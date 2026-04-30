@@ -71,6 +71,7 @@ class Store:
                     country_code TEXT,
                     api_key TEXT UNIQUE NOT NULL,
                     verified INTEGER DEFAULT 1,
+                    tier TEXT NOT NULL DEFAULT 'free',
                     created_at TEXT DEFAULT (datetime('now')),
                     last_login_at TEXT
                 );
@@ -81,6 +82,10 @@ class Store:
                 );
                 """
             )
+            # Migrate old DBs that pre-date the `tier` column.
+            cols = [r[1] for r in c.execute("PRAGMA table_info(users)")]
+            if "tier" not in cols:
+                c.execute("ALTER TABLE users ADD COLUMN tier TEXT NOT NULL DEFAULT 'free'")
             self._conn.commit()
 
     @staticmethod
@@ -162,6 +167,11 @@ class Store:
             )
             self._conn.commit()
 
+    def set_tier(self, user_id: int, tier: str) -> None:
+        with self._lock:
+            self._conn.execute("UPDATE users SET tier = ? WHERE id = ?", (tier, user_id))
+            self._conn.commit()
+
 
 # ── Response helpers ─────────────────────────────────────────────────────────
 
@@ -174,6 +184,11 @@ def envelope_err(message: str) -> dict:
     return {"success": False, "message": message}
 
 
+# Tier strings recognised by AuthTypes::SessionData::has_paid_plan():
+# basic | standard | pro | enterprise. `free` is the unpaid floor.
+VALID_TIERS = {"free", "basic", "standard", "pro", "enterprise"}
+
+
 def user_to_profile(row: sqlite3.Row) -> dict:
     return {
         "user_id": row["id"],
@@ -182,7 +197,7 @@ def user_to_profile(row: sqlite3.Row) -> dict:
         "phone": row["phone"] or "",
         "country": row["country"] or "",
         "country_code": row["country_code"] or "",
-        "account_type": "local",
+        "account_type": row["tier"] or "free",
         "credit_balance": 999999,
         "created_at": row["created_at"],
         "last_login_at": row["last_login_at"] or row["created_at"],
@@ -192,10 +207,10 @@ def user_to_profile(row: sqlite3.Row) -> dict:
 def user_to_subscription(row: sqlite3.Row) -> dict:
     return {
         "user_id": row["id"],
-        "account_type": "local",
+        "account_type": row["tier"] or "free",
         "credit_balance": 999999,
         "credits_expire_at": "",
-        "support_type": "self-hosted",
+        "support_type": "premium",
         "last_credit_purchase_at": "",
         "created_at": row["created_at"],
     }
@@ -319,6 +334,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._ok({"history": []})
         if method == "GET" and path == "/user/transactions":
             return self._ok({"transactions": []})
+
+        # — Tier change (localhost-only fork) —
+        if method == "POST" and path == "/user/set-tier":
+            user = self._current_user()
+            if not user:
+                return self._err(401, "Unauthorized")
+            body = self._read_json()
+            tier = (body.get("tier") or "").strip().lower()
+            if tier not in VALID_TIERS:
+                return self._err(400, f"tier must be one of {sorted(VALID_TIERS)}")
+            self.store.set_tier(user["id"], tier)
+            updated = self.store.find_by_api_key(user["api_key"])
+            return self._ok({"account_type": updated["tier"]}, "Tier updated")
 
         # — MFA —
         if method == "POST" and path in ("/user/mfa/enable", "/user/mfa/disable"):

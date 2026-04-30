@@ -192,7 +192,7 @@ class StubServerTest(unittest.TestCase):
         profile = body["data"]
         self.assertEqual(profile["username"], "alice")
         self.assertEqual(profile["email"], "alice@local")
-        self.assertEqual(profile["account_type"], "local")
+        self.assertEqual(profile["account_type"], "free")
 
     def test_profile_with_invalid_api_key(self):
         status, body = self._req("GET", "/user/profile", headers={"X-API-Key": "garbage"})
@@ -205,7 +205,7 @@ class StubServerTest(unittest.TestCase):
         api_key = v["data"]["api_key"]
         status, body = self._req("GET", "/user/subscription", headers={"X-API-Key": api_key})
         self.assertEqual(status, 200)
-        self.assertEqual(body["data"]["account_type"], "local")
+        self.assertEqual(body["data"]["account_type"], "free")
         self.assertGreater(body["data"]["credit_balance"], 0)
 
     def test_logout_revokes_session(self):
@@ -243,6 +243,42 @@ class StubServerTest(unittest.TestCase):
         status, body = self._req("GET", "/marine/some-unknown-endpoint")
         self.assertEqual(status, 200)
         self.assertTrue(body["success"])
+
+    def test_set_tier_changes_account_type(self):
+        self._signup()
+        _, v = self._verify()
+        api_key = v["data"]["api_key"]
+        # Set to pro
+        status, body = self._req("POST", "/user/set-tier", {"tier": "pro"},
+                                 headers={"X-API-Key": api_key})
+        self.assertEqual(status, 200)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["data"]["account_type"], "pro")
+        # Profile reflects the change
+        status, body = self._req("GET", "/user/profile", headers={"X-API-Key": api_key})
+        self.assertEqual(body["data"]["account_type"], "pro")
+        # Subscription reflects the change
+        status, body = self._req("GET", "/user/subscription", headers={"X-API-Key": api_key})
+        self.assertEqual(body["data"]["account_type"], "pro")
+        # Switch to enterprise
+        self._req("POST", "/user/set-tier", {"tier": "enterprise"},
+                  headers={"X-API-Key": api_key})
+        status, body = self._req("GET", "/user/profile", headers={"X-API-Key": api_key})
+        self.assertEqual(body["data"]["account_type"], "enterprise")
+
+    def test_set_tier_rejects_invalid_tier(self):
+        self._signup()
+        _, v = self._verify()
+        api_key = v["data"]["api_key"]
+        status, body = self._req("POST", "/user/set-tier", {"tier": "platinum"},
+                                 headers={"X-API-Key": api_key})
+        self.assertEqual(status, 400)
+        self.assertFalse(body["success"])
+
+    def test_set_tier_requires_auth(self):
+        status, body = self._req("POST", "/user/set-tier", {"tier": "pro"})
+        self.assertEqual(status, 401)
+        self.assertFalse(body["success"])
 
 
 if __name__ == "__main__":
