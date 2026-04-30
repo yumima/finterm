@@ -22,7 +22,9 @@ void AppConfig::remove(const QString& key) {
 }
 
 QString AppConfig::api_base_url() const {
-    return settings_.value("api/base_url", "https://api.fincept.in").toString();
+    // Localhost-only fork: default base URL points at the bundled local stub server
+    // (tools/local_stub_server.py). No traffic ever leaves this machine.
+    return settings_.value("api/base_url", "http://127.0.0.1:8765").toString();
 }
 
 bool AppConfig::dark_mode() const {

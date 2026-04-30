@@ -63,7 +63,7 @@ class ForumService : public QObject {
     static ForumProfile parse_profile(const QJsonObject& o);
 
     QNetworkAccessManager* nam_ = nullptr;
-    static constexpr const char* BASE = "https://api.fincept.in";
+    static constexpr const char* BASE = "http://127.0.0.1:8765";
 };
 
 } // namespace fincept::services

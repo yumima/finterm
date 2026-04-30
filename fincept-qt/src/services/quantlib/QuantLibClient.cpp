@@ -21,7 +21,7 @@ namespace fincept::services {
 
 static constexpr const char* kQuantLibClientTag = "QuantLibClient";
 
-const QString QuantLibClient::API_BASE = QStringLiteral("https://api.fincept.in");
+const QString QuantLibClient::API_BASE = QStringLiteral("http://127.0.0.1:8765");
 
 // Endpoints that use GET (no request body).
 static const QStringList GET_ENDPOINTS = {

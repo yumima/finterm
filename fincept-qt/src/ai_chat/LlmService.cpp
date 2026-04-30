@@ -375,7 +375,7 @@ QString LlmService::get_endpoint_url() const {
     // base_url_ stores the base domain; append path here.
     if (p == "fincept") {
         // sync endpoint for chat (short replies)
-        return "https://api.fincept.in/research/chat";
+        return "http://127.0.0.1:8765/research/chat";
     }
 
     // Custom base_url takes priority for other providers
@@ -782,8 +782,8 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
     // Temperature intentionally omitted — Fincept backend uses its own default.
 
     auto hdr = get_headers();
-    const QString async_url = "https://api.fincept.in/research/llm/async";
-    const QString status_base = "https://api.fincept.in/research/llm/status/";
+    const QString async_url = "http://127.0.0.1:8765/research/llm/async";
+    const QString status_base = "http://127.0.0.1:8765/research/llm/status/";
 
     LOG_INFO(TAG, QString("Fincept async: submitting to %1 (api_key=%2, prompt_len=%3)")
                       .arg(async_url)
@@ -1955,7 +1955,7 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
     if (p == "kimi")
         return "https://api.moonshot.ai/v1/models";
     if (p == "fincept")
-        return "https://api.fincept.in/research/llm/models";
+        return "http://127.0.0.1:8765/research/llm/models";
     // minimax: no public /v1/models endpoint — fallback models used instead
     return {};
 }

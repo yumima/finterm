@@ -557,7 +557,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         LOG_INFO("NewsService", "Live article: " + article.headline.left(50));
     });
 
-    QString url = ws_url.isEmpty() ? "wss://api.fincept.in/ws/news" : ws_url;
+    QString url = ws_url.isEmpty() ? "ws://127.0.0.1:8765/ws/news" : ws_url;
     live_ws_->open(QUrl(url));
 }
 

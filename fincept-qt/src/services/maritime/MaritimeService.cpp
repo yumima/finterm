@@ -21,7 +21,7 @@ inline void publish_to_hub(const QString& topic, const QVariant& value) {
 }
 }  // namespace
 
-static constexpr const char* kMarineBase = "https://api.fincept.in/marine";
+static constexpr const char* kMarineBase = "http://127.0.0.1:8765/marine";
 static constexpr int kVesselTtlSec = 60;      // position data: 1 min
 static constexpr int kHistoryTtlSec = 5 * 60; // history: 5 min
 
