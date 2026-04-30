@@ -29,7 +29,15 @@
 #    include <QSettings>
 #    include <QSysInfo>
 #    ifdef FINCEPT_HAVE_LIBSECRET
+// glib's gio/gdbusintrospection.h declares a struct field named `signals`,
+// which collides with Qt's `signals` macro (#define signals public) brought
+// in via the precompiled header. Push/pop the macro around the libsecret
+// include so the gio header parses cleanly. Required on GCC 13+/15+ where
+// the parser is stricter.
+#        pragma push_macro("signals")
+#        undef signals
 #        include <libsecret/secret.h>
+#        pragma pop_macro("signals")
 #    endif
 #endif
 
