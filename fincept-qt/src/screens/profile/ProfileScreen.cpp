@@ -3,6 +3,7 @@
 #include "auth/AuthManager.h"
 #include "auth/UserApi.h"
 #include "core/logging/Logger.h"
+#include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
@@ -13,8 +14,10 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QTimer>
 
 namespace fincept::screens {
@@ -62,6 +65,46 @@ QWidget* ProfileScreen::make_data_row(const QString& label, QLabel*& value_out) 
         QString("color:%1;font-size:13px;font-weight:700;background:transparent;%2").arg(ui::colors::TEXT_PRIMARY(), MF));
     hl->addWidget(value_out);
     return row;
+}
+
+QWidget* ProfileScreen::make_tier_picker_row() {
+    auto* row = new QWidget(this);
+    row->setStyleSheet(QString("background:transparent;border-bottom:1px solid %1;").arg(ui::colors::BORDER_DIM()));
+    auto* hl = new QHBoxLayout(row);
+    hl->setContentsMargins(12, 6, 12, 6);
+    auto* lbl = new QLabel("TIER");
+    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;letter-spacing:0.5px;%2")
+                           .arg(ui::colors::TEXT_SECONDARY(), MF));
+    hl->addWidget(lbl);
+    hl->addStretch();
+    ov_tier_picker_ = new QComboBox(row);
+    ov_tier_picker_->addItems({"free", "basic", "standard", "pro", "enterprise"});
+    ov_tier_picker_->setCursor(Qt::PointingHandCursor);
+    ov_tier_picker_->setStyleSheet(
+        QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 8px;font-size:12px;font-weight:700;%4}"
+                "QComboBox::drop-down{border:none;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MF));
+    connect(ov_tier_picker_, QOverload<int>::of(&QComboBox::activated), this,
+            [this](int) { apply_tier_change(ov_tier_picker_->currentText()); });
+    hl->addWidget(ov_tier_picker_);
+    return row;
+}
+
+void ProfileScreen::apply_tier_change(const QString& tier) {
+    QJsonObject body;
+    body["tier"] = tier;
+    LOG_INFO("Profile", "Requesting tier change → " + tier);
+    fincept::HttpClient::instance().post(
+        "/user/set-tier", body, [this, tier](fincept::Result<QJsonDocument> r) {
+            if (!r.is_ok()) {
+                LOG_WARN("Profile", "set-tier failed: " + QString::fromStdString(r.error()));
+                QMessageBox::warning(this, "Tier change failed",
+                                     QString("Could not update tier to '%1'.\n\nIs the local stub server running?").arg(tier));
+                return;
+            }
+            LOG_INFO("Profile", "Tier updated to " + tier + " — refreshing session");
+            auth::AuthManager::instance().refresh_user_data();
+        });
 }
 
 QWidget* ProfileScreen::make_stat_box(const QString& label, QLabel*& value_out, const QString& color) {
@@ -199,6 +242,7 @@ QWidget* ProfileScreen::build_overview() {
     avl->addWidget(make_data_row("EMAIL", ov_email_));
     avl->addWidget(make_data_row("USER TYPE", ov_user_type_));
     avl->addWidget(make_data_row("ACCOUNT TYPE", ov_account_type_));
+    avl->addWidget(make_tier_picker_row());
     avl->addWidget(make_data_row("PHONE", ov_phone_));
     avl->addWidget(make_data_row("COUNTRY", ov_country_));
     avl->addWidget(make_data_row("EMAIL VERIFIED", ov_verified_));
@@ -525,6 +569,14 @@ void ProfileScreen::refresh_all() {
     ov_account_type_->setText(s.account_type().toUpper());
     ov_account_type_->setStyleSheet(
         QString("color:%1;font-size:13px;font-weight:700;background:transparent;%2").arg(ui::colors::AMBER(), MF));
+    if (ov_tier_picker_) {
+        // Block signals so syncing the combo box to the current session doesn't
+        // re-trigger apply_tier_change() and POST a redundant /user/set-tier.
+        QSignalBlocker block(ov_tier_picker_);
+        const int idx = ov_tier_picker_->findText(s.account_type().toLower());
+        if (idx >= 0)
+            ov_tier_picker_->setCurrentIndex(idx);
+    }
     ov_phone_->setText(s.user_info.phone.isEmpty() ? "\xe2\x80\x94" : s.user_info.phone);
     ov_country_->setText(s.user_info.country.isEmpty() ? "\xe2\x80\x94" : s.user_info.country);
     ov_verified_->setText(s.user_info.is_verified ? "YES" : "NO");

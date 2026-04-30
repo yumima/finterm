@@ -1,4 +1,5 @@
 #pragma once
+#include <QComboBox>
 #include <QDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -32,6 +33,9 @@ class ProfileScreen : public QWidget {
     QLabel* ov_email_ = nullptr;
     QLabel* ov_user_type_ = nullptr;
     QLabel* ov_account_type_ = nullptr;
+    /// Localhost-only fork: in-app tier picker writes to the local stub's
+    /// /user/set-tier endpoint and refreshes the session.
+    QComboBox* ov_tier_picker_ = nullptr;
     QLabel* ov_phone_ = nullptr;
     QLabel* ov_country_ = nullptr;
     QLabel* ov_verified_ = nullptr;
@@ -80,6 +84,9 @@ class ProfileScreen : public QWidget {
     QWidget* make_panel(const QString& title);
     QWidget* make_data_row(const QString& label, QLabel*& value_out);
     QWidget* make_stat_box(const QString& label, QLabel*& value_out, const QString& color);
+    /// Localhost-only fork: tier picker row used in the Overview tab.
+    QWidget* make_tier_picker_row();
+    void apply_tier_change(const QString& tier);
 
     void show_edit_profile_dialog();
     void show_logout_confirm();
