@@ -72,15 +72,21 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
             });
     connect(&svc, &services::PortfolioService::benchmark_history_loaded, this,
             [this](QString symbol, QStringList dates, QVector<double> closes) {
-                // Hand the chart whichever benchmark was actually requested
-                // (SPY for USD, ^GSPTSE for CAD, etc.) so the overlay label and
-                // currency-normalisation are correct.
-                if (!perf_chart_ || !summary_loaded_)
+                if (!perf_chart_)
                     return;
+                // Per-symbol focus mode: the chart filters by its current
+                // focus_symbol() so a stale fetch from a previous selection
+                // is harmlessly dropped on the chart side.
+                perf_chart_->set_focus_history(symbol, dates, closes);
+                if (!summary_loaded_)
+                    return;
+                // Benchmark overlay path — only the portfolio's currency
+                // benchmark (SPY for USD, ^GSPTSE for CAD, etc.) drives the
+                // overlay label and currency-normalisation logic.
                 const QString want = services::PortfolioService::default_benchmark_for_currency(
                     current_summary_.portfolio.currency);
                 if (symbol != want)
-                    return; // ignore the secondary SPY-for-Beta fetch
+                    return; // ignore secondary fetches (focus symbol, SPY-for-Beta)
                 perf_chart_->set_benchmark_history(symbol, dates, closes);
             });
     connect(&svc, &services::PortfolioService::risk_free_rate_loaded, this, [this](double /*rate*/) {
@@ -811,6 +817,12 @@ QWidget* PortfolioScreen::build_main_view() {
                     return;
                 services::PortfolioService::instance().backfill_history(selected_id_, period);
             });
+    // Per-symbol focus: refetch daily closes when the user picks a row or
+    // changes the period in focus mode.
+    connect(perf_chart_, &PortfolioPerfChart::focus_symbol_period_requested, this,
+            [](const QString& symbol, const QString& period) {
+                services::PortfolioService::instance().fetch_benchmark_history(symbol, period);
+            });
     sector_panel_ = new PortfolioSectorPanel;
     connect(sector_panel_, &PortfolioSectorPanel::sector_selected, this, [this](const QString& sector) {
         if (sector.isEmpty()) {
@@ -1047,6 +1059,12 @@ void PortfolioScreen::on_symbol_selected(const QString& symbol) {
         blotter_->set_selected_symbol(symbol);
     if (order_panel_)
         order_panel_->set_holding(find_holding(symbol));
+    if (perf_chart_) {
+        if (symbol.isEmpty())
+            perf_chart_->clear_focus_symbol();
+        else
+            perf_chart_->set_focus_symbol(symbol); // emits focus_symbol_period_requested → fetch
+    }
 
     // Publish to the linked group so other panels (Equity Research, Watchlist
     // …) follow the selection. Only when actually linked.

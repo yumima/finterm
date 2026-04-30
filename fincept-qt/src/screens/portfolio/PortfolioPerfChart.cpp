@@ -133,10 +133,25 @@ void PortfolioPerfChart::build_ui() {
     auto* header = new QHBoxLayout;
     header->setContentsMargins(10, 6, 10, 4);
 
-    auto* title = new QLabel("PERFORMANCE");
-    title->setStyleSheet(
+    title_label_ = new QLabel("PERFORMANCE");
+    title_label_->setStyleSheet(
         QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
-    header->addWidget(title);
+    header->addWidget(title_label_);
+
+    // ← BACK button: hidden until focus mode is entered. Reverts to portfolio NAV.
+    back_btn_ = new QPushButton(QStringLiteral("← PORTFOLIO"));
+    back_btn_->setFixedHeight(22);
+    back_btn_->setCursor(Qt::PointingHandCursor);
+    back_btn_->setStyleSheet(
+        QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                "  font-size:9px; font-weight:700; padding:0 8px; border-radius:2px; }"
+                "QPushButton:hover { color:%3; border-color:%3; }")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
+    back_btn_->setVisible(false);
+    connect(back_btn_, &QPushButton::clicked, this, [this]() { clear_focus_symbol(); });
+    header->addSpacing(8);
+    header->addWidget(back_btn_);
+
     header->addStretch();
 
     for (const auto& p : kPeriods) {
@@ -299,6 +314,15 @@ void PortfolioPerfChart::set_period(const QString& period) {
     for (auto* btn : period_btns_)
         btn->setChecked(btn->text() == period);
 
+    // Focus mode: ask the owner to refetch this symbol's history for the new
+    // period and exit early — backfill applies to NAV snapshots only.
+    if (!focus_symbol_.isEmpty()) {
+        if (prev != period)
+            emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+        update_chart();
+        return;
+    }
+
     // If the user is asking for a longer window than we have snapshots for,
     // request a backfill. The owner re-feeds set_snapshots when it lands.
     if (prev != period && !snapshots_.isEmpty()) {
@@ -315,6 +339,62 @@ void PortfolioPerfChart::set_period(const QString& period) {
             emit backfill_period_requested(backfill_period);
         }
     }
+    update_chart();
+}
+
+QString PortfolioPerfChart::period_for_yfinance() const {
+    // yfinance accepts: 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
+    const QString& p = current_period_;
+    if (p == "1D") return QStringLiteral("5d"); // daily-only — show last few sessions
+    if (p == "1W") return QStringLiteral("5d");
+    if (p == "1M") return QStringLiteral("1mo");
+    if (p == "3M") return QStringLiteral("3mo");
+    if (p == "YTD") return QStringLiteral("ytd");
+    if (p == "1Y") return QStringLiteral("1y");
+    if (p == "5Y") return QStringLiteral("5y");
+    return QStringLiteral("max"); // ALL
+}
+
+void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
+    if (symbol.isEmpty()) {
+        clear_focus_symbol();
+        return;
+    }
+    if (focus_symbol_ == symbol) {
+        // Already focused on this symbol — refresh data anyway.
+        emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+        return;
+    }
+    focus_symbol_ = symbol.toUpper();
+    focus_dates_.clear();
+    focus_closes_.clear();
+    if (title_label_)
+        title_label_->setText(focus_symbol_);
+    if (back_btn_)
+        back_btn_->setVisible(true);
+    emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+    update_chart(); // renders empty placeholder until data lands
+}
+
+void PortfolioPerfChart::clear_focus_symbol() {
+    if (focus_symbol_.isEmpty())
+        return;
+    focus_symbol_.clear();
+    focus_dates_.clear();
+    focus_closes_.clear();
+    if (title_label_)
+        title_label_->setText(QStringLiteral("PERFORMANCE"));
+    if (back_btn_)
+        back_btn_->setVisible(false);
+    update_chart();
+}
+
+void PortfolioPerfChart::set_focus_history(const QString& symbol, const QStringList& dates,
+                                           const QVector<double>& closes) {
+    if (focus_symbol_.isEmpty() || symbol.toUpper() != focus_symbol_)
+        return; // stale or off-target fetch — ignore
+    focus_dates_ = dates;
+    focus_closes_ = closes;
     update_chart();
 }
 
@@ -350,7 +430,115 @@ QColor PortfolioPerfChart::chart_color() const {
     return summary_.total_unrealized_pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
 }
 
+void PortfolioPerfChart::update_chart_focus() {
+    auto* chart = chart_view_->chart();
+    chart->removeAllSeries();
+    const auto old_axes = chart->axes();
+    for (auto* axis : old_axes) {
+        chart->removeAxis(axis);
+        delete axis;
+    }
+
+    if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
+        focus_dates_.size() != focus_closes_.size()) {
+        period_change_label_->setText(QStringLiteral("Loading %1…").arg(focus_symbol_));
+        total_return_label_->clear();
+        nav_label_->clear();
+        if (cost_basis_label_)
+            cost_basis_label_->clear();
+        chart_view_->set_series_data({}, currency_);
+        return;
+    }
+
+    // Build (ms, close) points.
+    QVector<QPointF> pts;
+    pts.reserve(focus_closes_.size());
+    for (int i = 0; i < focus_closes_.size(); ++i) {
+        const qint64 ms = iso_date_to_ms_utc(focus_dates_[i]);
+        pts.append(QPointF(static_cast<double>(ms), focus_closes_[i]));
+    }
+    std::sort(pts.begin(), pts.end(),
+              [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+
+    const double first = pts.first().y();
+    const double last = pts.last().y();
+    const double pnl = last - first;
+    const double pnl_pct = first > 0 ? (pnl / first) * 100.0 : 0.0;
+
+    auto to_display = [&](double v) -> double {
+        if (!indexed_mode_)
+            return v;
+        return first > 0 ? (v / first) * 100.0 : 0.0;
+    };
+
+    auto* line = new QLineSeries;
+    auto* upper = new QLineSeries;
+    auto* lower = new QLineSeries;
+    double y_min = std::numeric_limits<double>::max();
+    double y_max = std::numeric_limits<double>::lowest();
+    const double base_disp = to_display(first);
+    for (const auto& p : pts) {
+        const double y = to_display(p.y());
+        line->append(p.x(), y);
+        upper->append(p.x(), y);
+        lower->append(p.x(), base_disp);
+        y_min = std::min(y_min, y);
+        y_max = std::max(y_max, y);
+    }
+    QColor lc = pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
+    line->setPen(QPen(lc, 2));
+    auto* area = new QAreaSeries(upper, lower);
+    QColor fill = lc; fill.setAlpha(35);
+    area->setBrush(fill);
+    area->setPen(QPen(Qt::NoPen));
+
+    chart->addSeries(area);
+    chart->addSeries(line);
+
+    auto* x = new QDateTimeAxis;
+    x->setFormat("MMM d");
+    x->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
+    x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
+    x->setRange(QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(pts.first().x())),
+                QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(pts.last().x())));
+    chart->addAxis(x, Qt::AlignBottom);
+    line->attachAxis(x);
+    area->attachAxis(x);
+
+    auto* y = new QValueAxis;
+    y->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
+    y->setLinePenColor(QColor(ui::colors::BORDER_MED()));
+    const double pad = (y_max - y_min) * 0.05;
+    y->setRange(y_min - pad, y_max + pad);
+    y->setLabelFormat(indexed_mode_ ? QStringLiteral("%.1f") : QStringLiteral("%.2f"));
+    chart->addAxis(y, Qt::AlignLeft);
+    line->attachAxis(y);
+    area->attachAxis(y);
+
+    chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"));
+
+    // Info bar — re-purposed for the focused symbol.
+    const QString sign = pnl >= 0 ? QStringLiteral("▲") : QStringLiteral("▼");
+    period_change_label_->setText(QString("%1  %2  %3%")
+                                      .arg(sign)
+                                      .arg(QString::number(pnl, 'f', 2))
+                                      .arg(QString::number(pnl_pct, 'f', 2)));
+    period_change_label_->setStyleSheet(
+        QString("color:%1; font-size:11px; font-weight:700;").arg(lc.name()));
+    total_return_label_->setText(QString("$%1").arg(QString::number(last, 'f', 2)));
+    nav_label_->setText(focus_symbol_);
+    if (cost_basis_label_)
+        cost_basis_label_->clear();
+}
+
 void PortfolioPerfChart::update_chart() {
+    if (!focus_symbol_.isEmpty()) {
+        update_chart_focus();
+        return;
+    }
+
     auto* chart = chart_view_->chart();
     chart->removeAllSeries();
 

@@ -50,21 +50,40 @@ class PortfolioPerfChart : public QWidget {
     void set_spy_history(const QStringList& dates, const QVector<double>& closes);
     void refresh_theme();
 
+    // ── Per-symbol focus mode ─────────────────────────────────────────────
+    /// Switch to per-symbol focus: chart renders this symbol's daily close
+    /// history instead of portfolio NAV. Triggers focus_symbol_period_requested
+    /// so the owner re-fetches data for the current period.
+    void set_focus_symbol(const QString& symbol);
+    /// Exit focus mode and revert to portfolio NAV view.
+    void clear_focus_symbol();
+    /// Feed daily closes for the currently focused symbol. Mismatched symbols
+    /// are ignored (race-safe against stale fetches).
+    void set_focus_history(const QString& symbol, const QStringList& dates,
+                           const QVector<double>& closes);
+    QString focus_symbol() const { return focus_symbol_; }
+
   signals:
     /// Emitted when the user clicks a period button that requires backfilling
     /// (e.g. 5Y when only 1Y is cached). Owner can call
     /// PortfolioService::backfill_history(portfolio_id, period) in response.
     void backfill_period_requested(QString period);
+    /// Focus mode: owner should fetch daily closes for @p symbol over the
+    /// yfinance @p period (e.g. "1mo", "1y", "max").
+    void focus_symbol_period_requested(QString symbol, QString period);
 
   private:
     void build_ui();
     void update_chart();
+    void update_chart_focus(); ///< Render focused-symbol daily-close series.
     void set_period(const QString& period);
     void update_period_buttons_enabled();
     QColor chart_color() const;
     /// Convert a UTC ISO date string to ms since epoch (UTC midnight).
     /// Centralised so portfolio and benchmark series share the same time axis.
     static qint64 iso_date_to_ms_utc(const QString& iso_date);
+    /// Map the chart's internal period token to a yfinance period string.
+    QString period_for_yfinance() const;
 
     // Period selector buttons
     QVector<QPushButton*> period_btns_;
@@ -94,6 +113,13 @@ class PortfolioPerfChart : public QWidget {
     QString benchmark_symbol_ = "SPY";
     QStringList spy_dates_;
     QVector<double> spy_closes_;
+
+    // Per-symbol focus mode (empty focus_symbol_ → portfolio NAV view).
+    QString focus_symbol_;
+    QStringList focus_dates_;
+    QVector<double> focus_closes_;
+    QLabel* title_label_ = nullptr;
+    QPushButton* back_btn_ = nullptr;
 };
 
 } // namespace fincept::screens
