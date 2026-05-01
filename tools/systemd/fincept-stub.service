@@ -1,0 +1,21 @@
+[Unit]
+# Localhost stub server for the FinceptTerminal localhost-only fork.
+# Replaces api.fincept.in with a Python process on http://127.0.0.1:8765.
+# See tools/local_stub/server.py for the routes it serves.
+Description=Fincept localhost stub server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/fin/finterm/tools/local_stub/server.py
+Restart=on-failure
+RestartSec=2
+
+# Defensive sandboxing — the stub only needs to read its source dir, write
+# to its sqlite users.db under ~/.fincept-localhost, and listen on a port.
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
