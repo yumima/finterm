@@ -21,7 +21,7 @@
 namespace fincept::ui {
 
 static constexpr int kMaxResults = 10;
-static constexpr int kSearchDebounceMs = 300;
+static constexpr int kSearchDebounceMs = 150;
 
 // ── styling ─────────────────────────────────────────────────────────────────
 
@@ -487,9 +487,17 @@ CommandBar::CommandBar(QWidget* parent) : QWidget(parent) {
     input_->installEventFilter(this);
     hl->addWidget(input_);
 
-    // Dropdown — true top-level floating window so it appears above all widgets
-    dropdown_ = new QFrame(nullptr);
-    dropdown_->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    // Autocomplete dropdown. Qt::ToolTip is the right primitive here:
+    //   - Application-positioned (no WM auto-placement quirks).
+    //   - Doesn't take focus / doesn't grab keyboard, so typing keeps going
+    //     to the input even while the dropdown is visible.
+    //   - Stays on top within the application without modal grab.
+    // Avoid: Qt::Tool (X11 WM picks centre-screen on first map before
+    //        update_position() runs); Qt::Popup (grabs keyboard, blocks
+    //        further typing past the slash-prefix).
+    dropdown_ = new QFrame(this);
+    dropdown_->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint
+                              | Qt::NoDropShadowWindowHint);
     dropdown_->setAttribute(Qt::WA_ShowWithoutActivating);
     dropdown_->setStyleSheet(drop_ss());
 
@@ -520,9 +528,16 @@ CommandBar::CommandBar(QWidget* parent) : QWidget(parent) {
     connect(list_, &QListWidget::itemClicked, this, &CommandBar::on_item_clicked);
     connect(list_, &QListWidget::itemEntered, this, &CommandBar::on_item_entered);
 
-    // Hide dropdown when app loses focus
+    // Hide dropdown when app loses focus. `dropdown_->isAncestorOf(dropdown_)`
+    // returns false (a widget isn't its own ancestor), so without an explicit
+    // `now == dropdown_` check, transient focus landing on the dropdown frame
+    // itself when it first shows would close it on Linux X11.
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
-        if (!now || (now != input_ && !dropdown_->isAncestorOf(now) && now != list_))
+        if (!now)
+            return; // spurious focus-out events while the dropdown opens
+        const bool focus_inside =
+            (now == input_ || now == list_ || now == dropdown_ || dropdown_->isAncestorOf(now));
+        if (!focus_inside)
             hide_dropdown();
     });
 
@@ -565,6 +580,13 @@ void CommandBar::restore_draft() {
     // That will rebuild the correct dropdown for the restored mode.
     input_->setText(text);
     input_->setCursorPosition(text.length());
+
+    // Don't pop the autocomplete dropdown on startup — it's distracting and
+    // not what the user is doing right now. The text and mode are restored;
+    // the user can re-trigger the dropdown by editing the input.
+    if (search_debounce_)
+        search_debounce_->stop();
+    hide_dropdown();
 }
 
 void CommandBar::save_draft_now() {
@@ -898,14 +920,23 @@ void CommandBar::on_return_pressed() {
     // screen navigation — the user has to explicitly pick an asset from the list.
     if (mode_ == Mode::AssetSearch) {
         auto* item = list_->currentItem();
-        if (!item)
-            return;
-        const QString symbol = item->data(Qt::UserRole).toString();
-        const QString type = item->data(Qt::UserRole + 2).toString();
-        // Only navigate if this item is an actual asset result (has a symbol)
-        if (!symbol.isEmpty())
+        const QString symbol = item ? item->data(Qt::UserRole).toString() : QString();
+        const QString type = item ? item->data(Qt::UserRole + 2).toString() : active_asset_type_;
+        if (!symbol.isEmpty()) {
             select_asset(symbol, type);
-        // else: hint or "no results" row — do nothing, keep waiting for input
+            return;
+        }
+        // Fallback: no usable dropdown result (search API unreachable or
+        // returned no matches). Treat whatever the user typed after the
+        // slash-type as a literal ticker. Lets "/stock IONQ" + Enter work
+        // without depending on /market/search.
+        const QString trimmed = input_->text().trimmed();
+        const int space_idx = trimmed.indexOf(' ');
+        if (space_idx > 0) {
+            const QString raw = trimmed.mid(space_idx + 1).trimmed().toUpper();
+            if (!raw.isEmpty())
+                select_asset(raw, active_asset_type_);
+        }
         return;
     }
 
@@ -1479,9 +1510,9 @@ void CommandBar::update_position() {
     const int rows = list_->count();
     const int h = std::min(rows * 32, 320);
 
-    // dropdown_ is a top-level window — move() takes screen-global coordinates
-    dropdown_->move(global_pos);
-    dropdown_->resize(w, h);
+    // dropdown_ is a top-level window — setGeometry takes screen-global
+    // coordinates and is more reliable than separate move/resize on Linux X11.
+    dropdown_->setGeometry(global_pos.x(), global_pos.y(), w, h);
 }
 
 } // namespace fincept::ui
