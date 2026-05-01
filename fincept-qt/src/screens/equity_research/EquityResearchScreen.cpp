@@ -318,8 +318,11 @@ QVariantMap EquityResearchScreen::save_state() const {
 void EquityResearchScreen::restore_state(const QVariantMap& state) {
     const QString sym = state.value("symbol").toString();
     if (!sym.isEmpty()) {
-        current_symbol_ = sym;
-        services::equity::EquityResearchService::instance().load_symbol(sym);
+        // Route through load_symbol() so the title/quote bar, overview tab,
+        // and active sub-tab all update. Pre-mutating current_symbol_ here
+        // would make load_symbol() no-op via its equality guard, leaving the
+        // title bar stuck on whatever the ctor initialised it to.
+        load_symbol(sym);
     }
     if (tab_widget_) {
         const int idx = state.value("tab_index", 0).toInt();
