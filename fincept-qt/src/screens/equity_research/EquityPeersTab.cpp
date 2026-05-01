@@ -223,6 +223,7 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
         {"AAPL", {"MSFT", "GOOGL", "META", "AMZN", "NVDA"}},
         {"MSFT", {"AAPL", "GOOGL", "AMZN", "ORCL", "CRM"}},
         {"GOOGL", {"MSFT", "AAPL", "META", "AMZN", "NFLX"}},
+        {"GOOG", {"MSFT", "AAPL", "META", "AMZN", "NFLX"}},
         {"AMZN", {"MSFT", "GOOGL", "AAPL", "WMT", "TGT"}},
         {"NVDA", {"AMD", "INTC", "QCOM", "TSM", "AVGO"}},
         {"META", {"GOOGL", "SNAP", "PINS", "MSFT", "AMZN"}},
@@ -232,6 +233,124 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
         {"XOM", {"CVX", "BP", "SHEL", "COP", "EOG"}},
         {"RELIANCE.NS", {"TCS.NS", "INFY.NS", "HDFCBANK.NS", "ITC.NS", "HINDUNILVR.NS"}},
         {"TCS.NS", {"INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "RELIANCE.NS"}},
+        // Quantum computing
+        {"IONQ", {"RGTI", "QBTS", "QUBT", "IBM", "ARQQ"}},
+        {"RGTI", {"IONQ", "QBTS", "QUBT", "IBM", "ARQQ"}},
+        {"QBTS", {"IONQ", "RGTI", "QUBT", "IBM", "ARQQ"}},
+        // Semis — chip design / AI infra
+        {"ARM",  {"NVDA", "AVGO", "QCOM", "AMD", "INTC"}},
+        {"AVGO", {"NVDA", "AMD", "QCOM", "TSM", "MRVL"}},
+        {"AMD",  {"NVDA", "INTC", "QCOM", "AVGO", "TSM"}},
+        // Enterprise data / AI software
+        {"PLTR", {"SNOW", "CRM", "NOW", "MDB", "AI"}},
+        // Diversified financials (Berkshire has no true peer; this is the closest set)
+        {"BRK.B", {"JPM", "BLK", "MS", "V", "MA"}},
+        {"BRK-B", {"JPM", "BLK", "MS", "V", "MA"}},
+        // ── More common stocks ────────────────────────────────────────────────
+        // Semis (standalone keys)
+        {"TSM",  {"NVDA", "AVGO", "INTC", "AMD", "ASML"}},
+        {"INTC", {"AMD", "NVDA", "TSM", "QCOM", "AVGO"}},
+        {"QCOM", {"NVDA", "AVGO", "AMD", "INTC", "MRVL"}},
+        // Enterprise software
+        {"ORCL", {"MSFT", "CRM", "SAP", "IBM", "NOW"}},
+        {"CRM",  {"ORCL", "NOW", "MSFT", "ADBE", "WDAY"}},
+        {"NOW",  {"CRM", "MSFT", "ORCL", "SNOW", "DDOG"}},
+        {"SNOW", {"DDOG", "MDB", "NET", "PLTR", "CRM"}},
+        {"ADBE", {"CRM", "MSFT", "ORCL", "INTU", "AUTODESK"}},
+        // Media / streaming
+        {"NFLX", {"DIS", "CMCSA", "WBD", "ROKU", "SPOT"}},
+        {"DIS",  {"NFLX", "CMCSA", "PARA", "WBD", "T"}},
+        // Retail
+        {"WMT",  {"COST", "TGT", "AMZN", "KR", "BJ"}},
+        {"COST", {"WMT", "BJ", "TGT", "KR", "DG"}},
+        {"HD",   {"LOW", "FND", "BLDR", "TSCO", "AZO"}},
+        {"TGT",  {"WMT", "COST", "DG", "DLTR", "BJ"}},
+        // Consumer staples
+        {"KO",   {"PEP", "MNST", "KDP", "FIZZ", "CELH"}},
+        {"PEP",  {"KO", "MNST", "KDP", "CELH", "STZ"}},
+        {"PG",   {"KMB", "CL", "CHD", "UL", "EL"}},
+        // Payments / fintech
+        {"V",    {"MA", "AXP", "PYPL", "FIS", "FISV"}},
+        {"MA",   {"V", "AXP", "PYPL", "FIS", "FISV"}},
+        {"AXP",  {"V", "MA", "COF", "DFS", "SYF"}},
+        {"PYPL", {"V", "MA", "SQ", "ADYEN", "AFRM"}},
+        // Banks (extended)
+        {"BAC",  {"JPM", "WFC", "C", "USB", "PNC"}},
+        {"WFC",  {"JPM", "BAC", "C", "USB", "PNC"}},
+        {"GS",   {"MS", "JPM", "BAC", "BLK", "C"}},
+        {"MS",   {"GS", "JPM", "BAC", "BLK", "SCHW"}},
+        // Healthcare
+        {"LLY",  {"NVO", "MRK", "PFE", "AZN", "ABBV"}},
+        {"UNH",  {"CVS", "ELV", "CI", "HUM", "CNC"}},
+        {"PFE",  {"MRK", "JNJ", "BMY", "ABBV", "LLY"}},
+        // Aerospace / defense
+        {"BA",   {"LMT", "NOC", "RTX", "GD", "HII"}},
+        {"LMT",  {"NOC", "RTX", "GD", "BA", "HII"}},
+        {"RTX",  {"LMT", "NOC", "GD", "BA", "HII"}},
+        // Industrials
+        {"HON",  {"MMM", "GE", "EMR", "ROK", "ETN"}},
+        {"CAT",  {"DE", "CMI", "PCAR", "AGCO", "OSK"}},
+        {"GE",   {"HON", "MMM", "RTX", "EMR", "ROK"}},
+        // Telecom
+        {"T",    {"VZ", "TMUS", "CMCSA", "CHTR", "LUMN"}},
+        {"VZ",   {"T", "TMUS", "CMCSA", "CHTR", "LUMN"}},
+        {"TMUS", {"T", "VZ", "CMCSA", "CHTR", "LUMN"}},
+        // Energy (extended)
+        {"CVX",  {"XOM", "BP", "SHEL", "COP", "EOG"}},
+        {"COP",  {"XOM", "CVX", "EOG", "OXY", "PXD"}},
+        // Crypto / fintech retail
+        {"COIN", {"HOOD", "SOFI", "MARA", "RIOT", "CLSK"}},
+        {"HOOD", {"COIN", "SOFI", "IBKR", "SCHW", "LPLA"}},
+        // EV / auto (extended beyond TSLA)
+        {"F",    {"GM", "TSLA", "STLA", "TM", "HMC"}},
+        {"GM",   {"F", "TSLA", "STLA", "TM", "HMC"}},
+
+        // ── Index & broad-market ETFs ────────────────────────────────────────
+        {"SPY",  {"IVV", "VOO", "VTI", "SCHX", "SPLG"}},       // S&P 500
+        {"VOO",  {"IVV", "SPY", "VTI", "SCHX", "SPLG"}},
+        {"IVV",  {"SPY", "VOO", "VTI", "SCHX", "SPLG"}},
+        {"QQQ",  {"QQQM", "ONEQ", "SPYG", "VUG", "IVW"}},      // Nasdaq-100
+        {"QQQM", {"QQQ", "ONEQ", "SPYG", "VUG", "IVW"}},
+        {"DIA",  {"SPY", "IVV", "OEF", "IWB", "RSP"}},         // Dow
+        {"VTI",  {"ITOT", "SCHB", "SWTSX", "FZROX", "VTSAX"}}, // total US
+        {"IWM",  {"VTWO", "SCHA", "VBR", "VB", "IJR"}},        // small cap
+        {"EFA",  {"VEA", "IEFA", "SCHF", "SPDW", "VXUS"}},     // developed ex-US
+        {"VWO",  {"IEMG", "EEM", "SCHE", "SPEM", "VXUS"}},     // emerging
+        {"AGG",  {"BND", "SCHZ", "IUSB", "FXNAX", "VBTLX"}},   // total bond
+
+        // ── Sector / thematic ETFs ───────────────────────────────────────────
+        {"SMH",  {"SOXX", "FTXL", "XSD", "PSI", "SOXQ"}},      // semiconductor
+        {"XLK",  {"VGT", "IYW", "FTEC", "FXL", "IGM"}},        // broad tech
+        {"SLX",  {"XME", "PICK", "COPX", "REMX", "GDX"}},      // steel
+        {"AIRR", {"XLI", "IYJ", "VIS", "FXR", "ITA"}},         // US industrials
+        {"GLD",  {"IAU", "GLDM", "SGOL", "BAR", "AAAU"}},      // gold bullion
+        {"XME",  {"PICK", "SLX", "COPX", "REMX", "GDX"}},      // metals & mining
+        {"XLE",  {"VDE", "IYE", "FENY", "IXC", "AMLP"}},       // energy
+        {"XLF",  {"VFH", "IYF", "FNCL", "KBE", "KRE"}},        // financials
+        {"XLV",  {"VHT", "IYH", "FHLC", "IBB", "XBI"}},        // healthcare
+        {"XLY",  {"VCR", "IYC", "FDIS", "RXI", "RTH"}},        // consumer disc.
+        {"XLP",  {"VDC", "IYK", "FSTA", "KXI", "PSL"}},        // consumer staples
+        {"XLI",  {"VIS", "IYJ", "FIDU", "FXR", "EXI"}},        // industrials
+        {"XLU",  {"VPU", "IDU", "FUTY", "JXI", "RYU"}},        // utilities
+        {"XLB",  {"VAW", "IYM", "FMAT", "MXI", "RTM"}},        // materials
+        {"XLRE", {"VNQ", "IYR", "USRT", "REET", "RWR"}},       // real estate
+        {"VNQ",  {"XLRE", "IYR", "USRT", "REET", "RWR"}},
+        {"GDX",  {"GDXJ", "RING", "GOAU", "SGDM", "PICK"}},    // gold miners
+        {"ARKK", {"ARKW", "ARKG", "ARKQ", "ARKF", "TSLA"}},    // disruptive innov.
+
+        // ── Mutual funds (your portfolio holdings) ───────────────────────────
+        // Index funds — large-cap blend
+        {"FNILX", {"FXAIX", "FZROX", "VFIAX", "SWPPX", "VTSAX"}},
+        // Short-term bond
+        {"VBIPX", {"VFSUX", "VBIRX", "VSCSX", "VTAPX", "VFICX"}},
+        // Active large-cap growth
+        {"FTQGX", {"FBGRX", "FCNTX", "VPMCX", "FOCPX", "VWUAX"}},
+        // Sector — semiconductors
+        {"FSELX", {"FELC", "FSPTX", "SMH", "SOXX", "PSI"}},
+        // EKWAX / GRHAX — exact strategy not verified; default to large-cap
+        // blend & balanced peers respectively. Edit if your funds differ.
+        {"EKWAX", {"FXAIX", "VFIAX", "FCNTX", "VPMCX", "FBGRX"}},
+        {"GRHAX", {"VWELX", "FBALX", "VTMFX", "VBIAX", "AOR"}},
     };
     return kPeers.value(symbol.toUpper(), {"SPY", "QQQ", "DIA"});
 }
