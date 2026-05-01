@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioBlotter.cpp
 #include "screens/portfolio/PortfolioBlotter.h"
 
+#include "core/events/EventBus.h"
 #include "screens/portfolio/PortfolioSparkline.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
@@ -416,9 +417,12 @@ void PortfolioBlotter::on_context_menu(const QPoint& pos) {
     }());
     menu.addSeparator();
 
+    auto* research_act = menu.addAction("Open in Equity Research");
+    menu.addSeparator();
     auto* edit_act = menu.addAction("Edit Transaction");
     auto* delete_act = menu.addAction("Close / Delete Position");
 
+    research_act->setIcon(QIcon());
     edit_act->setIcon(QIcon());
     delete_act->setIcon(QIcon());
 
@@ -427,6 +431,13 @@ void PortfolioBlotter::on_context_menu(const QPoint& pos) {
     menu.setStyleSheet(menu.styleSheet() +
                        QString("QMenu::item[data='danger'] { color:%1; }").arg(ui::colors::NEGATIVE()));
 
+    connect(research_act, &QAction::triggered, this, [symbol]() {
+        // Mirror CommandBar::select_asset: navigate first, then push the symbol.
+        // EquityResearchScreen subscribes to "equity_research.load_symbol" in its
+        // ctor and routes through load_symbol() which updates title/quote/tabs.
+        EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "equity_research"}});
+        EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", symbol}});
+    });
     connect(edit_act, &QAction::triggered, this, [this, symbol]() { emit edit_transaction_requested(symbol); });
     connect(delete_act, &QAction::triggered, this, [this, symbol]() { emit delete_position_requested(symbol); });
 
