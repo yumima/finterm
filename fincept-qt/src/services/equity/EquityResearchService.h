@@ -48,6 +48,12 @@ class EquityResearchService : public QObject {
 
     // ── Python helpers ────────────────────────────────────────────────────────
     void run_python(const QString& script, const QStringList& args, std::function<void(bool, const QString&)> cb);
+    /// Persistent yfinance daemon path — same shape as run_python but skips
+    /// the ~1.5s pandas/yfinance cold-import per call. Callback receives the
+    /// daemon's `result` field already parsed as a QJsonObject (or wrapped
+    /// under "_value" if the action returns a non-object).
+    void run_daemon(const QString& action, const QJsonObject& payload,
+                    std::function<void(bool, QJsonObject, QString)> cb);
 
     // ── Parsers ───────────────────────────────────────────────────────────────
     QuoteData parse_quote(const QJsonObject& obj) const;

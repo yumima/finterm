@@ -1129,6 +1129,19 @@ def _daemon_dispatch(action, payload):
     if action == "compute_technicals":
         p = payload or {}
         return compute_technicals_from_candles(p.get("candles") or [])
+    if action == "search":
+        p = payload or {}
+        return search_symbols(p.get("query", ""), p.get("limit", 20))
+    if action == "financials":
+        return get_financials((payload or {}).get("symbol"))
+    if action == "multiple_ratios":
+        p = payload or {}
+        syms = p.get("symbols") or []
+        # get_multiple_ratios expects a list — accept either list or CSV
+        # string for forward compatibility with CLI-style payloads.
+        if isinstance(syms, str):
+            syms = [s.strip() for s in syms.split(",") if s.strip()]
+        return get_multiple_ratios(syms)
     return {"error": f"Unknown action: {action}"}
 
 

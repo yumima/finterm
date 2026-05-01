@@ -333,17 +333,19 @@ void MarketDataService::flush_batch() {
     LOG_INFO("MarketData",
              QString("Batch fetch: %1 unique symbols from %2 requests").arg(all_symbols.size()).arg(requests.size()));
 
-    QStringList args;
-    args << "batch_quotes";
-    args.append(all_symbols);
+    // Persistent yfinance daemon — same import is reused across refreshes,
+    // saving the ~1.5s pandas/yfinance cold-import per call.
+    QJsonArray syms_arr;
+    for (const auto& s : all_symbols) syms_arr.append(s);
+    QJsonObject payload;
+    payload["symbols"] = syms_arr;
 
-    python::PythonRunner::instance().run(
-        "yfinance_data.py", args, [this, requests = std::move(requests)](python::PythonResult result) {
+    python::PythonWorker::instance().submit(
+        "batch_quotes", payload,
+        [this, requests = std::move(requests)](bool ok, QJsonObject result, QString err) {
             QVector<QuoteData> all_quotes;
 
-            if (result.success) {
-                auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-
+            if (ok) {
                 auto parse_quote = [](const QJsonObject& q) -> QuoteData {
                     return {q["symbol"].toString(),
                             q["name"].toString(q["symbol"].toString()),
@@ -371,34 +373,30 @@ void MarketDataService::flush_batch() {
                         "market_data");
                 };
 
-                if (doc.isArray()) {
-                    for (const auto& v : doc.array()) {
-                        auto q = v.toObject();
-                        if (q.contains("error"))
-                            continue;
-                        auto quote = parse_quote(q);
-                        all_quotes.append(quote);
-                        store_quote(quote);
-                        publish_quote_to_hub(quote);
-                    }
-                } else if (doc.isObject()) {
-                    auto obj = doc.object();
-                    if (obj.contains("symbol") && !obj.contains("error")) {
-                        auto quote = parse_quote(obj);
-                        all_quotes.append(quote);
-                        store_quote(quote);
-                        publish_quote_to_hub(quote);
-                    }
+                // Daemon's batch_quotes returns a flat list; PythonWorker
+                // wraps it under "_value". Fall back to "quotes" for forward
+                // compatibility if the daemon ever returns a wrapped shape.
+                const QJsonArray quotes = result.contains("_value")
+                                              ? result.value("_value").toArray()
+                                              : result.value("quotes").toArray();
+                for (const auto& v : quotes) {
+                    auto q = v.toObject();
+                    if (q.contains("error"))
+                        continue;
+                    auto quote = parse_quote(q);
+                    all_quotes.append(quote);
+                    store_quote(quote);
+                    publish_quote_to_hub(quote);
                 }
 
                 LOG_INFO("MarketData", QString("Fetched %1 quotes (cached)").arg(all_quotes.size()));
             } else {
-                LOG_WARN("MarketData", "Batch fetch failed: " + result.error);
+                LOG_WARN("MarketData", "Batch fetch failed: " + err);
             }
 
             // Fan out results to each waiting callback, filtered to their requested symbols
             for (const auto& req : requests) {
-                if (!result.success) {
+                if (!ok) {
                     // On failure, try to serve from stale cache (ignoring TTL)
                     QVector<QuoteData> stale;
                     for (const auto& sym : req.symbols) {

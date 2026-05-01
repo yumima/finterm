@@ -39,6 +39,17 @@ void EquityResearchService::run_python(const QString& script, const QStringList&
     });
 }
 
+void EquityResearchService::run_daemon(const QString& action, const QJsonObject& payload,
+                                       std::function<void(bool, QJsonObject, QString)> cb) {
+    QPointer<EquityResearchService> self = this;
+    python::PythonWorker::instance().submit(
+        action, payload,
+        [self, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
+            if (!self) return;
+            cb(ok, std::move(result), std::move(err));
+        });
+}
+
 // ── Search ────────────────────────────────────────────────────────────────────
 void EquityResearchService::schedule_search(const QString& query) {
     pending_query_ = query;
@@ -48,13 +59,15 @@ void EquityResearchService::schedule_search(const QString& query) {
 void EquityResearchService::search_symbols(const QString& query) {
     if (query.trimmed().isEmpty())
         return;
-    run_python("yfinance_data.py", {"search", query, "20"}, [this](bool ok, const QString& out) {
+    QJsonObject payload;
+    payload["query"] = query;
+    payload["limit"] = 20;
+    run_daemon("search", payload, [this](bool ok, QJsonObject result, QString err) {
         if (!ok) {
-            LOG_WARN("EquityResearch", "Symbol search failed");
+            LOG_WARN("EquityResearch", "Symbol search failed: " + err);
             return;
         }
-        auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
-        auto arr = doc.object()["results"].toArray();
+        const auto arr = result.value("results").toArray();
         QVector<SearchResult> results;
         results.reserve(arr.size());
         for (const auto& v : arr) {
@@ -84,12 +97,13 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!qcv.isNull()) {
             emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
         } else {
-            run_python("yfinance_data.py", {"quote", symbol}, [this, symbol](bool ok, const QString& out) {
+            QJsonObject payload;
+            payload["symbol"] = symbol;
+            run_daemon("quote", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
                 if (!ok) {
-                    emit error_occurred("Quote", "Failed to fetch quote for " + symbol);
+                    emit error_occurred("Quote", "Failed to fetch quote for " + symbol + ": " + err);
                     return;
                 }
-                auto obj = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
                 if (obj.contains("error"))
                     return;
                 fincept::CacheManager::instance().put(
@@ -107,12 +121,13 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
         } else {
-            run_python("yfinance_data.py", {"info", symbol}, [this, symbol](bool ok, const QString& out) {
+            QJsonObject payload;
+            payload["symbol"] = symbol;
+            run_daemon("info", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
                 if (!ok) {
-                    emit error_occurred("Info", "Failed to fetch info for " + symbol);
+                    emit error_occurred("Info", "Failed to fetch info for " + symbol + ": " + err);
                     return;
                 }
-                auto obj = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
                 if (obj.contains("error"))
                     return;
                 fincept::CacheManager::instance().put(
@@ -130,13 +145,20 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!hcv.isNull()) {
             emit historical_loaded(symbol, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
-            run_python("yfinance_data.py", {"historical_period", symbol, period, "1d"},
-                       [this, symbol](bool ok, const QString& out) {
+            QJsonObject payload;
+            payload["symbol"] = symbol;
+            payload["period"] = period;
+            payload["interval"] = "1d";
+            run_daemon("historical_period", payload,
+                       [this, symbol](bool ok, QJsonObject result, QString err) {
                            if (!ok) {
-                               emit error_occurred("Historical", "Failed to fetch historical for " + symbol);
+                               emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
                                return;
                            }
-                           auto arr = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).array();
+                           // Daemon returns a flat list; PythonWorker wraps under "_value".
+                           const auto arr = result.contains("_value")
+                                                ? result.value("_value").toArray()
+                                                : result.value("history").toArray();
                            fincept::CacheManager::instance().put(
                                "equity:candles:" + symbol,
                                QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
@@ -149,12 +171,13 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
 // ── Financials ────────────────────────────────────────────────────────────────
 void EquityResearchService::fetch_financials(const QString& symbol) {
-    run_python("yfinance_data.py", {"financials", symbol}, [this, symbol](bool ok, const QString& out) {
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    run_daemon("financials", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
         if (!ok) {
-            emit error_occurred("Financials", "Failed to fetch financials for " + symbol);
+            emit error_occurred("Financials", "Failed to fetch financials for " + symbol + ": " + err);
             return;
         }
-        auto obj = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
         if (obj.contains("error")) {
             emit error_occurred("Financials", obj["error"].toString());
             return;
@@ -250,17 +273,21 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
 // ── Peers ─────────────────────────────────────────────────────────────────────
 void EquityResearchService::fetch_peers(const QString& symbol, const QStringList& peer_symbols) {
-    QStringList all;
-    all << symbol;
-    all.append(peer_symbols);
-    QString joined = all.join(",");
+    QJsonArray syms_arr;
+    syms_arr.append(symbol);
+    for (const auto& s : peer_symbols) syms_arr.append(s);
+    QJsonObject payload;
+    payload["symbols"] = syms_arr;
 
-    run_python("yfinance_data.py", {"multiple_ratios", joined}, [this](bool ok, const QString& out) {
+    run_daemon("multiple_ratios", payload, [this](bool ok, QJsonObject result, QString err) {
         if (!ok) {
-            emit error_occurred("Peers", "Failed to fetch peer data");
+            emit error_occurred("Peers", "Failed to fetch peer data: " + err);
             return;
         }
-        auto arr = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).array();
+        // multiple_ratios returns a list; PythonWorker wraps under "_value".
+        const auto arr = result.contains("_value")
+                             ? result.value("_value").toArray()
+                             : result.value("ratios").toArray();
         emit peers_loaded(parse_peers(arr));
     });
 }
@@ -321,13 +348,20 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     if (!cached_candles.isNull()) {
         run_talipp(cached_candles.toString());
     } else {
-        run_python("yfinance_data.py", {"historical_period", symbol, period, "1d"},
-                   [this, symbol, run_talipp](bool ok, const QString& out) {
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        payload["period"] = period;
+        payload["interval"] = "1d";
+        run_daemon("historical_period", payload,
+                   [this, symbol, run_talipp](bool ok, QJsonObject result, QString err) {
                        if (!ok) {
-                           emit error_occurred("TALIpp", "Historical fetch failed");
+                           emit error_occurred("TALIpp", "Historical fetch failed: " + err);
                            return;
                        }
-                       auto raw = python::extract_json(out);
+                       const auto arr = result.contains("_value")
+                                            ? result.value("_value").toArray()
+                                            : result.value("history").toArray();
+                       const QString raw = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
                        fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(raw),
                                                              kHistoricalTtlSec, "equity");
                        run_talipp(raw);
