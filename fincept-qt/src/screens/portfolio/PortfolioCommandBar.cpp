@@ -30,6 +30,7 @@ static const DetailBtnDef kDetailButtons[] = {
     {"RISK", portfolio::DetailView::RiskMgmt},
     {"PLANNING", portfolio::DetailView::Planning},
     {"ECONOMICS", portfolio::DetailView::Economics},
+    {"FUTURES & EXT", portfolio::DetailView::FuturesExtHours},
 };
 
 PortfolioCommandBar::PortfolioCommandBar(QWidget* parent) : QWidget(parent) {

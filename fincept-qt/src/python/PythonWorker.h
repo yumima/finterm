@@ -20,6 +20,15 @@ namespace fincept::python {
 /// through here — those need PythonRunner's per-script venv routing (numpy1
 /// vs numpy2 selection in PythonRunner.cpp::select_venv_for_script).
 ///
+/// Hosted actions (see `_daemon_dispatch` in yfinance_data.py): batch_quotes,
+/// batch_sparklines, batch_all, historical_period, quote, info, news,
+/// financial_ratios, portfolio_nav_history, extended_hours, compute_technicals.
+///
+/// Caveat — daemon is single-threaded. A long-running action blocks every
+/// other request until it returns. compute_technicals is CPU-bound but bounded
+/// (<1s for 252-bar series). If you add a new action that can hang, either
+/// move it to a fresh PythonRunner spawn or add per-request timeout handling.
+///
 /// Framing: 4-byte big-endian length prefix, UTF-8 JSON body. Matches
 /// `run_daemon()` in scripts/yfinance_data.py.
 ///

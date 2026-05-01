@@ -10,6 +10,7 @@
 #include "screens/portfolio/views/QuantStatsView.h"
 #include "screens/portfolio/views/ReportsView.h"
 #include "screens/portfolio/views/RiskManagementView.h"
+#include "screens/portfolio/PortfolioFuturesView.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -131,6 +132,8 @@ void PortfolioDetailWrapper::update_data(const portfolio::PortfolioSummary& summ
         plan_v->set_data(summary, currency);
     } else if (auto* econ_v = qobject_cast<EconomicsView*>(current)) {
         econ_v->set_data(summary, currency);
+    } else if (auto* fut_v = qobject_cast<PortfolioFuturesView*>(current)) {
+        fut_v->set_summary(summary, currency);
     }
 }
 
@@ -189,6 +192,14 @@ QWidget* PortfolioDetailWrapper::get_or_create_view(portfolio::DetailView view) 
         case portfolio::DetailView::Economics:
             widget = new EconomicsView;
             break;
+        case portfolio::DetailView::FuturesExtHours: {
+            auto* fv = new PortfolioFuturesView;
+            // Hand it the latest summary if we already have one.
+            if (!current_summary_.holdings.isEmpty())
+                fv->set_summary(current_summary_, current_currency_);
+            widget = fv;
+            break;
+        }
     }
 
     view_stack_->addWidget(widget);
@@ -216,6 +227,8 @@ QString PortfolioDetailWrapper::view_title(portfolio::DetailView view) const {
             return "FINANCIAL PLANNING";
         case portfolio::DetailView::Economics:
             return "ECONOMICS";
+        case portfolio::DetailView::FuturesExtHours:
+            return "FUTURES & EXTENDED HOURS";
     }
     return "DETAIL VIEW";
 }

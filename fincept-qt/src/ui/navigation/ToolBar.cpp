@@ -1,14 +1,19 @@
 #include "ui/navigation/ToolBar.h"
 
 #include "auth/AuthManager.h"
+#include "screens/futures/FuturesDataService.h"
+#include "screens/futures/FuturesQuoteCache.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QDateTime>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QMenu>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
@@ -88,6 +93,18 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     live_label_ = mk(" LIVE");
     hl->addWidget(live_label_);
 
+    // Data source chip — sits next to LIVE because it's a session-wide
+    // infrastructure choice that affects every yfinance-driven screen.
+    hl->addWidget(mk("  "));
+    data_source_btn_ = new QPushButton("DATA: YAHOO \xe2\x96\xbe");
+    data_source_btn_->setObjectName("toolbarDataSource");
+    data_source_btn_->setFixedHeight(20);
+    data_source_btn_->setCursor(Qt::PointingHandCursor);
+    data_source_btn_->setToolTip("Switch market data source");
+    data_source_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(data_source_btn_, &QPushButton::clicked, this, &ToolBar::show_data_source_menu);
+    hl->addWidget(data_source_btn_);
+
     hl->addStretch(1);
 
     clock_label_ = mk("");
@@ -142,6 +159,54 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
 
     refresh_user_display();
     refresh_theme();
+
+    // Restore persisted data source preference (default: yahoo).
+    const auto saved_src = SettingsRepository::instance().get("data.source", "yahoo");
+    apply_data_source(saved_src.is_ok() ? saved_src.value() : QString("yahoo"), false);
+}
+
+void ToolBar::show_data_source_menu() {
+    QMenu menu(this);
+    menu.setStyleSheet(menu_ss());
+    auto* group = new QActionGroup(&menu);
+    group->setExclusive(true);
+
+    auto add = [&](const QString& label, const QString& value) {
+        auto* a = menu.addAction(label);
+        a->setCheckable(true);
+        a->setChecked(data_source_ == value);
+        group->addAction(a);
+        connect(a, &QAction::triggered, this, [this, value]() { apply_data_source(value, true); });
+    };
+    add("Yahoo  (live, slower)", "yahoo");
+    add("Stooq  (EOD, fast)", "stooq");
+
+    menu.exec(data_source_btn_->mapToGlobal(QPoint(0, data_source_btn_->height())));
+}
+
+// Apply the chosen data source globally and invalidate every cache that
+// holds source-specific values. If you add a new yfinance-backed cache
+// (say, an MarketDataCache), wire its invalidation in here — otherwise
+// the user's source switch will leave stale data on screen until the
+// next periodic refresh. Caches currently invalidated:
+//   - FuturesQuoteCache             (futures quote board / heatmap / spread)
+// Caches that are unaffected (still call yfinance daemon directly,
+// regardless of the toggle):
+//   - PortfolioFuturesView ext_quotes (Stooq has no extended-hours data,
+//                                      so we always serve it from yfinance)
+//   - CacheManager equity:* keys     (Equity Research is yfinance-only today)
+void ToolBar::apply_data_source(const QString& source, bool persist) {
+    if (source != "yahoo" && source != "stooq") return;
+    data_source_ = source;
+    if (data_source_btn_) {
+        data_source_btn_->setText(source == "stooq" ? "DATA: STOOQ \xe2\x96\xbe"
+                                                     : "DATA: YAHOO \xe2\x96\xbe");
+    }
+    fincept::screens::futures::FuturesDataService::instance().set_source(source);
+    fincept::screens::futures::FuturesQuoteCache::instance().refresh();
+    if (persist) {
+        SettingsRepository::instance().set("data.source", source);
+    }
 }
 
 void ToolBar::refresh_theme() {
@@ -189,6 +254,13 @@ void ToolBar::refresh_theme() {
                                            "QPushButton:hover{background:%1;color:%2;border-color:%1;}")
                                        .arg(colors::NEGATIVE())
                                        .arg(colors::TEXT_PRIMARY()));
+    if (data_source_btn_)
+        data_source_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                                                "padding:0 6px;font-weight:600;letter-spacing:0.4px;}"
+                                                "QPushButton:hover{background:%2;color:%3;}")
+                                             .arg(colors::AMBER())
+                                             .arg(colors::BORDER_DIM())
+                                             .arg(colors::TEXT_PRIMARY()));
 }
 
 void ToolBar::resizeEvent(QResizeEvent* e) {
@@ -336,6 +408,7 @@ QMenu* ToolBar::build_navigate_menu() {
 
     // Markets & Data
     auto* mkt = add_sub("Markets & Data");
+    nav(mkt, "Futures", "futures");
     nav(mkt, "Economics", "economics");
     nav(mkt, "GOVT Data", "gov_data");
     nav(mkt, "DBnomics", "dbnomics");
@@ -414,6 +487,7 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("News Feed", this, [this]() { emit action_triggered("panel_news"); });
     panels->addAction("Portfolio", this, [this]() { emit action_triggered("panel_portfolio"); });
     panels->addAction("Markets", this, [this]() { emit action_triggered("panel_markets"); });
+    panels->addAction("Futures", this, [this]() { emit action_triggered("panel_futures"); });
     panels->addSeparator();
     panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
     panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });

@@ -11,45 +11,67 @@
 # On macOS anything unexpected inside an .app bundle trips codesign with
 # "bundle format unrecognized, invalid, or unsuitable". On Linux/Windows
 # these just bloat the installer; removing them shrinks it meaningfully.
+#
+# IMPORTANT — do NOT mix `GLOB_RECURSE` with `LIST_DIRECTORIES true`. CMake's
+# globbing then returns every intermediate directory on the search path, not
+# just the pattern matches. (Diagnosed when `technicals/` and 11 other
+# legitimate subdirectories were being wiped on every build, breaking
+# `compute_technicals.py` because its `from technicals.X import Y` failed.)
 
 if(NOT DEFINED SCRIPTS_DIR)
     message(FATAL_ERROR "prune_scripts_junk.cmake: SCRIPTS_DIR must be set")
 endif()
 
 if(NOT IS_DIRECTORY "${SCRIPTS_DIR}")
-    # Nothing to do — scripts dir isn't there.
     return()
 endif()
 
-# Glob directories to nuke (recursively under scripts/).
-file(GLOB_RECURSE _junk_dirs
-    LIST_DIRECTORIES true
-    "${SCRIPTS_DIR}/*.deleted.*"
-    "${SCRIPTS_DIR}/*.deleted"
-    "${SCRIPTS_DIR}/*/.pytest_cache"
-    "${SCRIPTS_DIR}/*/.benchmarks"
-    "${SCRIPTS_DIR}/*/__pycache__"
-    "${SCRIPTS_DIR}/.pytest_cache"
-    "${SCRIPTS_DIR}/.benchmarks"
-    "${SCRIPTS_DIR}/__pycache__"
-)
+# Recursive walk that only matches blacklisted basenames — no glob patterns.
+# Returns sets in the parent scope.
+set(_junk_dirs "")
+set(_junk_files "")
 
-# Glob stray files (local DBs + editor/backup artifacts).
-file(GLOB_RECURSE _junk_files
-    "${SCRIPTS_DIR}/*.db"
-    "${SCRIPTS_DIR}/*.sqlite"
-    "${SCRIPTS_DIR}/*.sqlite3"
-    "${SCRIPTS_DIR}/*.bak"
-    "${SCRIPTS_DIR}/*.orig"
-    "${SCRIPTS_DIR}/*.pyc"
-)
+function(_walk dir)
+    file(GLOB _children RELATIVE "${dir}" "${dir}/*")
+    foreach(_name IN LISTS _children)
+        set(_path "${dir}/${_name}")
+        if(IS_DIRECTORY "${_path}")
+            set(_blacklisted FALSE)
+            if(_name STREQUAL "__pycache__"
+                OR _name STREQUAL ".pytest_cache"
+                OR _name STREQUAL ".benchmarks")
+                set(_blacklisted TRUE)
+            elseif(_name MATCHES "\\.deleted$" OR _name MATCHES "\\.deleted\\.")
+                set(_blacklisted TRUE)
+            endif()
+            if(_blacklisted)
+                list(APPEND _junk_dirs "${_path}")
+                set(_junk_dirs "${_junk_dirs}" PARENT_SCOPE)
+            else()
+                _walk("${_path}")
+                set(_junk_dirs "${_junk_dirs}" PARENT_SCOPE)
+                set(_junk_files "${_junk_files}" PARENT_SCOPE)
+            endif()
+        else()
+            if(_name MATCHES "\\.(db|sqlite|sqlite3|bak|orig|pyc)$")
+                list(APPEND _junk_files "${_path}")
+                set(_junk_files "${_junk_files}" PARENT_SCOPE)
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
+_walk("${SCRIPTS_DIR}")
 
 set(_removed 0)
-foreach(_path IN LISTS _junk_dirs _junk_files)
+foreach(_path IN LISTS _junk_dirs)
     if(IS_DIRECTORY "${_path}")
         file(REMOVE_RECURSE "${_path}")
         math(EXPR _removed "${_removed} + 1")
-    elseif(EXISTS "${_path}")
+    endif()
+endforeach()
+foreach(_path IN LISTS _junk_files)
+    if(EXISTS "${_path}")
         file(REMOVE "${_path}")
         math(EXPR _removed "${_removed} + 1")
     endif()

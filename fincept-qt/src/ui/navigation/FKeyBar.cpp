@@ -18,7 +18,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     tab_layout_->setSpacing(2);
 
     QVector<TabDef> tabs = {
-        {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
+        {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"futures", "FUTURES"},        {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
         {"news", "NEWS"},           {"ai_chat", "AI CHAT"},   {"backtesting", "BACKTEST"},   {"algo_trading", "ALGO"},
         {"node_editor", "NODES"},   {"code_editor", "CODE"},  {"ai_quant_lab", "QUANT LAB"}, {"quantlib", "QUANTLIB"},
         {"forum", "FORUM"},         {"settings", "SETTINGS"}, {"profile", "PROFILE"},

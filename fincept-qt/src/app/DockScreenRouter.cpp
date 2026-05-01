@@ -35,6 +35,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
     static const QHash<QString, QString> titles = {
         {"dashboard", "Dashboard"},
         {"markets", "Markets"},
+        {"futures", "Futures"},
         {"crypto_trading", "Crypto Trading"},
         {"equity_trading", "Equity Trading"},
         {"algo_trading", "Algo Trading"},

@@ -252,11 +252,27 @@ void EquityResearchScreen::load_symbol(const QString& symbol) {
     // Overview always loads (tab 0 is default)
     overview_tab_->set_symbol(symbol);
 
-    // Load data for currently active tab
-    on_tab_changed(tab_widget_->currentIndex());
+    // Forward to every tab so each filters its own signals correctly when
+    // the responses land. Tabs whose data hasn't been fetched yet just sit
+    // empty until the prefetch below resolves.
+    if (financials_tab_) financials_tab_->set_symbol(symbol);
+    if (analysis_tab_) analysis_tab_->set_symbol(symbol);
+    if (technicals_tab_) technicals_tab_->set_symbol(symbol);
+    if (talipp_tab_) talipp_tab_->set_symbol(symbol);
+    if (peers_tab_) peers_tab_->set_symbol(symbol);
+    if (news_tab_) news_tab_->set_symbol(symbol);
+    if (sentiment_tab_) sentiment_tab_->set_symbol(symbol);
 
-    // Trigger quote + info + historical
-    services::equity::EquityResearchService::instance().load_symbol(symbol);
+    // Prefetch — fire every fetch in parallel so whichever tab the user
+    // opens next is already populated (or rendering from a cache hit).
+    // load_symbol() handles overview info + historical + quote.
+    auto& svc = services::equity::EquityResearchService::instance();
+    svc.load_symbol(symbol);
+    svc.fetch_financials(symbol);
+    svc.fetch_technicals(symbol);
+    svc.fetch_news(symbol);
+    // peers + sentiment have their own fetch APIs — invoked by the tabs on
+    // first show. Skipping eager prefetch since they don't lock the UI.
 
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
     if (link_group_ != SymbolGroup::None) {

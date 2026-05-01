@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "python/PythonWorker.h"
 #include "storage/cache/CacheManager.h"
 
 #include <QJsonArray>
@@ -163,45 +164,88 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
 }
 
 // ── Technicals ────────────────────────────────────────────────────────────────
+//
+// Optimised path (after the worker rewire):
+//   • If `equity:technicals:<sym>:<period>` is cached → parse + emit immediately.
+//   • Else fetch candles (cached at `equity:candles:<sym>`) via the persistent
+//     yfinance daemon, then compute via the same daemon's `compute_technicals`
+//     action. Both daemon hops share the warm pandas/yfinance import so the
+//     wall time is dominated only by the network roundtrip on cold candles.
+//
 void EquityResearchService::fetch_technicals(const QString& symbol, const QString& period) {
-    // Step 1: fetch historical (from CacheManager), then step 2: compute technicals
-    QString cached_json;
+    // ── Tier 0: technicals cache ─────────────────────────────────────────────
     {
-        const QVariant hcv = fincept::CacheManager::instance().get("equity:candles:" + symbol);
-        if (!hcv.isNull())
-            cached_json = hcv.toString();
+        const QVariant tcv = fincept::CacheManager::instance().get("equity:technicals:" + symbol + ":" + period);
+        if (!tcv.isNull()) {
+            const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
+            if (cached_doc.isArray()) {
+                emit technicals_loaded(parse_technicals(symbol, cached_doc.array()));
+                return;
+            }
+        }
     }
 
-    auto run_compute = [this, symbol](const QString& hist_json) {
-        run_python("compute_technicals.py", {hist_json}, [this, symbol](bool ok2, const QString& out2) {
-            if (!ok2) {
-                emit error_occurred("Technicals", "Indicator computation failed");
-                return;
-            }
-            auto doc = QJsonDocument::fromJson(python::extract_json(out2).toUtf8()).object();
-            if (!doc["success"].toBool()) {
-                emit error_occurred("Technicals", "compute_technicals returned failure");
-                return;
-            }
-            emit technicals_loaded(parse_technicals(symbol, doc["data"].toArray()));
-        });
+    QPointer<EquityResearchService> self = this;
+
+    // ── Stage 2: compute via daemon, given a candles array ───────────────────
+    auto run_compute = [self, symbol, period](const QJsonArray& candles) {
+        if (!self) return;
+        QJsonObject payload;
+        payload["candles"] = candles;
+        python::PythonWorker::instance().submit("compute_technicals", payload,
+            [self, symbol, period](bool ok, QJsonObject result, QString err) {
+                if (!self) return;
+                if (!ok || !result.value("success").toBool(false)) {
+                    emit self->error_occurred(
+                        "Technicals",
+                        ok ? QString("compute_technicals returned failure: %1").arg(result.value("error").toString())
+                           : QString("Indicator computation failed: %1").arg(err));
+                    return;
+                }
+                const QJsonArray data = result.value("data").toArray();
+                // Cache the computed series so re-opens are <100ms.
+                const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put(
+                    "equity:technicals:" + symbol + ":" + period, QVariant(blob),
+                    kHistoricalTtlSec, "equity");
+                emit self->technicals_loaded(self->parse_technicals(symbol, data));
+            });
     };
 
-    if (!cached_json.isEmpty()) {
-        run_compute(cached_json);
-    } else {
-        run_python("yfinance_data.py", {"historical_period", symbol, period, "1d"},
-                   [this, symbol, run_compute](bool ok, const QString& out) {
-                       if (!ok) {
-                           emit error_occurred("Technicals", "Failed historical fetch");
-                           return;
-                       }
-                       auto raw = python::extract_json(out);
-                       fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(raw),
-                                                             kHistoricalTtlSec, "equity");
-                       run_compute(raw);
-                   });
+    // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
+    QJsonArray candles_from_cache;
+    {
+        const QVariant hcv = fincept::CacheManager::instance().get("equity:candles:" + symbol);
+        if (!hcv.isNull()) {
+            const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
+            if (doc.isArray()) candles_from_cache = doc.array();
+        }
     }
+    if (!candles_from_cache.isEmpty()) {
+        run_compute(candles_from_cache);
+        return;
+    }
+
+    QJsonObject hist_payload;
+    hist_payload["symbol"] = symbol;
+    hist_payload["period"] = period;
+    hist_payload["interval"] = "1d";
+    python::PythonWorker::instance().submit("historical_period", hist_payload,
+        [self, symbol, run_compute](bool ok, QJsonObject result, QString /*err*/) {
+            if (!self) return;
+            if (!ok) {
+                emit self->error_occurred("Technicals", "Failed historical fetch");
+                return;
+            }
+            // Daemon returns a flat array; PythonWorker wraps under _value.
+            const QJsonArray candles = result.contains("_value")
+                                            ? result.value("_value").toArray()
+                                            : result.value("history").toArray();
+            const QString blob = QString::fromUtf8(QJsonDocument(candles).toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(blob),
+                                                   kHistoricalTtlSec, "equity");
+            run_compute(candles);
+        });
 }
 
 // ── Peers ─────────────────────────────────────────────────────────────────────

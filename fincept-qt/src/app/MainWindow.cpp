@@ -39,6 +39,9 @@
 #include "screens/crypto_center/CryptoCenterScreen.h"
 #include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
+#include "screens/futures/FuturesScreen.h"
+#include "screens/futures/FuturesQuoteCache.h"
+#include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
 #include "screens/file_manager/FileManagerScreen.h"
@@ -283,6 +286,31 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     dock_router_ = new DockScreenRouter(dock_manager_, this);
     setup_dock_screens();
+
+    // Boot prefetch — warm caches before the user clicks anything. The
+    // FUTURES screen and PortfolioFuturesView read the futures cache
+    // synchronously, so by the time those screens open, data is already
+    // there. Cost: one yfinance batch (~3–5s) overlapping window setup.
+    {
+        auto& fut_cache = fincept::screens::futures::FuturesQuoteCache::instance();
+        fut_cache.start_auto_refresh(fincept::screens::futures::kFuturesRefreshIntervalMs);
+        fut_cache.refresh();
+
+        // Portfolio prefetch — load the list, then warm the summary cache
+        // for every portfolio. The persistent yfinance daemon handles the
+        // batch, so cost is one network roundtrip per portfolio (no import
+        // overhead). Switching between portfolios in the UI then hits the
+        // in-memory summary cache and renders synchronously.
+        auto& portfolio_svc = services::PortfolioService::instance();
+        QObject::connect(&portfolio_svc, &services::PortfolioService::portfolios_loaded, this,
+            [&portfolio_svc](QVector<portfolio::Portfolio> portfolios) {
+                static bool already_prefetched = false;
+                if (already_prefetched || portfolios.isEmpty()) return;
+                already_prefetched = true;
+                for (const auto& p : portfolios) portfolio_svc.load_summary(p.id);
+            });
+        portfolio_svc.load_portfolios();
+    }
 
     // Tab bar navigation: open the selected screen exclusively — closes all other
     // panels and fills the full area. Each tab is a fresh independent screen,
@@ -569,6 +597,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_news", {"News Feed", "news"}},
                 {"panel_portfolio", {"Portfolio", "portfolio"}},
                 {"panel_markets", {"Markets", "markets"}},
+                {"panel_futures", {"Futures", "futures"}},
                 {"panel_crypto", {"Crypto Trading", "crypto_trading"}},
                 {"panel_equity", {"Equity Trading", "equity_trading"}},
                 {"panel_algo", {"Algo Trading", "algo_trading"}},
@@ -990,6 +1019,7 @@ void MainWindow::setup_docking_mode() {
 void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("dashboard", []() { return new screens::DashboardScreen; });
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
+    dock_router_->register_factory("futures", []() { return new screens::FuturesScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
     dock_router_->register_factory("forum", []() { return new screens::ForumScreen; });

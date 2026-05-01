@@ -1072,6 +1072,28 @@ def _daemon_write_frame(stream, data_bytes):
     stream.flush()
 
 
+def _sanitize_for_json(obj):
+    """Replace NaN / +Inf / -Inf with None recursively.
+
+    Python's `json.dumps` emits these as bare `NaN` / `Infinity` tokens by
+    default (allow_nan=True) — that is invalid per the JSON spec and Qt's
+    QJsonDocument::fromJson rejects the whole frame with "illegal number".
+    We sanitize on the daemon side so every action's result is safe to
+    transmit, regardless of how careful the implementation was about
+    pandas/numpy NaN handling.
+    """
+    import math as _m
+    if isinstance(obj, float):
+        if _m.isnan(obj) or _m.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+
 def _daemon_dispatch(action, payload):
     """Run one action and return the raw result object (not wrapped)."""
     if action == "batch_all":
@@ -1093,7 +1115,161 @@ def _daemon_dispatch(action, payload):
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))
+    if action == "portfolio_nav_history":
+        p = payload or {}
+        positions = p.get("positions") or []
+        period = p.get("period", "6mo")
+        return get_portfolio_nav_history(positions, period)
+    if action == "extended_hours":
+        p = payload or {}
+        symbols = p.get("symbols") or []
+        return get_extended_hours_quotes(symbols)
+    if action == "financial_ratios":
+        return get_financial_ratios((payload or {}).get("symbol"))
+    if action == "compute_technicals":
+        p = payload or {}
+        return compute_technicals_from_candles(p.get("candles") or [])
     return {"error": f"Unknown action: {action}"}
+
+
+# Technical indicators — heavy `ta` library import is amortized over the
+# lifetime of the daemon (loaded lazily on first request, then reused).
+_TECHNICALS_MOD = None
+
+
+def _load_technicals_modules():
+    """Import the technicals package once; return the bundle."""
+    global _TECHNICALS_MOD
+    if _TECHNICALS_MOD is not None:
+        return _TECHNICALS_MOD
+    import os as _os, sys as _sys
+    _sd = _os.path.dirname(_os.path.abspath(__file__))
+    if _sd not in _sys.path:
+        _sys.path.insert(0, _sd)
+    from technicals.momentum_indicators import calculate_all_momentum_indicators
+    from technicals.volume_indicators import calculate_all_volume_indicators
+    from technicals.volatility_indicators import calculate_all_volatility_indicators
+    from technicals.trend_indicators import calculate_all_trend_indicators
+    from technicals.others_indicators import calculate_all_others_indicators
+    _TECHNICALS_MOD = {
+        "momentum":   calculate_all_momentum_indicators,
+        "volume":     calculate_all_volume_indicators,
+        "volatility": calculate_all_volatility_indicators,
+        "trend":      calculate_all_trend_indicators,
+        "others":     calculate_all_others_indicators,
+    }
+    return _TECHNICALS_MOD
+
+
+def compute_technicals_from_candles(candles):
+    """
+    Compute the full indicator suite from a candle list. Mirrors what
+    compute_technicals.py does standalone, but reuses the daemon's already-
+    imported pandas + cached `ta` modules.
+
+    candles: list of {timestamp/date, open, high, low, close, volume?}.
+    Returns: {success, data: <merged indicator dict>, error?}
+    """
+    try:
+        if not candles:
+            return {"success": False, "error": "no candles", "data": []}
+        try:
+            mods = _load_technicals_modules()
+        except Exception as e:
+            return {"success": False, "error": f"technicals import failed: {e}", "data": []}
+
+        df = pd.DataFrame(candles)
+        # Tolerate either lowercase or capitalized column names.
+        rename = {c: c.lower() for c in df.columns if c[0].isupper()}
+        if rename:
+            df = df.rename(columns=rename)
+        for col in ("open", "high", "low", "close"):
+            if col not in df.columns:
+                return {"success": False, "error": f"missing column: {col}", "data": []}
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        if "volume" not in df.columns:
+            df["volume"] = 0.0
+        else:
+            df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0.0)
+        df = df.dropna(subset=["close"]).reset_index(drop=True)
+
+        # Each calculator returns the df with new indicator columns appended.
+        # Order mirrors compute_technicals.py: trend, momentum, volatility,
+        # volume (only if available), others.
+        result = df.copy()
+        for stage in ("trend", "momentum", "volatility", "volume", "others"):
+            if stage == "volume" and "volume" not in result.columns:
+                continue
+            try:
+                result = mods[stage](result)
+            except Exception as e:
+                # Don't abort the whole compute on one stage failure — just
+                # surface it via a sentinel column the frontend can ignore.
+                result[f"_{stage}_error"] = str(e)
+
+        result = result.replace([float("inf"), float("-inf")], None)
+        result = result.where(pd.notna(result), None)
+        rows = result.to_dict("records")
+        return {"success": True, "data": rows}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": []}
+
+
+# Extended-hours helper — returns regular / pre / post for each symbol so the
+# Portfolio Futures view can show after-hours moves. Sourced from
+# `Ticker.info` (preMarketPrice / postMarketPrice / regularMarketPrice).
+def get_extended_hours_quotes(symbols):
+    if not symbols:
+        return []
+    try:
+        import yfinance as _yf
+    except Exception:
+        return []
+    rows = []
+    for sym in symbols:
+        try:
+            info = _yf.Ticker(sym).info or {}
+        except Exception:
+            info = {}
+        regular = info.get("regularMarketPrice") or info.get("currentPrice") or None
+        pre = info.get("preMarketPrice")
+        post = info.get("postMarketPrice")
+        state = (info.get("marketState") or "").upper()
+        if "PRE" in state:
+            session = "PRE"
+        elif "POST" in state:
+            session = "POST"
+        elif "REGULAR" in state:
+            session = "REGULAR"
+        else:
+            session = "CLOSED"
+        ext = None
+        if session == "PRE" and pre is not None:
+            ext = float(pre)
+        elif session == "POST" and post is not None:
+            ext = float(post)
+        elif post is not None:
+            ext = float(post)
+        elif pre is not None:
+            ext = float(pre)
+        ext_chg = None
+        ext_pct = None
+        if ext is not None and regular:
+            ext_chg = ext - float(regular)
+            ext_pct = (ext_chg / float(regular)) * 100.0 if regular else 0.0
+        rows.append({
+            "symbol": sym,
+            "regular": float(regular) if regular is not None else None,
+            "pre_market": float(pre) if pre is not None else None,
+            "post_market": float(post) if post is not None else None,
+            "ext_price": ext,
+            "ext_change": ext_chg,
+            "ext_change_pct": ext_pct,
+            "session": session,
+            "currency": info.get("currency", ""),
+            "name": info.get("shortName") or info.get("longName") or sym,
+        })
+    return rows
 
 
 def run_daemon():
@@ -1130,11 +1306,21 @@ def run_daemon():
 
         try:
             result = _daemon_dispatch(action, req.get("payload"))
-            resp = {"id": req_id, "ok": True, "result": result}
+            resp = {"id": req_id, "ok": True, "result": _sanitize_for_json(result)}
         except Exception as e:
             resp = {"id": req_id, "ok": False, "error": str(e)}
         try:
-            _daemon_write_frame(stdout, json.dumps(resp).encode("utf-8"))
+            # allow_nan=False is the safety net — if anything still slips
+            # through _sanitize_for_json (e.g. numpy.float64 NaN we missed),
+            # we get a ValueError here instead of writing invalid JSON that
+            # the C++ side will silently drop.
+            body = json.dumps(resp, allow_nan=False).encode("utf-8")
+        except (ValueError, TypeError) as e:
+            err_resp = {"id": req_id, "ok": False,
+                        "error": f"non-JSON-safe result: {e}"}
+            body = json.dumps(err_resp).encode("utf-8")
+        try:
+            _daemon_write_frame(stdout, body)
         except Exception:
             break
 

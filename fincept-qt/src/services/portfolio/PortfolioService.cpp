@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "python/PythonWorker.h"
 #include "services/sectors/SectorResolver.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -1064,36 +1065,31 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
     }
     const auto assets = assets_r.value();
 
-    // Build the args list: [portfolio_nav_history, period, sym1, qty1, sym2, qty2, ...]
-    // Cost basis is the same for every backfilled day (we don't have transaction-time
-    // cost basis), so save_snapshot's pnl_pct uses today's cost — see comment below.
-    QStringList args;
-    args << "portfolio_nav_history" << period;
+    // Persistent yfinance daemon — same shape, no per-call import cost.
+    QJsonArray positions_arr;
     double total_cost_basis = 0.0;
     for (const auto& a : assets) {
-        args << a.symbol << QString::number(a.quantity, 'f', 8);
+        QJsonObject p;
+        p["symbol"] = a.symbol;
+        p["quantity"] = a.quantity;
+        positions_arr.append(p);
         total_cost_basis += a.quantity * a.avg_buy_price;
     }
+    QJsonObject payload;
+    payload["positions"] = positions_arr;
+    payload["period"] = period;
 
     QPointer<PortfolioService> self = this;
-    python::PythonRunner::instance().run("yfinance_data.py", args,
-                                         [self, portfolio_id, total_cost_basis](python::PythonResult result) {
+    python::PythonWorker::instance().submit("portfolio_nav_history", payload,
+        [self, portfolio_id, total_cost_basis](bool ok, QJsonObject obj, QString err) {
         if (!self)
             return;
-        if (!result.success || result.output.trimmed().isEmpty()) {
+        if (!ok) {
             LOG_WARN("PortfolioSvc",
-                     QString("backfill_history failed for %1: %2").arg(portfolio_id, result.error.left(200)));
+                     QString("backfill_history failed for %1: %2").arg(portfolio_id, err.left(200)));
             emit self->history_backfilled(portfolio_id, 0);
             return;
         }
-        QJsonParseError err;
-        const auto doc = QJsonDocument::fromJson(result.output.trimmed().toUtf8(), &err);
-        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            LOG_WARN("PortfolioSvc", "backfill_history: bad JSON: " + err.errorString());
-            emit self->history_backfilled(portfolio_id, 0);
-            return;
-        }
-        const auto obj = doc.object();
         if (obj.contains("error")) {
             LOG_WARN("PortfolioSvc", "backfill_history: " + obj["error"].toString());
             emit self->history_backfilled(portfolio_id, 0);

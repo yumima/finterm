@@ -999,6 +999,10 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketPanel.cpp
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
+    src/screens/futures/FuturesScreen.cpp
+    src/screens/futures/FuturesDataService.cpp
+    src/screens/futures/FuturesPanels.cpp
+    src/screens/futures/FuturesQuoteCache.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/DashboardStatusBar.cpp
@@ -1259,6 +1263,7 @@ set(SCREEN_SOURCES
     src/screens/portfolio/views/PlanningView.cpp
     src/screens/portfolio/views/EconomicsView.cpp
     src/screens/portfolio/PortfolioFFNView.cpp
+    src/screens/portfolio/PortfolioFuturesView.cpp
     src/screens/portfolio/PortfolioInsightsPanel.cpp
     src/screens/agent_config/AgentConfigScreen.cpp
     src/screens/agent_config/AgentsViewPanel.cpp
@@ -1451,6 +1456,10 @@ set_source_files_properties(
     src/screens/forum/ForumScreen.cpp
     src/screens/forum/ForumSidebarPanel.cpp
     src/screens/forum/ForumThreadPanel.cpp
+    src/screens/futures/FuturesDataService.cpp
+    src/screens/futures/FuturesPanels.cpp
+    src/screens/futures/FuturesQuoteCache.cpp
+    src/screens/futures/FuturesScreen.cpp
     src/screens/geopolitics/ConflictMonitorPanel.cpp
     src/screens/geopolitics/GeopoliticsScreen.cpp
     src/screens/geopolitics/HDXDataPanel.cpp
@@ -1506,6 +1515,7 @@ set_source_files_properties(
     src/screens/portfolio/PortfolioDetailWrapper.cpp
     src/screens/portfolio/PortfolioDialogs.cpp
     src/screens/portfolio/PortfolioFFNView.cpp
+    src/screens/portfolio/PortfolioFuturesView.cpp
     src/screens/portfolio/PortfolioHeatmap.cpp
     src/screens/portfolio/PortfolioOrderPanel.cpp
     src/screens/portfolio/PortfolioPerfChart.cpp

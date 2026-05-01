@@ -429,23 +429,19 @@ void MarketDataService::flush_batch() {
 // ── News fetch (unchanged) ──────────────────────────────────────────────────
 
 void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallback cb) {
-    QStringList args;
-    args << "news" << symbol << QString::number(count);
-
-    python::PythonRunner::instance().run("yfinance_data.py", args, [cb](python::PythonResult result) {
-        if (!result.success) {
-            LOG_WARN("MarketData", "News fetch failed: " + result.error);
-            cb(false, {});
-            return;
-        }
-
-        auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-        if (doc.isObject() && doc.object().contains("articles")) {
-            cb(true, doc.object()["articles"].toArray());
-        } else {
-            cb(false, {});
-        }
-    });
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    payload["count"] = count;
+    python::PythonWorker::instance().submit("news", payload,
+        [cb](bool ok, QJsonObject result, QString err) {
+            if (!ok) {
+                LOG_WARN("MarketData", "News fetch failed: " + err);
+                cb(false, {});
+                return;
+            }
+            // Daemon returns {articles: [...]} for news.
+            cb(true, result.value("articles").toArray());
+        });
 }
 
 // ── Info fetch (company fundamentals) ───────────────────────────────────────
@@ -476,23 +472,17 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
         cb(ok, shared->info);
     };
 
-    // ── Call 1: get_info ──────────────────────────────────────────────────────
-    QStringList args1;
-    args1 << "info" << symbol;
-    python::PythonRunner::instance().run("yfinance_data.py", args1,
-                                         [shared, symbol, try_complete](python::PythonResult result) {
+    // ── Call 1: get_info via daemon ───────────────────────────────────────────
+    QJsonObject info_payload;
+    info_payload["symbol"] = symbol;
+    python::PythonWorker::instance().submit("info", info_payload,
+                                         [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
                                              shared->info_done = true;
-                                             if (!result.success) {
+                                             if (!ok || o.contains("error")) {
                                                  LOG_WARN("MarketData", "get_info failed for " + symbol);
                                                  try_complete();
                                                  return;
                                              }
-                                             auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-                                             if (!doc.isObject() || doc.object().contains("error")) {
-                                                 try_complete();
-                                                 return;
-                                             }
-                                             QJsonObject o = doc.object();
                                              shared->info.symbol = o["symbol"].toString(symbol);
                                              shared->info.name = o["company_name"].toString();
                                              shared->info.sector = o["sector"].toString();
@@ -509,23 +499,17 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              try_complete();
                                          });
 
-    // ── Call 2: financial_ratios ──────────────────────────────────────────────
-    QStringList args2;
-    args2 << "financial_ratios" << symbol;
-    python::PythonRunner::instance().run("yfinance_data.py", args2,
-                                         [shared, symbol, try_complete](python::PythonResult result) {
+    // ── Call 2: financial_ratios via daemon ───────────────────────────────────
+    QJsonObject ratios_payload;
+    ratios_payload["symbol"] = symbol;
+    python::PythonWorker::instance().submit("financial_ratios", ratios_payload,
+                                         [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
                                              shared->ratios_done = true;
-                                             if (!result.success) {
+                                             if (!ok || o.contains("error")) {
                                                  LOG_WARN("MarketData", "financial_ratios failed for " + symbol);
                                                  try_complete();
                                                  return;
                                              }
-                                             auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-                                             if (!doc.isObject() || doc.object().contains("error")) {
-                                                 try_complete();
-                                                 return;
-                                             }
-                                             QJsonObject o = doc.object();
                                              shared->info.pe_ratio = o["peRatio"].toDouble();
                                              shared->info.forward_pe = o["forwardPE"].toDouble();
                                              shared->info.price_to_book = o["priceToBook"].toDouble();
@@ -544,25 +528,25 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
 
 void MarketDataService::fetch_history(const QString& symbol, const QString& period, const QString& interval,
                                       HistoryCallback cb) {
-    QStringList args;
-    args << "historical_period" << symbol << period << interval;
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    payload["period"] = period;
+    payload["interval"] = interval;
 
-    python::PythonRunner::instance().run("yfinance_data.py", args, [cb, symbol](python::PythonResult result) {
-        if (!result.success) {
-            LOG_WARN("MarketData", "History fetch failed for " + symbol + ": " + result.error);
+    python::PythonWorker::instance().submit("historical_period", payload,
+        [cb, symbol](bool ok, QJsonObject result, QString err) {
+        if (!ok) {
+            LOG_WARN("MarketData", "History fetch failed for " + symbol + ": " + err);
             cb(false, {});
             return;
         }
-
-        auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-        if (!doc.isArray()) {
-            LOG_WARN("MarketData", "History parse error for " + symbol);
-            cb(false, {});
-            return;
-        }
+        // Daemon returns a flat list; wrapped under _value.
+        const QJsonArray points = result.contains("_value")
+                                       ? result.value("_value").toArray()
+                                       : result.value("history").toArray();
 
         QVector<HistoryPoint> history;
-        for (const auto& v : doc.array()) {
+        for (const auto& v : points) {
             QJsonObject o = v.toObject();
             HistoryPoint pt;
             pt.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
@@ -681,24 +665,21 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
         return;
     }
 
-    // Use existing yfinance_data.py — batch_sparklines command takes symbols as args
-    QStringList args;
-    args << "batch_sparklines" << symbols;
+    QJsonArray syms_arr;
+    for (const auto& s : symbols) syms_arr.append(s);
+    QJsonObject payload;
+    payload["symbols"] = syms_arr;
 
-    python::PythonRunner::instance().run("yfinance_data.py", args, [cb](python::PythonResult result) {
-        if (!result.success || result.output.trimmed().isEmpty()) {
-            LOG_WARN("MarketData", "Sparklines failed: " + result.error.left(200));
-            cb(false, {});
-            return;
-        }
-        auto doc = QJsonDocument::fromJson(result.output.trimmed().toUtf8());
-        if (!doc.isObject()) {
+    python::PythonWorker::instance().submit("batch_sparklines", payload,
+        [cb](bool ok, QJsonObject obj, QString err) {
+        if (!ok) {
+            LOG_WARN("MarketData", "Sparklines failed: " + err.left(200));
             cb(false, {});
             return;
         }
         QHash<QString, QVector<double>> out;
-        const auto obj = doc.object();
         for (auto it = obj.begin(); it != obj.end(); ++it) {
+            if (it.key() == "_value") continue;
             QVector<double> prices;
             for (const auto& v : it.value().toArray())
                 prices.append(v.toDouble());

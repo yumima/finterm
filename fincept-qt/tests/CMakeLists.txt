@@ -34,3 +34,14 @@ set_target_properties(test_datahub PROPERTIES
 )
 
 add_test(NAME datahub COMMAND test_datahub)
+
+# ── prune_scripts_junk smoke test ────────────────────────────────────────────
+# Pure cmake -P script that builds a fixture tree, runs the real prune script,
+# and asserts legitimate dirs survive while junk is gone. Guards against the
+# GLOB_RECURSE/LIST_DIRECTORIES regression that previously wiped technicals/.
+add_test(
+    NAME prune_scripts_junk
+    COMMAND ${CMAKE_COMMAND}
+            -DPRUNE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/../cmake/prune_scripts_junk.cmake
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_prune_scripts_junk.cmake
+)

@@ -210,6 +210,16 @@ EquityTechnicalsTab::EquityTechnicalsTab(QWidget* parent) : QWidget(parent) {
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::technicals_loaded, this,
             &EquityTechnicalsTab::on_technicals_loaded);
+    // Hide the spinner on errors. Without this the overlay stays up forever
+    // when compute_technicals fails (e.g. missing module, malformed JSON,
+    // network error during candle fetch). Filter to the Technicals context
+    // so we don't react to other services' errors.
+    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
+            [this](const QString& context, const QString& message) {
+                if (context != "Technicals") return;
+                if (loading_overlay_) loading_overlay_->hide_loading();
+                Q_UNUSED(message);
+            });
 }
 
 void EquityTechnicalsTab::set_symbol(const QString& symbol) {

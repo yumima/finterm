@@ -122,7 +122,8 @@ enum class DetailView {
     Indices,
     RiskMgmt,
     Planning,
-    Economics
+    Economics,
+    FuturesExtHours
 };
 
 // ── Import/Export types ──────────────────────────────────────────────────────
