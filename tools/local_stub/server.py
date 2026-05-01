@@ -36,7 +36,9 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 LOG = logging.getLogger("fincept-localstub")
 
@@ -182,6 +184,89 @@ def envelope_ok(data: dict | list | None = None, message: str = "OK") -> dict:
 
 def envelope_err(message: str) -> dict:
     return {"success": False, "message": message}
+
+
+# ── Asset search (Yahoo autocomplete proxy) ──────────────────────────────────
+# Yahoo's quoteType vocabulary → CommandBar's asset_types_ slash names.
+# CommandBar passes one of: stock, fund, index, crypto. ETFs and mutual funds
+# both map to "fund" in the UI; equities map to "stock".
+_YAHOO_TO_UI_TYPE = {
+    "EQUITY": "stock",
+    "ETF": "fund",
+    "MUTUALFUND": "fund",
+    "INDEX": "index",
+    "CRYPTOCURRENCY": "crypto",
+    "CURRENCY": "crypto",  # FX shows up under crypto search in the UI
+}
+
+# In-memory LRU-ish cache so repeat searches (typing forward then deleting,
+# or hovering over results) don't re-hit Yahoo. 60 s TTL is enough for an
+# interactive session; results are stable on that timescale.
+_SEARCH_CACHE: dict[tuple[str, str, int], tuple[float, list[dict]]] = {}
+_SEARCH_CACHE_LOCK = threading.Lock()
+_SEARCH_CACHE_TTL = 60.0
+_SEARCH_CACHE_MAX = 256
+
+
+def yahoo_search(query: str, asset_type: str, limit: int) -> list[dict]:
+    """Hit query2.finance.yahoo.com and reformat for CommandBar.
+
+    Filters by `asset_type` so /stock returns equities only, /fund returns
+    ETFs+mutual funds, etc. Returns an empty list on any network/parse error
+    so the UI gracefully shows "No results found" instead of breaking.
+
+    Caches results for 60 s — every keystroke past 4 chars usually shares a
+    prefix, and repeat queries within an interactive session are common.
+    """
+    key = (query.lower(), asset_type, limit)
+    now = time.time()
+    with _SEARCH_CACHE_LOCK:
+        hit = _SEARCH_CACHE.get(key)
+        if hit and now - hit[0] < _SEARCH_CACHE_TTL:
+            return hit[1]
+
+    params = urlencode({"q": query, "quotesCount": max(limit, 10), "newsCount": 0})
+    url = f"https://query2.finance.yahoo.com/v1/finance/search?{params}"
+    req = Request(url, headers={
+        # Yahoo blocks requests without a real UA.
+        "User-Agent": "Mozilla/5.0 (FinceptTerminal localhost stub)",
+        "Accept": "application/json",
+    })
+    try:
+        with urlopen(req, timeout=4.0) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (URLError, TimeoutError, ValueError) as e:
+        LOG.warning("Yahoo search failed for %r: %s", query, e)
+        return []
+
+    out: list[dict] = []
+    for q in payload.get("quotes", []):
+        symbol = (q.get("symbol") or "").strip()
+        if not symbol:
+            continue
+        yahoo_type = (q.get("quoteType") or "").upper()
+        ui_type = _YAHOO_TO_UI_TYPE.get(yahoo_type)
+        if ui_type is None:
+            continue  # skip futures, options, etc. — UI has no slash for them
+        if asset_type and ui_type != asset_type:
+            continue
+        out.append({
+            "symbol": symbol,
+            "name": q.get("longname") or q.get("shortname") or symbol,
+            "exchange": q.get("exchDisp") or q.get("exchange") or "",
+            "country": q.get("market") or "",
+            "type": ui_type,
+        })
+        if len(out) >= limit:
+            break
+
+    with _SEARCH_CACHE_LOCK:
+        # Bound the cache size by evicting the oldest entry on overflow.
+        if len(_SEARCH_CACHE) >= _SEARCH_CACHE_MAX:
+            oldest = min(_SEARCH_CACHE.items(), key=lambda kv: kv[1][0])[0]
+            _SEARCH_CACHE.pop(oldest, None)
+        _SEARCH_CACHE[key] = (now, out)
+    return out
 
 
 # Tier strings recognised by AuthTypes::SessionData::has_paid_plan():
@@ -412,6 +497,23 @@ class Handler(BaseHTTPRequestHandler):
         # — Forum (read-only empty) —
         if path.startswith("/forum/"):
             return self._ok([])
+
+        # — Asset symbol search (CommandBar /stock /fund /index /crypto) —
+        # Proxies Yahoo's public autocomplete and reformats to the shape the
+        # C++ CommandBar expects: [{symbol, name, exchange, country, type}].
+        # Outbound is to query2.finance.yahoo.com — explicitly allowed by the
+        # localhost-only fork policy (third-party data providers are fine;
+        # only fincept-controlled hosts are blocked).
+        if method == "GET" and path == "/market/search":
+            q = (query.get("q", [""])[0] or "").strip()
+            asset_type = (query.get("type", ["stock"])[0] or "stock").strip().lower()
+            try:
+                limit = max(1, min(50, int(query.get("limit", ["10"])[0])))
+            except ValueError:
+                limit = 10
+            if not q:
+                return self._ok([])
+            return self._ok(yahoo_search(q, asset_type, limit))
 
         # — Default catch-all: empty success envelope so the UI doesn't error —
         LOG.warning("Unhandled %s %s — returning empty envelope", method, path)
