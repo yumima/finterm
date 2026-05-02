@@ -300,6 +300,22 @@ void PortfolioHeatmap::rebuild_blocks() {
         connect(block, &QWidget::customContextMenuRequested, this,
                 [this, btn = block, sym = h.symbol](const QPoint& pos) {
             QMenu menu(btn);
+            // Solid background — without this the menu inherits a transparent
+            // style from the heatmap block (which is itself styled with rgba
+            // colors), making the popup hard to read against the panels
+            // behind it. Match PortfolioBlotter's menu styling so both
+            // context-menu sources look identical.
+            menu.setStyleSheet(QString(
+                "QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
+                "QMenu::item { padding:6px 20px 6px 12px; font-size:11px; }"
+                "QMenu::item:selected { background:%4; color:%5; }"
+                "QMenu::item:disabled { color:%6; }"
+                "QMenu::item[data='danger'] { color:%7; }"
+                "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
+                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
+                     ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::colors::AMBER(),
+                     ui::colors::NEGATIVE()));
+
             auto* sym_label = menu.addAction(sym);
             sym_label->setEnabled(false);
             sym_label->setFont([] {
@@ -315,8 +331,6 @@ void PortfolioHeatmap::rebuild_blocks() {
             auto* edit_act = menu.addAction("Edit Transaction");
             auto* delete_act = menu.addAction("Close / Delete Position");
             delete_act->setData("danger");
-            menu.setStyleSheet(menu.styleSheet() +
-                               QString("QMenu::item[data='danger'] { color:%1; }").arg(ui::colors::NEGATIVE()));
 
             connect(research_act, &QAction::triggered, this, [sym]() {
                 EventBus::instance().publish("nav.split_alongside",
