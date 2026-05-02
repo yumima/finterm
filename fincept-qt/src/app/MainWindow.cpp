@@ -355,7 +355,19 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     connect(toolbar, &ui::ToolBar::chat_mode_toggled, this, &MainWindow::toggle_chat_mode);
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
-        if (!locked_) dock_router_->navigate(id, true);
+        if (locked_) return;
+        // Smart navigate — preserve any existing split when the target is
+        // already in the layout. Critical for the CommandBar /stock <sym>
+        // flow: typing "/stock AAPL" while Portfolio + ER are side-by-side
+        // should update the existing ER pane in place, NOT clobber the
+        // layout with an exclusive single-pane ER.
+        //
+        // Tab-bar (FKeyBar) clicks intentionally use exclusive navigate
+        // elsewhere — they really do mean "switch the whole view".
+        if (dock_router_->is_open(id))
+            dock_router_->raise(id);
+        else
+            dock_router_->navigate(id, true);
     });
 
     // Debounced dock-layout save: ADS emits a burst of signals during
