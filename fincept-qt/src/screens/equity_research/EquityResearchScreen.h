@@ -8,6 +8,8 @@
 #include <QHash>
 #include <QHideEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QShowEvent>
 #include <QTabWidget>
 #include <QTimer>
@@ -45,6 +47,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
   protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private slots:
     void on_quote_loaded(services::equity::QuoteData quote);
@@ -60,6 +63,14 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
 
     // Title bar
     QLabel* symbol_label_ = nullptr;
+    // Inline symbol search — works like the top CommandBar's stock picker:
+    // type → autocomplete dropdown of matching symbols → click or
+    // Up/Down+Enter to load. Strips leading "/stock ", "/fund ", "/index "
+    // prefixes if the user types them out of habit.
+    QLineEdit*   inline_search_input_ = nullptr;
+    QListWidget* inline_search_popup_ = nullptr;
+    void position_inline_search_popup();
+    QString strip_search_prefix(const QString& raw) const;
 
     // Quote bar
     QLabel* sym_label_ = nullptr;

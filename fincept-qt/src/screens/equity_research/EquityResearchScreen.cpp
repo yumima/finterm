@@ -19,7 +19,9 @@
 #include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -179,28 +181,124 @@ QWidget* EquityResearchScreen::build_title_bar() {
     // Visual breathing room before the inline search input.
     hl->addSpacing(24);
 
-    // Inline symbol search — same effect as typing "/stock SYM" in the
-    // command bar, but local to this screen so the user doesn't have to
-    // jump to the top toolbar to switch symbols. The hint label below
-    // still teaches the broader command-bar syntax (/fund, /index, …).
-    auto* inline_search = new QLineEdit;
-    inline_search->setPlaceholderText("Load symbol — type and Enter");
-    inline_search->setFixedWidth(220);
-    inline_search->setClearButtonEnabled(true);
-    inline_search->setStyleSheet(QString(
+    // Inline symbol search with autocomplete dropdown — mirrors the top
+    // CommandBar's /stock picker. Three input paths all converge on
+    // load_symbol(sym):
+    //   • Type → debounced search → click a result in the popup.
+    //   • Type → arrow keys to highlight in popup → Enter.
+    //   • Type a literal symbol (no popup interaction) → Enter.
+    //
+    // The hint label after this field still advertises the global command
+    // bar's broader /fund, /index, … syntax. If the user types one of
+    // those prefixes here we strip it transparently.
+    inline_search_input_ = new QLineEdit;
+    inline_search_input_->setPlaceholderText("Search symbol — type and Enter");
+    inline_search_input_->setFixedWidth(220);
+    inline_search_input_->setClearButtonEnabled(true);
+    inline_search_input_->setStyleSheet(QString(
         "QLineEdit { background:%1; color:%2; border:1px solid %3;"
         " border-radius:2px; padding:3px 8px; font-size:12px;"
         " font-family:'Consolas',monospace; }"
         "QLineEdit:focus { border-color:%4; }")
         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::BORDER_DIM(), ui::colors::AMBER()));
-    connect(inline_search, &QLineEdit::returnPressed, this, [this, inline_search]() {
-        const QString sym = inline_search->text().trimmed().toUpper();
+    hl->addWidget(inline_search_input_);
+
+    // Popup dropdown — borderless top-level so it floats over screen
+    // contents without being clipped by the title bar's frame.
+    inline_search_popup_ = new QListWidget;
+    inline_search_popup_->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+    inline_search_popup_->setUniformItemSizes(true);
+    inline_search_popup_->setFocusPolicy(Qt::NoFocus);
+    inline_search_popup_->setMaximumHeight(280);
+    inline_search_popup_->setStyleSheet(QString(
+        "QListWidget { background:%1; color:%2; border:1px solid %3;"
+        " font-family:'Consolas',monospace; font-size:12px;"
+        " outline:0; padding:2px; }"
+        "QListWidget::item { padding:4px 8px; }"
+        "QListWidget::item:selected { background:%4; color:%5; }"
+        "QListWidget::item:hover { background:%6; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_MED(), ui::colors::AMBER_DIM(),
+             ui::colors::AMBER(), ui::colors::BG_RAISED()));
+    inline_search_popup_->hide();
+
+    // Debounced search on text change.
+    connect(inline_search_input_, &QLineEdit::textChanged, this,
+            [this](const QString& text) {
+        const QString stripped = strip_search_prefix(text).trimmed();
+        if (stripped.isEmpty()) {
+            inline_search_popup_->hide();
+            return;
+        }
+        services::equity::EquityResearchService::instance().schedule_search(stripped);
+    });
+
+    // search_results_loaded broadcasts to anyone subscribed; we only
+    // populate (and show) the popup if our input currently has focus —
+    // otherwise the top CommandBar would also show a phantom dropdown
+    // every time user types in the global bar.
+    auto& svc = services::equity::EquityResearchService::instance();
+    connect(&svc, &services::equity::EquityResearchService::search_results_loaded, this,
+            [this](QVector<services::equity::SearchResult> results) {
+        if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
+        inline_search_popup_->clear();
+        for (const auto& r : results) {
+            QString line = r.symbol;
+            if (!r.name.isEmpty())  line += "  " + r.name;
+            if (!r.exchange.isEmpty()) line += "  · " + r.exchange;
+            auto* it = new QListWidgetItem(line);
+            it->setData(Qt::UserRole, r.symbol);
+            inline_search_popup_->addItem(it);
+        }
+        if (inline_search_popup_->count() == 0) {
+            inline_search_popup_->hide();
+            return;
+        }
+        inline_search_popup_->setCurrentRow(0);
+        position_inline_search_popup();
+        inline_search_popup_->show();
+    });
+
+    // Click a suggestion → load it.
+    connect(inline_search_popup_, &QListWidget::itemActivated, this,
+            [this](QListWidgetItem* it) {
+        if (!it) return;
+        const QString sym = it->data(Qt::UserRole).toString();
+        if (!sym.isEmpty()) load_symbol(sym);
+        inline_search_input_->clear();
+        inline_search_popup_->hide();
+    });
+    connect(inline_search_popup_, &QListWidget::itemClicked, this,
+            [this](QListWidgetItem* it) {
+        if (!it) return;
+        const QString sym = it->data(Qt::UserRole).toString();
+        if (!sym.isEmpty()) load_symbol(sym);
+        inline_search_input_->clear();
+        inline_search_popup_->hide();
+    });
+
+    // Enter on the input: prefer current popup selection, else fall back
+    // to literal typed symbol (with /prefix stripped).
+    connect(inline_search_input_, &QLineEdit::returnPressed, this, [this]() {
+        if (inline_search_popup_->isVisible() && inline_search_popup_->currentItem()) {
+            const QString sym = inline_search_popup_->currentItem()->data(Qt::UserRole).toString();
+            if (!sym.isEmpty()) {
+                load_symbol(sym);
+                inline_search_input_->clear();
+                inline_search_popup_->hide();
+                return;
+            }
+        }
+        const QString sym = strip_search_prefix(inline_search_input_->text()).trimmed().toUpper();
         if (sym.isEmpty()) return;
         load_symbol(sym);
-        inline_search->clear();
+        inline_search_input_->clear();
+        inline_search_popup_->hide();
     });
-    hl->addWidget(inline_search);
+
+    // Up/Down keys navigate the popup; Escape closes it.
+    inline_search_input_->installEventFilter(this);
 
     hl->addStretch();
 
@@ -305,7 +403,17 @@ void EquityResearchScreen::on_tab_changed(int index) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-void EquityResearchScreen::load_symbol(const QString& symbol) {
+void EquityResearchScreen::load_symbol(const QString& symbol_in) {
+    // Defensive sanitize: if a caller passes "/stock AAPL" or similar
+    // (CommandBar fallback path, EventBus payload from elsewhere, inline
+    // search), strip the slash-command prefix and uppercase. Without this
+    // the title-bar label ends up showing literal "/STOCK AAPL".
+    QString symbol = symbol_in.trimmed();
+    if (symbol.startsWith('/')) {
+        const int sp = symbol.indexOf(QChar(' '));
+        symbol = (sp >= 0) ? symbol.mid(sp + 1).trimmed() : QString();
+    }
+    symbol = symbol.toUpper();
     if (symbol.isEmpty() || symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
@@ -440,6 +548,60 @@ void EquityResearchScreen::update_freshness_chip() {
     else if (secs < 86400) rel = QString("%1h ago").arg(secs / 3600);
     else                  rel = QString("%1d ago").arg(secs / 86400);
     freshness_label_->setText(QString("as of %1 · %2").arg(t.toString("HH:mm:ss"), rel));
+}
+
+// ── Inline search helpers ────────────────────────────────────────────────────
+
+QString EquityResearchScreen::strip_search_prefix(const QString& raw) const {
+    // Strip a leading "/<word>" (e.g. "/stock", "/fund", "/index") plus the
+    // following whitespace, so users who type the global command-bar syntax
+    // here by reflex still get a clean symbol query.
+    const QString s = raw.trimmed();
+    if (!s.startsWith('/')) return s;
+    const int sp = s.indexOf(QChar(' '));
+    if (sp < 0) return QString();        // just "/stock" with nothing after
+    return s.mid(sp + 1).trimmed();
+}
+
+void EquityResearchScreen::position_inline_search_popup() {
+    if (!inline_search_input_ || !inline_search_popup_) return;
+    const QPoint global_below =
+        inline_search_input_->mapToGlobal(QPoint(0, inline_search_input_->height()));
+    inline_search_popup_->move(global_below);
+    inline_search_popup_->resize(std::max(280, inline_search_input_->width()), 280);
+}
+
+bool EquityResearchScreen::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == inline_search_input_ && inline_search_popup_) {
+        if (event->type() == QEvent::KeyPress) {
+            auto* ke = static_cast<QKeyEvent*>(event);
+            if (inline_search_popup_->isVisible()) {
+                if (ke->key() == Qt::Key_Down) {
+                    const int next = std::min(inline_search_popup_->currentRow() + 1,
+                                              inline_search_popup_->count() - 1);
+                    inline_search_popup_->setCurrentRow(next);
+                    return true;
+                }
+                if (ke->key() == Qt::Key_Up) {
+                    const int prev = std::max(inline_search_popup_->currentRow() - 1, 0);
+                    inline_search_popup_->setCurrentRow(prev);
+                    return true;
+                }
+                if (ke->key() == Qt::Key_Escape) {
+                    inline_search_popup_->hide();
+                    return true;
+                }
+            }
+        } else if (event->type() == QEvent::FocusOut) {
+            // Defer hide so a click on the popup still registers (the click
+            // briefly steals focus before the itemActivated signal fires).
+            QTimer::singleShot(150, this, [this]() {
+                if (inline_search_popup_ && !inline_search_popup_->underMouse())
+                    inline_search_popup_->hide();
+            });
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 } // namespace fincept::screens
