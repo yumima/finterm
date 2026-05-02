@@ -24,6 +24,17 @@ if [[ ! -x "$FINTERM_BIN" ]]; then
     exit 1
 fi
 
+# Strip Qt window/toolbar/dock-layout state from FinceptTerminal.conf so
+# every launch starts with a clean default layout. Avoids the duplicate-
+# floating-window bug where dragging the toolbar out, or any prior state
+# corruption, persists across launches and steals keyboard focus from
+# the PIN screen. Surgical — preserves portfolio data, workspaces, theme,
+# component-usage stats, and every other setting. Set FINCEPT_KEEP_WINDOW=1
+# to skip if you want Qt to remember your dragged layout across launches.
+if [[ "${FINCEPT_KEEP_WINDOW:-0}" != "1" ]]; then
+    "$REPO_DIR/tools/reset.sh" --window-only
+fi
+
 # Ensure the stub is up. pgrep matches the process whether it was started
 # by systemd, by hand, or by a previous run of this script.
 if ! pgrep -f "tools/local_stub/server.py" >/dev/null; then
