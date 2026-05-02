@@ -64,6 +64,7 @@ if [ "$PLATFORM" = "linux" ]; then
             libssl-dev \
             libxcb-cursor0 \
             libsecret-1-dev \
+            portaudio19-dev \
             pkg-config curl
     elif command -v pacman &>/dev/null; then
         sudo pacman -Sy --noconfirm --needed \
@@ -72,6 +73,7 @@ if [ "$PLATFORM" = "linux" ]; then
             mesa glu libxkbcommon \
             fontconfig dbus \
             libsecret \
+            portaudio \
             pkgconf curl
     elif command -v dnf &>/dev/null; then
         sudo dnf install -y \
@@ -81,6 +83,7 @@ if [ "$PLATFORM" = "linux" ]; then
             libxkbcommon-devel \
             fontconfig dbus-libs \
             libsecret-devel \
+            portaudio-devel \
             pkgconfig curl
     else
         info "No recognised package manager found. Ensure cmake, ninja, g++, python3, and Qt build dependencies are installed manually."
@@ -91,7 +94,7 @@ elif [ "$PLATFORM" = "macos" ]; then
         info "Homebrew not found. Installing..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
-    brew install cmake ninja python@3.11 openssl@3 yt-dlp
+    brew install cmake ninja python@3.11 openssl@3 yt-dlp portaudio
 fi
 ok
 
