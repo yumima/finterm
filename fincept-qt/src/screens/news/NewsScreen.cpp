@@ -269,7 +269,13 @@ void NewsScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     visible_ = true;
     ticker_strip_->resume();
-    pulse_timer_->start();
+    // Pulse animation intentionally disabled — the 500ms amber-glow cycle
+    // on unseen rows reads as visual flicker once you have >5 new articles.
+    // The static amber tint (alpha 40 at phase 0) + amber dot indicator are
+    // already enough to spot new items at a glance. To restore the
+    // animation, uncomment the next line and the matching stop() in
+    // hideEvent.
+    // pulse_timer_->start();
     services::NewsService::instance().start_auto_refresh();
     services::NewsService::instance().connect_live_feed();
 
