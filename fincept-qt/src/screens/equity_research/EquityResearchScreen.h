@@ -4,6 +4,8 @@
 #include "screens/IStatefulScreen.h"
 #include "services/equity/EquityResearchModels.h"
 
+#include <QDateTime>
+#include <QHash>
 #include <QHideEvent>
 #include <QLabel>
 #include <QShowEvent>
@@ -67,6 +69,14 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     QLabel* hl_label_ = nullptr;
     QLabel* mktcap_label_ = nullptr;
     QLabel* rec_label_ = nullptr;
+    // Per-tab data freshness chip — shows "as of HH:mm:ss · 30s ago" for
+    // whichever tab is active. Updated on service signals + 1-Hz ticker.
+    QLabel* freshness_label_ = nullptr;
+    QTimer* freshness_ticker_ = nullptr;
+    QHash<int, QDateTime> tab_loaded_at_;
+
+    void mark_tab_loaded(int tab_index);
+    void update_freshness_chip();
 
     // Tabs
     QTabWidget* tab_widget_ = nullptr;

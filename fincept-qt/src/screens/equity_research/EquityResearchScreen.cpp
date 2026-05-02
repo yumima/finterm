@@ -39,6 +39,36 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     connect(&svc, &services::equity::EquityResearchService::quote_loaded, this, &EquityResearchScreen::on_quote_loaded);
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityResearchScreen::on_info_loaded);
 
+    // ── Per-tab freshness tracking ──────────────────────────────────────────
+    // Tab indices match the order tabs are added in build_ui:
+    //   0 Overview, 1 Financials, 2 Analysis, 3 Technicals, 4 TALipp,
+    //   5 Peers, 6 News, 7 Sentiment.
+    // Overview/Analysis share the load_symbol triple (quote+info+history),
+    // so any of those signals stamps both.
+    // Trailing-argument-drop: Qt allows zero-arg lambda slots on signals
+    // with any number of arguments, which sidesteps name churn in the
+    // service's payload structs.
+    connect(&svc, &services::equity::EquityResearchService::quote_loaded, this,
+            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+    connect(&svc, &services::equity::EquityResearchService::info_loaded, this,
+            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+    connect(&svc, &services::equity::EquityResearchService::historical_loaded, this,
+            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+    connect(&svc, &services::equity::EquityResearchService::financials_loaded, this,
+            [this]() { mark_tab_loaded(1); });
+    connect(&svc, &services::equity::EquityResearchService::technicals_loaded, this,
+            [this]() { mark_tab_loaded(3); });
+    connect(&svc, &services::equity::EquityResearchService::peers_loaded, this,
+            [this]() { mark_tab_loaded(5); });
+    connect(&svc, &services::equity::EquityResearchService::news_loaded, this,
+            [this]() { mark_tab_loaded(6); });
+
+    // 1-Hz ticker keeps the relative time ("30s ago") readable as it ages.
+    freshness_ticker_ = new QTimer(this);
+    freshness_ticker_->setInterval(1000);
+    connect(freshness_ticker_, &QTimer::timeout, this, &EquityResearchScreen::update_freshness_chip);
+    freshness_ticker_->start();
+
     // Listen for navigation from CommandBar asset search
     EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
         const QString symbol = payload.value("symbol").toString();
@@ -185,6 +215,14 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     rec_label_ = make_label("—");
     hl->addStretch();
 
+    // Right-aligned freshness chip — shows when the active tab's data
+    // last arrived. Empty until the first signal lands.
+    freshness_label_ = new QLabel("");
+    freshness_label_->setStyleSheet(
+        QString("font-size:11px; font-weight:500; color:%1;").arg(ui::colors::TEXT_DIM()));
+    freshness_label_->setToolTip("When this tab's data was last refreshed");
+    hl->addWidget(freshness_label_);
+
     return bar;
 }
 
@@ -201,6 +239,7 @@ void EquityResearchScreen::on_info_loaded(services::equity::StockInfo info) {
 
 void EquityResearchScreen::on_tab_changed(int index) {
     ScreenStateManager::instance().notify_changed(this);
+    update_freshness_chip();
     if (current_symbol_.isEmpty())
         return;
 
@@ -345,6 +384,35 @@ void EquityResearchScreen::restore_state(const QVariantMap& state) {
         if (idx >= 0 && idx < tab_widget_->count())
             tab_widget_->setCurrentIndex(idx);
     }
+}
+
+// ── Freshness chip ───────────────────────────────────────────────────────────
+
+void EquityResearchScreen::mark_tab_loaded(int tab_index) {
+    tab_loaded_at_[tab_index] = QDateTime::currentDateTime();
+    if (tab_widget_ && tab_widget_->currentIndex() == tab_index)
+        update_freshness_chip();
+}
+
+void EquityResearchScreen::update_freshness_chip() {
+    if (!freshness_label_ || !tab_widget_) return;
+    const int idx = tab_widget_->currentIndex();
+    const auto it = tab_loaded_at_.constFind(idx);
+    if (it == tab_loaded_at_.constEnd()) {
+        // No data has arrived for the active tab yet — keep chip blank
+        // rather than show a misleading age.
+        freshness_label_->setText("");
+        return;
+    }
+    const QDateTime& t = it.value();
+    const qint64 secs = t.secsTo(QDateTime::currentDateTime());
+    QString rel;
+    if (secs < 5)        rel = "just now";
+    else if (secs < 60)  rel = QString("%1s ago").arg(secs);
+    else if (secs < 3600) rel = QString("%1m ago").arg(secs / 60);
+    else if (secs < 86400) rel = QString("%1h ago").arg(secs / 3600);
+    else                  rel = QString("%1d ago").arg(secs / 86400);
+    freshness_label_->setText(QString("as of %1 · %2").arg(t.toString("HH:mm:ss"), rel));
 }
 
 } // namespace fincept::screens
