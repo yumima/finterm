@@ -292,9 +292,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // synchronously, so by the time those screens open, data is already
     // there. Cost: one yfinance batch (~3–5s) overlapping window setup.
     {
-        auto& fut_cache = fincept::screens::futures::FuturesQuoteCache::instance();
-        fut_cache.start_auto_refresh(fincept::screens::futures::kFuturesRefreshIntervalMs);
-        fut_cache.refresh();
+        // Boot prefetch: kick a one-shot fetch so the cache is warm by the
+        // time the user opens FUTURES or PORTFOLIO. We deliberately do NOT
+        // call start_auto_refresh — the cache's refresh timer is now
+        // ref-counted via FuturesQuoteCache::retain()/release() in each
+        // consumer's showEvent/hideEvent, which keeps it idle while
+        // nothing is visible.
+        fincept::screens::futures::FuturesQuoteCache::instance().refresh();
 
         // Portfolio prefetch — load the list, then warm the summary cache
         // for every portfolio. The persistent yfinance daemon handles the

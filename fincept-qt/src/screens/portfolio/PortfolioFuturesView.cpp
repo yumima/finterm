@@ -125,6 +125,19 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
             this, &PortfolioFuturesView::on_quote_cache_updated);
 }
 
+void PortfolioFuturesView::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // Subscribe to live futures quotes only while the view is visible.
+    // The cache reference-counts subscribers so the timer pauses when
+    // every consumer is hidden.
+    futures::FuturesQuoteCache::instance().retain();
+}
+
+void PortfolioFuturesView::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    futures::FuturesQuoteCache::instance().release();
+}
+
 void PortfolioFuturesView::build_ui() {
     using namespace ui;
     setStyleSheet(QString("background:%1;").arg(colors::BG_BASE()));

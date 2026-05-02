@@ -42,9 +42,20 @@ class FuturesQuoteCache : public QObject {
     /// Auto-coalesces to at most one fetch per `min_interval_ms`.
     void refresh();
 
-    /// Start the periodic refresh timer. Safe to call from multiple screens.
+    /// Start the periodic refresh timer unconditionally. Safe to call from
+    /// multiple screens. Prefer `retain()` / `release()` for visibility-
+    /// aware lifetimes — those auto-pause the timer when no consumer is
+    /// visible, eliminating background bandwidth use.
     void start_auto_refresh(int interval_ms = kFuturesRefreshIntervalMs);
     void stop_auto_refresh();
+
+    /// Reference-counted timer lifecycle. Call from a consumer's showEvent
+    /// (paired with `release()` in hideEvent). When the count goes 0→1 the
+    /// timer starts and an immediate refresh is kicked; when 1→0 the
+    /// timer stops. Multiple visible consumers share the same single
+    /// refresh stream — no fan-out.
+    void retain();
+    void release();
 
   signals:
     void quotes_updated();
@@ -60,6 +71,8 @@ class FuturesQuoteCache : public QObject {
     bool                         in_flight_ = false;
     QTimer*                      timer_     = nullptr;
     int                          min_interval_ms_ = 5'000;
+    int                          retain_count_ = 0;
+    int                          interval_ms_ = kFuturesRefreshIntervalMs;
 };
 
 } // namespace fincept::screens::futures

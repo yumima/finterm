@@ -75,12 +75,35 @@ void FuturesQuoteCache::refresh() {
 }
 
 void FuturesQuoteCache::start_auto_refresh(int interval_ms) {
+    interval_ms_ = interval_ms;
     timer_->setInterval(interval_ms);
     if (!timer_->isActive()) timer_->start();
 }
 
 void FuturesQuoteCache::stop_auto_refresh() {
     timer_->stop();
+}
+
+void FuturesQuoteCache::retain() {
+    ++retain_count_;
+    if (retain_count_ == 1) {
+        // First visible consumer — wake the cache up.
+        timer_->setInterval(interval_ms_);
+        if (!timer_->isActive()) timer_->start();
+        // Kick an immediate refresh too, in case the data is stale from
+        // having been suspended for a while.
+        refresh();
+    }
+}
+
+void FuturesQuoteCache::release() {
+    if (retain_count_ <= 0) return;  // defensive — unbalanced release
+    --retain_count_;
+    if (retain_count_ == 0) {
+        // No visible consumers — stop polling Yahoo. Cached values stay
+        // available for the next consumer that retain()s.
+        timer_->stop();
+    }
 }
 
 } // namespace fincept::screens::futures

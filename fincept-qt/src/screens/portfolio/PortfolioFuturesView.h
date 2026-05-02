@@ -2,7 +2,9 @@
 #include "screens/portfolio/PortfolioTypes.h"
 
 #include <QHash>
+#include <QHideEvent>
 #include <QLabel>
+#include <QShowEvent>
 #include <QString>
 #include <QTableWidget>
 #include <QWidget>
@@ -31,6 +33,10 @@ class PortfolioFuturesView : public QWidget {
     // PortfolioFuturesView.cpp; otherwise these would be private.
     static bool looks_like_future(const QString& symbol);
     static QString futures_root(const QString& symbol);
+
+  protected:
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
   private:
     struct ExtQuote {

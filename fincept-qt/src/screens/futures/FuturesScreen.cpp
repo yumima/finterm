@@ -27,20 +27,34 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
     build_body();
     root->addWidget(body_, 1);
 
-    // The quote cache is started by MainWindow's boot prefetch — we don't
-    // double-start here. We do, however, run our own refresh tick so the
-    // symbol-driven panels (term structure, settlements, chart) re-fetch
-    // in lockstep with the cache cycle.
+    // Local refresh tick for the symbol-driven panels (term structure,
+    // settlements, chart) — runs in lockstep with the cache cycle. Started
+    // in showEvent, stopped in hideEvent so it doesn't poll while the
+    // FUTURES tab is hidden.
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(kFuturesRefreshIntervalMs);
     connect(refresh_timer_, &QTimer::timeout, this, &FuturesScreen::refresh_all);
-    refresh_timer_->start();
 
     connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
             [this](const ThemeTokens&) { apply_theme(); });
     apply_theme();
 
     set_active_class("INDEX");
+}
+
+void FuturesScreen::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // Wake the shared cache (ref-counted; a no-op if other consumers are
+    // already visible) and start our local refresh tick.
+    FuturesQuoteCache::instance().retain();
+    if (refresh_timer_ && !refresh_timer_->isActive())
+        refresh_timer_->start();
+}
+
+void FuturesScreen::hideEvent(QHideEvent* event) {
+    QWidget::hideEvent(event);
+    if (refresh_timer_) refresh_timer_->stop();
+    FuturesQuoteCache::instance().release();
 }
 
 void FuturesScreen::build_header() {

@@ -1,5 +1,7 @@
 #pragma once
+#include <QHideEvent>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QTimer>
 #include <QVector>
 #include <QWidget>
@@ -31,6 +33,14 @@ class FuturesScreen : public QWidget {
     Q_OBJECT
   public:
     explicit FuturesScreen(QWidget* parent = nullptr);
+
+  protected:
+    // Visibility-aware refresh: when the screen is hidden, suspend the
+    // local refresh tick and release the shared FuturesQuoteCache. When
+    // shown, resume both. Eliminates background Yahoo traffic when the
+    // user isn't looking at FUTURES.
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
   private:
     void build_header();
