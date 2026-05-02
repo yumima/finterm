@@ -451,6 +451,98 @@ void DockScreenRouter::tab_into(const QString& id) {
     emit screen_changed(id);
 }
 
+bool DockScreenRouter::is_open(const QString& id) const {
+    auto* dw = find_dock_widget(id);
+    return dw && !dw->isClosed() && dw->dockAreaWidget() != nullptr;
+}
+
+void DockScreenRouter::raise(const QString& id) {
+    auto* dw = find_dock_widget(id);
+    if (!dw || dw->isClosed() || !dw->dockAreaWidget()) {
+        // Not currently part of the layout — caller decides what to do
+        // (typically split_alongside or navigate).
+        return;
+    }
+    if (auto* tab = dw->tabWidget()) {
+        if (tab->isHidden())
+            tab->setVisible(true);
+    }
+    dw->setAsCurrentTab();
+    dw->raise();
+    current_id_ = id;
+    SessionManager::instance().set_last_screen(id);
+    emit screen_changed(id);
+    LOG_INFO("DockRouter", "Raised existing panel: " + id);
+}
+
+void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side) {
+    if (!factories_.contains(id) && !screens_.contains(id)) {
+        LOG_WARN("DockRouter", "split_alongside: unknown screen: " + id);
+        return;
+    }
+
+    // Already in the layout? Just raise the existing tab — no reflow, no
+    // surprise layout changes. This matches the user's intent: "open this
+    // alongside what I'm looking at" → if it's already alongside (or
+    // anywhere), just focus it.
+    if (is_open(id)) {
+        raise(id);
+        return;
+    }
+
+    // Materialize the screen if it was lazily registered, and ensure a
+    // CDockWidget exists.
+    auto* dw = find_dock_widget(id);
+    if (!dw) {
+        dw = create_dock_widget(id);
+    }
+    materialize_screen(id);
+    if (!dw) {
+        LOG_WARN("DockRouter", "split_alongside: dock widget creation failed for " + id);
+        return;
+    }
+
+    // Anchor the split on the currently-focused dock area; fall back to the
+    // first opened area if nothing has focus yet.
+    ads::CDockAreaWidget* anchor = nullptr;
+    if (auto* focused = manager_->focusedDockWidget())
+        anchor = focused->dockAreaWidget();
+    if (!anchor) {
+        const auto opened = manager_->openedDockAreas();
+        if (!opened.isEmpty())
+            anchor = opened.first();
+    }
+
+    if (!anchor) {
+        // Nothing open yet — fall through to a full-area placement so the
+        // call still produces a visible result.
+        manager_->addDockWidget(ads::CenterDockWidgetArea, dw);
+    } else {
+        manager_->addDockWidget(side, dw, anchor);
+    }
+
+    dw->toggleView(true);
+    if (auto* tab = dw->tabWidget()) {
+        if (tab->isHidden())
+            tab->setVisible(true);
+    }
+    dw->raise();
+    dw->setAsCurrentTab();
+    apply_ads_theme();
+
+    // Refresh panel-count tracking so subsequent navigate() calls don't
+    // place into a stale grid slot.
+    panel_count_ = manager_->openedDockAreas().size();
+
+    current_id_ = id;
+    SessionManager::instance().set_last_screen(id);
+    emit screen_changed(id);
+    LOG_INFO("DockRouter",
+             QString("split_alongside [%1] placed (side=%2, anchor=%3, panel_count=%4)")
+                 .arg(id).arg(static_cast<int>(side))
+                 .arg(anchor ? "ok" : "none").arg(panel_count_));
+}
+
 void DockScreenRouter::add_alongside(const QString& primary, const QString& secondary) {
     // If primary is already open, just add secondary into the next grid slot
     // without resetting the layout. This allows building up to a 2x2 grid

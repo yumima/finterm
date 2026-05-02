@@ -51,6 +51,32 @@ class DockScreenRouter : public QObject {
     /// Open `primary` alone, then split `secondary` alongside it (side-by-side).
     void add_alongside(const QString& primary, const QString& secondary);
 
+    /// Open `id` alongside the currently-focused dock area, splitting on the
+    /// requested side (default: Right → side-by-side, splitter handle
+    /// vertical, panes arranged left-right). Use this for intent-based
+    /// "open this next to what I'm looking at" gestures (e.g. right-click
+    /// "Open in Equity Research" from a holdings list). Bypasses the
+    /// panel_count_ math used by navigate(), which can drift to "place
+    /// below" after multi-screen sessions.
+    ///
+    /// If `id` is already open in the layout: no new placement — just raise
+    /// + focus the existing tab. Preserves the user's current split.
+    /// If nothing is open yet: opens `id` as the sole screen.
+    void split_alongside(const QString& id,
+                         ads::DockWidgetArea side = ads::RightDockWidgetArea);
+
+    /// True if `id`'s dock widget is currently part of the visible layout
+    /// (exists, not closed, has a dock area). Use this to decide whether
+    /// a "navigate to X" gesture should preserve the split (raise) or
+    /// take over the layout (navigate exclusively).
+    bool is_open(const QString& id) const;
+
+    /// Raise an already-open screen to the front of its dock area without
+    /// changing the layout. No-op if `id` isn't currently open — the
+    /// caller should decide whether to navigate() or split_alongside()
+    /// in that case.
+    void raise(const QString& id);
+
     /// Close all panels except `primary`, which fills the full area.
     void remove_screen(const QString& primary);
 
