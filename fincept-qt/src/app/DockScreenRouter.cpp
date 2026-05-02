@@ -463,6 +463,14 @@ void DockScreenRouter::raise(const QString& id) {
         // (typically split_alongside or navigate).
         return;
     }
+    // Materialize before the visibility flip so any caller that immediately
+    // publishes a follow-up event (e.g. equity_research.load_symbol AAPL)
+    // finds the screen subscribed and ready to receive it. After a layout
+    // restore, dock widgets exist as lazy shells whose inner screen widget
+    // is otherwise only constructed on the deferred ADS visibilityChanged
+    // signal — that delay is what dropped the symbol on first click.
+    // materialize_screen() is idempotent.
+    materialize_screen(id);
     if (auto* tab = dw->tabWidget()) {
         if (tab->isHidden())
             tab->setVisible(true);
@@ -484,19 +492,9 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
     // Already in the layout? Just raise the existing tab — no reflow, no
     // surprise layout changes. This matches the user's intent: "open this
     // alongside what I'm looking at" → if it's already alongside (or
-    // anywhere), just focus it.
-    //
-    // Materialize synchronously even on the raise path: when a layout is
-    // restored from disk, dock widgets exist as lazy shells and the screen
-    // widget inside is only created on the first ADS visibilityChanged(true)
-    // signal — which is deferred to the next event-loop spin. Callers like
-    // PortfolioBlotter immediately follow split_alongside with another
-    // EventBus publish (e.g. equity_research.load_symbol AMZN), and that
-    // second publish would arrive before the screen had subscribed, getting
-    // dropped. Materializing here guarantees subscribers are wired before we
-    // return.
+    // anywhere), just focus it. raise() handles synchronous materialization
+    // for layout-restored shells, so subscribers are wired before we return.
     if (is_open(id)) {
-        materialize_screen(id);
         raise(id);
         return;
     }

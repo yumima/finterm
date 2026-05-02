@@ -396,7 +396,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 schedule_dock_layout_save();
             });
 
-    // MCP navigation tool → dock_router (cross-thread safe)
+    // MCP navigation tool → dock_router. The MCP server publishes from a
+    // worker QThread, so this lambda runs on that thread; QueuedConnection
+    // marshals the dock_router_ call onto the GUI thread where layout
+    // mutation is safe. (This is *thread routing*, not the EventBus
+    // reentrancy workaround that nav.split_alongside used to need —
+    // EventBus is now reentrant-safe internally.)
     EventBus::instance().subscribe("nav.switch_screen", [this](const QVariantMap& nav_data) {
         QString screen_id = nav_data["screen_id"].toString();
         if (!screen_id.isEmpty())

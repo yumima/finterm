@@ -35,6 +35,33 @@ set_target_properties(test_datahub PROPERTIES
 
 add_test(NAME datahub COMMAND test_datahub)
 
+# ── EventBus tests ───────────────────────────────────────────────────────────
+# Reentrancy + thread-safety regression suite. Locks in the invariants that
+# (1) handlers can subscribe()/unsubscribe()/publish() during dispatch
+# without crashing or skipping events, and (2) cross-thread publish is safe
+# (MCP tools publish from a worker thread).
+
+add_executable(test_event_bus
+    core/test_event_bus.cpp
+    ../src/core/events/EventBus.cpp
+)
+
+target_include_directories(test_event_bus PRIVATE
+    ../src
+)
+
+target_link_libraries(test_event_bus PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_event_bus PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME event_bus COMMAND test_event_bus)
+
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,
 # and asserts legitimate dirs survive while junk is gone. Guards against the

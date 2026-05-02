@@ -152,3 +152,9 @@ fincept-qt/scripts/exchange/.cache/
 # ── Internal planning docs ────────────────────────────────────
 fincept-qt/docs/superpowers/
 docs/superpowers/
+
+# ── Stray runtime artifact ────────────────────────────────────
+# Base64-hash filename the running app drops in CWD on launch —
+# looks like an SSL/credential marker side effect. Empty file,
+# harmless. Ignored at repo root only.
+/b_*=
