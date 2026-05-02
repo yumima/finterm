@@ -864,7 +864,12 @@ void CommandBar::on_text_changed(const QString& text) {
 
     const auto results = search(text);
     if (results.isEmpty()) {
-        hide_dropdown();
+        // No screen-command match — fall back to asset search with the
+        // implicit "stock" filter. Lets the user type "AAPL" / "Apple"
+        // directly without a /stock prefix; the slash prefix is still
+        // available above for explicitly scoping to /fund, /index, etc.
+        activate_asset_mode(QStringLiteral("stock"));
+        schedule_asset_search(trimmed);
         return;
     }
 
@@ -926,16 +931,21 @@ void CommandBar::on_return_pressed() {
             select_asset(symbol, type);
             return;
         }
-        // Fallback: no usable dropdown result (search API unreachable or
-        // returned no matches). Treat whatever the user typed after the
-        // slash-type as a literal ticker. Lets "/stock IONQ" + Enter work
-        // without depending on /market/search.
+        // Fallback when no usable dropdown result (search API unreachable,
+        // returned no matches, or the user pressed Enter before suggestions
+        // arrived). Treat the typed input as a literal ticker.
+        //   "/stock IONQ"      → strip prefix, take "IONQ"
+        //   "AAPL"             → take as-is (bare-symbol mode)
         const QString trimmed = input_->text().trimmed();
-        const int space_idx = trimmed.indexOf(' ');
-        if (space_idx > 0) {
-            const QString raw = trimmed.mid(space_idx + 1).trimmed().toUpper();
-            if (!raw.isEmpty())
-                select_asset(raw, active_asset_type_);
+        if (trimmed.startsWith('/')) {
+            const int space_idx = trimmed.indexOf(' ');
+            if (space_idx > 0) {
+                const QString raw = trimmed.mid(space_idx + 1).trimmed().toUpper();
+                if (!raw.isEmpty())
+                    select_asset(raw, active_asset_type_);
+            }
+        } else if (!trimmed.isEmpty()) {
+            select_asset(trimmed.toUpper(), active_asset_type_);
         }
         return;
     }
