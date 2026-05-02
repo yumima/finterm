@@ -3,6 +3,7 @@
 #include "services/equity/EquityResearchModels.h"
 
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 
 #include <functional>
@@ -55,6 +56,15 @@ class EquityResearchService : public QObject {
     void run_daemon(const QString& action, const QJsonObject& payload,
                     std::function<void(bool, QJsonObject, QString)> cb);
 
+    /// In-flight request dedup. Returns true if the key was successfully
+    /// acquired (caller proceeds with the daemon request). Returns false
+    /// if a request for the same key is already in flight — the caller
+    /// should return early; the existing in-flight request will fan out
+    /// its result via the matching `*_loaded` signal so all subscribers
+    /// (including this caller's tab) still get the data.
+    bool acquire_inflight(const QString& key);
+    void release_inflight(const QString& key);
+
     // ── Parsers ───────────────────────────────────────────────────────────────
     QuoteData parse_quote(const QJsonObject& obj) const;
     StockInfo parse_info(const QJsonObject& obj) const;
@@ -74,6 +84,9 @@ class EquityResearchService : public QObject {
     static constexpr int kFinancialsTtlSec = 3600;
     // Peer fundamentals (P/E, P/B, ROE, …) move slowly — same hour-long TTL.
     static constexpr int kPeersTtlSec = 3600;
+
+    // ── In-flight dedup state ─────────────────────────────────────────────────
+    QSet<QString> in_flight_keys_;
 
     // ── Debounce ──────────────────────────────────────────────────────────────
     static constexpr int kDebounceMs = 350;

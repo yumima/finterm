@@ -39,6 +39,21 @@ void EquityResearchService::run_python(const QString& script, const QStringList&
     });
 }
 
+bool EquityResearchService::acquire_inflight(const QString& key) {
+    if (in_flight_keys_.contains(key)) {
+        // A daemon request for the same key is already pending — the
+        // duplicate caller relies on the existing request's *_loaded signal
+        // to deliver the result. No second daemon spawn needed.
+        return false;
+    }
+    in_flight_keys_.insert(key);
+    return true;
+}
+
+void EquityResearchService::release_inflight(const QString& key) {
+    in_flight_keys_.remove(key);
+}
+
 void EquityResearchService::run_daemon(const QString& action, const QJsonObject& payload,
                                        std::function<void(bool, QJsonObject, QString)> cb) {
     QPointer<EquityResearchService> self = this;
@@ -98,9 +113,12 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!qcv.isNull()) {
             emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
         } else {
+            const QString inflight_key = "quote:" + symbol;
+            if (!acquire_inflight(inflight_key)) return;
             QJsonObject payload;
             payload["symbol"] = symbol;
-            run_daemon("quote", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
+            run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+                release_inflight(inflight_key);
                 if (!ok) {
                     emit error_occurred("Quote", "Failed to fetch quote for " + symbol + ": " + err);
                     return;
@@ -122,9 +140,12 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
         } else {
+            const QString inflight_key = "info:" + symbol;
+            if (!acquire_inflight(inflight_key)) return;
             QJsonObject payload;
             payload["symbol"] = symbol;
-            run_daemon("info", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
+            run_daemon("info", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+                release_inflight(inflight_key);
                 if (!ok) {
                     emit error_occurred("Info", "Failed to fetch info for " + symbol + ": " + err);
                     return;
@@ -146,12 +167,15 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         if (!hcv.isNull()) {
             emit historical_loaded(symbol, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
+            const QString inflight_key = "historical:" + symbol + ":" + period;
+            if (!acquire_inflight(inflight_key)) return;
             QJsonObject payload;
             payload["symbol"] = symbol;
             payload["period"] = period;
             payload["interval"] = "1d";
             run_daemon("historical_period", payload,
-                       [this, symbol](bool ok, QJsonObject result, QString err) {
+                       [this, symbol, inflight_key](bool ok, QJsonObject result, QString err) {
+                           release_inflight(inflight_key);
                            if (!ok) {
                                emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
                                return;
@@ -183,9 +207,12 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
         }
     }
 
+    const QString inflight_key = "financials:" + symbol;
+    if (!acquire_inflight(inflight_key)) return;
     QJsonObject payload;
     payload["symbol"] = symbol;
-    run_daemon("financials", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
+    run_daemon("financials", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+        release_inflight(inflight_key);
         if (!ok) {
             emit error_occurred("Financials", "Failed to fetch financials for " + symbol + ": " + err);
             return;
@@ -224,16 +251,22 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         }
     }
 
+    // Dedup: a (symbol, period) request already in flight will fan out via
+    // technicals_loaded — duplicate caller drops here.
+    const QString inflight_key = "technicals:" + symbol + ":" + period;
+    if (!acquire_inflight(inflight_key)) return;
+
     QPointer<EquityResearchService> self = this;
 
     // ── Stage 2: compute via daemon, given a candles array ───────────────────
-    auto run_compute = [self, symbol, period](const QJsonArray& candles) {
-        if (!self) return;
+    auto run_compute = [self, symbol, period, inflight_key](const QJsonArray& candles) {
+        if (!self) { return; }  // (key remains held — process is exiting anyway)
         QJsonObject payload;
         payload["candles"] = candles;
         python::PythonWorker::instance().submit("compute_technicals", payload,
-            [self, symbol, period](bool ok, QJsonObject result, QString err) {
+            [self, symbol, period, inflight_key](bool ok, QJsonObject result, QString err) {
                 if (!self) return;
+                self->release_inflight(inflight_key);
                 if (!ok || !result.value("success").toBool(false)) {
                     emit self->error_occurred(
                         "Technicals",
@@ -271,9 +304,12 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     hist_payload["period"] = period;
     hist_payload["interval"] = "1d";
     python::PythonWorker::instance().submit("historical_period", hist_payload,
-        [self, symbol, run_compute](bool ok, QJsonObject result, QString /*err*/) {
+        [self, symbol, run_compute, inflight_key](bool ok, QJsonObject result, QString /*err*/) {
             if (!self) return;
             if (!ok) {
+                // Stage 1 failed — release the dedup key here since stage 2
+                // will never run to release it for us.
+                self->release_inflight(inflight_key);
                 emit self->error_occurred("Technicals", "Failed historical fetch");
                 return;
             }
@@ -308,6 +344,10 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
         }
     }
 
+    // Reuse the cache key as the dedup key — if a fetch for this exact
+    // peer set is already pending, drop the second caller.
+    if (!acquire_inflight(cache_key)) return;
+
     QJsonArray syms_arr;
     syms_arr.append(symbol);
     for (const auto& s : peer_symbols) syms_arr.append(s);
@@ -315,6 +355,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     payload["symbols"] = syms_arr;
 
     run_daemon("multiple_ratios", payload, [this, cache_key](bool ok, QJsonObject result, QString err) {
+        release_inflight(cache_key);
         if (!ok) {
             emit error_occurred("Peers", "Failed to fetch peer data: " + err);
             return;
@@ -343,10 +384,13 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
         }
     }
 
+    const QString inflight_key = "news:" + symbol;
+    if (!acquire_inflight(inflight_key)) return;
     QJsonObject payload;
     payload["symbol"] = symbol;
     payload["count"] = count;
-    run_daemon("news", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
+    run_daemon("news", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+        release_inflight(inflight_key);
         if (!ok) {
             emit error_occurred("News", "Failed to fetch news for " + symbol + ": " + err);
             return;
