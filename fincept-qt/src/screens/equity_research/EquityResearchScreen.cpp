@@ -204,12 +204,22 @@ QWidget* EquityResearchScreen::build_title_bar() {
              ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     hl->addWidget(inline_search_input_);
 
-    // Popup dropdown — borderless top-level so it floats over screen
-    // contents without being clipped by the title bar's frame.
-    inline_search_popup_ = new QListWidget;
-    inline_search_popup_->setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+    // Popup dropdown — borderless top-level mirroring CommandBar's working
+    // pattern (Qt::ToolTip + WA_ShowWithoutActivating). Notes from that
+    // implementation that we deliberately match here:
+    //   - DO NOT add Qt::Popup: grabs keyboard, blocks typing.
+    //   - DO NOT add Qt::WindowDoesNotAcceptFocus: on X11 some WMs treat
+    //     that as "deactivate parent window," which made the QLineEdit
+    //     stop rendering typed characters until refocused.
+    //   - DO NOT use Qt::Tool: X11 can place it centre-screen on first
+    //     map before our setGeometry() runs.
+    inline_search_popup_ = new QListWidget(this);
+    inline_search_popup_->setWindowFlags(
+        Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    inline_search_popup_->setAttribute(Qt::WA_ShowWithoutActivating);
     inline_search_popup_->setUniformItemSizes(true);
     inline_search_popup_->setFocusPolicy(Qt::NoFocus);
+    inline_search_popup_->setMouseTracking(true);
     inline_search_popup_->setMaximumHeight(280);
     inline_search_popup_->setStyleSheet(QString(
         "QListWidget { background:%1; color:%2; border:1px solid %3;"
@@ -258,6 +268,7 @@ QWidget* EquityResearchScreen::build_title_bar() {
         inline_search_popup_->setCurrentRow(0);
         position_inline_search_popup();
         inline_search_popup_->show();
+        inline_search_popup_->raise();
     });
 
     // Click a suggestion → load it.
@@ -299,6 +310,21 @@ QWidget* EquityResearchScreen::build_title_bar() {
 
     // Up/Down keys navigate the popup; Escape closes it.
     inline_search_input_->installEventFilter(this);
+
+    // Dismiss the popup when focus leaves the input → popup region.
+    // Application-level focusChanged is more reliable than a per-widget
+    // FocusOut + timer hack, especially on X11 where transient focus
+    // can land on the popup itself when it first maps. (Same approach
+    // CommandBar uses for its top-level dropdown.)
+    connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
+        if (!inline_search_popup_ || !inline_search_input_) return;
+        if (!now) return;  // spurious during popup map
+        const bool inside = (now == inline_search_input_ ||
+                             now == inline_search_popup_ ||
+                             inline_search_popup_->isAncestorOf(now));
+        if (!inside)
+            inline_search_popup_->hide();
+    });
 
     hl->addStretch();
 
@@ -567,8 +593,13 @@ void EquityResearchScreen::position_inline_search_popup() {
     if (!inline_search_input_ || !inline_search_popup_) return;
     const QPoint global_below =
         inline_search_input_->mapToGlobal(QPoint(0, inline_search_input_->height()));
-    inline_search_popup_->move(global_below);
-    inline_search_popup_->resize(std::max(280, inline_search_input_->width()), 280);
+    const int w = std::max(inline_search_input_->width(), 320);
+    const int rows = inline_search_popup_->count();
+    const int h = std::min(std::max(rows, 1) * 26 + 8, 280);
+    // setGeometry is more reliable than move+resize on Linux X11 for
+    // top-level windows (the WM occasionally ignores move()/resize()
+    // pairs and keeps the previous geometry).
+    inline_search_popup_->setGeometry(global_below.x(), global_below.y(), w, h);
 }
 
 bool EquityResearchScreen::eventFilter(QObject* watched, QEvent* event) {
@@ -592,13 +623,6 @@ bool EquityResearchScreen::eventFilter(QObject* watched, QEvent* event) {
                     return true;
                 }
             }
-        } else if (event->type() == QEvent::FocusOut) {
-            // Defer hide so a click on the popup still registers (the click
-            // briefly steals focus before the itemActivated signal fires).
-            QTimer::singleShot(150, this, [this]() {
-                if (inline_search_popup_ && !inline_search_popup_->underMouse())
-                    inline_search_popup_->hide();
-            });
         }
     }
     return QWidget::eventFilter(watched, event);
