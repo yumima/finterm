@@ -290,11 +290,23 @@ void FuturesTermStructurePanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
     set_status("loading…");
+    // Show a loading placeholder immediately so the user sees feedback even
+    // when the previous chart is stale or the panel just opened. Without
+    // this the chart area stays in its prior state (or empty on first open)
+    // until the async result arrives, which feels like "nothing happened".
+    show_placeholder(QString("Loading term structure for %1…").arg(sym));
     const quint64 my_gen = bump_gen();
     FuturesDataService::instance().fetch_term_structure(
         sym, 8, [this, my_gen, sym](bool ok, QVector<TermStructurePoint> pts, QString source) {
             if (!is_current(my_gen)) return;          // stale — drop
-            if (!ok) { set_status("error", colors::NEGATIVE()); return; }
+            if (!ok) {
+                set_status("error", colors::NEGATIVE());
+                show_placeholder(QString("Term structure unavailable for %1.\n"
+                                         "CME public data is unreachable from this network;\n"
+                                         "live forward curves require a Databento subscription\n"
+                                         "(set DATABENTO_API_KEY and restart).").arg(sym));
+                return;
+            }
             set_status(QString("%1 · %2").arg(source, sym));
             render(pts);
         });
@@ -541,11 +553,23 @@ void FuturesSettlementsPanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
     set_status("loading…");
+    // Immediate loading placeholder — the table is created with 0 rows and
+    // its column headers are always visible, so without flipping to the
+    // placeholder the panel reads as "empty data" the entire time the
+    // request is in flight (and forever if the request errors silently).
+    show_placeholder(QString("Loading settlements for %1…").arg(sym));
     const quint64 my_gen = bump_gen();
     FuturesDataService::instance().fetch_term_structure(
         sym, 12, [this, my_gen, sym](bool ok, QVector<TermStructurePoint> pts, QString source) {
             if (!is_current(my_gen)) return;
-            if (!ok) { set_status("error", colors::NEGATIVE()); return; }
+            if (!ok) {
+                set_status("error", colors::NEGATIVE());
+                show_placeholder(QString("Per-month settlements unavailable for %1.\n"
+                                         "CME public data is unreachable from this network;\n"
+                                         "live data requires a Databento subscription\n"
+                                         "(set DATABENTO_API_KEY and restart).").arg(sym));
+                return;
+            }
             set_status(QString("%1 · %2").arg(source, sym));
             populate(pts);
         });
