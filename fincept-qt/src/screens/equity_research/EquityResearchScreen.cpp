@@ -19,6 +19,7 @@
 #include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QLineEdit>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -174,6 +175,32 @@ QWidget* EquityResearchScreen::build_title_bar() {
         [this]() { return current_symbol(); },
         link_group_);
     hl->addWidget(symbol_label_);
+
+    // Visual breathing room before the inline search input.
+    hl->addSpacing(24);
+
+    // Inline symbol search — same effect as typing "/stock SYM" in the
+    // command bar, but local to this screen so the user doesn't have to
+    // jump to the top toolbar to switch symbols. The hint label below
+    // still teaches the broader command-bar syntax (/fund, /index, …).
+    auto* inline_search = new QLineEdit;
+    inline_search->setPlaceholderText("Load symbol — type and Enter");
+    inline_search->setFixedWidth(220);
+    inline_search->setClearButtonEnabled(true);
+    inline_search->setStyleSheet(QString(
+        "QLineEdit { background:%1; color:%2; border:1px solid %3;"
+        " border-radius:2px; padding:3px 8px; font-size:12px;"
+        " font-family:'Consolas',monospace; }"
+        "QLineEdit:focus { border-color:%4; }")
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    connect(inline_search, &QLineEdit::returnPressed, this, [this, inline_search]() {
+        const QString sym = inline_search->text().trimmed().toUpper();
+        if (sym.isEmpty()) return;
+        load_symbol(sym);
+        inline_search->clear();
+    });
+    hl->addWidget(inline_search);
 
     hl->addStretch();
 
