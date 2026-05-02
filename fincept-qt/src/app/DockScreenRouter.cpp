@@ -485,7 +485,18 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
     // surprise layout changes. This matches the user's intent: "open this
     // alongside what I'm looking at" → if it's already alongside (or
     // anywhere), just focus it.
+    //
+    // Materialize synchronously even on the raise path: when a layout is
+    // restored from disk, dock widgets exist as lazy shells and the screen
+    // widget inside is only created on the first ADS visibilityChanged(true)
+    // signal — which is deferred to the next event-loop spin. Callers like
+    // PortfolioBlotter immediately follow split_alongside with another
+    // EventBus publish (e.g. equity_research.load_symbol AMZN), and that
+    // second publish would arrive before the screen had subscribed, getting
+    // dropped. Materializing here guarantees subscribers are wired before we
+    // return.
     if (is_open(id)) {
+        materialize_screen(id);
         raise(id);
         return;
     }
