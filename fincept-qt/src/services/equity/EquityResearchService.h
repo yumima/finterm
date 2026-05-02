@@ -70,6 +70,10 @@ class EquityResearchService : public QObject {
     static constexpr int kInfoTtlSec = 300;
     static constexpr int kHistoricalTtlSec = 120;
     static constexpr int kNewsTtlSec = 180;
+    // Financials are quarterly — no need to refetch within a session.
+    static constexpr int kFinancialsTtlSec = 3600;
+    // Peer fundamentals (P/E, P/B, ROE, …) move slowly — same hour-long TTL.
+    static constexpr int kPeersTtlSec = 3600;
 
     // ── Debounce ──────────────────────────────────────────────────────────────
     static constexpr int kDebounceMs = 350;

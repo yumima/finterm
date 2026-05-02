@@ -171,6 +171,17 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
 // ── Financials ────────────────────────────────────────────────────────────────
 void EquityResearchService::fetch_financials(const QString& symbol) {
+    // Tier 0: SWR cache — emit cached immediately and skip the network if
+    // we have a fresh entry. Quarterly data; 1h TTL is plenty.
+    {
+        const QVariant fcv = fincept::CacheManager::instance().get("equity:financials:" + symbol);
+        if (!fcv.isNull()) {
+            const auto cached = QJsonDocument::fromJson(fcv.toString().toUtf8()).object();
+            emit financials_loaded(parse_financials(cached));
+            return;
+        }
+    }
+
     QJsonObject payload;
     payload["symbol"] = symbol;
     run_daemon("financials", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
@@ -182,6 +193,10 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
             emit error_occurred("Financials", obj["error"].toString());
             return;
         }
+        fincept::CacheManager::instance().put(
+            "equity:financials:" + symbol,
+            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+            kFinancialsTtlSec, "equity");
         emit financials_loaded(parse_financials(obj));
     });
 }
@@ -273,13 +288,30 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
 // ── Peers ─────────────────────────────────────────────────────────────────────
 void EquityResearchService::fetch_peers(const QString& symbol, const QStringList& peer_symbols) {
+    // Build the cache key from the full symbol set so different peer
+    // selections for the same primary symbol don't collide.
+    QStringList key_syms;
+    key_syms.append(symbol);
+    key_syms.append(peer_symbols);
+    const QString cache_key = "equity:peers:" + key_syms.join(",");
+
+    // Tier 0: SWR cache — peer ratios are stable over hour-scale.
+    {
+        const QVariant pcv = fincept::CacheManager::instance().get(cache_key);
+        if (!pcv.isNull()) {
+            const auto arr = QJsonDocument::fromJson(pcv.toString().toUtf8()).array();
+            emit peers_loaded(parse_peers(arr));
+            return;
+        }
+    }
+
     QJsonArray syms_arr;
     syms_arr.append(symbol);
     for (const auto& s : peer_symbols) syms_arr.append(s);
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
-    run_daemon("multiple_ratios", payload, [this](bool ok, QJsonObject result, QString err) {
+    run_daemon("multiple_ratios", payload, [this, cache_key](bool ok, QJsonObject result, QString err) {
         if (!ok) {
             emit error_occurred("Peers", "Failed to fetch peer data: " + err);
             return;
@@ -288,12 +320,17 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
         const auto arr = result.contains("_value")
                              ? result.value("_value").toArray()
                              : result.value("ratios").toArray();
+        fincept::CacheManager::instance().put(
+            cache_key,
+            QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+            kPeersTtlSec, "equity");
         emit peers_loaded(parse_peers(arr));
     });
 }
 
 // ── News ──────────────────────────────────────────────────────────────────────
 void EquityResearchService::fetch_news(const QString& symbol, int count) {
+    // Tier 0: SWR cache — emit cached immediately and skip the network.
     {
         const QVariant ncv = fincept::CacheManager::instance().get("equity:news:" + symbol);
         if (!ncv.isNull()) {
@@ -302,19 +339,22 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
             return;
         }
     }
-    run_python(
-        "yfinance_data.py", {"news", symbol, QString::number(count)}, [this, symbol](bool ok, const QString& out) {
-            if (!ok) {
-                emit error_occurred("News", "Failed to fetch news for " + symbol);
-                return;
-            }
-            auto obj = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
-            auto arr = obj["articles"].toArray();
-            fincept::CacheManager::instance().put(
-                "equity:news:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                kNewsTtlSec, "equity");
-            emit news_loaded(symbol, parse_news(arr));
-        });
+
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    payload["count"] = count;
+    run_daemon("news", payload, [this, symbol](bool ok, QJsonObject obj, QString err) {
+        if (!ok) {
+            emit error_occurred("News", "Failed to fetch news for " + symbol + ": " + err);
+            return;
+        }
+        const QJsonArray arr = obj.value("articles").toArray();
+        fincept::CacheManager::instance().put(
+            "equity:news:" + symbol,
+            QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+            kNewsTtlSec, "equity");
+        emit news_loaded(symbol, parse_news(arr));
+    });
 }
 
 // ── TALIpp ────────────────────────────────────────────────────────────────────
