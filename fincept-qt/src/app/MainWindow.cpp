@@ -394,6 +394,18 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 }, Qt::QueuedConnection);
     });
 
+    // Intent-based "open alongside" — used by right-click "Open in X" gestures.
+    // Side-by-side placement (Right of focused), preserves the rest of the
+    // user's layout. If `screen_id` is already open, just raises it.
+    EventBus::instance().subscribe("nav.split_alongside", [this](const QVariantMap& nav_data) {
+        QString screen_id = nav_data["screen_id"].toString();
+        if (!screen_id.isEmpty())
+            QMetaObject::invokeMethod(
+                dock_router_, [this, screen_id]() {
+                    if (!locked_) dock_router_->split_alongside(screen_id);
+                }, Qt::QueuedConnection);
+    });
+
     // ── Keyboard shortcuts via KeyConfigManager ───────────────────────────────
     auto& km = KeyConfigManager::instance();
 

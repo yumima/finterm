@@ -1,9 +1,12 @@
 // src/screens/portfolio/PortfolioHeatmap.cpp
 #include "screens/portfolio/PortfolioHeatmap.h"
 
+#include "core/events/EventBus.h"
 #include "ui/theme/Theme.h"
 
+#include <QAction>
 #include <QGridLayout>
+#include <QMenu>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
@@ -286,6 +289,47 @@ void PortfolioHeatmap::rebuild_blocks() {
             rebuild_blocks();
             update_detail();
             emit symbol_selected(sym);
+        });
+
+        // Right-click context menu — mirrors PortfolioBlotter so the user
+        // can take the same actions from this sidebar (especially useful in
+        // a side-by-side layout where the blotter is hidden behind another
+        // pane). "Open in Equity Research" uses split_alongside so ER opens
+        // beside Portfolio rather than replacing it.
+        block->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(block, &QWidget::customContextMenuRequested, this,
+                [this, btn = block, sym = h.symbol](const QPoint& pos) {
+            QMenu menu(btn);
+            auto* sym_label = menu.addAction(sym);
+            sym_label->setEnabled(false);
+            sym_label->setFont([] {
+                QFont f;
+                f.setBold(true);
+                f.setPointSize(10);
+                return f;
+            }());
+            menu.addSeparator();
+
+            auto* research_act = menu.addAction("Open in Equity Research");
+            menu.addSeparator();
+            auto* edit_act = menu.addAction("Edit Transaction");
+            auto* delete_act = menu.addAction("Close / Delete Position");
+            delete_act->setData("danger");
+            menu.setStyleSheet(menu.styleSheet() +
+                               QString("QMenu::item[data='danger'] { color:%1; }").arg(ui::colors::NEGATIVE()));
+
+            connect(research_act, &QAction::triggered, this, [sym]() {
+                EventBus::instance().publish("nav.split_alongside",
+                                             QVariantMap{{"screen_id", "equity_research"}});
+                EventBus::instance().publish("equity_research.load_symbol",
+                                             QVariantMap{{"symbol", sym}});
+            });
+            connect(edit_act, &QAction::triggered, this,
+                    [this, sym]() { emit edit_transaction_requested(sym); });
+            connect(delete_act, &QAction::triggered, this,
+                    [this, sym]() { emit delete_position_requested(sym); });
+
+            menu.exec(btn->mapToGlobal(pos));
         });
 
         grid->addWidget(block, row, col);

@@ -432,10 +432,13 @@ void PortfolioBlotter::on_context_menu(const QPoint& pos) {
                        QString("QMenu::item[data='danger'] { color:%1; }").arg(ui::colors::NEGATIVE()));
 
     connect(research_act, &QAction::triggered, this, [symbol]() {
-        // Mirror CommandBar::select_asset: navigate first, then push the symbol.
-        // EquityResearchScreen subscribes to "equity_research.load_symbol" in its
-        // ctor and routes through load_symbol() which updates title/quote/tabs.
-        EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "equity_research"}});
+        // split_alongside places ER to the right of the focused area
+        // (side-by-side, splitter handle vertical, panes arranged left-right).
+        // If ER is already open, the router raises the existing tab without
+        // reflowing — the user keeps their split intact.
+        // EquityResearchScreen subscribes to "equity_research.load_symbol" in
+        // its ctor and routes through load_symbol().
+        EventBus::instance().publish("nav.split_alongside", QVariantMap{{"screen_id", "equity_research"}});
         EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", symbol}});
     });
     connect(edit_act, &QAction::triggered, this, [this, symbol]() { emit edit_transaction_requested(symbol); });

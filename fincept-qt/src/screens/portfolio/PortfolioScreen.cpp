@@ -964,6 +964,16 @@ QWidget* PortfolioScreen::build_main_view() {
     });
     connect(filter_edit, &QLineEdit::textChanged, blotter_, &PortfolioBlotter::set_filter);
 
+    // Heatmap right-click context menu emits the same intent signals as the
+    // blotter. Forward signal-to-signal so the existing dialog handlers
+    // (wired above) fire from both sources without duplication.
+    if (heatmap_) {
+        connect(heatmap_, &PortfolioHeatmap::edit_transaction_requested, blotter_,
+                &PortfolioBlotter::edit_transaction_requested);
+        connect(heatmap_, &PortfolioHeatmap::delete_position_requested, blotter_,
+                &PortfolioBlotter::delete_position_requested);
+    }
+
     blotter_layout->addWidget(blotter_, 1);
 
     // Transaction history panel below blotter

@@ -24,6 +24,9 @@ class PortfolioHeatmap : public QWidget {
   signals:
     void symbol_selected(QString symbol);
     void mode_changed(portfolio::HeatmapMode mode);
+    // Mirror PortfolioBlotter — same actions, same screen-level dialogs.
+    void edit_transaction_requested(QString symbol);
+    void delete_position_requested(QString symbol);
 
   private:
     void build_ui();
