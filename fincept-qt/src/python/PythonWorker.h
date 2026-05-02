@@ -27,7 +27,9 @@ namespace fincept::python {
 /// Caveat — daemon is single-threaded. A long-running action blocks every
 /// other request until it returns. compute_technicals is CPU-bound but bounded
 /// (<1s for 252-bar series). If you add a new action that can hang, either
-/// move it to a fresh PythonRunner spawn or add per-request timeout handling.
+/// move it to a fresh PythonRunner spawn or pass a `timeout_ms` to submit()
+/// (which fails the C++ callback at the deadline; the Python action keeps
+/// running, but the UI no longer hangs waiting for it).
 ///
 /// Framing: 4-byte big-endian length prefix, UTF-8 JSON body. Matches
 /// `run_daemon()` in scripts/yfinance_data.py.
@@ -54,7 +56,21 @@ class PythonWorker : public QObject {
     /// (batch_all, batch_quotes, batch_sparklines, historical_period, ...).
     /// `payload` is action-specific. Callback is invoked on the hub thread.
     /// Safe to call before the daemon is ready — the request queues.
-    void submit(const QString& action, const QJsonObject& payload, Callback cb);
+    ///
+    /// `timeout_ms` defaults to 0 (no timeout, wait forever). Pass a
+    /// positive value to cap how long the C++ callback will wait. On
+    /// timeout the callback fires with `ok=false, err="timeout (Nms)"`,
+    /// the request is erased from the in-flight table, and any subsequent
+    /// daemon response for the same id is ignored. The Python action keeps
+    /// running (single-threaded daemon — we can't preempt it) but the UI
+    /// no longer pretends to be loading.
+    void submit(const QString& action, const QJsonObject& payload, Callback cb,
+                int timeout_ms = 0);
+
+    // Suggested per-action timeouts. Network-bound actions (yfinance HTTP
+    // round-trip) get the smaller cap; compute-bound ones get the larger.
+    static constexpr int kNetworkActionTimeoutMs = 10'000;
+    static constexpr int kComputeActionTimeoutMs = 30'000;
 
     /// Graceful shutdown — sent automatically on app exit via destructor.
     void stop();
@@ -84,6 +100,7 @@ class PythonWorker : public QObject {
         QString action;
         QJsonObject payload;
         Callback cb;
+        QTimer* deadline = nullptr;  // null when timeout_ms was 0
     };
     QHash<int, Pending> in_flight_;
     // Requests submitted before the daemon was ready, or queued during restart.

@@ -47,7 +47,8 @@ void EquityResearchService::run_daemon(const QString& action, const QJsonObject&
         [self, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
             if (!self) return;
             cb(ok, std::move(result), std::move(err));
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
@@ -247,7 +248,8 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                     "equity:technicals:" + symbol + ":" + period, QVariant(blob),
                     kHistoricalTtlSec, "equity");
                 emit self->technicals_loaded(self->parse_technicals(symbol, data));
-            });
+            },
+            python::PythonWorker::kComputeActionTimeoutMs);
     };
 
     // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
@@ -283,7 +285,8 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
             fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(blob),
                                                    kHistoricalTtlSec, "equity");
             run_compute(candles);
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Peers ─────────────────────────────────────────────────────────────────────

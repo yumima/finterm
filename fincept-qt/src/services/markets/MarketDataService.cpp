@@ -214,7 +214,8 @@ void MarketDataService::refresh(const QStringList& topics) {
                          .arg(quotes_ok).arg(quote_syms.size())
                          .arg(sparks_ok).arg(spark_syms.size())
                          .arg(hists_ok).arg(hist_reqs.size()));
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void MarketDataService::publish_quote_to_hub(const QuoteData& q) {
@@ -421,7 +422,8 @@ void MarketDataService::flush_batch() {
                 }
                 req.cb(true, filtered);
             }
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── News fetch (unchanged) ──────────────────────────────────────────────────
@@ -439,7 +441,8 @@ void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallbac
             }
             // Daemon returns {articles: [...]} for news.
             cb(true, result.value("articles").toArray());
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Info fetch (company fundamentals) ───────────────────────────────────────
@@ -495,7 +498,8 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              shared->info.eps = o["revenue_per_share"].toDouble();
                                              shared->info_ok = true;
                                              try_complete();
-                                         });
+                                         },
+                                         python::PythonWorker::kNetworkActionTimeoutMs);
 
     // ── Call 2: financial_ratios via daemon ───────────────────────────────────
     QJsonObject ratios_payload;
@@ -519,7 +523,8 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              shared->info.eps = o["revenuePerShare"].toDouble();
                                              shared->ratios_ok = true;
                                              try_complete();
-                                         });
+                                         },
+                                         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── History fetch (OHLCV) ────────────────────────────────────────────────────
@@ -558,7 +563,8 @@ void MarketDataService::fetch_history(const QString& symbol, const QString& peri
 
         LOG_INFO("MarketData", QString("Fetched %1 history points for %2").arg(history.size()).arg(symbol));
         cb(true, history);
-    });
+    },
+    python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Static symbol lists ─────────────────────────────────────────────────────
@@ -685,7 +691,8 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
                 out[it.key()] = prices;
         }
         cb(true, out);
-    });
+    },
+    python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 } // namespace fincept::services

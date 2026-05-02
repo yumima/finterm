@@ -52,7 +52,8 @@ PythonWorker::~PythonWorker() {
     stop();
 }
 
-void PythonWorker::submit(const QString& action, const QJsonObject& payload, Callback cb) {
+void PythonWorker::submit(const QString& action, const QJsonObject& payload, Callback cb,
+                          int timeout_ms) {
     ensure_started();
 
     const int id = next_id_++;
@@ -61,8 +62,32 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     p.payload = payload;
     p.cb = std::move(cb);
 
+    // Deadline timer: fires once at `timeout_ms`, fails the callback if the
+    // response hasn't arrived yet. Stays inactive forever when timeout_ms == 0.
+    if (timeout_ms > 0) {
+        p.deadline = new QTimer(this);
+        p.deadline->setSingleShot(true);
+        p.deadline->setInterval(timeout_ms);
+        connect(p.deadline, &QTimer::timeout, this, [this, id, action, timeout_ms]() {
+            auto it = in_flight_.find(id);
+            if (it == in_flight_.end()) return;  // already resolved — race
+            Pending p = std::move(it.value());
+            in_flight_.erase(it);
+            LOG_WARN("PythonWorker",
+                     QString("action '%1' (id=%2) timed out after %3ms — daemon "
+                             "may still be working on it; UI callback failed")
+                         .arg(action).arg(id).arg(timeout_ms));
+            const QString err = QString("timeout (%1ms)").arg(timeout_ms);
+            if (p.deadline) p.deadline->deleteLater();
+            if (p.cb) p.cb(false, QJsonObject{}, err);
+        });
+    }
+
     if (!ready_ || !proc_ || proc_->state() != QProcess::Running) {
-        // Queue until the daemon is ready (or restarted).
+        // Queue until the daemon is ready (or restarted). The deadline
+        // timer (if any) is intentionally not started yet — we don't want
+        // to charge wait time against the user before we even sent the
+        // request.
         queue_.append({id, std::move(p)});
         return;
     }
@@ -71,6 +96,7 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     req["id"] = id;
     req["action"] = action;
     req["payload"] = payload;
+    if (p.deadline) p.deadline->start();
     in_flight_.insert(id, std::move(p));
     proc_->write(encode_frame(req));
 }
@@ -247,6 +273,11 @@ void PythonWorker::try_drain_frames() {
         }
         Pending p = std::move(it.value());
         in_flight_.erase(it);
+        // Cancel the deadline timer — response beat the timeout.
+        if (p.deadline) {
+            p.deadline->stop();
+            p.deadline->deleteLater();
+        }
         const bool ok = obj.value("ok").toBool();
         const QString err = obj.value("error").toString();
         QJsonObject result_obj;
@@ -274,6 +305,9 @@ void PythonWorker::dispatch_queued() {
         req["id"] = id;
         req["action"] = p.action;
         req["payload"] = p.payload;
+        // Start the deadline timer now that we're actually sending — wait
+        // time before this point shouldn't count against the user.
+        if (p.deadline) p.deadline->start();
         in_flight_.insert(id, std::move(p));
         proc_->write(encode_frame(req));
     }
@@ -281,10 +315,12 @@ void PythonWorker::dispatch_queued() {
 
 void PythonWorker::fail_all_pending(const QString& reason) {
     for (auto& entry : queue_) {
+        if (entry.second.deadline) entry.second.deadline->deleteLater();
         if (entry.second.cb) entry.second.cb(false, {}, reason);
     }
     queue_.clear();
     for (auto it = in_flight_.begin(); it != in_flight_.end(); ++it) {
+        if (it.value().deadline) it.value().deadline->deleteLater();
         if (it.value().cb) it.value().cb(false, {}, reason);
     }
     in_flight_.clear();

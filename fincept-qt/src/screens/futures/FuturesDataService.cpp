@@ -117,7 +117,8 @@ void FuturesDataService::fetch_quotes_yahoo(const QStringList& symbols, QuotesCa
                 rows.push_back(q);
             }
             cb(true, rows, "yfinance");
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void FuturesDataService::fetch_quotes_stooq(const QStringList& symbols, QuotesCallback cb) {
@@ -213,7 +214,8 @@ void FuturesDataService::fetch_history_yahoo(const QString& symbol, const QStrin
                 pts.push_back(p);
             }
             cb(true, pts, "yfinance");
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void FuturesDataService::fetch_history_stooq(const QString& symbol, const QString& period, HistoryCallback cb) {

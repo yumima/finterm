@@ -1121,7 +1121,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                  QString("Backfilled %1 historical snapshots for %2").arg(written).arg(portfolio_id));
         self->invalidate_cache(portfolio_id);
         emit self->history_backfilled(portfolio_id, written);
-    });
+    },
+    python::PythonWorker::kComputeActionTimeoutMs);
 }
 
 // ── Cache control ────────────────────────────────────────────────────────────

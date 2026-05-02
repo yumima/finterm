@@ -367,7 +367,8 @@ void PortfolioFuturesView::refresh_extended_hours() {
             }
             extended_status_->setText(QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
             populate_extended();
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 } // namespace fincept::screens
