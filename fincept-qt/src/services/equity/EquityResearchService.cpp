@@ -162,8 +162,12 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     }
 
     // ── Historical ───────────────────────────────────────────────────────────
+    // Cache key MUST include period — without it, switching the period
+    // button (1M/3M/6M/1Y/5Y) hits the cached entry from the previous
+    // period and emits stale data, leaving the chart visually unchanged.
     {
-        const QVariant hcv = fincept::CacheManager::instance().get("equity:candles:" + symbol);
+        const QString candles_key = "equity:candles:" + symbol + ":" + period;
+        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
         if (!hcv.isNull()) {
             emit historical_loaded(symbol, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
@@ -174,7 +178,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
             payload["period"] = period;
             payload["interval"] = "1d";
             run_daemon("historical_period", payload,
-                       [this, symbol, inflight_key](bool ok, QJsonObject result, QString err) {
+                       [this, symbol, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
                            release_inflight(inflight_key);
                            if (!ok) {
                                emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
@@ -185,7 +189,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                                 ? result.value("_value").toArray()
                                                 : result.value("history").toArray();
                            fincept::CacheManager::instance().put(
-                               "equity:candles:" + symbol,
+                               candles_key,
                                QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                                kHistoricalTtlSec, "equity");
                            emit historical_loaded(symbol, parse_candles(arr));
@@ -286,9 +290,11 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     };
 
     // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
+    // Cache key includes period so 1y candles aren't reused for a 5y request.
+    const QString candles_key = "equity:candles:" + symbol + ":" + period;
     QJsonArray candles_from_cache;
     {
-        const QVariant hcv = fincept::CacheManager::instance().get("equity:candles:" + symbol);
+        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
         if (!hcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
             if (doc.isArray()) candles_from_cache = doc.array();
@@ -304,7 +310,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     hist_payload["period"] = period;
     hist_payload["interval"] = "1d";
     python::PythonWorker::instance().submit("historical_period", hist_payload,
-        [self, symbol, run_compute, inflight_key](bool ok, QJsonObject result, QString /*err*/) {
+        [self, symbol, candles_key, run_compute, inflight_key](bool ok, QJsonObject result, QString /*err*/) {
             if (!self) return;
             if (!ok) {
                 // Stage 1 failed — release the dedup key here since stage 2
@@ -318,7 +324,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                                             ? result.value("_value").toArray()
                                             : result.value("history").toArray();
             const QString blob = QString::fromUtf8(QJsonDocument(candles).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(blob),
+            fincept::CacheManager::instance().put(candles_key, QVariant(blob),
                                                    kHistoricalTtlSec, "equity");
             run_compute(candles);
         },
@@ -430,8 +436,10 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                    });
     };
 
-    // Use cached historical if available, else fetch
-    const QVariant cached_candles = fincept::CacheManager::instance().get("equity:candles:" + symbol);
+    // Use cached historical if available, else fetch. Cache key includes
+    // period so different period selections don't reuse each other's data.
+    const QString candles_key = "equity:candles:" + symbol + ":" + period;
+    const QVariant cached_candles = fincept::CacheManager::instance().get(candles_key);
     if (!cached_candles.isNull()) {
         run_talipp(cached_candles.toString());
     } else {
@@ -440,7 +448,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-                   [this, symbol, run_talipp](bool ok, QJsonObject result, QString err) {
+                   [this, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
                        if (!ok) {
                            emit error_occurred("TALIpp", "Historical fetch failed: " + err);
                            return;
@@ -449,7 +457,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                                             ? result.value("_value").toArray()
                                             : result.value("history").toArray();
                        const QString raw = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-                       fincept::CacheManager::instance().put("equity:candles:" + symbol, QVariant(raw),
+                       fincept::CacheManager::instance().put(candles_key, QVariant(raw),
                                                              kHistoricalTtlSec, "equity");
                        run_talipp(raw);
                    });
