@@ -43,6 +43,12 @@ class AiChatBubble : public QWidget {
   protected:
     bool eventFilter(QObject* obj, QEvent* e) override;
 
+    // Drag-to-move support — bubble was previously pinned to bottom-right
+    // and could occlude content (e.g. the Equity Research FINANCIAL HEALTH
+    // panel that sits in the same corner). Mouse events on the bubble
+    // button are intercepted via eventFilter; these handlers are kept for
+    // future use if we ever forward bubble events to the parent widget.
+
   private slots:
     void on_toggle_open();
     void on_send();
@@ -88,6 +94,16 @@ class AiChatBubble : public QWidget {
     QString active_session_id_;
     std::vector<ai_chat::ConversationMessage> history_;
     QPointer<QTextEdit> streaming_bubble_;
+
+    // Drag state. `has_custom_pos_` is true once the user has dragged the
+    // bubble at least once — reposition() then respects custom_pos_ instead
+    // of pinning to bottom-right. Persisted to SettingsRepository under
+    // ui.chat_bubble.x / .y so the position survives launches.
+    bool   dragging_        = false;
+    bool   has_custom_pos_  = false;
+    QPoint drag_press_pos_;     // global press position
+    QPoint drag_widget_origin_; // bubble's top-left at press time
+    QPoint custom_pos_;         // top-left of bubble in parent coords
 
     // ── TTS ──────────────────────────────────────────────────────────────────
     QMediaPlayer* tts_player_ = nullptr;

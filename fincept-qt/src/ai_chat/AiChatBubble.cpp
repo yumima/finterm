@@ -2,6 +2,7 @@
 
 #include "services/stt/SpeechService.h"
 #include "storage/repositories/ChatRepository.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -10,6 +11,7 @@
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPalette>
 #include <QRegularExpression>
 #include <QResizeEvent>
@@ -73,6 +75,22 @@ AiChatBubble::AiChatBubble(QWidget* parent) : QWidget(parent) {
 
     if (parent)
         parent->installEventFilter(this);
+
+    // Restore custom drag position from settings if the user had moved it.
+    {
+        const auto rx = SettingsRepository::instance().get("ui.chat_bubble.x");
+        const auto ry = SettingsRepository::instance().get("ui.chat_bubble.y");
+        if (rx.is_ok() && ry.is_ok()) {
+            bool ok_x = false, ok_y = false;
+            const int x = rx.value().toInt(&ok_x);
+            const int y = ry.value().toInt(&ok_y);
+            if (ok_x && ok_y) {
+                custom_pos_ = QPoint(x, y);
+                has_custom_pos_ = true;
+            }
+        }
+    }
+
     reposition();
     raise();
 
@@ -119,21 +137,39 @@ void AiChatBubble::refresh_theme() {
 }
 
 // ── Reposition ────────────────────────────────────────────────────────────────
+// If the user has dragged the bubble, custom_pos_ holds their chosen
+// top-left and we honor it (clamped to the parent's current rect, in case
+// the window has shrunk since the last drag). Otherwise default to
+// bottom-right with MARGIN inset.
+//
+// Panel anchors above-and-aligned-to-right-of the bubble — clamped to the
+// parent rect so it stays on-screen regardless of where the bubble lives.
 void AiChatBubble::reposition() {
     if (!parentWidget())
         return;
 
     const QRect pr = parentWidget()->rect();
-    const int bx = pr.width() - BTN_SIZE - MARGIN;
-    const int by = pr.height() - BTN_SIZE - MARGIN;
+
+    int bx, by;
+    if (has_custom_pos_) {
+        bx = std::clamp(custom_pos_.x(), 0, std::max(0, pr.width() - BTN_SIZE));
+        by = std::clamp(custom_pos_.y(), 0, std::max(0, pr.height() - BTN_SIZE));
+    } else {
+        bx = pr.width() - BTN_SIZE - MARGIN;
+        by = pr.height() - BTN_SIZE - MARGIN;
+    }
     setGeometry(bx, by, BTN_SIZE, BTN_SIZE);
     bubble_btn_->setGeometry(0, 0, BTN_SIZE, BTN_SIZE);
 
-    const int px = pr.width() - PANEL_W - MARGIN;
-    const int py = pr.height() - PANEL_H - BTN_SIZE - MARGIN - 10;
+    // Panel: anchor right-edge to bubble's right-edge, sit above with 10 px gap.
+    int px = bx + BTN_SIZE - PANEL_W;
+    int py = by - PANEL_H - 10;
+    // Clamp so the panel stays on-screen even when the bubble is near an edge.
+    px = std::clamp(px, 4, std::max(4, pr.width() - PANEL_W - 4));
+    if (py < 4) py = 4;
     if (chat_panel_->parentWidget() != parentWidget())
         chat_panel_->setParent(parentWidget());
-    chat_panel_->setGeometry(px, (py < 4 ? 4 : py), PANEL_W, PANEL_H);
+    chat_panel_->setGeometry(px, py, PANEL_W, PANEL_H);
     if (is_open_) {
         chat_panel_->show();
         chat_panel_->raise();
@@ -920,9 +956,57 @@ void AiChatBubble::animate_pulse() {
 
 // ── Event filter ──────────────────────────────────────────────────────────────
 bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
-    if (obj == bubble_btn_ && e->type() == QEvent::MouseButtonRelease) {
-        on_toggle_open();
-        return true;
+    if (obj == bubble_btn_) {
+        // Distinguish click (open panel) from drag (move bubble). Movement
+        // beyond DRAG_THRESHOLD pixels between press and release switches
+        // the gesture from "click" to "drag" and suppresses the toggle.
+        constexpr int DRAG_THRESHOLD = 5;
+        if (e->type() == QEvent::MouseButtonPress) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->button() == Qt::LeftButton) {
+                drag_press_pos_ = me->globalPosition().toPoint();
+                drag_widget_origin_ = pos();
+                dragging_ = false;
+                return true;
+            }
+        } else if (e->type() == QEvent::MouseMove) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->buttons() & Qt::LeftButton) {
+                const QPoint delta = me->globalPosition().toPoint() - drag_press_pos_;
+                if (!dragging_ &&
+                    (std::abs(delta.x()) > DRAG_THRESHOLD || std::abs(delta.y()) > DRAG_THRESHOLD)) {
+                    dragging_ = true;
+                    setCursor(Qt::ClosedHandCursor);
+                }
+                if (dragging_ && parentWidget()) {
+                    QPoint target = drag_widget_origin_ + delta;
+                    // Clamp to parent rect so the bubble can't be dragged
+                    // off-screen and become unreachable.
+                    const QRect pr = parentWidget()->rect();
+                    target.setX(std::clamp(target.x(), 0, pr.width() - width()));
+                    target.setY(std::clamp(target.y(), 0, pr.height() - height()));
+                    move(target);
+                    custom_pos_ = target;
+                    has_custom_pos_ = true;
+                    if (chat_panel_ && is_open_) reposition();  // re-anchor panel
+                }
+                return true;
+            }
+        } else if (e->type() == QEvent::MouseButtonRelease) {
+            auto* me = static_cast<QMouseEvent*>(e);
+            unsetCursor();
+            if (dragging_) {
+                dragging_ = false;
+                // Persist position so it survives launches.
+                SettingsRepository::instance().set("ui.chat_bubble.x", QString::number(custom_pos_.x()));
+                SettingsRepository::instance().set("ui.chat_bubble.y", QString::number(custom_pos_.y()));
+                return true;  // suppress click — this was a drag
+            }
+            if (me->button() == Qt::LeftButton) {
+                on_toggle_open();
+                return true;
+            }
+        }
     }
     if (obj == input_box_ && e->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(e);
