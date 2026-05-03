@@ -7,6 +7,8 @@
 #   reset              — reset persistent state (window-only / full / etc.)
 #   stop               — stop the running app and stub
 #   status             — print what's running
+#   install            — register a desktop-launcher entry (pinnable to dock)
+#   uninstall          — remove the desktop-launcher entry
 #   help               — print this help
 #
 # Safe to invoke from anywhere; paths resolve relative to this script's
@@ -49,6 +51,8 @@ USAGE
     finterm reset [reset-options...]       Reset persistent state
     finterm stop                           Stop the Qt app and the stub
     finterm status                         Show what's running
+    finterm install                        Register a desktop-launcher entry
+    finterm uninstall                      Remove the desktop-launcher entry
     finterm help                           Show this message
 
 START
@@ -87,6 +91,13 @@ STOP
 STATUS
     Show whether the Qt binary, the data daemon, and the stub are
     running, and whether http://127.0.0.1:8765/health is responding.
+
+INSTALL / UNINSTALL
+    `install` writes ~/.local/share/applications/finterm.desktop with
+    Exec/Icon paths resolved to this checkout, so the launcher works
+    no matter where you cloned the repo. After install, find "finterm"
+    in your apps menu and right-click → Pin to Dash / Add to Favorites.
+    `uninstall` removes that file.
 EOF
 }
 
@@ -364,6 +375,51 @@ cmd_status() {
     fi
 }
 
+# ── Subcommand: install / uninstall ──────────────────────────────────────────
+
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+DESKTOP_FILE="$DESKTOP_DIR/finterm.desktop"
+
+cmd_install() {
+    local icon="$REPO_DIR/finterm-icon.png"
+    if [[ ! -f "$icon" ]]; then
+        echo "Error: icon not found at $icon" >&2
+        exit 1
+    fi
+    mkdir -p "$DESKTOP_DIR"
+    cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=finterm
+GenericName=Financial Terminal
+Comment=finterm (Qt)
+Exec=$REPO_DIR/finterm.sh
+Icon=$icon
+Terminal=false
+Categories=Office;Finance;
+StartupWMClass=FinceptTerminal
+StartupNotify=true
+EOF
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+    fi
+    echo "Installed: $DESKTOP_FILE"
+    echo "Find \"finterm\" in your apps menu and right-click → Pin to Dash / Add to Favorites."
+}
+
+cmd_uninstall() {
+    if [[ -f "$DESKTOP_FILE" ]]; then
+        rm -f "$DESKTOP_FILE"
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+        fi
+        echo "Removed: $DESKTOP_FILE"
+    else
+        echo "Nothing to remove — $DESKTOP_FILE not present."
+    fi
+}
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 
 sub="${1:-start}"
@@ -379,6 +435,8 @@ case "$sub" in
     reset|--reset)   cmd_reset  "$@" ;;
     stop|--stop)     cmd_stop   "$@" ;;
     status|--status) cmd_status "$@" ;;
+    install|--install)     cmd_install   "$@" ;;
+    uninstall|--uninstall) cmd_uninstall "$@" ;;
     help|-h|--help)  usage ;;
     *)
         echo "unknown subcommand: $sub" >&2
