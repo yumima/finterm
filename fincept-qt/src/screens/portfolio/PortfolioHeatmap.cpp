@@ -262,10 +262,10 @@ void PortfolioHeatmap::rebuild_blocks() {
         // don't need to encode it here as well. Variable heights also caused
         // the apparent grid-gap inconsistency (a QGridLayout row's height is
         // the tallest tile, leaving extra space below shorter neighbours).
-        // 38px fits two lines (symbol + Δ%) at 10px font with 3-4px breathing
-        // room top/bottom — was 50px, which wasted vertical space and clipped
+        // 40px fits two lines (symbol + Δ%) at 10px font with comfortable
+        // breathing room — was 50px, which wasted vertical space and clipped
         // the bottom row when a column had ~13 holdings.
-        block->setFixedHeight(38);
+        block->setFixedHeight(40);
         block->setCursor(Qt::PointingHandCursor);
 
         QColor bg = block_color(h);
