@@ -80,9 +80,11 @@ cd ~/fin/finterm
 Everything day-to-day goes through `finterm.sh`. Symlink it once and use the bare command from anywhere:
 
 ```bash
-ln -s ~/fin/finterm/finterm.sh ~/bin/finterm
+ln -sf ~/fin/finterm/finterm.sh ~/bin/finterm    # -f also relinks an old start.sh symlink
 finterm help
 ```
+
+> **Upgrading from a previous version?** If your `~/bin/finterm` previously pointed at `start.sh`, the line above with `-sf` replaces it. (`start.sh` and `tools/reset.sh` were merged into `finterm.sh`.)
 
 | Command | What it does |
 |---|---|
