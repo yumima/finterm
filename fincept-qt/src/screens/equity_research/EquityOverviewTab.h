@@ -47,7 +47,7 @@ class EquityOverviewTab : public QWidget {
 
   private slots:
     void on_info_loaded(services::equity::StockInfo info);
-    void on_historical_loaded(QString symbol, QVector<services::equity::Candle> candles);
+    void on_historical_loaded(QString symbol, QString period, QVector<services::equity::Candle> candles);
     void on_quote_loaded(services::equity::QuoteData quote);
 
   private:

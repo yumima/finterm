@@ -35,7 +35,12 @@ class EquityResearchService : public QObject {
     void search_results_loaded(QVector<fincept::services::equity::SearchResult> results);
     void quote_loaded(fincept::services::equity::QuoteData quote);
     void info_loaded(fincept::services::equity::StockInfo info);
-    void historical_loaded(QString symbol, QVector<fincept::services::equity::Candle> candles);
+    // period is one of "1mo", "3mo", "6mo", "1y", "5y" — receivers must
+    // filter to ignore stale emissions from a different period than the
+    // one currently selected (e.g. a refresh-timer reload that uses the
+    // default "1y" must not overwrite a chart the user has just switched
+    // to "1mo").
+    void historical_loaded(QString symbol, QString period, QVector<fincept::services::equity::Candle> candles);
     void financials_loaded(fincept::services::equity::FinancialsData data);
     void technicals_loaded(fincept::services::equity::TechnicalsData data);
     void peers_loaded(QVector<fincept::services::equity::PeerData> peers);

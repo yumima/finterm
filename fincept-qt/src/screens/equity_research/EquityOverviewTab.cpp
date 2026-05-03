@@ -666,8 +666,14 @@ void EquityOverviewTab::on_info_loaded(services::equity::StockInfo info) {
     free_cf_val_->setText(fmt_large(info.free_cashflow));
 }
 
-void EquityOverviewTab::on_historical_loaded(QString symbol, QVector<services::equity::Candle> candles) {
+void EquityOverviewTab::on_historical_loaded(QString symbol, QString period, QVector<services::equity::Candle> candles) {
     if (symbol != current_symbol_)
+        return;
+    // Filter by period too: a refresh-timer reload (or any caller using the
+    // default "1y") must not overwrite the chart while the user has 1M/3M/
+    // 6M/5Y selected. Without this check the chart visibly flips back to
+    // the default period a few seconds after the user switches.
+    if (period != current_period_)
         return;
     historical_loaded_ = true;
     cached_candles_ = candles;

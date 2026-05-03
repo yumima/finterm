@@ -169,7 +169,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
         const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
         if (!hcv.isNull()) {
-            emit historical_loaded(symbol, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
+            emit historical_loaded(symbol, period, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
             const QString inflight_key = "historical:" + symbol + ":" + period;
             if (!acquire_inflight(inflight_key)) return;
@@ -178,7 +178,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
             payload["period"] = period;
             payload["interval"] = "1d";
             run_daemon("historical_period", payload,
-                       [this, symbol, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
+                       [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
                            release_inflight(inflight_key);
                            if (!ok) {
                                emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
@@ -192,7 +192,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                candles_key,
                                QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                                kHistoricalTtlSec, "equity");
-                           emit historical_loaded(symbol, parse_candles(arr));
+                           emit historical_loaded(symbol, period, parse_candles(arr));
                        });
         }
     }
