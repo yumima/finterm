@@ -77,7 +77,9 @@ cd ~/fin/finterm
 
 ### `finterm.sh` — one-stop CLI
 
-Everything day-to-day goes through `finterm.sh`. Symlink it once and use the bare command from anywhere:
+Everything day-to-day goes through `finterm.sh`. Symlink it once and use the bare command from anywhere.
+
+Subcommands are bare words — no leading dashes. Flags *inside* a subcommand take `--` (e.g. `finterm build --clean`). Leading-dash forms (`finterm --build`) are also accepted as aliases for first-timers.
 
 ```bash
 ln -sf ~/fin/finterm/finterm.sh ~/bin/finterm    # -f also relinks an old start.sh symlink

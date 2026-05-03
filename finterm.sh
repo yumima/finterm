@@ -37,6 +37,12 @@ usage() {
 finterm — local Fincept Terminal management
 
 USAGE
+    finterm <subcommand> [subcommand-flags...]
+
+    Subcommands are bare words — no leading dashes. Flags inside a
+    subcommand take "--" (e.g. `finterm build --clean`). Leading-dash
+    forms like `finterm --build` are also accepted as aliases.
+
     finterm                                Launch (same as `finterm start`)
     finterm start                          Launch the Qt app + localhost stub
     finterm build [--clean] [--tests]      Build the Qt binary
@@ -363,13 +369,17 @@ cmd_status() {
 sub="${1:-start}"
 [[ $# -gt 0 ]] && shift || true
 
+# Accept --start / --build / --reset / --stop / --status as ergonomic
+# aliases for the bare subcommands. The canonical form is bare (matches
+# `git`, `docker`, `kubectl`); the leading-dash form is forgiving for
+# first-timers who guess wrong.
 case "$sub" in
-    start)         cmd_start  "$@" ;;
-    build)         cmd_build  "$@" ;;
-    reset)         cmd_reset  "$@" ;;
-    stop)          cmd_stop   "$@" ;;
-    status)        cmd_status "$@" ;;
-    help|-h|--help) usage ;;
+    start|--start)   cmd_start  "$@" ;;
+    build|--build)   cmd_build  "$@" ;;
+    reset|--reset)   cmd_reset  "$@" ;;
+    stop|--stop)     cmd_stop   "$@" ;;
+    status|--status) cmd_status "$@" ;;
+    help|-h|--help)  usage ;;
     *)
         echo "unknown subcommand: $sub" >&2
         echo >&2
