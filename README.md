@@ -1,90 +1,83 @@
-# finterm — Localhost Fincept Terminal (Linux)
+# finterm
 
-A self-hosted, **offline-capable** fork of [Fincept Terminal](https://github.com/Fincept-Corporation/FinceptTerminal) — the C++/Qt6 financial-research desktop. This fork strips out the cloud dependency so the entire app runs locally on Linux: no account, no `api.fincept.in`, no rate-limited SaaS backend. Just the Qt binary, a small localhost stub that fakes the cloud auth layer, and Python data scripts you already trust.
+A local-first, **offline-capable** financial-research terminal — Qt6/C++ desktop app plus a thin Python data layer. Everything runs on your machine: no SaaS account, no cloud round-trips, no telemetry. The only outbound traffic is the public market-data APIs you explicitly use (Yahoo Finance, Stooq, akshare).
 
-## What this is
+## What you get
 
-| | Upstream Fincept Terminal | This fork |
-|---|---|---|
-| Backend | `api.fincept.in` (SaaS) | `127.0.0.1:8765` (local Python stub) |
-| Account | Required signup + login | Stub accepts anything; no signup |
-| Credits / billing | Server-side | Mocked — always positive |
-| Platform support | Linux / macOS / Windows | **Linux only** |
-| Market data | yfinance + akshare + (paid feeds) | Same — but with optional Stooq toggle for fast EOD |
-| Data leaving your machine | Quote APIs + telemetry to `api.fincept.in` | **Quote APIs only.** No telemetry. No analytics. See [Data flow](#data-flow). |
-
-The Qt UI is unchanged from upstream where it doesn't need to be. Where it does — auth, profile, credits — the client talks to the stub and gets stubbed answers, so the screens render normally.
+- **Markets / Watchlist / News** — live quotes via yfinance with an optional Stooq toggle for fast EOD pulls.
+- **Portfolio** — multi-account holdings, transactions, P&L, sparklines, heatmap, blotter. Plus a *Futures & Ext Hours* sub-view that filters futures-style symbols and shows pre/post-market values.
+- **Equity Research** — quote bar, financials, analyst targets, technical indicators (RSI / MACD / EMA / stochastic / ATR), peers, news, sentiment. Right-click a holding → opens ER side-by-side; symbol search is inline in the panel header.
+- **FUTURES top-level tab** — 8 asset-class watchlist (Index, Rates, Energy, Metals, Ags, FX, Crypto, China), heatmap, term structure, spread monitor, settlements, and continuous chart. Backed by a shared in-memory quote cache.
+- **Persistent yfinance daemon** — long-lived Python child process; cuts the ~1.5s pandas/yfinance import cost off every request.
+- **Boot prefetch** — futures cache and active portfolios are warmed at startup, so first-click feels instant.
+- **AI chat bubble** — drag-to-anywhere, position persisted; pluggable LLM provider (OpenAI / Anthropic / local Ollama / etc., configured in Settings → Agent). No provider is wired by default.
+- **Component browser, dock layouts, multi-window, workspaces** — full Qt-Advanced-Docking layout with per-screen state save/restore.
 
 ## Data flow
 
-This fork is **data-in only**: the app fetches market data *from* public quote APIs but **never sends your data anywhere**. No portfolio holdings, no watchlists, no notes, no chat history, no usage telemetry, no error reports leave the machine.
+finterm is **data-in only**: the app fetches market data *from* public APIs but **never sends your data anywhere**. No portfolio holdings, no watchlists, no notes, no chat history, no usage telemetry, no error reports leave the machine.
 
 Concretely:
 
-- **Outbound, on your behalf:** Yahoo Finance (`query1.finance.yahoo.com`, `query2.finance.yahoo.com`) and Stooq (`stooq.com`) for quotes/history. akshare hits Chinese exchange endpoints when you use the China futures panel. These are the same calls upstream makes; they fetch data **into** the app.
-- **Outbound, never:** no calls to `api.fincept.in`, no analytics provider, no crash reporter, no LLM/AI provider unless *you* configure one explicitly via Settings → Agent.
-- **Inbound only:** all auth, profile, credits, MFA, subscription, and account flows resolve against `127.0.0.1:8765` (the local stub). The stub is stdlib-only Python, no network code.
-- **Local only:** portfolio, watchlists, notes, alerts, candles cache, chat history, settings — all in `~/.local/share/com.fincept.terminal/` (SQLite + json) and `~/.config/Fincept/`. Nothing in those dirs is uploaded.
+- **Outbound, on your behalf:** Yahoo Finance (`query1.finance.yahoo.com`, `query2.finance.yahoo.com`) and Stooq (`stooq.com`) for quotes/history. akshare hits Chinese exchange endpoints when you use the China futures panel. These calls fetch data **into** the app.
+- **Outbound, never:** no analytics provider, no crash reporter, no SaaS backend, no LLM/AI provider unless *you* configure one explicitly via Settings → Agent.
+- **Inbound only:** auth, profile, credits, MFA, subscription, and account flows resolve against `127.0.0.1:8765` (a local Python stub). The stub is stdlib-only — no network code at all.
+- **Local only:** portfolio, watchlists, notes, alerts, candles cache, chat history, settings — all in `~/.local/share/com.fincept.terminal/` (SQLite + json) and `~/.config/Fincept/`. Nothing in those directories is uploaded.
 
-If you wire in an external LLM via Settings → Agent (OpenAI, Anthropic, local Ollama, etc.), prompt+response pairs go to whatever endpoint *you* configured — that's the one and only outbound channel under your direct control. Default is no AI provider.
+If you wire in an external LLM via Settings → Agent, prompt+response pairs go to whatever endpoint *you* configured — that is the one and only outbound channel under your direct control. Default is no AI provider.
 
-### Fork-specific additions
-
-Beyond the cloud-removal, this branch adds:
-
-- **FUTURES** top-level tab — 8 asset-class watchlist (Index, Rates, Energy, Metals, Ags, FX, Crypto, China) with heatmap, term structure, spread monitor, settlements, and continuous chart. Backed by a shared in-memory quote cache.
-- **Portfolio → Futures & Ext Hours** sub-view — filters your holdings to futures-style symbols and shows pre/post-market values for the rest.
-- **DATA: Yahoo / Stooq toggle** in the top toolbar — switch between Yahoo (live, ~3–5s) and Stooq (EOD, ~1s). Persists across launches.
-- **Persistent yfinance daemon** — long-lived Python child process; eliminates the ~1.5s pandas/yfinance import cost per request.
-- **Boot prefetch** — futures cache and active portfolios are warmed at app startup, so first-click feels instant.
-
-See [`fincept-qt/CHANGELOG-fork.md`](fincept-qt/CHANGELOG-fork.md) if/when that lands; otherwise the diff against upstream is the source of truth.
-
-## Where things live
+## Architecture
 
 ```
 finterm/                            ← this repo
 ├── start.sh                        ← single-command launcher (used by ~/bin/finterm)
 ├── setup.sh                        ← preflight: checks Qt / cmake / Python toolchain
-├── fincept-qt/                     ← upstream Qt6 source tree (forked + patched)
-│   ├── src/                        ← C++ application
-│   ├── scripts/                    ← Python data layer (yfinance, akshare, stooq, ...)
+├── fincept-qt/                     ← Qt6/C++ application
+│   ├── src/                        ← C++ source
+│   ├── scripts/                    ← Python data layer (yfinance, akshare, stooq, …)
 │   ├── cmake/                      ← build helpers
-│   └── build/linux-release/        ← compiled binary lands here
-├── tools/
-│   ├── local_stub/server.py        ← localhost backend that replaces api.fincept.in
-│   └── systemd/fincept-stub.service ← optional user unit to keep stub running
-└── docs/                           ← upstream docs (unchanged)
+│   └── build/<preset>/             ← compiled binary lands here
+└── tools/
+    ├── local_stub/server.py        ← localhost backend (auth/profile/credits stubs)
+    ├── reset.sh                    ← state-recovery utility
+    └── systemd/fincept-stub.service ← optional user unit to keep stub running
 ```
 
 Two processes run when you launch:
 
 1. **Local stub** (`tools/local_stub/server.py`, system Python) — listens on `127.0.0.1:8765`, fields auth/profile/credits/etc. requests. Stays alive across launches.
-2. **FinceptTerminal** (`fincept-qt/build/linux-release/FinceptTerminal`) — the Qt app. Spawns its own Python child for market-data work (`yfinance_data.py --daemon`).
+2. **FinceptTerminal** (`fincept-qt/build/<preset>/FinceptTerminal`) — the Qt app. Spawns its own Python child for market-data work (`yfinance_data.py --daemon`).
 
-Neither process talks to anything outside `127.0.0.1` except the data scripts you explicitly invoke (Yahoo Finance, Stooq, akshare). Those reach out to the public quote APIs the same way upstream does.
+Neither process talks to anything outside `127.0.0.1` except the data scripts you explicitly invoke (Yahoo Finance, Stooq, akshare).
 
 ## How to run
 
+### Platform support
+
+The codebase and CMake presets target **Linux, macOS, and Windows**, but only **Linux** is regularly tested by the maintainer (Ubuntu / Debian-likes, x86-64). macOS (`macos-release` preset) and Windows (`windows-release` preset, MSVC 2022) should build but are unverified — expect minor friction around platform-specific dependencies (audio, system tray, codecs). Reports / patches welcome.
+
+The launcher (`start.sh`) and reset utility (`tools/reset.sh`) are bash scripts. On Windows you'd launch the Qt binary directly from the `windows-release` build dir; the localhost stub still works (it's plain Python).
+
 ### Prerequisites
 
-- Linux x86-64 (tested on Ubuntu / Debian-likes)
-- Qt 6.8.3 (`gcc_64` kit) — the build expects it under `~/fin/finterm/.qt/6.8.3/gcc_64/` or wherever your `setup.sh` provisioned it
-- CMake 3.27+, GCC 12.3+ (or Clang 15+)
-- Python 3.11+ for the stub (system python is fine)
-- A separate Python venv for the data scripts (`venv-numpy2`) — `setup.sh` provisions it under `~/.local/share/com.fincept.terminal/`
+- Qt 6.8.3 (the `setup.sh` script provisions it via `aqtinstall` under `<repo>/.qt/6.8.3/<kit>/` if not already present).
+- CMake 3.27+, GCC 12.3+ / Clang 15+ / MSVC 2022.
+- Python 3.11+ (system python is fine for the stub).
+- A separate Python venv for the data scripts — `setup.sh` provisions it under `~/.local/share/com.fincept.terminal/`. ~110 packages, ~5–15 minutes the first time.
 
 ### First-time setup
 
 ```bash
-git clone <this-fork-url> ~/fin/finterm
+git clone <this-repo-url> ~/fin/finterm
 cd ~/fin/finterm
 ./setup.sh                     # checks toolchain, provisions venvs, fetches Qt if needed
-cmake --preset linux-release   # configure
+cmake --preset linux-release   # or macos-release / windows-release
 cmake --build --preset linux-release
 ```
 
-### Launch
+`setup.sh` installs system dependencies on Linux/macOS automatically (build tools, OpenGL/xkbcommon/dbus, `portaudio19-dev` for the AI chat voice-input feature, etc.) — see the script for the full list per package manager.
+
+### Launch (Linux/macOS)
 
 ```bash
 # Convenience: symlink so `finterm` works from anywhere
@@ -94,14 +87,24 @@ finterm
 
 What `start.sh` does, in order:
 
-1. **Strips Qt window/toolbar/dock-layout state from `~/.config/Fincept/FinceptTerminal.conf`** via `tools/reset.sh --window-only`. Surgical: portfolio, watchlists, theme, workspaces, component usage stats are all preserved. Defends against the duplicate-floating-window bug where any prior layout corruption persists across launches and steals keyboard focus from the PIN screen. Skip with `FINCEPT_KEEP_WINDOW=1 finterm` if you want Qt to remember a hand-arranged layout.
-2. **Starts the localhost stub if it isn't already running**, via `nohup`. Detects an existing stub regardless of whether it was started by `start.sh`, by hand, or by the optional systemd user unit (`tools/systemd/fincept-stub.service`). Logs to `~/.cache/fincept-stub.log`.
-3. **Execs the Qt binary in the foreground.** Closing the Qt window returns control to your shell; the stub keeps running so the next launch is instant.
+1. **Strips Qt window/toolbar/dock-layout state** from `~/.config/Fincept/FinceptTerminal.conf` via `tools/reset.sh --window-only`. Surgical: portfolio, watchlists, theme, workspaces, and component usage stats are preserved. Defends against layout corruption persisting across launches (duplicate floating windows, focus stolen from PIN screen). Skip with `FINCEPT_KEEP_WINDOW=1 finterm` if you want Qt to remember a hand-arranged layout.
+2. **Starts the localhost stub if not already running**, via `nohup`. Detects an existing stub started by `start.sh`, by hand, or by the optional systemd user unit (`tools/systemd/fincept-stub.service`). Stub log: `~/.cache/fincept-stub.log`.
+3. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell; the stub keeps running so the next launch is instant.
+
+### Launch (Windows)
+
+The bash launcher doesn't run on plain `cmd.exe`. Either run it under WSL/MSYS, or do it by hand:
+
+```powershell
+python tools\local_stub\server.py &        # in one shell
+fincept-qt\build\windows-release\FinceptTerminal.exe
+```
 
 ### Verify
 
 After launch:
-- The Qt window title reads **`finterm @ <hostname>`**.
+
+- The window title reads **`finterm @ <hostname>`**.
 - The top status bar shows **● LIVE** in green and `DATA: YAHOO ▾`.
 - `pgrep -af FinceptTerminal` shows the Qt binary.
 - `pgrep -af "yfinance_data.py --daemon"` shows the data daemon (spawned by the Qt app).
@@ -117,21 +120,19 @@ pkill -f tools/local_stub/server.py   # kills the localhost stub
 
 ### Reset / recovery
 
-If the app gets into a bad state — duplicate floating windows after a layout edit, stuck PIN screen, broken dock layout, "Install Analytics Libraries" prompt looping on every launch — the right tool is `tools/reset.sh`.
+If the app gets into a bad state — duplicate floating windows after a layout edit, stuck PIN screen, broken dock layout, "Install Analytics Libraries" prompt looping on every launch — use `tools/reset.sh`.
 
 ```bash
 tools/reset.sh                  # default: strip Qt window/dock/toolbar state only
                                 # (~1s, preserves portfolio + venv + everything else)
 tools/reset.sh --window-only    # explicit form of the default; what start.sh runs
 tools/reset.sh --full           # nuke Qt config + Python venv + caches
-                                # (next launch reprovisions ~120 pip packages, 5–15 min)
+                                # (next launch reprovisions ~110 pip packages, 5–15 min)
 tools/reset.sh --list           # show timestamped backups created by previous resets
 tools/reset.sh --restore <ts>   # roll back a specific reset
 ```
 
 Every destructive reset moves the affected directory aside as `<dir>.bak.<unix-ts>` rather than deleting outright, so `--restore` is always available. None of these touch your portfolio data — that lives in SQLite under `~/.local/share/com.fincept.terminal/data/` and is never moved or rebuilt.
-
-Common scenarios:
 
 | Symptom | Try |
 |---|---|
@@ -145,20 +146,14 @@ Common scenarios:
 
 `tools/local_stub/server.py` is **stdlib only** (no pip deps) and stores users in `~/.fincept-localhost/users.db` (SQLite). It accepts:
 
-- Any 6-digit OTP code (the "real" code is logged to stdout for convenience)
-- Any password reset / MFA flow without external email
-- Any subscription tier you set via `/user/set-tier`
+- Any 6-digit OTP code (the "real" code is logged to stdout for convenience).
+- Any password reset / MFA flow without external email.
+- Any subscription tier you set via `/user/set-tier`.
 
 Endpoints not relevant to local use (marine, research, quantlib, chat, forum) return empty success envelopes so the UI doesn't show errors for features that need a server-side backend.
 
-## Upstream
+## License & attribution
 
-Everything UI-side is owned by Fincept Corporation. This is a personal fork for offline use. If you want the full SaaS experience — paid tiers, Databento data, AI features, billing, hosted backend — go to:
+Licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).
 
-→ **[github.com/Fincept-Corporation/FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal)** ←
-
-This fork tracks upstream best-effort but does not redistribute the cloud product, marketing assets, or paid-tier features.
-
-## License
-
-Upstream is **AGPL-3.0** (see [`LICENSE`](LICENSE)). This fork inherits that license.
+finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this repo strips the SaaS/cloud dependency, replaces it with a localhost stub, and adds the futures tab, performance work, and various local-first conveniences described above. AGPL-3.0 inherits.
