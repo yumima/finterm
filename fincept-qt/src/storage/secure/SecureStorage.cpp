@@ -72,18 +72,32 @@ SecureStorage& SecureStorage::instance() {
 
 #ifdef FINCEPT_HAVE_LIBSECRET
 
-// Schema describing the structure of secrets we store. The single attribute
-// "fincept-key" holds the per-secret name (e.g. FRED_API_KEY) so we can look
-// it up later without scanning the whole keyring.
+// Schema describing the structure of secrets we store. The single
+// attribute "fincept-key" holds the per-secret name (e.g. FRED_API_KEY)
+// so we can look it up later without scanning the whole keyring.
+//
+// libsecret's SecretSchema has eight private trailing `reserved` /
+// `reserved1`..`reserved7` slots that the documentation explicitly says
+// to leave default-zeroed. Designated initializers express this clearly
+// but gcc still emits -Wmissing-field-initializers in C++ for the
+// unnamed trailing fields (long-standing quirk; gcc bug 39589 family).
+// Suppress just here — it's not a bug we can fix on the libsecret side.
 static const SecretSchema* fincept_schema() {
+#if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
     static const SecretSchema schema = {
-        "com.fincept.terminal",
-        SECRET_SCHEMA_NONE,
-        {
+        .name = "com.fincept.terminal",
+        .flags = SECRET_SCHEMA_NONE,
+        .attributes = {
             {"fincept-key", SECRET_SCHEMA_ATTRIBUTE_STRING},
             {nullptr, SecretSchemaAttributeType(0)},
         },
     };
+#if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic pop
+#endif
     return &schema;
 }
 

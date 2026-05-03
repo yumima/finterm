@@ -412,7 +412,30 @@ FetchContent_Declare(
     GIT_TAG        729e6b8b320caa96328968ab27d7db2235e4fb47  # release-0.5.2
     GIT_SHALLOW    TRUE
 )
-FetchContent_MakeAvailable(md4c)
+# Patch md4c's CMakeLists.txt before FetchContent_MakeAvailable processes
+# it. md4c adds -Wdeclaration-after-statement at directory scope (a C-only
+# warning), which then bleeds into the CXX-compiled MOC files we generate
+# for the same targets — gcc emits "valid for C/ObjC but not for C++" on
+# every CXX file. -w on the targets doesn't catch it because cc1plus
+# emits the message before user warning machinery activates. Modifying
+# the directory's COMPILE_OPTIONS post-MakeAvailable is also too late
+# because targets snapshot directory props at creation time. So we patch
+# the source file directly: comment the line out before subdirectory
+# processing. Idempotent — re-runs of cmake configure no-op.
+FetchContent_GetProperties(md4c)
+if(NOT md4c_POPULATED)
+    FetchContent_Populate(md4c)
+    set(_md4c_lists "${md4c_SOURCE_DIR}/CMakeLists.txt")
+    if(EXISTS "${_md4c_lists}")
+        file(READ "${_md4c_lists}" _md4c_text)
+        string(REPLACE
+            "add_compile_options(-Wdeclaration-after-statement)"
+            "# patched out by parent finterm CMakeLists (CXX-incompatible flag)\n#    add_compile_options(-Wdeclaration-after-statement)"
+            _md4c_text "${_md4c_text}")
+        file(WRITE "${_md4c_lists}" "${_md4c_text}")
+    endif()
+    add_subdirectory("${md4c_SOURCE_DIR}" "${md4c_BINARY_DIR}")
+endif()
 # md4c builds md4c (parser) and md4c-html (HTML renderer) as static libs.
 # Disable any example/test targets it may expose.
 set_target_properties(md4c PROPERTIES UNITY_BUILD OFF)
@@ -431,6 +454,7 @@ foreach(_md4c_tgt md4c md4c-html md2html)
         endif()
     endif()
 endforeach()
+
 # md4c's src/CMakeLists.txt installs from ${CMAKE_BINARY_DIR}/src/md4c.pc but
 # configure_file() writes to ${CMAKE_CURRENT_BINARY_DIR}/md4c.pc (the subbuild
 # dir). On CI these are different paths, causing CPack's "file INSTALL cannot
