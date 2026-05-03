@@ -30,7 +30,7 @@ If you wire in an external LLM via Settings → Agent, prompt+response pairs go 
 
 ```
 finterm/                            ← this repo
-├── start.sh                        ← single-command launcher (used by ~/bin/finterm)
+├── finterm.sh                      ← one-stop CLI: start / build / reset / stop / status
 ├── setup.sh                        ← preflight: checks Qt / cmake / Python toolchain
 ├── fincept-qt/                     ← Qt6/C++ application
 │   ├── src/                        ← C++ source
@@ -39,7 +39,6 @@ finterm/                            ← this repo
 │   └── build/<preset>/             ← compiled binary lands here
 └── tools/
     ├── local_stub/server.py        ← localhost backend (auth/profile/credits stubs)
-    ├── reset.sh                    ← state-recovery utility
     └── systemd/fincept-stub.service ← optional user unit to keep stub running
 ```
 
@@ -56,7 +55,7 @@ Neither process talks to anything outside `127.0.0.1` except the data scripts yo
 
 The codebase and CMake presets target **Linux, macOS, and Windows**, but only **Linux** is regularly tested by the maintainer (Ubuntu / Debian-likes, x86-64). macOS (`macos-release` preset) and Windows (`windows-release` preset, MSVC 2022) should build but are unverified — expect minor friction around platform-specific dependencies (audio, system tray, codecs). Reports / patches welcome.
 
-The launcher (`start.sh`) and reset utility (`tools/reset.sh`) are bash scripts. On Windows you'd launch the Qt binary directly from the `windows-release` build dir; the localhost stub still works (it's plain Python).
+The single management script (`finterm.sh`) is bash. On Windows you'd launch the Qt binary directly from the `windows-release` build dir; the localhost stub still works (it's plain Python).
 
 ### Prerequisites
 
@@ -71,76 +70,67 @@ The launcher (`start.sh`) and reset utility (`tools/reset.sh`) are bash scripts.
 git clone <this-repo-url> ~/fin/finterm
 cd ~/fin/finterm
 ./setup.sh                     # checks toolchain, provisions venvs, fetches Qt if needed
-cmake --preset linux-release   # or macos-release / windows-release
-cmake --build --preset linux-release
+./finterm.sh build             # configure + build the Qt binary
 ```
 
 `setup.sh` installs system dependencies on Linux/macOS automatically (build tools, OpenGL/xkbcommon/dbus, `portaudio19-dev` for the AI chat voice-input feature, etc.) — see the script for the full list per package manager.
 
-### Launch (Linux/macOS)
+### `finterm.sh` — one-stop CLI
+
+Everything day-to-day goes through `finterm.sh`. Symlink it once and use the bare command from anywhere:
 
 ```bash
-# Convenience: symlink so `finterm` works from anywhere
-ln -s ~/fin/finterm/start.sh ~/bin/finterm
-finterm
+ln -s ~/fin/finterm/finterm.sh ~/bin/finterm
+finterm help
 ```
 
-What `start.sh` does, in order:
+| Command | What it does |
+|---|---|
+| `finterm` *(or)* `finterm start` | Launch the Qt app + localhost stub. |
+| `finterm build` | Incremental cmake/ninja build. |
+| `finterm build --clean` | Clean rebuild (re-runs configure). |
+| `finterm build --tests` | Configure with `-DFINCEPT_BUILD_TESTS=ON`. |
+| `finterm reset` | Strip Qt window/dock/toolbar state only — ~1s, preserves everything else. This is what `start` runs each launch. |
+| `finterm reset --config-only` | Back up the entire `~/.config/Fincept/`. Python venv preserved → next launch is fast. |
+| `finterm reset --full` | Nuke Qt config + Python venv + caches. Next launch reprovisions ~110 pip packages (5–15 min). |
+| `finterm reset --list` | List timestamped backups. |
+| `finterm reset --restore <ts>` | Roll back a prior reset. |
+| `finterm stop` | `pkill` the Qt binary and the stub. |
+| `finterm status` | Print what's running + stub `/health` check. |
+| `finterm help` *(or `-h`, `--help`)* | Full help. |
 
-1. **Strips Qt window/toolbar/dock-layout state** from `~/.config/Fincept/FinceptTerminal.conf` via `tools/reset.sh --window-only`. Surgical: portfolio, watchlists, theme, workspaces, and component usage stats are preserved. Defends against layout corruption persisting across launches (duplicate floating windows, focus stolen from PIN screen). Skip with `FINCEPT_KEEP_WINDOW=1 finterm` if you want Qt to remember a hand-arranged layout.
-2. **Starts the localhost stub if not already running**, via `nohup`. Detects an existing stub started by `start.sh`, by hand, or by the optional systemd user unit (`tools/systemd/fincept-stub.service`). Stub log: `~/.cache/fincept-stub.log`.
+What `finterm start` does, in order:
+
+1. **Strips Qt window/toolbar/dock-layout state** from `~/.config/Fincept/FinceptTerminal.conf`. Surgical: portfolio, watchlists, theme, workspaces, and component usage stats are preserved. Defends against layout corruption persisting across launches (duplicate floating windows, focus stolen from PIN screen). Skip with `FINCEPT_KEEP_WINDOW=1 finterm` if you want Qt to remember a hand-arranged layout.
+2. **Starts the localhost stub if not already running**, via `nohup`. Detects an existing stub started by `finterm`, by hand, or by the optional systemd user unit (`tools/systemd/fincept-stub.service`). Stub log: `~/.cache/fincept-stub.log`.
 3. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell; the stub keeps running so the next launch is instant.
 
-### Launch (Windows)
+### Windows
 
-The bash launcher doesn't run on plain `cmd.exe`. Either run it under WSL/MSYS, or do it by hand:
+`finterm.sh` is bash and won't run on plain `cmd.exe`. Either run it under WSL/MSYS, or invoke the pieces manually:
 
 ```powershell
-python tools\local_stub\server.py &        # in one shell
+python tools\local_stub\server.py &
 fincept-qt\build\windows-release\FinceptTerminal.exe
 ```
 
-### Verify
-
-After launch:
+### Verify a launch
 
 - The window title reads **`finterm @ <hostname>`**.
 - The top status bar shows **● LIVE** in green and `DATA: YAHOO ▾`.
-- `pgrep -af FinceptTerminal` shows the Qt binary.
-- `pgrep -af "yfinance_data.py --daemon"` shows the data daemon (spawned by the Qt app).
-- `pgrep -af "tools/local_stub/server.py"` shows the localhost stub.
-- `curl http://127.0.0.1:8765/health` returns 200.
+- `finterm status` shows the Qt binary, the data daemon, and the stub all running, with `/health` returning 200.
 
-### Tear down
+### Recovery cheatsheet
 
-```bash
-pkill -f FinceptTerminal              # kills the Qt app + its data daemon child
-pkill -f tools/local_stub/server.py   # kills the localhost stub
-```
-
-### Reset / recovery
-
-If the app gets into a bad state — duplicate floating windows after a layout edit, stuck PIN screen, broken dock layout, "Install Analytics Libraries" prompt looping on every launch — use `tools/reset.sh`.
-
-```bash
-tools/reset.sh                  # default: strip Qt window/dock/toolbar state only
-                                # (~1s, preserves portfolio + venv + everything else)
-tools/reset.sh --window-only    # explicit form of the default; what start.sh runs
-tools/reset.sh --full           # nuke Qt config + Python venv + caches
-                                # (next launch reprovisions ~110 pip packages, 5–15 min)
-tools/reset.sh --list           # show timestamped backups created by previous resets
-tools/reset.sh --restore <ts>   # roll back a specific reset
-```
-
-Every destructive reset moves the affected directory aside as `<dir>.bak.<unix-ts>` rather than deleting outright, so `--restore` is always available. None of these touch your portfolio data — that lives in SQLite under `~/.local/share/com.fincept.terminal/data/` and is never moved or rebuilt.
+`finterm reset` covers ~95% of breakage. None of the reset modes touch your portfolio data — that lives in SQLite under `~/.local/share/com.fincept.terminal/data/` and is never moved or rebuilt. Every destructive reset moves the affected directory to `<dir>.bak.<unix-ts>` rather than deleting outright, so `--restore` is always available.
 
 | Symptom | Try |
 |---|---|
-| Two floating empty windows on launch / PIN screen behind another window | `tools/reset.sh` (`--window-only` is the default) |
-| App is fine but stuck on a weird theme / layout | `tools/reset.sh` |
-| Setup screen keeps offering "Install Analytics Libraries" every launch | Install `portaudio19-dev` (or distro equivalent), then `tools/reset.sh --full` once. PyAudio's system dep is now in `setup.sh`, so a fresh clone won't hit this. |
-| Daemon hung / Yahoo calls timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it on next request |
-| Stub returning 500s | `pkill -f tools/local_stub/server.py` then relaunch via `finterm`; `start.sh` will restart the stub |
+| Two floating empty windows on launch / PIN screen behind another window | `finterm reset` (default mode is window-only) |
+| App is fine but stuck on a weird theme / layout | `finterm reset --config-only` |
+| Setup screen keeps offering "Install Analytics Libraries" every launch | Install `portaudio19-dev` (or distro equivalent), then `finterm reset --full` once. PyAudio's system dep is now in `setup.sh`, so a fresh clone won't hit this. |
+| Daemon hung / Yahoo calls timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it on next request. |
+| Stub returning 500s | `finterm stop && finterm` — restarts both. |
 
 ## Notes on the localhost stub
 
