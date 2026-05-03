@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QScrollArea>
 #include <QSizePolicy>
@@ -88,18 +89,21 @@ QLabel* add_row(QFrame* panel, const QString& key, const char* val_color) {
 ResearchCandleCanvas::ResearchCandleCanvas(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(250);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setMouseTracking(true);  // receive mouseMoveEvent without a button held
 }
 
 void ResearchCandleCanvas::set_candles(const QVector<services::equity::Candle>& candles, const QString& cs) {
     candles_ = candles;
     currency_sym_ = cs;
     dirty_ = true;
+    hover_idx_ = -1;  // candles changed; previous hover index is meaningless
     update();
 }
 
 void ResearchCandleCanvas::clear() {
     candles_.clear();
     dirty_ = true;
+    hover_idx_ = -1;
     update();
 }
 
@@ -115,9 +119,19 @@ void ResearchCandleCanvas::paintEvent(QPaintEvent*) {
     }
     QPainter p(this);
     p.drawPixmap(0, 0, cache_);
+    // Hover overlay is painted live (not into the cache) so a mouse
+    // move only re-runs draw_hover_overlay's small overhead, not the
+    // full candle re-render.
+    if (hover_idx_ >= 0)
+        draw_hover_overlay(p);
 }
 
 void ResearchCandleCanvas::rebuild_cache() {
+    // Reset cached geometry up front; any early return below leaves
+    // the hover overlay disabled rather than acting on stale numbers.
+    last_plot_w_ = last_plot_h_ = last_start_ = last_count_ = 0;
+    last_slot_w_ = 0.0;
+
     const int W = width();
     const int H = height();
     if (W <= 0 || H <= 0)
@@ -171,6 +185,15 @@ void ResearchCandleCanvas::rebuild_cache() {
     const double slot_w = static_cast<double>(plot_w) / count;
     const int body_w = qMax(1, static_cast<int>(slot_w * 0.65));
     const int half = body_w / 2;
+
+    // Snapshot the visible-window geometry for mouseMoveEvent /
+    // draw_hover_overlay — they map cursor x → candle without
+    // re-deriving the layout.
+    last_plot_w_ = plot_w;
+    last_plot_h_ = plot_h;
+    last_start_  = start;
+    last_count_  = count;
+    last_slot_w_ = slot_w;
 
     const QColor bull_color(ui::colors::POSITIVE.get());
     const QColor bear_color(ui::colors::NEGATIVE.get());
@@ -251,6 +274,113 @@ void ResearchCandleCanvas::rebuild_cache() {
         p.setPen(QPen(QColor(ui::colors::AMBER.get()), 1, Qt::DashLine));
         p.drawLine(0, ly, plot_w, ly);
     }
+}
+
+void ResearchCandleCanvas::mouseMoveEvent(QMouseEvent* event) {
+    QWidget::mouseMoveEvent(event);
+    if (last_count_ <= 0 || last_slot_w_ <= 0.0) {
+        if (hover_idx_ != -1) { hover_idx_ = -1; update(); }
+        return;
+    }
+    const int x = event->position().toPoint().x();
+    const int y = event->position().toPoint().y();
+    // Outside the plot area? Drop hover.
+    if (x < 0 || x >= last_plot_w_ || y < 0 || y >= last_plot_h_) {
+        if (hover_idx_ != -1) { hover_idx_ = -1; update(); }
+        return;
+    }
+    int visible_i = static_cast<int>(x / last_slot_w_);
+    visible_i = std::clamp(visible_i, 0, last_count_ - 1);
+    const int abs_idx = last_start_ + visible_i;
+    if (abs_idx != hover_idx_) {
+        hover_idx_ = abs_idx;
+        update();  // full repaint is cheap (cached pixmap blit + overlay)
+    }
+}
+
+void ResearchCandleCanvas::leaveEvent(QEvent* event) {
+    QWidget::leaveEvent(event);
+    if (hover_idx_ != -1) {
+        hover_idx_ = -1;
+        update();
+    }
+}
+
+void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
+    if (hover_idx_ < 0 || hover_idx_ >= candles_.size()) return;
+    if (last_count_ <= 0 || last_slot_w_ <= 0.0) return;
+
+    const int visible_i = hover_idx_ - last_start_;
+    if (visible_i < 0 || visible_i >= last_count_) return;
+
+    const int cx = static_cast<int>((visible_i + 0.5) * last_slot_w_);
+
+    // 1. Dashed vertical crosshair line through the candle.
+    p.setPen(QPen(QColor(ui::colors::TEXT_TERTIARY()), 1, Qt::DashLine));
+    p.drawLine(cx, 0, cx, last_plot_h_);
+
+    // 2. Build the readout text segments.
+    const auto& c = candles_[hover_idx_];
+    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp);
+    const QString date_str = dt.toString("ddd dd MMM yyyy");
+
+    // Δ vs previous close (or open if it's the first candle).
+    const double prev_close = (hover_idx_ > 0) ? candles_[hover_idx_ - 1].close : c.open;
+    const double dchg = c.close - prev_close;
+    const double dpct = (prev_close != 0.0) ? (dchg / prev_close * 100.0) : 0.0;
+
+    auto fmt_p = [](double v) { return QString::number(v, 'f', 2); };
+    auto fmt_v = [](double v) -> QString {
+        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
+        if (v >= 1e6) return QString::number(v / 1e6, 'f', 1) + "M";
+        if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+        return QString::number(v, 'f', 0);
+    };
+    auto fmt_signed = [&](double v) {
+        return (v >= 0 ? QString("+") : QString()) + fmt_p(v);
+    };
+    auto fmt_signed2 = [](double v) {
+        return (v >= 0 ? QString("+") : QString()) + QString::number(v, 'f', 2);
+    };
+
+    const QString left  = QString("%1   O %2  H %3  L %4  C %5")
+                              .arg(date_str, fmt_p(c.open), fmt_p(c.high), fmt_p(c.low), fmt_p(c.close));
+    const QString delta = QString("Δ %1 (%2%)").arg(fmt_signed(dchg), fmt_signed2(dpct));
+    const QString right = QString("Vol %1").arg(fmt_v(c.volume));
+
+    // 3. Render the readout strip at the top-left of the plot area.
+    QFont lbl_font("Consolas", 9);
+    p.setFont(lbl_font);
+    QFontMetrics fm(lbl_font);
+
+    constexpr int PAD_X = 8;
+    constexpr int PAD_Y = 4;
+    constexpr int GAP   = 12;
+
+    const int left_w  = fm.horizontalAdvance(left);
+    const int delta_w = fm.horizontalAdvance(delta);
+    const int right_w = fm.horizontalAdvance(right);
+    const int total_w = left_w + GAP + delta_w + GAP + right_w;
+    const int line_h  = fm.height();
+
+    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
+    p.fillRect(bg, QColor(0, 0, 0, 180));
+    p.setPen(QColor(ui::colors::BORDER_DIM()));
+    p.drawRect(bg);
+
+    int x_cursor = PAD_X;
+    const int baseline = PAD_Y + fm.ascent();
+
+    p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
+    p.drawText(x_cursor, baseline, left);
+    x_cursor += left_w + GAP;
+
+    p.setPen(QColor(dchg >= 0 ? ui::colors::POSITIVE.get() : ui::colors::NEGATIVE.get()));
+    p.drawText(x_cursor, baseline, delta);
+    x_cursor += delta_w + GAP;
+
+    p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
+    p.drawText(x_cursor, baseline, right);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

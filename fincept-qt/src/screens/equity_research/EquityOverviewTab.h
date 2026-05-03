@@ -21,14 +21,28 @@ class ResearchCandleCanvas : public QWidget {
   protected:
     void paintEvent(QPaintEvent*) override;
     void resizeEvent(QResizeEvent*) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
   private:
     void rebuild_cache();
+    void draw_hover_overlay(QPainter& p);
 
     QVector<services::equity::Candle> candles_;
     QPixmap cache_;
     bool dirty_ = true;
     QString currency_sym_ = "$";
+
+    // Hover crosshair state. hover_idx_ is an absolute candles_ index
+    // (NOT visible-window-relative). The cached geometry below is filled
+    // in by rebuild_cache() so mouseMoveEvent and draw_hover_overlay()
+    // can map cursor x → candle without re-deriving the layout.
+    int    hover_idx_     = -1;
+    int    last_plot_w_   = 0;
+    int    last_plot_h_   = 0;
+    int    last_start_    = 0;   // first visible candle (window slide)
+    int    last_count_    = 0;   // visible candle count
+    double last_slot_w_   = 0.0; // pixels per candle slot
 
     static constexpr int MAX_VISIBLE = 260;
     static constexpr int PRICE_AXIS_W = 80;
