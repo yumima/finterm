@@ -11,9 +11,22 @@ A self-hosted, **offline-capable** fork of [Fincept Terminal](https://github.com
 | Credits / billing | Server-side | Mocked — always positive |
 | Platform support | Linux / macOS / Windows | **Linux only** |
 | Market data | yfinance + akshare + (paid feeds) | Same — but with optional Stooq toggle for fast EOD |
-| Data leaving your machine | Quote APIs to Yahoo / akshare / etc. | Same — quote APIs only. **Nothing else.** |
+| Data leaving your machine | Quote APIs + telemetry to `api.fincept.in` | **Quote APIs only.** No telemetry. No analytics. See [Data flow](#data-flow). |
 
 The Qt UI is unchanged from upstream where it doesn't need to be. Where it does — auth, profile, credits — the client talks to the stub and gets stubbed answers, so the screens render normally.
+
+## Data flow
+
+This fork is **data-in only**: the app fetches market data *from* public quote APIs but **never sends your data anywhere**. No portfolio holdings, no watchlists, no notes, no chat history, no usage telemetry, no error reports leave the machine.
+
+Concretely:
+
+- **Outbound, on your behalf:** Yahoo Finance (`query1.finance.yahoo.com`, `query2.finance.yahoo.com`) and Stooq (`stooq.com`) for quotes/history. akshare hits Chinese exchange endpoints when you use the China futures panel. These are the same calls upstream makes; they fetch data **into** the app.
+- **Outbound, never:** no calls to `api.fincept.in`, no analytics provider, no crash reporter, no LLM/AI provider unless *you* configure one explicitly via Settings → Agent.
+- **Inbound only:** all auth, profile, credits, MFA, subscription, and account flows resolve against `127.0.0.1:8765` (the local stub). The stub is stdlib-only Python, no network code.
+- **Local only:** portfolio, watchlists, notes, alerts, candles cache, chat history, settings — all in `~/.local/share/com.fincept.terminal/` (SQLite + json) and `~/.config/Fincept/`. Nothing in those dirs is uploaded.
+
+If you wire in an external LLM via Settings → Agent (OpenAI, Anthropic, local Ollama, etc.), prompt+response pairs go to whatever endpoint *you* configured — that's the one and only outbound channel under your direct control. Default is no AI provider.
 
 ### Fork-specific additions
 
@@ -79,23 +92,54 @@ ln -s ~/fin/finterm/start.sh ~/bin/finterm
 finterm
 ```
 
-`start.sh` ensures the local stub is up (starts it via `nohup` if not), then `exec`s the Qt binary in the foreground. The stub logs to `~/.cache/fincept-stub.log`.
+What `start.sh` does, in order:
+
+1. **Strips Qt window/toolbar/dock-layout state from `~/.config/Fincept/FinceptTerminal.conf`** via `tools/reset.sh --window-only`. Surgical: portfolio, watchlists, theme, workspaces, component usage stats are all preserved. Defends against the duplicate-floating-window bug where any prior layout corruption persists across launches and steals keyboard focus from the PIN screen. Skip with `FINCEPT_KEEP_WINDOW=1 finterm` if you want Qt to remember a hand-arranged layout.
+2. **Starts the localhost stub if it isn't already running**, via `nohup`. Detects an existing stub regardless of whether it was started by `start.sh`, by hand, or by the optional systemd user unit (`tools/systemd/fincept-stub.service`). Logs to `~/.cache/fincept-stub.log`.
+3. **Execs the Qt binary in the foreground.** Closing the Qt window returns control to your shell; the stub keeps running so the next launch is instant.
 
 ### Verify
 
 After launch:
-- The top status bar should show **● LIVE** in green and `DATA: YAHOO ▾`
-- `pgrep -af FinceptTerminal` shows the Qt binary
-- `pgrep -af "yfinance_data.py --daemon"` shows the data daemon
-- `pgrep -af "tools/local_stub/server.py"` shows the localhost stub
-- `curl http://127.0.0.1:8765/health` returns 200
+- The Qt window title reads **`finterm @ <hostname>`**.
+- The top status bar shows **● LIVE** in green and `DATA: YAHOO ▾`.
+- `pgrep -af FinceptTerminal` shows the Qt binary.
+- `pgrep -af "yfinance_data.py --daemon"` shows the data daemon (spawned by the Qt app).
+- `pgrep -af "tools/local_stub/server.py"` shows the localhost stub.
+- `curl http://127.0.0.1:8765/health` returns 200.
 
 ### Tear down
 
 ```bash
-pkill -f FinceptTerminal              # kills the Qt app + its daemon child
+pkill -f FinceptTerminal              # kills the Qt app + its data daemon child
 pkill -f tools/local_stub/server.py   # kills the localhost stub
 ```
+
+### Reset / recovery
+
+If the app gets into a bad state — duplicate floating windows after a layout edit, stuck PIN screen, broken dock layout, "Install Analytics Libraries" prompt looping on every launch — the right tool is `tools/reset.sh`.
+
+```bash
+tools/reset.sh                  # default: strip Qt window/dock/toolbar state only
+                                # (~1s, preserves portfolio + venv + everything else)
+tools/reset.sh --window-only    # explicit form of the default; what start.sh runs
+tools/reset.sh --full           # nuke Qt config + Python venv + caches
+                                # (next launch reprovisions ~120 pip packages, 5–15 min)
+tools/reset.sh --list           # show timestamped backups created by previous resets
+tools/reset.sh --restore <ts>   # roll back a specific reset
+```
+
+Every destructive reset moves the affected directory aside as `<dir>.bak.<unix-ts>` rather than deleting outright, so `--restore` is always available. None of these touch your portfolio data — that lives in SQLite under `~/.local/share/com.fincept.terminal/data/` and is never moved or rebuilt.
+
+Common scenarios:
+
+| Symptom | Try |
+|---|---|
+| Two floating empty windows on launch / PIN screen behind another window | `tools/reset.sh` (`--window-only` is the default) |
+| App is fine but stuck on a weird theme / layout | `tools/reset.sh` |
+| Setup screen keeps offering "Install Analytics Libraries" every launch | Install `portaudio19-dev` (or distro equivalent), then `tools/reset.sh --full` once. PyAudio's system dep is now in `setup.sh`, so a fresh clone won't hit this. |
+| Daemon hung / Yahoo calls timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it on next request |
+| Stub returning 500s | `pkill -f tools/local_stub/server.py` then relaunch via `finterm`; `start.sh` will restart the stub |
 
 ## Notes on the localhost stub
 

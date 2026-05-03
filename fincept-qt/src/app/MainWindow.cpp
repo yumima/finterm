@@ -100,6 +100,7 @@
 #include <QScreen>
 #include <QShortcut>
 #include <QStatusBar>
+#include <QSysInfo>
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -112,6 +113,18 @@
 #include <algorithm>
 
 namespace fincept {
+
+// Window-title base — "finterm @ <hostname>" with optional [profile] suffix.
+// Hostname is computed once and cached: machineHostName() does a syscall
+// (uname / GetComputerName) and the value won't change during a session.
+static QString app_title_base() {
+    static const QString host = QSysInfo::machineHostName();
+    const QString profile = ProfileManager::instance().active();
+    QString base = QString("finterm @ %1").arg(host.isEmpty() ? QStringLiteral("localhost") : host);
+    if (profile != "default")
+        base += QString(" [%1]").arg(profile);
+    return base;
+}
 
 int MainWindow::next_window_id() {
     // Seed from the max of (persisted window IDs, live window IDs) so a new
@@ -132,9 +145,10 @@ int MainWindow::next_window_id() {
 }
 
 MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), window_id_(window_id) {
-    // Show active profile in title bar when using a non-default profile
-    const QString profile = ProfileManager::instance().active();
-    setWindowTitle(profile == "default" ? "Fincept Terminal" : QString("Fincept Terminal [%1]").arg(profile));
+    // Window title format: "finterm @ <hostname>" — makes it obvious which
+    // box you're on when running multiple instances over SSH/VNC and
+    // distinguishes this fork from upstream "Fincept Terminal" branding.
+    setWindowTitle(app_title_base());
     // Load icon from the embedded Windows resource (IDI_ICON1 in app.rc).
     // Falls back to the .ico beside the executable on other platforms.
     QIcon app_icon;
@@ -1409,19 +1423,13 @@ void MainWindow::set_shell_visible(bool visible) {
     if (pushpin_toolbar_)
         pushpin_toolbar_->setVisible(visible && !focus_mode_ && !chat_mode_);
     if (!visible) {
-        // Reset title to plain app name — no screen suffix while on auth screens
-        const QString profile = ProfileManager::instance().active();
-        setWindowTitle(profile == "default" ? "Fincept Terminal"
-                                            : QString("Fincept Terminal [%1]").arg(profile));
+        // Reset title to plain app base — no screen suffix while on auth screens
+        setWindowTitle(app_title_base());
     }
 }
 
 void MainWindow::update_window_title() {
-    QString title = "Fincept Terminal";
-
-    const QString profile = ProfileManager::instance().active();
-    if (profile != "default")
-        title += QString(" [%1]").arg(profile);
+    QString title = app_title_base();
 
     // Workspace / screen name must never appear in the title while the user
     // is on the auth or lock stack — that would leak the last-visited screen
