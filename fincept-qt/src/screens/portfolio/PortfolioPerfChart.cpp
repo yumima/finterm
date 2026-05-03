@@ -156,7 +156,7 @@ void PortfolioPerfChart::build_ui() {
 
     for (const auto& p : kPeriods) {
         auto* btn = new QPushButton(p);
-        btn->setFixedSize(32, 22);
+        btn->setFixedSize(44, 22);
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid transparent;"
