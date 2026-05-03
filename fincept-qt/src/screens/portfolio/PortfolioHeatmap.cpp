@@ -257,8 +257,12 @@ void PortfolioHeatmap::rebuild_blocks() {
         auto* block = new QPushButton;
         bool selected = (h.symbol == selected_symbol_);
 
-        int min_h = static_cast<int>(std::max(40.0, 40.0 + h.weight * 0.8));
-        block->setFixedHeight(std::min(min_h, 70));
+        // Uniform tile height — weight is already shown as a column in the
+        // PortfolioBlotter table and in the Position Detail panel, so we
+        // don't need to encode it here as well. Variable heights also caused
+        // the apparent grid-gap inconsistency (a QGridLayout row's height is
+        // the tallest tile, leaving extra space below shorter neighbours).
+        block->setFixedHeight(50);
         block->setCursor(Qt::PointingHandCursor);
 
         QColor bg = block_color(h);
