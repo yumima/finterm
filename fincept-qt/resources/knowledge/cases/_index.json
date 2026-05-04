@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "cases",
+    "label": "CASES",
+    "description": "Famous market events and trades — concepts illustrated through what actually happened. The lessons stick.",
+    "order": 30
+  },
+  "entries": [
+    {
+      "id": "case-ltcm-1998",
+      "title": "LTCM 1998 — Genius Without Liquidity",
+      "subtitle": "Two Nobel laureates, leveraged arbitrage, and the fund that nearly broke the financial system.",
+      "body": "cases/case-ltcm-1998.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "leverage", "liquidity", "tail-risk"],
+      "aliases": ["ltcm", "long term capital management"],
+      "related": ["var", "liquidity", "kelly-criterion", "behavioral-biases"],
+      "external_links": [
+        {"type": "deep_dive", "source": "Roger Lowenstein", "title": "When Genius Failed (book)", "url": "https://www.penguinrandomhouse.com/books/9099/when-genius-failed-by-roger-lowenstein/"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-burry-cds-2007",
+      "title": "Michael Burry's CDS Shorts (2005–08)",
+      "subtitle": "How one fund manager bet against subprime mortgages and made billions when the market caught up.",
+      "body": "cases/case-burry-cds-2007.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "contrarian", "credit", "subprime"],
+      "aliases": ["michael burry", "the big short", "cds shorts"],
+      "related": ["credit-spread", "high-yield-bond", "build-a-thesis"],
+      "external_links": [
+        {"type": "deep_dive", "source": "Michael Lewis", "title": "The Big Short (book)", "url": "https://www.penguinrandomhouse.com/books/89322/the-big-short-by-michael-lewis/"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-gamestop-2021",
+      "title": "GameStop January 2021 — Short Squeeze + Gamma Squeeze",
+      "subtitle": "A retail trade pile-on broke the short-interest math and cost hedge funds billions.",
+      "body": "cases/case-gamestop-2021.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "short-squeeze", "gamma", "retail"],
+      "aliases": ["gamestop", "gme", "wallstreetbets"],
+      "related": ["float", "open-interest", "gamma", "delta"],
+      "external_links": [
+        {"type": "deep_dive", "source": "SEC", "title": "Staff Report on Equity and Options Market Structure", "url": "https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-svb-2023",
+      "title": "Silicon Valley Bank — March 2023",
+      "subtitle": "A 40-year-old bank failed in 36 hours from duration mismatch + a deposit run.",
+      "body": "cases/case-svb-2023.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "bank", "duration", "liquidity"],
+      "aliases": ["svb", "silicon valley bank", "bank run"],
+      "related": ["duration", "convexity", "liquidity", "yield-curve"],
+      "external_links": [
+        {"type": "reference", "source": "Federal Reserve", "title": "Review of the Federal Reserve's Supervision of SVB", "url": "https://www.federalreserve.gov/publications/files/svb-review-20230428.pdf"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-volkswagen-2008",
+      "title": "Volkswagen Squeeze — October 2008",
+      "subtitle": "Porsche cornered VW's float and briefly made it the world's largest market-cap company.",
+      "body": "cases/case-volkswagen-2008.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "short-squeeze", "float"],
+      "aliases": ["volkswagen squeeze", "porsche vw"],
+      "related": ["float", "market-cap"],
+      "external_links": [
+        {"type": "primer", "source": "Bloomberg", "title": "How VW Briefly Became the Most Valuable Company", "url": "https://www.bloomberg.com/news/articles/2008-10-29/the-anatomy-of-the-volkswagen-short-squeezebusinessweek-business-news-stock-market-and-financial-advice"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-black-monday-1987",
+      "title": "Black Monday — October 19, 1987",
+      "subtitle": "Dow fell 22.6% in one day — portfolio insurance amplified a normal correction into a crash.",
+      "body": "cases/case-black-monday-1987.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "crash", "feedback-loops", "options"],
+      "aliases": ["black monday", "1987 crash"],
+      "related": ["volatility", "vix", "drawdown"],
+      "external_links": [
+        {"type": "reference", "source": "SEC Brady Commission Report", "title": "Report of the Presidential Task Force on Market Mechanisms (1988)", "url": "https://www.sec.gov/news/studies/2003/marketstudies020703.pdf"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-hunt-silver-1980",
+      "title": "Hunt Brothers Silver Corner — 1979–80",
+      "subtitle": "Two Texas oil heirs tried to corner the silver market and lost it all when CME changed margin rules.",
+      "body": "cases/case-hunt-silver-1980.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "commodities", "manipulation", "leverage"],
+      "aliases": ["hunt brothers", "silver corner"],
+      "related": ["futures-mechanics", "liquidity", "contango"],
+      "external_links": [
+        {"type": "deep_dive", "source": "TIME", "title": "The Hunt Brothers' Silver Saga", "url": "https://content.time.com/time/subscriber/article/0,33009,953779,00.html"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-soros-pound-1992",
+      "title": "Soros Breaking the Pound — September 1992",
+      "subtitle": "Quantum Fund made $1B+ shorting GBP when the UK was forced to exit the ERM.",
+      "body": "cases/case-soros-pound-1992.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "macro", "currencies", "central-bank"],
+      "aliases": ["soros pound", "black wednesday", "broke the bank of england"],
+      "related": ["inflation-and-rates", "build-a-thesis"],
+      "external_links": [
+        {"type": "deep_dive", "source": "FT", "title": "How George Soros Broke the Bank of England", "url": "https://www.ft.com/content/8b1c6c9e-fbcf-11e1-87ae-00144feabdc0"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-volmageddon-2018",
+      "title": "Volmageddon — February 5, 2018",
+      "subtitle": "XIV (inverse VIX ETF) lost 96% in one day, vaporizing $2B and revealing crowded short-vol trades.",
+      "body": "cases/case-volmageddon-2018.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "volatility", "etn", "feedback-loops"],
+      "aliases": ["volmageddon", "xiv blowup"],
+      "related": ["vix", "implied-volatility", "volatility"],
+      "external_links": [
+        {"type": "primer", "source": "Bloomberg", "title": "Volmageddon Anniversary", "url": "https://www.bloomberg.com/news/articles/2019-02-05/volmageddon-one-year-on-still-haunts-market-makers"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "case-covid-march-2020",
+      "title": "COVID Crash — March 2020",
+      "subtitle": "S&P 500 fell 34% in 33 days; Treasury market briefly seized; Fed intervened with everything.",
+      "body": "cases/case-covid-march-2020.md",
+      "difficulty": "intermediate",
+      "tags": ["case", "crash", "liquidity", "pandemic"],
+      "aliases": ["covid crash", "march 2020"],
+      "related": ["vix", "drawdown", "liquidity", "handle-a-crash"],
+      "external_links": [
+        {"type": "reference", "source": "Federal Reserve", "title": "Federal Reserve Actions in Response to COVID-19", "url": "https://www.federalreserve.gov/covid-19.htm"}
+      ],
+      "updated": "2026-05-04"
+    }
+  ]
+}

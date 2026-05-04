@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "tracks",
+    "label": "TRACKS",
+    "description": "Ordered learning paths — sequences of entries to build up a topic from foundation to mastery.",
+    "order": 25
+  },
+  "entries": [
+    {
+      "id": "track-value-investing",
+      "title": "Path: Value Investing",
+      "subtitle": "10-step path from financials to disciplined value buying.",
+      "body": "tracks/track-value-investing.md",
+      "difficulty": "beginner",
+      "tags": ["track", "value", "fundamentals"],
+      "aliases": ["value investing path", "value track"],
+      "related": ["pe-ratio", "fcf", "roe", "evaluate-a-stock", "build-a-thesis"],
+      "external_links": [
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "Investment Valuation", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/invemgmt.html"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-options-trader",
+      "title": "Path: Options Trader Starter Pack",
+      "subtitle": "12-step path from option mechanics to trading multi-leg structures.",
+      "body": "tracks/track-options-trader.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "options", "derivatives"],
+      "aliases": ["options path", "options track"],
+      "related": ["options-basics", "delta", "gamma", "theta", "vega", "implied-volatility"],
+      "external_links": [
+        {"type": "reference", "source": "OCC", "title": "Characteristics & Risks of Options", "url": "https://www.theocc.com/about/publications/character-risks.jsp"}
+      ],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-macro-fundamentals",
+      "title": "Path: Macro for Portfolio Managers",
+      "subtitle": "8 entries to read inflation, rates, the curve, and act on regime change.",
+      "body": "tracks/track-macro-fundamentals.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "macro", "rates"],
+      "aliases": ["macro path", "macro track"],
+      "related": ["yield-curve", "inflation-and-rates", "interpret-an-inversion"],
+      "external_links": [],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-risk-management",
+      "title": "Path: Risk Management Essentials",
+      "subtitle": "6 entries on sizing, stops, drawdown control, and surviving the bad years.",
+      "body": "tracks/track-risk-management.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "risk", "sizing"],
+      "aliases": ["risk path", "risk track"],
+      "related": ["size-a-position", "drawdown", "var", "kelly-criterion", "handle-a-crash"],
+      "external_links": [],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-bonds-from-zero",
+      "title": "Path: Bonds From Zero",
+      "subtitle": "7 entries to go from coupons to duration risk to credit cycles.",
+      "body": "tracks/track-bonds-from-zero.md",
+      "difficulty": "beginner",
+      "tags": ["track", "bonds", "fixed-income"],
+      "aliases": ["bonds path", "fixed income track"],
+      "related": ["yield-to-maturity", "duration", "credit-spread", "bonds-primer"],
+      "external_links": [],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-trader-discipline",
+      "title": "Path: Trader Discipline",
+      "subtitle": "8 entries on the math + psychology that separate pros from gamblers.",
+      "body": "tracks/track-trader-discipline.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "discipline", "psychology"],
+      "aliases": ["trading discipline path"],
+      "related": ["r-multiple", "expected-value", "kelly-criterion", "expectancy", "behavioral-biases"],
+      "external_links": [],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-microstructure-execution",
+      "title": "Path: Execution & Microstructure",
+      "subtitle": "7 entries on order types, spreads, slippage, and avoiding self-inflicted execution pain.",
+      "body": "tracks/track-microstructure-execution.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "execution", "microstructure"],
+      "aliases": ["execution path", "microstructure track"],
+      "related": ["bid-ask-spread", "slippage", "liquidity", "market-order", "limit-order", "stop-loss-order"],
+      "external_links": [],
+      "updated": "2026-05-04"
+    },
+    {
+      "id": "track-first-portfolio",
+      "title": "Path: Building Your First Portfolio",
+      "subtitle": "10 steps from \"I have $10k\" to a balanced, monitored, sane portfolio.",
+      "body": "tracks/track-first-portfolio.md",
+      "difficulty": "beginner",
+      "tags": ["track", "beginner", "allocation"],
+      "aliases": ["first portfolio path", "beginner track"],
+      "related": ["allocate-across-assets", "build-a-watchlist", "size-a-position", "evaluate-a-stock"],
+      "external_links": [
+        {"type": "deep_dive", "source": "Vanguard", "title": "Principles for Investing Success", "url": "https://corporate.vanguard.com/content/dam/corp/research/pdf/Principles-of-Investing-Success.pdf"}
+      ],
+      "updated": "2026-05-04"
+    }
+  ]
+}
