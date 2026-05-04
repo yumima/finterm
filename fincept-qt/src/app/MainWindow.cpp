@@ -50,6 +50,10 @@
 #include "screens/gov_data/GovDataScreen.h"
 #include "screens/info/ContactScreen.h"
 #include "screens/info/HelpScreen.h"
+#include "core/symbol/SymbolContext.h"
+#include "core/symbol/SymbolGroup.h"
+#include "core/symbol/SymbolRef.h"
+#include "screens/knowledge/KnowledgeScreen.h"
 #include "screens/info/PrivacyScreen.h"
 #include "screens/info/TermsScreen.h"
 #include "screens/info/TrademarksScreen.h"
@@ -1120,6 +1124,18 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("excel", []() { return new screens::ExcelScreen; });
     dock_router_->register_factory("trade_viz", []() { return new screens::TradeVizScreen; });
     dock_router_->register_factory("docs", []() { return new screens::DocsScreen; });
+    dock_router_->register_factory("knowledge", [this]() {
+        auto* screen = new knowledge::KnowledgeScreen;
+        connect(screen, &knowledge::KnowledgeScreen::navigate_to_screen, this,
+                [this](const QString& id, const QString& ticker) {
+                    if (!ticker.isEmpty()) {
+                        SymbolContext::instance().set_group_symbol(
+                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+                    }
+                    dock_router_->navigate(id);
+                });
+        return screen;
+    });
 
     // Info/legal pages: static content, safe to construct eagerly.
     dock_router_->register_screen("contact", new screens::ContactScreen);

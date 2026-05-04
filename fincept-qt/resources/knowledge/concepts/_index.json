@@ -1,0 +1,680 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "concepts",
+    "label": "CONCEPTS",
+    "description": "Slightly longer explainers — markets, instruments, and how the parts fit together.",
+    "order": 20
+  },
+  "entries": [
+    {
+      "id": "options-basics",
+      "title": "Options — The Basics",
+      "subtitle": "Calls, puts, strikes, expiry, and the four payoff diagrams.",
+      "body": "concepts/options-basics.md",
+      "difficulty": "beginner",
+      "tags": [
+        "options",
+        "derivatives"
+      ],
+      "aliases": [
+        "call",
+        "put",
+        "option contract"
+      ],
+      "related": [
+        "implied-volatility",
+        "open-interest",
+        "vix"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Derivatives (option chain)",
+          "screen": "derivatives",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Surface Analytics (vol surface)",
+          "screen": "surface_analytics",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Options Basics Tutorial",
+          "url": "https://www.investopedia.com/options-basics-tutorial-4583012"
+        },
+        {
+          "type": "reference",
+          "source": "OCC",
+          "title": "Characteristics & Risks of Standardized Options",
+          "url": "https://www.theocc.com/about/publications/character-risks.jsp"
+        },
+        {
+          "type": "video",
+          "source": "Khan Academy",
+          "title": "Put and call options",
+          "url": "https://www.khanacademy.org/economics-finance-domain/core-finance/derivative-securities/put-call-options"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "high",
+          "text": "Selling naked options exposes you to potentially unlimited losses. Never sell options without understanding the worst-case scenario."
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "yield-curve",
+      "title": "The Yield Curve",
+      "subtitle": "What the shape of interest rates across maturities is telling you.",
+      "body": "concepts/yield-curve.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "fixed-income",
+        "rates"
+      ],
+      "aliases": [
+        "yield curve",
+        "term structure",
+        "inverted curve",
+        "2s10s"
+      ],
+      "related": [
+        "fcf"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · rates panel"
+        },
+        {
+          "screen": "gov_data",
+          "label": "Gov Data · Treasury yields"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Economics (rates panel)",
+          "screen": "economics",
+          "ticker": ""
+        },
+        {
+          "label": "Open Gov Data (Treasury yields)",
+          "screen": "gov_data",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "US Treasury",
+          "title": "Daily Treasury Par Yield Curve Rates",
+          "url": "https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Federal Reserve Bank of St. Louis (FRED)",
+          "title": "10-Year minus 2-Year Treasury",
+          "url": "https://fred.stlouisfed.org/series/T10Y2Y"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Yield Curve",
+          "url": "https://www.investopedia.com/terms/y/yieldcurve.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "futures-mechanics",
+      "title": "How Futures Actually Work",
+      "subtitle": "Margin, mark-to-market, contract specs, and rolling.",
+      "body": "concepts/futures-mechanics.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "futures",
+        "derivatives",
+        "margin"
+      ],
+      "aliases": [
+        "futures contract",
+        "initial margin",
+        "maintenance margin",
+        "rolling futures"
+      ],
+      "related": [
+        "contango",
+        "backwardation",
+        "basis",
+        "open-interest"
+      ],
+      "seen_in": [
+        {
+          "screen": "futures",
+          "label": "Futures · contract chain"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Futures contract chain",
+          "screen": "futures",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "CME Group",
+          "title": "Introduction to Futures",
+          "url": "https://www.cmegroup.com/education/courses/introduction-to-futures.html"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Futures Contract",
+          "url": "https://www.investopedia.com/terms/f/futurescontract.asp"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "high",
+          "text": "Futures use leverage. A small adverse move can wipe out your margin and trigger forced liquidation. Size positions by total notional, not margin used."
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "reading-financials",
+      "title": "Reading Company Financial Statements",
+      "subtitle": "Income statement, balance sheet, cash flow — what each one is for.",
+      "body": "concepts/reading-financials.md",
+      "difficulty": "beginner",
+      "tags": [
+        "fundamentals",
+        "accounting"
+      ],
+      "aliases": [
+        "income statement",
+        "balance sheet",
+        "cash flow statement",
+        "10-k"
+      ],
+      "related": [
+        "eps",
+        "fcf",
+        "ebitda",
+        "roe"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · financials tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL Financials",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Open MSFT Financials",
+          "screen": "equity_research",
+          "ticker": "MSFT"
+        }
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "SEC",
+          "title": "Beginners' Guide to Financial Statements",
+          "url": "https://www.sec.gov/reportspubs/investor-publications/investorpubsbegfinstmtguide"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "Foundations of Financial Statement Analysis",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/fundgrowth.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "inflation-and-rates",
+      "title": "Inflation and Interest Rates",
+      "subtitle": "Why central banks raise rates when prices rise — and what that does to assets.",
+      "body": "concepts/inflation-and-rates.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "rates",
+        "inflation"
+      ],
+      "aliases": [
+        "cpi",
+        "ppi",
+        "fed funds rate",
+        "real rates"
+      ],
+      "related": [
+        "yield-curve"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · macro indicators"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Economics · macro indicators",
+          "screen": "economics",
+          "ticker": ""
+        },
+        {
+          "label": "Open News",
+          "screen": "news",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "BLS",
+          "title": "Consumer Price Index — official",
+          "url": "https://www.bls.gov/cpi/"
+        },
+        {
+          "type": "reference",
+          "source": "Federal Reserve",
+          "title": "Federal Open Market Committee (FOMC)",
+          "url": "https://www.federalreserve.gov/monetarypolicy/fomc.htm"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "How Interest Rates Affect the U.S. Markets",
+          "url": "https://www.investopedia.com/articles/stocks/09/how-interest-rates-affect-markets.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "greeks-deep-dive",
+      "title": "Options Greeks — Deep Dive",
+      "subtitle": "Delta, Gamma, Theta, Vega, Rho — how they interact and why each matters.",
+      "body": "concepts/greeks-deep-dive.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives"
+      ],
+      "aliases": [
+        "greeks",
+        "option greeks",
+        "delta gamma theta vega"
+      ],
+      "related": [
+        "delta",
+        "gamma",
+        "theta",
+        "vega",
+        "rho",
+        "implied-volatility",
+        "options-basics"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        },
+        {
+          "screen": "surface_analytics",
+          "label": "Surface Analytics · IV surface"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "ATM call delta",
+          "value": "~0.50"
+        },
+        {
+          "label": "Gamma peaks",
+          "value": "ATM, near expiry"
+        },
+        {
+          "label": "Theta accelerates",
+          "value": "Last 30 days"
+        },
+        {
+          "label": "Vega largest",
+          "value": "ATM, long-dated"
+        }
+      ],
+      "pitfalls": [
+        "Treating Greeks as constants — they all change as price/time/IV moves.",
+        "Sizing for delta but ignoring gamma → blowups in fast moves.",
+        "Selling premium for theta without acknowledging gamma + vega risk."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "The Greeks",
+          "url": "https://www.investopedia.com/trading/getting-to-know-the-greeks/"
+        },
+        {
+          "type": "deep_dive",
+          "source": "John Hull",
+          "title": "Options, Futures and Other Derivatives",
+          "url": "https://www-2.rotman.utoronto.ca/~hull/ofod/index.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "bonds-primer",
+      "title": "Bonds — A Primer",
+      "subtitle": "Coupons, yield, duration, credit risk, how the bond market works end-to-end.",
+      "body": "concepts/bonds-primer.md",
+      "difficulty": "beginner",
+      "tags": [
+        "bonds",
+        "fixed-income",
+        "rates"
+      ],
+      "aliases": [
+        "bonds",
+        "fixed income",
+        "bond market"
+      ],
+      "related": [
+        "yield-to-maturity",
+        "duration",
+        "convexity",
+        "credit-spread",
+        "treasury-securities",
+        "high-yield-bond"
+      ],
+      "seen_in": [
+        {
+          "screen": "gov_data",
+          "label": "Gov Data · Treasury yields"
+        },
+        {
+          "screen": "economics",
+          "label": "Economics · credit + rates panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Yields ↑ → prices ↓",
+          "value": "Inverse always"
+        },
+        {
+          "label": "Long bonds",
+          "value": "Higher duration = bigger price swings"
+        },
+        {
+          "label": "HY in stress",
+          "value": "Acts like equity"
+        },
+        {
+          "label": "Inflation hedge",
+          "value": "TIPS or short-duration"
+        }
+      ],
+      "pitfalls": [
+        "Treating bonds as 'safe' without distinguishing credit, duration, inflation risks.",
+        "Buying long-duration bonds at low yields late in cycle (SVB-style mistake).",
+        "Confusing coupon rate with YTM."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "US Treasury",
+          "title": "Treasury Auction Schedule",
+          "url": "https://www.treasurydirect.gov/auctions/auction-query/"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Bond Basics Tutorial",
+          "url": "https://www.investopedia.com/articles/bonds/07/portfolio_strategies.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "market-microstructure",
+      "title": "Market Microstructure",
+      "subtitle": "How orders, exchanges, and market makers actually interact under the hood.",
+      "body": "concepts/market-microstructure.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "microstructure",
+        "execution",
+        "trading"
+      ],
+      "aliases": [
+        "microstructure",
+        "order flow",
+        "market structure"
+      ],
+      "related": [
+        "bid-ask-spread",
+        "slippage",
+        "liquidity",
+        "volume",
+        "market-order",
+        "limit-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · order book"
+        },
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · execution"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "PFOF brokers",
+          "value": "Route flow to wholesalers; small price improvement"
+        },
+        {
+          "label": "Dark pool % of US volume",
+          "value": "~40%"
+        },
+        {
+          "label": "ETF authorized participants",
+          "value": "Keep ETF price near NAV"
+        },
+        {
+          "label": "Tick size",
+          "value": "$0.01 stocks, $0.01 most options"
+        }
+      ],
+      "pitfalls": [
+        "Treating displayed quotes as the only liquidity — dark pools and hidden orders hide volume.",
+        "Assuming ETF liquidity = underlying basket liquidity always.",
+        "Ignoring auction mechanics at open / close — different from continuous trading."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Larry Harris",
+          "title": "Trading and Exchanges (book)",
+          "url": "https://global.oup.com/academic/product/trading-and-exchanges-9780195144703"
+        },
+        {
+          "type": "reference",
+          "source": "SEC",
+          "title": "Equity Market Structure",
+          "url": "https://www.sec.gov/marketstructure/data"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "behavioral-biases",
+      "title": "Behavioral Biases in Investing",
+      "subtitle": "The mental shortcuts that quietly destroy returns — and how to catch yourself.",
+      "body": "concepts/behavioral-biases.md",
+      "difficulty": "beginner",
+      "tags": [
+        "behavioral",
+        "psychology",
+        "decision-making"
+      ],
+      "aliases": [
+        "biases",
+        "behavioral finance",
+        "cognitive biases"
+      ],
+      "related": [
+        "evaluate-a-stock",
+        "size-a-position"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · trade journal review"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Loss aversion ratio",
+          "value": "~2× (losses hurt 2× as much as gains feel good)"
+        },
+        {
+          "label": "Confirmation bias",
+          "value": "We seek info that confirms our thesis"
+        },
+        {
+          "label": "Anchoring",
+          "value": "First number seen distorts subsequent estimates"
+        },
+        {
+          "label": "Recency bias",
+          "value": "Recent events feel more likely than they are"
+        }
+      ],
+      "pitfalls": [
+        "Holding losers too long (loss aversion), selling winners too early.",
+        "Anchoring to your purchase price as if it has meaning.",
+        "Confirmation bias filtering out evidence against your thesis.",
+        "Overconfidence after a winning streak — sizing up exactly when you should size down."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Kahneman",
+          "title": "Thinking, Fast and Slow",
+          "url": "https://us.macmillan.com/books/9780374533557/thinkingfastandslow"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Behavioral Finance",
+          "url": "https://www.investopedia.com/terms/b/behavioralfinance.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "James Montier",
+          "title": "The Little Book of Behavioral Investing",
+          "url": "https://www.wiley.com/en-us/The+Little+Book+of+Behavioral+Investing-p-9780470686027"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "tax-basics",
+      "title": "Tax Basics for Traders & Investors (US)",
+      "subtitle": "Cap gains, wash sales, 1256 contracts, harvesting — what actually moves your after-tax return.",
+      "body": "concepts/tax-basics.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "tax",
+        "regulatory",
+        "us"
+      ],
+      "aliases": [
+        "tax",
+        "wash sale",
+        "capital gains",
+        "section 1256"
+      ],
+      "related": [
+        "dividend-yield",
+        "evaluate-a-stock"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · tax-lot view"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Long-term cap gains",
+          "value": "Held >1y: 0%/15%/20% by income"
+        },
+        {
+          "label": "Short-term cap gains",
+          "value": "Held ≤1y: ordinary income rate"
+        },
+        {
+          "label": "Wash sale window",
+          "value": "30 days before and after"
+        },
+        {
+          "label": "Section 1256 (futures)",
+          "value": "60% LT / 40% ST regardless of holding period"
+        }
+      ],
+      "pitfalls": [
+        "Triggering wash sales by re-buying within 30 days — disallowed loss.",
+        "Forgetting state tax (CA/NY make a big difference).",
+        "Not realizing tax-loss harvesting only works in taxable accounts.",
+        "Treating qualified dividends as ordinary (they're taxed at LT cap gains rates)."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "IRS",
+          "title": "Topic No. 409 — Capital Gains and Losses",
+          "url": "https://www.irs.gov/taxtopics/tc409"
+        },
+        {
+          "type": "reference",
+          "source": "IRS",
+          "title": "Publication 550 — Investment Income & Expenses",
+          "url": "https://www.irs.gov/publications/p550"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "medium",
+          "text": "This is general guidance, not tax advice. Consult a CPA for your specific situation. Rules change annually."
+        }
+      ],
+      "updated": "2026-05-03"
+    }
+  ]
+}

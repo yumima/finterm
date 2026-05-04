@@ -127,42 +127,26 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
                                  .arg(colors::AMBER(), MF));
         text_vl->addWidget(title);
 
-        auto* sub = new QLabel("Find answers, get support, and connect with the Fincept community.");
+        auto* sub = new QLabel("Find answers and learn how to get the most out of finterm.");
         sub->setStyleSheet(
             QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
         text_vl->addWidget(sub);
 
         hl->addLayout(text_vl, 1);
 
-        // Contact chips on the right
-        auto* chips_vl = new QVBoxLayout;
-        chips_vl->setSpacing(5);
-
-        auto make_chip = [](const QString& icon, const QString& text, const QString& color,
-                            const QString& url = {}) -> QWidget* {
-            if (url.isEmpty()) {
-                auto* chip = new QLabel(QString("%1  %2").arg(icon, text));
-                chip->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
-                                            " font-family:'Consolas','Courier New',monospace;")
-                                        .arg(color));
-                return chip;
-            }
-            auto* chip = new QPushButton(QString("%1  %2").arg(icon, text));
-            chip->setFlat(true);
-            chip->setCursor(Qt::PointingHandCursor);
-            chip->setStyleSheet(QString("QPushButton { color: %1; font-size: 11px; background: transparent;"
-                                        " border: none; text-align: left; padding: 0;"
-                                        " font-family:'Consolas','Courier New',monospace; }"
-                                        "QPushButton:hover { color: %2; }")
-                                    .arg(color, colors::AMBER()));
-            QObject::connect(chip, &QPushButton::clicked, chip, [url]() { QDesktopServices::openUrl(QUrl(url)); });
-            return chip;
-        };
-        chips_vl->addWidget(make_chip("✉", "support@fincept.in", colors::CYAN, "mailto:support@fincept.in"));
-        chips_vl->addWidget(
-            make_chip("💬", "discord.gg/ae87a8ygbN", colors::POSITIVE, "https://discord.gg/ae87a8ygbN"));
-        chips_vl->addWidget(make_chip("🕐", "Mon-Fri  9AM–6PM EST", colors::TEXT_TERTIARY));
-        hl->addLayout(chips_vl);
+        // GitHub link on the right
+        auto* gh = new QPushButton(QString::fromUtf8("📦  github.com/Fincept-Corporation/FinceptTerminal"));
+        gh->setFlat(true);
+        gh->setCursor(Qt::PointingHandCursor);
+        gh->setStyleSheet(QString("QPushButton { color: %1; font-size: 11px; background: transparent;"
+                                  " border: none; text-align: right; padding: 0;"
+                                  " font-family:'Consolas','Courier New',monospace; }"
+                                  "QPushButton:hover { color: %2; }")
+                              .arg(colors::CYAN(), colors::AMBER()));
+        QObject::connect(gh, &QPushButton::clicked, gh, []() {
+            QDesktopServices::openUrl(QUrl("https://github.com/Fincept-Corporation/FinceptTerminal"));
+        });
+        hl->addWidget(gh);
 
         vl->addWidget(hero);
     }
@@ -186,9 +170,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             {"👤", "Create Account", "Register for full access"},
             {"🔑", "Reset Password", "Recover your account"},
             {"📖", "Documentation", "Guides, tutorials & API ref"},
-            {"🐛", "Report a Bug", "Open a bug report ticket"},
-            {"💬", "Join Discord", "Community & live support"},
-            {"🎟", "Support Tickets", "View or open a support ticket"},
+            {"🐛", "Report a Bug", "Open an issue on GitHub"},
         };
 
         int col = 0, row = 0;
@@ -288,9 +270,9 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
              "direct broker connections from your machine."},
 
             {"🐛", "How do I report a bug?",
-             "Open a support ticket with category \"bug report\" (Help → Support Tickets → "
-             "+ New Ticket). Include your OS, version, steps to reproduce, and any error "
-             "messages you see. Screenshots are helpful."},
+             "Open an issue on GitHub at github.com/Fincept-Corporation/FinceptTerminal/issues. "
+             "Include your OS, version, steps to reproduce, and any error messages you see. "
+             "Screenshots are helpful."},
         };
 
         for (const auto& f : faqs)
@@ -377,9 +359,6 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             const char* url;
         };
         const Contact contacts[] = {
-            {"✉", "Email Support", "support@fincept.in", "mailto:support@fincept.in"},
-            {"💬", "Discord Server", "discord.gg/ae87a8ygbN", "https://discord.gg/ae87a8ygbN"},
-            {"🌐", "Website", "fincept.in", "https://fincept.in"},
             {"📦", "GitHub", "github.com/Fincept-Corporation/FinceptTerminal",
              "https://github.com/Fincept-Corporation/FinceptTerminal"},
         };

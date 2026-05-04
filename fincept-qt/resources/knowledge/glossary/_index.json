@@ -1,0 +1,3393 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "glossary",
+    "label": "GLOSSARY",
+    "description": "Plain-English definitions of terms you'll see on price screens, company pages, and quote tickers.",
+    "order": 10
+  },
+  "entries": [
+    {
+      "id": "pe-ratio",
+      "title": "P/E Ratio",
+      "subtitle": "Price-to-Earnings — how much investors pay per dollar of earnings.",
+      "body": "glossary/pe-ratio.md",
+      "difficulty": "beginner",
+      "abbreviation": "P/E",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "price to earnings",
+        "p/e",
+        "pe",
+        "pe ratio",
+        "price-earnings"
+      ],
+      "related": [
+        "eps",
+        "peg-ratio",
+        "ev-ebitda",
+        "pb-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · stock detail card"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation tab"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · ratio columns"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Markets",
+          "screen": "markets",
+          "ticker": "AAPL",
+          "hint": "See current P/E in the stock detail"
+        },
+        {
+          "label": "Compare AAPL to peers",
+          "screen": "equity_research",
+          "ticker": "AAPL",
+          "hint": "Equity Research peers tab"
+        },
+        {
+          "label": "Screen low-P/E names",
+          "screen": "watchlist",
+          "ticker": "",
+          "hint": "Add a P/E filter"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL P/E",
+          "ticker": "AAPL",
+          "metric": "pe_ratio"
+        },
+        {
+          "label": "MSFT P/E",
+          "ticker": "MSFT",
+          "metric": "pe_ratio"
+        },
+        {
+          "label": "AAPL fwd P/E",
+          "ticker": "AAPL",
+          "metric": "forward_pe"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mature sector",
+          "value": "10–20×",
+          "note": "Industrials, consumer staples"
+        },
+        {
+          "label": "Growth software",
+          "value": "30–60×",
+          "note": "Higher justified by growth rate"
+        },
+        {
+          "label": "S&P 500 (long-run avg)",
+          "value": "~16×"
+        },
+        {
+          "label": "Negative EPS",
+          "value": "N/M",
+          "note": "P/E is meaningless when earnings are negative"
+        }
+      ],
+      "pitfalls": [
+        "Comparing P/E across sectors without context (banks vs SaaS — useless).",
+        "Trusting forward P/E in cyclical troughs — analyst estimates lag reality.",
+        "Looking at P/E without checking debt — leverage flatters EPS.",
+        "Ignoring share buybacks that mechanically inflate EPS without growth."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "META"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "pe_ratio",
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Share price ($)",
+        "denominator_label": "EPS (TTM, $)",
+        "result_label": "P/E",
+        "result_format": "ratio",
+        "numerator_default": 175.0,
+        "denominator_default": 6.3
+      },
+      "exposure_criterion": "P/E > 30",
+      "exposure_tickers": [
+        "AAPL",
+        "MSFT",
+        "TSLA",
+        "NVDA"
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Price-to-Earnings (P/E) Ratio",
+          "url": "https://www.investopedia.com/terms/p/price-earningsratio.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "Price-Earnings Ratio — definitions & determinants",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/pe.html"
+        },
+        {
+          "type": "reference",
+          "source": "SEC",
+          "title": "Beginners' Guide to Financial Statements",
+          "url": "https://www.sec.gov/reportspubs/investor-publications/investorpubsbegfinstmtguide"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "eps",
+      "title": "EPS",
+      "subtitle": "Earnings Per Share — profit attributable to each share of stock.",
+      "body": "glossary/eps.md",
+      "difficulty": "beginner",
+      "abbreviation": "EPS",
+      "tags": [
+        "valuation",
+        "equities",
+        "fundamentals"
+      ],
+      "aliases": [
+        "earnings per share",
+        "diluted eps",
+        "basic eps"
+      ],
+      "related": [
+        "pe-ratio",
+        "fcf",
+        "dividend-yield"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · earnings line"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · financials tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Markets",
+          "screen": "markets",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "AAPL Financials (TTM EPS)",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL EPS",
+          "ticker": "AAPL",
+          "metric": "eps"
+        },
+        {
+          "label": "MSFT EPS",
+          "ticker": "MSFT",
+          "metric": "eps"
+        },
+        {
+          "label": "GOOGL EPS",
+          "ticker": "GOOGL",
+          "metric": "eps"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Beat rate (S&P 500 hist)",
+          "value": "~70%",
+          "note": "Stocks usually beat low-balled estimates"
+        },
+        {
+          "label": "Surprise that moves stock",
+          "value": "5%+",
+          "note": "Beats/misses under 5% rarely move price meaningfully"
+        },
+        {
+          "label": "GAAP vs adjusted gap (red flag)",
+          "value": ">25%",
+          "note": "Persistent gap = aggressive add-backs"
+        }
+      ],
+      "pitfalls": [
+        "Headline EPS beats funded by buybacks instead of revenue growth.",
+        "Forgetting diluted vs basic EPS when valuations get tight.",
+        "One-time tax benefits flowing through net income → temporary EPS lift."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "GOOGL"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "eps",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Earnings Per Share (EPS)",
+          "url": "https://www.investopedia.com/terms/e/eps.asp"
+        },
+        {
+          "type": "reference",
+          "source": "FASB",
+          "title": "ASC 260 — Earnings Per Share (overview)",
+          "url": "https://asc.fasb.org/topic&trid=2127197"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "pb-ratio",
+      "title": "P/B Ratio",
+      "subtitle": "Price-to-Book — share price relative to accounting book value per share.",
+      "body": "glossary/pb-ratio.md",
+      "difficulty": "beginner",
+      "abbreviation": "P/B",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "price to book",
+        "p/b",
+        "pb"
+      ],
+      "related": [
+        "pe-ratio",
+        "roe"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open JPM in Markets",
+          "screen": "markets",
+          "ticker": "JPM"
+        },
+        {
+          "label": "Open BAC in Equity Research",
+          "screen": "equity_research",
+          "ticker": "BAC"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "JPM P/B",
+          "ticker": "JPM",
+          "metric": "price_to_book"
+        },
+        {
+          "label": "BAC P/B",
+          "ticker": "BAC",
+          "metric": "price_to_book"
+        },
+        {
+          "label": "WFC P/B",
+          "ticker": "WFC",
+          "metric": "price_to_book"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Bank fair value",
+          "value": "~1.0×",
+          "note": "P/B near 1 implies ROE ≈ cost of equity"
+        },
+        {
+          "label": "Quality bank premium",
+          "value": "1.5–2.5×"
+        },
+        {
+          "label": "Distressed bank",
+          "value": "< 0.7×",
+          "note": "Market pricing in writedowns"
+        }
+      ],
+      "pitfalls": [
+        "Using P/B for tech / asset-light businesses — book misses intangibles.",
+        "Goodwill from acquisitions inflating book without value creation.",
+        "Treating low P/B as automatically cheap — could be a value trap."
+      ],
+      "peer_tickers": [
+        "JPM",
+        "BAC",
+        "WFC",
+        "C",
+        "GS"
+      ],
+      "primary_ticker": "JPM",
+      "primary_metric": "price_to_book",
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Share price ($)",
+        "denominator_label": "Book value/share ($)",
+        "result_label": "P/B",
+        "result_format": "ratio",
+        "numerator_default": 200.0,
+        "denominator_default": 90.0
+      },
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Price-to-Book Ratio",
+          "url": "https://www.investopedia.com/terms/p/price-to-bookratio.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "ev-ebitda",
+      "title": "EV / EBITDA",
+      "subtitle": "Enterprise multiple — capital-structure-neutral valuation metric.",
+      "body": "glossary/ev-ebitda.md",
+      "difficulty": "intermediate",
+      "abbreviation": "EV/EBITDA",
+      "tags": [
+        "valuation",
+        "equities",
+        "m&a"
+      ],
+      "aliases": [
+        "enterprise multiple",
+        "ev to ebitda"
+      ],
+      "related": [
+        "pe-ratio",
+        "fcf"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation tab"
+        },
+        {
+          "screen": "ma_analytics",
+          "label": "M&A Analytics · transaction multiples"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Equity Research",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "M&A multiples view",
+          "screen": "ma_analytics",
+          "ticker": ""
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL Market Cap",
+          "ticker": "AAPL",
+          "metric": "market_cap"
+        },
+        {
+          "label": "MSFT Market Cap",
+          "ticker": "MSFT",
+          "metric": "market_cap"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mature industrial",
+          "value": "6–10×"
+        },
+        {
+          "label": "Growth software / SaaS",
+          "value": "15–40×"
+        },
+        {
+          "label": "Distressed / cyclical trough",
+          "value": "3–6×"
+        },
+        {
+          "label": "Bubble territory",
+          "value": "50×+"
+        }
+      ],
+      "pitfalls": [
+        "Trusting EBITDA without checking maintenance CapEx.",
+        "Using EV/EBITDA on banks or insurers — interest is operating, not financing.",
+        "Ignoring stock-based comp added back in 'adjusted EBITDA'."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "META"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "market_cap",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "EV/EBITDA",
+          "url": "https://www.investopedia.com/terms/e/ev-ebitda.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "Enterprise Value & Equity multiples",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/multiples.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "fcf",
+      "title": "Free Cash Flow",
+      "subtitle": "Cash a business generates after reinvesting in itself.",
+      "body": "glossary/fcf.md",
+      "difficulty": "beginner",
+      "abbreviation": "FCF",
+      "tags": [
+        "fundamentals",
+        "cash-flow",
+        "valuation"
+      ],
+      "aliases": [
+        "free cash flow",
+        "fcf",
+        "ufcf",
+        "fcfe",
+        "fcff"
+      ],
+      "related": [
+        "ebitda",
+        "dcf",
+        "ev-ebitda"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · financials tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "AAPL Financials → FCF",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Open Portfolio cash-flow view",
+          "screen": "portfolio",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Healthy FCF yield",
+          "value": "5%+"
+        },
+        {
+          "label": "Premium quality",
+          "value": "FCF margin > 20%",
+          "note": "Tech / consumer brand businesses"
+        },
+        {
+          "label": "Working-capital lumpy",
+          "value": "Use 3y avg",
+          "note": "Single-quarter FCF is noisy"
+        }
+      ],
+      "pitfalls": [
+        "Confusing operating cash flow with FCF (OCF ignores CapEx).",
+        "Using levered FCF (FCFE) for valuation that should be unlevered (FCFF).",
+        "Trusting FCF when it's funded by stretching payables."
+      ],
+      "primary_ticker": "AAPL",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Free Cash Flow (FCF)",
+          "url": "https://www.investopedia.com/terms/f/freecashflow.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "CFA Institute",
+          "title": "Free Cash Flow valuation",
+          "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/free-cash-flow-valuation"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "ebitda",
+      "title": "EBITDA",
+      "subtitle": "Operating performance proxy that strips out financing & accounting noise.",
+      "body": "glossary/ebitda.md",
+      "difficulty": "beginner",
+      "abbreviation": "EBITDA",
+      "tags": [
+        "fundamentals",
+        "valuation"
+      ],
+      "aliases": [
+        "earnings before interest taxes depreciation amortization"
+      ],
+      "related": [
+        "fcf",
+        "ev-ebitda"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · financials tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL Financials",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "M&A transaction multiples",
+          "screen": "ma_analytics",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Trustworthy when…",
+          "value": "CapEx ≈ depreciation"
+        },
+        {
+          "label": "Misleading when…",
+          "value": "CapEx >> depreciation",
+          "note": "Capital-intensive (telecom, airlines)"
+        },
+        {
+          "label": "Adjusted EBITDA gap",
+          "value": "Watch >15%",
+          "note": "Add-backs may be hiding real costs"
+        }
+      ],
+      "pitfalls": [
+        "Treating EBITDA as 'cash flow' — it isn't, by a wide margin.",
+        "Comparing EBITDA across capital intensities (utility vs SaaS).",
+        "Ignoring stock-based comp in 'adjusted' figures."
+      ],
+      "primary_ticker": "AAPL",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "EBITDA",
+          "url": "https://www.investopedia.com/terms/e/ebitda.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "The EBITDA myth",
+          "url": "https://aswathdamodaran.blogspot.com/2018/02/superman-and-stocks-it-not-cape-it-cash.html"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "medium",
+          "text": "EBITDA is not GAAP and can mask real cash needs (CapEx, working capital, interest). Don't use it alone."
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "beta",
+      "title": "Beta",
+      "subtitle": "How much a stock moves when the broader market moves.",
+      "body": "glossary/beta.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "equities",
+        "capm"
+      ],
+      "aliases": [
+        "beta coefficient",
+        "market beta"
+      ],
+      "related": [
+        "alpha",
+        "volatility",
+        "sharpe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · technicals tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Markets",
+          "screen": "markets",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Portfolio risk panel",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Equity Research → Technicals",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL beta",
+          "ticker": "AAPL",
+          "metric": "beta"
+        },
+        {
+          "label": "TSLA beta",
+          "ticker": "TSLA",
+          "metric": "beta"
+        },
+        {
+          "label": "JNJ beta",
+          "ticker": "JNJ",
+          "metric": "beta"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Defensive sector",
+          "value": "0.4–0.8",
+          "note": "Utilities, staples"
+        },
+        {
+          "label": "Broad market",
+          "value": "~1.0",
+          "note": "Index ETFs, large blue chips"
+        },
+        {
+          "label": "High-beta tech",
+          "value": "1.3–2.0"
+        },
+        {
+          "label": "Speculative / leveraged",
+          "value": ">2.0",
+          "note": "Often biotech, micro-cap, crypto-linked"
+        }
+      ],
+      "pitfalls": [
+        "Using a 1-year beta during regime change — past beta ≠ future beta.",
+        "Confusing beta (relative) with volatility (absolute) — they're different.",
+        "Trusting beta of low-volume stocks — estimation is noisy."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "TSLA",
+        "JNJ",
+        "XLU"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "beta",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Beta",
+          "url": "https://www.investopedia.com/terms/b/beta.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "Estimating risk parameters",
+          "url": "https://pages.stern.nyu.edu/~adamodar/pdfiles/papers/beta.pdf"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "alpha",
+      "title": "Alpha",
+      "subtitle": "Return above what the market would predict for your risk level.",
+      "body": "glossary/alpha.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "performance",
+        "portfolio",
+        "capm"
+      ],
+      "aliases": [
+        "jensen's alpha",
+        "excess return"
+      ],
+      "related": [
+        "beta",
+        "sharpe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · performance panel"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Portfolio performance",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Backtest a strategy",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Top-quartile fund (3y)",
+          "value": "1–3% alpha"
+        },
+        {
+          "label": "Repeatable signal threshold",
+          "value": ">5y of consistent +α"
+        },
+        {
+          "label": "After-fees survival rate",
+          "value": "~15%",
+          "note": "Active funds beating benchmarks over 10y"
+        }
+      ],
+      "pitfalls": [
+        "Confusing single-year alpha with skill — too noisy.",
+        "Hidden factor exposure (small-cap, value) being mistaken for alpha.",
+        "Survivorship bias — failed funds don't show up in averages."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Alpha",
+          "url": "https://www.investopedia.com/terms/a/alpha.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "sharpe-ratio",
+      "title": "Sharpe Ratio",
+      "subtitle": "Return per unit of volatility — risk-adjusted performance.",
+      "body": "glossary/sharpe-ratio.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "portfolio",
+        "performance"
+      ],
+      "aliases": [
+        "sharpe",
+        "risk-adjusted return"
+      ],
+      "related": [
+        "sortino-ratio",
+        "alpha",
+        "beta",
+        "drawdown"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · performance panel"
+        },
+        {
+          "screen": "backtesting",
+          "label": "Backtesting · results"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Portfolio performance",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Backtesting results",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mediocre",
+          "value": "0–1"
+        },
+        {
+          "label": "Good",
+          "value": "1–2"
+        },
+        {
+          "label": "Very good",
+          "value": "2–3"
+        },
+        {
+          "label": "Suspicious",
+          "value": ">3",
+          "note": "Likely backtest overfit or hidden tail risk"
+        }
+      ],
+      "pitfalls": [
+        "Treating upside volatility as 'risk' — Sharpe penalizes it identically.",
+        "Trusting Sharpe of strategies with fat-tailed returns (option selling).",
+        "Comparing Sharpe across non-stationary regimes."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Sharpe Ratio",
+          "url": "https://www.investopedia.com/terms/s/sharperatio.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "William F. Sharpe",
+          "title": "The Sharpe Ratio (original 1994 paper)",
+          "url": "https://web.stanford.edu/~wfsharpe/art/sr/sr.htm"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "drawdown",
+      "title": "Drawdown",
+      "subtitle": "How far down you are from a previous high — the pain measure.",
+      "body": "glossary/drawdown.md",
+      "difficulty": "beginner",
+      "abbreviation": "MDD",
+      "tags": [
+        "risk",
+        "portfolio"
+      ],
+      "aliases": [
+        "max drawdown",
+        "maximum drawdown",
+        "mdd"
+      ],
+      "related": [
+        "volatility",
+        "sharpe-ratio",
+        "var"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        },
+        {
+          "screen": "backtesting",
+          "label": "Backtesting · equity curve"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Portfolio risk panel",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Backtest equity curve",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "60/40 portfolio (modern)",
+          "value": "−20 to −30%"
+        },
+        {
+          "label": "S&P 500 worst (2008)",
+          "value": "−57%"
+        },
+        {
+          "label": "Acceptable for retail",
+          "value": "<−25%",
+          "note": "Behavioral panic threshold"
+        },
+        {
+          "label": "−50% drawdown recovery",
+          "value": "+100%",
+          "note": "Math is brutal"
+        }
+      ],
+      "pitfalls": [
+        "Confusing volatility with drawdown — drawdown is the felt pain.",
+        "Ignoring time-to-recover; underwater for years can be worse than depth.",
+        "Looking at backtest max drawdown without asking if you'd have held through it."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Drawdown",
+          "url": "https://www.investopedia.com/terms/d/drawdown.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "volatility",
+      "title": "Volatility",
+      "subtitle": "How much prices move around — the standard deviation of returns.",
+      "body": "glossary/volatility.md",
+      "difficulty": "beginner",
+      "tags": [
+        "risk",
+        "options"
+      ],
+      "aliases": [
+        "realized volatility",
+        "historical volatility",
+        "stdev of returns"
+      ],
+      "related": [
+        "implied-volatility",
+        "beta",
+        "var"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · vol column"
+        },
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Markets",
+          "screen": "markets",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Portfolio risk panel",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Surface Analytics (vol surf)",
+          "screen": "surface_analytics",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "S&P 500 long-run vol",
+          "value": "~16% annual"
+        },
+        {
+          "label": "Single-stock typical",
+          "value": "20–35%"
+        },
+        {
+          "label": "Crypto majors",
+          "value": "60–100%"
+        },
+        {
+          "label": "Daily 1σ rule of thumb",
+          "value": "annual ÷ 16"
+        }
+      ],
+      "pitfalls": [
+        "Using normal-distribution math for fat-tailed returns.",
+        "Mistaking realized vol for implied vol (and vice versa).",
+        "Annualizing short windows during a vol spike — overshoots."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "TSLA",
+        "JNJ",
+        "XLU"
+      ],
+      "primary_ticker": "^VIX",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Volatility",
+          "url": "https://www.investopedia.com/terms/v/volatility.asp"
+        },
+        {
+          "type": "reference",
+          "source": "CBOE",
+          "title": "Volatility — methodology resources",
+          "url": "https://www.cboe.com/tradable_products/vix/"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "implied-volatility",
+      "title": "Implied Volatility",
+      "subtitle": "The volatility the option market thinks the underlying will exhibit.",
+      "body": "glossary/implied-volatility.md",
+      "difficulty": "intermediate",
+      "abbreviation": "IV",
+      "tags": [
+        "options",
+        "derivatives",
+        "risk"
+      ],
+      "aliases": [
+        "iv",
+        "implied vol",
+        "iv rank"
+      ],
+      "related": [
+        "volatility",
+        "vega",
+        "vix"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        },
+        {
+          "screen": "surface_analytics",
+          "label": "Surface Analytics · vol surface"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Derivatives (option chain)",
+          "screen": "derivatives",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Surface Analytics (IV surface)",
+          "screen": "surface_analytics",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "S&P IV (calm)",
+          "value": "12–18%"
+        },
+        {
+          "label": "S&P IV (stressed)",
+          "value": "30–50%"
+        },
+        {
+          "label": "Earnings IV pop",
+          "value": "+20–60%",
+          "note": "Spot vs. previous trading day"
+        },
+        {
+          "label": "IV crush after print",
+          "value": "−30 to −50%"
+        }
+      ],
+      "pitfalls": [
+        "Buying options just before earnings — vol crush often eats the directional gain.",
+        "Treating high IV as bullish/bearish — it's only directional in magnitude, not sign.",
+        "Selling far-dated IV without understanding term-structure dynamics."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "TSLA",
+        "NVDA",
+        "META"
+      ],
+      "primary_ticker": "^VIX",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Implied Volatility",
+          "url": "https://www.investopedia.com/terms/i/iv.asp"
+        },
+        {
+          "type": "reference",
+          "source": "CBOE",
+          "title": "VIX White Paper (IV methodology)",
+          "url": "https://cdn.cboe.com/api/global/us_indices/governance/Volatility_Index_Methodology_Cboe_Volatility_Index.pdf"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "medium",
+          "text": "High IV usually means premium is rich for sellers but expensive for buyers — direction-of-movement is not implied."
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "open-interest",
+      "title": "Open Interest",
+      "subtitle": "How many derivatives contracts are still open and unsettled.",
+      "body": "glossary/open-interest.md",
+      "difficulty": "intermediate",
+      "abbreviation": "OI",
+      "tags": [
+        "derivatives",
+        "futures",
+        "options"
+      ],
+      "aliases": [
+        "oi",
+        "open interest"
+      ],
+      "related": [
+        "volume",
+        "implied-volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "futures",
+          "label": "Futures · contract chain"
+        },
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Futures contract chain",
+          "screen": "futures",
+          "ticker": ""
+        },
+        {
+          "label": "Open Derivatives chain",
+          "screen": "derivatives",
+          "ticker": "SPY"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Liquid option strike",
+          "value": "OI > 1,000"
+        },
+        {
+          "label": "Tradable strike",
+          "value": "OI > 100"
+        },
+        {
+          "label": "Untouchable",
+          "value": "OI < 50",
+          "note": "You'll get filled at terrible prices"
+        }
+      ],
+      "pitfalls": [
+        "Selecting strikes by 'cheap premium' without checking OI — execution slips wreck the trade.",
+        "Reading rising OI without context (price direction) — signal needs both.",
+        "Confusing volume (today's flow) with OI (alive contracts)."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Open Interest",
+          "url": "https://www.investopedia.com/terms/o/openinterest.asp"
+        },
+        {
+          "type": "reference",
+          "source": "CME Group",
+          "title": "Open Interest — definition",
+          "url": "https://www.cmegroup.com/education/courses/introduction-to-futures/understanding-open-interest.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "contango",
+      "title": "Contango",
+      "subtitle": "When future prices are higher than spot — common in storable commodities.",
+      "body": "glossary/contango.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "futures",
+        "commodities",
+        "term-structure"
+      ],
+      "aliases": [
+        "contango"
+      ],
+      "related": [
+        "backwardation",
+        "basis",
+        "open-interest"
+      ],
+      "seen_in": [
+        {
+          "screen": "futures",
+          "label": "Futures · curve view"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Futures · curve view",
+          "screen": "futures",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mild contango",
+          "value": "<2%/yr roll cost"
+        },
+        {
+          "label": "Steep contango",
+          "value": ">10%/yr",
+          "note": "USO 2014–2016 era"
+        },
+        {
+          "label": "Long-only ETF cost",
+          "value": "Roll yield = drag",
+          "note": "Compounds over time — major USO underperformance"
+        }
+      ],
+      "pitfalls": [
+        "Buying long-only commodity ETFs in contango without understanding roll cost.",
+        "Ignoring storage/logistics in 'contango is normal' assumption.",
+        "Assuming contango → bullish future spot (it doesn't imply that)."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Contango",
+          "url": "https://www.investopedia.com/terms/c/contango.asp"
+        },
+        {
+          "type": "reference",
+          "source": "CME Group",
+          "title": "Futures term structure",
+          "url": "https://www.cmegroup.com/education/courses/introduction-to-futures/understanding-contango-and-backwardation.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "backwardation",
+      "title": "Backwardation",
+      "subtitle": "When future prices are below spot — typical in tight supply markets.",
+      "body": "glossary/backwardation.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "futures",
+        "commodities",
+        "term-structure"
+      ],
+      "aliases": [
+        "backwardated"
+      ],
+      "related": [
+        "contango",
+        "basis"
+      ],
+      "seen_in": [
+        {
+          "screen": "futures",
+          "label": "Futures · curve view"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Futures · curve view",
+          "screen": "futures",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Spot premium",
+          "value": "Tight supply signal"
+        },
+        {
+          "label": "Long-only ETF gain",
+          "value": "+roll yield"
+        },
+        {
+          "label": "Crude oil example",
+          "value": "2022 Russia / 2008 oil spike"
+        }
+      ],
+      "pitfalls": [
+        "Assuming backwardation will persist — it can flip back fast.",
+        "Trading the curve shape without understanding what's driving it."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Backwardation",
+          "url": "https://www.investopedia.com/terms/b/backwardation.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "basis",
+      "title": "Basis",
+      "subtitle": "Spot price minus the futures price for the same asset.",
+      "body": "glossary/basis.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "futures",
+        "hedging",
+        "arbitrage"
+      ],
+      "aliases": [
+        "basis risk",
+        "cash-futures basis"
+      ],
+      "related": [
+        "contango",
+        "backwardation"
+      ],
+      "seen_in": [
+        {
+          "screen": "futures",
+          "label": "Futures · spread view"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Futures · spread view",
+          "screen": "futures",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Cash-and-carry typical",
+          "value": "Risk-free rate + storage"
+        },
+        {
+          "label": "Hedger basis risk",
+          "value": "5–20% of price-level risk"
+        }
+      ],
+      "pitfalls": [
+        "Treating basis as constant in a hedge — it isn't.",
+        "Ignoring delivery location/quality differences vs futures spec."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Basis",
+          "url": "https://www.investopedia.com/terms/b/basis.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "var",
+      "title": "Value at Risk",
+      "subtitle": "Largest loss you'd expect over N days at a given confidence.",
+      "body": "glossary/var.md",
+      "difficulty": "advanced",
+      "abbreviation": "VaR",
+      "tags": [
+        "risk",
+        "portfolio"
+      ],
+      "aliases": [
+        "value-at-risk",
+        "var"
+      ],
+      "related": [
+        "cvar",
+        "drawdown",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Portfolio risk panel",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Backtest a hedged strat",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Daily 95% VaR",
+          "value": "~1.65σ"
+        },
+        {
+          "label": "Daily 99% VaR",
+          "value": "~2.33σ"
+        },
+        {
+          "label": "Hist vs param gap",
+          "value": "Hist usually fatter tails"
+        }
+      ],
+      "pitfalls": [
+        "Treating VaR as the worst case — it's the threshold, not the tail.",
+        "Trusting parametric VaR for fat-tailed returns.",
+        "Backtesting on a benign window — VaR will look great until it doesn't."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Value at Risk (VaR)",
+          "url": "https://www.investopedia.com/terms/v/var.asp"
+        },
+        {
+          "type": "reference",
+          "source": "Bank for International Settlements",
+          "title": "Backtesting & risk",
+          "url": "https://www.bis.org/publ/bcbs22.pdf"
+        }
+      ],
+      "warnings": [
+        {
+          "severity": "high",
+          "text": "VaR tells you the threshold of bad days, not how bad they get past it. Pair it with CVaR or stress tests."
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "dividend-yield",
+      "title": "Dividend Yield",
+      "subtitle": "Annual dividend per share divided by share price.",
+      "body": "glossary/dividend-yield.md",
+      "difficulty": "beginner",
+      "tags": [
+        "income",
+        "equities"
+      ],
+      "aliases": [
+        "yield",
+        "div yield"
+      ],
+      "related": [
+        "fcf",
+        "eps"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · income column"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open KO in Markets",
+          "screen": "markets",
+          "ticker": "KO"
+        },
+        {
+          "label": "Open JNJ in Equity Research",
+          "screen": "equity_research",
+          "ticker": "JNJ"
+        },
+        {
+          "label": "Screen high-yield names",
+          "screen": "watchlist",
+          "ticker": ""
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "KO yield",
+          "ticker": "KO",
+          "metric": "dividend_yield"
+        },
+        {
+          "label": "JNJ yield",
+          "ticker": "JNJ",
+          "metric": "dividend_yield"
+        },
+        {
+          "label": "T  yield",
+          "ticker": "T",
+          "metric": "dividend_yield"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "S&P 500 long-run",
+          "value": "~2%"
+        },
+        {
+          "label": "REIT typical",
+          "value": "3–6%"
+        },
+        {
+          "label": "MLP / energy",
+          "value": "5–10%"
+        },
+        {
+          "label": "Yield trap territory",
+          "value": ">8%",
+          "note": "Often signals impending cut"
+        }
+      ],
+      "pitfalls": [
+        "Chasing high yield without checking payout ratio + FCF coverage.",
+        "Treating yield as 'safe income' — it can be cut overnight.",
+        "Ignoring total return — low-yield growth may compound faster."
+      ],
+      "peer_tickers": [
+        "KO",
+        "JNJ",
+        "T",
+        "VZ",
+        "PG"
+      ],
+      "primary_ticker": "KO",
+      "primary_metric": "dividend_yield",
+      "exposure_criterion": "yield > 4%",
+      "exposure_tickers": [
+        "KO",
+        "JNJ",
+        "T",
+        "VZ"
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Dividend Yield",
+          "url": "https://www.investopedia.com/terms/d/dividendyield.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "market-cap",
+      "title": "Market Capitalization",
+      "subtitle": "Total dollar value of a company's outstanding shares.",
+      "body": "glossary/market-cap.md",
+      "difficulty": "beginner",
+      "tags": [
+        "equities",
+        "size"
+      ],
+      "aliases": [
+        "mcap",
+        "market cap"
+      ],
+      "related": [
+        "ev-ebitda",
+        "pe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · stock detail"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL in Markets",
+          "screen": "markets",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Compare to peers",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL market cap",
+          "ticker": "AAPL",
+          "metric": "market_cap"
+        },
+        {
+          "label": "MSFT market cap",
+          "ticker": "MSFT",
+          "metric": "market_cap"
+        },
+        {
+          "label": "GOOGL market cap",
+          "ticker": "GOOGL",
+          "metric": "market_cap"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mega cap",
+          "value": "> $200B"
+        },
+        {
+          "label": "Large cap",
+          "value": "$10–200B"
+        },
+        {
+          "label": "Mid cap",
+          "value": "$2–10B"
+        },
+        {
+          "label": "Small cap",
+          "value": "$300M–$2B"
+        },
+        {
+          "label": "Micro cap",
+          "value": "< $300M",
+          "note": "Liquidity + analyst coverage drops sharply"
+        }
+      ],
+      "pitfalls": [
+        "Confusing market cap with enterprise value — leverage matters.",
+        "Ignoring float-adjusted vs full market cap (insiders / govt holdings).",
+        "Treating micro-caps like large-caps in liquidity assumptions."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "META"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "market_cap",
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Market Capitalization",
+          "url": "https://www.investopedia.com/terms/m/marketcapitalization.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "vix",
+      "title": "VIX",
+      "subtitle": "30-day implied volatility of S&P 500 options — the market's 'fear gauge'.",
+      "body": "glossary/vix.md",
+      "difficulty": "intermediate",
+      "abbreviation": "VIX",
+      "tags": [
+        "options",
+        "volatility",
+        "macro"
+      ],
+      "aliases": [
+        "fear index",
+        "vix index",
+        "cboe vix"
+      ],
+      "related": [
+        "implied-volatility",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · macro panel"
+        },
+        {
+          "screen": "dashboard",
+          "label": "Dashboard · key indices"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Markets macro panel",
+          "screen": "markets",
+          "ticker": ""
+        },
+        {
+          "label": "Dashboard key indices",
+          "screen": "dashboard",
+          "ticker": ""
+        },
+        {
+          "label": "Open VIX directly",
+          "screen": "markets",
+          "ticker": "^VIX"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "VIX level",
+          "ticker": "^VIX",
+          "metric": "price"
+        },
+        {
+          "label": "VIX 52W high",
+          "ticker": "^VIX",
+          "metric": "week52_high"
+        },
+        {
+          "label": "VIX 52W low",
+          "ticker": "^VIX",
+          "metric": "week52_low"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Calm",
+          "value": "10–15"
+        },
+        {
+          "label": "Normal",
+          "value": "15–20"
+        },
+        {
+          "label": "Elevated",
+          "value": "20–30"
+        },
+        {
+          "label": "Stressed",
+          "value": "30–40"
+        },
+        {
+          "label": "Crisis (2008/COVID)",
+          "value": "40+ (peaks ~80)"
+        }
+      ],
+      "pitfalls": [
+        "Buying VIX after a spike — you're paying peak insurance price.",
+        "Confusing VIX (forward-looking) with realized SPX vol (historical).",
+        "Trading VIX directly — it's not investible; only futures/options/ETFs."
+      ],
+      "primary_ticker": "^VIX",
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "CBOE",
+          "title": "VIX Index Methodology",
+          "url": "https://cdn.cboe.com/api/global/us_indices/governance/Volatility_Index_Methodology_Cboe_Volatility_Index.pdf"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Volatility Index (VIX)",
+          "url": "https://www.investopedia.com/terms/v/vix.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "roe",
+      "title": "Return on Equity",
+      "subtitle": "Net income as a percentage of shareholder equity.",
+      "body": "glossary/roe.md",
+      "difficulty": "beginner",
+      "abbreviation": "ROE",
+      "tags": [
+        "fundamentals",
+        "profitability"
+      ],
+      "aliases": [
+        "return on equity"
+      ],
+      "related": [
+        "roa",
+        "roic",
+        "pb-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · financials tab"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL Financials",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Compare to peers",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL ROE",
+          "ticker": "AAPL",
+          "metric": "roe"
+        },
+        {
+          "label": "MSFT ROE",
+          "ticker": "MSFT",
+          "metric": "roe"
+        },
+        {
+          "label": "JPM ROE",
+          "ticker": "JPM",
+          "metric": "roe"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Poor",
+          "value": "< 5%"
+        },
+        {
+          "label": "Solid",
+          "value": "10–15%"
+        },
+        {
+          "label": "Very good",
+          "value": "15–25%"
+        },
+        {
+          "label": "Outstanding",
+          "value": ">25% sustained"
+        },
+        {
+          "label": "Suspicious",
+          "value": ">50%",
+          "note": "Usually leverage or one-time accounting"
+        }
+      ],
+      "pitfalls": [
+        "Treating high ROE as automatic quality — leverage flatters it.",
+        "Comparing ROE across capital structures — use DuPont decomposition.",
+        "Ignoring goodwill — return on tangible equity is often more honest."
+      ],
+      "peer_tickers": [
+        "AAPL",
+        "MSFT",
+        "JPM",
+        "PG",
+        "JNJ"
+      ],
+      "primary_ticker": "AAPL",
+      "primary_metric": "roe",
+      "exposure_criterion": "ROE > 20%",
+      "exposure_tickers": [
+        "AAPL",
+        "MSFT",
+        "GOOGL"
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Return on Equity (ROE)",
+          "url": "https://www.investopedia.com/terms/r/returnonequity.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "delta",
+      "title": "Delta",
+      "subtitle": "Δ option price per $1 move in the underlying — also approx. probability of finishing ITM.",
+      "body": "glossary/delta.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Δ",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives"
+      ],
+      "aliases": [
+        "delta",
+        "option delta",
+        "directional sensitivity"
+      ],
+      "related": [
+        "gamma",
+        "theta",
+        "vega",
+        "implied-volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "ATM call delta",
+          "value": "~0.50"
+        },
+        {
+          "label": "OTM call delta",
+          "value": "0.10–0.30"
+        },
+        {
+          "label": "Deep ITM call delta",
+          "value": "0.85–1.00"
+        },
+        {
+          "label": "Put delta",
+          "value": "−1.00 to 0"
+        }
+      ],
+      "pitfalls": [
+        "Treating delta as exact probability — it's an approximation, off in fat tails.",
+        "Forgetting put delta is negative; long puts hedge long stock 1-for-1 at delta ~−1.",
+        "Ignoring delta drift as gamma compounds — your hedge ratio shifts with price."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Delta",
+          "url": "https://www.investopedia.com/terms/d/delta.asp"
+        },
+        {
+          "type": "reference",
+          "source": "OCC",
+          "title": "Characteristics & Risks of Options",
+          "url": "https://www.theocc.com/about/publications/character-risks.jsp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "gamma",
+      "title": "Gamma",
+      "subtitle": "Rate of change of delta — the option's 'acceleration'.",
+      "body": "glossary/gamma.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Γ",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives"
+      ],
+      "aliases": [
+        "gamma",
+        "convexity (options)"
+      ],
+      "related": [
+        "delta",
+        "theta",
+        "vega"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Gamma peaks",
+          "value": "ATM near expiration"
+        },
+        {
+          "label": "Long options",
+          "value": "+gamma (good for movers)"
+        },
+        {
+          "label": "Short options",
+          "value": "−gamma (lose more on big moves)"
+        }
+      ],
+      "pitfalls": [
+        "Selling short-dated ATM options under-prices gamma — losses accelerate quickly.",
+        "Confusing gamma with vega — gamma reacts to price moves, vega to vol changes.",
+        "Gamma squeezes (e.g., GME 2021) come from dealers being short gamma at scale."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Gamma",
+          "url": "https://www.investopedia.com/terms/g/gamma.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "theta",
+      "title": "Theta",
+      "subtitle": "Daily time decay — how much an option loses per day from passage of time.",
+      "body": "glossary/theta.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Θ",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives"
+      ],
+      "aliases": [
+        "theta",
+        "time decay"
+      ],
+      "related": [
+        "delta",
+        "gamma",
+        "vega"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Long options",
+          "value": "−theta (you lose value daily)"
+        },
+        {
+          "label": "Theta accelerates",
+          "value": "Last 30 days to expiration"
+        },
+        {
+          "label": "Short ATM weekly",
+          "value": "Highest theta capture"
+        }
+      ],
+      "pitfalls": [
+        "Holding long calls 'just one more day' through theta-heavy decay.",
+        "Selling weekly premium without sizing for the gamma risk it carries.",
+        "Forgetting weekend theta — Friday close to Monday open eats 3 days of theta."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Theta",
+          "url": "https://www.investopedia.com/terms/t/theta.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "vega",
+      "title": "Vega",
+      "subtitle": "Δ option price per 1% change in implied volatility.",
+      "body": "glossary/vega.md",
+      "difficulty": "intermediate",
+      "abbreviation": "ν",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives"
+      ],
+      "aliases": [
+        "vega",
+        "vol sensitivity"
+      ],
+      "related": [
+        "delta",
+        "gamma",
+        "theta",
+        "implied-volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        },
+        {
+          "screen": "surface_analytics",
+          "label": "Surface Analytics · IV surface"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Vega peaks",
+          "value": "ATM, longer-dated"
+        },
+        {
+          "label": "Long options",
+          "value": "+vega (gain on IV rise)"
+        },
+        {
+          "label": "Vega vs theta tradeoff",
+          "value": "Long options: collect vega, pay theta"
+        }
+      ],
+      "pitfalls": [
+        "Buying premium right before earnings → vol crush often eats directional gain.",
+        "Selling vega blindly when IV spikes — IV can keep climbing in real shocks.",
+        "Ignoring term structure — front-month vega and back-month vega behave differently."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Vega",
+          "url": "https://www.investopedia.com/terms/v/vega.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "rho",
+      "title": "Rho",
+      "subtitle": "Δ option price per 1% change in interest rates — usually small except on long-dated options.",
+      "body": "glossary/rho.md",
+      "difficulty": "advanced",
+      "abbreviation": "ρ",
+      "tags": [
+        "options",
+        "greeks",
+        "derivatives",
+        "rates"
+      ],
+      "aliases": [
+        "rho",
+        "rate sensitivity"
+      ],
+      "related": [
+        "delta",
+        "vega",
+        "yield-curve"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · long-dated option chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Short-dated options",
+          "value": "Rho ≈ 0 — ignore"
+        },
+        {
+          "label": "LEAPS (>1y)",
+          "value": "Rho material — can move with rate changes"
+        },
+        {
+          "label": "Calls",
+          "value": "+rho (rates ↑ → call value ↑)"
+        },
+        {
+          "label": "Puts",
+          "value": "−rho"
+        }
+      ],
+      "pitfalls": [
+        "Ignoring rho on multi-year LEAPS — can be larger than vega.",
+        "Forgetting rho effect on synthetic positions (long stock + long put)."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Rho",
+          "url": "https://www.investopedia.com/terms/r/rho.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "yield-to-maturity",
+      "title": "Yield to Maturity",
+      "subtitle": "The total return on a bond if held to maturity, including coupons and price convergence.",
+      "body": "glossary/yield-to-maturity.md",
+      "difficulty": "intermediate",
+      "abbreviation": "YTM",
+      "tags": [
+        "bonds",
+        "fixed-income",
+        "rates"
+      ],
+      "aliases": [
+        "ytm",
+        "yield to maturity",
+        "redemption yield"
+      ],
+      "related": [
+        "duration",
+        "credit-spread",
+        "yield-curve"
+      ],
+      "seen_in": [
+        {
+          "screen": "gov_data",
+          "label": "Gov Data · Treasury yields"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Bond at par",
+          "value": "YTM ≈ coupon rate"
+        },
+        {
+          "label": "Bond at premium",
+          "value": "YTM < coupon"
+        },
+        {
+          "label": "Bond at discount",
+          "value": "YTM > coupon"
+        }
+      ],
+      "pitfalls": [
+        "Confusing YTM with current yield (coupon ÷ price) — they differ when bond is not at par.",
+        "Assuming you'll re-invest coupons at YTM — depends on future rate environment.",
+        "Ignoring call provisions — YTC (yield-to-call) matters for callable bonds."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Yield to Maturity",
+          "url": "https://www.investopedia.com/terms/y/yieldtomaturity.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "duration",
+      "title": "Duration",
+      "subtitle": "How sensitive a bond's price is to a 1% change in interest rates — measured in years.",
+      "body": "glossary/duration.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "bonds",
+        "fixed-income",
+        "risk"
+      ],
+      "aliases": [
+        "duration",
+        "modified duration",
+        "macaulay duration"
+      ],
+      "related": [
+        "yield-to-maturity",
+        "convexity",
+        "yield-curve"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "1y T-bill",
+          "value": "~1y duration"
+        },
+        {
+          "label": "10y Treasury",
+          "value": "~8.5y duration"
+        },
+        {
+          "label": "30y zero-coupon",
+          "value": "~30y duration (max sensitivity)"
+        },
+        {
+          "label": "Price impact",
+          "value": "Duration × −Δy ≈ %ΔP"
+        }
+      ],
+      "pitfalls": [
+        "SVB-style failure: long-duration bonds + sudden rate spike + deposit run = insolvency.",
+        "Ignoring convexity for large rate moves — duration is a linear approximation only.",
+        "Treating bond fund duration as fixed — managers shift duration over time."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Duration",
+          "url": "https://www.investopedia.com/terms/d/duration.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "CFA Institute",
+          "title": "Bond Duration & Convexity",
+          "url": "https://www.cfainstitute.org/insights/professional-learning/refresher-readings/bond-duration-convexity"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "convexity",
+      "title": "Convexity",
+      "subtitle": "Second-order rate sensitivity — accounts for the curvature in price/yield relationship.",
+      "body": "glossary/convexity.md",
+      "difficulty": "advanced",
+      "tags": [
+        "bonds",
+        "fixed-income",
+        "risk"
+      ],
+      "aliases": [
+        "convexity"
+      ],
+      "related": [
+        "duration",
+        "yield-to-maturity"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Long bonds + low coupon",
+          "value": "Highest convexity"
+        },
+        {
+          "label": "Callable bonds",
+          "value": "Negative convexity at low yields"
+        },
+        {
+          "label": "Convexity gain",
+          "value": "Adds ~½ × convexity × (Δy)²"
+        }
+      ],
+      "pitfalls": [
+        "Duration alone underestimates losses on big rate moves up; overestimates losses on big down.",
+        "Mortgages have negative convexity due to prepayment optionality.",
+        "Convexity is small for short-duration bonds; matters most for 10y+."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Convexity",
+          "url": "https://www.investopedia.com/terms/c/convexity.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "credit-spread",
+      "title": "Credit Spread",
+      "subtitle": "Yield premium of a corporate/risky bond over a comparable Treasury — compensation for default risk.",
+      "body": "glossary/credit-spread.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "bonds",
+        "credit",
+        "risk"
+      ],
+      "aliases": [
+        "credit spread",
+        "spread",
+        "OAS"
+      ],
+      "related": [
+        "yield-to-maturity",
+        "high-yield-bond"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · credit panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "IG (investment grade) avg",
+          "value": "100–200 bps"
+        },
+        {
+          "label": "HY (high yield) avg",
+          "value": "400–600 bps"
+        },
+        {
+          "label": "HY in recession",
+          "value": "1,000–2,000 bps"
+        },
+        {
+          "label": "Spread of 100 bps",
+          "value": "= 1% extra yield over Treasury"
+        }
+      ],
+      "pitfalls": [
+        "Spread ≈ default expectation only roughly; large component is liquidity premium.",
+        "Tight spreads near cycle ends signal complacency, not safety.",
+        "Spreads widen sharply in liquidity events (March 2020) regardless of fundamentals."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Credit Spread",
+          "url": "https://www.investopedia.com/terms/c/creditspread.asp"
+        },
+        {
+          "type": "reference",
+          "source": "FRED",
+          "title": "ICE BofA US HY Master II OAS",
+          "url": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "treasury-securities",
+      "title": "Treasury Securities",
+      "subtitle": "US government debt: T-bills (≤1y), T-notes (2–10y), T-bonds (20–30y), TIPS (inflation-linked).",
+      "body": "glossary/treasury-securities.md",
+      "difficulty": "beginner",
+      "tags": [
+        "bonds",
+        "fixed-income",
+        "rates"
+      ],
+      "aliases": [
+        "treasury",
+        "t-bill",
+        "t-note",
+        "t-bond",
+        "tips"
+      ],
+      "related": [
+        "yield-curve",
+        "yield-to-maturity",
+        "duration"
+      ],
+      "seen_in": [
+        {
+          "screen": "gov_data",
+          "label": "Gov Data · Treasury yields"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "T-bill",
+          "value": "≤1y; sold at discount, no coupon"
+        },
+        {
+          "label": "T-note",
+          "value": "2y/3y/5y/7y/10y; semi-annual coupons"
+        },
+        {
+          "label": "T-bond",
+          "value": "20y/30y; longest duration"
+        },
+        {
+          "label": "TIPS",
+          "value": "Principal indexed to CPI"
+        }
+      ],
+      "pitfalls": [
+        "T-bills are 'risk-free' for default but not for inflation or reinvestment.",
+        "T-bonds carry significant duration risk — 10% NAV swings on rate shifts.",
+        "TIPS underperform in deflation periods (no negative inflation adjustment in some cases)."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "US Treasury",
+          "title": "Daily Yield Curve",
+          "url": "https://home.treasury.gov/policy-issues/financing-the-government/interest-rate-statistics"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Treasury Securities",
+          "url": "https://www.investopedia.com/terms/t/treasury-securities.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "high-yield-bond",
+      "title": "High-Yield Bond (Junk Bond)",
+      "subtitle": "Corporate bond rated below investment grade (BB+ or lower) — higher yield, higher default risk.",
+      "body": "glossary/high-yield-bond.md",
+      "difficulty": "intermediate",
+      "abbreviation": "HY",
+      "tags": [
+        "bonds",
+        "credit",
+        "high-yield"
+      ],
+      "aliases": [
+        "junk bond",
+        "high yield",
+        "speculative grade"
+      ],
+      "related": [
+        "credit-spread",
+        "yield-to-maturity"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · credit panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Avg HY default rate (cycle)",
+          "value": "~3–4%/yr"
+        },
+        {
+          "label": "Recession peak default",
+          "value": "10–15%"
+        },
+        {
+          "label": "Avg recovery on default",
+          "value": "~40 cents on the dollar"
+        },
+        {
+          "label": "Tight HY spreads",
+          "value": "<350 bps — late cycle"
+        }
+      ],
+      "pitfalls": [
+        "Treating HY as 'high income' without acknowledging default risk and equity-like correlations in stress.",
+        "Buying HY for diversification — in real crises HY correlates with equities.",
+        "Ignoring covenant quality — 'cov-lite' loans give bondholders little protection."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "High-Yield Bond",
+          "url": "https://www.investopedia.com/terms/h/high_yield_bond.asp"
+        },
+        {
+          "type": "reference",
+          "source": "S&P Global Ratings",
+          "title": "Default & Transition Studies",
+          "url": "https://www.spglobal.com/ratings/en/research-insights/special-reports/default-transition-and-recovery"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "market-order",
+      "title": "Market Order",
+      "subtitle": "Order to buy or sell immediately at the best available price.",
+      "body": "glossary/market-order.md",
+      "difficulty": "beginner",
+      "tags": [
+        "orders",
+        "trading",
+        "execution"
+      ],
+      "aliases": [
+        "market order",
+        "MKT order"
+      ],
+      "related": [
+        "limit-order",
+        "slippage",
+        "bid-ask-spread"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Liquid mega-cap",
+          "value": "Market order safe"
+        },
+        {
+          "label": "Small cap / illiquid",
+          "value": "Use limit instead"
+        },
+        {
+          "label": "After-hours",
+          "value": "Avoid market orders entirely"
+        }
+      ],
+      "pitfalls": [
+        "Market orders in thin markets fill far from displayed mid — slippage destroys execution.",
+        "Market open / close has wide spreads — limit orders preferred.",
+        "Stop orders trigger market orders — same liquidity risk applies."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Market Order",
+          "url": "https://www.investopedia.com/terms/m/marketorder.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "limit-order",
+      "title": "Limit Order",
+      "subtitle": "Order to buy at or below / sell at or above a specified price — price guaranteed, fill is not.",
+      "body": "glossary/limit-order.md",
+      "difficulty": "beginner",
+      "tags": [
+        "orders",
+        "trading",
+        "execution"
+      ],
+      "aliases": [
+        "limit order",
+        "LMT order"
+      ],
+      "related": [
+        "market-order",
+        "stop-loss-order",
+        "slippage"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Default for retail",
+          "value": "Limit at or near mid"
+        },
+        {
+          "label": "Aggressive limit",
+          "value": "= cross the spread"
+        },
+        {
+          "label": "Passive limit",
+          "value": "= add liquidity, may not fill"
+        }
+      ],
+      "pitfalls": [
+        "Setting limit too far from market → no fill, miss the move.",
+        "GTC limits expire on most platforms after 30–90 days — may not realize.",
+        "Partial fills can leave odd-lot positions in low-volume names."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Limit Order",
+          "url": "https://www.investopedia.com/terms/l/limitorder.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "stop-loss-order",
+      "title": "Stop-Loss Order",
+      "subtitle": "Triggers a market order when price hits a defined level — designed to cap losses.",
+      "body": "glossary/stop-loss-order.md",
+      "difficulty": "beginner",
+      "tags": [
+        "orders",
+        "trading",
+        "risk"
+      ],
+      "aliases": [
+        "stop loss",
+        "stop order",
+        "stop"
+      ],
+      "related": [
+        "limit-order",
+        "stop-limit-order",
+        "trailing-stop"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Stop distance",
+          "value": "1.5–3× ATR for swing trades"
+        },
+        {
+          "label": "Tight stop downside",
+          "value": "Frequent whipsaws"
+        },
+        {
+          "label": "Wide stop downside",
+          "value": "Larger losses when right thesis fails"
+        }
+      ],
+      "pitfalls": [
+        "Stops execute as market orders — gap risk through the stop level.",
+        "Round-number stops cluster; algos hunt them.",
+        "Mental stops fail under pressure; use hard stops if you'll honor them."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Stop Loss",
+          "url": "https://www.investopedia.com/terms/s/stop-lossorder.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "stop-limit-order",
+      "title": "Stop-Limit Order",
+      "subtitle": "Triggers a limit order at the stop price — price-protected but can fail to fill in fast moves.",
+      "body": "glossary/stop-limit-order.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "orders",
+        "trading",
+        "risk"
+      ],
+      "aliases": [
+        "stop limit",
+        "stop-limit"
+      ],
+      "related": [
+        "stop-loss-order",
+        "limit-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Use case",
+          "value": "Avoid bad fills in gappy markets"
+        },
+        {
+          "label": "Risk",
+          "value": "Order doesn't fill if price gaps through limit"
+        },
+        {
+          "label": "Spread between",
+          "value": "Stop and limit price 0.1–1% typical"
+        }
+      ],
+      "pitfalls": [
+        "On a hard gap, stop-limit may not fill — you stay in a falling position.",
+        "Often the 'safer' choice that paradoxically delivers the worst outcome in a crash.",
+        "Pure stop-loss is usually better for risk-discipline; stop-limit only for normal-vol days."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Stop-Limit Order",
+          "url": "https://www.investopedia.com/terms/s/stop-limitorder.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "trailing-stop",
+      "title": "Trailing Stop",
+      "subtitle": "Stop-loss that adjusts upward as price rises — locks in gains while letting winners run.",
+      "body": "glossary/trailing-stop.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "orders",
+        "trading",
+        "risk"
+      ],
+      "aliases": [
+        "trailing stop",
+        "trail stop",
+        "TSL"
+      ],
+      "related": [
+        "stop-loss-order",
+        "limit-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Common trail",
+          "value": "5–15% behind high"
+        },
+        {
+          "label": "ATR-based trail",
+          "value": "2–4× ATR behind high"
+        },
+        {
+          "label": "Tight trail",
+          "value": "Frequent stop-outs in normal vol"
+        }
+      ],
+      "pitfalls": [
+        "Trail too tight → stopped out on normal pullbacks.",
+        "Trail too wide → give back significant gains.",
+        "Doesn't help on hard down-gaps — same as regular stop."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Trailing Stop",
+          "url": "https://www.investopedia.com/terms/t/trailingstop.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "bid-ask-spread",
+      "title": "Bid-Ask Spread",
+      "subtitle": "Difference between the highest buyer price (bid) and lowest seller price (ask) — execution cost.",
+      "body": "glossary/bid-ask-spread.md",
+      "difficulty": "beginner",
+      "tags": [
+        "microstructure",
+        "execution",
+        "liquidity"
+      ],
+      "aliases": [
+        "spread",
+        "bid-ask",
+        "bid ask spread"
+      ],
+      "related": [
+        "liquidity",
+        "slippage",
+        "volume",
+        "market-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · quote panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Mega-cap stock",
+          "value": "<0.05% of price"
+        },
+        {
+          "label": "Mid-cap",
+          "value": "0.05–0.25%"
+        },
+        {
+          "label": "Small-cap",
+          "value": "0.25–1.0%"
+        },
+        {
+          "label": "Micro-cap / illiquid",
+          "value": "1–5%+"
+        }
+      ],
+      "pitfalls": [
+        "Buying at ask + selling at bid = round-trip cost = 1× spread; matters in active trading.",
+        "Spread widens at open, close, around news, and in low-volume hours.",
+        "Wide spreads are an under-appreciated cost in small-cap and crypto trading."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Bid-Ask Spread",
+          "url": "https://www.investopedia.com/terms/b/bid-askspread.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "slippage",
+      "title": "Slippage",
+      "subtitle": "Difference between expected execution price and actual fill price.",
+      "body": "glossary/slippage.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "microstructure",
+        "execution",
+        "trading"
+      ],
+      "aliases": [
+        "slippage",
+        "execution shortfall"
+      ],
+      "related": [
+        "bid-ask-spread",
+        "liquidity",
+        "market-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · execution"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Liquid + small order",
+          "value": "<0.05% slippage"
+        },
+        {
+          "label": "Stop order in fast move",
+          "value": "0.5–5%+ slippage"
+        },
+        {
+          "label": "Crypto large order",
+          "value": "Often 1–3% per trade"
+        }
+      ],
+      "pitfalls": [
+        "Backtests usually under-model slippage; live results disappoint.",
+        "Stop-loss + thin market = stop hits at far worse price than expected.",
+        "Strategy that's fine at $10k size may be unprofitable at $1M due to slippage scaling."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Slippage",
+          "url": "https://www.investopedia.com/terms/s/slippage.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "liquidity",
+      "title": "Liquidity",
+      "subtitle": "How easily an asset can be bought or sold without significantly moving the price.",
+      "body": "glossary/liquidity.md",
+      "difficulty": "beginner",
+      "tags": [
+        "microstructure",
+        "execution",
+        "risk"
+      ],
+      "aliases": [
+        "liquidity",
+        "market depth"
+      ],
+      "related": [
+        "bid-ask-spread",
+        "slippage",
+        "volume"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · volume + depth"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Liquid stock",
+          "value": "ADV > $10M, spread < 0.1%"
+        },
+        {
+          "label": "Tradable",
+          "value": "ADV $1–10M"
+        },
+        {
+          "label": "Illiquid",
+          "value": "ADV < $1M — large position dangerous"
+        }
+      ],
+      "pitfalls": [
+        "Liquidity disappears in stress — same stock that traded $100M/day stops trading.",
+        "Single-counterparty risk in crypto/derivatives (FTX 2022).",
+        "Treating ETF liquidity as = underlying liquidity — they can decouple."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Liquidity",
+          "url": "https://www.investopedia.com/terms/l/liquidity.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "volume",
+      "title": "Volume",
+      "subtitle": "Number of shares (or contracts) traded in a period — confirms or refutes price moves.",
+      "body": "glossary/volume.md",
+      "difficulty": "beginner",
+      "tags": [
+        "microstructure",
+        "trading",
+        "technical"
+      ],
+      "aliases": [
+        "volume",
+        "trading volume",
+        "ADV"
+      ],
+      "related": [
+        "liquidity",
+        "open-interest",
+        "bid-ask-spread"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · quote panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Breakout on >2× ADV",
+          "value": "More credible than low-volume break"
+        },
+        {
+          "label": "Decline on heavy volume",
+          "value": "Distribution; conviction selling"
+        },
+        {
+          "label": "Decline on low volume",
+          "value": "Often retraces"
+        }
+      ],
+      "pitfalls": [
+        "Confusing daily volume with average — single-day spikes mean little.",
+        "Volume in dark pools doesn't show up on lit-tape; total picture is incomplete.",
+        "Low-float stocks can have huge volume relative to size — beware short squeezes."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Volume",
+          "url": "https://www.investopedia.com/terms/v/volume.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "float",
+      "title": "Float",
+      "subtitle": "Shares actually available to trade — excludes insider holdings, government stakes, lockups.",
+      "body": "glossary/float.md",
+      "difficulty": "beginner",
+      "tags": [
+        "microstructure",
+        "shares",
+        "equities"
+      ],
+      "aliases": [
+        "float",
+        "free float",
+        "tradable shares"
+      ],
+      "related": [
+        "market-cap",
+        "volume",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · share data"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Float < 20M shares",
+          "value": "Susceptible to large moves on small flows"
+        },
+        {
+          "label": "Float < 10M shares",
+          "value": "Squeeze territory"
+        },
+        {
+          "label": "Index inclusion",
+          "value": "Uses float-adjusted market cap"
+        }
+      ],
+      "pitfalls": [
+        "Confusing market cap with float — small float means real liquidity is much smaller.",
+        "Lockup expirations release new float → often pressures price downward.",
+        "Founder selling can dramatically increase float in months."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Float",
+          "url": "https://www.investopedia.com/terms/f/floatingstock.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "r-multiple",
+      "title": "R-Multiple",
+      "subtitle": "Trade outcome expressed as multiples of risked capital — speaks directly to expectancy.",
+      "body": "glossary/r-multiple.md",
+      "difficulty": "intermediate",
+      "abbreviation": "R",
+      "tags": [
+        "trade-math",
+        "risk",
+        "discipline"
+      ],
+      "aliases": [
+        "r-multiple",
+        "r multiple",
+        "r"
+      ],
+      "related": [
+        "expected-value",
+        "kelly-criterion"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · trade journal"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Stop loss = 1R",
+          "value": "Risk per trade"
+        },
+        {
+          "label": "Win 2R = 2× initial risk",
+          "value": "Position closed at +2× stop distance"
+        },
+        {
+          "label": "Avg expectancy > 0.5R",
+          "value": "Sustainable edge after costs"
+        }
+      ],
+      "pitfalls": [
+        "Reporting raw $ P&L without normalizing by risk — hides whether you have an edge.",
+        "Cutting winners early reduces avg R below sustainable threshold.",
+        "Doubling down increases R-cost on losers; rarely improves expectancy."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Van K. Tharp",
+          "title": "Expectancy and the R-Multiple",
+          "url": "https://vantharp.com/r-multiple/"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "expected-value",
+      "title": "Expected Value",
+      "subtitle": "Probability-weighted average outcome of a decision — the right way to compare bets.",
+      "body": "glossary/expected-value.md",
+      "difficulty": "intermediate",
+      "abbreviation": "EV",
+      "tags": [
+        "trade-math",
+        "probability",
+        "decision-making"
+      ],
+      "aliases": [
+        "ev",
+        "expected value",
+        "expectation"
+      ],
+      "related": [
+        "r-multiple",
+        "kelly-criterion"
+      ],
+      "seen_in": [
+        {
+          "screen": "backtesting",
+          "label": "Backtesting · expectancy"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "EV > 0",
+          "value": "Bet has positive edge over time"
+        },
+        {
+          "label": "EV = 0",
+          "value": "Fair bet (e.g., coin flip)"
+        },
+        {
+          "label": "EV < 0",
+          "value": "House edge against you (casino, lottery)"
+        }
+      ],
+      "pitfalls": [
+        "Confusing EV with most-likely outcome — they often differ.",
+        "Ignoring fat-tail risk that makes 'EV' calculation invalid.",
+        "Acting on EV without enough trials to realize it (volatility eats you first)."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Expected Value",
+          "url": "https://www.investopedia.com/terms/e/expected-value.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "kelly-criterion",
+      "title": "Kelly Criterion",
+      "subtitle": "Mathematically optimal fraction of capital to bet given known edge and odds.",
+      "body": "glossary/kelly-criterion.md",
+      "difficulty": "advanced",
+      "tags": [
+        "trade-math",
+        "risk",
+        "sizing"
+      ],
+      "aliases": [
+        "kelly",
+        "kelly criterion",
+        "kelly formula"
+      ],
+      "related": [
+        "r-multiple",
+        "expected-value"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · sizing tools"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Full Kelly",
+          "value": "f = (p·b − q) / b"
+        },
+        {
+          "label": "Half Kelly",
+          "value": "Recommended; smoother drawdowns"
+        },
+        {
+          "label": "Quarter Kelly",
+          "value": "When edge estimate uncertain"
+        }
+      ],
+      "pitfalls": [
+        "Full Kelly produces brutal drawdowns even at the optimum — most pros use ¼ to ½ Kelly.",
+        "Estimating p and b incorrectly = catastrophic over-betting.",
+        "Assumes returns are independent — correlated trades break the math."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Kelly Criterion",
+          "url": "https://www.investopedia.com/terms/k/kellycriterion.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Edward O. Thorp",
+          "title": "The Kelly Criterion in Blackjack & Investing",
+          "url": "https://www.edwardothorp.com/wp-content/uploads/2016/11/TheKellyCriterionAndTheStockMarket.pdf"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "expectancy",
+      "title": "Expectancy",
+      "subtitle": "Average expected dollar return per trade given win rate, average win, and average loss.",
+      "body": "glossary/expectancy.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trade-math",
+        "performance",
+        "discipline"
+      ],
+      "aliases": [
+        "expectancy",
+        "trade expectancy"
+      ],
+      "related": [
+        "expected-value",
+        "r-multiple",
+        "kelly-criterion"
+      ],
+      "seen_in": [
+        {
+          "screen": "backtesting",
+          "label": "Backtesting · stats"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Formula",
+          "value": "(P_win × Avg_win) − (P_loss × Avg_loss)"
+        },
+        {
+          "label": "Sustainable edge",
+          "value": "Expectancy > $0 after costs/slippage"
+        },
+        {
+          "label": "Sample needed",
+          "value": "100+ trades to trust the number"
+        }
+      ],
+      "pitfalls": [
+        "Reporting expectancy on too few trades — random noise dominates.",
+        "Forgetting to subtract commissions, slippage, and fees.",
+        "Strategies with infrequent huge winners need long samples to show true expectancy."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Van K. Tharp",
+          "title": "Expectancy",
+          "url": "https://vantharp.com/about/expectancy/"
+        }
+      ],
+      "updated": "2026-05-03"
+    }
+  ]
+}

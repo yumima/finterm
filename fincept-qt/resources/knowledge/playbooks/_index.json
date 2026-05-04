@@ -1,0 +1,592 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "playbooks",
+    "label": "PLAYBOOKS",
+    "description": "Step-by-step processes for common decisions — \"how do I actually do this?\"",
+    "order": 30
+  },
+  "entries": [
+    {
+      "id": "evaluate-a-stock",
+      "title": "How to Evaluate a Stock",
+      "subtitle": "A 30-minute checklist before you put real money in.",
+      "body": "playbooks/evaluate-a-stock.md",
+      "difficulty": "beginner",
+      "tags": [
+        "process",
+        "equities",
+        "research"
+      ],
+      "aliases": [
+        "stock research",
+        "stock analysis",
+        "due diligence"
+      ],
+      "related": [
+        "pe-ratio",
+        "fcf",
+        "ev-ebitda",
+        "roe"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL Equity Research",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Open my Watchlist",
+          "screen": "watchlist",
+          "ticker": ""
+        },
+        {
+          "label": "Run a backtest of the thesis",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "Investment Valuation — book site",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/invemgmt.html"
+        },
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "How to Analyze a Stock",
+          "url": "https://www.investopedia.com/articles/fundamental-analysis/09/five-must-have-metrics-value-investors.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "size-a-position",
+      "title": "How to Size a Position",
+      "subtitle": "Translate conviction and risk into actual share counts.",
+      "body": "playbooks/size-a-position.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "process",
+        "portfolio"
+      ],
+      "aliases": [
+        "position sizing",
+        "kelly criterion",
+        "risk per trade"
+      ],
+      "related": [
+        "volatility",
+        "drawdown",
+        "var"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · sizing tools"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Portfolio sizing tools",
+          "screen": "portfolio",
+          "ticker": ""
+        },
+        {
+          "label": "Backtest with risk controls",
+          "screen": "backtesting",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Position Sizing",
+          "url": "https://www.investopedia.com/terms/p/positionsizing.asp"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Edward O. Thorp",
+          "title": "The Kelly Capital Growth Investment Criterion",
+          "url": "https://www.edwardothorp.com/wp-content/uploads/2016/11/TheKellyCriterionAndTheStockMarket.pdf"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "read-an-earnings-release",
+      "title": "How to Read an Earnings Release",
+      "subtitle": "What to look at first, and what to ignore.",
+      "body": "playbooks/read-an-earnings-release.md",
+      "difficulty": "beginner",
+      "tags": [
+        "process",
+        "earnings",
+        "fundamentals"
+      ],
+      "aliases": [
+        "earnings report",
+        "10-q",
+        "earnings call",
+        "guidance"
+      ],
+      "related": [
+        "eps",
+        "fcf"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · news tab"
+        },
+        {
+          "screen": "news",
+          "label": "News"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open AAPL · News tab",
+          "screen": "equity_research",
+          "ticker": "AAPL"
+        },
+        {
+          "label": "Open News",
+          "screen": "news",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "SEC",
+          "title": "How to Read a 10-K",
+          "url": "https://www.sec.gov/oiea/Article/edgarguide.html"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "interpret-an-inversion",
+      "title": "How to Interpret a Yield Curve Inversion",
+      "subtitle": "Don't sell everything — but don't ignore it either.",
+      "body": "playbooks/interpret-an-inversion.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "rates",
+        "process"
+      ],
+      "aliases": [
+        "yield curve inversion",
+        "recession indicator"
+      ],
+      "related": [
+        "yield-curve",
+        "inflation-and-rates"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · rates panel"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Economics · rates panel",
+          "screen": "economics",
+          "ticker": ""
+        },
+        {
+          "label": "Gov Data · Treasury yields",
+          "screen": "gov_data",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "FRED (St. Louis Fed)",
+          "title": "10Y minus 2Y Treasury — chart",
+          "url": "https://fred.stlouisfed.org/series/T10Y2Y"
+        },
+        {
+          "type": "deep_dive",
+          "source": "NY Fed",
+          "title": "Recession probability model",
+          "url": "https://www.newyorkfed.org/research/capital_markets/ycfaq"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "build-a-watchlist",
+      "title": "How to Build a Watchlist",
+      "subtitle": "From idea generation to a small set of stocks worth tracking daily.",
+      "body": "playbooks/build-a-watchlist.md",
+      "difficulty": "beginner",
+      "tags": [
+        "process",
+        "workflow"
+      ],
+      "aliases": [
+        "watchlist",
+        "screener",
+        "stock screening"
+      ],
+      "related": [
+        "evaluate-a-stock"
+      ],
+      "seen_in": [
+        {
+          "screen": "watchlist",
+          "label": "Watchlist"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · screener"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Watchlist",
+          "screen": "watchlist",
+          "ticker": ""
+        },
+        {
+          "label": "Markets · Screener",
+          "screen": "markets",
+          "ticker": ""
+        }
+      ],
+      "external_links": [
+        {
+          "type": "tool",
+          "source": "Finviz",
+          "title": "Free stock screener",
+          "url": "https://finviz.com/screener.ashx"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "read-an-option-chain",
+      "title": "How to Read an Option Chain",
+      "subtitle": "What every column on the chain means and how to extract a tradable view in 5 minutes.",
+      "body": "playbooks/read-an-option-chain.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "options",
+        "process"
+      ],
+      "aliases": [
+        "option chain",
+        "options chain"
+      ],
+      "related": [
+        "options-basics",
+        "delta",
+        "gamma",
+        "theta",
+        "vega",
+        "implied-volatility",
+        "open-interest"
+      ],
+      "seen_in": [
+        {
+          "screen": "derivatives",
+          "label": "Derivatives · option chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Liquid strike OI",
+          "value": ">1,000"
+        },
+        {
+          "label": "Reasonable IV rank",
+          "value": "<70 for buying, >50 for selling"
+        },
+        {
+          "label": "Bid-ask spread of trade",
+          "value": "<5% of mid"
+        }
+      ],
+      "pitfalls": [
+        "Buying 'cheap' premium without checking liquidity — can't sell back.",
+        "Ignoring ex-dividend dates that affect call/put parity.",
+        "Reading the wrong expiration cycle (weekly vs monthly) on display."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Reading an Option Chain",
+          "url": "https://www.investopedia.com/articles/optioninvestor/06/optionschain.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "use-stop-losses-well",
+      "title": "How to Use Stop-Losses Without Sabotaging Yourself",
+      "subtitle": "Where to place them, when to honor them, when not to use them at all.",
+      "body": "playbooks/use-stop-losses-well.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "process",
+        "execution"
+      ],
+      "aliases": [
+        "stop loss strategy",
+        "using stops"
+      ],
+      "related": [
+        "stop-loss-order",
+        "stop-limit-order",
+        "trailing-stop",
+        "size-a-position"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_trading",
+          "label": "Equity Trading · order ticket"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Stop distance",
+          "value": "2–3× ATR for swing"
+        },
+        {
+          "label": "Max risk per trade",
+          "value": "0.5–2% of portfolio"
+        },
+        {
+          "label": "Mental stops",
+          "value": "Fail in real declines — use hard stops"
+        }
+      ],
+      "pitfalls": [
+        "Stops too tight → whipsaws + frustration.",
+        "Stops too wide → larger losses than position size assumed.",
+        "Round-number stops cluster and get hunted.",
+        "Mental stops always fail under real pressure."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "The Stop-Loss Order",
+          "url": "https://www.investopedia.com/articles/stocks/09/use-stop-loss.asp"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "allocate-across-assets",
+      "title": "How to Allocate Across Asset Classes",
+      "subtitle": "From 60/40 to risk parity — frameworks for splitting your capital across stocks, bonds, cash, real assets.",
+      "body": "playbooks/allocate-across-assets.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "allocation",
+        "process",
+        "portfolio"
+      ],
+      "aliases": [
+        "asset allocation",
+        "60 40 portfolio"
+      ],
+      "related": [
+        "beta",
+        "drawdown",
+        "volatility",
+        "size-a-position"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · allocation view"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Classic 60/40",
+          "value": "60% stocks, 40% bonds"
+        },
+        {
+          "label": "Age-based",
+          "value": "Stocks ≈ 110 − age (%)"
+        },
+        {
+          "label": "Risk parity",
+          "value": "Equal risk contribution per asset (not equal $)"
+        }
+      ],
+      "pitfalls": [
+        "Rebalancing too often (taxes + costs) or too rarely (drift).",
+        "Treating bonds as automatically diversifying — fails in stagflation (2022).",
+        "Over-emphasizing US equities; home bias is a real risk.",
+        "Picking allocation by recent returns instead of forward expectations."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Vanguard",
+          "title": "Principles for Investing Success",
+          "url": "https://corporate.vanguard.com/content/dam/corp/research/pdf/Principles-of-Investing-Success.pdf"
+        },
+        {
+          "type": "deep_dive",
+          "source": "Bridgewater",
+          "title": "All Weather Story (Ray Dalio)",
+          "url": "https://www.bridgewater.com/research-and-insights/the-all-weather-story"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "handle-a-crash",
+      "title": "How to Handle a Market Crash",
+      "subtitle": "Pre-crash preparation, in-the-moment discipline, post-crash positioning.",
+      "body": "playbooks/handle-a-crash.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "process",
+        "psychology"
+      ],
+      "aliases": [
+        "bear market",
+        "market crash",
+        "drawdown handling"
+      ],
+      "related": [
+        "drawdown",
+        "var",
+        "vix",
+        "size-a-position",
+        "behavioral-biases"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk panel"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · macro panel"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Cash buffer",
+          "value": "6–12 months expenses"
+        },
+        {
+          "label": "Equity bottoms",
+          "value": "Often before recession officially ends"
+        },
+        {
+          "label": "Average bear market",
+          "value": "−35% over 14 months"
+        },
+        {
+          "label": "Best bull-market days",
+          "value": "Concentrated in/near worst bear days"
+        }
+      ],
+      "pitfalls": [
+        "Panic-selling at the bottom — locks in the loss permanently.",
+        "Trying to call the bottom — most miss it.",
+        "Going to 100% cash and never re-entering.",
+        "Adding leverage to 'buy the dip' before it stops dipping."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Morgan Housel",
+          "title": "The Psychology of Money",
+          "url": "https://www.morganhousel.com/the-psychology-of-money"
+        }
+      ],
+      "updated": "2026-05-03"
+    },
+    {
+      "id": "build-a-thesis",
+      "title": "How to Build an Investment Thesis With Conviction",
+      "subtitle": "From idea spark to documented, falsifiable thesis you can hold through volatility.",
+      "body": "playbooks/build-a-thesis.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "process",
+        "research",
+        "discipline"
+      ],
+      "aliases": [
+        "investment thesis",
+        "thesis writing"
+      ],
+      "related": [
+        "evaluate-a-stock",
+        "size-a-position",
+        "build-a-watchlist"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · thesis notes"
+        },
+        {
+          "screen": "notes",
+          "label": "Notes"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Thesis must be",
+          "value": "Specific + falsifiable + time-bound"
+        },
+        {
+          "label": "Pre-mortem",
+          "value": "Imagine the trade failed — why?"
+        },
+        {
+          "label": "Sizing reflects conviction",
+          "value": "Higher conviction = larger position"
+        }
+      ],
+      "pitfalls": [
+        "Vague thesis ('it's cheap') with no falsification criteria.",
+        "Confusing a feeling for a thesis.",
+        "Updating thesis in real-time to fit price action (rationalization).",
+        "Sizing without explicit conviction calibration."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Howard Marks",
+          "title": "Memos (Oaktree)",
+          "url": "https://www.oaktreecapital.com/insights/memos"
+        }
+      ],
+      "updated": "2026-05-03"
+    }
+  ]
+}

@@ -74,6 +74,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"notes", "Notes"},
         {"forum", "Forum"},
         {"docs", "Docs"},
+        {"knowledge", "Knowledge"},
         {"support", "Support"},
         {"about", "About"},
         {"profile", "Profile"},

@@ -554,11 +554,6 @@ QMenu* ToolBar::build_help_menu() {
     m->addAction("About Fincept", this, [this]() { emit navigate_to("about"); });
     m->addAction("Help Center", this, [this]() { emit navigate_to("help"); });
     m->addSeparator();
-    m->addAction("Contact Us", this, [this]() { emit navigate_to("contact"); });
-    m->addAction("Terms of Service", this, [this]() { emit navigate_to("terms"); });
-    m->addAction("Privacy Policy", this, [this]() { emit navigate_to("privacy"); });
-    m->addAction("Trademarks", this, [this]() { emit navigate_to("trademarks"); });
-    m->addSeparator();
     m->addAction("Check for Updates", this, [this]() { emit action_triggered("check_updates"); });
     m->addSeparator();
     m->addAction("Logout", this, [this]() { emit action_triggered("logout"); });

@@ -1013,6 +1013,19 @@ set(SCREEN_SOURCES
     src/screens/info/PrivacyScreen.cpp
     src/screens/info/TrademarksScreen.cpp
     src/screens/info/HelpScreen.cpp
+    src/screens/knowledge/AITutorPanel.cpp
+    src/screens/knowledge/AbbreviationsColumn.cpp
+    src/screens/knowledge/CalculatorPanel.cpp
+    src/screens/knowledge/CategoryColumn.cpp
+    src/screens/knowledge/ContentLoader.cpp
+    src/screens/knowledge/EntryBodyView.cpp
+    src/screens/knowledge/ExposurePanel.cpp
+    src/screens/knowledge/HelpHint.cpp
+    src/screens/knowledge/HistoryChartPanel.cpp
+    src/screens/knowledge/KnowledgeScreen.cpp
+    src/screens/knowledge/LiveDataPanel.cpp
+    src/screens/knowledge/PeerChartPanel.cpp
+    src/screens/knowledge/RailWidget.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
     src/screens/relationship_map/RelationshipGraphScene.cpp
@@ -1502,6 +1515,19 @@ set_source_files_properties(
     src/screens/info/PrivacyScreen.cpp
     src/screens/info/TermsScreen.cpp
     src/screens/info/TrademarksScreen.cpp
+    src/screens/knowledge/AITutorPanel.cpp
+    src/screens/knowledge/AbbreviationsColumn.cpp
+    src/screens/knowledge/CalculatorPanel.cpp
+    src/screens/knowledge/CategoryColumn.cpp
+    src/screens/knowledge/ContentLoader.cpp
+    src/screens/knowledge/EntryBodyView.cpp
+    src/screens/knowledge/ExposurePanel.cpp
+    src/screens/knowledge/HelpHint.cpp
+    src/screens/knowledge/HistoryChartPanel.cpp
+    src/screens/knowledge/KnowledgeScreen.cpp
+    src/screens/knowledge/LiveDataPanel.cpp
+    src/screens/knowledge/PeerChartPanel.cpp
+    src/screens/knowledge/RailWidget.cpp
     src/screens/ma_analytics/MAAnalyticsScreen.cpp
     src/screens/ma_analytics/MAModulePanel.cpp
     src/screens/maritime/MaritimeScreen.cpp
@@ -2246,6 +2272,9 @@ add_custom_command(TARGET FinceptTerminal POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/wallet/vendor"
         "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/vendor"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/knowledge"
+        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/knowledge"
     COMMENT "Copying requirements files to build output..."
 )
 
