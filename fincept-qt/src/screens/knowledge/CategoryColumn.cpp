@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QSettings>
 #include <QVBoxLayout>
 
 namespace fincept::knowledge {
@@ -82,10 +83,21 @@ CategoryColumn::CategoryColumn(const KnowledgeCategory& category, QWidget* paren
     header->installEventFilter(this);
     body_->installEventFilter(this);
 
-    // Auto-select first entry so the column has content immediately.
+    // Restore previously-viewed entry from QSettings; fall back to first.
     if (!category.entries.isEmpty()) {
-        picker_->setCurrentIndex(0);
-        set_active_entry_internal(category.entries.first().id);
+        QSettings s;
+        const QString saved = s.value(QString("knowledge/%1/active_entry").arg(category_id_)).toString();
+        int restore_idx = 0;
+        if (!saved.isEmpty()) {
+            for (int i = 0; i < picker_->count(); ++i) {
+                if (picker_->itemData(i).toString() == saved) {
+                    restore_idx = i;
+                    break;
+                }
+            }
+        }
+        picker_->setCurrentIndex(restore_idx);
+        set_active_entry_internal(picker_->itemData(restore_idx).toString());
     }
 }
 
@@ -105,6 +117,7 @@ void CategoryColumn::set_active_entry_internal(const QString& entry_id) {
         return;
     active_entry_id_ = entry_id;
     body_->set_entry(ContentLoader::instance().entry(entry_id));
+    QSettings().setValue(QString("knowledge/%1/active_entry").arg(category_id_), entry_id);
     emit entry_activated(entry_id);
 }
 

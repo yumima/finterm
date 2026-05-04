@@ -19,21 +19,21 @@ namespace fincept::knowledge {
 
 namespace {
 
-// VSCode dark + warm-brown ("Warty Brown") palette. Sans-serif body, monospace
-// code, with the distinctive tan inline-code chip style. Headings stay clean
-// (no border-bottom) — the visual hierarchy comes from size and weight.
+// VS Code dark+ palette — neutral cool grays, sans body, mono code, thin H2
+// separator. Mirrors the markdown preview pane in VS Code so finterm articles
+// read like tech docs rather than terminal output.
 constexpr const char* MONO = "font-family: 'JetBrains Mono','SF Mono','Consolas','Courier New',monospace;";
 constexpr const char* SANS =
     "font-family: 'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;";
-constexpr const char* BODY_BG       = "#1c1815"; ///< warm dark, brown-tinted (vs VSCode #1e1e1e)
-constexpr const char* BODY_TEXT     = "#d4cab0"; ///< warm cream body text
-constexpr const char* HEAD_TEXT     = "#f0e8d0"; ///< near-white cream for headings + bold
-constexpr const char* MUTED_TEXT    = "#a89878"; ///< muted warm tan for subtitles, captions
-constexpr const char* CODE_TEXT     = "#d4a878"; ///< Warty Brown — inline code accent
-constexpr const char* CODE_BG       = "#2a221a"; ///< warm-dark chip bg for inline code
-constexpr const char* PRE_BG        = "#15110d"; ///< slightly darker than body for code blocks
-constexpr const char* LINK_COLOR    = "#6dc1c9"; ///< muted cyan for links
-constexpr const char* RULE_COLOR    = "#3a2e22"; ///< warm brown border / hr
+constexpr const char* BODY_BG       = "#1f1f1f"; ///< VS Code editor background
+constexpr const char* BODY_TEXT     = "#cccccc"; ///< default editor foreground
+constexpr const char* HEAD_TEXT     = "#e6e6e6"; ///< brighter cream for headings + bold
+constexpr const char* MUTED_TEXT    = "#9d9d9d"; ///< secondary text (subtitles, blockquote)
+constexpr const char* CODE_TEXT     = "#ce9178"; ///< VS Code "string" peach for inline code
+constexpr const char* CODE_BG       = "#2d2d2d"; ///< inline-code chip bg
+constexpr const char* PRE_BG        = "#1a1a1a"; ///< code-block bg (slightly darker than body)
+constexpr const char* LINK_COLOR    = "#3794ff"; ///< VS Code accent blue
+constexpr const char* RULE_COLOR    = "#3a3a3a"; ///< borders, hr, h2 separator, blockquote rule
 
 struct DiffStyle {
     const char* label;
@@ -55,15 +55,17 @@ WarnStyle warning_style(const QString& severity) {
 }
 
 QString markdown_default_css() {
-    // VSCode-style markdown rendering with a warm-brown ("Warty Brown") accent.
-    // Sans-serif body, monospace code, near-white bold headings, distinctive
-    // tan inline-code chips. Reads like a tech-doc page rather than a terminal.
+    // VS Code-style markdown rendering — cool neutral grays, sans-serif body,
+    // mono code chips, thin H2 separator. Reads like a doc page.
     return QString(
                "body { %0 color: %1; }"
-               // Headings: clean white-ish, sans-serif, no border-bottom.
-               "h1 { color: %1; %0 font-size: 22px; font-weight: 700;"
+               // Headings: neutral cream, sans-serif. H1/H2 get a thin bottom rule
+               // matching VS Code's preview, the rest stay clean.
+               "h1 { color: %1; %0 font-size: 24px; font-weight: 700;"
+               "     border-bottom: 1px solid %8; padding-bottom: 6px;"
                "     margin-top: 8px; margin-bottom: 18px; }"
-               "h2 { color: %1; %0 font-size: 18px; font-weight: 700;"
+               "h2 { color: %1; %0 font-size: 19px; font-weight: 600;"
+               "     border-bottom: 1px solid %8; padding-bottom: 4px;"
                "     margin-top: 28px; margin-bottom: 12px; }"
                "h3 { color: %1; %0 font-size: 16px; font-weight: 600;"
                "     margin-top: 22px; margin-bottom: 10px; }"
@@ -190,12 +192,18 @@ void EntryBodyView::rebuild() {
     {
         auto* top = new QHBoxLayout;
         top->setSpacing(8);
-        const auto ds = difficulty_style(current_->difficulty);
-        auto* diff = new QLabel(ds.label, page);
-        diff->setStyleSheet(QString("color: %1; background: %2; padding: 2px 8px; font-size: 9px;"
-                                    " font-weight: bold; letter-spacing: 1.5px; %3")
-                                .arg(ds.fg, ds.bg, MONO));
-        top->addWidget(diff);
+        // Only flag advanced/pro entries — beginner & intermediate are the
+        // default reading level and don't need a badge.
+        const QString d = current_->difficulty;
+        const bool show_pill = (d == Difficulty::ADVANCED || d == Difficulty::PRO);
+        if (show_pill) {
+            const auto ds = difficulty_style(d);
+            auto* diff = new QLabel(ds.label, page);
+            diff->setStyleSheet(QString("color: %1; background: %2; padding: 2px 8px; font-size: 9px;"
+                                        " font-weight: bold; letter-spacing: 1.5px; %3")
+                                    .arg(ds.fg, ds.bg, MONO));
+            top->addWidget(diff);
+        }
         if (!current_->abbreviation.isEmpty()) {
             auto* abbr = new QLabel(current_->abbreviation, page);
             abbr->setStyleSheet(QString("color: %1; background: transparent; padding: 2px 0; font-size: 10px; %2")

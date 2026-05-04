@@ -1020,6 +1020,7 @@ set(SCREEN_SOURCES
     src/screens/knowledge/ContentLoader.cpp
     src/screens/knowledge/EntryBodyView.cpp
     src/screens/knowledge/ExposurePanel.cpp
+    src/screens/knowledge/GroupedPane.cpp
     src/screens/knowledge/HelpHint.cpp
     src/screens/knowledge/HistoryChartPanel.cpp
     src/screens/knowledge/KnowledgeScreen.cpp
@@ -1522,6 +1523,7 @@ set_source_files_properties(
     src/screens/knowledge/ContentLoader.cpp
     src/screens/knowledge/EntryBodyView.cpp
     src/screens/knowledge/ExposurePanel.cpp
+    src/screens/knowledge/GroupedPane.cpp
     src/screens/knowledge/HelpHint.cpp
     src/screens/knowledge/HistoryChartPanel.cpp
     src/screens/knowledge/KnowledgeScreen.cpp

@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QSettings>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -92,11 +93,15 @@ AbbreviationsColumn::AbbreviationsColumn(QWidget* parent) : QWidget(parent) {
         const QString entry_id = ContentLoader::instance().resolve_alias(data);
         if (!entry_id.isEmpty()) {
             last_entry_id_ = entry_id;
+            QSettings().setValue("knowledge/abbreviations/active_entry", entry_id);
             emit entry_activated(entry_id);
         }
     });
 
     rebuild_list();
+
+    // Restore last clicked abbreviation so the rail can repopulate it on demand.
+    last_entry_id_ = QSettings().value("knowledge/abbreviations/active_entry").toString();
 }
 
 void AbbreviationsColumn::rebuild_list(const QString& filter) {

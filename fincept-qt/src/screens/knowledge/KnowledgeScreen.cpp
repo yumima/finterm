@@ -3,6 +3,7 @@
 #include "screens/knowledge/AbbreviationsColumn.h"
 #include "screens/knowledge/CategoryColumn.h"
 #include "screens/knowledge/ContentLoader.h"
+#include "screens/knowledge/GroupedPane.h"
 #include "screens/knowledge/HelpHint.h"
 #include "screens/knowledge/RailWidget.h"
 #include "ui/theme/Theme.h"
@@ -21,6 +22,10 @@ namespace fincept::knowledge {
 namespace {
 
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
+
+// Sub-tab assignment for the new 3-pane cockpit.
+const QStringList BASICS_CATS   = {"glossary", "concepts"};
+const QStringList PRACTICE_CATS = {"cases", "tracks", "playbooks"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
@@ -88,7 +93,7 @@ void KnowledgeScreen::build_layout() {
     sep->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::BORDER_BRIGHT(), MONO));
     ch->addWidget(sep);
 
-    breadcrumb_ = new QLabel("Cockpit · 5-pane view", cmd);
+    breadcrumb_ = new QLabel("Cockpit · Basics / Practice / Context", cmd);
     breadcrumb_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
                                    .arg(ui::colors::TEXT_SECONDARY(), MONO));
     ch->addWidget(breadcrumb_);
@@ -106,68 +111,104 @@ void KnowledgeScreen::build_layout() {
 
     root->addWidget(cmd);
 
-    // ── 5-pane horizontal splitter ────────────────────────────────────────────
+    // ── 3-pane horizontal splitter ────────────────────────────────────────────
     auto* split = new QSplitter(Qt::Horizontal, this);
     split->setHandleWidth(1);
     split->setStyleSheet(QString("QSplitter::handle { background: %1; }").arg(ui::colors::BORDER_DIM()));
     split->setChildrenCollapsible(false);
 
     auto& loader = ContentLoader::instance();
-    const auto cats = loader.categories();
     int total_entries = 0;
-    constexpr int COL_MIN_WIDTH = 240;
 
-    // Order: GLOSSARY, CONCEPTS, PLAYBOOKS, FINTERM RAIL, ABBREVIATIONS (rightmost)
-    for (const auto& cat : cats) {
-        auto* col = new CategoryColumn(cat, split);
-        col->setMinimumWidth(COL_MIN_WIDTH);
-        category_cols_.push_back(col);
-        split->addWidget(col);
+    // Build CategoryColumns up front, indexed by category id.
+    for (const auto& cat : loader.categories()) {
+        auto* col = new CategoryColumn(cat);
+        category_cols_.insert(cat.id, col);
         total_entries += cat.entries.size();
-
         connect(col, &CategoryColumn::entry_activated, this,
-                [this, col](const QString& id) { on_column_active(col, id); });
+                [this, col](const QString& id) { on_category_active(col, id); });
         connect(col, &CategoryColumn::open_entry_external, this, &KnowledgeScreen::open_entry);
     }
 
-    // Rail column (between playbooks and abbreviations)
+    // ── BASICS pane (Glossary, Concepts, Abbreviations) ───────────────────────
+    basics_pane_ = new GroupedPane("basics", "BASICS", split);
+    basics_pane_->setMinimumWidth(280);
+    for (const auto& cat_id : BASICS_CATS) {
+        if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
+            const auto* meta = loader.category(cat_id);
+            const QString lbl = meta ? meta->label : cat_id.toUpper();
+            basics_pane_->addSubPane(lbl, *it);
+        }
+    }
+    if (!loader.abbreviations().isEmpty()) {
+        abbrev_col_ = new AbbreviationsColumn();
+        basics_pane_->addSubPane("ABBREV.", abbrev_col_);
+        connect(abbrev_col_, &AbbreviationsColumn::entry_activated, this, [this](const QString& id) {
+            if (rail_)
+                rail_->set_entry(ContentLoader::instance().entry(id));
+            if (const auto* e = ContentLoader::instance().entry(id))
+                breadcrumb_->setText(QString("Cockpit · BASICS / ABBREV. · %1").arg(e->title));
+        });
+    }
+    split->addWidget(basics_pane_);
+
+    // ── PRACTICE pane (Cases, Tracks, Playbooks) ──────────────────────────────
+    practice_pane_ = new GroupedPane("practice", "PRACTICE", split);
+    practice_pane_->setMinimumWidth(280);
+    for (const auto& cat_id : PRACTICE_CATS) {
+        if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
+            const auto* meta = loader.category(cat_id);
+            const QString lbl = meta ? meta->label : cat_id.toUpper();
+            practice_pane_->addSubPane(lbl, *it);
+        }
+    }
+    split->addWidget(practice_pane_);
+
+    // ── CONTEXT (rail) ────────────────────────────────────────────────────────
     rail_ = new RailWidget(split);
-    rail_->setMinimumWidth(COL_MIN_WIDTH);
+    rail_->setMinimumWidth(320);
     split->addWidget(rail_);
     connect(rail_, &RailWidget::open_entry, this, &KnowledgeScreen::open_entry);
     connect(rail_, &RailWidget::request_action, this,
             [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
 
-    // Abbreviations column (rightmost)
-    if (!loader.abbreviations().isEmpty()) {
-        abbrev_col_ = new AbbreviationsColumn(split);
-        abbrev_col_->setMinimumWidth(COL_MIN_WIDTH);
-        split->addWidget(abbrev_col_);
-        connect(abbrev_col_, &AbbreviationsColumn::entry_activated, this, [this](const QString& id) {
-            set_active_column(abbrev_col_);
-            if (rail_)
-                rail_->set_entry(ContentLoader::instance().entry(id));
-        });
-    }
-
-    // Equal widths and equal stretch for all panes — drag handles to rebalance.
-    const int n = split->count();
-    QList<int> sizes;
-    for (int i = 0; i < n; ++i)
-        sizes << 400;
-    split->setSizes(sizes);
-    for (int i = 0; i < n; ++i)
-        split->setStretchFactor(i, 1);
+    // 30 / 30 / 40 default split, with rail stretching most.
+    split->setSizes({300, 300, 420});
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 3);
+    split->setStretchFactor(2, 4);
 
     root->addWidget(split, 1);
 
-    // ── Initial state: first column drives the rail ───────────────────────────
-    if (!category_cols_.isEmpty()) {
-        set_active_column(category_cols_.first());
-        const auto first_id = category_cols_.first()->active_entry_id();
-        if (!first_id.isEmpty())
-            rail_->set_entry(loader.entry(first_id));
+    // Restore each grouped pane's previously-active sub-tab. The CategoryColumns
+    // already restored their own active entries at construction, so this also
+    // makes the rail / breadcrumb reflect the user's last-viewed entry.
+    basics_pane_->restoreActiveSubTab();
+    practice_pane_->restoreActiveSubTab();
+
+    // Trigger the rail to follow whichever sub-tab is currently active in BASICS
+    // (the leftmost group leads on cold start).
+    if (auto* current = qobject_cast<CategoryColumn*>(basics_pane_->currentSubPane())) {
+        const auto id = current->active_entry_id();
+        if (!id.isEmpty())
+            on_category_active(current, id);
     }
+
+    // When the user switches sub-tabs, refresh the rail/breadcrumb to the
+    // restored entry of that newly-active sub-pane.
+    auto refresh_from_subpane = [this](QWidget* w) {
+        if (auto* col = qobject_cast<CategoryColumn*>(w)) {
+            const auto id = col->active_entry_id();
+            if (!id.isEmpty())
+                on_category_active(col, id);
+        } else if (auto* abbr = qobject_cast<AbbreviationsColumn*>(w)) {
+            const auto id = abbr->last_selected_entry_id();
+            if (!id.isEmpty() && rail_)
+                rail_->set_entry(ContentLoader::instance().entry(id));
+        }
+    };
+    connect(basics_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(practice_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
 
     // ── Search wiring (typeahead routes into the right column) ────────────────
     connect(search_, &QLineEdit::textChanged, this, &KnowledgeScreen::on_search);
@@ -200,18 +241,20 @@ void KnowledgeScreen::open_entry(const QString& entry_id) {
     if (!e)
         return;
 
-    // Find the category column that owns this entry, switch its picker to it,
-    // and make it active.
-    for (auto* col : category_cols_) {
-        if (col->category_id() == e->category) {
-            col->open_entry(id); // triggers entry_activated → on_column_active
-            return;
-        }
-    }
+    auto it = category_cols_.find(e->category);
+    if (it == category_cols_.end())
+        return;
+
+    auto* col = *it;
+    // Make sure the hosting super-pane has this column visible, then open the entry.
+    if (basics_pane_ && basics_pane_->subPaneCount() > 0)
+        basics_pane_->showSubPane(col); // no-op if column not in basics
+    if (practice_pane_ && practice_pane_->subPaneCount() > 0)
+        practice_pane_->showSubPane(col); // no-op if column not in practice
+    col->open_entry(id); // emits entry_activated → on_category_active
 }
 
-void KnowledgeScreen::on_column_active(CategoryColumn* col, const QString& entry_id) {
-    set_active_column(col);
+void KnowledgeScreen::on_category_active(CategoryColumn* col, const QString& entry_id) {
     if (rail_)
         rail_->set_entry(ContentLoader::instance().entry(entry_id));
 
@@ -219,17 +262,10 @@ void KnowledgeScreen::on_column_active(CategoryColumn* col, const QString& entry
         QString cat = e->category;
         if (auto* c = ContentLoader::instance().category(e->category))
             cat = c->label;
-        breadcrumb_->setText(QString("Cockpit · %1 / %2").arg(cat, e->title));
+        const QString group = BASICS_CATS.contains(e->category) ? "BASICS" : "PRACTICE";
+        breadcrumb_->setText(QString("Cockpit · %1 / %2 · %3").arg(group, cat, e->title));
     }
-}
-
-void KnowledgeScreen::set_active_column(QWidget* col) {
-    if (active_col_ == col)
-        return;
-    // Toggle the highlight on category columns. Abbreviations doesn't need it.
-    for (auto* c : category_cols_)
-        c->set_active(c == col);
-    active_col_ = col;
+    Q_UNUSED(col);
 }
 
 void KnowledgeScreen::on_search(const QString& /*query*/) {

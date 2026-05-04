@@ -12,19 +12,28 @@ namespace fincept::knowledge {
 
 class CategoryColumn;
 class AbbreviationsColumn;
+class GroupedPane;
 class RailWidget;
 
-/// KNOWLEDGE tab — 5-column cockpit:
-///   [GLOSSARY] [CONCEPTS] [PLAYBOOKS] [ABBREVIATIONS] [FINTERM RAIL]
-/// Each category column has its own picker; the rail follows whichever
-/// column was most recently focused.
+/// KNOWLEDGE tab — 3-pane cockpit:
+///
+///   [ BASICS  : Glossary | Concepts | Abbreviations ]
+///   [ PRACTICE: Cases    | Tracks   | Playbooks     ]
+///   [ CONTEXT : finterm rail tied to last selection ]
+///
+/// Within each grouped pane, sub-tabs are segmented buttons. Each
+/// sub-pane (CategoryColumn / AbbreviationsColumn) keeps its own
+/// last-viewed entry — switching sub-tabs preserves the picker /
+/// body state. The Context rail follows whichever sub-tab was most
+/// recently activated across both groups.
 class KnowledgeScreen : public QWidget {
     Q_OBJECT
   public:
     explicit KnowledgeScreen(QWidget* parent = nullptr);
 
     /// Public entry point used by HelpHint navigator and external callers.
-    /// Routes the entry into its proper category column.
+    /// Routes the entry into its proper category column, switching the
+    /// hosting super-pane's sub-tab to it as needed.
     void open_entry(const QString& entry_id);
 
   signals:
@@ -35,18 +44,19 @@ class KnowledgeScreen : public QWidget {
 
   private:
     void build_layout();
-    void on_column_active(CategoryColumn* col, const QString& entry_id);
+    void on_category_active(CategoryColumn* col, const QString& entry_id);
     void on_search(const QString& query);
-    void set_active_column(QWidget* col);
 
     QLineEdit* search_ = nullptr;
     QLabel* breadcrumb_ = nullptr;
     QLabel* count_label_ = nullptr;
 
-    QVector<CategoryColumn*> category_cols_;     ///< one per category
+    GroupedPane* basics_pane_ = nullptr;
+    GroupedPane* practice_pane_ = nullptr;
+
+    QHash<QString, CategoryColumn*> category_cols_;     ///< category_id → column
     AbbreviationsColumn* abbrev_col_ = nullptr;
     RailWidget* rail_ = nullptr;
-    QWidget* active_col_ = nullptr;              ///< column currently driving the rail
 };
 
 } // namespace fincept::knowledge
