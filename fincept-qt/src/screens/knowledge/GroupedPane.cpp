@@ -18,16 +18,19 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 constexpr const char* BODY_BG = "#13110f";
 
 QString tab_button_ss(bool active) {
-    // Segmented uppercase pill — active button gets the amber accent,
-    // inactive sits flat against the header bar.
-    const QString fg = active ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY();
-    const QString bg = active ? ui::colors::BG_RAISED() : QString("transparent");
-    const QString border = active ? ui::colors::AMBER() : ui::colors::BORDER_DIM();
+    // Segmented uppercase pill. Active = amber accent on raised bg with amber
+    // border (the "selected chip" look). Inactive = bright primary text on a
+    // subtle raised bg with a visible mid-gray border, so it reads as a
+    // tappable button rather than a faint label.
+    const QString fg     = active ? ui::colors::AMBER()     : ui::colors::TEXT_PRIMARY();
+    const QString bg     = active ? ui::colors::BG_RAISED() : ui::colors::BG_SURFACE();
+    const QString border = active ? ui::colors::AMBER()     : ui::colors::BORDER_BRIGHT();
     return QString("QToolButton { color: %1; background: %2; border: 1px solid %3;"
                    " padding: 4px 12px; font-size: 10px; font-weight: bold;"
                    " letter-spacing: 1.4px; %4 }"
-                   "QToolButton:hover { color: %5; border-color: %5; }")
-        .arg(fg, bg, border, MONO, ui::colors::AMBER());
+                   "QToolButton:hover { color: %5; border-color: %5;"
+                   "                    background: %6; }")
+        .arg(fg, bg, border, MONO, ui::colors::AMBER(), ui::colors::BG_RAISED());
 }
 
 } // namespace
