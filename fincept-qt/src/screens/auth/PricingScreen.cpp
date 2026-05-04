@@ -80,7 +80,7 @@ void PricingScreen::build_ui() {
                              .arg(MF));
     vl->addWidget(title);
 
-    auto* subtitle = new QLabel("Unlock the full power of Fincept Terminal");
+    auto* subtitle = new QLabel("finterm is open source under AGPL-3.0 — no paid tiers in this fork");
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setStyleSheet(
         QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_TERTIARY()).arg(MF));
@@ -483,9 +483,13 @@ void PricingScreen::on_select_plan(const QString& plan_id) {
             return;
         }
 
-        QString url = QString("https://fincept.in/checkout?token=%1&plan=%2")
-                          .arg(QUrl::toPercentEncoding(token), QUrl::toPercentEncoding(plan_id));
-        QDesktopServices::openUrl(QUrl(url));
+        // This fork has no commercial checkout. Original upstream wired the URL
+        // to a SaaS payment page; here we just inform the user.
+        Q_UNUSED(token);
+        Q_UNUSED(plan_id);
+        error_label_->setText("This fork is open source under AGPL-3.0; paid tiers are not available here.");
+        error_label_->show();
+        return;
 
         // Store plan before payment so we can detect changes
         awaiting_payment_ = true;

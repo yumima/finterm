@@ -25,7 +25,8 @@ static QLabel* body(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setWordWrap(true);
     lbl->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_PRIMARY(), MF));
+        QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; %2")
+            .arg(colors::TEXT_PRIMARY(), MF));
     return lbl;
 }
 
@@ -63,16 +64,11 @@ TrademarksScreen::TrademarksScreen(QWidget* parent) : QWidget(parent) {
     connect(back_btn, &QPushButton::clicked, this, &TrademarksScreen::navigate_back);
     vl->addWidget(back_btn, 0, Qt::AlignLeft);
 
-    auto* title = new QLabel("TRADEMARKS");
+    auto* title = new QLabel("TRADEMARKS & ACKNOWLEDGMENTS");
     title->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 700; letter-spacing: 1px; "
                                  "background: transparent; %2")
                              .arg(colors::AMBER(), MF));
     vl->addWidget(title);
-
-    auto* updated = new QLabel("Last updated: January 1, 2026");
-    updated->setStyleSheet(
-        QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
-    vl->addWidget(updated);
     vl->addSpacing(12);
 
     // Panel
@@ -83,51 +79,36 @@ TrademarksScreen::TrademarksScreen(QWidget* parent) : QWidget(parent) {
     pvl->setContentsMargins(20, 16, 20, 16);
     pvl->setSpacing(6);
 
-    pvl->addWidget(heading("1", "FINCEPT TRADEMARKS"));
-    pvl->addWidget(bullet("Fincept (TM)"));
-    pvl->addWidget(bullet("Fincept Terminal (TM)"));
-    pvl->addWidget(bullet("Fincept Corporation (TM)"));
-    pvl->addWidget(bullet("Fincept Logo and associated visual identities"));
+    pvl->addWidget(heading("1", "ABOUT THIS PROJECT"));
+    pvl->addWidget(body("finterm is a community fork of an upstream project, distributed under AGPL-3.0. "
+                        "There is no commercial entity behind it and no associated trademarks claimed by this fork. "
+                        "Upstream attribution and the upstream project's marks are noted in the README."));
 
     pvl->addWidget(heading("2", "THIRD-PARTY TRADEMARKS"));
-    pvl->addWidget(body("The following are trademarks of their respective owners:"));
+    pvl->addWidget(body("The following are trademarks of their respective owners and are referenced in the app for "
+                        "data-source identification only:"));
     pvl->addWidget(bullet("Reuters — Thomson Reuters Corporation"));
     pvl->addWidget(bullet("S&P 500 — S&P Dow Jones Indices LLC"));
     pvl->addWidget(bullet("NASDAQ — Nasdaq, Inc."));
     pvl->addWidget(bullet("NYSE — Intercontinental Exchange, Inc."));
     pvl->addWidget(bullet("FTSE — FTSE International Limited"));
+    pvl->addWidget(bullet("Bloomberg — Bloomberg L.P."));
 
-    pvl->addWidget(heading("3", "TRADEMARK GUIDELINES"));
-    pvl->addWidget(body("Permitted Uses:"));
-    pvl->addWidget(bullet("Referring to Fincept products in editorial or descriptive contexts"));
-    pvl->addWidget(bullet("Linking to official Fincept resources"));
-    pvl->addWidget(bullet("Academic or research references"));
+    pvl->addWidget(heading("3", "DATA PROVIDER ACKNOWLEDGMENTS"));
+    pvl->addWidget(bullet("Yahoo Finance — yfinance library; quote and history data"));
+    pvl->addWidget(bullet("Stooq — historical EOD data"));
+    pvl->addWidget(bullet("akshare — Chinese exchange data"));
+    pvl->addWidget(bullet("FRED — economic time series (St. Louis Fed)"));
+    pvl->addWidget(bullet("DBnomics — economic data aggregator"));
+    pvl->addWidget(bullet("HDX — humanitarian / geopolitical datasets"));
 
-    pvl->addSpacing(4);
-    pvl->addWidget(body("Prohibited Uses:"));
-    pvl->addWidget(bullet("Using Fincept marks to imply endorsement or affiliation"));
-    pvl->addWidget(bullet("Modifying or altering any Fincept trademark"));
-    pvl->addWidget(bullet("Using Fincept marks in domain names or product names"));
-    pvl->addWidget(bullet("Creating confusingly similar marks"));
+    pvl->addWidget(heading("4", "OPEN-SOURCE LIBRARIES"));
+    pvl->addWidget(body("finterm is built on Qt 6 (LGPL-3.0), uses Qt-Advanced-Docking-System and a number of other "
+                        "open-source libraries. License notices for each are bundled with the binary distribution."));
 
-    pvl->addWidget(heading("4", "COPYRIGHT NOTICE"));
-    pvl->addWidget(body("Copyright 2024-2026 Fincept Corporation. All rights reserved."));
-    pvl->addWidget(body("This software is licensed under AGPL-3.0-or-later for open source use, "
-                        "with a separate commercial license available for enterprise deployment."));
-
-    pvl->addWidget(heading("5", "DATA PROVIDER ACKNOWLEDGMENTS"));
-    pvl->addWidget(bullet("Market data provided by various exchanges and data vendors"));
-    pvl->addWidget(bullet("Economic data from DBnomics, FRED, and government sources"));
-    pvl->addWidget(bullet("News data from licensed news aggregation services"));
-    pvl->addWidget(bullet("Geopolitical data from HDX and public sources"));
-    pvl->addWidget(bullet("Crypto data from exchange APIs (Kraken, HyperLiquid, etc.)"));
-
-    pvl->addWidget(heading("6", "REPORTING INFRINGEMENT"));
-    pvl->addWidget(body("To report trademark infringement, contact: support@fincept.in"));
-
-    pvl->addWidget(heading("7", "LEGAL DEPARTMENT"));
-    pvl->addWidget(body("Fincept Corporation — Legal Department"));
-    pvl->addWidget(body("Email: support@fincept.in"));
+    pvl->addWidget(heading("5", "REPORTING ISSUES"));
+    pvl->addWidget(body("This project has no commercial support. To report bugs, request features, or ask questions, "
+                        "use GitHub issues / discussions on the project repository (see README for the link)."));
 
     vl->addWidget(panel);
     vl->addStretch();

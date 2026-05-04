@@ -76,7 +76,7 @@ void SetupScreen::build_ui() {
     cl->setSpacing(8);
 
     // ── Title block ───────────────────────────────────────────────────────────
-    auto* title = new QLabel("FINCEPT TERMINAL", center);
+    auto* title = new QLabel("FINTERM", center);
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet(QString("color:%1; font-family:%2; font-size:24px; font-weight:700; letter-spacing:3px;")
                              .arg(kAccent, fonts::DATA_FAMILY));
@@ -418,7 +418,7 @@ void SetupScreen::on_setup_done(bool success, const QString& error) {
 
     if (success) {
         LOG_INFO("SetupScreen", "Python setup completed — all steps done");
-        status_label_->setText("Everything is ready! Launching Fincept Terminal...");
+        status_label_->setText("Everything is ready! Launching finterm...");
         status_label_->setStyleSheet(
             QString("color:%1; font-family:%2; font-size:10px; margin-top:6px;").arg(colors::GREEN(), fonts::DATA_FAMILY));
         begin_btn_->setText("LAUNCH");

@@ -1127,7 +1127,7 @@ void McpServersScreen::refresh_tools() {
         chk->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
         tools_table_->setItem(row, 0, chk);
         tools_table_->setItem(row, 1, new QTableWidgetItem(t.name));
-        auto* si = new QTableWidgetItem("Fincept Terminal");
+        auto* si = new QTableWidgetItem("finterm (internal)");
         si->setData(Qt::UserRole, QString(INTERNAL_SERVER_ID));
         si->setForeground(QColor(colors::AMBER()));
         tools_table_->setItem(row, 2, si);

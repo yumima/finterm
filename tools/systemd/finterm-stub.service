@@ -1,8 +1,8 @@
 [Unit]
-# Localhost stub server for the FinceptTerminal localhost-only fork.
-# Replaces api.fincept.in with a Python process on http://127.0.0.1:8765.
-# See tools/local_stub/server.py for the routes it serves.
-Description=Fincept localhost stub server
+# Localhost stub server for finterm.
+# Serves auth/profile/credits/MFA endpoints on http://127.0.0.1:8765.
+# Stdlib-only Python; no network code. See tools/local_stub/server.py.
+Description=finterm localhost stub server
 After=network.target
 
 [Service]

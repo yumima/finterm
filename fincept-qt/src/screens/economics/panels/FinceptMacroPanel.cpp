@@ -25,26 +25,20 @@ FinceptMacroPanel::FinceptMacroPanel(QWidget* parent)
 }
 
 void FinceptMacroPanel::activate() {
-    show_empty("Fincept Macro — Coming Soon\n\n"
-               "Planned data:\n"
-               "  · Central bank rates (40+ countries)\n"
-               "  · Sovereign debt metrics\n"
-               "  · Fincept proprietary macro indices\n"
-               "  · Global inflation dashboard\n"
-               "  · Emerging market indicators\n\n"
-               "Requires Fincept subscription + API key\n"
-               "Check back in a future release");
+    show_empty("Proprietary macro data — not available in this fork\n\n"
+               "This panel was wired to a SaaS-only macro data source in the upstream\n"
+               "project. The localhost fork does not have access to that source.\n\n"
+               "For comparable data, use the FRED, DBnomics, or Gov Data panels.");
 }
 
 void FinceptMacroPanel::build_controls(QHBoxLayout* thl) {
-    auto* lbl = new QLabel("FINCEPT MACRO — COMING SOON");
+    auto* lbl = new QLabel("PROPRIETARY MACRO — N/A IN THIS FORK");
     lbl->setStyleSheet(ctrl_label_style() + "letter-spacing:1px;");
     thl->addWidget(lbl);
 }
 
 void FinceptMacroPanel::on_fetch() {
-    show_empty("Fincept Macro data script is not yet available.\n"
-               "This panel will be enabled in a future release.");
+    show_empty("Not available in this fork — see FRED / DBnomics / Gov Data instead.");
 }
 
 void FinceptMacroPanel::on_result(const QString& /*request_id*/, const services::EconomicsResult& /*result*/) {

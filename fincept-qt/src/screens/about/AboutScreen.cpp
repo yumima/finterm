@@ -119,7 +119,7 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
 
         auto* left = new QVBoxLayout;
         left->setSpacing(4);
-        auto* name = new QLabel("Fincept Terminal");
+        auto* name = new QLabel("finterm");
         name->setStyleSheet(QString("color: %1; font-size: 15px; font-weight: bold; background: transparent; "
                                     "font-family: 'Consolas','Courier New',monospace;")
                                 .arg(ui::colors::TEXT_PRIMARY()));
@@ -165,7 +165,7 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         pvl->addWidget(body);
 
         // Footer bar
-        auto* foot = new QLabel("© 2024-2026 Fincept Corporation. All rights reserved.");
+        auto* foot = new QLabel("© 2024–2026 finterm contributors · AGPL-3.0 · See README for upstream attribution.");
         foot->setStyleSheet(QString("color: %1; font-size: 11px; background: %2; "
                                     "padding: 6px 14px; border-top: 1px solid %3; "
                                     "font-family: 'Consolas','Courier New',monospace;")
@@ -213,27 +213,26 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             rl->addWidget(panel, 1);
         }
 
-        // Commercial
+        // Attribution
         {
             auto* panel = makePanel();
             auto* pvl = new QVBoxLayout(panel);
             pvl->setContentsMargins(0, 0, 0, 0);
             pvl->setSpacing(0);
-            pvl->addWidget(makePanelHeader("★", "COMMERCIAL LICENSE", ui::colors::AMBER));
+            pvl->addWidget(makePanelHeader("★", "ATTRIBUTION", ui::colors::AMBER));
 
             auto* body = new QWidget(this);
             body->setStyleSheet("background: transparent;");
             auto* bvl = new QVBoxLayout(body);
             bvl->setContentsMargins(14, 10, 14, 10);
             bvl->setSpacing(6);
-            bvl->addWidget(makeBullet("Required for commercial deployment"));
-            bvl->addWidget(makeBullet("No source sharing required"));
-            bvl->addWidget(makeBullet("Priority support included"));
-            bvl->addWidget(makeBullet("Custom integration options available"));
+            bvl->addWidget(makeBullet("Community fork — no commercial entity"));
+            bvl->addWidget(makeBullet("Derived from upstream project (see README)"));
+            bvl->addWidget(makeBullet("Patches and PRs are the path to fixes"));
+            bvl->addWidget(makeBullet("AGPL-3.0 — modifications must share-alike"));
             pvl->addWidget(body);
 
-            // Footer link
-            auto* foot = new QLabel("support@fincept.in");
+            auto* foot = new QLabel("github.com → file an issue or PR");
             foot->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent; "
                                         "padding: 6px 14px; border-top: 1px solid %2; "
                                         "font-family: 'Consolas','Courier New',monospace;")
@@ -244,37 +243,6 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         }
 
         vl->addWidget(row);
-    }
-
-    // ── Trademarks ────────────────────────────────────────────────────────────
-    {
-        auto* panel = makePanel();
-        auto* pvl = new QVBoxLayout(panel);
-        pvl->setContentsMargins(0, 0, 0, 0);
-        pvl->setSpacing(0);
-        pvl->addWidget(makePanelHeader("🛡", "TRADEMARKS", ui::colors::AMBER));
-
-        auto* body = new QWidget(this);
-        body->setStyleSheet("background: transparent;");
-        auto* bvl = new QVBoxLayout(body);
-        bvl->setContentsMargins(14, 10, 14, 12);
-        bvl->setSpacing(6);
-
-        auto* desc = new QLabel("\"Fincept\", \"Fincept Terminal\", and associated logos are trademarks of "
-                                "Fincept Corporation. Use of these marks requires explicit written permission.");
-        desc->setStyleSheet(BODY());
-        desc->setWordWrap(true);
-        bvl->addWidget(desc);
-
-        auto* perm =
-            new QLabel("Permission is not granted to use Fincept trademarks in a way that suggests "
-                       "affiliation with or endorsement by Fincept Corporation without prior written consent.");
-        perm->setStyleSheet(MUTED());
-        perm->setWordWrap(true);
-        bvl->addWidget(perm);
-
-        pvl->addWidget(body);
-        vl->addWidget(panel);
     }
 
     // ── Resources — 3×2 grid ─────────────────────────────────────────────────
@@ -296,22 +264,18 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             QString url;
         };
         const Link links[] = {
-            {"GitHub Repository", "https://github.com/Fincept-Corporation/FinceptTerminal"},
-            {"License (AGPL-3.0)", "https://github.com/Fincept-Corporation/FinceptTerminal/blob/main/LICENSE"},
-            {"Commercial License",
-             "https://github.com/Fincept-Corporation/FinceptTerminal/blob/main/docs/COMMERCIAL_LICENSE.md"},
-            {"Trademark Policy", "https://github.com/Fincept-Corporation/FinceptTerminal/blob/main/docs/TRADEMARK.md"},
-            {"Contributor CLA", "https://github.com/Fincept-Corporation/FinceptTerminal/blob/main/docs/CLA.md"},
-            {"Official Website", "https://fincept.in"},
+            {"AGPL-3.0 License",   "https://www.gnu.org/licenses/agpl-3.0.html"},
+            {"Open-source Definition", "https://opensource.org/osd"},
+            {"Qt Documentation",   "https://doc.qt.io/qt-6/"},
         };
 
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < 3; ++i) {
             auto* btn = new QPushButton(links[i].label);
             btn->setStyleSheet(LINK_BTN());
             btn->setFixedHeight(36);
             const QString url = links[i].url;
             connect(btn, &QPushButton::clicked, this, [url]() { QDesktopServices::openUrl(QUrl(url)); });
-            grid->addWidget(btn, i / 3, i % 3);
+            grid->addWidget(btn, 0, i);
         }
 
         pvl->addWidget(body);
@@ -326,41 +290,15 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         pvl->setSpacing(0);
         pvl->addWidget(makePanelHeader("✉", "CONTACT", ui::colors::AMBER));
 
-        auto* body = new QWidget(this);
-        body->setStyleSheet("background: transparent;");
-        auto* grid = new QGridLayout(body);
-        grid->setContentsMargins(14, 10, 14, 12);
-        grid->setSpacing(12);
-
-        struct Contact {
-            QString label;
-            QString email;
-        };
-        const Contact contacts[] = {
-            {"GENERAL", "support@fincept.in"},
-            {"COMMERCIAL", "support@fincept.in"},
-            {"SECURITY", "support@fincept.in"},
-            {"LEGAL", "support@fincept.in"},
-        };
-
-        for (int i = 0; i < 4; ++i) {
-            auto* col = new QWidget(this);
-            col->setStyleSheet("background: transparent;");
-            auto* cvl = new QVBoxLayout(col);
-            cvl->setContentsMargins(0, 0, 0, 0);
-            cvl->setSpacing(2);
-
-            auto* lbl = new QLabel(contacts[i].label);
-            lbl->setStyleSheet(SECTION_LABEL());
-            cvl->addWidget(lbl);
-
-            auto* email = new QLabel(contacts[i].email);
-            email->setStyleSheet(LINK_STYLE());
-            cvl->addWidget(email);
-
-            grid->addWidget(col, 0, i);
-        }
-
+        auto* body = new QLabel(
+            "This is an open-source project. There is no commercial support, no email, and no phone. "
+            "File bug reports, feature requests, and questions on GitHub. The maintainer(s) review "
+            "issues and PRs as time permits.");
+        body->setWordWrap(true);
+        body->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; "
+                                    "padding: 14px; "
+                                    "font-family: 'Consolas','Courier New',monospace;")
+                                .arg(ui::colors::TEXT_PRIMARY()));
         pvl->addWidget(body);
         vl->addWidget(panel);
     }

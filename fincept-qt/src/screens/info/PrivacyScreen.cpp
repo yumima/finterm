@@ -2,7 +2,7 @@
 
 #include "ui/theme/Theme.h"
 
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -25,8 +25,8 @@ static QLabel* section_heading(const QString& icon, const QString& title) {
 static QLabel* body_text(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setWordWrap(true);
-    lbl->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_PRIMARY(), MF));
+    lbl->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; %2")
+                           .arg(colors::TEXT_PRIMARY(), MF));
     return lbl;
 }
 
@@ -36,28 +36,6 @@ static QLabel* bullet(const QString& text) {
     lbl->setStyleSheet(
         QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
     return lbl;
-}
-
-static QWidget* info_card(const QString& title, const QString& desc) {
-    auto* card = new QWidget(nullptr);
-    card->setStyleSheet(QString("background: %1; border: 1px solid %2; border-radius: 2px;")
-                            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-    auto* vl = new QVBoxLayout(card);
-    vl->setContentsMargins(12, 10, 12, 10);
-    vl->setSpacing(4);
-
-    auto* t = new QLabel(title);
-    t->setStyleSheet(
-        QString("color: %1; font-size: 11px; font-weight: 700; background: transparent; %2").arg(colors::AMBER(), MF));
-    vl->addWidget(t);
-
-    auto* d = new QLabel(desc);
-    d->setWordWrap(true);
-    d->setStyleSheet(
-        QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
-    vl->addWidget(d);
-
-    return card;
 }
 
 PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
@@ -86,16 +64,17 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     connect(back_btn, &QPushButton::clicked, this, &PrivacyScreen::navigate_back);
     vl->addWidget(back_btn, 0, Qt::AlignLeft);
 
-    auto* title = new QLabel("PRIVACY POLICY");
+    auto* title = new QLabel("PRIVACY");
     title->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 700; letter-spacing: 1px; "
                                  "background: transparent; %2")
                              .arg(colors::AMBER(), MF));
     vl->addWidget(title);
 
-    auto* updated = new QLabel("Last updated: January 1, 2026");
-    updated->setStyleSheet(
-        QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
-    vl->addWidget(updated);
+    auto* subtitle = new QLabel("Local-first by design. No accounts, no telemetry, no cloud.");
+    subtitle->setStyleSheet(
+        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
+    subtitle->setWordWrap(true);
+    vl->addWidget(subtitle);
     vl->addSpacing(12);
 
     // Main panel
@@ -106,82 +85,60 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->setContentsMargins(20, 16, 20, 16);
     pvl->setSpacing(6);
 
-    // 1 — Commitment
-    pvl->addWidget(section_heading("#", "OUR COMMITMENT TO PRIVACY"));
-    pvl->addWidget(
-        body_text("At Fincept Corporation, we are committed to protecting your privacy. This policy describes "
-                  "how we collect, use, and safeguard your personal information when you use Fincept Terminal."));
+    // 1 — TL;DR
+    pvl->addWidget(section_heading("#", "TL;DR"));
+    pvl->addWidget(body_text(
+        "finterm runs entirely on your machine. There is no SaaS account, no cloud round-trips, no telemetry, "
+        "no analytics, no crash reporter. The project does not collect any data about you or what you do with the app. "
+        "The only outbound network traffic is the public market-data APIs you explicitly use."));
 
-    // 2 — Information We Collect
-    pvl->addWidget(section_heading("@", "INFORMATION WE COLLECT"));
-    pvl->addWidget(body_text("Personal Information:"));
-    pvl->addWidget(bullet("Name and email address"));
-    pvl->addWidget(bullet("Account credentials (encrypted)"));
-    pvl->addWidget(bullet("Payment information (processed by third-party providers)"));
-    pvl->addWidget(bullet("Phone number (optional)"));
-    pvl->addWidget(bullet("Country and region"));
+    // 2 — What stays local
+    pvl->addWidget(section_heading("@", "WHAT STAYS LOCAL"));
+    pvl->addWidget(body_text("Stored only on your machine, in plain SQLite / JSON files:"));
+    pvl->addWidget(bullet("Portfolio holdings, transactions, P&L history"));
+    pvl->addWidget(bullet("Watchlists, alerts, custom indices"));
+    pvl->addWidget(bullet("Notes, chat history with any LLM you wired up"));
+    pvl->addWidget(bullet("Window layouts, theme, workspaces"));
+    pvl->addWidget(bullet("Cached candles, quotes, news"));
+    pvl->addWidget(bullet("Login state for the localhost stub"));
 
     pvl->addSpacing(4);
-    pvl->addWidget(body_text("Usage Information:"));
-    pvl->addWidget(bullet("Feature usage and navigation patterns"));
-    pvl->addWidget(bullet("Device and browser information"));
-    pvl->addWidget(bullet("IP address and approximate location"));
-    pvl->addWidget(bullet("Error logs and performance metrics"));
-    pvl->addWidget(bullet("Session duration and frequency"));
+    pvl->addWidget(body_text("Locations: ~/.local/share/com.fincept.terminal/ (data) and ~/.config/Fincept/ (settings)."));
 
-    // 3 — How We Use
-    pvl->addWidget(section_heading("*", "HOW WE USE YOUR INFORMATION"));
-    {
-        auto* grid = new QGridLayout;
-        grid->setSpacing(8);
-        grid->addWidget(
-            info_card("SERVICE DELIVERY",
-                      "Provide and maintain terminal features, process transactions, and deliver data feeds"),
-            0, 0);
-        grid->addWidget(
-            info_card("SECURITY",
-                      "Protect accounts, detect fraud, enforce terms of service, and ensure platform integrity"),
-            0, 1);
-        grid->addWidget(info_card("COMMUNICATION",
-                                  "Send service updates, security alerts, support responses, and optional marketing"),
-                        1, 0);
-        grid->addWidget(
-            info_card("IMPROVEMENT", "Analyze usage to improve features, fix bugs, and develop new capabilities"), 1,
-            1);
-        pvl->addLayout(grid);
-    }
+    // 3 — Outbound
+    pvl->addWidget(section_heading("→", "OUTBOUND TRAFFIC"));
+    pvl->addWidget(body_text("On your behalf — fetched into the app, never sent out:"));
+    pvl->addWidget(bullet("Yahoo Finance — quotes, history, fundamentals (yfinance)"));
+    pvl->addWidget(bullet("Stooq — optional EOD data"));
+    pvl->addWidget(bullet("akshare — Chinese exchange data (only when you use the China futures panel)"));
+    pvl->addWidget(bullet("FRED, DBnomics, government data sources — when you query them"));
 
-    // 4 — Sharing
-    pvl->addWidget(section_heading("~", "INFORMATION SHARING"));
-    pvl->addWidget(body_text("We may share your information with:"));
-    pvl->addWidget(bullet("Service Providers — third-party services that help operate the platform"));
-    pvl->addWidget(bullet("Legal Requirements — when required by law or to protect our rights"));
-    pvl->addWidget(bullet("Business Transfer — in connection with a merger, acquisition, or sale"));
-    pvl->addWidget(bullet("With Your Consent — when you explicitly authorize sharing"));
+    pvl->addSpacing(4);
+    pvl->addWidget(body_text("Never:"));
+    pvl->addWidget(bullet("No analytics provider"));
+    pvl->addWidget(bullet("No crash reporter"));
+    pvl->addWidget(bullet("No SaaS backend (auth/profile flows go to a localhost stub on 127.0.0.1:8765)"));
+    pvl->addWidget(bullet("No telemetry of any kind"));
 
-    // 5 — Security
-    pvl->addWidget(section_heading("!", "DATA SECURITY"));
-    pvl->addWidget(body_text("We implement industry-standard security measures:"));
-    pvl->addWidget(bullet("End-to-end encryption for sensitive data"));
-    pvl->addWidget(bullet("Secure credential storage (encrypted at rest)"));
-    pvl->addWidget(bullet("Regular security audits and penetration testing"));
-    pvl->addWidget(bullet("Access controls and authentication requirements"));
-    pvl->addWidget(bullet("Automatic session expiry and logout"));
-    pvl->addWidget(bullet("HTTPS/TLS for all data transmission"));
+    // 4 — LLM opt-in
+    pvl->addWidget(section_heading("∗", "LLM PROVIDER (OPT-IN)"));
+    pvl->addWidget(body_text(
+        "If you configure an external LLM in Settings → Agent (OpenAI / Anthropic / local Ollama / etc.), "
+        "your prompts and responses go to whatever endpoint you configured. That is the one and only outbound "
+        "channel under your direct control. No LLM is wired by default."));
 
-    // 6 — Rights
-    pvl->addWidget(section_heading("=", "YOUR RIGHTS"));
-    pvl->addWidget(body_text("You have the right to:"));
-    pvl->addWidget(bullet("Access — Request a copy of your personal data"));
-    pvl->addWidget(bullet("Correction — Update inaccurate or incomplete data"));
-    pvl->addWidget(bullet("Deletion — Request deletion of your account and data"));
-    pvl->addWidget(bullet("Portability — Export your data in a machine-readable format"));
-    pvl->addWidget(bullet("Opt-out — Unsubscribe from marketing communications"));
+    // 5 — Removing your data
+    pvl->addWidget(section_heading("✕", "REMOVING YOUR DATA"));
+    pvl->addWidget(body_text(
+        "Because everything is local, removing your data is `rm -rf` on the data + config directories listed "
+        "above. There is nothing on a server to delete. `finterm reset --full` does this with a backup, restorable "
+        "via `finterm reset --restore <ts>`."));
 
-    // 7 — Contact
-    pvl->addWidget(section_heading("@", "CONTACT US"));
-    pvl->addWidget(body_text("Privacy Officer: support@fincept.in"));
-    pvl->addWidget(body_text("For privacy-related inquiries, write to the address above."));
+    // 6 — Source code
+    pvl->addWidget(section_heading("§", "INSPECT THE SOURCE"));
+    pvl->addWidget(body_text(
+        "AGPL-3.0. Every line of network code in this repository is open. If you want to verify these claims, "
+        "the data layer is in fincept-qt/scripts/ and the localhost stub is in tools/local_stub/server.py."));
 
     vl->addWidget(panel);
 
@@ -201,13 +158,13 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
         return btn;
     };
 
-    auto* terms_link = make_link("Terms of Service");
+    auto* terms_link = make_link("Terms");
     connect(terms_link, &QPushButton::clicked, this, &PrivacyScreen::navigate_terms);
     fhl->addWidget(terms_link);
 
     fhl->addStretch();
 
-    auto* contact_link = make_link("Contact Us");
+    auto* contact_link = make_link("Contact");
     connect(contact_link, &QPushButton::clicked, this, &PrivacyScreen::navigate_contact);
     fhl->addWidget(contact_link);
 

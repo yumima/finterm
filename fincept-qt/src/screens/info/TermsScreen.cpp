@@ -2,6 +2,7 @@
 
 #include "ui/theme/Theme.h"
 
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
@@ -24,7 +25,7 @@ static QLabel* section_heading(const QString& number, const QString& title) {
 static QLabel* body_text(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setWordWrap(true);
-    lbl->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 1.5; background: transparent; %2")
+    lbl->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; %2")
                            .arg(colors::TEXT_PRIMARY(), MF));
     return lbl;
 }
@@ -54,7 +55,7 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
     vl->setContentsMargins(24, 24, 24, 24);
     vl->setSpacing(6);
 
-    // Back button
+    // Back
     auto* back_btn = new QPushButton("< BACK");
     back_btn->setCursor(Qt::PointingHandCursor);
     back_btn->setStyleSheet(QString("QPushButton { color: %1; background: transparent; border: none; "
@@ -63,20 +64,20 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
     connect(back_btn, &QPushButton::clicked, this, &TermsScreen::navigate_back);
     vl->addWidget(back_btn, 0, Qt::AlignLeft);
 
-    // Title
-    auto* title = new QLabel("TERMS OF SERVICE");
+    auto* title = new QLabel("TERMS");
     title->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: 700; letter-spacing: 1px; "
                                  "background: transparent; %2")
                              .arg(colors::AMBER(), MF));
     vl->addWidget(title);
 
-    auto* updated = new QLabel("Last updated: January 1, 2026");
-    updated->setStyleSheet(
-        QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
-    vl->addWidget(updated);
+    auto* subtitle = new QLabel("Open-source software under AGPL-3.0. Use at your own risk.");
+    subtitle->setStyleSheet(
+        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
+    subtitle->setWordWrap(true);
+    vl->addWidget(subtitle);
     vl->addSpacing(12);
 
-    // Panel container
+    // Panel
     auto* panel = new QWidget(this);
     panel->setStyleSheet(QString("background: %1; border: 1px solid %2; border-radius: 2px;")
                              .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
@@ -84,66 +85,57 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
     pvl->setContentsMargins(20, 16, 20, 16);
     pvl->setSpacing(6);
 
-    // Section 1
-    pvl->addWidget(section_heading("1", "ACCEPTANCE OF TERMS"));
-    pvl->addWidget(body_text("By accessing or using Fincept Terminal (\"the Service\"), you agree to be bound by these "
-                             "Terms of Service. If you do not agree to these terms, do not use the Service."));
+    pvl->addWidget(section_heading("1", "LICENSE"));
+    pvl->addWidget(body_text(
+        "finterm is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0). "
+        "The full license text is in the LICENSE file in the repository root and at "
+        "https://www.gnu.org/licenses/agpl-3.0.html. By using, modifying, or distributing this software you "
+        "agree to comply with the license."));
 
-    // Section 2
-    pvl->addWidget(section_heading("2", "DESCRIPTION OF SERVICE"));
-    pvl->addWidget(body_text("Fincept Terminal is a desktop financial intelligence terminal providing market data, "
-                             "analytics, trading tools, and AI-powered research capabilities."));
+    pvl->addWidget(section_heading("2", "NO WARRANTY"));
+    pvl->addWidget(body_text(
+        "This software is provided \"AS IS\", without warranty of any kind, express or implied, including "
+        "but not limited to the warranties of merchantability, fitness for a particular purpose, and non-infringement. "
+        "In no event shall the authors or copyright holders be liable for any claim, damages, or other liability "
+        "arising from the use of the software."));
 
-    // Section 3
-    pvl->addWidget(section_heading("3", "USER ACCOUNTS AND REGISTRATION"));
-    pvl->addWidget(
-        body_text("To access certain features, you must create an account. You are responsible for maintaining "
-                  "the confidentiality of your account credentials and for all activities under your account."));
+    pvl->addWidget(section_heading("3", "NOT FINANCIAL ADVICE"));
+    pvl->addWidget(body_text(
+        "All market data, fundamentals, technical indicators, AI-generated commentary, and analytics displayed "
+        "by this software are for informational and educational purposes only. Nothing in this software constitutes "
+        "investment, legal, or tax advice. Do your own research; consult a licensed professional before making "
+        "financial decisions."));
+    pvl->addWidget(bullet("Market data may be delayed, incomplete, or wrong"));
+    pvl->addWidget(bullet("Backtests are historical and not predictive"));
+    pvl->addWidget(bullet("AI outputs may be inaccurate or fabricated"));
+    pvl->addWidget(bullet("You bear full responsibility for any trades you place"));
 
-    // Section 4
-    pvl->addWidget(section_heading("4", "ACCEPTABLE USE POLICY"));
-    pvl->addWidget(body_text("You agree not to:"));
-    pvl->addWidget(bullet("Use the Service for any unlawful purpose"));
-    pvl->addWidget(bullet("Attempt to gain unauthorized access to any part of the Service"));
-    pvl->addWidget(bullet("Interfere with or disrupt the Service or its servers"));
-    pvl->addWidget(bullet("Reverse engineer, decompile, or disassemble any part of the Service"));
-    pvl->addWidget(bullet("Use automated means to access the Service without permission"));
+    pvl->addWidget(section_heading("4", "DATA SOURCES"));
+    pvl->addWidget(body_text(
+        "Market data is fetched on your behalf from public APIs (Yahoo Finance, Stooq, akshare, FRED, etc.) "
+        "subject to those providers' own terms of service. You are responsible for complying with each provider's "
+        "rate limits and usage rules."));
 
-    // Section 5
-    pvl->addWidget(section_heading("5", "DATA AND PRIVACY"));
-    pvl->addWidget(body_text("Your use of the Service is also governed by our Privacy Policy. By using the Service, "
-                             "you consent to the collection and use of information as described therein."));
+    pvl->addWidget(section_heading("5", "NO COMMERCIAL SUPPORT"));
+    pvl->addWidget(body_text(
+        "This is a community open-source project. There is no commercial support, no SLA, no help desk, no "
+        "guaranteed response time. Use GitHub issues / discussions for community-level help."));
 
-    // Section 6
-    pvl->addWidget(section_heading("6", "SUBSCRIPTION AND BILLING"));
-    pvl->addWidget(
-        body_text("Certain features require a paid subscription. Subscriptions are billed in advance. "
-                  "Refunds are handled according to our refund policy. Credits expire according to plan terms."));
+    pvl->addWidget(section_heading("6", "ACCEPTABLE USE"));
+    pvl->addWidget(body_text("You agree to:"));
+    pvl->addWidget(bullet("Comply with all applicable laws and regulations in your jurisdiction"));
+    pvl->addWidget(bullet("Respect upstream API terms (rate limits, usage caps, etc.)"));
+    pvl->addWidget(bullet("Not use the software to harm others or as part of unauthorized access systems"));
+    pvl->addWidget(bullet("Comply with the AGPL-3.0 source-disclosure requirement when modifying and distributing"));
 
-    // Section 7
-    pvl->addWidget(section_heading("7", "DISCLAIMERS AND LIMITATIONS"));
-    pvl->addWidget(
-        body_text("The Service is provided \"as is\" without warranty of any kind. Fincept Corporation shall not "
-                  "be liable for any indirect, incidental, special, or consequential damages. Financial data "
-                  "and analytics are for informational purposes only and do not constitute investment advice."));
-
-    // Section 8
-    pvl->addWidget(section_heading("8", "TERMINATION"));
-    pvl->addWidget(body_text("We may terminate or suspend your account at any time for violation of these terms. "
-                             "Upon termination, your right to use the Service will immediately cease."));
-
-    // Section 9
-    pvl->addWidget(section_heading("9", "CHANGES TO TERMS"));
-    pvl->addWidget(body_text("We reserve the right to modify these terms at any time. Continued use of the Service "
-                             "after changes constitutes acceptance of the modified terms."));
-
-    // Section 10
-    pvl->addWidget(section_heading("10", "CONTACT INFORMATION"));
-    pvl->addWidget(body_text("For questions about these Terms, contact us at support@fincept.in"));
+    pvl->addWidget(section_heading("7", "MODIFICATIONS TO TERMS"));
+    pvl->addWidget(body_text(
+        "These terms may be updated. The current version always lives in the source tree. Use of any new release "
+        "after an update implies acceptance of the new terms."));
 
     vl->addWidget(panel);
 
-    // Footer navigation
+    // Footer
     auto* footer = new QWidget(this);
     footer->setStyleSheet("background: transparent;");
     auto* fhl = new QHBoxLayout(footer);
@@ -159,13 +151,13 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
         return btn;
     };
 
-    auto* privacy_link = make_link("Privacy Policy");
+    auto* privacy_link = make_link("Privacy");
     connect(privacy_link, &QPushButton::clicked, this, &TermsScreen::navigate_privacy);
     fhl->addWidget(privacy_link);
 
     fhl->addStretch();
 
-    auto* contact_link = make_link("Contact Us");
+    auto* contact_link = make_link("Contact");
     connect(contact_link, &QPushButton::clicked, this, &TermsScreen::navigate_contact);
     fhl->addWidget(contact_link);
 

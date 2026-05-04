@@ -1041,7 +1041,7 @@ void ReportBuilderScreen::on_new() {
 
 void ReportBuilderScreen::on_open() {
     QString path =
-        QFileDialog::getOpenFileName(this, "Open Report", "", "Fincept Report (*.fincept);;JSON (*.json)");
+        QFileDialog::getOpenFileName(this, "Open Report", "", "finterm Report (*.fincept);;JSON (*.json)");
     if (path.isEmpty())
         return;
     auto r = Service::instance().load_from(path);
@@ -1055,7 +1055,7 @@ void ReportBuilderScreen::on_save() {
     QString path = svc.current_file();
     if (path.isEmpty()) {
         path = QFileDialog::getSaveFileName(this, "Save Report", svc.metadata().title,
-                                            "Fincept Report (*.fincept);;JSON (*.json)");
+                                            "finterm Report (*.fincept);;JSON (*.json)");
         if (path.isEmpty())
             return;
     }

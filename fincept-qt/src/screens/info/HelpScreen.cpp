@@ -134,18 +134,11 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
         hl->addLayout(text_vl, 1);
 
-        // GitHub link on the right
-        auto* gh = new QPushButton(QString::fromUtf8("📦  github.com/Fincept-Corporation/FinceptTerminal"));
-        gh->setFlat(true);
-        gh->setCursor(Qt::PointingHandCursor);
-        gh->setStyleSheet(QString("QPushButton { color: %1; font-size: 11px; background: transparent;"
-                                  " border: none; text-align: right; padding: 0;"
-                                  " font-family:'Consolas','Courier New',monospace; }"
-                                  "QPushButton:hover { color: %2; }")
-                              .arg(colors::CYAN(), colors::AMBER()));
-        QObject::connect(gh, &QPushButton::clicked, gh, []() {
-            QDesktopServices::openUrl(QUrl("https://github.com/Fincept-Corporation/FinceptTerminal"));
-        });
+        // Open-source project hint on the right
+        auto* gh = new QLabel(QString::fromUtf8("📦  open source · file issues on GitHub"));
+        gh->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
+                                  " font-family:'Consolas','Courier New',monospace;")
+                              .arg(colors::TEXT_TERTIARY()));
         hl->addWidget(gh);
 
         vl->addWidget(hero);
@@ -251,13 +244,13 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
             {"📊", "How do I connect a broker?",
              "Navigate to Settings → Brokers, select your broker from the list, and enter your "
-             "API key and secret. Fincept supports 18+ brokers including Zerodha, Angel One, "
-             "Upstox, Interactive Brokers, and more."},
+             "API key and secret. Multiple brokers supported (Zerodha, Angel One, Upstox, "
+             "Interactive Brokers, and more). Credentials stay on your machine."},
 
             {"🐍", "Why does Python install at first launch?",
-             "Fincept embeds Python for 1300+ analytics scripts covering CFA-level equity, "
-             "portfolio, derivatives, and quant analysis. The one-time install is ~150 MB and "
-             "happens automatically in the background."},
+             "finterm embeds Python for analytics scripts covering equity, portfolio, derivatives, "
+             "and quant analysis. The one-time install is ~150 MB and happens automatically in "
+             "the background."},
 
             {"💻", "What are the system requirements?",
              "Windows 10+ (x64), macOS 12+, or Linux (glibc 2.31+). 8 GB RAM recommended. "
@@ -265,14 +258,13 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
              "during first-time setup."},
 
             {"🔒", "Is my data secure?",
-             "Credentials are stored encrypted via SecureStorage (OS keychain on each platform). "
-             "API keys are never logged or sent to Fincept servers — they are used only for "
-             "direct broker connections from your machine."},
+             "All data stays on your machine. Credentials are stored encrypted via SecureStorage "
+             "(OS keychain on each platform). API keys are never sent to any server — they are "
+             "used only for direct broker connections from your machine."},
 
             {"🐛", "How do I report a bug?",
-             "Open an issue on GitHub at github.com/Fincept-Corporation/FinceptTerminal/issues. "
-             "Include your OS, version, steps to reproduce, and any error messages you see. "
-             "Screenshots are helpful."},
+             "Open an issue on the GitHub repository (see README for the link). Include your OS, "
+             "version, steps to reproduce, and any error messages you see. Screenshots are helpful."},
         };
 
         for (const auto& f : faqs)
@@ -283,7 +275,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
     // ── Getting Started ────────────────────────────────────────────────────────
     {
-        vl->addWidget(section_header("GETTING STARTED", "New to Fincept? Start here"));
+        vl->addWidget(section_header("GETTING STARTED", "New to finterm? Start here"));
         vl->addSpacing(8);
 
         struct Step {
@@ -292,7 +284,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             const char* detail;
         };
         const Step steps[] = {
-            {"1", "Create an account", "Register at fincept.in or use the in-app sign-up."},
+            {"1", "Create an account", "Use the in-app sign-up — credentials stay on your machine via the localhost stub."},
             {"2", "Complete setup", "The setup wizard installs Python and configures your paths."},
             {"3", "Connect a data source", "Add a broker or enable free data feeds in Data Sources."},
             {"4", "Explore the terminal", "Browse Markets, Research, AI Chat, and QuantLib tabs."},
@@ -346,61 +338,18 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
     // ── Contact & Resources ───────────────────────────────────────────────────
     {
-        vl->addWidget(section_header("CONTACT & RESOURCES"));
+        vl->addWidget(section_header("WHERE TO GO FROM HERE"));
         vl->addSpacing(8);
 
-        auto* grid2 = new QGridLayout;
-        grid2->setSpacing(8);
-
-        struct Contact {
-            const char* icon;
-            const char* label;
-            const char* value;
-            const char* url;
-        };
-        const Contact contacts[] = {
-            {"📦", "GitHub", "github.com/Fincept-Corporation/FinceptTerminal",
-             "https://github.com/Fincept-Corporation/FinceptTerminal"},
-        };
-
-        int ci = 0;
-        for (const auto& c : contacts) {
-            auto* card = new QWidget(this);
-            card->setStyleSheet(
-                QString("background: %1; border: 1px solid %2;").arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-            auto* cl = new QHBoxLayout(card);
-            cl->setContentsMargins(14, 12, 14, 12);
-            cl->setSpacing(10);
-
-            auto* ico = new QLabel(QString::fromUtf8(c.icon));
-            ico->setStyleSheet("background: transparent; font-size: 18px;");
-            cl->addWidget(ico);
-
-            auto* tvl = new QVBoxLayout;
-            tvl->setSpacing(2);
-            auto* lbl = new QLabel(c.label);
-            lbl->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent; %2")
-                                   .arg(colors::TEXT_TERTIARY(), MF));
-
-            auto* val = new QPushButton(c.value);
-            val->setFlat(true);
-            val->setCursor(Qt::PointingHandCursor);
-            val->setStyleSheet(QString("QPushButton { color: %1; font-size: 11px; background: transparent;"
-                                       " border: none; text-align: left; padding: 0; %2 }"
-                                       "QPushButton:hover { color: %3; text-decoration: underline; }")
-                                   .arg(colors::CYAN(), MF, colors::AMBER()));
-            const QString link(c.url);
-            QObject::connect(val, &QPushButton::clicked, val, [link]() { QDesktopServices::openUrl(QUrl(link)); });
-
-            tvl->addWidget(lbl);
-            tvl->addWidget(val);
-            cl->addLayout(tvl, 1);
-
-            grid2->addWidget(card, ci / 2, ci % 2);
-            ++ci;
-        }
-
-        vl->addLayout(grid2);
+        auto* card = new QLabel(
+            "finterm is an open-source community fork. There is no commercial support. "
+            "For bugs, feature requests, and questions, file an issue or discussion on the GitHub "
+            "repository (URL in the project README).");
+        card->setWordWrap(true);
+        card->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: %2;"
+                                    " border: 1px solid %3; padding: 14px; %4")
+                                .arg(colors::TEXT_PRIMARY(), colors::BG_SURFACE(), colors::BORDER_DIM(), MF));
+        vl->addWidget(card);
     }
 
     vl->addStretch();

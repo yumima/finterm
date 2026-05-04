@@ -191,7 +191,7 @@ void LoginScreen::build_login_page() {
     hl->addWidget(title);
     hl->addStretch();
 
-    auto* brand = new QLabel("FINCEPT");
+    auto* brand = new QLabel("FINTERM");
     brand->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: 700;"
                                  "background: transparent; letter-spacing: 0.5px;"
                                  "font-family: 'Consolas','Courier New',monospace;")

@@ -280,7 +280,7 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     const QString ytdlp_program = resolve_ytdlp_program();
     if (ytdlp_program.isEmpty()) {
         set_loading(false);
-        status_label_->setText("yt-dlp not found. Bundle yt-dlp.exe next to FinceptTerminal.exe.");
+        status_label_->setText("yt-dlp not found. Place the binary next to the finterm executable, or install it on your PATH.");
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp not found in app directory or PATH");
         return;
