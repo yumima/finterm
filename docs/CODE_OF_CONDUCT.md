@@ -2,7 +2,7 @@
 
 ## Our Pledge
 
-We pledge to make participation in the Fincept Terminal community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity.
+We pledge to make participation in the finterm community a harassment-free experience for everyone, regardless of age, body size, disability, ethnicity, gender identity, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity.
 
 We pledge to act in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
 
@@ -59,33 +59,17 @@ Given the nature of this financial technology project:
 
 ### Data Contributors
 
-- Verify data source accuracy
-- Respect data provider terms of service
-- Document data formats
-- Handle missing data gracefully
-
-### Documentation Contributors
-
-- Clear, beginner-friendly language
-- Include code examples
-- Keep information up-to-date
-
----
-
-## Enforcement
-
-Community leaders will take appropriate action for violations:
-
-1. **Correction** - Private warning for minor issues
-2. **Warning** - Formal warning with consequences defined
-3. **Temporary Ban** - Temporary removal from community
-4. **Permanent Ban** - Permanent removal for severe violations
+- Verified, accurate data sources
+- Proper attribution and licensing
+- No proprietary data without permission
 
 ---
 
 ## Reporting
 
-**Report unacceptable behavior to:** support@fincept.in
+This is a community open-source project. There is no commercial entity, no support email, and no formal incident-response team.
+
+**Report unacceptable behavior** by opening a GitHub issue (mark it private if the platform supports that) or by reaching out to the maintainer through the contact information on their GitHub profile.
 
 Include:
 - Your contact information
@@ -94,42 +78,32 @@ Include:
 - Date and time
 - Supporting materials (screenshots, links)
 
-**Response Timeline:**
-- Acknowledgment within 48 hours
-- Reporter confidentiality maintained
-- Fair and transparent resolution process
+The maintainer(s) will respond as time allows. There is no guaranteed response time.
 
 ---
 
-## Appeals
+## Enforcement
 
-Appeal within 14 days by emailing support@fincept.in with:
-- Full details of the incident
-- Reason for appeal
-- Additional context or evidence
+Maintainers may, at their discretion:
+- Remove offensive comments, commits, or contributions
+- Temporarily or permanently ban contributors who violate this Code of Conduct
+- Request public or private apologies
+
+Decisions are at the maintainer's discretion. There is no formal appeals process — this is an open-source project, not a workplace HR function.
 
 ---
 
 ## Scope
 
 This Code of Conduct applies:
-- Within all community spaces (GitHub, forums, chat)
-- When representing the community officially
-- At events related to the project
+- Within all community spaces (GitHub issues, discussions, PRs)
+- When representing the project officially
 
 ---
 
 ## Attribution
 
 Adapted from [Contributor Covenant](https://www.contributor-covenant.org), version 2.1.
-
----
-
-## Contact
-
-- **Email:** support@fincept.in
-- **GitHub Issues:** https://github.com/Fincept-Corporation/FinceptTerminal/issues
-- **GitHub Discussions:** https://github.com/Fincept-Corporation/FinceptTerminal/discussions
 
 ---
 

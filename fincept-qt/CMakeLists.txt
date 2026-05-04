@@ -1833,11 +1833,11 @@ target_include_directories(FinceptTerminal PRIVATE
 if(APPLE)
     set_target_properties(FinceptTerminal PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER    "com.fincept.terminal"
-        MACOSX_BUNDLE_BUNDLE_NAME       "Fincept Terminal"
+        MACOSX_BUNDLE_BUNDLE_NAME       "finterm"
         MACOSX_BUNDLE_BUNDLE_VERSION    "${CMAKE_PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_PROJECT_VERSION}"
         MACOSX_BUNDLE_ICON_FILE         "fincept.icns"
-        MACOSX_BUNDLE_COPYRIGHT         "Copyright © 2025 Fincept Corporation"
+        MACOSX_BUNDLE_COPYRIGHT         "Copyright © 2024-2026 finterm contributors"
     )
     # Copy .icns into the bundle Resources folder at build time
     set(_FINCEPT_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.icns")
@@ -2444,12 +2444,11 @@ if(FINCEPT_BUILD_INSTALLER)
 
     # ── CPack general metadata ───────────────────────────────────────────────
     set(CPACK_PACKAGE_NAME "FinceptTerminal")
-    set(CPACK_PACKAGE_VENDOR "Fincept Corporation")
+    set(CPACK_PACKAGE_VENDOR "finterm contributors")
     set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-        "Professional financial intelligence terminal with AI analytics")
-    set(CPACK_PACKAGE_HOMEPAGE_URL
-        "https://github.com/Fincept-Corporation/FinceptTerminal")
+        "finterm — local-first financial-research terminal")
+    set(CPACK_PACKAGE_HOMEPAGE_URL "")
     set(CPACK_RESOURCE_FILE_LICENSE
         "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/com.fincept.terminal.core/meta/license.txt")
     set(CPACK_PACKAGE_ICON
@@ -2477,10 +2476,10 @@ if(FINCEPT_BUILD_INSTALLER)
     endif()
 
     # ── CPackIFW installer configuration ─────────────────────────────────────
-    set(CPACK_IFW_PACKAGE_TITLE "Fincept Terminal")
+    set(CPACK_IFW_PACKAGE_TITLE "finterm")
     set(CPACK_IFW_PACKAGE_NAME "com.fincept.terminal")
-    set(CPACK_IFW_PACKAGE_PUBLISHER "Fincept Corporation")
-    set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "Fincept")
+    set(CPACK_IFW_PACKAGE_PUBLISHER "finterm contributors")
+    set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "finterm")
     set(CPACK_IFW_PACKAGE_ICON
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico")
     set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FinceptMaintenanceTool")
@@ -2548,7 +2547,7 @@ if(FINCEPT_BUILD_INSTALLER)
 
     # ── Define install components ────────────────────────────────────────────
     cpack_add_component(core
-        DISPLAY_NAME "Fincept Terminal"
+        DISPLAY_NAME "finterm"
         DESCRIPTION  "Core application executable and Qt runtime libraries"
         REQUIRED)
 

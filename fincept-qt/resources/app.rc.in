@@ -22,13 +22,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName",      "Fincept Corporation"
-            VALUE "FileDescription",  "Fincept Terminal - Financial Intelligence Platform"
+            VALUE "CompanyName",      "finterm contributors"
+            VALUE "FileDescription",  "finterm - Local-first Financial Research Terminal"
             VALUE "FileVersion",      "@CMAKE_PROJECT_VERSION@"
             VALUE "InternalName",     "FinceptTerminal"
-            VALUE "LegalCopyright",   "Copyright (C) 2025 Fincept Corporation. AGPL-3.0-or-later."
+            VALUE "LegalCopyright",   "Copyright (C) 2024-2026 finterm contributors. AGPL-3.0-or-later."
             VALUE "OriginalFilename", "FinceptTerminal.exe"
-            VALUE "ProductName",      "Fincept Terminal"
+            VALUE "ProductName",      "finterm"
             VALUE "ProductVersion",   "@CMAKE_PROJECT_VERSION@"
         END
     END

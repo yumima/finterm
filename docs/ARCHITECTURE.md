@@ -1,7 +1,7 @@
-# Fincept Terminal Architecture
+# finterm Architecture
 ## Technical Design & System Architecture
 
-This document provides a comprehensive overview of Fincept Terminal v4's architecture — a native C++20 desktop application.
+This document provides a comprehensive overview of finterm v4's architecture — a native C++20 desktop application.
 
 ---
 
@@ -294,8 +294,8 @@ No external package manager required — Qt6 provides all core dependencies.
 
 ## Contact
 
-- **Email:** support@fincept.in
-- **GitHub Issues:** https://github.com/Fincept-Corporation/FinceptTerminal/issues
+- **Email:** (no support email — community open-source project)
+- **GitHub Issues:** GitHub Issues on this repo
 - **Discord:** https://discord.gg/ae87a8ygbN
 
 ---

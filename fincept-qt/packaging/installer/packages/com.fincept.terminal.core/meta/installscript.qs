@@ -64,30 +64,30 @@ Component.prototype.createOperations = function()
         // Start Menu shortcut
         component.addOperation("CreateShortcut",
             targetDir + "/FinceptTerminal.exe",
-            "@StartMenuDir@/Fincept Terminal.lnk",
+            "@StartMenuDir@/finterm.lnk",
             "workingDirectory=" + targetDir,
             "iconPath=" + targetDir + "/FinceptTerminal.exe",
             "iconId=0",
-            "description=Professional Financial Intelligence Terminal");
+            "description=Local-first Financial Research Terminal");
 
         // Desktop shortcut
         component.addOperation("CreateShortcut",
             targetDir + "/FinceptTerminal.exe",
-            "@DesktopDir@/Fincept Terminal.lnk",
+            "@DesktopDir@/finterm.lnk",
             "workingDirectory=" + targetDir,
             "iconPath=" + targetDir + "/FinceptTerminal.exe",
             "iconId=0",
-            "description=Professional Financial Intelligence Terminal");
+            "description=Local-first Financial Research Terminal");
     }
 
     if (systemInfo.kernelType === "linux") {
         component.addOperation("CreateDesktopEntry",
-            "@HomeDir@/.local/share/applications/fincept-terminal.desktop",
+            "@HomeDir@/.local/share/applications/finterm.desktop",
             "Version=1.0\n" +
             "Type=Application\n" +
-            "Name=Fincept Terminal\n" +
-            "GenericName=Financial Intelligence Terminal\n" +
-            "Comment=Professional financial data terminal with AI analytics\n" +
+            "Name=finterm\n" +
+            "GenericName=Financial Research Terminal\n" +
+            "Comment=Local-first financial research terminal\n" +
             "Exec=" + targetDir + "/bin/FinceptTerminal %U\n" +
             "Icon=" + targetDir + "/share/icons/hicolor/256x256/apps/fincept-terminal.png\n" +
             "Terminal=false\n" +
@@ -115,8 +115,8 @@ function onUninstallationStarted()
 
     var answer = QMessageBox.question(
         "fincept.uninstall.data",
-        "Remove Fincept Terminal User Data?",
-        "Do you want to remove all Fincept Terminal user data?\n\n" +
+        "Remove finterm user data?",
+        "Do you want to remove all finterm user data?\n\n" +
         "This includes:\n" +
         "  - Databases (chat history, portfolio, watchlists)\n" +
         "  - Log files\n" +

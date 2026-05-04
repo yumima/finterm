@@ -1,6 +1,6 @@
-# Contributing to Fincept Terminal
+# Contributing to finterm
 
-Fincept Terminal is an open-source native C++20/Qt6 financial intelligence platform with 50+ screens, embedded Python analytics, and 100+ data connectors. This guide is the canonical **how-to** for contributors — build, architecture, conventions.
+finterm is a community open-source fork — a native C++20/Qt6 financial-research terminal with embedded Python analytics. This guide is the canonical **how-to** for contributors: build, architecture, conventions.
 
 > **Before you open a PR**, also read the contribution **policy**: [`.github/CONTRIBUTING.md`](../.github/CONTRIBUTING.md). Policy defines which PRs are accepted (linked approved issue, minimum scope, no auto-formatter churn, etc.); this file covers how to build and where code lives.
 
@@ -71,10 +71,11 @@ Optional (speeds up rebuilds): **ccache 4.13.4** on Windows is auto-detected.
 ### Fastest — automated setup script
 
 ```bash
-git clone https://github.com/Fincept-Corporation/FinceptTerminal.git
-cd FinceptTerminal
-./setup.sh      # Linux / macOS — installs toolchain + Qt via aqtinstall, then builds
-setup.bat       # Windows — run from a VS 2022 Developer Command Prompt
+git clone <this-repo-url> ~/fin/finterm
+cd ~/fin/finterm
+./setup.sh        # Linux / macOS — installs toolchain + Qt via aqtinstall
+./finterm.sh build
+setup.bat         # Windows — run from a VS 2022 Developer Command Prompt
 ```
 
 ### Manual — CMake presets
@@ -115,6 +116,8 @@ cmake --build build/win-release
 ./build/macos-release/FinceptTerminal.app/Contents/MacOS/FinceptTerminal          # macOS
 ```
 
+(The binary name is `FinceptTerminal` because the project's CMake target was inherited from upstream — renaming it would break installers and registered file types. Day-to-day, just use `finterm.sh start`.)
+
 ---
 
 ## Project Architecture
@@ -122,17 +125,20 @@ cmake --build build/win-release
 ### Repository layout
 
 ```
-finceptTerminal/
+finterm/
 ├── fincept-qt/                 # Main C++ application (all development happens here)
 │   ├── src/                    # C++ source
 │   ├── scripts/                # Embedded Python analytics (4000+ files)
-│   ├── resources/              # Icons, assets, Qt resources
+│   ├── resources/              # Icons, knowledge content, Qt resources
 │   ├── CMakeLists.txt
 │   ├── CMakePresets.json
 │   ├── CLAUDE.md               # Performance/architecture rules (P1–P15, D1–D5)
 │   └── DESIGN_SYSTEM.md        # Obsidian UI/UX spec
 ├── docs/                       # Repo-wide documentation (this file lives here)
+├── tools/                      # Localhost stub server, systemd unit
 ├── .github/                    # Issue/PR templates, workflows, contribution policy
+├── finterm.sh                  # one-stop CLI: start / build / reset / install / stop / status
+├── setup.sh                    # toolchain preflight + provisioner
 └── README.md
 ```
 
@@ -144,13 +150,13 @@ src/
 ├── core/             # Config, events, logging, Result<T>, session
 ├── ui/               # Theme, reusable widgets, tables, charts, navigation
 ├── network/          # http/ and websocket/ clients
-├── storage/          # SQLite, cache, secure storage, 16 repositories
-├── auth/             # Guest + registered auth, JWT
+├── storage/          # SQLite, cache, secure storage, repositories
+├── auth/             # Guest + registered auth, JWT (against localhost stub)
 ├── python/           # Embedded Python bridge, PythonRunner
-├── datahub/          # DataHub producers/consumers (see DATAHUB_ARCHITECTURE.md)
-├── services/         # 18 service domains — market data, news, agents, workflow, etc.
-├── trading/          # Trading core + 18 broker integrations
-├── mcp/              # Model Context Protocol infrastructure (24 tool modules)
+├── datahub/          # DataHub producers/consumers
+├── services/         # Service domains — market data, news, agents, workflow, etc.
+├── trading/          # Trading core + broker integrations
+├── mcp/              # Model Context Protocol infrastructure
 ├── ai_chat/          # AI chat UI + LlmService
 └── screens/          # 50+ terminal screens, one subdirectory each
 ```
@@ -161,7 +167,7 @@ src/
 scripts/
 ├── Analytics/        # CFA-level quant modules — equity, portfolio, derivatives,
 │                     #   fixed income, economics, corporate finance
-├── agents/           # AI agent frameworks (finagent_core, Geopolitics, HedgeFund, …)
+├── agents/           # AI agent frameworks
 ├── ai_quant_lab/     # ML, factor discovery, HFT, RL trading, vision quant
 ├── agno_trading/     # Agno-based trading agents
 └── *.py              # 100+ top-level data fetchers (market, gov, economic, alt)
@@ -177,7 +183,7 @@ See `fincept-qt/CLAUDE.md` for the detailed service catalog and architecture rul
 
 - **Standard:** C++20
 - **Naming:** `snake_case` functions/variables, `PascalCase` types/classes
-- **Namespaces:** `namespace fincept {}`, `namespace fincept::ui {}`; never `using namespace std;`
+- **Namespaces:** `namespace fincept {}`, `namespace fincept::ui {}`; never `using namespace std;` (the `fincept` namespace name is a code-internal vestige from the upstream project — keep it, it's not user-visible)
 - **Qt:** `Q_OBJECT` in all QObject subclasses; pointer-to-member signal/slot syntax only (never `SIGNAL()`/`SLOT()` string macros)
 - **Error handling:** `Result<T>` — no raw exception-based APIs across module boundaries
 - **Logging:** `LOG_INFO` / `LOG_WARN` / `LOG_ERROR` / `LOG_DEBUG` with a context tag, e.g. `LOG_INFO("MarketData", "Fetched 12 quotes")`. Never log API keys or credentials.
@@ -251,18 +257,18 @@ Review process, scope gate, and close-on-sight list are in [`.github/CONTRIBUTIN
 
 ---
 
-## Getting Help
+## Questions before you code?
 
-| Channel      | Link                                                                          |
-|--------------|-------------------------------------------------------------------------------|
-| Issues       | [GitHub Issues](https://github.com/Fincept-Corporation/FinceptTerminal/issues) |
-| Discussions  | [GitHub Discussions](https://github.com/Fincept-Corporation/FinceptTerminal/discussions) |
-| Discord      | [discord.gg/ae87a8ygbN](https://discord.gg/ae87a8ygbN)                         |
-| Email        | support@fincept.in                                                             |
+Ask on the issue before writing code — maintainers can scope-approve early and save you a wasted PR.
 
-Good first issues carry the `good-first-issue` label — those are the right starting point for new contributors.
+| Channel     | Link                                                   |
+|-------------|--------------------------------------------------------|
+| Issues      | GitHub Issues on this repository                       |
+| Discussions | GitHub Discussions on this repository                  |
+| Discord     | [discord.gg/ae87a8ygbN](https://discord.gg/ae87a8ygbN) |
+
+This is a community open-source project. There is no commercial support email or formal SLA — patches and PRs are the path to fixes. Good first issues carry the `good-first-issue` label.
 
 ---
 
-**Repository:** https://github.com/Fincept-Corporation/FinceptTerminal
 **License:** AGPL-3.0-or-later

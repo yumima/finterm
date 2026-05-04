@@ -1,77 +1,22 @@
-# Commercial & Educational Licensing
+# Commercial License
 
-## Overview
+**finterm has no separate commercial license.** It is distributed exclusively under **AGPL-3.0-or-later**.
 
-Fincept Terminal is dual-licensed under **AGPL-3.0** (free for personal/educational use) and **Commercial License** (required for business use).
+That means:
 
-Commercial licensing is required to access Fincept Data Sources and APIs for business use.
+- **Free for any use** (personal, educational, commercial, internal-business, embedded in your own product) as long as you comply with the AGPL.
+- **No SaaS / network-service exception.** If you run a modified version of finterm as a network service (web app, hosted dashboard, API behind a frontend), the AGPL requires you to make your modified source available to your users (sections 6 and 13 of the license).
+- **No paid tiers, no enterprise edition, no priority-support contract.**
 
----
+If you need a non-AGPL license for a closed-source commercial deployment, you would need to negotiate that with the upstream rights holder of the original codebase — see the README's attribution section for the upstream link. This fork itself doesn't grant non-AGPL rights.
 
-## Do I Need a Commercial License?
+## Data sources
 
-**Free (No License Needed):** Personal use & learning, Individual students, Open source contributions, Using your own data sources
+The market-data APIs the app calls (Yahoo Finance, Stooq, akshare, FRED, etc.) have their **own** terms of service. You're responsible for complying with each provider's rate limits and acceptable-use rules — that's separate from finterm's own license.
 
-**Commercial License Required:** Any business use, Startups (even $0 revenue), Internal company use, Using Fincept Data/APIs commercially, SaaS/Cloud platforms, White-label/Reselling
+## Read the license
 
----
+- [`LICENSE`](../LICENSE) — full AGPL-3.0 text (binding)
+- [GNU AGPL-3.0 official text](https://www.gnu.org/licenses/agpl-3.0.html)
 
-## Pricing
-
-**Commercial License - $10,200/year**
-- Fincept Data & API Access (Full access)
-- 65,000 credits/month (resets monthly)
-- Additional credits available for purchase
-
-**Technical Support (Optional) - $149/month**
-- Priority support, Direct technical assistance, Faster response times
-
-**University & Academic - $799/month**
-- 20 accounts for teaching & research
-- Fincept Data Access included
-- For accredited educational institutions only
-
-**Custom Enterprise - Contact for pricing**
-- Tailored requirements, Custom integrations, Higher credit limits, Dedicated support, Custom SLAs
-
----
-
-## Credits
-
-Credits are used for Fincept Data Sources and API calls.
-
-- **Commercial:** 65,000/month
-- **University:** Included in plan
-- **Custom:** Based on agreement
-
-When credits run out: Purchase additional credits OR wait for monthly reset.
-
----
-
-## How to Get Started
-
-1. **Contact Us** - Email support@fincept.in with company name, use case, and number of users
-2. **Agreement** - Review and sign license agreement, complete payment
-3. **Access** - Receive credentials and access Fincept Data & APIs
-
----
-
-## Contact
-
-**Email:** support@fincept.in | **Phone:** +91-9773034108 | **Website:** https://fincept.in
-
----
-
-## Terms
-
-Licenses are non-transferable. Annual licenses renew yearly. Refunds within 30 days if credits are unused. Fincept Corporation reserves right to modify pricing.
-
-## Trademark
-
-"Fincept", "Fincept Terminal", and the Fincept logo are trademarks of Fincept Corporation. Use requires written permission.
-
----
-
-**Last Updated:** March 2026
-
-For full license terms, see [LICENSE](../LICENSE).
+For the practical TL;DR of what AGPL-3.0 actually requires, the in-app **Terms** screen has a plain-English summary.

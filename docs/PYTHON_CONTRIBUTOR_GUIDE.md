@@ -1,6 +1,6 @@
 # Python Contributor Guide
 
-This guide covers Python development for Fincept Terminal — 100+ scripts including 34 Analytics modules and 80+ data fetchers.
+This guide covers Python development for finterm — 100+ scripts including 34 Analytics modules and 80+ data fetchers.
 
 > **Prerequisites**: Read the [Contributing Guide](./CONTRIBUTING.md) first for setup and workflow.
 
@@ -8,7 +8,7 @@ This guide covers Python development for Fincept Terminal — 100+ scripts inclu
 
 ## Overview
 
-Python powers Fincept Terminal's analytics and data capabilities:
+Python powers finterm's analytics and data capabilities:
 - **34 Analytics modules** — Financial calculations, portfolio optimization, ML models
 - **80+ Data fetchers** — APIs for market data, economics, government sources
 - **AI Agents** — Geopolitical analysis, trading strategies
@@ -203,4 +203,4 @@ python Analytics/quantstats_analytics.py metrics '{"returns":[0.01,0.02,-0.01]}'
 
 ---
 
-**Questions?** Open an issue on [GitHub](https://github.com/Fincept-Corporation/FinceptTerminal).
+**Questions?** Open an issue on [GitHub](the project repository).

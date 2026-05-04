@@ -1,6 +1,6 @@
 # C++ Contributor Guide
 
-This guide covers C++ development for Fincept Terminal — 40+ screens, core infrastructure, trading engine, and Qt6 UI.
+This guide covers C++ development for finterm — 40+ screens, core infrastructure, trading engine, and Qt6 UI.
 
 > **Prerequisites**: Read the [Contributing Guide](./CONTRIBUTING.md) first for setup and workflow.
 
@@ -228,4 +228,4 @@ perf: optimize order book rendering
 
 ---
 
-**Questions?** Open an issue on [GitHub](https://github.com/Fincept-Corporation/FinceptTerminal).
+**Questions?** Open an issue on [GitHub](the project repository).

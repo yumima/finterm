@@ -1,13 +1,13 @@
-# Getting Started with Fincept Terminal Development
+# Getting Started with finterm Development
 ## Your Complete Onboarding Guide
 
-Welcome to Fincept Terminal! This guide will get you from zero to your first contribution.
+Welcome to finterm! This guide will get you from zero to your first contribution.
 
 ---
 
-## What is Fincept Terminal?
+## What is finterm?
 
-Fincept Terminal is an **open-source financial analysis platform** — a free, open-source alternative to Bloomberg Terminal. Version 4 is a native C++20 application built with Qt6.
+finterm is an **open-source financial analysis platform** — a free, open-source alternative to Bloomberg Terminal. Version 4 is a native C++20 application built with Qt6.
 
 ### The Big Picture
 
@@ -37,7 +37,7 @@ Fincept Terminal is an **open-source financial analysis platform** — a free, o
 
 ### Prerequisites (pinned versions — required)
 
-> **Use exactly these versions.** Fincept Terminal's CMake build enforces them with `FATAL_ERROR` checks. Newer/older versions will refuse to configure.
+> **Use exactly these versions.** finterm's CMake build enforces them with `FATAL_ERROR` checks. Newer/older versions will refuse to configure.
 
 | Tool | Pinned Version |
 |------|----------------|
@@ -85,8 +85,8 @@ sudo apt install -y \
 
 ```bash
 # 1. Clone
-git clone https://github.com/Fincept-Corporation/FinceptTerminal.git
-cd FinceptTerminal/fincept-qt
+git clone <this-repo-url>
+cd finterm/fincept-qt
 
 # 2. Configure + Build (pick your platform)
 cmake --preset win-release     && cmake --build --preset win-release     # Windows (Dev Cmd for VS 2022)
@@ -106,7 +106,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build
 ```
 
-**Expected Result:** Fincept Terminal window should open, showing the login screen.
+**Expected Result:** finterm window should open, showing the login screen.
 
 ### Verify Everything Works
 
@@ -123,7 +123,7 @@ Once the app opens:
 ### Project Structure
 
 ```
-FinceptTerminal/
+finterm/
 │
 ├── fincept-qt/                     ← Main application (you'll work here)
 │   ├── src/                        ← C++ source code
@@ -309,14 +309,14 @@ sudo apt install libgl1-mesa-dev libglu1-mesa-dev
 
 | Channel | Link |
 |---------|------|
-| GitHub Issues | https://github.com/Fincept-Corporation/FinceptTerminal/issues |
-| GitHub Discussions | https://github.com/Fincept-Corporation/FinceptTerminal/discussions |
+| GitHub Issues | GitHub Issues on this repo |
+| GitHub Discussions | GitHub Discussions on this repo |
 | Discord | https://discord.gg/ae87a8ygbN |
-| Email | support@fincept.in |
+| Email | (no support email — community open-source project) |
 
 ---
 
 **Ready to contribute?**
-- Pick an issue: https://github.com/Fincept-Corporation/FinceptTerminal/issues
+- Pick an issue: GitHub Issues on this repo
 - Read the C++ guide: [fincept-qt/CONTRIBUTING.md](../fincept-qt/CONTRIBUTING.md)
 - Read the Python guide: [PYTHON_CONTRIBUTOR_GUIDE.md](./PYTHON_CONTRIBUTOR_GUIDE.md)
