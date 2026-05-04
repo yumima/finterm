@@ -518,9 +518,12 @@ void MarketsScreen::showEvent(QShowEvent* event) {
     if (auto_update_ && auto_refresh_timer_) auto_refresh_timer_->start();
     if (session_timer_) session_timer_->start();
     if (clock_timer_)   clock_timer_->start();
-    bool needs_refresh = !last_refresh_time_.isValid() ||
-        last_refresh_time_.secsTo(QDateTime::currentDateTime()) >= kMinRefreshIntervalSec;
-    if (needs_refresh) refresh_all();
+    // User just brought MARKETS to the front — drop the quote cache and
+    // always refresh so they see fresh data, not whatever was last cached.
+    // The DataHub min_interval (2s) still rate-limits actual outbound calls,
+    // so rapid tab switching won't hammer yfinance.
+    services::MarketDataService::instance().invalidate_quotes({});
+    refresh_all();
 }
 
 void MarketsScreen::hideEvent(QHideEvent* event) {

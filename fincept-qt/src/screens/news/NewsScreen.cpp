@@ -295,11 +295,11 @@ void NewsScreen::showEvent(QShowEvent* e) {
         auto saved_result = fincept::NewsArticleRepository::instance().load_saved();
         if (saved_result.is_ok())
             side_panel_->update_saved(saved_result.value());
-
-        LOG_INFO("NewsScreen", "showEvent: calling on_refresh");
-        on_refresh();
-        LOG_INFO("NewsScreen", "showEvent: on_refresh returned");
     }
+
+    // Force-fresh on every tab activation — user re-opening NEWS expects to
+    // see the latest articles, not whatever was last loaded.
+    on_refresh();
 }
 
 void NewsScreen::hideEvent(QHideEvent* e) {

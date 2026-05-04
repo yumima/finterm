@@ -14,6 +14,7 @@
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "services/equity/EquityResearchService.h"
+#include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
@@ -31,7 +32,7 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
 
     // Refresh timer — only started in showEvent
     refresh_timer_ = new QTimer(this);
-    refresh_timer_->setInterval(30 * 1000); // 30s quote refresh
+    refresh_timer_->setInterval(20 * 1000); // 20s quote refresh
     connect(refresh_timer_, &QTimer::timeout, this, [this]() {
         if (!current_symbol_.isEmpty())
             services::equity::EquityResearchService::instance().load_symbol(current_symbol_);
@@ -94,6 +95,12 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
 void EquityResearchScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     refresh_timer_->start();
+    // Force-fresh on tab activation: invalidate the quote cache and re-load
+    // the active symbol so the user always sees the latest data.
+    if (!current_symbol_.isEmpty()) {
+        services::MarketDataService::instance().invalidate_quotes({current_symbol_});
+        services::equity::EquityResearchService::instance().load_symbol(current_symbol_);
+    }
 }
 
 void EquityResearchScreen::hideEvent(QHideEvent* e) {

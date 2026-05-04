@@ -12,7 +12,7 @@ namespace fincept::screens::futures {
 
 /// Default refresh cadence for the quote cache and the Futures screen's own
 /// refresh tick. One source of truth so they don't drift.
-inline constexpr int kFuturesRefreshIntervalMs = 60'000;
+inline constexpr int kFuturesRefreshIntervalMs = 20'000;
 
 /// Process-wide singleton holding the most recent quote for every contract
 /// in the catalog. Backed by one batched yfinance fetch — far cheaper than

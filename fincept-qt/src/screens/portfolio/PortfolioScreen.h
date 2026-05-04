@@ -80,7 +80,11 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     QWidget* build_main_view();
     void update_content_state();
     void update_main_view_data();
-    void request_refresh();
+    /// @param force_fresh true on user-initiated refresh (tab show, portfolio
+    ///        change, refresh button) — drops the quote cache so the next
+    ///        fetch hits the data source. Timer-driven ticks pass false so
+    ///        background polling can still benefit from the cache TTL.
+    void request_refresh(bool force_fresh = false);
     void load_demo_portfolio();
     void reposition_order_panel();
     void animate_order_panel_in();
@@ -122,7 +126,7 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
 
     // Refresh timer (P3)
     QTimer* refresh_timer_ = nullptr;
-    int refresh_interval_ms_ = 60000;
+    int refresh_interval_ms_ = 20000;
 
     // Order panel slide-in animation
     QPropertyAnimation* order_panel_anim_ = nullptr;

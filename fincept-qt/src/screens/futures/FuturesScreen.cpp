@@ -3,6 +3,7 @@
 #include "screens/futures/FuturesContracts.h"
 #include "screens/futures/FuturesPanels.h"
 #include "screens/futures/FuturesQuoteCache.h"
+#include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -49,6 +50,9 @@ void FuturesScreen::showEvent(QShowEvent* event) {
     FuturesQuoteCache::instance().retain();
     if (refresh_timer_ && !refresh_timer_->isActive())
         refresh_timer_->start();
+    // Force-fresh on tab activation so the user always sees the latest data.
+    services::MarketDataService::instance().invalidate_quotes({});
+    refresh_all();
 }
 
 void FuturesScreen::hideEvent(QHideEvent* event) {

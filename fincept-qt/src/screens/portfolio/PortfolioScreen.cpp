@@ -18,6 +18,7 @@
 #include "screens/portfolio/PortfolioStatusBar.h"
 #include "screens/portfolio/PortfolioTxnPanel.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
@@ -118,7 +119,9 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     // Refresh timer (P3: only set interval, don't start)
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(refresh_interval_ms_);
-    connect(refresh_timer_, &QTimer::timeout, this, &PortfolioScreen::request_refresh);
+    // Timer ticks → background polling; don't bypass the cache (let TTL govern).
+    connect(refresh_timer_, &QTimer::timeout, this,
+            [this]() { request_refresh(/*force_fresh=*/false); });
     command_bar_->set_refresh_interval(refresh_interval_ms_);
 
     // Load portfolios
@@ -144,7 +147,9 @@ void PortfolioScreen::build_ui() {
     connect(command_bar_, &PortfolioCommandBar::portfolio_selected, this, &PortfolioScreen::on_portfolio_selected);
     connect(command_bar_, &PortfolioCommandBar::create_requested, this, &PortfolioScreen::on_create_requested);
     connect(command_bar_, &PortfolioCommandBar::delete_requested, this, &PortfolioScreen::on_delete_requested);
-    connect(command_bar_, &PortfolioCommandBar::refresh_requested, this, &PortfolioScreen::request_refresh);
+    // User clicked the refresh button → bypass cache so they always feel "live".
+    connect(command_bar_, &PortfolioCommandBar::refresh_requested, this,
+            [this]() { request_refresh(/*force_fresh=*/true); });
     connect(command_bar_, &PortfolioCommandBar::refresh_interval_changed, this,
             &PortfolioScreen::on_refresh_interval_changed);
     connect(command_bar_, &PortfolioCommandBar::detail_view_selected, this, &PortfolioScreen::on_detail_view_selected);
@@ -557,6 +562,10 @@ void PortfolioScreen::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     refresh_timer_->start();
     status_bar_->start_clock();
+    // User just brought this tab to the front — make sure they see fresh data,
+    // not whatever was last cached. Force-fresh bypasses the quote TTL.
+    if (!selected_id_.isEmpty())
+        request_refresh(/*force_fresh=*/true);
 }
 
 void PortfolioScreen::hideEvent(QHideEvent* event) {
@@ -588,6 +597,10 @@ void PortfolioScreen::on_portfolios_loaded(QVector<portfolio::Portfolio> portfol
 void PortfolioScreen::on_portfolio_selected(const QString& id) {
     if (id == selected_id_ && summary_loaded_)
         return;
+
+    // Drop quote cache so the new portfolio's holdings get fresh values.
+    // (Cheap; CacheManager.remove_prefix is one DB op.)
+    services::MarketDataService::instance().invalidate_quotes({});
 
     selected_id_ = id;
     ScreenStateManager::instance().notify_changed(this);
@@ -774,11 +787,17 @@ void PortfolioScreen::on_refresh_interval_changed(int ms) {
     SettingsRepository::instance().set("portfolio.refresh_interval_ms", QString::number(ms), "portfolio");
 }
 
-void PortfolioScreen::request_refresh() {
-    if (!selected_id_.isEmpty()) {
-        command_bar_->set_refreshing(true);
-        services::PortfolioService::instance().refresh_summary(selected_id_);
+void PortfolioScreen::request_refresh(bool force_fresh) {
+    if (selected_id_.isEmpty())
+        return;
+    if (force_fresh) {
+        // Drop the quote cache so the upcoming refresh hits the data source.
+        // The DataHub min_interval (2s) still rate-limits actual outbound
+        // calls, so this is safe even on rapid tab switches.
+        services::MarketDataService::instance().invalidate_quotes({});
     }
+    command_bar_->set_refreshing(true);
+    services::PortfolioService::instance().refresh_summary(selected_id_);
 }
 
 // ── Phase 3: Main view construction ──────────────────────────────────────────

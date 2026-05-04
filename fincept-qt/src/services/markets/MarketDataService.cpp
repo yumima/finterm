@@ -275,6 +275,18 @@ void MarketDataService::ensure_registered_with_hub() {
 }
 
 
+// ── Cache invalidation ──────────────────────────────────────────────────────
+
+void MarketDataService::invalidate_quotes(const QStringList& symbols) {
+    if (symbols.isEmpty()) {
+        // Bulk clear: drop everything in the "market:" prefix bucket.
+        fincept::CacheManager::instance().remove_prefix("market:");
+        return;
+    }
+    for (const auto& sym : symbols)
+        fincept::CacheManager::instance().remove("market:" + sym);
+}
+
 // ── Batched + Cached fetch_quotes ───────────────────────────────────────────
 
 void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb) {

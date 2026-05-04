@@ -101,6 +101,14 @@ class MarketDataService : public QObject
     /// This callback API remains for one-shot reads (e.g. report builder snapshots).
     void fetch_quotes(const QStringList& symbols, QuoteCallback cb);
 
+    /// Drop cached quote entries for the given symbols, forcing the next
+    /// fetch_quotes() call to hit the data source. The DataHub min_interval
+    /// (currently 2s) still rate-limits actual outbound calls, so rapid tab
+    /// switching won't hammer yfinance. Pass an empty list to clear all.
+    /// Use this on user-initiated refresh (tab activation, refresh button,
+    /// portfolio selection change) so the user always feels the data is live.
+    void invalidate_quotes(const QStringList& symbols = {});
+
     using NewsCallback = std::function<void(bool, QJsonArray)>;
     void fetch_news(const QString& symbol, int count, NewsCallback cb);
 
