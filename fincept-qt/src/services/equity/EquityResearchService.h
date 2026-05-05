@@ -43,7 +43,7 @@ class EquityResearchService : public QObject {
     void historical_loaded(QString symbol, QString period, QVector<fincept::services::equity::Candle> candles);
     void financials_loaded(fincept::services::equity::FinancialsData data);
     void technicals_loaded(fincept::services::equity::TechnicalsData data);
-    void peers_loaded(QVector<fincept::services::equity::PeerData> peers);
+    void peers_loaded(QString symbol, QVector<fincept::services::equity::PeerData> peers);
     void news_loaded(QString symbol, QVector<fincept::services::equity::NewsArticle> articles);
     void talipp_result(QString indicator, QVector<double> values, QVector<qint64> timestamps);
     void error_occurred(QString context, QString message);
@@ -75,7 +75,7 @@ class EquityResearchService : public QObject {
     StockInfo parse_info(const QJsonObject& obj) const;
     QVector<Candle> parse_candles(const QJsonArray& arr) const;
     FinancialsData parse_financials(const QJsonObject& obj) const;
-    TechnicalsData parse_technicals(const QString& symbol, const QJsonArray& rows) const;
+    TechnicalsData parse_technicals(const QString& symbol, const QString& period, const QJsonArray& rows) const;
     TechSignal score_indicator(const QString& name, double value, double sma20, double sma50) const;
     QVector<PeerData> parse_peers(const QJsonArray& arr) const;
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;

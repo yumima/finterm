@@ -255,7 +255,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         if (!tcv.isNull()) {
             const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (cached_doc.isArray()) {
-                emit technicals_loaded(parse_technicals(symbol, cached_doc.array()));
+                emit technicals_loaded(parse_technicals(symbol, period, cached_doc.array()));
                 return;
             }
         }
@@ -290,7 +290,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 fincept::CacheManager::instance().put(
                     "equity:technicals:" + symbol + ":" + period, QVariant(blob),
                     kTechnicalsTtlSec, "equity");
-                emit self->technicals_loaded(self->parse_technicals(symbol, data));
+                emit self->technicals_loaded(self->parse_technicals(symbol, period, data));
             },
             python::PythonWorker::kComputeActionTimeoutMs);
     };
@@ -351,7 +351,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
         const QVariant pcv = fincept::CacheManager::instance().get(cache_key);
         if (!pcv.isNull()) {
             const auto arr = QJsonDocument::fromJson(pcv.toString().toUtf8()).array();
-            emit peers_loaded(parse_peers(arr));
+            emit peers_loaded(symbol, parse_peers(arr));
             return;
         }
     }
@@ -366,7 +366,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
-    run_daemon("multiple_ratios", payload, [this, cache_key](bool ok, QJsonObject result, QString err) {
+    run_daemon("multiple_ratios", payload, [this, symbol, cache_key](bool ok, QJsonObject result, QString err) {
         release_inflight(cache_key);
         if (!ok) {
             emit error_occurred("Peers", "Failed to fetch peer data: " + err);
@@ -380,7 +380,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
             cache_key,
             QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kPeersTtlSec, "equity");
-        emit peers_loaded(parse_peers(arr));
+        emit peers_loaded(symbol, parse_peers(arr));
     });
 }
 
@@ -703,9 +703,11 @@ TechSignal EquityResearchService::score_indicator(const QString& name, double va
     return TechSignal::Neutral;
 }
 
-TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, const QJsonArray& rows) const {
+TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, const QString& period,
+                                                        const QJsonArray& rows) const {
     TechnicalsData td;
     td.symbol = symbol;
+    td.period = period;
     if (rows.isEmpty())
         return td;
 

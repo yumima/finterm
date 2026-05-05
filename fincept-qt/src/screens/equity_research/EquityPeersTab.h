@@ -17,7 +17,7 @@ class EquityPeersTab : public QWidget {
     void set_symbol(const QString& symbol);
 
   private slots:
-    void on_peers_loaded(QVector<services::equity::PeerData> peers);
+    void on_peers_loaded(QString symbol, QVector<services::equity::PeerData> peers);
     void on_load_clicked();
 
   private:
