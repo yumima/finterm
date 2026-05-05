@@ -77,6 +77,11 @@ EquityAnalysisTab::EquityAnalysisTab(QWidget* parent) : QWidget(parent) {
     build_ui();
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityAnalysisTab::on_info_loaded);
+    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
+            [this](const QString& context, const QString&) {
+                if (context != "Info") return;
+                if (loading_overlay_) loading_overlay_->hide_loading();
+            });
 }
 
 void EquityAnalysisTab::set_symbol(const QString& symbol) {

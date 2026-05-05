@@ -84,6 +84,7 @@ class EquityResearchService : public QObject {
     static constexpr int kQuoteTtlSec = 30;
     static constexpr int kInfoTtlSec = 300;
     static constexpr int kHistoricalTtlSec = 120;
+    static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
     static constexpr int kNewsTtlSec = 180;
     // Financials are quarterly — no need to refetch within a session.
     static constexpr int kFinancialsTtlSec = 3600;

@@ -17,6 +17,11 @@ EquityNewsTab::EquityNewsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::news_loaded, this, &EquityNewsTab::on_news_loaded);
+    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
+            [this](const QString& context, const QString&) {
+                if (context != "News") return;
+                if (loading_overlay_) loading_overlay_->hide_loading();
+            });
 }
 
 void EquityNewsTab::set_symbol(const QString& symbol) {

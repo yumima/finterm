@@ -289,7 +289,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
                 fincept::CacheManager::instance().put(
                     "equity:technicals:" + symbol + ":" + period, QVariant(blob),
-                    kHistoricalTtlSec, "equity");
+                    kTechnicalsTtlSec, "equity");
                 emit self->technicals_loaded(self->parse_technicals(symbol, data));
             },
             python::PythonWorker::kComputeActionTimeoutMs);
