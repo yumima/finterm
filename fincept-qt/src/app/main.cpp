@@ -1,6 +1,7 @@
 #include "ai_chat/LlmService.h"
 #include "app/MainWindow.h"
 #include "auth/AuthManager.h"
+#include "auth/AuthService.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
 #include "auth/SessionGuard.h"
@@ -444,7 +445,27 @@ int main(int argc, char* argv[]) {
     // Start session
     fincept::SessionManager::instance().start_session();
 
-    // Initialize auth (loads saved session, validates with server)
+    // Initialize in-process auth service (replaces external stub server).
+    // On the very first launch (no auth.db present), wipe any legacy single-user
+    // fincept.db so the multi-user setup starts completely clean.
+    {
+        const QString auth_db  = fincept::AppPaths::data() + "/auth.db";
+        const QString main_db  = fincept::AppPaths::data() + "/fincept.db";
+        const QString stub_db  = QDir::homePath() + "/.fincept-localhost/users.db";
+        if (!QFile::exists(auth_db)) {
+            if (QFile::exists(main_db)) {
+                QFile::rename(main_db, main_db + ".pre-multiuser.bak");
+                LOG_INFO("App", "Archived legacy fincept.db → fincept.db.pre-multiuser.bak");
+            }
+            if (QFile::exists(stub_db)) {
+                QFile::rename(stub_db, stub_db + ".bak");
+                LOG_INFO("App", "Archived legacy stub users.db");
+            }
+        }
+    }
+    fincept::auth::AuthService::instance().initialize();
+
+    // Initialize auth (loads saved session, validates against local auth.db)
     fincept::auth::AuthManager::instance().initialize();
 
     // Session guard — auto-logout on 401

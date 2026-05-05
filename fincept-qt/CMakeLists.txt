@@ -641,6 +641,7 @@ set(DATAHUB_SOURCES
 # Auth
 set(AUTH_SOURCES
     src/auth/AuthManager.cpp
+    src/auth/AuthService.cpp
     src/auth/AuthApi.cpp
     src/auth/UserApi.cpp
     src/auth/SessionGuard.cpp

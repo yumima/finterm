@@ -1,8 +1,7 @@
 #include "auth/AuthManager.h"
 
-#include "auth/AuthApi.h"
+#include "auth/AuthService.h"
 #include "auth/PinManager.h"
-#include "auth/UserApi.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "storage/repositories/LlmConfigRepository.h"
@@ -160,34 +159,20 @@ void AuthManager::validate_saved_session() {
 }
 
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {
-    AuthApi::instance().get_user_profile([this, on_done = std::move(on_done)](ApiResponse r) mutable {
+    AuthService::instance().get_user_profile(session_.api_key, [this, on_done = std::move(on_done)](ApiResponse r) mutable {
         if (!r.success && (r.status_code == 401 || r.status_code == 403)) {
-            // API key is revoked or invalid — force re-login
-            LOG_WARN("Auth", "Profile fetch returned 401/403 — API key invalid, clearing session");
+            LOG_WARN("Auth", "Profile fetch: API key invalid, clearing session");
             clear_session();
             set_loading(false);
             emit auth_state_changed();
             return;
         }
         if (r.success) {
-            const auto data = unwrap_data(r.data);
-            session_.user_info = UserProfile::from_json(data);
-
-            // api_key confirmed valid — now restore session_token on HttpClient
-            // so subsequent authenticated requests include it. If the old
-            // session_token turns out to be stale during usage, SessionGuard
-            // will handle recovery without clearing the api_key.
-            if (!session_.session_token.isEmpty()) {
-                fincept::HttpClient::instance().set_session_token(session_.session_token);
-            }
+            session_.user_info = UserProfile::from_json(unwrap_data(r.data));
         } else {
-            // Network/server error — keep going with cached session data
-            LOG_WARN("Auth", "Profile fetch failed (non-auth error) — using cached data");
+            // DB unavailable — keep cached session data
+            LOG_WARN("Auth", "Profile fetch failed — using cached data");
             session_.authenticated = !session_.api_key.isEmpty();
-            // Restore session_token for subsequent requests even in offline mode
-            if (!session_.session_token.isEmpty()) {
-                fincept::HttpClient::instance().set_session_token(session_.session_token);
-            }
         }
         fetch_user_subscription(std::move(on_done));
     });
@@ -198,33 +183,19 @@ void AuthManager::fetch_user_profile(std::function<void()> on_done) {
 // Used by login / verify_otp / verify_mfa / session restore.
 
 void AuthManager::complete_auth_flow(std::function<void()> on_done) {
-    UserApi::instance().get_user_subscription([this, on_done = std::move(on_done)](ApiResponse r) {
-        if (r.success) {
-            const auto sub_data = unwrap_data(r.data);
-            session_.subscription = UserSubscription::from_json(sub_data);
-            session_.has_subscription = !session_.subscription.account_type.isEmpty();
-        }
-        // Fallback: promote profile account_type into subscription so account_type() is consistent
-        if (session_.subscription.account_type.isEmpty() && !session_.user_info.account_type.isEmpty()) {
-            session_.subscription.account_type = session_.user_info.account_type;
-            session_.subscription.credit_balance = session_.user_info.credit_balance;
-            session_.has_subscription = true;
-        }
-        // Sync user_info from subscription so legacy readers stay consistent
-        if (!session_.subscription.account_type.isEmpty())
-            session_.user_info.account_type = session_.subscription.account_type;
-        if (session_.subscription.credit_balance > 0)
-            session_.user_info.credit_balance = session_.subscription.credit_balance;
+    // Local build: no subscription server — every user gets full access.
+    session_.subscription.account_type = "local";
+    session_.has_subscription = true;
+    session_.user_info.account_type = "local";
 
-        if (!session_.api_key.isEmpty())
-            session_.authenticated = true;
-        save_session();
-        auto_configure_fincept_llm();
-        set_loading(false);
-        if (on_done)
-            on_done();
-        emit auth_state_changed();
-    });
+    if (!session_.api_key.isEmpty())
+        session_.authenticated = true;
+    save_session();
+    auto_configure_fincept_llm();
+    set_loading(false);
+    if (on_done)
+        on_done();
+    emit auth_state_changed();
 }
 
 void AuthManager::fetch_user_subscription(std::function<void()> on_done) {
@@ -241,7 +212,7 @@ void AuthManager::login(const QString& email, const QString& password, bool forc
     req.password = password;
     req.force_login = force_login;
 
-    AuthApi::instance().login(req, [this](ApiResponse r) {
+    AuthService::instance().login(req, [this](ApiResponse r) {
         if (!r.success) {
             set_loading(false);
             emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
@@ -298,7 +269,7 @@ void AuthManager::signup(const QString& username, const QString& email, const QS
     req.country = country;
     req.country_code = country_code;
 
-    AuthApi::instance().register_user(req, [this](ApiResponse r) {
+    AuthService::instance().register_user(req, [this](ApiResponse r) {
         set_loading(false);
         if (r.success)
             emit signup_succeeded();
@@ -316,7 +287,7 @@ void AuthManager::verify_otp(const QString& email, const QString& otp) {
     req.email = sanitize_input(email).toLower();
     req.otp = sanitize_input(otp);
 
-    AuthApi::instance().verify_otp(req, [this](ApiResponse r) {
+    AuthService::instance().verify_otp(req, [this](ApiResponse r) {
         if (!r.success) {
             set_loading(false);
             emit otp_failed(r.error.isEmpty() ? "Verification failed" : r.error);
@@ -349,7 +320,11 @@ void AuthManager::verify_otp(const QString& email, const QString& otp) {
 void AuthManager::verify_mfa(const QString& email, const QString& otp) {
     set_loading(true);
 
-    AuthApi::instance().verify_mfa(sanitize_input(email).toLower(), sanitize_input(otp), [this](ApiResponse r) {
+    // Local build: MFA is treated as a second OTP — same accept-any-6-digits logic.
+    VerifyOtpRequest mfa_req;
+    mfa_req.email = sanitize_input(email).toLower();
+    mfa_req.otp   = sanitize_input(otp);
+    AuthService::instance().verify_otp(mfa_req, [this](ApiResponse r) {
         if (!r.success) {
             set_loading(false);
             emit mfa_failed(r.error.isEmpty() ? "MFA verification failed" : r.error);
@@ -385,7 +360,7 @@ void AuthManager::forgot_password(const QString& email) {
     ForgotPasswordRequest req;
     req.email = sanitize_input(email).toLower();
 
-    AuthApi::instance().forgot_password(req, [this](ApiResponse r) {
+    AuthService::instance().forgot_password(req, [this](ApiResponse r) {
         set_loading(false);
         if (r.success)
             emit forgot_password_sent();
@@ -404,7 +379,7 @@ void AuthManager::reset_password(const QString& email, const QString& otp, const
     req.otp = sanitize_input(otp);
     req.new_password = new_password;
 
-    AuthApi::instance().reset_password(req, [this](ApiResponse r) {
+    AuthService::instance().reset_password(req, [this](ApiResponse r) {
         set_loading(false);
         if (r.success)
             emit password_reset_succeeded();
@@ -421,7 +396,7 @@ void AuthManager::logout() {
     is_logging_out_ = true;
 
     if (!session_.api_key.isEmpty()) {
-        AuthApi::instance().logout([](ApiResponse) {});
+        AuthService::instance().logout(session_.api_key, [](ApiResponse) {});
     }
 
     clear_session();
@@ -449,7 +424,7 @@ void AuthManager::attempt_session_recovery(std::function<void(bool)> cb) {
     // Temporarily strip session_token so the validation request doesn't 401
     fincept::HttpClient::instance().clear_session_token();
 
-    AuthApi::instance().get_user_profile([this, cb = std::move(cb)](ApiResponse r) mutable {
+    AuthService::instance().get_user_profile(session_.api_key, [this, cb = std::move(cb)](ApiResponse r) mutable {
         if (r.success) {
             LOG_INFO("Auth", "Session recovery succeeded — api_key is valid");
             const auto data = unwrap_data(r.data);
@@ -493,40 +468,8 @@ void AuthManager::refresh_user_data() {
 // ── Auto-configure Fincept LLM provider ──────────────────────────────────────
 
 void AuthManager::auto_configure_fincept_llm() {
-    if (session_.api_key.isEmpty())
-        return;
-
-    // Always store API key in settings — LlmService resolves it at runtime
-    fincept::SettingsRepository::instance().set("fincept_api_key", session_.api_key, "auth");
-
-    // Only create the fincept provider row if it doesn't already exist.
-    // This prevents overwriting the user's model/settings choice on every
-    // session revalidation (~30s interval).
-    auto providers = LlmConfigRepository::instance().list_providers();
-    bool fincept_exists = false;
-    if (providers.is_ok()) {
-        for (const auto& p : providers.value()) {
-            if (p.provider.toLower() == "fincept") {
-                fincept_exists = true;
-                break;
-            }
-        }
-    }
-
-    if (!fincept_exists) {
-        LlmConfig fincept_llm;
-        fincept_llm.provider = "fincept";
-        fincept_llm.model = "MiniMax-M2.7";
-        fincept_llm.base_url = {};
-        LlmConfigRepository::instance().save_provider(fincept_llm);
-        LOG_INFO("Auth", "Created fincept LLM provider config");
-    }
-
-    // Set as active if no other provider is currently active
-    auto active = LlmConfigRepository::instance().get_active_provider();
-    bool has_active = active.is_ok() && !active.value().provider.isEmpty();
-    if (!has_active)
-        LlmConfigRepository::instance().set_active("fincept");
+    // Fincept cloud LLM is disabled in this local build (stub server removed).
+    // Users configure their own provider via Settings → LLM.
 }
 
 } // namespace fincept::auth
