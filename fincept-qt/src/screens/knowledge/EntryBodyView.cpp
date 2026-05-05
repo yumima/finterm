@@ -327,14 +327,16 @@ void EntryBodyView::rebuild() {
             QTextCursor cur(blk);
             cur.setBlockFormat(fmt);
             // Qt's markdown parser stamps explicit QTextCharFormat on every run
-            // during parsing, so defaultFont is ignored for body text too.
-            // Walk all blocks and pin the pixel size directly. mergeCharFormat
-            // touches only FontPixelSize/FontWeight — bold, italic, color, and
-            // inline code spans within each block are left intact.
+            // during parsing, so defaultFont is ignored. Pin family, size, and
+            // (for headings) weight on every block. FontWeight is only set for
+            // heading blocks so inline **bold** / *italic* in paragraphs is
+            // left intact. FontFamilies is set everywhere to unify the typeface
+            // — Qt's heading parser otherwise injects the system heading font.
             {
                 constexpr int kHeadPx[] = {28, 25, 23, 22, 21, 21};  // H1–H6
                 const int px = (level >= 1 && level <= 6) ? kHeadPx[level - 1] : 21;
                 QTextCharFormat cfmt;
+                cfmt.setFontFamilies(base_font.families());
                 cfmt.setProperty(QTextCharFormat::FontPixelSize, px);
                 if (level >= 1 && level <= 6)
                     cfmt.setFontWeight(QFont::Bold);
