@@ -108,29 +108,32 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         return;
 
     // ── Quote ────────────────────────────────────────────────────────────────
+    // NOTE: Each block must fall through independently. Do NOT use `return`
+    // here — it aborts info and historical fetches, leaving the overlay hung.
     {
         const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
         if (!qcv.isNull()) {
             emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
         } else {
             const QString inflight_key = "quote:" + symbol;
-            if (!acquire_inflight(inflight_key)) return;
-            QJsonObject payload;
-            payload["symbol"] = symbol;
-            run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
-                release_inflight(inflight_key);
-                if (!ok) {
-                    emit error_occurred("Quote", "Failed to fetch quote for " + symbol + ": " + err);
-                    return;
-                }
-                if (obj.contains("error"))
-                    return;
-                fincept::CacheManager::instance().put(
-                    "equity:quote:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
-                    "equity");
-                emit quote_loaded(parse_quote(obj));
-            });
+            if (acquire_inflight(inflight_key)) {
+                QJsonObject payload;
+                payload["symbol"] = symbol;
+                run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+                    release_inflight(inflight_key);
+                    if (!ok || obj.contains("error")) {
+                        emit error_occurred("Quote", !ok ? err : obj["error"].toString());
+                        QuoteData failed; failed.symbol = symbol; failed.valid = false;
+                        emit quote_loaded(failed);
+                        return;
+                    }
+                    fincept::CacheManager::instance().put(
+                        "equity:quote:" + symbol,
+                        QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
+                        "equity");
+                    emit quote_loaded(parse_quote(obj));
+                });
+            }
         }
     }
 
@@ -141,23 +144,24 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
         } else {
             const QString inflight_key = "info:" + symbol;
-            if (!acquire_inflight(inflight_key)) return;
-            QJsonObject payload;
-            payload["symbol"] = symbol;
-            run_daemon("info", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
-                release_inflight(inflight_key);
-                if (!ok) {
-                    emit error_occurred("Info", "Failed to fetch info for " + symbol + ": " + err);
-                    return;
-                }
-                if (obj.contains("error"))
-                    return;
-                fincept::CacheManager::instance().put(
-                    "equity:info:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
-                    "equity");
-                emit info_loaded(parse_info(obj));
-            });
+            if (acquire_inflight(inflight_key)) {
+                QJsonObject payload;
+                payload["symbol"] = symbol;
+                run_daemon("info", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+                    release_inflight(inflight_key);
+                    if (!ok || obj.contains("error")) {
+                        emit error_occurred("Info", !ok ? err : obj["error"].toString());
+                        StockInfo failed; failed.symbol = symbol; failed.valid = false;
+                        emit info_loaded(failed);
+                        return;
+                    }
+                    fincept::CacheManager::instance().put(
+                        "equity:info:" + symbol,
+                        QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
+                        "equity");
+                    emit info_loaded(parse_info(obj));
+                });
+            }
         }
     }
 
@@ -172,28 +176,30 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
             emit historical_loaded(symbol, period, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
             const QString inflight_key = "historical:" + symbol + ":" + period;
-            if (!acquire_inflight(inflight_key)) return;
-            QJsonObject payload;
-            payload["symbol"] = symbol;
-            payload["period"] = period;
-            payload["interval"] = "1d";
-            run_daemon("historical_period", payload,
-                       [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
-                           release_inflight(inflight_key);
-                           if (!ok) {
-                               emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
-                               return;
-                           }
-                           // Daemon returns a flat list; PythonWorker wraps under "_value".
-                           const auto arr = result.contains("_value")
-                                                ? result.value("_value").toArray()
-                                                : result.value("history").toArray();
-                           fincept::CacheManager::instance().put(
-                               candles_key,
-                               QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                               kHistoricalTtlSec, "equity");
-                           emit historical_loaded(symbol, period, parse_candles(arr));
-                       });
+            if (acquire_inflight(inflight_key)) {
+                QJsonObject payload;
+                payload["symbol"] = symbol;
+                payload["period"] = period;
+                payload["interval"] = "1d";
+                run_daemon("historical_period", payload,
+                           [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
+                               release_inflight(inflight_key);
+                               if (!ok) {
+                                   emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
+                                   emit historical_loaded(symbol, period, {});
+                                   return;
+                               }
+                               // Daemon returns a flat list; PythonWorker wraps under "_value".
+                               const auto arr = result.contains("_value")
+                                                    ? result.value("_value").toArray()
+                                                    : result.value("history").toArray();
+                               fincept::CacheManager::instance().put(
+                                   candles_key,
+                                   QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                                   kHistoricalTtlSec, "equity");
+                               emit historical_loaded(symbol, period, parse_candles(arr));
+                           });
+            }
         }
     }
 }

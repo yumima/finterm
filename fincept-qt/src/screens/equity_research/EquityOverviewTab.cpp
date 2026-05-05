@@ -700,10 +700,12 @@ QWidget* EquityOverviewTab::build_financial_health_panel() {
 void EquityOverviewTab::on_quote_loaded(services::equity::QuoteData q) {
     if (q.symbol != current_symbol_)
         return;
-    cached_quote_ = q;
     quote_loaded_ = true;
     if (info_loaded_ && quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
+    if (!q.valid)
+        return;
+    cached_quote_ = q;
 
     open_val_->setText(fmt_price(q.open));
     high_val_->setText(fmt_price(q.high));
@@ -715,11 +717,13 @@ void EquityOverviewTab::on_quote_loaded(services::equity::QuoteData q) {
 void EquityOverviewTab::on_info_loaded(services::equity::StockInfo info) {
     if (info.symbol != current_symbol_)
         return;
-    cached_info_ = info;
     info_loaded_ = true;
-    current_currency_ = info.currency;
     if (info_loaded_ && quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
+    if (!info.valid)
+        return;
+    cached_info_ = info;
+    current_currency_ = info.currency;
 
     // Re-render quote and chart with correct currency
     if (quote_loaded_) {

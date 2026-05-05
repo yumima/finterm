@@ -19,6 +19,7 @@ struct SearchResult {
 // ── Real-time quote ───────────────────────────────────────────────────────────
 struct QuoteData {
     QString symbol;
+    bool valid = true;
     double price = 0.0;
     double change = 0.0;
     double change_pct = 0.0;
@@ -34,6 +35,7 @@ struct QuoteData {
 // ── Company fundamentals ──────────────────────────────────────────────────────
 struct StockInfo {
     QString symbol;
+    bool valid = true;
     QString company_name;
     QString sector;
     QString industry;
