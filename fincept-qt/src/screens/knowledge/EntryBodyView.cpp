@@ -326,15 +326,18 @@ void EntryBodyView::rebuild() {
             fmt.setLineHeight(lh_pct, QTextBlockFormat::ProportionalHeight);
             QTextCursor cur(blk);
             cur.setBlockFormat(fmt);
-            // Qt auto-scales headings from defaultFont, which at 21 px base
-            // would push H1 to ~42 px. Pin each level to a gentle type scale.
-            if (level >= 1 && level <= 6) {
+            // Qt's markdown parser stamps explicit QTextCharFormat on every run
+            // during parsing, so defaultFont is ignored for body text too.
+            // Walk all blocks and pin the pixel size directly. mergeCharFormat
+            // touches only FontPixelSize/FontWeight — bold, italic, color, and
+            // inline code spans within each block are left intact.
+            {
                 constexpr int kHeadPx[] = {28, 25, 23, 22, 21, 21};  // H1–H6
-                QFont hfont = base_font;
-                hfont.setPixelSize(kHeadPx[level - 1]);
-                hfont.setBold(true);
+                const int px = (level >= 1 && level <= 6) ? kHeadPx[level - 1] : 21;
                 QTextCharFormat cfmt;
-                cfmt.setFont(hfont);
+                cfmt.setProperty(QTextCharFormat::FontPixelSize, px);
+                if (level >= 1 && level <= 6)
+                    cfmt.setFontWeight(QFont::Bold);
                 cur.movePosition(QTextCursor::StartOfBlock);
                 cur.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
                 cur.mergeCharFormat(cfmt);
