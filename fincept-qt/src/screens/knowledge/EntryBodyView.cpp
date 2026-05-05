@@ -271,7 +271,7 @@ void EntryBodyView::rebuild() {
         // Qt mechanism the layout engine actually reads.
         QFont base_font;
         base_font.setFamilies({"Noto Sans", "Cantarell", "DejaVu Sans", "Liberation Sans"});
-        base_font.setPixelSize(14);
+        base_font.setPixelSize(21);
         browser->document()->setDefaultFont(base_font);
         QPalette pal = browser->palette();
         pal.setColor(QPalette::Text, QColor(HEAD_TEXT));
@@ -326,6 +326,19 @@ void EntryBodyView::rebuild() {
             fmt.setLineHeight(lh_pct, QTextBlockFormat::ProportionalHeight);
             QTextCursor cur(blk);
             cur.setBlockFormat(fmt);
+            // Qt auto-scales headings from defaultFont, which at 21 px base
+            // would push H1 to ~42 px. Pin each level to a gentle type scale.
+            if (level >= 1 && level <= 6) {
+                constexpr int kHeadPx[] = {28, 25, 23, 22, 21, 21};  // H1–H6
+                QFont hfont = base_font;
+                hfont.setPixelSize(kHeadPx[level - 1]);
+                hfont.setBold(true);
+                QTextCharFormat cfmt;
+                cfmt.setFont(hfont);
+                cur.movePosition(QTextCursor::StartOfBlock);
+                cur.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+                cur.mergeCharFormat(cfmt);
+            }
         }
         batch.endEditBlock();
 

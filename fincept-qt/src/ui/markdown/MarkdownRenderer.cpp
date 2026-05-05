@@ -23,22 +23,22 @@ QString MarkdownRenderer::wrap_html(const QString& body) {
     // We embed a <style> block that overrides the defaults.
     static const QLatin1String kStyle(R"(
 <style>
-body  { color:#e5e5e5; font-family:'Consolas','Courier New',monospace; font-size:14px; margin:0; padding:0; }
-h1    { color:#d97706; font-size:18px; font-weight:700; margin:8px 0 4px; }
-h2    { color:#d97706; font-size:16px; font-weight:700; margin:7px 0 3px; }
-h3    { color:#d97706; font-size:14px; font-weight:700; margin:6px 0 2px; }
-h4,h5,h6 { color:#b45309; font-size:13px; font-weight:600; margin:5px 0 2px; }
+body  { color:#e5e5e5; font-family:'Consolas','Courier New',monospace; font-size:21px; margin:0; padding:0; }
+h1    { color:#d97706; font-size:28px; font-weight:700; margin:8px 0 4px; }
+h2    { color:#d97706; font-size:25px; font-weight:700; margin:7px 0 3px; }
+h3    { color:#d97706; font-size:23px; font-weight:700; margin:6px 0 2px; }
+h4,h5,h6 { color:#b45309; font-size:22px; font-weight:600; margin:5px 0 2px; }
 p     { margin:4px 0; line-height:1.55; }
 a     { color:#d97706; text-decoration:none; }
 strong,b { color:#f59e0b; font-weight:700; }
 em,i  { color:#808080; font-style:italic; }
 code  { font-family:'Consolas','Courier New',monospace;
-        font-size:13px; color:#16a34a;
+        font-size:19px; color:#16a34a;
         background:#111111; padding:1px 5px; }
 pre   { background:#111111; border:1px solid #1a1a1a;
         padding:10px 12px; margin:6px 0;
         font-family:'Consolas','Courier New',monospace;
-        font-size:13px; color:#16a34a; white-space:pre-wrap; }
+        font-size:19px; color:#16a34a; white-space:pre-wrap; }
 pre code { background:transparent; padding:0; }
 blockquote { border-left:2px solid #d97706; margin:6px 0 6px 4px;
              padding:4px 10px; color:#808080; font-style:italic; }
