@@ -18,8 +18,8 @@ class RailWidget;
 /// KNOWLEDGE tab — 3-pane cockpit:
 ///
 ///   [ BASICS  : Glossary | Concepts | Abbreviations ]
-///   [ PRACTICE: Cases    | Tracks   | Playbooks     ]
 ///   [ CONTEXT : finterm rail tied to last selection ]
+///   [ PRACTICE: Cases    | Tracks   | Playbooks     ]
 ///
 /// Within each grouped pane, sub-tabs are segmented buttons. Each
 /// sub-pane (CategoryColumn / AbbreviationsColumn) keeps its own

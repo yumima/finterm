@@ -152,6 +152,14 @@ void KnowledgeScreen::build_layout() {
     }
     split->addWidget(basics_pane_);
 
+    // ── CONTEXT (rail) ────────────────────────────────────────────────────────
+    rail_ = new RailWidget(split);
+    rail_->setMinimumWidth(320);
+    split->addWidget(rail_);
+    connect(rail_, &RailWidget::open_entry, this, &KnowledgeScreen::open_entry);
+    connect(rail_, &RailWidget::request_action, this,
+            [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
+
     // ── PRACTICE pane (Cases, Tracks, Playbooks) ──────────────────────────────
     practice_pane_ = new GroupedPane("practice", "PRACTICE", split);
     practice_pane_->setMinimumWidth(280);
@@ -164,19 +172,11 @@ void KnowledgeScreen::build_layout() {
     }
     split->addWidget(practice_pane_);
 
-    // ── CONTEXT (rail) ────────────────────────────────────────────────────────
-    rail_ = new RailWidget(split);
-    rail_->setMinimumWidth(320);
-    split->addWidget(rail_);
-    connect(rail_, &RailWidget::open_entry, this, &KnowledgeScreen::open_entry);
-    connect(rail_, &RailWidget::request_action, this,
-            [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
-
-    // 30 / 30 / 40 default split, with rail stretching most.
-    split->setSizes({300, 300, 420});
+    // 30 / 40 / 30 default split — context rail in centre, adjacent to both.
+    split->setSizes({300, 420, 300});
     split->setStretchFactor(0, 3);
-    split->setStretchFactor(1, 3);
-    split->setStretchFactor(2, 4);
+    split->setStretchFactor(1, 4);
+    split->setStretchFactor(2, 3);
 
     root->addWidget(split, 1);
 
