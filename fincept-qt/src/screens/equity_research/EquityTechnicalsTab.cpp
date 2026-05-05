@@ -227,7 +227,30 @@ void EquityTechnicalsTab::set_symbol(const QString& symbol) {
         return;
     current_symbol_ = symbol;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
-    services::equity::EquityResearchService::instance().fetch_technicals(symbol, "1y");
+    services::equity::EquityResearchService::instance().fetch_technicals(symbol, current_period_);
+}
+
+void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period) {
+    if (period == current_period_ || current_symbol_.isEmpty())
+        return;
+    current_period_ = period;
+    if (active_period_btn_) {
+        const QString inactive =
+            QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                    "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+                    "QPushButton:hover{border-color:%3;background:%4;}")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
+                     ui::colors::BG_RAISED());
+        active_period_btn_->setStyleSheet(inactive);
+    }
+    const QString active =
+        QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
+                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
+    btn->setStyleSheet(active);
+    active_period_btn_ = btn;
+    loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
+    services::equity::EquityResearchService::instance().fetch_technicals(current_symbol_, period);
 }
 
 // ── build_ui ─────────────────────────────────────────────────────────────────
@@ -238,6 +261,48 @@ void EquityTechnicalsTab::build_ui() {
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+
+    // ── Period selector bar ───────────────────────────────────────────────────
+    auto* period_bar = new QWidget;
+    period_bar->setStyleSheet(
+        QString("background:%1;border-bottom:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* pb_hl = new QHBoxLayout(period_bar);
+    pb_hl->setContentsMargins(12, 6, 12, 6);
+    pb_hl->setSpacing(4);
+
+    auto* period_lbl = new QLabel("PERIOD");
+    period_lbl->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
+    pb_hl->addWidget(period_lbl);
+
+    const QString btn_inactive =
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+                "QPushButton:hover{border-color:%3;background:%4;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED());
+    const QString btn_active =
+        QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
+                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
+
+    auto make_btn = [&](const QString& label, QPushButton*& out, const QString& period) {
+        out = new QPushButton(label);
+        out->setCursor(Qt::PointingHandCursor);
+        out->setStyleSheet(period == current_period_ ? btn_active : btn_inactive);
+        connect(out, &QPushButton::clicked, this, [this, out, period]() { switch_period(out, period); });
+        pb_hl->addWidget(out);
+    };
+
+    make_btn("1M", btn_1m_, "1mo");
+    make_btn("3M", btn_3m_, "3mo");
+    make_btn("6M", btn_6m_, "6mo");
+    make_btn("1Y", btn_1y_, "1y");
+    make_btn("5Y", btn_5y_, "5y");
+    active_period_btn_ = btn_1y_;
+    pb_hl->addStretch();
+    outer->addWidget(period_bar);
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
@@ -681,7 +746,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
 // ── on_technicals_loaded ─────────────────────────────────────────────────────
 
 void EquityTechnicalsTab::on_technicals_loaded(services::equity::TechnicalsData payload) {
-    if (payload.symbol != current_symbol_)
+    if (payload.symbol != current_symbol_ || payload.period != current_period_)
         return;
     loading_overlay_->hide_loading();
     populate(payload);

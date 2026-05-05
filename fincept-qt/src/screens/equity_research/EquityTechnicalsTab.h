@@ -6,6 +6,7 @@
 #include <QFrame>
 #include <QLabel>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -23,12 +24,22 @@ class EquityTechnicalsTab : public QWidget {
     void build_ui();
     void populate(const services::equity::TechnicalsData& data);
     void clear_sections();
+    void switch_period(QPushButton* btn, const QString& period);
 
     static QString signal_text(services::equity::TechSignal s);
     static const char* signal_color(services::equity::TechSignal s);
     static QString interpretation(const QString& col_key, double value);
 
     QString current_symbol_;
+    QString current_period_ = "1y";
+
+    // Period buttons
+    QPushButton* btn_1m_ = nullptr;
+    QPushButton* btn_3m_ = nullptr;
+    QPushButton* btn_6m_ = nullptr;
+    QPushButton* btn_1y_ = nullptr;
+    QPushButton* btn_5y_ = nullptr;
+    QPushButton* active_period_btn_ = nullptr;
 
     // Rating panel
     QLabel* rating_label_ = nullptr;

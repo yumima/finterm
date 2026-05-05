@@ -136,6 +136,7 @@ struct TechIndicator {
 
 struct TechnicalsData {
     QString symbol;
+    QString period;
     QVector<TechIndicator> trend;
     QVector<TechIndicator> momentum;
     QVector<TechIndicator> volatility;
