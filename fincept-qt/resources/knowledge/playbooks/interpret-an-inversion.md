@@ -36,7 +36,7 @@ Every US recession in the past ~50 years was preceded by a 2s10s inversion. **Bu
 
 Long rates reflect long-run expectations of growth + inflation + a term premium. Short rates reflect current Fed policy. An inversion means:
 
-> "The market thinks future short rates will be *lower* than today's — likely because the Fed will need to cut to support a slowing economy."
+*"The market thinks future short rates will be **lower** than today's — likely because the Fed will need to cut to support a slowing economy."*
 
 That's a recession *forecast by the market*, not a guarantee. The forecast can be wrong.
 

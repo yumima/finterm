@@ -4,7 +4,7 @@ A 12-entry sequence to go from "what is a call?" to trading multi-leg structures
 
 Estimated time: **8–12 hours of reading**, plus paper-trading practice.
 
-> **Critical**: paper-trade for at least 30 days before risking real money. Greeks behave very differently in live markets than on paper.
+**Critical** — paper-trade for at least `30 days` before risking real money. Greeks behave very differently in live markets than on paper.
 
 ## Foundation — what an option is (1–3)
 

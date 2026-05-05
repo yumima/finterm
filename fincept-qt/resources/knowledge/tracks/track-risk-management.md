@@ -4,7 +4,7 @@
 
 Estimated time: **3–5 hours of reading**, plus rigorous trade journaling.
 
-> The math of compounding is unforgiving: a 50% drawdown requires +100% to recover. Spend more time avoiding drawdowns than picking winners.
+*The math of compounding is unforgiving: a `50%` drawdown requires `+100%` to recover. Spend more time avoiding drawdowns than picking winners.*
 
 ## Sizing (1–2)
 

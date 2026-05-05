@@ -2,7 +2,7 @@
 
 The **largest expected loss** over a specified horizon at a given confidence level.
 
-> "1-day 95% VaR of $50,000" means: on 19 out of 20 days, the portfolio should not lose more than $50,000.
+*"1-day 95% VaR of `$50,000`"* means: on 19 out of 20 days, the portfolio should not lose more than `$50,000`.
 
 ## Worked example — parametric VaR
 

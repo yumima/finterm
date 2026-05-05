@@ -1,6 +1,6 @@
 # Tax Basics for Traders & Investors (US)
 
-> *General educational guidance, not tax advice. Consult a CPA for your specific situation. Tax law changes annually; verify current rules before relying.*
+*General educational guidance, not tax advice. Consult a CPA for your specific situation. Tax law changes annually; verify current rules before relying.*
 
 After-tax return is what you actually keep. A 10% pre-tax return at 35% effective tax rate is 6.5% net. **Tax efficiency is one of the highest-leverage decisions in investing**, often worth more than picking the right strategy.
 

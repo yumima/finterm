@@ -64,12 +64,12 @@ If you can't write these clearly, you don't have a thesis — you have a feeling
 
 ## Worked example — short-form thesis
 
-> **Ticker:** Costco (COST)
-> **Thesis:** Member retention >90%, fee growth from membership hikes is durable margin expansion. Buying at 30× P/E versus 5y avg of 32×.
-> **Disconfirmation:** Membership renewal rate drops below 88%, OR same-store sales growth turns negative for 2 consecutive quarters.
-> **Sizing:** 4% of portfolio; willing to take 25% drawdown.
-> **Time horizon:** 3+ years.
-> **Exit signal:** P/E > 40× without earnings acceleration, OR thesis broken per above.
+- **Ticker**: Costco (COST)
+- **Thesis**: Member retention >90%, fee growth from membership hikes is durable margin expansion. Buying at 30× P/E versus 5y avg of 32×.
+- **Disconfirmation**: Membership renewal rate drops below 88%, OR same-store sales growth turns negative for 2 consecutive quarters.
+- **Sizing**: 4% of portfolio; willing to take 25% drawdown.
+- **Time horizon**: 3+ years.
+- **Exit signal**: P/E > 40× without earnings acceleration, OR thesis broken per above.
 
 Concrete and falsifiable. You'll know in months, not years, if you were wrong.
 
