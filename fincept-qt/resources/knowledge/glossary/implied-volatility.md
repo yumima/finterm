@@ -6,10 +6,9 @@ It's the market's **forward-looking guess** at how much the underlying will move
 
 ## Worked example — earnings IV spike
 
-> AAPL stock: `$175` · At-the-money 30-day call: `$9.20` · Solving Black-Scholes for σ: `IV ≈ 32%`
->
-> Two days before earnings, same option trades at `$11.50` → IV ≈ `42%`
-> The day after earnings, stock barely moves, option drops to `$7.30` → IV crashed to `24%`
+- **Baseline**: AAPL stock `$175` · ATM 30-day call `$9.20` · solving Black-Scholes for σ → `IV ≈ 32%`
+- **Two days before earnings**: same option trades at `$11.50` → `IV ≈ 42%`
+- **Day after earnings**: stock barely moves, option drops to `$7.30` → IV crashes to `24%`
 
 A long-call holder who was right about direction (flat) still lost ~`$2.20` per share — the *implied vol crush* (`42% → 24%`) outweighed any small directional move. That's why earnings options are dangerous: you must be right about direction *and* magnitude.
 

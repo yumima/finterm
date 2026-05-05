@@ -108,6 +108,16 @@ QString scroll_ss() {
         .arg(ui::colors::BORDER_MED(), ui::colors::BORDER_BRIGHT());
 }
 
+// Strip a leading `# Title` line if present — the entry header already renders
+// the title as a QLabel, so an H1 at the top of the body would double up.
+QString strip_leading_h1(QString markdown) {
+    static const QRegularExpression re(R"(^\s*#\s+[^\n]*\n+)");
+    const auto m = re.match(markdown);
+    if (m.hasMatch() && m.capturedStart() == 0)
+        markdown.remove(0, m.capturedLength());
+    return markdown;
+}
+
 QString preprocess_crossrefs(QString markdown) {
     static const QRegularExpression re(R"(\[\[([a-z0-9_\-]+)(?:\|([^\]]+))?\]\])",
                                        QRegularExpression::CaseInsensitiveOption);
@@ -271,14 +281,14 @@ void EntryBodyView::rebuild() {
         // Qt mechanism the layout engine actually reads.
         QFont base_font;
         base_font.setFamilies({"Noto Sans", "Cantarell", "DejaVu Sans", "Liberation Sans"});
-        base_font.setPixelSize(21);
+        base_font.setPixelSize(17);
         browser->document()->setDefaultFont(base_font);
         QPalette pal = browser->palette();
         pal.setColor(QPalette::Text, QColor(HEAD_TEXT));
         pal.setColor(QPalette::WindowText, QColor(HEAD_TEXT));
         browser->setPalette(pal);
         browser->document()->setDefaultStyleSheet(markdown_default_css());
-        browser->setMarkdown(preprocess_crossrefs(body));
+        browser->setMarkdown(preprocess_crossrefs(strip_leading_h1(body)));
 
         // Block-margin override — VS Code / GitHub Markdown CSS values.
         //   h1, h2: 24 / 16 (line-height 125)
@@ -302,18 +312,18 @@ void EntryBodyView::rebuild() {
             // VS Code preview cadence: tighter than github-markdown-css's 160%.
             // Body lines around 1.5×, headings around 1.15× (just enough to keep
             // descenders clear). These match the reference screenshot density.
-            int top = 0, bottom = 16;
-            int lh_pct = 150;
+            int top = 0, bottom = 12;
+            int lh_pct = 125;
             switch (level) {
-                case 1: top = 24; bottom = 16; lh_pct = 115; break;
-                case 2: top = 24; bottom = 16; lh_pct = 115; break;
-                case 3: top = 24; bottom = 12; lh_pct = 115; break;
-                case 4: top = 20; bottom =  8; lh_pct = 115; break;
+                case 1: top = 20; bottom = 12; lh_pct = 115; break;
+                case 2: top = 20; bottom = 12; lh_pct = 115; break;
+                case 3: top = 20; bottom = 10; lh_pct = 115; break;
+                case 4: top = 16; bottom =  6; lh_pct = 115; break;
                 default:
                     if (blk.textList() != nullptr) {
-                        top = 0; bottom = 4; lh_pct = 150;   // adjacent list items
+                        top = 0; bottom = 3; lh_pct = 125;   // adjacent list items
                     } else {
-                        top = 0; bottom = 16; lh_pct = 150;  // p, pre, table, blockquote
+                        top = 0; bottom = 12; lh_pct = 125;  // p, pre, table, blockquote
                     }
                     break;
             }
@@ -333,8 +343,8 @@ void EntryBodyView::rebuild() {
             // left intact. FontFamilies is set everywhere to unify the typeface
             // — Qt's heading parser otherwise injects the system heading font.
             {
-                constexpr int kHeadPx[] = {28, 25, 23, 22, 21, 21};  // H1–H6
-                const int px = (level >= 1 && level <= 6) ? kHeadPx[level - 1] : 21;
+                constexpr int kHeadPx[] = {22, 20, 18, 18, 17, 17};  // H1–H6
+                const int px = (level >= 1 && level <= 6) ? kHeadPx[level - 1] : 17;
                 QTextCharFormat cfmt;
                 cfmt.setFontFamilies(base_font.families());
                 cfmt.setProperty(QTextCharFormat::FontPixelSize, px);
