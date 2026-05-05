@@ -86,49 +86,11 @@ void EconomicCalendarWidget::on_theme_changed() {
 }
 
 void EconomicCalendarWidget::refresh_data() {
-    set_loading(true);
-
-    // Response shape: {"success":true,"data":{"events":[...],"total_count":N,...}}
-    QString url = "http://127.0.0.1:8765/macro/upcoming-events?limit=25";
-
-    fincept::HttpClient::instance().get(url, [this](fincept::Result<QJsonDocument> result) {
-        set_loading(false);
-        if (!result.is_ok()) {
-            status_label_->setVisible(true);
-            status_label_->setText("Failed to load calendar");
-            return;
-        }
-
-        auto doc = result.value();
-        QJsonArray events;
-
-        if (doc.isObject()) {
-            auto root = doc.object();
-            // {"success":true,"data":{"events":[...]}}
-            if (root.contains("data") && root["data"].isObject()) {
-                auto data = root["data"].toObject();
-                if (data.contains("events") && data["events"].isArray())
-                    events = data["events"].toArray();
-            }
-            // fallback: {"data":[...]}
-            if (events.isEmpty() && root.contains("data") && root["data"].isArray())
-                events = root["data"].toArray();
-            // fallback: {"events":[...]}
-            if (events.isEmpty() && root.contains("events") && root["events"].isArray())
-                events = root["events"].toArray();
-        } else if (doc.isArray()) {
-            events = doc.array();
-        }
-
-        if (events.isEmpty()) {
-            status_label_->setVisible(true);
-            status_label_->setText("No events available");
-            return;
-        }
-
-        status_label_->setVisible(false);
-        populate(events);
-    });
+    // Economic calendar endpoint was served by the external stub server which
+    // has been removed. Wire up a direct data provider here when available.
+    set_loading(false);
+    status_label_->setVisible(true);
+    status_label_->setText("No events available");
 }
 
 void EconomicCalendarWidget::populate(const QJsonArray& events) {

@@ -1,4 +1,13 @@
 """
+DEPRECATED — 2026-05 — DO NOT RUN.
+
+Auth/profile/session/subscription have been moved in-process to the C++ class
+AuthService (fincept-qt/src/auth/AuthService.{h,cpp}).  finterm.sh no longer
+launches this process, and FinceptTerminal no longer connects to port 8765 for
+auth.  The stub is kept here for historical reference only.
+
+--- original docstring below ---
+
 Local stub server for the FinceptTerminal localhost-only fork.
 
 Replaces api.fincept.in with a process running on http://127.0.0.1:8765.

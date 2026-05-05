@@ -2,10 +2,10 @@
 # finterm.sh — one-stop launcher / builder / state utility for finterm.
 #
 # Subcommands:
-#   start    (default) — launch the Qt app + the localhost stub
+#   start    (default) — launch the Qt app (auth runs in-process; no stub needed)
 #   build              — build the Qt binary via cmake
 #   reset              — reset persistent state (window-only / full / etc.)
-#   stop               — stop the running app and stub
+#   stop               — stop the running app
 #   status             — print what's running
 #   install            — register a desktop-launcher entry (pinnable to dock)
 #   uninstall          — remove the desktop-launcher entry
@@ -20,13 +20,9 @@ set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 APP_DIR="$REPO_DIR/fincept-qt"
-STUB_PY="$REPO_DIR/tools/local_stub/server.py"
 BUILD_PRESET="linux-release"
 BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
 FINTERM_BIN="$BUILD_DIR/FinceptTerminal"
-STUB_LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
-STUB_LOG="$STUB_LOG_DIR/fincept-stub.log"
-STUB_HEALTH_URL="http://127.0.0.1:8765/health"
 
 # State dirs that `reset` operates on.
 CONFIG_DIR="$HOME/.config/Fincept"
@@ -123,24 +119,7 @@ EOF
         do_window_only_reset
     fi
 
-    # Ensure the stub is up. pgrep matches whether it was started by
-    # systemd, by hand, or by a previous launch.
-    if ! pgrep -f "tools/local_stub/server.py" >/dev/null; then
-        mkdir -p "$STUB_LOG_DIR"
-        echo "Starting localhost stub (logs: $STUB_LOG)"
-        nohup python3 "$STUB_PY" >>"$STUB_LOG" 2>&1 &
-        disown || true
-
-        # Wait briefly for the port to come up so finterm doesn't race
-        # the stub. ~3s budget; usually <200ms.
-        for _ in $(seq 1 30); do
-            if curl -fs --max-time 0.2 "$STUB_HEALTH_URL" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 0.1
-        done
-    fi
-
+    # Auth runs in-process via AuthService — no stub server needed.
     exec "$FINTERM_BIN" "$@"
 }
 
@@ -334,18 +313,15 @@ cmd_stop() {
     if pgrep -f FinceptTerminal >/dev/null; then
         pkill -f FinceptTerminal && echo "Stopped FinceptTerminal" && stopped=1
     fi
-    if pgrep -f "tools/local_stub/server.py" >/dev/null; then
-        pkill -f "tools/local_stub/server.py" && echo "Stopped localhost stub" && stopped=1
-    fi
     if [[ "$stopped" == 0 ]]; then
-        echo "Nothing to stop — neither FinceptTerminal nor the stub is running."
+        echo "Nothing to stop — FinceptTerminal is not running."
     fi
 }
 
 # ── Subcommand: status ───────────────────────────────────────────────────────
 
 cmd_status() {
-    local app stub daemon
+    local app daemon
 
     if app=$(pgrep -af FinceptTerminal); then
         echo "● FinceptTerminal:"
@@ -361,18 +337,8 @@ cmd_status() {
         echo "○ Data daemon: not running"
     fi
 
-    if stub=$(pgrep -af "tools/local_stub/server.py"); then
-        echo "● Localhost stub:"
-        echo "$stub" | sed 's/^/    /'
-    else
-        echo "○ Localhost stub: not running"
-    fi
-
-    if curl -fsS --max-time 1 "$STUB_HEALTH_URL" >/dev/null 2>&1; then
-        echo "● Stub /health: 200 OK"
-    else
-        echo "○ Stub /health: not responding"
-    fi
+    # Auth stub is gone — auth/profile run in-process via AuthService.
+    echo "● Auth: in-process (no stub server)"
 }
 
 # ── Subcommand: install / uninstall ──────────────────────────────────────────

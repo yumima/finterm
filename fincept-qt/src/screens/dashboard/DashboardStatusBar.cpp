@@ -118,10 +118,10 @@ DashboardStatusBar::DashboardStatusBar(QWidget* parent) : QWidget(parent) {
     connect(&uptime_timer_, &QTimer::timeout, this, &DashboardStatusBar::update_uptime);
     uptime_timer_.start(1000);
 
-    nam_ = new QNetworkAccessManager(this);
-    connect(&ping_timer_, &QTimer::timeout, this, &DashboardStatusBar::ping_api);
-    ping_timer_.start(30000);
-    ping_api();
+    // Auth runs in-process — no stub server to probe. Show static LOCAL indicator.
+    latency_label_->setText("LOCAL");
+    latency_label_->setStyleSheet(
+        QString("color:%1;font-weight:bold;background:transparent;").arg(ui::colors::POSITIVE()));
 
     refresh_theme();
 }
@@ -178,14 +178,7 @@ void DashboardStatusBar::set_connected(bool connected) {
 }
 
 void DashboardStatusBar::ping_api() {
-    QNetworkRequest req(QUrl("http://127.0.0.1:8765/health"));
-    req.setTransferTimeout(5000);
-    ping_elapsed_.restart();
-    QNetworkReply* reply = nam_->get(req);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        reply->deleteLater();
-        set_latency(reply->error() == QNetworkReply::NoError ? static_cast<int>(ping_elapsed_.elapsed()) : -1);
-    });
+    // No-op: auth runs in-process; label is set to "LOCAL" at construction.
 }
 
 void DashboardStatusBar::set_latency(int ms) {

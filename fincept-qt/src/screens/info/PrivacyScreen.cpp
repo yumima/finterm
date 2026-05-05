@@ -117,7 +117,7 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->addWidget(body_text("Never:"));
     pvl->addWidget(bullet("No analytics provider"));
     pvl->addWidget(bullet("No crash reporter"));
-    pvl->addWidget(bullet("No SaaS backend (auth/profile flows go to a localhost stub on 127.0.0.1:8765)"));
+    pvl->addWidget(bullet("No SaaS backend — auth/profile run entirely in-process, stored in auth.db on this machine"));
     pvl->addWidget(bullet("No telemetry of any kind"));
 
     // 4 — LLM opt-in

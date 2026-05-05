@@ -13,7 +13,9 @@
 
 namespace fincept::chat_mode {
 
-static constexpr const char* API_BASE = "http://127.0.0.1:8765";
+// The external stub server has been removed; ChatModeService fincept-backend
+// features are unavailable in this local build. Requests will fail gracefully.
+static constexpr const char* API_BASE = "";
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
