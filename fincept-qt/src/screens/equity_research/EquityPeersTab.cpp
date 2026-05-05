@@ -17,8 +17,8 @@ EquityPeersTab::EquityPeersTab(QWidget* parent) : QWidget(parent) {
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::peers_loaded, this, &EquityPeersTab::on_peers_loaded);
     connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& context, const QString&) {
-                if (context != "Peers") return;
+            [this](const QString& symbol, const QString& context, const QString&) {
+                if (context != "Peers" || symbol != current_symbol_) return;
                 if (loading_overlay_) loading_overlay_->hide_loading();
             });
 }

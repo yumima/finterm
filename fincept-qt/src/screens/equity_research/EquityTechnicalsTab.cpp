@@ -215,10 +215,9 @@ EquityTechnicalsTab::EquityTechnicalsTab(QWidget* parent) : QWidget(parent) {
     // network error during candle fetch). Filter to the Technicals context
     // so we don't react to other services' errors.
     connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& context, const QString& message) {
-                if (context != "Technicals") return;
+            [this](const QString& symbol, const QString& context, const QString&) {
+                if (context != "Technicals" || symbol != current_symbol_) return;
                 if (loading_overlay_) loading_overlay_->hide_loading();
-                Q_UNUSED(message);
             });
 }
 
@@ -234,23 +233,27 @@ void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period)
     if (period == current_period_ || current_symbol_.isEmpty())
         return;
     current_period_ = period;
-    if (active_period_btn_) {
-        const QString inactive =
-            QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                    "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
-                    "QPushButton:hover{border-color:%3;background:%4;}")
-                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
-                     ui::colors::BG_RAISED());
-        active_period_btn_->setStyleSheet(inactive);
-    }
-    const QString active =
-        QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
-                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
-            .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
-    btn->setStyleSheet(active);
+    if (active_period_btn_)
+        active_period_btn_->setStyleSheet(period_btn_style_inactive());
+    btn->setStyleSheet(period_btn_style_active());
     active_period_btn_ = btn;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
     services::equity::EquityResearchService::instance().fetch_technicals(current_symbol_, period);
+}
+
+// static
+QString EquityTechnicalsTab::period_btn_style_active() {
+    return QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
+                   "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
+        .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
+}
+
+// static
+QString EquityTechnicalsTab::period_btn_style_inactive() {
+    return QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                   "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+                   "QPushButton:hover{border-color:%3;background:%4;}")
+        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED());
 }
 
 // ── build_ui ─────────────────────────────────────────────────────────────────
@@ -277,20 +280,10 @@ void EquityTechnicalsTab::build_ui() {
             .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addWidget(period_lbl);
 
-    const QString btn_inactive =
-        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
-                "QPushButton:hover{border-color:%3;background:%4;}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED());
-    const QString btn_active =
-        QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
-                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
-            .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
-
     auto make_btn = [&](const QString& label, QPushButton*& out, const QString& period) {
         out = new QPushButton(label);
         out->setCursor(Qt::PointingHandCursor);
-        out->setStyleSheet(period == current_period_ ? btn_active : btn_inactive);
+        out->setStyleSheet(period == current_period_ ? period_btn_style_active() : period_btn_style_inactive());
         connect(out, &QPushButton::clicked, this, [this, out, period]() { switch_period(out, period); });
         pb_hl->addWidget(out);
     };
@@ -300,7 +293,15 @@ void EquityTechnicalsTab::build_ui() {
     make_btn("6M", btn_6m_, "6mo");
     make_btn("1Y", btn_1y_, "1y");
     make_btn("5Y", btn_5y_, "5y");
-    active_period_btn_ = btn_1y_;
+    // Derive initial active button from current_period_ — stays correct if default ever changes.
+    const auto period_to_btn = [&](const QString& p) -> QPushButton* {
+        if (p == "1mo") return btn_1m_;
+        if (p == "3mo") return btn_3m_;
+        if (p == "6mo") return btn_6m_;
+        if (p == "5y")  return btn_5y_;
+        return btn_1y_;
+    };
+    active_period_btn_ = period_to_btn(current_period_);
     pb_hl->addStretch();
     outer->addWidget(period_bar);
 

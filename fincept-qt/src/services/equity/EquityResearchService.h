@@ -46,7 +46,7 @@ class EquityResearchService : public QObject {
     void peers_loaded(QString symbol, QVector<fincept::services::equity::PeerData> peers);
     void news_loaded(QString symbol, QVector<fincept::services::equity::NewsArticle> articles);
     void talipp_result(QString indicator, QVector<double> values, QVector<qint64> timestamps);
-    void error_occurred(QString context, QString message);
+    void error_occurred(QString symbol, QString context, QString message);
 
   private:
     explicit EquityResearchService(QObject* parent = nullptr);

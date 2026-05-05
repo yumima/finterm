@@ -122,7 +122,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                 run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
                     release_inflight(inflight_key);
                     if (!ok || obj.contains("error")) {
-                        emit error_occurred("Quote", !ok ? err : obj["error"].toString());
+                        emit error_occurred(symbol, "Quote", !ok ? err : obj["error"].toString());
                         QuoteData failed; failed.symbol = symbol; failed.valid = false;
                         emit quote_loaded(failed);
                         return;
@@ -150,7 +150,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                 run_daemon("info", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
                     release_inflight(inflight_key);
                     if (!ok || obj.contains("error")) {
-                        emit error_occurred("Info", !ok ? err : obj["error"].toString());
+                        emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
                         StockInfo failed; failed.symbol = symbol; failed.valid = false;
                         emit info_loaded(failed);
                         return;
@@ -185,7 +185,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                            [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
                                release_inflight(inflight_key);
                                if (!ok) {
-                                   emit error_occurred("Historical", "Failed to fetch historical for " + symbol + ": " + err);
+                                   emit error_occurred(symbol, "Historical", "Failed to fetch historical for " + symbol + ": " + err);
+                                   // Empty candles signals failure; overlay gate still closes via on_historical_loaded.
                                    emit historical_loaded(symbol, period, {});
                                    return;
                                }
@@ -224,11 +225,11 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
     run_daemon("financials", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
         release_inflight(inflight_key);
         if (!ok) {
-            emit error_occurred("Financials", "Failed to fetch financials for " + symbol + ": " + err);
+            emit error_occurred(symbol, "Financials", "Failed to fetch financials for " + symbol + ": " + err);
             return;
         }
         if (obj.contains("error")) {
-            emit error_occurred("Financials", obj["error"].toString());
+            emit error_occurred(symbol, "Financials", obj["error"].toString());
             return;
         }
         fincept::CacheManager::instance().put(
@@ -279,7 +280,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 self->release_inflight(inflight_key);
                 if (!ok || !result.value("success").toBool(false)) {
                     emit self->error_occurred(
-                        "Technicals",
+                        symbol, "Technicals",
                         ok ? QString("compute_technicals returned failure: %1").arg(result.value("error").toString())
                            : QString("Indicator computation failed: %1").arg(err));
                     return;
@@ -322,7 +323,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 // Stage 1 failed — release the dedup key here since stage 2
                 // will never run to release it for us.
                 self->release_inflight(inflight_key);
-                emit self->error_occurred("Technicals", "Failed historical fetch");
+                emit self->error_occurred(symbol, "Technicals", "Failed historical fetch");
                 return;
             }
             // Daemon returns a flat array; PythonWorker wraps under _value.
@@ -369,7 +370,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     run_daemon("multiple_ratios", payload, [this, symbol, cache_key](bool ok, QJsonObject result, QString err) {
         release_inflight(cache_key);
         if (!ok) {
-            emit error_occurred("Peers", "Failed to fetch peer data: " + err);
+            emit error_occurred(symbol, "Peers", "Failed to fetch peer data: " + err);
             return;
         }
         // multiple_ratios returns a list; PythonWorker wraps under "_value".
@@ -404,7 +405,7 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
     run_daemon("news", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
         release_inflight(inflight_key);
         if (!ok) {
-            emit error_occurred("News", "Failed to fetch news for " + symbol + ": " + err);
+            emit error_occurred(symbol, "News", "Failed to fetch news for " + symbol + ": " + err);
             return;
         }
         const QJsonArray arr = obj.value("articles").toArray();
@@ -419,16 +420,16 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
 // ── TALIpp ────────────────────────────────────────────────────────────────────
 void EquityResearchService::compute_talipp(const QString& symbol, const QString& indicator, const QVariantMap& params,
                                            const QString& period) {
-    auto run_talipp = [this, indicator, params](const QString& hist_json) {
+    auto run_talipp = [this, symbol, indicator, params](const QString& hist_json) {
         QJsonObject p_obj;
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             p_obj[it.key()] = QJsonValue::fromVariant(it.value());
         QString params_json = QJsonDocument(p_obj).toJson(QJsonDocument::Compact);
 
         run_python("equity_talipp.py", {indicator, hist_json, params_json},
-                   [this, indicator](bool ok, const QString& out) {
+                   [this, symbol, indicator](bool ok, const QString& out) {
                        if (!ok) {
-                           emit error_occurred("TALIpp", out);
+                           emit error_occurred(symbol, "TALIpp", out);
                            return;
                        }
                        auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
@@ -454,9 +455,9 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-                   [this, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
+                   [this, symbol, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
                        if (!ok) {
-                           emit error_occurred("TALIpp", "Historical fetch failed: " + err);
+                           emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
                            return;
                        }
                        const auto arr = result.contains("_value")

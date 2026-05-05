@@ -29,6 +29,8 @@ class EquityTechnicalsTab : public QWidget {
     static QString signal_text(services::equity::TechSignal s);
     static const char* signal_color(services::equity::TechSignal s);
     static QString interpretation(const QString& col_key, double value);
+    static QString period_btn_style_active();
+    static QString period_btn_style_inactive();
 
     QString current_symbol_;
     QString current_period_ = "1y";
