@@ -289,15 +289,18 @@ void FuturesTermStructurePanel::set_symbol(const QString& sym) {
 void FuturesTermStructurePanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
+    // Skip timer-driven refreshes while a fetch is already in flight.
+    // Without this guard the 20s refresh timer bumps the generation every
+    // 20s, making every 30s timeout callback stale — the panel stays on
+    // "Loading…" forever.
+    if (fetch_in_flight_) return;
+    fetch_in_flight_ = true;
     set_status("loading…");
-    // Show a loading placeholder immediately so the user sees feedback even
-    // when the previous chart is stale or the panel just opened. Without
-    // this the chart area stays in its prior state (or empty on first open)
-    // until the async result arrives, which feels like "nothing happened".
     show_placeholder(QString("Loading term structure for %1…").arg(sym));
     const quint64 my_gen = bump_gen();
     FuturesDataService::instance().fetch_term_structure(
         sym, 8, [this, my_gen, sym](bool ok, QVector<TermStructurePoint> pts, QString source) {
+            fetch_in_flight_ = false;
             if (!is_current(my_gen)) return;          // stale — drop
             if (!ok) {
                 set_status("error", colors::NEGATIVE());
@@ -552,15 +555,14 @@ void FuturesSettlementsPanel::set_symbol(const QString& sym) {
 void FuturesSettlementsPanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
+    if (fetch_in_flight_) return;
+    fetch_in_flight_ = true;
     set_status("loading…");
-    // Immediate loading placeholder — the table is created with 0 rows and
-    // its column headers are always visible, so without flipping to the
-    // placeholder the panel reads as "empty data" the entire time the
-    // request is in flight (and forever if the request errors silently).
     show_placeholder(QString("Loading settlements for %1…").arg(sym));
     const quint64 my_gen = bump_gen();
     FuturesDataService::instance().fetch_term_structure(
         sym, 12, [this, my_gen, sym](bool ok, QVector<TermStructurePoint> pts, QString source) {
+            fetch_in_flight_ = false;
             if (!is_current(my_gen)) return;
             if (!ok) {
                 set_status("error", colors::NEGATIVE());

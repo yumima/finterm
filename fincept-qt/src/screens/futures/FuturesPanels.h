@@ -26,8 +26,10 @@ class FuturesPanelBase : public QWidget {
 
   public slots:
     /// Override in panels that change behaviour per asset class.
-    virtual void set_asset_class(const QString& cls) { active_class_ = cls; refresh(); }
-    virtual void set_symbol(const QString& sym) { active_symbol_ = sym; refresh(); }
+    // User-triggered changes always reset the in-flight guard so the new
+    // symbol/class gets a fresh fetch even if a previous one is running.
+    virtual void set_asset_class(const QString& cls) { active_class_ = cls; fetch_in_flight_ = false; refresh(); }
+    virtual void set_symbol(const QString& sym)      { active_symbol_ = sym; fetch_in_flight_ = false; refresh(); }
     virtual void refresh() {}
 
   protected:
@@ -43,6 +45,11 @@ class FuturesPanelBase : public QWidget {
     QString  active_class_;
     QString  active_symbol_;
     quint64  gen_ = 0;
+    // Set true while an async fetch is in flight; cleared in the callback.
+    // Prevents the 20s refresh timer from stacking a new request before the
+    // previous one completes (or times out), which would always invalidate the
+    // pending callback's generation and leave the panel stuck on "Loading…".
+    bool     fetch_in_flight_ = false;
     QLabel*  title_label_  = nullptr;
     QLabel*  status_label_ = nullptr;
 };
