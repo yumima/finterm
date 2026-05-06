@@ -23,6 +23,7 @@ class LoadingOverlay : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent* e) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     QTimer* anim_timer_ = nullptr;

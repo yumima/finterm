@@ -3,6 +3,7 @@
 
 #include "ui/theme/ThemeManager.h"
 
+#include <QEvent>
 #include <QPainter>
 #include <QPainterPath>
 
@@ -32,7 +33,16 @@ LoadingOverlay::LoadingOverlay(QWidget* parent) : QWidget(parent) {
     if (parent) {
         setGeometry(parent->rect());
         raise();
+        // Track parent resizes so the overlay always fills its parent,
+        // even when show_loading() is called before the first layout pass.
+        parent->installEventFilter(this);
     }
+}
+
+bool LoadingOverlay::eventFilter(QObject* watched, QEvent* event) {
+    if (watched == parentWidget() && event->type() == QEvent::Resize)
+        setGeometry(parentWidget()->rect());
+    return QWidget::eventFilter(watched, event);
 }
 
 void LoadingOverlay::show_loading(const QString& message) {
