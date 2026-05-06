@@ -28,8 +28,8 @@ class FuturesPanelBase : public QWidget {
     /// Override in panels that change behaviour per asset class.
     // User-triggered changes always reset the in-flight guard so the new
     // symbol/class gets a fresh fetch even if a previous one is running.
-    virtual void set_asset_class(const QString& cls) { active_class_ = cls; fetch_in_flight_ = false; refresh(); }
-    virtual void set_symbol(const QString& sym)      { active_symbol_ = sym; fetch_in_flight_ = false; refresh(); }
+    virtual void set_asset_class(const QString& cls) { active_class_ = cls; fetch_in_flight_ = false; last_failed_ms_ = 0; refresh(); }
+    virtual void set_symbol(const QString& sym)      { active_symbol_ = sym; fetch_in_flight_ = false; last_failed_ms_ = 0; refresh(); }
     virtual void refresh() {}
 
   protected:
@@ -50,6 +50,11 @@ class FuturesPanelBase : public QWidget {
     // previous one completes (or times out), which would always invalidate the
     // pending callback's generation and leave the panel stuck on "Loading…".
     bool     fetch_in_flight_ = false;
+    // After a failed fetch, back off for kFailureBackoffMs before retrying.
+    // Prevents the 20s timer from cycling "Loading → error → Loading" when
+    // the data source is unavailable (e.g. CME API blocked, no Databento key).
+    qint64   last_failed_ms_ = 0;
+    static constexpr qint64 kFailureBackoffMs = 5 * 60 * 1000; // 5 minutes
     QLabel*  title_label_  = nullptr;
     QLabel*  status_label_ = nullptr;
 };

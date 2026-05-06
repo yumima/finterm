@@ -20,7 +20,9 @@ session.mount('http://', adapter)
 def _make_request(endpoint: str, params: Dict = None) -> Any:
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
     try:
-        response = session.get(url, params=params, timeout=30)
+        # (connect_timeout, read_timeout) — fail fast on blocked/unreachable host
+        # so futures_router.py cascades to the next source quickly.
+        response = session.get(url, params=params, timeout=(3, 10))
         response.raise_for_status()
         return response.json()
     except requests.exceptions.HTTPError as e:

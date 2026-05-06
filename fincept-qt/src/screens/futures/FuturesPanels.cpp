@@ -289,11 +289,12 @@ void FuturesTermStructurePanel::set_symbol(const QString& sym) {
 void FuturesTermStructurePanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
-    // Skip timer-driven refreshes while a fetch is already in flight.
-    // Without this guard the 20s refresh timer bumps the generation every
-    // 20s, making every 30s timeout callback stale — the panel stays on
-    // "Loading…" forever.
+    // Skip timer-driven refreshes while a fetch is already in flight OR within
+    // the failure backoff window. The backoff prevents "Loading → error →
+    // Loading" cycling when the data source is unavailable.
     if (fetch_in_flight_) return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (last_failed_ms_ > 0 && (now - last_failed_ms_) < kFailureBackoffMs) return;
     fetch_in_flight_ = true;
     set_status("loading…");
     show_placeholder(QString("Loading term structure for %1…").arg(sym));
@@ -303,11 +304,14 @@ void FuturesTermStructurePanel::refresh() {
             fetch_in_flight_ = false;
             if (!is_current(my_gen)) return;          // stale — drop
             if (!ok) {
+                last_failed_ms_ = QDateTime::currentMSecsSinceEpoch();
                 set_status("error", colors::NEGATIVE());
-                show_placeholder(QString("Term structure unavailable for %1.\n"
-                                         "CME public data is unreachable from this network;\n"
-                                         "live forward curves require a Databento subscription\n"
-                                         "(set DATABENTO_API_KEY and restart).").arg(sym));
+                show_placeholder(QString("Term structure unavailable for %1.\n\n"
+                                         "Neither CME public data nor a Databento key is\n"
+                                         "available. To enable live forward curves:\n"
+                                         "  • Set DATABENTO_API_KEY in your environment\n"
+                                         "    (free tier available at databento.com)\n"
+                                         "  • Or ensure network access to cmegroup.com").arg(sym));
                 return;
             }
             set_status(QString("%1 · %2").arg(source, sym));
@@ -556,6 +560,8 @@ void FuturesSettlementsPanel::refresh() {
     const QString sym = active_symbol_;
     if (sym.isEmpty()) return;
     if (fetch_in_flight_) return;
+    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+    if (last_failed_ms_ > 0 && (now_ms - last_failed_ms_) < kFailureBackoffMs) return;
     fetch_in_flight_ = true;
     set_status("loading…");
     show_placeholder(QString("Loading settlements for %1…").arg(sym));
@@ -565,11 +571,14 @@ void FuturesSettlementsPanel::refresh() {
             fetch_in_flight_ = false;
             if (!is_current(my_gen)) return;
             if (!ok) {
+                last_failed_ms_ = QDateTime::currentMSecsSinceEpoch();
                 set_status("error", colors::NEGATIVE());
-                show_placeholder(QString("Per-month settlements unavailable for %1.\n"
-                                         "CME public data is unreachable from this network;\n"
-                                         "live data requires a Databento subscription\n"
-                                         "(set DATABENTO_API_KEY and restart).").arg(sym));
+                show_placeholder(QString("Per-month settlements unavailable for %1.\n\n"
+                                         "Neither CME public data nor a Databento key is\n"
+                                         "available. To enable live settlement data:\n"
+                                         "  • Set DATABENTO_API_KEY in your environment\n"
+                                         "    (free tier available at databento.com)\n"
+                                         "  • Or ensure network access to cmegroup.com").arg(sym));
                 return;
             }
             set_status(QString("%1 · %2").arg(source, sym));
