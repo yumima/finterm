@@ -67,6 +67,7 @@ void AuthService::init_schema() {
 
 void AuthService::save_session(const QString& api_key, const QString& session_json) {
     if (api_key.isEmpty()) return;
+    if (!db_.isOpen()) { LOG_WARN("AuthService", "save_session: auth.db not open"); return; }
     QSqlQuery q(db_);
     q.prepare(R"(INSERT INTO sessions (api_key, session_json, updated_at)
                  VALUES (?, ?, datetime('now'))
@@ -79,6 +80,7 @@ void AuthService::save_session(const QString& api_key, const QString& session_js
 
 QString AuthService::load_session(const QString& api_key) {
     if (api_key.isEmpty()) return {};
+    if (!db_.isOpen()) { LOG_WARN("AuthService", "load_session: auth.db not open"); return {}; }
     QSqlQuery q(db_);
     q.prepare("SELECT session_json FROM sessions WHERE api_key = ?");
     q.addBindValue(api_key);
@@ -117,6 +119,12 @@ void AuthService::open_user_db(const QString& api_key) {
         return;
     }
     const QString path = user_db_path(username);
+    // Skip reopen if the correct DB is already open — avoids an unnecessary
+    // close/reopen when load_session() and complete_auth_flow() both call us.
+    if (fincept::Database::instance().is_open() &&
+        fincept::Database::instance().path() == path) {
+        return;
+    }
     auto r = fincept::Database::instance().reopen(path);
     if (r.is_err())
         LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": "
@@ -179,37 +187,22 @@ QJsonObject AuthService::profile_json(int id, const QString& username, const QSt
 // ── register_user ─────────────────────────────────────────────────────────────
 
 void AuthService::register_user(const RegisterRequest& req, Callback cb) {
-    // Duplicate email check
-    {
-        QSqlQuery q(db_);
-        q.prepare("SELECT id FROM users WHERE email = ?");
-        q.addBindValue(req.email.toLower().trimmed());
-        q.exec();
-        if (q.next()) {
-            cb({false, {}, "An account with this email already exists.", 409});
-            return;
-        }
-    }
-    // Duplicate username check
-    {
-        QSqlQuery q(db_);
-        q.prepare("SELECT id FROM users WHERE username = ?");
-        q.addBindValue(req.username.toLower().trimmed());
-        q.exec();
-        if (q.next()) {
-            cb({false, {}, "This username is already taken.", 409});
-            return;
-        }
-    }
-
+    // Rely on the UNIQUE constraints for atomicity — avoid a TOCTOU window from
+    // two-phase SELECT→INSERT. Map the constraint name to a user-friendly message.
     QSqlQuery q(db_);
     q.prepare("INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)");
     q.addBindValue(req.username.toLower().trimmed());
     q.addBindValue(req.email.toLower().trimmed());
     q.addBindValue(hash_password(req.password));
     if (!q.exec()) {
-        LOG_ERROR("AuthService", "register_user failed: " + q.lastError().text());
-        cb({false, {}, "Registration failed. Please try again.", 500});
+        const QString err = q.lastError().text();
+        LOG_ERROR("AuthService", "register_user failed: " + err);
+        if (err.contains("users.email", Qt::CaseInsensitive))
+            cb({false, {}, "An account with this email already exists.", 409});
+        else if (err.contains("users.username", Qt::CaseInsensitive))
+            cb({false, {}, "This username is already taken.", 409});
+        else
+            cb({false, {}, "Registration failed. Please try again.", 500});
         return;
     }
     LOG_INFO("AuthService", "Registered user: " + req.email);
@@ -220,8 +213,8 @@ void AuthService::register_user(const RegisterRequest& req, Callback cb) {
 
 void AuthService::login(const LoginRequest& req, Callback cb) {
     QSqlQuery q(db_);
-    q.prepare("SELECT id, username, email, password_hash, api_key, otp_verified, "
-              "created_at, last_login_at FROM users WHERE email = ?");
+    q.prepare("SELECT username, email, password_hash, api_key, otp_verified "
+              "FROM users WHERE email = ?");
     q.addBindValue(req.email.toLower().trimmed());
     q.exec();
     if (!q.next()) {
@@ -229,14 +222,11 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
         return;
     }
 
-    const int     id           = q.value(0).toInt();
-    const QString username     = q.value(1).toString();
-    const QString email        = q.value(2).toString();
-    const QString stored_hash  = q.value(3).toString();
-    const QString api_key      = q.value(4).toString();
-    const bool    otp_verified = q.value(5).toBool();
-    const QString created_at   = q.value(6).toString();
-    Q_UNUSED(id); Q_UNUSED(created_at);
+    const QString username     = q.value(0).toString();
+    const QString email        = q.value(1).toString();
+    const QString stored_hash  = q.value(2).toString();
+    const QString api_key      = q.value(3).toString();
+    const bool    otp_verified = q.value(4).toBool();
 
     if (!verify_password(req.password, stored_hash)) {
         cb({false, {}, "Incorrect email or password.", 401});
@@ -270,9 +260,11 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
 // ── verify_otp ────────────────────────────────────────────────────────────────
 
 void AuthService::verify_otp(const VerifyOtpRequest& req, Callback cb) {
-    // Validate: must be exactly 6 digits
+    // Validate: must be exactly 6 ASCII digits (including "000000").
     const QString otp = req.otp.trimmed();
-    if (otp.length() != 6 || !otp.toULongLong()) {
+    const bool all_digits = otp.length() == 6 &&
+        std::all_of(otp.begin(), otp.end(), [](QChar c) { return c.isDigit(); });
+    if (!all_digits) {
         cb({false, {}, "Please enter a 6-digit verification code.", 400});
         return;
     }

@@ -190,10 +190,9 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
 
     if (!session_.api_key.isEmpty()) {
         session_.authenticated = true;
-        // Open the per-user DB for fresh logins (load_session already opened it
-        // for session-restore paths; reopen is safe if already correct path).
-        if (!fincept::Database::instance().is_open())
-            AuthService::instance().open_user_db(session_.api_key);
+        // open_user_db is idempotent: skips reopen if the correct path is
+        // already open (handles both fresh login and session-restore paths).
+        AuthService::instance().open_user_db(session_.api_key);
     }
     save_session();
     auto_configure_fincept_llm();
