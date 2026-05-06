@@ -1,6 +1,6 @@
 #include "screens/markets/MarketPanelEditor.h"
 
-#include "network/http/HttpClient.h"
+#include "python/PythonWorker.h"
 #include "ui/theme/Theme.h"
 
 #include <QDialogButtonBox>
@@ -230,25 +230,28 @@ void MarketPanelEditor::on_search_text_changed(const QString& text) {
 void MarketPanelEditor::fire_search(const QString& query) {
     if (query.isEmpty()) return;
 
-    const QString url = QString("/market/search?q=%1&limit=%2").arg(query).arg(kMaxResults);
+    QJsonObject payload;
+    payload["query"] = query;
+    payload["limit"] = kMaxResults;
 
     QPointer<MarketPanelEditor> self = this;
-    HttpClient::instance().get(url, [self, query](Result<QJsonDocument> result) {
-        if (!self) return;
-        if (self->pending_query_ != query) return; // stale response
-        if (!result.is_ok()) return;
+    python::PythonWorker::instance().submit(
+        "search", payload,
+        [self, query](bool ok, QJsonObject result, QString) {
+            if (!self) return;
+            if (self->pending_query_ != query) return; // stale response
+            if (!ok) return;
 
-        const auto doc = result.value();
-        QJsonArray arr;
-        if (doc.isArray()) {
-            arr = doc.array();
-        } else if (doc.isObject()) {
-            const auto obj = doc.object();
-            if (obj.contains("results"))      arr = obj["results"].toArray();
-            else if (obj.contains("data"))    arr = obj["data"].toArray();
-        }
-        self->on_search_results(arr);
-    });
+            // Daemon wraps flat arrays under "_value"; results also come as
+            // a direct array or under a "results" key.
+            QJsonArray arr;
+            if (result.contains("_value") && result["_value"].isArray())
+                arr = result["_value"].toArray();
+            else if (result.contains("results"))
+                arr = result["results"].toArray();
+
+            self->on_search_results(arr);
+        });
 }
 
 void MarketPanelEditor::on_search_results(const QJsonArray& results) {

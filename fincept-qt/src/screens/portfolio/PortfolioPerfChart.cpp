@@ -368,12 +368,13 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_symbol_ = symbol.toUpper();
     focus_dates_.clear();
     focus_closes_.clear();
+    focus_data_loaded_ = false; // reset: waiting for set_focus_history()
     if (title_label_)
         title_label_->setText(focus_symbol_);
     if (back_btn_)
         back_btn_->setVisible(true);
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
-    update_chart(); // renders empty placeholder until data lands
+    update_chart(); // renders loading placeholder until data lands
 }
 
 void PortfolioPerfChart::clear_focus_symbol() {
@@ -382,6 +383,7 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_symbol_.clear();
     focus_dates_.clear();
     focus_closes_.clear();
+    focus_data_loaded_ = false;
     if (title_label_)
         title_label_->setText(QStringLiteral("PERFORMANCE"));
     if (back_btn_)
@@ -395,6 +397,7 @@ void PortfolioPerfChart::set_focus_history(const QString& symbol, const QStringL
         return; // stale or off-target fetch — ignore
     focus_dates_ = dates;
     focus_closes_ = closes;
+    focus_data_loaded_ = true; // fetch complete — even if data is empty
     update_chart();
 }
 
@@ -441,7 +444,12 @@ void PortfolioPerfChart::update_chart_focus() {
 
     if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
         focus_dates_.size() != focus_closes_.size()) {
-        period_change_label_->setText(QStringLiteral("Loading %1…").arg(focus_symbol_));
+        // Show "Loading" only while the fetch is still in-flight.
+        // Once the fetch completes (focus_data_loaded_=true) but returned no
+        // data (e.g. FCASH — a non-yfinance ticker), show a clear "no data" message.
+        period_change_label_->setText(focus_data_loaded_
+            ? QStringLiteral("No price history for %1").arg(focus_symbol_)
+            : QStringLiteral("Loading %1…").arg(focus_symbol_));
         total_return_label_->clear();
         nav_label_->clear();
         if (cost_basis_label_)

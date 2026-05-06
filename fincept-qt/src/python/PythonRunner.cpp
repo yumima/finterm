@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -500,6 +501,9 @@ void PythonRunner::start_next() {
                     const qint64 duration_ms = bufs.start_ms > 0
                         ? QDateTime::currentMSecsSinceEpoch() - bufs.start_ms : 0;
 
+                    // Stop the hard-timeout timer — process finished normally (or was killed).
+                    if (bufs.timeout_timer) { bufs.timeout_timer->stop(); bufs.timeout_timer->deleteLater(); }
+
                     QString stdout_str = QString::fromUtf8(bufs.stdout_buf);
                     QString stderr_str = QString::fromUtf8(bufs.stderr_buf);
 
@@ -547,6 +551,10 @@ void PythonRunner::start_next() {
 
         connect(proc, &QProcess::errorOccurred, this, [this, proc, cb, is_code, temp_file](QProcess::ProcessError) {
             QString error_msg = proc->errorString();
+            if (proc_buffers_.contains(proc) && proc_buffers_[proc].timeout_timer) {
+                proc_buffers_[proc].timeout_timer->stop();
+                proc_buffers_[proc].timeout_timer->deleteLater();
+            }
             proc_buffers_.remove(proc);
             // Clean up any spilled arg temp files
             auto spilled = proc->property("spilled_files").toStringList();
@@ -568,6 +576,21 @@ void PythonRunner::start_next() {
                                .arg(python_exe)
                                .arg(script_path));
         proc->start(python_exe, full_args);
+
+        // Hard timeout — kill hanging scripts so they don't hold a concurrency
+        // slot forever (futures_router network calls, yf.download on bad tickers).
+        auto* tmr = new QTimer(this);
+        tmr->setSingleShot(true);
+        tmr->setInterval(kProcessTimeoutMs);
+        connect(tmr, &QTimer::timeout, this, [this, proc, script_name]() {
+            if (proc_buffers_.contains(proc)) {
+                LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
+                                       .arg(script_name).arg(kProcessTimeoutMs / 1000));
+                proc->kill(); // triggers finished(), which calls cb + start_next()
+            }
+        });
+        proc_buffers_[proc].timeout_timer = tmr;
+        tmr->start();
     }
 }
 

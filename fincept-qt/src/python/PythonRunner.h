@@ -78,6 +78,12 @@ class PythonRunner : public QObject {
     int max_concurrent_ = DEFAULT_MAX_CONCURRENT;
     int active_count_ = 0;
 
+    // Per-process hard timeout. Scripts that make network calls (futures_router,
+    // benchmark fetches, etc.) can hang indefinitely on DNS/connection failure.
+    // When the deadline fires the process is killed and the callback is called
+    // with success=false so callers show an error rather than loading forever.
+    static constexpr int kProcessTimeoutMs = 30'000;
+
     struct QueuedRequest {
         QString script;
         QStringList args;
@@ -93,7 +99,8 @@ class PythonRunner : public QObject {
         int stdout_streamed = 0;  // offset into stdout_buf already streamed
         int stderr_streamed = 0;
         StreamCallback on_line;
-        qint64 start_ms = 0;  // spawn timestamp for duration diagnostics
+        qint64 start_ms = 0;      // spawn timestamp for duration diagnostics
+        QTimer* timeout_timer = nullptr; // killed + nulled in finished/error handlers
     };
     QHash<QProcess*, ProcessBuffers> proc_buffers_;
 };
