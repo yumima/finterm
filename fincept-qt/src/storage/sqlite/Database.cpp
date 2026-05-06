@@ -32,6 +32,14 @@ void Database::close() {
         db_.close();
 }
 
+Result<void> Database::reopen(const QString& path) {
+    close();
+    db_ = QSqlDatabase(); // release the handle before removing the connection
+    if (QSqlDatabase::contains("fincept_main"))
+        QSqlDatabase::removeDatabase("fincept_main");
+    return open(path);
+}
+
 bool Database::is_open() const {
     return db_.isOpen();
 }

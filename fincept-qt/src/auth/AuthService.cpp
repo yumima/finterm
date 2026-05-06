@@ -3,8 +3,10 @@
 
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
+#include "storage/sqlite/Database.h"
 
 #include <QCryptographicHash>
+#include <QDir>
 #include <QDateTime>
 #include <QRandomGenerator>
 #include <QSqlError>
@@ -50,6 +52,82 @@ void AuthService::init_schema() {
             last_login_at TEXT
         )
     )");
+    // sessions table: persists AuthManager session JSON so the user DB path
+    // (derived from username) can be opened before fincept.db is available.
+    q.exec(R"(
+        CREATE TABLE IF NOT EXISTS sessions (
+            api_key      TEXT PRIMARY KEY,
+            session_json TEXT NOT NULL,
+            updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    )");
+}
+
+// ── Session persistence ───────────────────────────────────────────────────────
+
+void AuthService::save_session(const QString& api_key, const QString& session_json) {
+    if (api_key.isEmpty()) return;
+    QSqlQuery q(db_);
+    q.prepare(R"(INSERT INTO sessions (api_key, session_json, updated_at)
+                 VALUES (?, ?, datetime('now'))
+                 ON CONFLICT(api_key) DO UPDATE SET session_json=excluded.session_json,
+                                                    updated_at=excluded.updated_at)");
+    q.addBindValue(api_key);
+    q.addBindValue(session_json);
+    q.exec();
+}
+
+QString AuthService::load_session(const QString& api_key) {
+    if (api_key.isEmpty()) return {};
+    QSqlQuery q(db_);
+    q.prepare("SELECT session_json FROM sessions WHERE api_key = ?");
+    q.addBindValue(api_key);
+    q.exec();
+    return q.next() ? q.value(0).toString() : QString{};
+}
+
+void AuthService::remove_session(const QString& api_key) {
+    if (api_key.isEmpty()) return;
+    QSqlQuery q(db_);
+    q.prepare("DELETE FROM sessions WHERE api_key = ?");
+    q.addBindValue(api_key);
+    q.exec();
+}
+
+// ── Per-user DB ───────────────────────────────────────────────────────────────
+
+QString AuthService::username_for_key(const QString& api_key) const {
+    QSqlQuery q(db_);
+    q.prepare("SELECT username FROM users WHERE api_key = ?");
+    q.addBindValue(api_key);
+    q.exec();
+    return q.next() ? q.value(0).toString() : QString{};
+}
+
+QString AuthService::user_db_path(const QString& username) const {
+    const QString dir = fincept::AppPaths::data() + "/users";
+    QDir().mkpath(dir);
+    return dir + "/" + username + ".db";
+}
+
+void AuthService::open_user_db(const QString& api_key) {
+    const QString username = username_for_key(api_key);
+    if (username.isEmpty()) {
+        LOG_WARN("AuthService", "open_user_db: no user found for api_key");
+        return;
+    }
+    const QString path = user_db_path(username);
+    auto r = fincept::Database::instance().reopen(path);
+    if (r.is_err())
+        LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": "
+                  + QString::fromStdString(r.error()));
+    else
+        LOG_INFO("AuthService", "Opened user DB: " + path);
+}
+
+void AuthService::close_user_db() {
+    fincept::Database::instance().close();
+    LOG_INFO("AuthService", "User DB closed");
 }
 
 // ── Password helpers ──────────────────────────────────────────────────────────

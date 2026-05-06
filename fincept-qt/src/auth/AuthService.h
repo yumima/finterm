@@ -29,6 +29,18 @@ class AuthService : public QObject {
     /// before AuthManager::initialize().
     void initialize();
 
+    // ── Session persistence (stored in auth.db, always open) ─────────────────
+    void    save_session(const QString& api_key, const QString& session_json);
+    QString load_session(const QString& api_key);
+    void    remove_session(const QString& api_key);
+
+    // ── Per-user DB lifecycle ─────────────────────────────────────────────────
+    /// Open the per-user fincept DB (users/<username>.db). Creates it fresh and
+    /// runs all migrations if this is the user's first login.
+    void open_user_db(const QString& api_key);
+    /// Close the per-user DB (called at logout). Safe to call when not open.
+    void close_user_db();
+
     // ── Unauthenticated ───────────────────────────────────────────────────────
     void register_user(const RegisterRequest& req, Callback cb);
     void login(const LoginRequest& req, Callback cb);
@@ -54,8 +66,10 @@ class AuthService : public QObject {
     QString     make_token() const;
     QJsonObject profile_json(int id, const QString& username, const QString& email,
                               const QString& created_at, const QString& last_login) const;
+    QString     username_for_key(const QString& api_key) const;
+    QString     user_db_path(const QString& username) const;
 
-    QSqlDatabase db_;
+    QSqlDatabase db_; // auth.db connection
 };
 
 } // namespace fincept::auth

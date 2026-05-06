@@ -15,6 +15,9 @@ class Database {
     static Database& instance();
 
     Result<void> open(const QString& path);
+    /// Close the current connection and reopen at a new path, running
+    /// migrations on the new database. Safe to call while logged out.
+    Result<void> reopen(const QString& path);
     void close();
     bool is_open() const;
 

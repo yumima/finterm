@@ -319,15 +319,13 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("App", "Fincept Terminal v4.0.2 starting...");
 
-    // Theme is applied after DB is open so saved font/theme are respected from the start.
-
-    // Initialize config
+    // Initialize config (HttpClient base URL kept for non-auth third-party requests)
     auto& config = fincept::AppConfig::instance();
     fincept::HttpClient::instance().set_base_url(config.api_base_url());
-    // Note: auth tokens are managed by AuthManager::initialize() which loads
-    // from SecureStorage (DPAPI) and SQLite — not from QSettings/Registry.
 
-    // Register migrations explicitly (avoids MSVC /OPT:REF stripping static-init TUs)
+    // Register migrations explicitly (avoids MSVC /OPT:REF stripping static-init TUs).
+    // Actual migration execution happens inside Database::open() which is called by
+    // AuthService::open_user_db() — no manual Database::open() call here.
     fincept::register_migration_v001();
     fincept::register_migration_v002();
     fincept::register_migration_v003();
@@ -349,45 +347,6 @@ int main(int argc, char* argv[]) {
     fincept::register_migration_v019();
     fincept::register_migration_v020();
     fincept::register_migration_v021();
-
-    // Open main database
-    QString db_path = fincept::AppPaths::data() + "/fincept.db";
-    auto db_result = fincept::Database::instance().open(db_path);
-    if (db_result.is_err()) {
-        LOG_ERROR("App", "Failed to open database: " + QString::fromStdString(db_result.error()));
-        // DB unavailable — apply theme with built-in defaults so the UI is at least styled
-        fincept::ui::apply_global_stylesheet();
-    } else {
-        // Prune news articles older than 30 days — deferred to run after the event loop
-        // starts so the startup critical path is not blocked.
-        // NewsArticleRepository uses the main-thread DB connection (not thread-safe),
-        // so we must not run this on a worker thread — QTimer::singleShot(0) posts it
-        // to the main thread's event queue instead.
-        {
-            int64_t news_cutoff = QDateTime::currentSecsSinceEpoch() - (30LL * 86400);
-            QTimer::singleShot(0, [news_cutoff]() {
-                fincept::NewsArticleRepository::instance().prune_older_than(news_cutoff);
-                LOG_INFO("App", "News articles pruned (keeping 30 days)");
-            });
-        }
-
-        // Load persisted font settings and apply before any window is shown
-        // — eliminates flash/wrong-font-on-startup. Theme is always Obsidian.
-        {
-            auto& repo = fincept::SettingsRepository::instance();
-            auto& tm = fincept::ui::ThemeManager::instance();
-            auto r_family = repo.get("appearance.font_family");
-            auto r_size = repo.get("appearance.font_size");
-            QString family = r_family.is_ok() ? r_family.value() : "Consolas";
-            QString size_s = r_size.is_ok() ? r_size.value() : "14px";
-            int size_px = size_s.left(size_s.indexOf("px")).toInt();
-            if (size_px <= 0)
-                size_px = 14;
-            tm.apply_font(family, size_px);
-            tm.apply_theme("Obsidian");
-            LOG_INFO("App", "Theme: Obsidian, font: " + family + " " + size_s);
-        }
-    }
 
     // Open cache database (non-fatal if fails)
     QString cache_path = fincept::AppPaths::data() + "/cache.db";
@@ -465,8 +424,38 @@ int main(int argc, char* argv[]) {
     }
     fincept::auth::AuthService::instance().initialize();
 
-    // Initialize auth (loads saved session, validates against local auth.db)
+    // Initialize auth: load_session() synchronously opens the per-user DB if a
+    // saved session exists, so the DB is available for the theme load below.
     fincept::auth::AuthManager::instance().initialize();
+
+    // Load persisted font/theme from user DB (open if there's a saved session,
+    // otherwise DB is closed and defaults are used — fine for the login screen).
+    {
+        auto& repo = fincept::SettingsRepository::instance();
+        auto& tm   = fincept::ui::ThemeManager::instance();
+        if (fincept::Database::instance().is_open()) {
+            auto r_family = repo.get("appearance.font_family");
+            auto r_size   = repo.get("appearance.font_size");
+            QString family  = r_family.is_ok() ? r_family.value() : "Consolas";
+            QString size_s  = r_size.is_ok()   ? r_size.value()   : "14px";
+            int size_px = size_s.left(size_s.indexOf("px")).toInt();
+            if (size_px <= 0) size_px = 14;
+            tm.apply_font(family, size_px);
+            LOG_INFO("App", "Theme: Obsidian, font: " + family + " " + size_s);
+        } else {
+            LOG_INFO("App", "No user session — using default theme/font");
+        }
+        tm.apply_theme("Obsidian");
+
+        // Prune stale news articles; deferred so startup critical path is not blocked.
+        if (fincept::Database::instance().is_open()) {
+            int64_t news_cutoff = QDateTime::currentSecsSinceEpoch() - (30LL * 86400);
+            QTimer::singleShot(0, [news_cutoff]() {
+                fincept::NewsArticleRepository::instance().prune_older_than(news_cutoff);
+                LOG_INFO("App", "News articles pruned (keeping 30 days)");
+            });
+        }
+    }
 
     // Session guard — auto-logout on 401
     fincept::auth::SessionGuard session_guard;

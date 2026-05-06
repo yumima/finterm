@@ -66,55 +66,55 @@ static void clear_tokens() {
 // ── Session persistence (SQLite via SettingsRepository) ──────────────────────
 
 void AuthManager::save_session() {
+    if (session_.api_key.isEmpty())
+        return;
     QJsonDocument doc(session_.to_json());
-    QString json = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-    auto r = fincept::SettingsRepository::instance().set("fincept_session", json, "auth");
-    if (r.is_err()) {
-        LOG_ERROR("Auth", "Failed to save session: " + QString::fromStdString(r.error()));
-    }
-
-    // Persist api_key to OS-native encrypted storage (DPAPI / Keychain) as the
-    // durable credential. SQLite session JSON is the fallback.
-    if (!session_.api_key.isEmpty()) {
-        auto sr = fincept::SecureStorage::instance().store("api_key", session_.api_key);
-        if (sr.is_err())
-            LOG_WARN("Auth", "SecureStorage: failed to persist api_key — using SQLite fallback");
-    }
+    const QString json = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+    // Persist to auth.db (always open) so load_session() can read it before
+    // the per-user fincept DB is opened.
+    AuthService::instance().save_session(session_.api_key, json);
+    // Also keep in OS-native SecureStorage as the durable credential.
+    auto sr = fincept::SecureStorage::instance().store("api_key", session_.api_key);
+    if (sr.is_err())
+        LOG_WARN("Auth", "SecureStorage: failed to persist api_key");
 }
 
 void AuthManager::load_session() {
-    auto r = fincept::SettingsRepository::instance().get("fincept_session");
-    if (r.is_ok() && !r.value().isEmpty()) {
-        auto doc = QJsonDocument::fromJson(r.value().toUtf8());
+    // Step 1: recover api_key from SecureStorage — doesn't need any DB.
+    const auto secure_key = fincept::SecureStorage::instance().retrieve("api_key");
+    if (!secure_key.is_ok() || secure_key.value().isEmpty()) {
+        session_.authenticated = false;
+        return;
+    }
+    session_.api_key = secure_key.value();
+
+    // Step 2: restore full session JSON from auth.db (always open).
+    const QString json = AuthService::instance().load_session(session_.api_key);
+    if (!json.isEmpty()) {
+        auto doc = QJsonDocument::fromJson(json.toUtf8());
         if (!doc.isNull())
             session_ = SessionData::from_json(doc.object());
+        session_.api_key = secure_key.value(); // SecureStorage is authoritative
     }
 
-    // Try to recover api_key from SecureStorage (DPAPI / Keychain) — this is the
-    // most reliable source since it survives SQLite corruption and DB migrations.
-    auto secure_key = fincept::SecureStorage::instance().retrieve("api_key");
-    if (secure_key.is_ok() && !secure_key.value().isEmpty()) {
-        if (session_.api_key.isEmpty() || session_.api_key != secure_key.value()) {
-            LOG_INFO("Auth", "Restored api_key from SecureStorage");
-            session_.api_key = secure_key.value();
-        }
-    }
+    // Step 3: open the per-user DB now — synchronous, so repos work during
+    // validate_saved_session() and any startup code that follows.
+    AuthService::instance().open_user_db(session_.api_key);
 
-    // Never trust saved authenticated flag — must be re-validated
+    // Never trust saved authenticated flag — must be re-validated against auth.db.
     session_.authenticated = false;
 }
 
 void AuthManager::clear_session() {
+    const QString api_key = session_.api_key;
+    // Close per-user DB before wiping session state.
+    AuthService::instance().close_user_db();
     session_ = SessionData{};
     clear_tokens();
-    fincept::SettingsRepository::instance().remove("fincept_session");
-    fincept::SettingsRepository::instance().remove("fincept_api_key");
+    // Remove session record from auth.db and OS keychain.
+    AuthService::instance().remove_session(api_key);
     fincept::SecureStorage::instance().remove("api_key");
-
-    // Clear PIN and lockout state on logout — user must set up again after re-login
     PinManager::instance().clear_pin();
-
-    // Clear auto-configured fincept LLM provider and reset LlmService
     LlmConfigRepository::instance().delete_provider("fincept");
 }
 
@@ -188,8 +188,13 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
     session_.has_subscription = true;
     session_.user_info.account_type = "local";
 
-    if (!session_.api_key.isEmpty())
+    if (!session_.api_key.isEmpty()) {
         session_.authenticated = true;
+        // Open the per-user DB for fresh logins (load_session already opened it
+        // for session-restore paths; reopen is safe if already correct path).
+        if (!fincept::Database::instance().is_open())
+            AuthService::instance().open_user_db(session_.api_key);
+    }
     save_session();
     auto_configure_fincept_llm();
     set_loading(false);
