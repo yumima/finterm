@@ -811,9 +811,12 @@ void EquityOverviewTab::on_historical_loaded(QString symbol, QString period, QVe
         return;
     historical_loaded_ = true;
     cached_candles_ = candles;
+    // Rebuild the chart before hiding the overlay so there is no one-frame
+    // window where the overlay is gone but the canvas still shows the empty
+    // "Waiting for data..." placeholder.
+    rebuild_chart(candles);
     if (info_loaded_ && quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
-    rebuild_chart(candles);
 }
 
 void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& candles) {

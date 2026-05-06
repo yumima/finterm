@@ -451,10 +451,12 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in) {
         return;
     current_symbol_ = symbol;
 
-    // Update title bar and quote bar
+    // Update title bar and quote bar.
+    // Don't overwrite price_label_ with a placeholder — keep the last known
+    // value (or the initial dash) so the header is stable while the overlay
+    // covers the content pane. The actual price arrives via on_quote_loaded.
     symbol_label_->setText(symbol);
     sym_label_->setText(symbol);
-    price_label_->setText("Loading\xe2\x80\xa6");
 
     // Overview always loads (tab 0 is default)
     overview_tab_->set_symbol(symbol);
