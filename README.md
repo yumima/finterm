@@ -10,7 +10,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 - **FUTURES** — 8-asset-class watchlist (Index · Rates · Energy · Metals · Ags · FX · Crypto · China), heatmap, term structure, spread monitor, settlements, continuous chart.
 - **KNOWLEDGE** — 5-pane cockpit (Glossary · Concepts · Tracks · Cases · Playbooks · Abbreviations) with curated content, live data lookups, formula calculators, peer comparison charts, and an embedded AI tutor.
 - **AI chat bubble** — pluggable LLM provider (OpenAI / Anthropic / local Ollama / etc.); none wired by default.
-- **Persistent yfinance daemon** — long-lived Python child; eliminates ~1.5s per-request import cost.
+- **Concurrent yfinance daemon** — long-lived Python child communicating over a Unix domain socket. A `ThreadPoolExecutor` (6 network + 2 compute workers) runs fetches in parallel. Interactive equity-research requests are prioritised over background market-data sweeps; background batch actions are deduplicated so slow symbols never block the UI.
 - **Boot prefetch** — futures cache and active portfolios warmed at startup.
 - **Component browser, dock layouts, multi-window, workspaces** — full Qt-Advanced-Docking.
 - **Desktop launcher** — `finterm install` registers a `.desktop` entry pinnable to your dock.
@@ -42,7 +42,7 @@ finterm/
 
 One process runs when you launch:
 
-1. **FinceptTerminal binary** — the Qt app. Spawns its own Python child for market-data work (`yfinance_data.py --daemon`). Auth/profile/session run in-process; no stub server needed.
+1. **FinceptTerminal binary** — the Qt app. Auth/profile/session run in-process via `AuthService` (no stub server). Spawns `yfinance_data.py --daemon --socket <path>` as a Python child for all market-data work; communicates via a Unix domain socket at `~/.local/share/com.fincept.terminal/runtime/yfinance.sock`. The daemon runs a `ThreadPoolExecutor` internally so multiple yfinance fetches execute concurrently.
 
 Nothing talks to anything outside `localhost` except the data scripts and any LLM provider you explicitly configure.
 
@@ -132,7 +132,8 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 | Two floating empty windows on launch / PIN screen behind another | `finterm reset` (default = window-only) |
 | Stuck on a weird theme / layout | `finterm reset --config-only` |
 | Setup keeps offering "Install Analytics Libraries" | Install `portaudio19-dev` (or distro equivalent), then `finterm reset --full` once. |
-| Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it. |
+| Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it automatically. |
+| Stale socket file after crash | `rm ~/.local/share/com.fincept.terminal/runtime/yfinance.sock` — cleared automatically on next launch too. |
 | Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — you will need to sign up again. |
 
 ## License & attribution
