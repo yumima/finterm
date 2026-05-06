@@ -63,7 +63,7 @@ class ForumService : public QObject {
     static ForumProfile parse_profile(const QJsonObject& o);
 
     QNetworkAccessManager* nam_ = nullptr;
-    static constexpr const char* BASE = "http://127.0.0.1:8765";
+    static constexpr const char* BASE = ""; // forum backend removed with stub server
 };
 
 } // namespace fincept::services

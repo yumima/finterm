@@ -21,7 +21,8 @@ namespace fincept::services {
 
 static constexpr const char* kQuantLibClientTag = "QuantLibClient";
 
-const QString QuantLibClient::API_BASE = QStringLiteral("http://127.0.0.1:8765");
+// QuantLib REST backend was served by the external stub (now removed).
+const QString QuantLibClient::API_BASE = QStringLiteral("");
 
 // Endpoints that use GET (no request body).
 static const QStringList GET_ENDPOINTS = {
@@ -135,6 +136,10 @@ mcp::ToolResult QuantLibClient::parse_response(int http_status, const QByteArray
 // ── Async call ───────────────────────────────────────────────────────────────
 
 void QuantLibClient::call(const QString& endpoint, const QJsonObject& body, QuantLibCallback callback) {
+    if (API_BASE.isEmpty()) {
+        callback(mcp::ToolResult::fail("QuantLib REST backend unavailable in this build"));
+        return;
+    }
     // Cache GET endpoints (static reference data) and query-param endpoints
     const bool cacheable = is_get_endpoint(endpoint) || is_query_param_endpoint(endpoint);
     if (cacheable) {

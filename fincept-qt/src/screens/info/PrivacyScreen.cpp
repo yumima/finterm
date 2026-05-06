@@ -138,7 +138,7 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->addWidget(section_heading("§", "INSPECT THE SOURCE"));
     pvl->addWidget(body_text(
         "AGPL-3.0. Every line of network code in this repository is open. If you want to verify these claims, "
-        "the data layer is in fincept-qt/scripts/ and the localhost stub is in tools/local_stub/server.py."));
+        "the data layer is in fincept-qt/scripts/ and the auth layer is in fincept-qt/src/auth/AuthService.cpp."));
 
     vl->addWidget(panel);
 

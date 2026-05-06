@@ -82,11 +82,11 @@ RESET
     always available.
 
 STOP
-    pkill the FinceptTerminal binary and the localhost stub.
+    pkill the FinceptTerminal binary.
 
 STATUS
-    Show whether the Qt binary, the data daemon, and the stub are
-    running, and whether http://127.0.0.1:8765/health is responding.
+    Show whether the Qt binary and the data daemon are running.
+    Auth runs in-process (no stub server).
 
 INSTALL / UNINSTALL
     `install` writes ~/.local/share/applications/finterm.desktop with

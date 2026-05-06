@@ -21,7 +21,7 @@ finterm is **data-in only**:
 
 - **Outbound, on your behalf** — Yahoo Finance, Stooq, akshare (China futures only). Quotes/history flow *into* the app.
 - **Outbound, never** — no analytics, no crash reporter, no SaaS backend, no LLM unless *you* configure one in Settings → Agent.
-- **Inbound only** — auth/profile/credits/MFA resolve against `127.0.0.1:8765` (a stdlib-only Python stub).
+- **Local only** — auth/profile/session/passcode handled entirely in-process by `AuthService` (C++, backed by `auth.db`). Nothing leaves the machine.
 - **Local only** — everything else lives in `~/.local/share/com.fincept.terminal/` (SQLite + JSON) and `~/.config/Fincept/`.
 
 ## Architecture
@@ -31,21 +31,20 @@ finterm/
 ├── finterm.sh                      ← one-stop CLI: start / build / reset / install / stop / status
 ├── setup.sh                        ← preflight: Qt / cmake / Python toolchain
 ├── fincept-qt/                     ← Qt6/C++ application
+│   ├── src/auth/AuthService.cpp    ← in-process auth (users stored in auth.db)
 │   ├── src/                        ← C++ source
 │   ├── scripts/                    ← Python data layer (yfinance, akshare, stooq, …)
 │   ├── resources/knowledge/        ← KNOWLEDGE tab content (markdown + JSON manifests)
 │   └── build/<preset>/             ← compiled binary lands here
 └── tools/
-    ├── local_stub/server.py        ← localhost backend (auth/profile/credits stubs)
-    └── systemd/finterm-stub.service ← optional user unit to keep the stub running
+    └── local_stub/server.py        ← DEPRECATED — kept for reference only, do not run
 ```
 
-Two processes run when you launch:
+One process runs when you launch:
 
-1. **Local stub** (`tools/local_stub/server.py`) — listens on `127.0.0.1:8765`. Stdlib only. Stays alive across launches.
-2. **FinceptTerminal binary** — the Qt app. Spawns its own Python child for market-data work (`yfinance_data.py --daemon`).
+1. **FinceptTerminal binary** — the Qt app. Spawns its own Python child for market-data work (`yfinance_data.py --daemon`). Auth/profile/session run in-process; no stub server needed.
 
-Neither talks to anything outside `127.0.0.1` except the data scripts you invoke.
+Nothing talks to anything outside `localhost` except the data scripts and any LLM provider you explicitly configure.
 
 ## How to run
 
@@ -57,7 +56,7 @@ Linux is regularly tested (Ubuntu / Debian-likes, x86-64). macOS and Windows bui
 
 - Qt 6.8.3 (`setup.sh` provisions via `aqtinstall` if absent).
 - CMake 3.27+, GCC 12.3+ / Clang 15+ / MSVC 2022.
-- Python 3.11+ (system Python is fine for the stub).
+- Python 3.11+ (for the data scripts; no stub server needed).
 - A separate venv for the data scripts — `setup.sh` provisions it under `~/.local/share/com.fincept.terminal/`. ~110 packages, ~5–15 minutes the first time.
 
 ### First-time setup
@@ -82,7 +81,7 @@ finterm help
 
 | Command | What it does |
 |---|---|
-| `finterm` *(or `finterm start`)* | Launch the Qt app + localhost stub. |
+| `finterm` *(or `finterm start`)* | Launch the Qt app (auth is in-process; no stub needed). |
 | `finterm build` | Incremental cmake/ninja build. |
 | `finterm build --clean` | Clean rebuild. |
 | `finterm build --tests` | Configure with `-DFINCEPT_BUILD_TESTS=ON`. |
@@ -92,49 +91,29 @@ finterm help
 | `finterm reset --list` / `--restore <ts>` | List / roll back prior reset backups. |
 | `finterm install` | Register a `.desktop` launcher (pinnable to your dock). |
 | `finterm uninstall` | Remove the `.desktop` launcher. |
-| `finterm stop` | `pkill` the Qt binary and the stub. |
-| `finterm status` | Print what's running + stub `/health` check. |
+| `finterm stop` | `pkill` the Qt binary. |
+| `finterm status` | Print what's running (Qt binary + data daemon). |
 
 What `finterm start` does:
 
 1. **Strips Qt window/dock layout state** from `~/.config/Fincept/FinceptTerminal.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
-2. **Starts the localhost stub** if not already running, via `nohup`. Detects existing instances (manual, finterm-managed, or systemd-managed). Stub log: `~/.cache/fincept-stub.log`.
-3. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell; the stub keeps running.
+2. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell.
 
-### Stub server lifecycle
+### Auth & user accounts
 
-The stub (`tools/local_stub/server.py`) services auth/profile/credits requests on `127.0.0.1:8765`. It's stdlib-only and stores users in `~/.fincept-localhost/users.db`. Three ways to manage it:
+Auth runs entirely in-process via `AuthService` (C++). Users and sessions are stored in `~/.local/share/com.fincept.terminal/data/auth.db`. Each user's portfolio, watchlists, and settings live in their own isolated `users/<username>.db`. No server process required.
 
-```bash
-# Manual (foreground, with logs)
-python3 tools/local_stub/server.py
+**Sign-up flow:**
+1. Launch the app → Sign Up screen.
+2. Enter username, email, password → submit.
+3. OTP screen appears — enter any 6-digit code (e.g. `123456`).
+4. You're in. All subsequent launches restore your session automatically; entering your PIN unlocks the terminal.
 
-# Manual (background)
-nohup python3 tools/local_stub/server.py > ~/.cache/fincept-stub.log 2>&1 &
-
-# Systemd user unit (auto-starts on login, restarts on failure)
-mkdir -p ~/.config/systemd/user
-cp tools/systemd/finterm-stub.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now finterm-stub.service
-
-# Verify
-curl http://127.0.0.1:8765/health
-# → {"status":"ok"}
-
-# Logs (systemd path)
-journalctl --user -u finterm-stub -f
-
-# Stop / disable
-systemctl --user disable --now finterm-stub.service
-```
-
-`finterm start` auto-detects an existing stub (manual, nohup, or systemd) and won't start a duplicate. The stub accepts any 6-digit OTP (the "real" code is logged to stdout) and any password reset / MFA flow without external email. Endpoints not relevant to local use return empty success envelopes.
+**Multiple users:** Each user on the same machine logs in with their own credentials and sees only their own data. Accounts accumulate in `auth.db`; data is isolated in separate per-user DB files.
 
 ### Windows
 
 ```powershell
-python tools\local_stub\server.py &
 fincept-qt\build\windows-release\FinceptTerminal.exe
 ```
 
@@ -142,7 +121,7 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 
 - Window title reads **`finterm @ <hostname>`**.
 - Top status bar shows **● LIVE** in green and `DATA: YAHOO ▾`.
-- `finterm status` reports the Qt binary, the data daemon, and the stub all running with `/health` returning 200.
+- `finterm status` reports the Qt binary and data daemon running.
 
 ### Recovery
 
@@ -154,10 +133,10 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 | Stuck on a weird theme / layout | `finterm reset --config-only` |
 | Setup keeps offering "Install Analytics Libraries" | Install `portaudio19-dev` (or distro equivalent), then `finterm reset --full` once. |
 | Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it. |
-| Stub returning 500s | `finterm stop && finterm` |
+| Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — you will need to sign up again. |
 
 ## License & attribution
 
 Licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).
 
-finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency, replaces it with a localhost stub, adds the FUTURES + KNOWLEDGE tabs, and the various local-first conveniences described above. AGPL-3.0 inherits.
+finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency, replaces it with an in-process C++ auth layer, adds the FUTURES + KNOWLEDGE tabs, and the various local-first conveniences described above. AGPL-3.0 inherits.

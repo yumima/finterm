@@ -30,9 +30,11 @@ Result<void> apply_v002(QSqlDatabase& db) {
     if (r.is_err())
         return r;
 
-    // Insert default Fincept LLM
+    // Fincept cloud LLM: disabled in local build (stub server removed).
+    // Insert row with empty base_url so LlmService recognises the provider name
+    // but makes no network call. Users configure their own provider in Settings → LLM.
     sql(db, "INSERT OR IGNORE INTO llm_configs (provider, api_key, base_url, model, is_active) "
-            "VALUES ('fincept', '', 'http://127.0.0.1:8765/research/llm', 'fincept-llm', 1)");
+            "VALUES ('fincept', '', '', 'fincept-llm', 0)");
 
     // ── LLM Global Settings (singleton row) ──────────────────────────────────
     r = sql(db, "CREATE TABLE IF NOT EXISTS llm_global_settings ("

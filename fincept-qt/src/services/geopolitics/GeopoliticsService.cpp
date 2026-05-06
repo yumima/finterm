@@ -17,7 +17,8 @@
 
 namespace fincept::services::geo {
 
-static constexpr const char* kApiBase = "http://127.0.0.1:8765/research/news-events";
+// Geopolitics stub endpoint removed. fetch_events/countries/categories/cities return empty.
+static constexpr const char* kApiBase = "";
 
 namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
@@ -49,6 +50,8 @@ void GeopoliticsService::run_python(const QString& script, const QStringList& ar
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void GeopoliticsService::fetch_events(const QString& country, const QString& city, const QString& category, int limit) {
+    Q_UNUSED(country); Q_UNUSED(city); Q_UNUSED(category); Q_UNUSED(limit);
+    if (!*kApiBase) { emit events_loaded({}, 0); return; }
     // Build URL with query params
     QUrl url(kApiBase);
     QUrlQuery q;
@@ -133,6 +136,7 @@ void GeopoliticsService::fetch_events(const QString& country, const QString& cit
 }
 
 void GeopoliticsService::fetch_unique_countries() {
+    if (!*kApiBase) { emit countries_loaded({}); return; }
     // Cache hit — deserialize and emit, otherwise go to network.
     const QVariant cached = fincept::CacheManager::instance().get("geo:countries");
     if (!cached.isNull()) {
@@ -183,6 +187,7 @@ void GeopoliticsService::fetch_unique_countries() {
 }
 
 void GeopoliticsService::fetch_unique_categories() {
+    if (!*kApiBase) { emit categories_loaded({}); return; }
     const QVariant cached = fincept::CacheManager::instance().get("geo:categories");
     if (!cached.isNull()) {
         const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
@@ -231,6 +236,7 @@ void GeopoliticsService::fetch_unique_categories() {
 }
 
 void GeopoliticsService::fetch_unique_cities() {
+    if (!*kApiBase) { emit cities_loaded({}); return; }
     QPointer<GeopoliticsService> self = this;
     HttpClient::instance().get(QString(kApiBase) + "?get_unique_cities=true", [self](Result<QJsonDocument> result) {
         if (!self)

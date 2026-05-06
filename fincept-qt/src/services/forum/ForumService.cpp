@@ -36,6 +36,7 @@ QString ForumService::api_key() const {
 // ── Low-level HTTP helpers ────────────────────────────────────────────────────
 
 void ForumService::get(const QString& path, std::function<void(bool, QJsonObject)> cb) {
+    if (!*BASE) { cb(false, {}); return; } // forum backend removed
     QNetworkRequest req(QUrl(QString(BASE) + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setRawHeader("Accept", "application/json");
@@ -61,6 +62,7 @@ void ForumService::get(const QString& path, std::function<void(bool, QJsonObject
 }
 
 void ForumService::post_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
+    if (!*BASE) { cb(false, {}); return; }
     QNetworkRequest req(QUrl(QString(BASE) + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -81,6 +83,7 @@ void ForumService::post_req(const QString& path, const QJsonObject& body, std::f
 }
 
 void ForumService::put_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
+    if (!*BASE) { cb(false, {}); return; }
     QNetworkRequest req(QUrl(QString(BASE) + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

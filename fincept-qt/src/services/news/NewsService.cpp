@@ -557,8 +557,15 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         LOG_INFO("NewsService", "Live article: " + article.headline.left(50));
     });
 
-    QString url = ws_url.isEmpty() ? "ws://127.0.0.1:8765/ws/news" : ws_url;
-    live_ws_->open(QUrl(url));
+    // Live news WebSocket was served by the external stub (now removed).
+    // Only connect if the caller supplies an explicit ws_url (user-configured provider).
+    if (ws_url.isEmpty()) {
+        LOG_INFO("NewsService", "Live WebSocket skipped — no provider configured");
+        live_ws_->deleteLater();
+        live_ws_ = nullptr;
+        return;
+    }
+    live_ws_->open(QUrl(ws_url));
 }
 
 void NewsService::disconnect_live_feed() {

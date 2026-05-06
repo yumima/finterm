@@ -21,7 +21,9 @@ inline void publish_to_hub(const QString& topic, const QVariant& value) {
 }
 }  // namespace
 
-static constexpr const char* kMarineBase = "http://127.0.0.1:8765/marine";
+// Maritime intelligence endpoint was served by the external stub (now removed).
+// All fetch methods return empty results immediately.
+static constexpr const char* kMarineBase = "";
 static constexpr int kVesselTtlSec = 60;      // position data: 1 min
 static constexpr int kHistoryTtlSec = 5 * 60; // history: 5 min
 
@@ -83,8 +85,10 @@ void MaritimeService::search_vessels_by_area(const AreaSearchParams& params) {
 
 // ── Single vessel position ───────────────────────────────────────────────────
 void MaritimeService::get_vessel_position(const QString& imo) {
-    if (imo.trimmed().isEmpty())
+    if (imo.trimmed().isEmpty() || !*kMarineBase) {
+        emit error_occurred("vessel_position", "Maritime intelligence unavailable in this build");
         return;
+    }
 
     const QString cache_key = "maritime:vessel:" + imo.trimmed();
     const QVariant cached = fincept::CacheManager::instance().get(cache_key);
@@ -124,6 +128,10 @@ void MaritimeService::get_vessel_position(const QString& imo) {
 
 // ── Multi vessel positions ───────────────────────────────────────────────────
 void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
+    if (!*kMarineBase) {
+        emit vessels_loaded({}, 0);
+        return;
+    }
     QStringList sorted = imos;
     std::sort(sorted.begin(), sorted.end());
     const QString cache_key = "maritime:multi:" + sorted.join(",");
@@ -173,6 +181,10 @@ void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
 
 // ── Vessel history ───────────────────────────────────────────────────────────
 void MaritimeService::get_vessel_history(const QString& imo) {
+    if (!*kMarineBase) {
+        emit vessel_history_loaded({});
+        return;
+    }
     const QString cache_key = "maritime:history:" + imo.trimmed();
     const QVariant cached = fincept::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
