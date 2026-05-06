@@ -661,6 +661,14 @@ void DataHub::scheduler_body() {
                 ++it;
         }
 
+        // Two-pass scheduling: collect ALL due topics per producer first, then
+        // apply the per-producer rate limit once per producer. The old per-topic
+        // check updated producer_last_refresh_ms_ on the first matching topic
+        // (e.g. a sparkline), causing the rate limit to immediately gate every
+        // subsequent topic for the same producer (e.g. all quote subscriptions).
+        // This meant PerformanceWidget indices were starved as long as sparklines
+        // fired on every tick.
+        QHash<Producer*, QStringList> candidates;
         for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ++it) {
             const QString& topic = it.key();
             if (it.value().isEmpty()) continue;
@@ -679,19 +687,25 @@ void DataHub::scheduler_body() {
             Producer* p = find_producer(topic);
             if (!p) continue;
 
-            // Per-producer rate limit: if producer caps at N req/sec,
-            // ensure at least (1000/N) ms between refresh() calls to it.
+            candidates[p].append(topic);
+        }
+
+        // Second pass: rate-check once per producer, then mark all its topics.
+        for (auto cit = candidates.begin(); cit != candidates.end(); ++cit) {
+            Producer* p = cit.key();
             const int rps = p->max_requests_per_sec();
             if (rps > 0) {
                 const qint64 last = producer_last_refresh_ms_.value(p, 0);
                 const qint64 min_gap = 1000 / std::max(1, rps);
                 if (last > 0 && (t - last) < min_gap) continue;
             }
-
-            st.in_flight = true;
-            st.last_refresh_request_ms = t;
             producer_last_refresh_ms_[p] = t;
-            work[p].append(topic);
+            for (const auto& topic : cit.value()) {
+                auto& st = state_for(topic);
+                st.in_flight = true;
+                st.last_refresh_request_ms = t;
+                work[p].append(topic);
+            }
         }
     }
 

@@ -134,10 +134,13 @@ void GroupBadge::paintEvent(QPaintEvent*) {
     path.addRoundedRect(r, 3.0, 3.0);
     p.fillPath(path, fill);
 
-    // Letter
+    // Letter — use a fixed pixel size derived from the badge height so the font
+    // is always valid regardless of whether the app font is point- or pixel-based.
+    // (pointSizeF() returns -1 for pixel-sized fonts; subtracting from -1 would
+    // produce -2, triggering a Qt warning and a potential FreeType crash on Linux.)
     p.setPen(QColor("#ffffff"));
     QFont f = p.font();
-    f.setPointSizeF(f.pointSizeF() - 1.0);
+    f.setPixelSize(qMax(6, static_cast<int>(height() * 0.55)));
     f.setBold(true);
     p.setFont(f);
     const QString label = group_ == SymbolGroup::None
