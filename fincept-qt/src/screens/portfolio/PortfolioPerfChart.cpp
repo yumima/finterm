@@ -444,12 +444,10 @@ void PortfolioPerfChart::update_chart_focus() {
 
     if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
         focus_dates_.size() != focus_closes_.size()) {
-        // Show "Loading" only while the fetch is still in-flight.
-        // Once the fetch completes (focus_data_loaded_=true) but returned no
-        // data (e.g. FCASH — a non-yfinance ticker), show a clear "no data" message.
-        period_change_label_->setText(focus_data_loaded_
-            ? QStringLiteral("No price history for %1").arg(focus_symbol_)
-            : QStringLiteral("Loading %1…").arg(focus_symbol_));
+        // Show "Loading" while the fetch is in-flight; PortfolioService now
+        // always returns data (synthetic flat series for unknown tickers), so
+        // this branch is transient — it clears once the callback fires.
+        period_change_label_->setText(QStringLiteral("Loading %1…").arg(focus_symbol_));
         total_return_label_->clear();
         nav_label_->clear();
         if (cost_basis_label_)
