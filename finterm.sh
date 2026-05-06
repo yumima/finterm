@@ -119,8 +119,38 @@ EOF
         do_window_only_reset
     fi
 
-    # Auth runs in-process via AuthService — no stub server needed.
-    exec "$FINTERM_BIN" "$@"
+    # ── Crash capture ────────────────────────────────────────────────────────
+    # Run under GDB in batch mode so any crash produces a full backtrace in
+    # $SHARE_DIR/crashdumps/ without requiring root or changing system config.
+    # Falls back to a plain exec if GDB is not installed.
+    local CRASHDUMP_DIR="$SHARE_DIR/crashdumps"
+    mkdir -p "$CRASHDUMP_DIR"
+
+    # Allow the kernel to write a core file (used by apport / systemd-coredump
+    # in addition to — or instead of — the GDB log).
+    ulimit -c unlimited
+
+    if command -v gdb >/dev/null 2>&1; then
+        local GDB_LOG="$CRASHDUMP_DIR/gdb-$(date +%Y%m%d-%H%M%S).log"
+        # Pass non-crash signals through to Qt so they are not intercepted.
+        exec gdb --batch \
+            -ex "set pagination off" \
+            -ex "set logging file $GDB_LOG" \
+            -ex "set logging enabled on" \
+            -ex "handle SIGPIPE  nostop noprint pass" \
+            -ex "handle SIGHUP   nostop noprint pass" \
+            -ex "handle SIGCHLD  nostop noprint pass" \
+            -ex "handle SIGUSR1  nostop noprint pass" \
+            -ex "handle SIGUSR2  nostop noprint pass" \
+            -ex "run" \
+            -ex "thread apply all bt full" \
+            -ex "info registers" \
+            -ex "quit" \
+            --args "$FINTERM_BIN" "$@"
+    else
+        # Auth runs in-process via AuthService — no stub server needed.
+        exec "$FINTERM_BIN" "$@"
+    fi
 }
 
 # ── Subcommand: build ────────────────────────────────────────────────────────

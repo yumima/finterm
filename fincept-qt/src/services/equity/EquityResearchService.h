@@ -81,9 +81,9 @@ class EquityResearchService : public QObject {
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
-    static constexpr int kQuoteTtlSec = 30;
-    static constexpr int kInfoTtlSec = 300;
-    static constexpr int kHistoricalTtlSec = 120;
+    static constexpr int kQuoteTtlSec = 60;
+    static constexpr int kInfoTtlSec = 1800;       // fundamentals barely change minute-to-minute
+    static constexpr int kHistoricalTtlSec = 600;  // daily candles stable within 10 min
     static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
     static constexpr int kNewsTtlSec = 180;
     // Financials are quarterly — no need to refetch within a session.

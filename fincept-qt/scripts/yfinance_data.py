@@ -13,6 +13,27 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
+# ── yfinance crumb/session state ──────────────────────────────────────────────
+# Yahoo Finance periodically rotates its internal auth crumb.  When this
+# happens every outgoing request returns HTTP 401 "Invalid Crumb".  The daemon
+# must reset yfinance's cached session so the next request re-authenticates
+# transparently rather than failing for the rest of the process lifetime.
+
+_CRUMB_ERROR_PATTERNS = ("invalid crumb", "unauthorized", "401")
+
+def _is_crumb_error(exc_or_msg: str) -> bool:
+    s = str(exc_or_msg).lower()
+    return any(p in s for p in _CRUMB_ERROR_PATTERNS)
+
+def _reset_yfinance_session() -> None:
+    """Best-effort crumb reset — tries several yfinance internals in order."""
+    try:
+        # yfinance 0.2.x: clear the module-level requests-cache session
+        import importlib
+        importlib.reload(yf)
+    except Exception:
+        pass
+
 def get_quote(symbol):
     """Fetch real-time quote for a single symbol"""
     try:
@@ -322,35 +343,47 @@ def get_batch_sparklines(symbols, period="5d", interval="1h"):
     """Fetch close price series for multiple symbols — used for blotter sparklines.
     Returns: {"AAPL": [170.1, 171.3, ...], "MSFT": [...], ...}
     """
+    import re, io, contextlib
+
+    # Normalize class-share dot notation → hyphen (BRK.B → BRK-B) so yfinance
+    # batch download finds the symbol.  Keep a reverse map so results are
+    # keyed by the original symbol the caller passed in.
+    norm_to_orig = {}
+    download_syms = []
+    for s in symbols:
+        n = re.sub(r'\.([A-Z])$', r'-\1', s)
+        norm_to_orig[n] = s
+        download_syms.append(n)
+
     try:
-        import io, contextlib
         _buf = io.StringIO()
         with contextlib.redirect_stdout(_buf):
-            data = yf.download(symbols, period=period, interval=interval,
+            data = yf.download(download_syms, period=period, interval=interval,
                                group_by='ticker', progress=False, threads=True, auto_adjust=True)
 
         if data is None or data.empty:
             return {"error": "No data"}
 
         result = {}
-        for symbol in symbols:
+        for norm_sym in download_syms:
+            orig_sym = norm_to_orig.get(norm_sym, norm_sym)
             try:
                 if not isinstance(data.columns, pd.MultiIndex):
                     hist = data
                 else:
                     level0 = data.columns.get_level_values(0).unique().tolist()
                     level1 = data.columns.get_level_values(1).unique().tolist()
-                    if symbol in level0:
-                        hist = data[symbol]
-                    elif symbol in level1:
-                        hist = data.xs(symbol, axis=1, level=1)
+                    if norm_sym in level0:
+                        hist = data[norm_sym]
+                    elif norm_sym in level1:
+                        hist = data.xs(norm_sym, axis=1, level=1)
                     else:
                         continue
 
                 closes = hist['Close'].dropna()
                 if closes.empty:
                     continue
-                result[symbol] = [round(float(v), 4) for v in closes.tolist()]
+                result[orig_sym] = [round(float(v), 4) for v in closes.tolist()]
             except Exception:
                 continue
 
@@ -760,6 +793,22 @@ def get_portfolio_nav_history(positions, period='6mo'):
         return {"dates": [], "navs": [], "error": str(e)}
 
 
+def _yf_ticker_with_fallback(symbol):
+    """Return (ticker, canonical_symbol).
+
+    yfinance requires a hyphen for US class-share suffixes (BRK-B, BF-B,
+    MOH-A, …) but brokerage exports often use a dot (BRK.B).  When a
+    Ticker is constructed with the dot form it may return empty history for
+    periods longer than 1d even though the quote endpoint still works.
+    Return the hyphen variant as a fallback only when the suffix is a single
+    uppercase letter — exchange-qualified symbols like SAP.DE / BP.L are
+    left unchanged.
+    """
+    import re
+    alt = re.sub(r'\.([A-Z])$', r'-\1', symbol)
+    return yf.Ticker(alt), alt
+
+
 def get_historical_period(symbol, period='6mo', interval='1d'):
     """Fetch historical data using a period string (e.g., '1mo', '6mo', '1y', '5y')"""
     try:
@@ -768,6 +817,15 @@ def get_historical_period(symbol, period='6mo', interval='1d'):
         _buf = io.StringIO()
         with contextlib.redirect_stdout(_buf):
             hist = ticker.history(period=period, interval=interval)
+
+        # BRK.B-style dot notation returns empty history for periods > 1d
+        # even though the 1d quote endpoint succeeds.  Retry with the
+        # canonical hyphen form (BRK-B) before giving up.
+        if hist.empty:
+            ticker_alt, _ = _yf_ticker_with_fallback(symbol)
+            if ticker_alt.ticker != symbol:
+                with contextlib.redirect_stdout(_buf):
+                    hist = ticker_alt.history(period=period, interval=interval)
 
         if hist.empty:
             return []
@@ -1098,7 +1156,23 @@ def _sanitize_for_json(obj):
 
 
 def _daemon_dispatch(action, payload):
-    """Run one action and return the raw result object (not wrapped)."""
+    """Run one action and return the raw result object (not wrapped).
+
+    On the first HTTP 401 / Invalid-Crumb error the yfinance session is reset
+    and the action is retried once so callers don't see a cascade of failures
+    every time Yahoo Finance rotates its auth crumb mid-session.
+    """
+    try:
+        return _daemon_dispatch_inner(action, payload)
+    except Exception as e:
+        if _is_crumb_error(e):
+            _reset_yfinance_session()
+            return _daemon_dispatch_inner(action, payload)
+        raise
+
+
+def _daemon_dispatch_inner(action, payload):
+    """Actual dispatch — called by _daemon_dispatch (with crumb-retry wrapper)."""
     if action == "batch_all":
         return get_batch_all(payload or {})
     if action == "batch_quotes":

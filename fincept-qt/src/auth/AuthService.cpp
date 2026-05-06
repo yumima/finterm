@@ -175,7 +175,7 @@ QJsonObject AuthService::profile_json(int id, const QString& username, const QSt
     obj["username"]      = username;
     obj["email"]         = email;
     obj["account_type"]  = "local";
-    obj["credit_balance"] = 0;
+    obj["credit_balance"] = 9999;
     obj["is_verified"]   = true;
     obj["is_admin"]      = false;
     obj["mfa_enabled"]   = false;

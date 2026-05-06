@@ -701,7 +701,10 @@ void EquityOverviewTab::on_quote_loaded(services::equity::QuoteData q) {
     if (q.symbol != current_symbol_)
         return;
     quote_loaded_ = true;
-    if (info_loaded_ && quote_loaded_ && historical_loaded_)
+    // Gate on quote+historical only; info fills in the side panels as it
+    // arrives.  Waiting for info (the slowest yfinance call) would keep the
+    // overlay visible long after the chart has already rendered.
+    if (quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
     if (!q.valid)
         return;
@@ -718,7 +721,10 @@ void EquityOverviewTab::on_info_loaded(services::equity::StockInfo info) {
     if (info.symbol != current_symbol_)
         return;
     info_loaded_ = true;
-    if (info_loaded_ && quote_loaded_ && historical_loaded_)
+    // info_loaded_ is not part of the overlay gate (see on_quote_loaded).
+    // Still hide here in the edge case where info arrives last and the
+    // quote+historical path already fired but couldn't hide yet.
+    if (quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
     if (!info.valid)
         return;
@@ -815,7 +821,7 @@ void EquityOverviewTab::on_historical_loaded(QString symbol, QString period, QVe
     // window where the overlay is gone but the canvas still shows the empty
     // "Waiting for data..." placeholder.
     rebuild_chart(candles);
-    if (info_loaded_ && quote_loaded_ && historical_loaded_)
+    if (quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
 }
 
