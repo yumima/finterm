@@ -668,12 +668,24 @@ void DataHub::scheduler_body() {
         // subsequent topic for the same producer (e.g. all quote subscriptions).
         // This meant PerformanceWidget indices were starved as long as sparklines
         // fired on every tick.
-        QHash<Producer*, QStringList> candidates;
+        // Two-pass scheduling: collect ALL due topics per producer first, then
+        // apply the per-producer rate limit once per producer. The old per-topic
+        // check updated producer_last_refresh_ms_ on the first matching topic
+        // (e.g. a sparkline), causing the rate limit to immediately gate every
+        // subsequent topic for the same producer (e.g. all quote subscriptions).
+        // This meant PerformanceWidget indices were starved as long as sparklines
+        // fired on every tick.
+        //
+        // Store TopicState pointers alongside each topic so the second pass can
+        // mark in_flight/last_refresh_request_ms without a second state_for()
+        // lookup (which would be redundant and could re-insert into topics_).
+        struct Candidate { QString topic; TopicState* st; };
+        QHash<Producer*, QVector<Candidate>> candidates;
         for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ++it) {
             const QString& topic = it.key();
             if (it.value().isEmpty()) continue;
 
-            auto& st = state_for(topic);
+            TopicState& st = state_for(topic);
             if (st.policy.push_only) continue;
             if (st.in_flight) continue;
 
@@ -687,10 +699,11 @@ void DataHub::scheduler_body() {
             Producer* p = find_producer(topic);
             if (!p) continue;
 
-            candidates[p].append(topic);
+            candidates[p].append({topic, &st});
         }
 
         // Second pass: rate-check once per producer, then mark all its topics.
+        // Reuse the TopicState pointers gathered above — no second hash lookup.
         for (auto cit = candidates.begin(); cit != candidates.end(); ++cit) {
             Producer* p = cit.key();
             const int rps = p->max_requests_per_sec();
@@ -700,11 +713,10 @@ void DataHub::scheduler_body() {
                 if (last > 0 && (t - last) < min_gap) continue;
             }
             producer_last_refresh_ms_[p] = t;
-            for (const auto& topic : cit.value()) {
-                auto& st = state_for(topic);
-                st.in_flight = true;
-                st.last_refresh_request_ms = t;
-                work[p].append(topic);
+            for (auto& c : cit.value()) {
+                c.st->in_flight = true;
+                c.st->last_refresh_request_ms = t;
+                work[p].append(c.topic);
             }
         }
     }

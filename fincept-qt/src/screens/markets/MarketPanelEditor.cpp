@@ -251,7 +251,8 @@ void MarketPanelEditor::fire_search(const QString& query) {
                 arr = result["results"].toArray();
 
             self->on_search_results(arr);
-        });
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void MarketPanelEditor::on_search_results(const QJsonArray& results) {

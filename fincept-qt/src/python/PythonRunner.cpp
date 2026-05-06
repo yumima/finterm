@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QPointer>
 #include <QTimer>
 #include <QDir>
 #include <QFile>
@@ -579,15 +580,18 @@ void PythonRunner::start_next() {
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency
         // slot forever (futures_router network calls, yf.download on bad tickers).
+        // Use QPointer so the lambda is safe if the QProcess is destroyed before
+        // the timer fires (OS address reuse would make a raw pointer check unreliable).
         auto* tmr = new QTimer(this);
         tmr->setSingleShot(true);
         tmr->setInterval(kProcessTimeoutMs);
-        connect(tmr, &QTimer::timeout, this, [this, proc, script_name]() {
-            if (proc_buffers_.contains(proc)) {
-                LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
-                                       .arg(script_name).arg(kProcessTimeoutMs / 1000));
-                proc->kill(); // triggers finished(), which calls cb + start_next()
-            }
+        QPointer<QProcess> proc_guard(proc);
+        connect(tmr, &QTimer::timeout, this, [this, proc_guard, script_name]() {
+            if (!proc_guard || !proc_buffers_.contains(proc_guard.data())) return;
+            LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
+                                   .arg(script_name)
+                                   .arg(static_cast<double>(kProcessTimeoutMs) / 1000.0, 0, 'f', 0));
+            proc_guard->kill(); // triggers finished(), which calls cb + start_next()
         });
         proc_buffers_[proc].timeout_timer = tmr;
         tmr->start();
