@@ -6,6 +6,9 @@ Returns JSON output for Qt/C++ integration
 
 import sys
 import json
+import os
+import threading
+import concurrent.futures
 import yfinance as yf
 import pandas as pd
 from datetime import datetime
@@ -1148,13 +1151,17 @@ def _daemon_dispatch(action, payload):
 # Technical indicators — heavy `ta` library import is amortized over the
 # lifetime of the daemon (loaded lazily on first request, then reused).
 _TECHNICALS_MOD = None
+_TECHNICALS_LOCK = threading.Lock()
 
 
 def _load_technicals_modules():
-    """Import the technicals package once; return the bundle."""
+    """Import the technicals package once; return the bundle. Thread-safe."""
     global _TECHNICALS_MOD
     if _TECHNICALS_MOD is not None:
         return _TECHNICALS_MOD
+    with _TECHNICALS_LOCK:
+        if _TECHNICALS_MOD is not None:   # double-checked: another thread may have loaded
+            return _TECHNICALS_MOD
     import os as _os, sys as _sys
     _sd = _os.path.dirname(_os.path.abspath(__file__))
     if _sd not in _sys.path:
@@ -1285,6 +1292,120 @@ def get_extended_hours_quotes(symbols):
     return rows
 
 
+def run_daemon_socket(socket_path):
+    """Multi-threaded daemon over a Unix domain socket.
+
+    Main thread reads request frames from the socket and submits each to a
+    thread pool. Worker threads call _daemon_dispatch and write the response
+    back (protected by a write lock so frames never interleave).
+
+    Two pools:
+      network_pool (6 workers) — yfinance HTTP I/O: quote, info, historical,
+                                  batch_all, batch_quotes, news, financials …
+      compute_pool (2 workers) — CPU-bound: compute_technicals
+    """
+    import socket as _sock
+
+    _COMPUTE_ACTIONS = {"compute_technicals"}
+
+    # Remove stale socket file left by a previous crash
+    try:
+        os.unlink(socket_path)
+    except OSError:
+        pass
+
+    srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
+    srv.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+    srv.bind(socket_path)
+    srv.listen(1)
+
+    # Signal ready to the C++ host via stdout (same framing as run_daemon)
+    try:
+        ready_bytes = json.dumps({"ready": True, "pid": os.getpid()}).encode("utf-8")
+        n = len(ready_bytes)
+        sys.stdout.buffer.write(n.to_bytes(4, "big") + ready_bytes)
+        sys.stdout.buffer.flush()
+    except Exception:
+        pass
+
+    conn, _ = srv.accept()
+    write_lock = threading.Lock()
+
+    def _send_response(resp_dict):
+        try:
+            body = json.dumps(resp_dict, allow_nan=False).encode("utf-8")
+        except (ValueError, TypeError) as exc:
+            body = json.dumps({
+                "id": resp_dict.get("id", 0), "ok": False,
+                "error": f"non-JSON-safe result: {exc}"
+            }).encode("utf-8")
+        frame = len(body).to_bytes(4, "big") + body
+        with write_lock:
+            conn.sendall(frame)
+
+    def _handle(req_id, action, payload):
+        try:
+            result = _daemon_dispatch(action, payload)
+            _send_response({"id": req_id, "ok": True,
+                            "result": _sanitize_for_json(result)})
+        except Exception as exc:
+            _send_response({"id": req_id, "ok": False, "error": str(exc)})
+
+    network_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=6, thread_name_prefix="yf-net")
+    compute_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=2, thread_name_prefix="yf-compute")
+
+    read_buf = b""
+    try:
+        while True:
+            try:
+                chunk = conn.recv(65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            read_buf += chunk
+
+            while len(read_buf) >= 4:
+                n = int.from_bytes(read_buf[:4], "big")
+                if n == 0 or n > 64 * 1024 * 1024:
+                    read_buf = b""
+                    break
+                if len(read_buf) < 4 + n:
+                    break
+                body = read_buf[4:4 + n]
+                read_buf = read_buf[4 + n:]
+
+                try:
+                    req = json.loads(body.decode("utf-8"))
+                except Exception as exc:
+                    _send_response({"id": 0, "ok": False,
+                                    "error": f"bad request JSON: {exc}"})
+                    continue
+
+                req_id = req.get("id", 0)
+                action = req.get("action", "")
+                payload = req.get("payload")
+
+                if action == "shutdown":
+                    _send_response({"id": req_id, "ok": True,
+                                    "result": {"shutdown": True}})
+                    return
+
+                pool = compute_pool if action in _COMPUTE_ACTIONS else network_pool
+                pool.submit(_handle, req_id, action, payload)
+    finally:
+        network_pool.shutdown(wait=False)
+        compute_pool.shutdown(wait=False)
+        try:
+            conn.close()
+            srv.close()
+            os.unlink(socket_path)
+        except OSError:
+            pass
+
+
 def run_daemon():
     """Main daemon loop — read frame, dispatch, write frame, repeat."""
     import io
@@ -1340,6 +1461,16 @@ def run_daemon():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--daemon":
-        run_daemon()
+        # Parse optional --socket <path> argument
+        socket_path = None
+        args = sys.argv[2:]
+        for i, arg in enumerate(args):
+            if arg == "--socket" and i + 1 < len(args):
+                socket_path = args[i + 1]
+                break
+        if socket_path:
+            run_daemon_socket(socket_path)
+        else:
+            run_daemon()   # fallback: stdin/stdout (backward compat)
     else:
         main()

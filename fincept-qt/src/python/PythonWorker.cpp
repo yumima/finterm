@@ -1,12 +1,13 @@
 #include "python/PythonWorker.h"
 
+#include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonSetupManager.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
-#include <QDateTime>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 
@@ -14,8 +15,6 @@ namespace fincept::python {
 
 namespace {
 
-/// Pack a 4-byte big-endian length prefix followed by the JSON payload bytes.
-/// Mirrors `_daemon_write_frame` on the Python side.
 QByteArray encode_frame(const QJsonObject& obj) {
     const QByteArray body = QJsonDocument(obj).toJson(QJsonDocument::Compact);
     const quint32 n = static_cast<quint32>(body.size());
@@ -23,13 +22,15 @@ QByteArray encode_frame(const QJsonObject& obj) {
     out.reserve(4 + body.size());
     out.append(static_cast<char>((n >> 24) & 0xff));
     out.append(static_cast<char>((n >> 16) & 0xff));
-    out.append(static_cast<char>((n >> 8) & 0xff));
-    out.append(static_cast<char>(n & 0xff));
+    out.append(static_cast<char>((n >> 8)  & 0xff));
+    out.append(static_cast<char>(n         & 0xff));
     out.append(body);
     return out;
 }
 
 } // namespace
+
+// ── Singleton ─────────────────────────────────────────────────────────────────
 
 PythonWorker& PythonWorker::instance() {
     static PythonWorker s;
@@ -42,9 +43,7 @@ PythonWorker::PythonWorker() {
     connect(&ready_watchdog_, &QTimer::timeout, this, [this]() {
         if (ready_) return;
         LOG_WARN("PythonWorker", "Daemon handshake timed out — killing and restarting");
-        if (proc_) {
-            proc_->kill();
-        }
+        if (proc_) proc_->kill();
     });
 }
 
@@ -52,59 +51,57 @@ PythonWorker::~PythonWorker() {
     stop();
 }
 
+// ── Background action classification ─────────────────────────────────────────
+
 // static
 bool PythonWorker::is_background_action(const QString& action) {
     return action == "batch_all" || action == "batch_quotes" || action == "batch_sparklines";
 }
+
+// ── submit ────────────────────────────────────────────────────────────────────
 
 void PythonWorker::submit(const QString& action, const QJsonObject& payload, Callback cb,
                           int timeout_ms) {
     ensure_started();
 
     // ── Background deduplication ─────────────────────────────────────────────
-    // batch_all / batch_quotes / batch_sparklines are idempotent refresh
-    // sweeps. Only the latest payload matters. If one is already queued or
-    // in-flight, discard the new submission — the refresh timer fires again
-    // soon. Without this, slow symbols (FCASH, BRK.B) cause queue growth
-    // that blocks interactive equity-research requests for minutes.
+    // batch_all/batch_quotes/batch_sparklines are idempotent refresh sweeps.
+    // Only the latest payload matters; stale queued or in-flight copies are
+    // discarded so the daemon queue never grows under slow-symbol conditions.
     if (is_background_action(action)) {
-        // In-flight: daemon already working on it — skip entirely.
+        // Already in-flight: daemon is working on it — drop new submission.
         for (const auto& p : in_flight_) {
             if (p.action == action) {
                 if (cb) cb(false, {}, "deduped: already in-flight");
                 return;
             }
         }
-        // Queued: replace with the latest payload so stale data is never sent.
+        // Already queued: replace with latest payload (keep same queue slot).
         for (auto& entry : queue_) {
             if (entry.second.action == action) {
                 if (entry.second.deadline) entry.second.deadline->deleteLater();
                 if (entry.second.cb) entry.second.cb(false, {}, "deduped: superseded");
                 entry.second.payload = payload;
-                entry.second.cb = std::move(cb);
-                // Rebuild deadline timer for the new call site's timeout.
+                entry.second.cb      = std::move(cb);
                 entry.second.deadline = nullptr;
                 if (timeout_ms > 0) {
-                    // Timer will be started in try_send_next() when this
-                    // entry is actually dispatched to the daemon.
-                    entry.second.deadline = new QTimer(this);
-                    entry.second.deadline->setSingleShot(true);
-                    entry.second.deadline->setInterval(timeout_ms);
+                    auto* t = new QTimer(this);
+                    t->setSingleShot(true);
+                    t->setInterval(timeout_ms);
                     const int eid = entry.first;
-                    const QString eact = action;
-                    connect(entry.second.deadline, &QTimer::timeout, this,
-                            [this, eid, eact, timeout_ms]() {
-                                auto it = in_flight_.find(eid);
-                                if (it == in_flight_.end()) return;
-                                Pending ep = std::move(it.value());
-                                in_flight_.erase(it);
-                                LOG_WARN("PythonWorker",
-                                         QString("action '%1' (id=%2) timed out after %3ms")
-                                             .arg(eact).arg(eid).arg(timeout_ms));
-                                if (ep.deadline) ep.deadline->deleteLater();
-                                if (ep.cb) ep.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
-                                try_send_next();
-                            });
+                    connect(t, &QTimer::timeout, this, [this, eid, action, timeout_ms]() {
+                        auto it = in_flight_.find(eid);
+                        if (it == in_flight_.end()) return;
+                        Pending ep = std::move(it.value());
+                        in_flight_.erase(it);
+                        LOG_WARN("PythonWorker",
+                                 QString("action '%1' (id=%2) timed out after %3ms")
+                                     .arg(action).arg(eid).arg(timeout_ms));
+                        if (ep.deadline) ep.deadline->deleteLater();
+                        if (ep.cb) ep.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
+                        on_background_complete();
+                    });
+                    entry.second.deadline = t;
                 }
                 return;
             }
@@ -113,12 +110,10 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
 
     const int id = next_id_++;
     Pending p;
-    p.action = action;
+    p.action  = action;
     p.payload = payload;
-    p.cb = std::move(cb);
+    p.cb      = std::move(cb);
 
-    // Deadline timer — started in try_send_next() when the request is
-    // actually dispatched (so queue wait time doesn't count against timeout).
     if (timeout_ms > 0) {
         p.deadline = new QTimer(this);
         p.deadline->setSingleShot(true);
@@ -129,73 +124,85 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
             Pending tp = std::move(it.value());
             in_flight_.erase(it);
             LOG_WARN("PythonWorker",
-                     QString("action '%1' (id=%2) timed out after %3ms — daemon "
-                             "may still be working on it; UI callback failed")
+                     QString("action '%1' (id=%2) timed out after %3ms — "
+                             "daemon may still be working on it; UI callback failed")
                          .arg(action).arg(id).arg(timeout_ms));
             if (tp.deadline) tp.deadline->deleteLater();
-            if (tp.cb) tp.cb(false, QJsonObject{}, QString("timeout (%1ms)").arg(timeout_ms));
-            try_send_next(); // unblock the queue after timeout
+            if (tp.cb) tp.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
+            // If it was a background action, unblock the next queued background.
+            if (is_background_action(action)) on_background_complete();
         });
     }
 
-    // ── Priority insertion ───────────────────────────────────────────────────
-    // Interactive requests (equity research, news, financials) are inserted
-    // before any background batch actions so they reach the daemon first.
-    // Background actions go to the back.
-    if (!is_background_action(action)) {
-        // Find the first background action in the queue and insert before it.
-        int insert_pos = queue_.size();
-        for (int i = 0; i < queue_.size(); ++i) {
-            if (is_background_action(queue_[i].second.action)) {
-                insert_pos = i;
-                break;
+    bool socket_live = socket_ && socket_->state() == QLocalSocket::ConnectedState;
+
+    if (!socket_live) {
+        // Queue while socket is connecting. Interactive requests jump in front
+        // of any pending background actions so they reach the daemon first.
+        if (!is_background_action(action)) {
+            int insert_at = 0;
+            for (int i = 0; i < queue_.size(); ++i) {
+                if (is_background_action(queue_[i].second.action)) { insert_at = i; break; }
+                insert_at = i + 1;
             }
+            queue_.insert(insert_at, {id, std::move(p)});
+        } else {
+            queue_.append({id, std::move(p)});
         }
-        queue_.insert(insert_pos, {id, std::move(p)});
-    } else {
-        queue_.append({id, std::move(p)});
+        return;
     }
 
-    try_send_next();
+    // Socket is live. Interactive requests go immediately; background requests
+    // are gated — only one of each type may be in-flight at a time.
+    if (is_background_action(action)) {
+        for (const auto& existing : in_flight_) {
+            if (is_background_action(existing.action)) {
+                queue_.append({id, std::move(p)});
+                return;
+            }
+        }
+    }
+
+    send_to_daemon(id, std::move(p));
 }
 
-void PythonWorker::try_send_next() {
-    if (!ready_ || !proc_ || proc_->state() != QProcess::Running)
-        return;
-    if (!in_flight_.isEmpty())
-        return; // daemon is busy — wait for the response
-    if (queue_.isEmpty())
-        return;
+// ── send_to_daemon ────────────────────────────────────────────────────────────
 
-    auto [id, p] = std::move(queue_.front());
-    queue_.removeFirst();
-
+void PythonWorker::send_to_daemon(int id, Pending p) {
     QJsonObject req;
-    req["id"] = id;
-    req["action"] = p.action;
+    req["id"]      = id;
+    req["action"]  = p.action;
     req["payload"] = p.payload;
-    if (p.deadline) p.deadline->start(); // start now, not when queued
+    if (p.deadline) p.deadline->start();
     in_flight_.insert(id, std::move(p));
-    proc_->write(encode_frame(req));
+    socket_->write(encode_frame(req));
 }
+
+// ── stop ──────────────────────────────────────────────────────────────────────
 
 void PythonWorker::stop() {
     shutting_down_ = true;
-    if (!proc_)
-        return;
-    if (proc_->state() == QProcess::Running) {
+    if (socket_ && socket_->state() == QLocalSocket::ConnectedState) {
         QJsonObject req;
-        req["id"] = 0;
-        req["action"] = QStringLiteral("shutdown");
+        req["id"]      = 0;
+        req["action"]  = QStringLiteral("shutdown");
         req["payload"] = QJsonObject{};
-        proc_->write(encode_frame(req));
+        socket_->write(encode_frame(req));
+        socket_->waitForBytesWritten(1'000);
+        socket_->disconnectFromServer();
+    }
+    if (proc_ && proc_->state() == QProcess::Running) {
         proc_->closeWriteChannel();
-        proc_->waitForFinished(2'000);  // destructor-only blocking call (P1 allows)
+        proc_->waitForFinished(2'000);
         if (proc_->state() != QProcess::NotRunning)
             proc_->kill();
     }
+    if (!socket_path_.isEmpty())
+        QFile::remove(socket_path_);
     fail_all_pending(QStringLiteral("worker shutting down"));
 }
+
+// ── ensure_started / launch_process ──────────────────────────────────────────
 
 void PythonWorker::ensure_started() {
     if (proc_ && proc_->state() != QProcess::NotRunning)
@@ -205,6 +212,7 @@ void PythonWorker::ensure_started() {
 
 void PythonWorker::launch_process() {
     auto& runner = PythonRunner::instance();
+
     const QString scripts_dir = runner.scripts_dir();
     const QString script_path = scripts_dir + "/yfinance_data.py";
     if (!QFileInfo::exists(script_path)) {
@@ -212,8 +220,6 @@ void PythonWorker::launch_process() {
         return;
     }
 
-    // Always use venv-numpy2 — yfinance lives there. Fall back to the
-    // PythonRunner's resolved interpreter if the venv isn't present.
     QString python_exe =
         PythonSetupManager::instance().python_path(QStringLiteral("venv-numpy2"));
     if (!QFileInfo::exists(python_exe))
@@ -223,10 +229,23 @@ void PythonWorker::launch_process() {
         return;
     }
 
+    // Clean up from previous run
+    if (socket_) {
+        socket_->disconnect();
+        socket_->deleteLater();
+        socket_ = nullptr;
+    }
     if (proc_) {
         proc_->deleteLater();
         proc_ = nullptr;
     }
+    socket_buf_.clear();
+    read_buf_.clear();
+
+    // Socket path in the app's runtime directory (already created at startup).
+    socket_path_ = fincept::AppPaths::runtime() + "/yfinance.sock";
+    QFile::remove(socket_path_); // remove any stale file from a previous crash
+
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(runner.build_python_env());
     proc_->setWorkingDirectory(scripts_dir);
@@ -234,7 +253,7 @@ void PythonWorker::launch_process() {
 
 #ifdef _WIN32
     proc_->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* cpa) {
-        cpa->flags |= 0x08000000;  // CREATE_NO_WINDOW
+        cpa->flags |= 0x08000000; // CREATE_NO_WINDOW
     });
 #endif
 
@@ -242,22 +261,21 @@ void PythonWorker::launch_process() {
     connect(proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
             &PythonWorker::on_process_finished);
     connect(proc_, &QProcess::errorOccurred, this, &PythonWorker::on_process_error);
-    // Drain stderr to the log so Python import/runtime errors surface.
     connect(proc_, &QProcess::readyReadStandardError, this, [this]() {
         if (!proc_) return;
         const QByteArray err = proc_->readAllStandardError();
-        if (!err.isEmpty()) {
+        if (!err.isEmpty())
             LOG_WARN("PythonWorker", QString("stderr: %1").arg(QString::fromUtf8(err).trimmed()));
-        }
     });
 
-    read_buf_.clear();
     ready_ = false;
-    LOG_INFO("PythonWorker", QString("Launching daemon: %1 %2 --daemon")
-                                  .arg(python_exe).arg(script_path));
-    proc_->start(python_exe, {script_path, QStringLiteral("--daemon")});
+    LOG_INFO("PythonWorker", QString("Launching daemon: %1 %2 --daemon --socket %3")
+                                  .arg(python_exe).arg(script_path).arg(socket_path_));
+    proc_->start(python_exe, {script_path, "--daemon", "--socket", socket_path_});
     ready_watchdog_.start();
 }
+
+// ── on_process_finished ───────────────────────────────────────────────────────
 
 void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus status) {
     ready_ = false;
@@ -265,21 +283,25 @@ void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus statu
     const QString reason = QString("daemon exited (code=%1 status=%2)").arg(exit_code).arg(status);
     LOG_INFO("PythonWorker", reason);
 
-    // Fail any in-flight requests; queued requests are preserved for the
-    // next restart so callers don't observe spurious failures.
+    // Disconnect socket — it points to a dead process.
+    if (socket_) {
+        socket_->disconnect();
+        socket_->deleteLater();
+        socket_ = nullptr;
+    }
+
     for (auto it = in_flight_.begin(); it != in_flight_.end(); ++it) {
         if (it.value().deadline) it.value().deadline->deleteLater();
         if (it.value().cb) it.value().cb(false, {}, reason);
     }
     in_flight_.clear();
 
-    if (shutting_down_ || QCoreApplication::closingDown()) {
+    if (shutting_down_ || QCoreApplication::closingDown())
         return;
-    }
 
     if (restart_count_ >= kMaxRestarts) {
         LOG_ERROR("PythonWorker",
-                  QString("Restart cap (%1) reached — giving up, pending requests will fail")
+                  QString("Restart cap (%1) reached — pending requests will fail")
                       .arg(kMaxRestarts));
         fail_all_pending(QStringLiteral("worker restart cap reached"));
         return;
@@ -296,32 +318,88 @@ void PythonWorker::on_process_error(QProcess::ProcessError err) {
                                   .arg(proc_ ? proc_->errorString() : QString()));
 }
 
+// ── Ready handshake (stdout) ──────────────────────────────────────────────────
+
 void PythonWorker::on_ready_read() {
     if (!proc_) return;
     read_buf_.append(proc_->readAllStandardOutput());
-    try_drain_frames();
-}
 
-void PythonWorker::try_drain_frames() {
+    // Parse the single ready frame from stdout.
     while (read_buf_.size() >= 4) {
         const quint8 b0 = static_cast<quint8>(read_buf_.at(0));
         const quint8 b1 = static_cast<quint8>(read_buf_.at(1));
         const quint8 b2 = static_cast<quint8>(read_buf_.at(2));
         const quint8 b3 = static_cast<quint8>(read_buf_.at(3));
-        const quint32 n =
-            (static_cast<quint32>(b0) << 24) | (static_cast<quint32>(b1) << 16) |
-            (static_cast<quint32>(b2) << 8)  |  static_cast<quint32>(b3);
-        if (n > 64u * 1024u * 1024u) {
-            LOG_ERROR("PythonWorker", QString("Frame size %1 exceeds 64MB cap — resetting stream").arg(n));
-            read_buf_.clear();
-            if (proc_) proc_->kill();
-            return;
-        }
-        if (static_cast<quint32>(read_buf_.size()) < 4 + n) {
-            return;  // wait for more bytes
-        }
+        const quint32 n = (static_cast<quint32>(b0) << 24) |
+                          (static_cast<quint32>(b1) << 16) |
+                          (static_cast<quint32>(b2) << 8)  |
+                           static_cast<quint32>(b3);
+        if (n > 64u * 1024u * 1024u) { read_buf_.clear(); return; }
+        if (static_cast<quint32>(read_buf_.size()) < 4 + n) return;
+
         const QByteArray body = read_buf_.mid(4, static_cast<int>(n));
         read_buf_.remove(0, 4 + static_cast<int>(n));
+
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (!doc.isObject()) continue;
+        const QJsonObject obj = doc.object();
+
+        if (!ready_ && obj.value("ready").toBool()) {
+            ready_ = true;
+            ready_watchdog_.stop();
+            restart_count_ = 0;
+            LOG_INFO("PythonWorker", QString("Daemon ready (pid=%1) — connecting socket %2")
+                                          .arg(obj.value("pid").toInt())
+                                          .arg(socket_path_));
+
+            // Connect to the Unix domain socket the daemon bound.
+            socket_ = new QLocalSocket(this);
+            connect(socket_, &QLocalSocket::readyRead,   this, &PythonWorker::on_socket_data);
+            connect(socket_, &QLocalSocket::connected,   this, [this]() {
+                LOG_INFO("PythonWorker", "Socket connected — dispatching queued requests");
+                dispatch_queued();
+            });
+            connect(socket_, &QLocalSocket::errorOccurred, this,
+                    [this](QLocalSocket::LocalSocketError err) {
+                        LOG_WARN("PythonWorker",
+                                 QString("Socket error %1: %2").arg(err)
+                                     .arg(socket_ ? socket_->errorString() : QString()));
+                    });
+            socket_->connectToServer(socket_path_);
+            return; // ready frame processed — nothing more expected on stdout
+        }
+    }
+}
+
+// ── Socket data ───────────────────────────────────────────────────────────────
+
+void PythonWorker::on_socket_data() {
+    if (!socket_) return;
+    socket_buf_.append(socket_->readAll());
+    try_drain_frames();
+}
+
+void PythonWorker::try_drain_frames() {
+    while (socket_buf_.size() >= 4) {
+        const quint8 b0 = static_cast<quint8>(socket_buf_.at(0));
+        const quint8 b1 = static_cast<quint8>(socket_buf_.at(1));
+        const quint8 b2 = static_cast<quint8>(socket_buf_.at(2));
+        const quint8 b3 = static_cast<quint8>(socket_buf_.at(3));
+        const quint32 n = (static_cast<quint32>(b0) << 24) |
+                          (static_cast<quint32>(b1) << 16) |
+                          (static_cast<quint32>(b2) << 8)  |
+                           static_cast<quint32>(b3);
+        if (n > 64u * 1024u * 1024u) {
+            LOG_ERROR("PythonWorker",
+                      QString("Frame size %1 exceeds 64 MB — resetting socket stream").arg(n));
+            socket_buf_.clear();
+            if (socket_) socket_->disconnectFromServer();
+            return;
+        }
+        if (static_cast<quint32>(socket_buf_.size()) < 4 + n) return;
+
+        const QByteArray body = socket_buf_.mid(4, static_cast<int>(n));
+        socket_buf_.remove(0, 4 + static_cast<int>(n));
 
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
@@ -331,20 +409,8 @@ void PythonWorker::try_drain_frames() {
             continue;
         }
         const QJsonObject obj = doc.object();
-
-        // Ready handshake
-        if (!ready_ && obj.value("ready").toBool()) {
-            ready_ = true;
-            ready_watchdog_.stop();
-            restart_count_ = 0;  // clean handshake resets the retry budget
-            LOG_INFO("PythonWorker", QString("Daemon ready (pid=%1)")
-                                          .arg(obj.value("pid").toInt()));
-            dispatch_queued();
-            continue;
-        }
-
-        // Response
         const int id = obj.value("id").toInt();
+
         auto it = in_flight_.find(id);
         if (it == in_flight_.end()) {
             LOG_DEBUG("PythonWorker", QString("Unknown response id=%1 — ignoring").arg(id));
@@ -352,31 +418,60 @@ void PythonWorker::try_drain_frames() {
         }
         Pending p = std::move(it.value());
         in_flight_.erase(it);
-        // Cancel the deadline timer — response beat the timeout.
-        if (p.deadline) {
-            p.deadline->stop();
-            p.deadline->deleteLater();
-        }
-        const bool ok = obj.value("ok").toBool();
+        if (p.deadline) { p.deadline->stop(); p.deadline->deleteLater(); }
+
+        const bool    ok  = obj.value("ok").toBool();
         const QString err = obj.value("error").toString();
-        QJsonObject result_obj;
-        // Result can be any JSON type; wrap non-object results in a container
-        // under "_value" so callers always receive an object.
+        QJsonObject   result_obj;
         const QJsonValue rv = obj.value("result");
-        if (rv.isObject()) {
-            result_obj = rv.toObject();
-        } else {
-            result_obj["_value"] = rv;
-        }
+        if (rv.isObject()) result_obj = rv.toObject();
+        else result_obj["_value"] = rv;
+
+        const bool was_background = is_background_action(p.action);
         if (p.cb) p.cb(ok, result_obj, err);
-        try_send_next(); // daemon is free — dispatch the next queued request
+
+        // Background slot just freed — send next queued background action.
+        if (was_background) on_background_complete();
     }
 }
 
+// ── dispatch_queued / on_background_complete ──────────────────────────────────
+
 void PythonWorker::dispatch_queued() {
-    // Daemon just became ready — start draining the queue one item at a time.
-    try_send_next();
+    if (!socket_ || socket_->state() != QLocalSocket::ConnectedState) return;
+
+    // Send ALL interactive requests immediately (daemon handles concurrently).
+    // Send at most ONE background action (gate opens after response arrives).
+    bool bg_sent = false;
+    QVector<QPair<int, Pending>> remaining;
+
+    for (auto& entry : queue_) {
+        if (!is_background_action(entry.second.action)) {
+            send_to_daemon(entry.first, std::move(entry.second));
+        } else if (!bg_sent) {
+            send_to_daemon(entry.first, std::move(entry.second));
+            bg_sent = true;
+        } else {
+            remaining.append(std::move(entry));
+        }
+    }
+    queue_ = std::move(remaining);
 }
+
+void PythonWorker::on_background_complete() {
+    // A background slot is now free — send the next queued background action.
+    if (!socket_ || socket_->state() != QLocalSocket::ConnectedState) return;
+    for (int i = 0; i < queue_.size(); ++i) {
+        if (is_background_action(queue_[i].second.action)) {
+            auto entry = std::move(queue_[i]);
+            queue_.removeAt(i);
+            send_to_daemon(entry.first, std::move(entry.second));
+            return;
+        }
+    }
+}
+
+// ── fail_all_pending ──────────────────────────────────────────────────────────
 
 void PythonWorker::fail_all_pending(const QString& reason) {
     for (auto& entry : queue_) {
