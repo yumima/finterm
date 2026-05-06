@@ -531,7 +531,14 @@ void DashboardCanvas::update_canvas_height() {
     int h = layout_.margin + rows * (layout_.row_h + layout_.margin);
     int min_h = std::max(h, 400);
     setMinimumHeight(min_h);
-    setFixedHeight(min_h);
+    // Do NOT call setFixedHeight — that locks the canvas to exactly the content
+    // height and prevents dragging tiles below the last row or resizing them
+    // taller than the current window. Instead, give 3 extra empty rows below
+    // the content so tiles can be dragged/resized into that space. The
+    // QScrollArea (widgetResizable=false) shows a scrollbar when the canvas
+    // exceeds the viewport, so extra canvas space is fully accessible.
+    const int extra = 3 * (layout_.row_h + layout_.margin);
+    resize(width(), min_h + extra);
 }
 
 void DashboardCanvas::update_placeholder(const GridCell& cell) {
