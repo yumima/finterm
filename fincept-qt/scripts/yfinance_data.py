@@ -1157,27 +1157,29 @@ _TECHNICALS_LOCK = threading.Lock()
 def _load_technicals_modules():
     """Import the technicals package once; return the bundle. Thread-safe."""
     global _TECHNICALS_MOD
-    if _TECHNICALS_MOD is not None:
+    if _TECHNICALS_MOD is not None:       # fast path: no lock needed after first load
         return _TECHNICALS_MOD
     with _TECHNICALS_LOCK:
         if _TECHNICALS_MOD is not None:   # double-checked: another thread may have loaded
             return _TECHNICALS_MOD
-    import os as _os, sys as _sys
-    _sd = _os.path.dirname(_os.path.abspath(__file__))
-    if _sd not in _sys.path:
-        _sys.path.insert(0, _sd)
-    from technicals.momentum_indicators import calculate_all_momentum_indicators
-    from technicals.volume_indicators import calculate_all_volume_indicators
-    from technicals.volatility_indicators import calculate_all_volatility_indicators
-    from technicals.trend_indicators import calculate_all_trend_indicators
-    from technicals.others_indicators import calculate_all_others_indicators
-    _TECHNICALS_MOD = {
-        "momentum":   calculate_all_momentum_indicators,
-        "volume":     calculate_all_volume_indicators,
-        "volatility": calculate_all_volatility_indicators,
-        "trend":      calculate_all_trend_indicators,
-        "others":     calculate_all_others_indicators,
-    }
+        # All imports and the assignment happen inside the lock so no thread
+        # can observe a partially-initialised _TECHNICALS_MOD.
+        import os as _os, sys as _sys
+        _sd = _os.path.dirname(_os.path.abspath(__file__))
+        if _sd not in _sys.path:
+            _sys.path.insert(0, _sd)
+        from technicals.momentum_indicators import calculate_all_momentum_indicators
+        from technicals.volume_indicators import calculate_all_volume_indicators
+        from technicals.volatility_indicators import calculate_all_volatility_indicators
+        from technicals.trend_indicators import calculate_all_trend_indicators
+        from technicals.others_indicators import calculate_all_others_indicators
+        _TECHNICALS_MOD = {
+            "momentum":   calculate_all_momentum_indicators,
+            "volume":     calculate_all_volume_indicators,
+            "volatility": calculate_all_volatility_indicators,
+            "trend":      calculate_all_trend_indicators,
+            "others":     calculate_all_others_indicators,
+        }
     return _TECHNICALS_MOD
 
 
@@ -1315,7 +1317,8 @@ def run_daemon_socket(socket_path):
         pass
 
     srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
-    srv.setsockopt(_sock.SOL_SOCKET, _sock.SO_REUSEADDR, 1)
+    # SO_REUSEADDR has no effect on AF_UNIX sockets; stale-file removal above
+    # is the correct mechanism for Unix domain socket reuse.
     srv.bind(socket_path)
     srv.listen(1)
 
@@ -1328,7 +1331,16 @@ def run_daemon_socket(socket_path):
     except Exception:
         pass
 
-    conn, _ = srv.accept()
+    # Wait for the C++ host to connect. The 30s timeout prevents the daemon
+    # from hanging forever if the host crashes between the ready signal and
+    # calling connectToServer().
+    srv.settimeout(30.0)
+    try:
+        conn, _ = srv.accept()
+    except _sock.timeout:
+        return  # host never connected — exit cleanly; C++ will restart us
+    finally:
+        srv.settimeout(None)  # restore blocking mode for the connection socket
     write_lock = threading.Lock()
 
     def _send_response(resp_dict):

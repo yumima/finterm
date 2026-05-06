@@ -33,6 +33,10 @@ void Database::close() {
 }
 
 Result<void> Database::reopen(const QString& path) {
+    // Safe only at login/logout boundaries when no repository code is
+    // executing. QSqlDatabase::removeDatabase() is undefined if any
+    // QSqlQuery objects still hold a reference to the connection; callers
+    // must ensure all queries are finished before calling reopen().
     close();
     db_ = QSqlDatabase(); // release the handle before removing the connection
     if (QSqlDatabase::contains("fincept_main"))

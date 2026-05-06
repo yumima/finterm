@@ -173,6 +173,8 @@ void PythonWorker::send_to_daemon(int id, Pending p) {
     req["id"]      = id;
     req["action"]  = p.action;
     req["payload"] = p.payload;
+    // Start the deadline timer here — not at submit() time — so queue
+    // wait time doesn't count against the caller's timeout budget.
     if (p.deadline) p.deadline->start();
     in_flight_.insert(id, std::move(p));
     socket_->write(encode_frame(req));
