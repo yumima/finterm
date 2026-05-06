@@ -516,7 +516,11 @@ void PortfolioPerfChart::update_chart_focus() {
     y->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
     y->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y->setLinePenColor(QColor(ui::colors::BORDER_MED()));
-    const double pad = (y_max - y_min) * 0.05;
+    // Guard against a zero-range axis (flat series where all closes are equal,
+    // e.g. synthetic $1.00 cash series). setRange(v, v) makes Qt Charts render
+    // each point as a full-height vertical spike rather than a horizontal line.
+    const double range = y_max - y_min;
+    const double pad = range > 0 ? range * 0.05 : std::max(1.0, std::abs(y_max) * 0.02);
     y->setRange(y_min - pad, y_max + pad);
     y->setLabelFormat(indexed_mode_ ? QStringLiteral("%.1f") : QStringLiteral("%.2f"));
     chart->addAxis(y, Qt::AlignLeft);
