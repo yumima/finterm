@@ -305,8 +305,13 @@ void PortfolioHeatmap::rebuild_blocks() {
         // beside Portfolio rather than replacing it.
         block->setContextMenuPolicy(Qt::CustomContextMenu);
         connect(block, &QWidget::customContextMenuRequested, this,
-                [this, btn = block, sym = h.symbol](const QPoint& pos) {
-            QMenu menu(btn);
+                [this, btn = QPointer<QPushButton>(block), sym = h.symbol](const QPoint& pos) {
+            if (!btn) return; // block was deleted by rebuild_blocks() before the event delivered
+            // Parent menu to the heatmap widget, NOT the block button.  Parenting
+            // to btn means Qt calls delete on the stack-allocated menu when btn is
+            // destroyed via deleteLater() inside the nested event loop opened by
+            // exec() — that double-frees a stack address → SIGABRT.
+            QMenu menu(this);
             // Solid background — without this the menu inherits a transparent
             // style from the heatmap block (which is itself styled with rgba
             // colors), making the popup hard to read against the panels

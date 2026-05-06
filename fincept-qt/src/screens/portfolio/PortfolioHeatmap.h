@@ -3,6 +3,7 @@
 #include "screens/portfolio/PortfolioTypes.h"
 
 #include <QLabel>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QWidget>
