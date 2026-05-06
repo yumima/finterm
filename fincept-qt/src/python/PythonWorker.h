@@ -102,10 +102,16 @@ class PythonWorker : public QObject {
         Callback cb;
         QTimer* deadline = nullptr;  // null when timeout_ms was 0
     };
-    QHash<int, Pending> in_flight_;
-    // Requests submitted before the daemon was ready, or queued during restart.
+    // At most one request is in-flight at a time (sent to daemon stdin).
+    // The C++ queue gives us priority control and background deduplication.
+    QHash<int, Pending> in_flight_;   // size is always 0 or 1
     QVector<QPair<int, Pending>> queue_;
     int next_id_ = 1;
+
+    // Send the front of queue_ to the daemon if nothing is currently in-flight.
+    void try_send_next();
+    // True for high-frequency idempotent background batch actions.
+    static bool is_background_action(const QString& action);
 
     // Read buffer — frames may span multiple readyRead() signals.
     QByteArray read_buf_;

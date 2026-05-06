@@ -52,9 +52,64 @@ PythonWorker::~PythonWorker() {
     stop();
 }
 
+// static
+bool PythonWorker::is_background_action(const QString& action) {
+    return action == "batch_all" || action == "batch_quotes" || action == "batch_sparklines";
+}
+
 void PythonWorker::submit(const QString& action, const QJsonObject& payload, Callback cb,
                           int timeout_ms) {
     ensure_started();
+
+    // ── Background deduplication ─────────────────────────────────────────────
+    // batch_all / batch_quotes / batch_sparklines are idempotent refresh
+    // sweeps. Only the latest payload matters. If one is already queued or
+    // in-flight, discard the new submission — the refresh timer fires again
+    // soon. Without this, slow symbols (FCASH, BRK.B) cause queue growth
+    // that blocks interactive equity-research requests for minutes.
+    if (is_background_action(action)) {
+        // In-flight: daemon already working on it — skip entirely.
+        for (const auto& p : in_flight_) {
+            if (p.action == action) {
+                if (cb) cb(false, {}, "deduped: already in-flight");
+                return;
+            }
+        }
+        // Queued: replace with the latest payload so stale data is never sent.
+        for (auto& entry : queue_) {
+            if (entry.second.action == action) {
+                if (entry.second.deadline) entry.second.deadline->deleteLater();
+                if (entry.second.cb) entry.second.cb(false, {}, "deduped: superseded");
+                entry.second.payload = payload;
+                entry.second.cb = std::move(cb);
+                // Rebuild deadline timer for the new call site's timeout.
+                entry.second.deadline = nullptr;
+                if (timeout_ms > 0) {
+                    // Timer will be started in try_send_next() when this
+                    // entry is actually dispatched to the daemon.
+                    entry.second.deadline = new QTimer(this);
+                    entry.second.deadline->setSingleShot(true);
+                    entry.second.deadline->setInterval(timeout_ms);
+                    const int eid = entry.first;
+                    const QString eact = action;
+                    connect(entry.second.deadline, &QTimer::timeout, this,
+                            [this, eid, eact, timeout_ms]() {
+                                auto it = in_flight_.find(eid);
+                                if (it == in_flight_.end()) return;
+                                Pending ep = std::move(it.value());
+                                in_flight_.erase(it);
+                                LOG_WARN("PythonWorker",
+                                         QString("action '%1' (id=%2) timed out after %3ms")
+                                             .arg(eact).arg(eid).arg(timeout_ms));
+                                if (ep.deadline) ep.deadline->deleteLater();
+                                if (ep.cb) ep.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
+                                try_send_next();
+                            });
+                }
+                return;
+            }
+        }
+    }
 
     const int id = next_id_++;
     Pending p;
@@ -62,41 +117,64 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     p.payload = payload;
     p.cb = std::move(cb);
 
-    // Deadline timer: fires once at `timeout_ms`, fails the callback if the
-    // response hasn't arrived yet. Stays inactive forever when timeout_ms == 0.
+    // Deadline timer — started in try_send_next() when the request is
+    // actually dispatched (so queue wait time doesn't count against timeout).
     if (timeout_ms > 0) {
         p.deadline = new QTimer(this);
         p.deadline->setSingleShot(true);
         p.deadline->setInterval(timeout_ms);
         connect(p.deadline, &QTimer::timeout, this, [this, id, action, timeout_ms]() {
             auto it = in_flight_.find(id);
-            if (it == in_flight_.end()) return;  // already resolved — race
-            Pending p = std::move(it.value());
+            if (it == in_flight_.end()) return;
+            Pending tp = std::move(it.value());
             in_flight_.erase(it);
             LOG_WARN("PythonWorker",
                      QString("action '%1' (id=%2) timed out after %3ms — daemon "
                              "may still be working on it; UI callback failed")
                          .arg(action).arg(id).arg(timeout_ms));
-            const QString err = QString("timeout (%1ms)").arg(timeout_ms);
-            if (p.deadline) p.deadline->deleteLater();
-            if (p.cb) p.cb(false, QJsonObject{}, err);
+            if (tp.deadline) tp.deadline->deleteLater();
+            if (tp.cb) tp.cb(false, QJsonObject{}, QString("timeout (%1ms)").arg(timeout_ms));
+            try_send_next(); // unblock the queue after timeout
         });
     }
 
-    if (!ready_ || !proc_ || proc_->state() != QProcess::Running) {
-        // Queue until the daemon is ready (or restarted). The deadline
-        // timer (if any) is intentionally not started yet — we don't want
-        // to charge wait time against the user before we even sent the
-        // request.
+    // ── Priority insertion ───────────────────────────────────────────────────
+    // Interactive requests (equity research, news, financials) are inserted
+    // before any background batch actions so they reach the daemon first.
+    // Background actions go to the back.
+    if (!is_background_action(action)) {
+        // Find the first background action in the queue and insert before it.
+        int insert_pos = queue_.size();
+        for (int i = 0; i < queue_.size(); ++i) {
+            if (is_background_action(queue_[i].second.action)) {
+                insert_pos = i;
+                break;
+            }
+        }
+        queue_.insert(insert_pos, {id, std::move(p)});
+    } else {
         queue_.append({id, std::move(p)});
-        return;
     }
+
+    try_send_next();
+}
+
+void PythonWorker::try_send_next() {
+    if (!ready_ || !proc_ || proc_->state() != QProcess::Running)
+        return;
+    if (!in_flight_.isEmpty())
+        return; // daemon is busy — wait for the response
+    if (queue_.isEmpty())
+        return;
+
+    auto [id, p] = std::move(queue_.front());
+    queue_.removeFirst();
 
     QJsonObject req;
     req["id"] = id;
-    req["action"] = action;
-    req["payload"] = payload;
-    if (p.deadline) p.deadline->start();
+    req["action"] = p.action;
+    req["payload"] = p.payload;
+    if (p.deadline) p.deadline->start(); // start now, not when queued
     in_flight_.insert(id, std::move(p));
     proc_->write(encode_frame(req));
 }
@@ -190,6 +268,7 @@ void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus statu
     // Fail any in-flight requests; queued requests are preserved for the
     // next restart so callers don't observe spurious failures.
     for (auto it = in_flight_.begin(); it != in_flight_.end(); ++it) {
+        if (it.value().deadline) it.value().deadline->deleteLater();
         if (it.value().cb) it.value().cb(false, {}, reason);
     }
     in_flight_.clear();
@@ -290,27 +369,13 @@ void PythonWorker::try_drain_frames() {
             result_obj["_value"] = rv;
         }
         if (p.cb) p.cb(ok, result_obj, err);
+        try_send_next(); // daemon is free — dispatch the next queued request
     }
 }
 
 void PythonWorker::dispatch_queued() {
-    if (!ready_ || !proc_)
-        return;
-    auto local = std::move(queue_);
-    queue_.clear();
-    for (auto& entry : local) {
-        const int id = entry.first;
-        Pending& p = entry.second;
-        QJsonObject req;
-        req["id"] = id;
-        req["action"] = p.action;
-        req["payload"] = p.payload;
-        // Start the deadline timer now that we're actually sending — wait
-        // time before this point shouldn't count against the user.
-        if (p.deadline) p.deadline->start();
-        in_flight_.insert(id, std::move(p));
-        proc_->write(encode_frame(req));
-    }
+    // Daemon just became ready — start draining the queue one item at a time.
+    try_send_next();
 }
 
 void PythonWorker::fail_all_pending(const QString& reason) {
