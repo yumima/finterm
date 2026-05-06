@@ -4,6 +4,8 @@
 #include "python/PythonSetupManager.h"
 #include "storage/secure/SecureStorage.h"
 
+#include <memory>
+
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QPointer>
@@ -489,11 +491,20 @@ void PythonRunner::start_next() {
                     drain_lines(true);
                 });
 
-        auto cb = std::move(req.cb);
+        // Share cb and a done-flag across both signal handlers so only the FIRST
+        // signal to fire claims the callback. When kill() is called, Qt emits
+        // errorOccurred(Crashed) AND finished in sequence. The old code moved cb
+        // into the finished lambda, leaving errorOccurred with a moved-from empty
+        // std::function; calling it threw std::bad_function_call and crashed.
+        auto shared_cb   = std::make_shared<Callback>(std::move(req.cb));
+        auto done        = std::make_shared<bool>(false);
         auto script_name = std::move(req.script);
 
         connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-                [this, proc, cb = std::move(cb), script_name, is_code, temp_file](int exit_code, QProcess::ExitStatus) {
+                [this, proc, shared_cb, done, script_name, is_code, temp_file](int exit_code, QProcess::ExitStatus) {
+                    if (*done) return; // errorOccurred already handled this — skip
+                    *done = true;
+
                     // Collect any remaining buffered data
                     auto& bufs = proc_buffers_[proc];
                     bufs.stdout_buf.append(proc->readAllStandardOutput());
@@ -511,21 +522,17 @@ void PythonRunner::start_next() {
                     proc_buffers_.remove(proc);
                     proc->deleteLater();
 
-                    // Clean up temp file for inline code
-                    if (is_code && !temp_file.isEmpty()) {
+                    if (is_code && !temp_file.isEmpty())
                         QFile::remove(temp_file);
-                    }
 
                     PythonResult result;
                     result.exit_code = exit_code;
 
                     if (is_code) {
-                        // For notebook cells: return raw stdout, not JSON-extracted
                         result.success = (exit_code == 0);
                         result.output = std::move(stdout_str);
                         result.error = std::move(stderr_str);
                     } else {
-                        // For scripts: extract JSON from output
                         QString json_out = extract_json(stdout_str);
                         result.success = (exit_code == 0 && !json_out.isEmpty());
                         result.output = json_out.isEmpty() ? std::move(stdout_str) : std::move(json_out);
@@ -534,40 +541,39 @@ void PythonRunner::start_next() {
 
                     if (!result.success && !is_code) {
                         LOG_ERROR("Python", QString("Script %1 failed in %2ms (exit=%3): %4")
-                                                .arg(script_name)
-                                                .arg(duration_ms)
-                                                .arg(exit_code)
-                                                .arg(result.error.left(200)));
+                                                .arg(script_name).arg(duration_ms)
+                                                .arg(exit_code).arg(result.error.left(200)));
                     } else if (!is_code) {
                         LOG_DEBUG("Python", QString("Script %1 finished in %2ms")
-                                                .arg(script_name)
-                                                .arg(duration_ms));
+                                                .arg(script_name).arg(duration_ms));
                     }
 
-                    cb(std::move(result));
-
+                    (*shared_cb)(std::move(result));
                     --active_count_;
-                    start_next(); // drain queue
+                    start_next();
                 });
 
-        connect(proc, &QProcess::errorOccurred, this, [this, proc, cb, is_code, temp_file](QProcess::ProcessError) {
+        connect(proc, &QProcess::errorOccurred, this,
+                [this, proc, shared_cb, done, is_code, temp_file](QProcess::ProcessError) {
+            if (*done) return; // finished() already handled this — skip
+            *done = true;
+
             QString error_msg = proc->errorString();
             if (proc_buffers_.contains(proc) && proc_buffers_[proc].timeout_timer) {
                 proc_buffers_[proc].timeout_timer->stop();
                 proc_buffers_[proc].timeout_timer->deleteLater();
             }
             proc_buffers_.remove(proc);
-            // Clean up any spilled arg temp files
             auto spilled = proc->property("spilled_files").toStringList();
             for (const QString& f : spilled)
                 QFile::remove(f);
             proc->deleteLater();
             if (is_code && !temp_file.isEmpty())
                 QFile::remove(temp_file);
-            cb({false, {}, "Process error: " + error_msg, -1});
 
+            (*shared_cb)({false, {}, "Process error: " + error_msg, -1});
             --active_count_;
-            start_next(); // drain queue
+            start_next();
         });
 
         LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued): %4 %5")
