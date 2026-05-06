@@ -23,6 +23,10 @@ class DashboardCanvas : public QWidget {
     void add_widget(const QString& widget_type_id);
     void remove_widget(const QString& instance_id);
     void set_row_height(int px);
+    /// Scale row_h so tiles fill vp_h exactly. Only expands — never shrinks
+    /// below the current row_h or the minimum (36px). Called by DashboardScreen
+    /// on every viewport resize so the dashboard always fills the window.
+    void fit_rows_to_viewport(int vp_h);
 
     int tile_count() const { return tiles_.size(); }
 

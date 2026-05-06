@@ -298,17 +298,22 @@ void DashboardScreen::hub_unsubscribe_ticker() {
 
 bool DashboardScreen::eventFilter(QObject* obj, QEvent* event) {
     if (obj == scroll_area_->viewport() && event->type() == QEvent::Resize) {
-        int vp_w = scroll_area_->viewport()->width();
-        // Only update if width actually changed — avoids triggering
-        // resizeEvent → rebuild_grid_cache → reflow_tiles on every scroll tick.
-        // Use setMaximumWidth + resize instead of setFixedWidth so the canvas
-        // never imposes a minimum-width constraint that fights ADS splitters
-        // when two screens are placed side-by-side.
+        const int vp_w = scroll_area_->viewport()->width();
+        const int vp_h = scroll_area_->viewport()->height();
+
+        // Sync canvas width to viewport — avoids triggering reflow on every
+        // scroll tick by guarding on actual width change.
         if (vp_w > 0 && vp_w != canvas_->width()) {
             canvas_->setMinimumWidth(0);
             canvas_->setMaximumWidth(QWIDGETSIZE_MAX);
             canvas_->resize(vp_w, canvas_->height());
         }
+
+        // Distribute tiles to fill the viewport height: scale row_h up when
+        // the window is taller than the current content so tiles expand to
+        // use the available space rather than leaving blank canvas at the bottom.
+        if (vp_h > 0)
+            canvas_->fit_rows_to_viewport(vp_h);
     }
     return QWidget::eventFilter(obj, event);
 }

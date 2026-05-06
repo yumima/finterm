@@ -198,6 +198,26 @@ void DashboardCanvas::set_row_height(int px) {
     emit layout_changed(layout_);
 }
 
+void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
+    const int rows = max_row(layout_.items);
+    if (rows <= 0 || vp_h <= 0) return;
+
+    // Ideal row_h so all tile rows fill vp_h without a scrollbar:
+    //   vp_h = margin + rows*(row_h+margin)  →  row_h = (vp_h - margin*(rows+1)) / rows
+    const int ideal = (vp_h - layout_.margin * (rows + 1)) / rows;
+
+    // Only expand — never shrink below the current row_h (user may have manually
+    // made tiles taller) and never below 36px (tiles become unreadable).
+    // Cap at 240px to avoid absurdly tall tiles on very large monitors.
+    const int new_rh = qBound(qMax(36, layout_.row_h), ideal, 240);
+    if (new_rh == layout_.row_h) return;
+
+    layout_.row_h = new_rh;
+    reflow_tiles(false); // no animation for viewport-driven reflow
+    update_canvas_height();
+    emit layout_changed(layout_);
+}
+
 // ── Drag handling (swap on collision) ─────────────────────────────────────────
 
 void DashboardCanvas::on_drag_started(WidgetTile* tile, QPoint canvas_pos) {
