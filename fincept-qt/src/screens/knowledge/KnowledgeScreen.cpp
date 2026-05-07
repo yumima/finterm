@@ -25,12 +25,12 @@ namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 
 // Sub-tab assignment — 3 content panes around the rail.
-//   BASICS   : reference lookup — Glossary · Concepts · Abbreviations
-//   REFERENCE: deeper reference — Formulas · Regulators · Interviews
-//   PRACTICE : learning paths   — Cases · Tracks · Playbooks
+//   BASICS   : core reference   — Glossary · Concepts · Abbreviations
+//   PRACTICE : applied learning — Formulas · Tracks · Playbooks
+//   REFERENCE: context & study  — Cases · Regulators · Interviews
 const QStringList BASICS_CATS    = {"glossary", "concepts"};
-const QStringList REFERENCE_CATS = {"formulas", "regulators", "interviews"};
-const QStringList PRACTICE_CATS  = {"cases", "tracks", "playbooks"};
+const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks"};
+const QStringList REFERENCE_CATS = {"cases", "regulators", "interviews"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
