@@ -465,12 +465,12 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
 
     const auto filtered  = PowerTraderService::instance().filtered_summary(body);
     const auto sectors   = PowerTraderService::instance().sector_breakdown();
-    const auto signals   = PowerTraderService::instance().committee_insider_signals();
+    const auto cmte_signals   = PowerTraderService::instance().committee_insider_signals();
     const auto cmte_grps = PowerTraderService::instance().committee_groups();
     const auto watch     = PowerTraderService::instance().insider_watch_list();
 
     populate_member_list(filtered.members);
-    overview_panel_ ->set_data(filtered, sectors, signals);
+    overview_panel_ ->set_data(filtered, sectors, cmte_signals);
     rankings_panel_ ->set_data(filtered);
     feed_panel_     ->set_trades(filtered.recent_trades);
     committee_panel_->set_data(filtered, cmte_grps);

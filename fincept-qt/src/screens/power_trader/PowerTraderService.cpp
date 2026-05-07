@@ -1287,7 +1287,7 @@ QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
                 QStringLiteral("Coordinated trades: other members traded same tickers within 14 days"));
         if (e.return_score > 6 && mem)
             e.evidence_bullets.append(
-                QString("YTD alpha +%1% above SPY").arg(mem->alpha_ytd,'f',1));
+                QString("YTD alpha +%1% above SPY").arg(mem->alpha_ytd, 0, 'f', 1));
         if (e.evidence_bullets.isEmpty())
             e.evidence_bullets.append(QStringLiteral("Low insider signal — no strong flags detected"));
     }
