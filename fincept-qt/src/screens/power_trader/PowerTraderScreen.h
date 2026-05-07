@@ -65,6 +65,7 @@ class PowerTraderScreen : public QWidget {
     // ── Top bar ───────────────────────────────────────────────────────────────
     QLabel*      timestamp_lbl_ = nullptr;
     QPushButton* refresh_btn_   = nullptr;
+    QWidget*     demo_banner_   = nullptr;  // shown when is_demo=true
 
     // ── Body strip ────────────────────────────────────────────────────────────
     QButtonGroup* body_btn_group_ = nullptr;

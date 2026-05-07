@@ -188,12 +188,17 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
         else if (at == QStringLiteral("MutualFund")) t.asset_type = AssetType::MutualFund;
         else                                         t.asset_type = AssetType::Other;
 
+        t.is_demo = o[QStringLiteral("is_demo")].toBool(false);
         s.recent_trades.append(t);
     }
 
+    // Mark summary as demo if any trade carries the demo flag
+    s.is_demo = !s.recent_trades.isEmpty() && s.recent_trades.first().is_demo;
+
     summary_ = s;
-    LOG_INFO("PowerTrader", QString("Loaded %1 members, %2 trades")
-                 .arg(s.members.size()).arg(s.recent_trades.size()));
+    LOG_INFO("PowerTrader", QString("Loaded %1 members, %2 trades%3")
+                 .arg(s.members.size()).arg(s.recent_trades.size())
+                 .arg(s.is_demo ? QStringLiteral(" [DEMO]") : QString()));
     emit data_loaded(summary_);
 }
 
@@ -268,7 +273,8 @@ PoliticalTrade PowerTraderService::make_trade(int idx,
 void PowerTraderService::generate_mock_data() {
     PowerTraderSummary s;
     s.last_updated = QDateTime::currentDateTimeUtc();
-    s.loaded = true;
+    s.loaded  = true;
+    s.is_demo = true;
 
     // ── Members ───────────────────────────────────────────────────────────────
     using C = MemberChamber;

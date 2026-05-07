@@ -728,11 +728,12 @@ def build_all_data(days_back: int = 90) -> dict:
     falls back to KNOWN_MEMBERS representative data when offline.
     Member party/state/committees come from dynamic Congress.gov / senate.gov roster.
     """
-    # Pre-load roster so _enrich_member() is fast for all subsequent calls
-    _load_roster()
-
+    # Fast-fail offline: probe before any network calls (avoids 8s _load_roster timeout)
     if not _network_available():
         return _build_fallback_data()
+
+    # Pre-load roster only when online so _enrich_member() is fast for live calls
+    _load_roster()
 
     senate_filings = fetch_senate_ptrs(days_back=days_back)
     house_filings  = fetch_house_ptrs(days_back=days_back)
@@ -812,6 +813,40 @@ def build_all_data(days_back: int = 90) -> dict:
     return {"members": list(member_map.values()), "trades": trades}
 
 
+_TICKER_NAMES: Dict[str, str] = {
+    "LMT": "Lockheed Martin", "RTX": "Raytheon Technologies", "NOC": "Northrop Grumman",
+    "GD": "General Dynamics", "LDOS": "Leidos Holdings",
+    "NVDA": "NVIDIA Corp", "MSFT": "Microsoft Corp", "AAPL": "Apple Inc",
+    "GOOGL": "Alphabet Inc", "META": "Meta Platforms", "AMD": "AMD Inc",
+    "JPM": "JPMorgan Chase", "GS": "Goldman Sachs", "MS": "Morgan Stanley",
+    "BX": "Blackstone Inc", "V": "Visa Inc",
+    "UNH": "UnitedHealth Group", "JNJ": "Johnson & Johnson",
+    "ABBV": "AbbVie Inc", "PFE": "Pfizer Inc", "MRK": "Merck & Co",
+    "XOM": "Exxon Mobil", "CVX": "Chevron Corp", "COP": "ConocoPhillips",
+    "SLB": "Schlumberger NV", "OXY": "Occidental Petroleum",
+}
+
+# Committee name → relevant sectors for demo trade generation
+_CMTE_SECTORS: Dict[str, List[str]] = {
+    "Armed Services": ["Defense"],
+    "Intelligence": ["Defense", "Technology"],
+    "Homeland Security": ["Defense", "Technology"],
+    "Finance": ["Financials"],
+    "Banking": ["Financials"],
+    "Banking, Housing, and Urban Affairs": ["Financials"],
+    "Financial Services": ["Financials"],
+    "Ways and Means": ["Financials"],
+    "Commerce": ["Technology"],
+    "Commerce, Science, and Transportation": ["Technology"],
+    "Energy and Commerce": ["Technology", "Energy"],
+    "Energy and Natural Resources": ["Energy"],
+    "Health": ["Healthcare"],
+    "Health, Education, Labor, and Pensions": ["Healthcare"],
+    "Agriculture": ["Energy"],  # closest available
+    "Agriculture, Nutrition, and Forestry": ["Energy"],
+}
+
+
 def _build_fallback_data() -> dict:
     """
     Generate representative data from KNOWN_MEMBERS when live sources are
@@ -819,11 +854,10 @@ def _build_fallback_data() -> dict:
     The C++ service also has its own mock fallback; this one runs inside Python
     so the data_source field reflects the true state.
     """
-    from datetime import datetime as _dt
     import random as _random
     _random.seed(42)   # deterministic so the UI doesn't flicker on refresh
 
-    tickers_by_sector = {
+    tickers_by_sector: Dict[str, List[str]] = {
         "Defense":    ["LMT", "RTX", "NOC", "GD", "LDOS"],
         "Technology": ["NVDA", "MSFT", "AAPL", "GOOGL", "META", "AMD"],
         "Financials": ["JPM", "GS", "MS", "BX", "V"],
@@ -840,14 +874,14 @@ def _build_fallback_data() -> dict:
 
     today = date.today()
     member_map: Dict[str, dict] = {}
-    trades = []
+    trades: List[dict] = []
     trade_idx = 0
 
     for name, v in KNOWN_MEMBERS.items():
-        member_id = _make_member_id(name)
-        full_name = " ".join(w.capitalize() for w in name.split())
-        chamber   = v["chamber"]
-        party     = v["party"]
+        member_id  = _make_member_id(name)
+        full_name  = " ".join(w.capitalize() for w in name.split())
+        chamber    = v["chamber"]
+        party      = v["party"]
         committees = v["committees"]
 
         if member_id not in member_map:
@@ -858,29 +892,32 @@ def _build_fallback_data() -> dict:
                 "committees": committees,
                 "term_start": "", "estimated_net_worth": 0.0,
                 "trade_count_ytd": 0, "portfolio_return_ytd": 0.0, "spy_return_ytd": 0.0,
+                "is_demo": True,
             }
 
-        # Pick 2-4 trades per member from their relevant sectors
-        related_sectors = [
-            s for c in committees
-            for s, ts in tickers_by_sector.items()
-            if any(kw.lower() in c.lower() for kw in
-                   ["Armed", "Defense", "Finance", "Banking", "Commerce",
-                    "Energy", "Health", "Intelligence"])
-        ] or list(tickers_by_sector.keys())[:2]
+        # Map committees → relevant sectors using the lookup table (no duplicates)
+        seen: set = set()
+        related_sectors: List[str] = []
+        for c in committees:
+            for s in _CMTE_SECTORS.get(c, []):
+                if s not in seen:
+                    seen.add(s)
+                    related_sectors.append(s)
+        if not related_sectors:
+            related_sectors = list(tickers_by_sector.keys())[:2]
 
         n_trades = _random.randint(2, 4)
         for _ in range(n_trades):
-            sector  = _random.choice(related_sectors[:3] or list(tickers_by_sector.keys()))
-            ticker  = _random.choice(tickers_by_sector.get(sector, ["SPY"]))
+            sector   = _random.choice(related_sectors)
+            ticker   = _random.choice(tickers_by_sector[sector])
             lo, hi, label = _random.choice(amounts)
-            direction = "Buy" if _random.random() > 0.3 else "Sell"
-            txn_days_ago = _random.randint(3, 85)
-            lag_days     = _random.randint(5, 45)
-            tx_date  = (today - timedelta(days=txn_days_ago)).isoformat()
-            dis_date = (today - timedelta(days=max(0, txn_days_ago - lag_days))).isoformat()
-            cmte_rel = committees[0] if committees else ""
-            score    = compute_signal_score(
+            direction     = "Buy" if _random.random() > 0.3 else "Sell"
+            txn_days_ago  = _random.randint(3, 85)
+            lag_days      = _random.randint(5, 45)
+            tx_date       = (today - timedelta(days=txn_days_ago)).isoformat()
+            dis_date      = (today - timedelta(days=max(0, txn_days_ago - lag_days))).isoformat()
+            cmte_rel      = committees[0] if committees else ""
+            score         = compute_signal_score(
                 {"ticker": ticker, "amount_high": hi, "disclosure_lag_days": lag_days,
                  "committee_relevance": cmte_rel},
                 {"committees": committees})
@@ -893,7 +930,8 @@ def _build_fallback_data() -> dict:
                 "party": party, "chamber": chamber,
                 "transaction_date": tx_date, "disclosure_date": dis_date,
                 "disclosure_lag_days": lag_days,
-                "ticker": ticker, "asset_name": ticker,
+                "ticker": ticker,
+                "asset_name": _TICKER_NAMES.get(ticker, ticker),
                 "amount_low": float(lo), "amount_high": float(hi),
                 "amount_range_label": label,
                 "committee_relevance": cmte_rel,
@@ -902,6 +940,7 @@ def _build_fallback_data() -> dict:
                 "direction": direction,
                 "asset_type": "Stock",
                 "data_source": "Demo (offline — live source unavailable)",
+                "is_demo": True,
             })
 
     trades.sort(key=lambda x: x.get("disclosure_date", ""), reverse=True)
