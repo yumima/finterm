@@ -3388,6 +3388,4910 @@
         }
       ],
       "updated": "2026-05-03"
+    },
+    {
+      "id": "sofr",
+      "title": "SOFR",
+      "subtitle": "Secured Overnight Financing Rate — the benchmark replacing LIBOR for USD lending.",
+      "body": "glossary/sofr.md",
+      "difficulty": "intermediate",
+      "abbreviation": "SOFR",
+      "tags": [
+        "rates",
+        "macro",
+        "fixed-income"
+      ],
+      "aliases": [
+        "secured overnight financing rate",
+        "sofr rate"
+      ],
+      "related": [
+        "federal-funds-rate",
+        "yield-to-maturity",
+        "duration",
+        "tips"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · rates panel"
+        },
+        {
+          "screen": "economics",
+          "label": "Economics · rates"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Rates in Economics",
+          "screen": "economics",
+          "ticker": "",
+          "hint": "See live SOFR rate"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "3m T-bill (SOFR proxy)",
+          "ticker": "^IRX",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Replaces",
+          "value": "LIBOR",
+          "note": "Full transition completed June 2023"
+        },
+        {
+          "label": "Spread to Fed Funds",
+          "value": "~5 bps",
+          "note": "Typical in calm markets"
+        },
+        {
+          "label": "Term SOFR 3m",
+          "value": "SOFR + ~26 bps",
+          "note": "LIBOR-equivalent spread"
+        }
+      ],
+      "pitfalls": [
+        "SOFR is overnight and nearly risk-free — LIBOR included bank credit risk; spreads differ.",
+        "Term SOFR (1m, 3m) exists but is not the same as overnight SOFR.",
+        "SOFR can spike at quarter-end when balance-sheet constraints reduce repo supply."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "NY Fed",
+          "title": "SOFR Overview",
+          "url": "https://www.newyorkfed.org/markets/reference-rates/sofr"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "federal-funds-rate",
+      "title": "Federal Funds Rate",
+      "subtitle": "The FOMC's target overnight interbank rate — the most influential short-term rate in the U.S.",
+      "body": "glossary/federal-funds-rate.md",
+      "difficulty": "beginner",
+      "abbreviation": "Fed Funds",
+      "tags": [
+        "macro",
+        "rates",
+        "monetary-policy"
+      ],
+      "aliases": [
+        "fed funds rate",
+        "federal funds",
+        "ffr",
+        "policy rate"
+      ],
+      "related": [
+        "sofr",
+        "quantitative-easing",
+        "neutral-rate",
+        "reverse-repo",
+        "real-interest-rate"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · central bank"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · macro panel"
+        }
+      ],
+      "actions": [
+        {
+          "label": "Open Economics Dashboard",
+          "screen": "economics",
+          "ticker": "",
+          "hint": "See current Fed Funds target"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "2yr Treasury (rate expectations)",
+          "ticker": "^IRX",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Neutral rate (nominal)",
+          "value": "~2.5–3.0%",
+          "note": "Fed estimate; highly uncertain"
+        },
+        {
+          "label": "Typical hike increment",
+          "value": "25 bps",
+          "note": "75 bps hikes were exceptional (2022)"
+        },
+        {
+          "label": "Lag to economy",
+          "value": "12–18 months",
+          "note": "Friedman's long and variable lags"
+        }
+      ],
+      "pitfalls": [
+        "The effective fed funds rate (EFFR) can drift a few bps from the target; that's normal.",
+        "Rate cuts don't guarantee economic stimulus if bank lending conditions tighten simultaneously.",
+        "Market pricing of future rates (OIS forwards) often diverges from the FOMC dot plot."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "Federal Reserve",
+          "title": "FOMC Target Rate",
+          "url": "https://www.federalreserve.gov/monetarypolicy/openmarket.htm"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "quantitative-easing",
+      "title": "Quantitative Easing",
+      "subtitle": "Central bank asset purchases that inject liquidity and suppress long-term yields.",
+      "body": "glossary/quantitative-easing.md",
+      "difficulty": "intermediate",
+      "abbreviation": "QE",
+      "tags": [
+        "macro",
+        "monetary-policy",
+        "fixed-income"
+      ],
+      "aliases": [
+        "qe",
+        "asset purchases",
+        "large-scale asset purchases",
+        "lsap"
+      ],
+      "related": [
+        "quantitative-tightening",
+        "federal-funds-rate",
+        "forward-guidance",
+        "real-interest-rate"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · monetary policy"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · macro"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Fed balance sheet peak",
+          "value": "$9.0T",
+          "note": "April 2022 peak"
+        },
+        {
+          "label": "Pre-GFC baseline",
+          "value": "$900B",
+          "note": "2008 pre-crisis"
+        },
+        {
+          "label": "$500B QE ≈",
+          "value": "~1 rate cut (25 bps)",
+          "note": "Rough equivalence on financial conditions"
+        }
+      ],
+      "pitfalls": [
+        "QE does not cause hyperinflation automatically — reserves stay in the banking system.",
+        "Diminishing returns: each subsequent QE program had smaller market impact.",
+        "Unwinding (QT) is difficult; the 2019 repo spike showed reserves can fall too far."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "Federal Reserve",
+          "title": "Federal Reserve Balance Sheet",
+          "url": "https://www.federalreserve.gov/releases/h41/"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "quantitative-tightening",
+      "title": "Quantitative Tightening",
+      "subtitle": "Central bank balance sheet reduction — the reverse of QE.",
+      "body": "glossary/quantitative-tightening.md",
+      "difficulty": "intermediate",
+      "abbreviation": "QT",
+      "tags": [
+        "macro",
+        "monetary-policy",
+        "fixed-income"
+      ],
+      "aliases": [
+        "qt",
+        "balance sheet runoff",
+        "balance sheet normalization"
+      ],
+      "related": [
+        "quantitative-easing",
+        "federal-funds-rate",
+        "reverse-repo",
+        "duration"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · monetary policy"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "QT2 peak pace",
+          "value": "$95B/month",
+          "note": "$60B Treasuries + $35B MBS"
+        },
+        {
+          "label": "QT1 ended at",
+          "value": "~$3.5T",
+          "note": "Sept 2019 repo crisis triggered restart"
+        },
+        {
+          "label": "QT duration impact",
+          "value": "+10–20 bps per $500B",
+          "note": "Approximate term premium effect"
+        }
+      ],
+      "pitfalls": [
+        "MBS rolls off slower than Treasuries because homeowners prepay less in rising-rate environments.",
+        "Monitoring reserve scarcity is imprecise — the safe floor is unknown until you cross it.",
+        "Markets focus more on the policy rate path than QT pace."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "Federal Reserve",
+          "title": "Balance Sheet Normalization",
+          "url": "https://www.federalreserve.gov/monetarypolicy/bst_reductionplan.htm"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "tips",
+      "title": "TIPS",
+      "subtitle": "Treasury Inflation-Protected Securities — U.S. government bonds with inflation-adjusted principal.",
+      "body": "glossary/tips.md",
+      "difficulty": "intermediate",
+      "abbreviation": "TIPS",
+      "tags": [
+        "fixed-income",
+        "inflation",
+        "government-bonds"
+      ],
+      "aliases": [
+        "treasury inflation-protected securities",
+        "inflation-linked bonds",
+        "linkers"
+      ],
+      "related": [
+        "breakeven-inflation",
+        "real-interest-rate",
+        "duration",
+        "treasury-securities"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bonds"
+        },
+        {
+          "screen": "economics",
+          "label": "Economics · rates"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "TIP ETF",
+          "ticker": "TIP",
+          "metric": "price"
+        },
+        {
+          "label": "SCHP ETF",
+          "ticker": "SCHP",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Best in",
+          "value": "Tax-deferred accounts",
+          "note": "Phantom income tax drag in taxable"
+        },
+        {
+          "label": "5yr breakeven (typical)",
+          "value": "2.0–2.5%",
+          "note": "Fed target anchors long-run expectation"
+        },
+        {
+          "label": "TIPS vs nominal",
+          "value": "Outperforms if CPI > breakeven"
+        }
+      ],
+      "pitfalls": [
+        "Phantom income: CPI adjustment is taxable in the year it accrues even though not received in cash.",
+        "Real yields can be negative for extended periods — you're guaranteed to underperform inflation slightly.",
+        "TIPS ETFs have duration risk; they fall in price when real yields rise."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "TreasuryDirect",
+          "title": "TIPS Overview",
+          "url": "https://www.treasurydirect.gov/marketable-securities/tips/"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "breakeven-inflation",
+      "title": "Breakeven Inflation",
+      "subtitle": "Market-implied inflation expectation derived from TIPS vs nominal Treasury yield spread.",
+      "body": "glossary/breakeven-inflation.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "inflation",
+        "fixed-income"
+      ],
+      "aliases": [
+        "breakeven inflation rate",
+        "implied inflation",
+        "inflation expectations"
+      ],
+      "related": [
+        "tips",
+        "real-interest-rate",
+        "inflation-cpi",
+        "federal-funds-rate",
+        "forward-guidance"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · inflation"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · bonds"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Nominal Treasury yield (%)",
+        "denominator_label": "TIPS real yield (%)",
+        "result_label": "Breakeven inflation",
+        "result_format": "percentage",
+        "numerator_default": 4.5,
+        "denominator_default": 1.8
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Fed target breakeven",
+          "value": "~2.0–2.3%",
+          "note": "PCE-CPI gap means BI runs above 2%"
+        },
+        {
+          "label": "Anchored",
+          "value": "< 2.7%",
+          "note": "Above 3% = unanchored expectations"
+        },
+        {
+          "label": "5y5y forward",
+          "value": "Cleaner signal",
+          "note": "Strips near-term noise"
+        }
+      ],
+      "pitfalls": [
+        "Breakeven includes an inflation risk premium (+20–40 bps) and liquidity premium (−10–20 bps) — not a pure inflation forecast.",
+        "Crisis periods cause TIPS to sell off (liquidity squeeze), making breakevens look deflationary when they're not.",
+        "PCE (the Fed's measure) runs ~20–30 bps below CPI."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "FRED",
+          "title": "10-Year Breakeven Inflation Rate",
+          "url": "https://fred.stlouisfed.org/series/T10YIE"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "forward-guidance",
+      "title": "Forward Guidance",
+      "subtitle": "Central bank communication about future policy — shaping expectations to move long-term rates.",
+      "body": "glossary/forward-guidance.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "monetary-policy",
+        "rates"
+      ],
+      "aliases": [
+        "central bank guidance",
+        "fomc guidance",
+        "open mouth operations"
+      ],
+      "related": [
+        "federal-funds-rate",
+        "quantitative-easing",
+        "neutral-rate",
+        "real-interest-rate"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · central bank"
+        },
+        {
+          "screen": "news",
+          "label": "News · FOMC"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Dot plot release",
+          "value": "Quarterly",
+          "note": "March, June, September, December FOMC"
+        },
+        {
+          "label": "Market vs dots",
+          "value": "Often diverges",
+          "note": "Markets price cuts faster than dots in easing cycles"
+        },
+        {
+          "label": "Tapering tantrum",
+          "value": "2013",
+          "note": "Hint at slowing QE → 100 bps yield spike"
+        }
+      ],
+      "pitfalls": [
+        "Forward guidance creates market dependency — surprises to the downside cause outsized volatility.",
+        "Calendar-based guidance is less flexible than state-contingent guidance.",
+        "International spillovers: Fed guidance moves global rates and currencies."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "Federal Reserve",
+          "title": "FOMC Projections (Dot Plot)",
+          "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "neutral-rate",
+      "title": "Neutral Rate",
+      "subtitle": "The theoretical interest rate that neither stimulates nor restrains economic growth (r*).",
+      "body": "glossary/neutral-rate.md",
+      "difficulty": "advanced",
+      "abbreviation": "r*",
+      "tags": [
+        "macro",
+        "monetary-policy",
+        "rates"
+      ],
+      "aliases": [
+        "r star",
+        "r-star",
+        "natural rate of interest",
+        "natural rate"
+      ],
+      "related": [
+        "federal-funds-rate",
+        "forward-guidance",
+        "real-interest-rate",
+        "inflation-cpi"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · policy analysis"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Fed nominal neutral estimate",
+          "value": "2.5–3.0%",
+          "note": "FOMC long-run dot (2024–2025)"
+        },
+        {
+          "label": "Real neutral (r*)",
+          "value": "~0.5–1.0%",
+          "note": "Laubach-Williams model"
+        },
+        {
+          "label": "Uncertainty band",
+          "value": "±1–2%",
+          "note": "Wide confidence intervals"
+        }
+      ],
+      "pitfalls": [
+        "r* is unobservable and estimated with wide uncertainty — policymakers can be badly wrong for years.",
+        "Structural shifts (demographics, AI investment, fiscal deficits) may have permanently raised r*.",
+        "Using market OIS forwards as r* proxy conflates market expectations with structural equilibrium."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "NY Fed",
+          "title": "Measuring r* (Laubach-Williams)",
+          "url": "https://www.newyorkfed.org/research/policy/rstar"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "reverse-repo",
+      "title": "Reverse Repo",
+      "subtitle": "Fed facility allowing money market funds to park cash overnight, setting a hard floor on short-term rates.",
+      "body": "glossary/reverse-repo.md",
+      "difficulty": "advanced",
+      "abbreviation": "ON RRP",
+      "tags": [
+        "macro",
+        "rates",
+        "money-markets"
+      ],
+      "aliases": [
+        "on rrp",
+        "overnight reverse repo",
+        "reverse repurchase agreement"
+      ],
+      "related": [
+        "federal-funds-rate",
+        "quantitative-tightening",
+        "sofr",
+        "treasury-securities"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · liquidity"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "ON RRP peak usage",
+          "value": "$2.55T",
+          "note": "December 2022"
+        },
+        {
+          "label": "Rate relationship",
+          "value": "Floor on EFFR",
+          "note": "Corridor: ON RRP rate ≤ EFFR ≤ IORB"
+        },
+        {
+          "label": "Usage decline signal",
+          "value": "Reserves normalizing",
+          "note": "Cash moving to T-bills"
+        }
+      ],
+      "pitfalls": [
+        "Rapid ON RRP decline during QT signals reserves may be approaching scarcity.",
+        "The rate differential between ON RRP and T-bills drives money market fund positioning shifts.",
+        "ON RRP usage is a plumbing indicator — not directly a growth or inflation signal."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "NY Fed",
+          "title": "Overnight Reverse Repo Operations",
+          "url": "https://www.newyorkfed.org/markets/domestic-market-operations/monetary-policy-implementation/repo-reverse-repo-agreements"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "real-interest-rate",
+      "title": "Real Interest Rate",
+      "subtitle": "Nominal interest rate minus inflation — the actual return in purchasing-power terms.",
+      "body": "glossary/real-interest-rate.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "macro",
+        "rates",
+        "fixed-income"
+      ],
+      "aliases": [
+        "real rate",
+        "inflation-adjusted rate",
+        "real yield"
+      ],
+      "related": [
+        "tips",
+        "breakeven-inflation",
+        "federal-funds-rate",
+        "neutral-rate",
+        "inflation-cpi"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · rates"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · bonds"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Nominal rate (%)",
+        "denominator_label": "Inflation rate (%)",
+        "result_label": "Approximate real rate",
+        "result_format": "percentage",
+        "numerator_default": 4.5,
+        "denominator_default": 3.0
+      },
+      "live_examples": [
+        {
+          "label": "10yr TIPS real yield",
+          "ticker": "TIP",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Formula",
+          "value": "Nominal − Inflation (approx)"
+        },
+        {
+          "label": "Positive real rate",
+          "value": "> 0%",
+          "note": "Restrictive for growth and risk assets"
+        },
+        {
+          "label": "Deeply negative",
+          "value": "< −2%",
+          "note": "Strong equity multiple expansion support"
+        }
+      ],
+      "pitfalls": [
+        "CPI vs PCE gives different real rate readings; the Fed uses PCE (runs ~20–30 bps below CPI).",
+        "Ex-ante real rate (uses expected inflation) differs from ex-post (uses actual inflation).",
+        "Negative real rates can persist for years without causing immediate inflation."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "FRED",
+          "title": "10-Year TIPS Yield",
+          "url": "https://fred.stlouisfed.org/series/DFII10"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "intrinsic-value",
+      "title": "Intrinsic Value (Options)",
+      "subtitle": "The immediate exercise value of an option — max(0, underlying minus strike for calls).",
+      "body": "glossary/intrinsic-value.md",
+      "difficulty": "beginner",
+      "tags": [
+        "options",
+        "derivatives"
+      ],
+      "aliases": [
+        "option intrinsic value",
+        "in-the-money value"
+      ],
+      "related": [
+        "extrinsic-value",
+        "moneyness",
+        "delta",
+        "put-call-parity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Underlying price ($)",
+        "denominator_label": "Strike price ($)",
+        "result_label": "Call intrinsic value",
+        "result_format": "currency",
+        "numerator_default": 185.0,
+        "denominator_default": 180.0
+      },
+      "live_examples": [
+        {
+          "label": "AAPL price",
+          "ticker": "AAPL",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Call intrinsic",
+          "value": "max(0, S − K)"
+        },
+        {
+          "label": "Put intrinsic",
+          "value": "max(0, K − S)"
+        },
+        {
+          "label": "Deep ITM delta",
+          "value": "~0.90–1.00",
+          "note": "Behaves like underlying"
+        }
+      ],
+      "pitfalls": [
+        "Intrinsic value is not option fair value — extrinsic value also exists.",
+        "Deep ITM options can have very wide bid-ask spreads despite large intrinsic value.",
+        "Early exercise is only rational when intrinsic exceeds extrinsic you'd forfeit."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "extrinsic-value",
+      "title": "Extrinsic Value",
+      "subtitle": "The time and volatility premium in an option price beyond its intrinsic value.",
+      "body": "glossary/extrinsic-value.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Time Value",
+      "tags": [
+        "options",
+        "derivatives"
+      ],
+      "aliases": [
+        "time value",
+        "option time value",
+        "option premium"
+      ],
+      "related": [
+        "intrinsic-value",
+        "theta",
+        "implied-volatility",
+        "vega",
+        "moneyness"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "At expiry",
+          "value": "Extrinsic = $0",
+          "note": "Fully decays to zero"
+        },
+        {
+          "label": "ATM options",
+          "value": "Maximum extrinsic",
+          "note": "Highest time value"
+        },
+        {
+          "label": "IV crush",
+          "value": "−30 to −50%",
+          "note": "Typical post-earnings extrinsic collapse"
+        }
+      ],
+      "pitfalls": [
+        "Buying high-IV options means paying expensive extrinsic that may never be recovered.",
+        "Never exercise an option early when you can sell it and capture remaining extrinsic value.",
+        "IV crush kills extrinsic even if the stock moves in your direction."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "moneyness",
+      "title": "Moneyness",
+      "subtitle": "Whether an option's strike is above, at, or below the current underlying price.",
+      "body": "glossary/moneyness.md",
+      "difficulty": "beginner",
+      "tags": [
+        "options",
+        "derivatives"
+      ],
+      "aliases": [
+        "in the money",
+        "out of the money",
+        "at the money",
+        "itm",
+        "otm",
+        "atm"
+      ],
+      "related": [
+        "intrinsic-value",
+        "extrinsic-value",
+        "delta",
+        "volatility-skew",
+        "put-call-parity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "ITM call",
+          "value": "Strike < Underlying",
+          "note": "Delta > 0.50"
+        },
+        {
+          "label": "ATM",
+          "value": "Strike ≈ Underlying",
+          "note": "Delta ≈ 0.50"
+        },
+        {
+          "label": "OTM call",
+          "value": "Strike > Underlying",
+          "note": "Delta < 0.50"
+        }
+      ],
+      "pitfalls": [
+        "ITM only means profitable if exercised immediately — can still expire worthless if stock reverses.",
+        "ATM-forward uses forward price (not spot) for precise options pricing.",
+        "Deep OTM options expire worthless at high frequency despite offering high percentage upside."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "put-call-parity",
+      "title": "Put-Call Parity",
+      "subtitle": "No-arbitrage relationship linking call price, put price, stock, and bond for European options.",
+      "body": "glossary/put-call-parity.md",
+      "difficulty": "advanced",
+      "tags": [
+        "options",
+        "derivatives",
+        "arbitrage"
+      ],
+      "aliases": [
+        "pcp",
+        "put call parity"
+      ],
+      "related": [
+        "intrinsic-value",
+        "moneyness",
+        "covered-call",
+        "delta"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Spot price ($)",
+        "denominator_label": "PV of strike ($)",
+        "result_label": "C − P (theoretical)",
+        "result_format": "currency",
+        "numerator_default": 520.0,
+        "denominator_default": 513.55
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Formula",
+          "value": "C − P = S − PV(K)"
+        },
+        {
+          "label": "Synthetic long stock",
+          "value": "Long call + Short put + Lend PV(K)"
+        },
+        {
+          "label": "Holds for",
+          "value": "European options only (exactly)"
+        }
+      ],
+      "pitfalls": [
+        "Strictly holds for European options; American options require inequality bounds.",
+        "Dividend-paying stocks require adjusting for present value of dividends.",
+        "Apparent violations during stress are often due to wide bid-ask spreads, not true arbitrage."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "covered-call",
+      "title": "Covered Call",
+      "subtitle": "Selling a call option against shares you own — collecting premium in exchange for capped upside.",
+      "body": "glossary/covered-call.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "options",
+        "strategies",
+        "income"
+      ],
+      "aliases": [
+        "buy-write",
+        "covered call writing"
+      ],
+      "related": [
+        "extrinsic-value",
+        "moneyness",
+        "theta",
+        "iron-condor",
+        "put-call-parity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        },
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · income strategies"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL (common covered call underlier)",
+          "ticker": "AAPL",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Max profit",
+          "value": "(Strike − Cost Basis) + Premium"
+        },
+        {
+          "label": "Breakeven",
+          "value": "Cost Basis − Premium"
+        },
+        {
+          "label": "Best market",
+          "value": "Neutral to mildly bullish"
+        }
+      ],
+      "pitfalls": [
+        "Covered calls cap your upside — a 5% premium sacrificed for a 50% upside move is a bad trade.",
+        "Assignment forces a taxable sale event in taxable accounts.",
+        "Rolling a short call higher when the stock surges does not recover all forgone upside."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "iron-condor",
+      "title": "Iron Condor",
+      "subtitle": "Selling both an OTM put spread and an OTM call spread — profiting from range-bound markets.",
+      "body": "glossary/iron-condor.md",
+      "difficulty": "advanced",
+      "tags": [
+        "options",
+        "strategies",
+        "income"
+      ],
+      "aliases": [
+        "iron condor",
+        "condor spread"
+      ],
+      "related": [
+        "covered-call",
+        "extrinsic-value",
+        "volatility-skew",
+        "implied-volatility",
+        "theta"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Max profit",
+          "value": "Net credit received"
+        },
+        {
+          "label": "Max loss",
+          "value": "Wing width − net credit"
+        },
+        {
+          "label": "Close at",
+          "value": "50% of max profit",
+          "note": "Risk-managed approach"
+        }
+      ],
+      "pitfalls": [
+        "Risk/reward is unfavorable: limited gain vs. larger loss — need high win rate.",
+        "Single gap move from earnings or macro shock can wipe out multiple months of premium.",
+        "Negative vega: rising IV causes mark-to-market losses even if the stock hasn't moved."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "calendar-spread",
+      "title": "Calendar Spread",
+      "subtitle": "Selling a near-dated option and buying a longer-dated option at the same strike — profiting from time decay differences.",
+      "body": "glossary/calendar-spread.md",
+      "difficulty": "advanced",
+      "tags": [
+        "options",
+        "strategies"
+      ],
+      "aliases": [
+        "time spread",
+        "horizontal spread",
+        "calendar"
+      ],
+      "related": [
+        "extrinsic-value",
+        "theta",
+        "implied-volatility",
+        "volatility-skew",
+        "iron-condor"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Max profit",
+          "value": "When underlying ≈ strike at short expiry"
+        },
+        {
+          "label": "Max loss",
+          "value": "Net debit paid"
+        },
+        {
+          "label": "Vega",
+          "value": "Positive — benefits from IV rise on back month"
+        }
+      ],
+      "pitfalls": [
+        "A large move away from the strike destroys both legs — total debit loss.",
+        "IV crush on earnings can hurt the back month more than expected.",
+        "Pin risk: exact expiry at the strike creates unintended delta exposure post-assignment."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "volatility-skew",
+      "title": "Volatility Skew",
+      "subtitle": "The pattern where OTM puts carry higher implied volatility than OTM calls in equity markets.",
+      "body": "glossary/volatility-skew.md",
+      "difficulty": "advanced",
+      "tags": [
+        "options",
+        "volatility",
+        "derivatives"
+      ],
+      "aliases": [
+        "vol skew",
+        "skew",
+        "implied volatility skew",
+        "smile"
+      ],
+      "related": [
+        "implied-volatility",
+        "vix",
+        "put-call-parity",
+        "moneyness",
+        "iron-condor"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · options chain"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · options"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "25-delta risk reversal",
+          "value": "Put IV − Call IV",
+          "note": "Standard skew measure"
+        },
+        {
+          "label": "Typical equity skew",
+          "value": "3–8 vol points",
+          "note": "Puts richer than calls"
+        },
+        {
+          "label": "Skew since",
+          "value": "Post-1987",
+          "note": "Crash demand permanently embedded"
+        }
+      ],
+      "pitfalls": [
+        "High skew (expensive puts) can persist indefinitely — not a timing signal for crashes.",
+        "Low skew (complacency) has preceded several major dislocations.",
+        "Single-stock skew is harder to interpret than index skew due to event-driven factors."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "funding-rate",
+      "title": "Funding Rate",
+      "subtitle": "Periodic payment between perpetual futures longs and shorts that anchors contract price to spot.",
+      "body": "glossary/funding-rate.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "crypto",
+        "derivatives",
+        "futures"
+      ],
+      "aliases": [
+        "crypto funding rate",
+        "perpetual funding",
+        "funding"
+      ],
+      "related": [
+        "liquidation-price",
+        "open-interest",
+        "basis",
+        "contango"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · perpetual futures"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Extreme positive (> 0.05%/8hr)",
+          "value": "Crowded longs; correction risk"
+        },
+        {
+          "label": "Near zero",
+          "value": "Balanced positioning"
+        },
+        {
+          "label": "Extreme negative",
+          "value": "Crowded shorts; squeeze risk"
+        },
+        {
+          "label": "Annualized",
+          "value": "Rate × 3 × 365"
+        }
+      ],
+      "pitfalls": [
+        "High positive funding is a lagging indicator — price may have already peaked.",
+        "Funding rates differ between exchanges; arbitrage requires cross-exchange execution.",
+        "Perpetual contracts not available to U.S. retail investors on most platforms."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "liquidation-price",
+      "title": "Liquidation Price",
+      "subtitle": "The price at which a leveraged crypto position is forcibly closed due to insufficient margin.",
+      "body": "glossary/liquidation-price.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "crypto",
+        "risk",
+        "leverage"
+      ],
+      "aliases": [
+        "liq price",
+        "forced liquidation",
+        "auto-deleveraging"
+      ],
+      "related": [
+        "funding-rate",
+        "margin",
+        "margin-call",
+        "leverage",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · perpetual futures"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Entry price ($)",
+        "denominator_label": "Leverage (×)",
+        "result_label": "Approx. long liquidation price",
+        "result_format": "currency",
+        "numerator_default": 65000,
+        "denominator_default": 10
+      },
+      "rules_of_thumb": [
+        {
+          "label": "10× leverage long",
+          "value": "~9.5% drop liquidates"
+        },
+        {
+          "label": "20× leverage long",
+          "value": "~4.8% drop liquidates"
+        },
+        {
+          "label": "Safe leverage (crypto)",
+          "value": "2–3× max",
+          "note": "Given crypto volatility"
+        }
+      ],
+      "pitfalls": [
+        "Cascade liquidations amplify moves — liquidations beget more liquidations.",
+        "Mark price (not last price) triggers liquidation — exchange smoothing prevents manipulation.",
+        "Funding rate costs erode margin and bring liquidation closer without adverse price movement."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "hash-rate",
+      "title": "Hash Rate",
+      "subtitle": "Total computational power securing a proof-of-work blockchain network.",
+      "body": "glossary/hash-rate.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "crypto",
+        "mining",
+        "on-chain"
+      ],
+      "aliases": [
+        "hashrate",
+        "network hash rate",
+        "bitcoin hash rate"
+      ],
+      "related": [
+        "staking-yield",
+        "mvrv-ratio",
+        "funding-rate"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · on-chain metrics"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "BTC hash rate (2025)",
+          "value": "500–700 EH/s"
+        },
+        {
+          "label": "Rising hash rate",
+          "value": "Bullish long-term",
+          "note": "New capital investing in mining"
+        },
+        {
+          "label": "Difficulty adjusts",
+          "value": "Every 2,016 blocks",
+          "note": "~2 weeks target"
+        }
+      ],
+      "pitfalls": [
+        "Real-time hash rate is an estimate inferred from block frequency — noisy over short windows.",
+        "Hash rate growth doesn't scale linearly with security beyond a threshold.",
+        "Miner capitulation (selling BTC reserves) historically marks cycle bottoms."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "gas-fee",
+      "title": "Gas Fee",
+      "subtitle": "Transaction cost paid to validators on Ethereum for computational work.",
+      "body": "glossary/gas-fee.md",
+      "difficulty": "beginner",
+      "tags": [
+        "crypto",
+        "ethereum",
+        "defi"
+      ],
+      "aliases": [
+        "gas",
+        "ethereum gas",
+        "transaction fee",
+        "gwei"
+      ],
+      "related": [
+        "staking-yield",
+        "funding-rate",
+        "hash-rate"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · transaction data"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Simple ETH transfer",
+          "value": "21,000 gas units"
+        },
+        {
+          "label": "DeFi swap",
+          "value": "100,000–200,000 gas units"
+        },
+        {
+          "label": "L2 vs mainnet",
+          "value": "10–100× cheaper on L2"
+        }
+      ],
+      "pitfalls": [
+        "Gas fees are paid in ETH even when transacting in other tokens — you must hold ETH.",
+        "Failed transactions still consume gas fees for the computation attempted.",
+        "L2 fees are not fully independent of Ethereum mainnet gas (calldata costs)."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "staking-yield",
+      "title": "Staking Yield",
+      "subtitle": "Annualized return earned by locking proof-of-stake tokens to validate the network.",
+      "body": "glossary/staking-yield.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "crypto",
+        "defi",
+        "yield"
+      ],
+      "aliases": [
+        "staking rewards",
+        "staking apy",
+        "eth staking yield"
+      ],
+      "related": [
+        "hash-rate",
+        "gas-fee",
+        "funding-rate",
+        "mvrv-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · staking"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Ethereum staking yield",
+          "value": "3–6%",
+          "note": "Variable; depends on activity"
+        },
+        {
+          "label": "Liquid staking minimum",
+          "value": "Any amount",
+          "note": "vs 32 ETH for solo validator"
+        },
+        {
+          "label": "High nominal yield",
+          "value": "Check token inflation",
+          "note": "Real yield may be negative"
+        }
+      ],
+      "pitfalls": [
+        "High yields in obscure protocols are funded by token inflation — not real economic activity.",
+        "Slashing risk: Ethereum validators can lose up to full 32 ETH stake for misbehavior.",
+        "Liquid staking concentration (Lido ~30%+ of staked ETH) creates systemic risk."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "mvrv-ratio",
+      "title": "MVRV Ratio",
+      "subtitle": "Market value to realized value — a Bitcoin cycle valuation gauge using on-chain cost basis.",
+      "body": "glossary/mvrv-ratio.md",
+      "difficulty": "advanced",
+      "abbreviation": "MVRV",
+      "tags": [
+        "crypto",
+        "on-chain",
+        "valuation"
+      ],
+      "aliases": [
+        "market value to realized value",
+        "mvrv",
+        "mvrv z-score"
+      ],
+      "related": [
+        "hash-rate",
+        "staking-yield",
+        "funding-rate",
+        "market-cap"
+      ],
+      "seen_in": [
+        {
+          "screen": "crypto_trading",
+          "label": "Crypto · on-chain metrics"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "< 1.0",
+          "value": "Historically strong buy zone"
+        },
+        {
+          "label": "> 3.5",
+          "value": "Historical distribution zone"
+        },
+        {
+          "label": "MVRV Z-score > 7",
+          "value": "Historical cycle top signal"
+        }
+      ],
+      "pitfalls": [
+        "MVRV at historical sell levels can stay elevated for months in a strong bull run.",
+        "Works best for Bitcoin; less reliable for altcoins with different supply dynamics.",
+        "Declining MVRV during price appreciation signals distribution — old holders selling to new buyers."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "Glassnode",
+          "title": "MVRV Ratio",
+          "url": "https://glassnode.com/indicators/bitcoin-mvrv-ratio"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "nav-premium-discount",
+      "title": "NAV Premium / Discount",
+      "subtitle": "The difference between an ETF's market price and the per-share value of its underlying holdings.",
+      "body": "glossary/nav-premium-discount.md",
+      "difficulty": "intermediate",
+      "abbreviation": "NAV P/D",
+      "tags": [
+        "etf",
+        "valuation",
+        "market-structure"
+      ],
+      "aliases": [
+        "etf premium",
+        "etf discount",
+        "nav discount",
+        "nav premium"
+      ],
+      "related": [
+        "authorized-participant",
+        "tracking-error",
+        "expense-ratio",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · ETF detail"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "ETF market price ($)",
+        "denominator_label": "NAV ($)",
+        "result_label": "Premium/Discount (%)",
+        "result_format": "percentage",
+        "numerator_default": 201.3,
+        "denominator_default": 200.0
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Large-cap equity ETF",
+          "value": "< 0.05%",
+          "note": "AP arbitrage nearly instant"
+        },
+        {
+          "label": "Bond ETF",
+          "value": "0.1–0.3%",
+          "note": "Less liquid underlying"
+        },
+        {
+          "label": "Closed-end fund",
+          "value": "±2–20%",
+          "note": "No AP mechanism"
+        }
+      ],
+      "pitfalls": [
+        "International ETF end-of-day NAV is calculated at local close — may be 10+ hours stale.",
+        "For bond ETFs, the ETF market price can actually be more accurate than the stale NAV.",
+        "Paying a premium means you're overpaying for assets at that moment."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "authorized-participant",
+      "title": "Authorized Participant",
+      "subtitle": "Large institution with exclusive rights to create and redeem ETF shares — the arbitrage mechanism keeping ETF prices near NAV.",
+      "body": "glossary/authorized-participant.md",
+      "difficulty": "advanced",
+      "abbreviation": "AP",
+      "tags": [
+        "etf",
+        "market-structure"
+      ],
+      "aliases": [
+        "ap",
+        "etf authorized participant",
+        "creation redemption"
+      ],
+      "related": [
+        "nav-premium-discount",
+        "tracking-error",
+        "expense-ratio",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · ETF structure"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Creation unit",
+          "value": "25,000–100,000 shares",
+          "note": "Minimum for AP creation/redemption"
+        },
+        {
+          "label": "Major APs",
+          "value": "Jane Street, Citadel, Goldman, Virtu"
+        },
+        {
+          "label": "AP arbitrage speed",
+          "value": "Near-instant for liquid ETFs"
+        }
+      ],
+      "pitfalls": [
+        "AP mechanism slows in illiquid underlying markets — bond and international ETFs most affected.",
+        "During March 2020, bond ETF APs slowed, causing ETFs to trade at significant discounts.",
+        "AP concentration risk: few APs dominate some ETFs; their withdrawal can disrupt NAV convergence."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "tracking-error",
+      "title": "Tracking Error",
+      "subtitle": "Divergence between an ETF's returns and its benchmark index — a measure of replication quality.",
+      "body": "glossary/tracking-error.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "etf",
+        "performance",
+        "indexing"
+      ],
+      "aliases": [
+        "te",
+        "tracking difference",
+        "active risk"
+      ],
+      "related": [
+        "nav-premium-discount",
+        "expense-ratio",
+        "authorized-participant",
+        "beta",
+        "information-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · fund comparison"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · fund analysis"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Fund return (%)",
+        "denominator_label": "Index return (%)",
+        "result_label": "Tracking difference",
+        "result_format": "percentage",
+        "numerator_default": 11.93,
+        "denominator_default": 12.0
+      },
+      "rules_of_thumb": [
+        {
+          "label": "S&P 500 ETF TE",
+          "value": "< 0.10% annualized",
+          "note": "Excellent replication"
+        },
+        {
+          "label": "Active ETF TE",
+          "value": "2–5%+",
+          "note": "Intentional deviation"
+        },
+        {
+          "label": "TE vs tracking diff",
+          "value": "Different metrics",
+          "note": "TE = volatility of gap; TD = total gap"
+        }
+      ],
+      "pitfalls": [
+        "Low tracking error with large tracking difference: consistently underperforms by a stable amount.",
+        "Securities lending income can make tracking difference better than expense ratio alone.",
+        "Synthetic ETFs (swaps) have low TE in normal markets but add counterparty risk."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "expense-ratio",
+      "title": "Expense Ratio",
+      "subtitle": "Annual percentage of fund assets charged as management and operating fees.",
+      "body": "glossary/expense-ratio.md",
+      "difficulty": "beginner",
+      "tags": [
+        "etf",
+        "mutual-fund",
+        "costs"
+      ],
+      "aliases": [
+        "management fee",
+        "mer",
+        "total expense ratio",
+        "ter",
+        "fund fees"
+      ],
+      "related": [
+        "tracking-error",
+        "nav-premium-discount",
+        "authorized-participant",
+        "smart-beta"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · fund comparison"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · ETF detail"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "VOO (0.03%)",
+          "ticker": "VOO",
+          "metric": "price"
+        },
+        {
+          "label": "SPY (0.09%)",
+          "ticker": "SPY",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Broad index ETF target",
+          "value": "< 0.10%"
+        },
+        {
+          "label": "$100k at 0.5% vs 0.05%",
+          "value": "~$150k cost over 30 years",
+          "note": "Compounding drag matters enormously"
+        },
+        {
+          "label": "Active fund average",
+          "value": "0.50–1.50%"
+        }
+      ],
+      "pitfalls": [
+        "Low expense ratio doesn't equal good tracking — verify tracking difference separately.",
+        "Net expense ratio (post-waiver) may jump to gross ratio when waivers expire.",
+        "Expense ratio excludes trading costs, bid-ask spread, and sales loads."
+      ],
+      "external_links": [
+        {
+          "type": "primer",
+          "source": "Investopedia",
+          "title": "Expense Ratio",
+          "url": "https://www.investopedia.com/terms/e/expenseratio.asp"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "nbbo",
+      "title": "NBBO",
+      "subtitle": "National Best Bid and Offer — the best available buy and sell prices across all U.S. exchanges.",
+      "body": "glossary/nbbo.md",
+      "difficulty": "intermediate",
+      "abbreviation": "NBBO",
+      "tags": [
+        "market-structure",
+        "trading",
+        "regulation"
+      ],
+      "aliases": [
+        "national best bid and offer",
+        "best bid offer",
+        "inside market"
+      ],
+      "related": [
+        "market-maker",
+        "payment-for-order-flow",
+        "dark-pool",
+        "bid-ask-spread",
+        "order-book"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · quote screen"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · quote columns"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Regulation NMS",
+          "value": "Brokers must fill at NBBO or better"
+        },
+        {
+          "label": "Large-cap spread",
+          "value": "$0.01",
+          "note": "AAPL, MSFT typically 1-cent spread"
+        },
+        {
+          "label": "NBBO valid for",
+          "value": "Microseconds",
+          "note": "HFT changes quotes constantly"
+        }
+      ],
+      "pitfalls": [
+        "NBBO may not exist by the time your market order arrives — quotes change in microseconds.",
+        "NBBO reflects only displayed liquidity; dark pools and iceberg orders are hidden.",
+        "For thinly traded stocks, NBBO spread can be 5–10%+ of share price."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "market-maker",
+      "title": "Market Maker",
+      "subtitle": "Firm that continuously quotes both sides of a market, earning the spread while providing liquidity.",
+      "body": "glossary/market-maker.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "market-structure",
+        "trading",
+        "liquidity"
+      ],
+      "aliases": [
+        "mm",
+        "designated market maker",
+        "dmm",
+        "liquidity provider"
+      ],
+      "related": [
+        "nbbo",
+        "bid-ask-spread",
+        "payment-for-order-flow",
+        "dark-pool",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · trading"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Primary profit source",
+          "value": "Bid-ask spread"
+        },
+        {
+          "label": "Primary risk",
+          "value": "Inventory risk (price moves against book)"
+        },
+        {
+          "label": "Obligations (exchange MM)",
+          "value": "Continuous quotes within max spread"
+        }
+      ],
+      "pitfalls": [
+        "Market makers can withdraw quotes during extreme volatility — markets become one-sided.",
+        "PFOF payments from retail brokers to market makers create potential conflicts of interest.",
+        "Options market makers hedge with stock — large options flow can move the underlying."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "payment-for-order-flow",
+      "title": "Payment for Order Flow",
+      "subtitle": "Broker practice of routing retail orders to market makers in exchange for payment.",
+      "body": "glossary/payment-for-order-flow.md",
+      "difficulty": "intermediate",
+      "abbreviation": "PFOF",
+      "tags": [
+        "market-structure",
+        "regulation",
+        "trading"
+      ],
+      "aliases": [
+        "pfof",
+        "order flow payment",
+        "internalization"
+      ],
+      "related": [
+        "nbbo",
+        "market-maker",
+        "dark-pool",
+        "bid-ask-spread",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · execution quality"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Price improvement (typical)",
+          "value": "$0.001–$0.005/share"
+        },
+        {
+          "label": "PFOF banned in",
+          "value": "UK, EU, Canada, Australia"
+        },
+        {
+          "label": "US broker revenue",
+          "value": "Hundreds of millions/year per large broker"
+        }
+      ],
+      "pitfalls": [
+        "Zero-commission trading funded by PFOF is not free — costs are in execution quality.",
+        "For large orders, information leakage to market makers can exceed price improvement received.",
+        "PFOF creates incentive to maximize trading frequency (gamification) for more PFOF revenue."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dark-pool",
+      "title": "Dark Pool",
+      "subtitle": "Private trading venue where institutional orders execute anonymously without pre-trade transparency.",
+      "body": "glossary/dark-pool.md",
+      "difficulty": "advanced",
+      "tags": [
+        "market-structure",
+        "trading",
+        "regulation"
+      ],
+      "aliases": [
+        "ats",
+        "alternative trading system",
+        "dark venue",
+        "dark liquidity"
+      ],
+      "related": [
+        "nbbo",
+        "market-maker",
+        "payment-for-order-flow",
+        "order-book",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · trade data"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Dark pool volume share",
+          "value": "~35–40% of US equity volume"
+        },
+        {
+          "label": "Execution price",
+          "value": "Typically NBBO midpoint"
+        },
+        {
+          "label": "Block trades",
+          "value": "100,000+ shares typical"
+        }
+      ],
+      "pitfalls": [
+        "Toxic flow (HFT in dark pools) can convert safe dark trading into information-loss scenarios.",
+        "Not all midpoint executions are genuine price improvements — some delay discovery instead.",
+        "Multiple regulatory fines for dark pool operators misleading clients about protections."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "short-interest",
+      "title": "Short Interest",
+      "subtitle": "Total shares sold short but not yet covered — a measure of bearish conviction and squeeze potential.",
+      "body": "glossary/short-interest.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "market-structure",
+        "equities",
+        "sentiment"
+      ],
+      "aliases": [
+        "short interest ratio",
+        "short float",
+        "shares short"
+      ],
+      "related": [
+        "days-to-cover",
+        "float",
+        "short-selling",
+        "dark-pool",
+        "margin"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · short interest"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · short data"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "GME (historically extreme)",
+          "ticker": "GME",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "High short interest",
+          "value": "> 20% of float"
+        },
+        {
+          "label": "Very high",
+          "value": "> 30%",
+          "note": "Meaningful squeeze potential"
+        },
+        {
+          "label": "Data lag",
+          "value": "~2 weeks",
+          "note": "FINRA semi-monthly reporting"
+        }
+      ],
+      "pitfalls": [
+        "High short interest alone is not a buy signal — stocks with high short interest often deserve it.",
+        "Short interest above 100% of float is possible via re-hypothecation.",
+        "Synthetic short positions (puts, swaps) don't appear in standard short interest data."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "days-to-cover",
+      "title": "Days to Cover",
+      "subtitle": "How many days of average volume it would take all short sellers to buy back their positions.",
+      "body": "glossary/days-to-cover.md",
+      "difficulty": "intermediate",
+      "abbreviation": "DTC",
+      "tags": [
+        "market-structure",
+        "equities",
+        "short-squeeze"
+      ],
+      "aliases": [
+        "dtc",
+        "short ratio",
+        "days to cover ratio"
+      ],
+      "related": [
+        "short-interest",
+        "short-selling",
+        "float",
+        "margin-call",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · short data"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Short interest (shares)",
+        "denominator_label": "Avg daily volume (shares)",
+        "result_label": "Days to cover",
+        "result_format": "ratio",
+        "numerator_default": 60000000,
+        "denominator_default": 20000000
+      },
+      "rules_of_thumb": [
+        {
+          "label": "High DTC",
+          "value": "> 5 days",
+          "note": "Elevated squeeze potential"
+        },
+        {
+          "label": "Very high",
+          "value": "> 10 days"
+        },
+        {
+          "label": "Low DTC",
+          "value": "< 2 days",
+          "note": "Shorts can exit quickly; lower squeeze risk"
+        }
+      ],
+      "pitfalls": [
+        "DTC uses average volume; during a squeeze, volume spikes 10–50× making actual cover time much shorter.",
+        "High DTC alone is not a buy signal — need a catalyst to force covering.",
+        "DTC calculated on bi-weekly delayed data; current short interest can differ significantly."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "wacc",
+      "title": "WACC",
+      "subtitle": "Weighted Average Cost of Capital — the blended rate a company must earn to create value.",
+      "body": "glossary/wacc.md",
+      "difficulty": "advanced",
+      "abbreviation": "WACC",
+      "tags": [
+        "corporate-finance",
+        "valuation",
+        "capital-structure"
+      ],
+      "aliases": [
+        "weighted average cost of capital",
+        "hurdle rate",
+        "cost of capital"
+      ],
+      "related": [
+        "dcf",
+        "beta",
+        "terminal-value",
+        "fcf",
+        "lbo"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        }
+      ],
+      "calculator": {
+        "kind": "formula",
+        "formula": "(E/V) × Re + (D/V) × Rd × (1 − Tax Rate)",
+        "result_label": "WACC",
+        "result_format": "percentage",
+        "numerator_default": 10.27
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Tech company WACC",
+          "value": "9–13%",
+          "note": "High beta, low leverage"
+        },
+        {
+          "label": "Utility WACC",
+          "value": "5–8%",
+          "note": "Low beta, regulated"
+        },
+        {
+          "label": "1% WACC change",
+          "value": "15–25% EV impact",
+          "note": "Most sensitive DCF input"
+        }
+      ],
+      "pitfalls": [
+        "Use market value weights (E and D), not book value — they're very different for growth companies.",
+        "Beta is backward-looking; future risk may differ from historical sensitivity.",
+        "Equity risk premium (ERP) estimates range 4–6%; a 1% difference shifts WACC by ~0.7%."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "WACC — Definition and Estimation",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/wacc.html"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dcf",
+      "title": "DCF",
+      "subtitle": "Discounted Cash Flow — valuing a business by discounting its projected free cash flows to present value.",
+      "body": "glossary/dcf.md",
+      "difficulty": "advanced",
+      "abbreviation": "DCF",
+      "tags": [
+        "valuation",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "discounted cash flow",
+        "dcf model",
+        "intrinsic value model"
+      ],
+      "related": [
+        "wacc",
+        "terminal-value",
+        "fcf",
+        "ev-ebitda",
+        "free-cash-flow-yield"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Terminal value % of EV",
+          "value": "60–80%",
+          "note": "Most value is in the terminal"
+        },
+        {
+          "label": "Sensitivity table",
+          "value": "Always include",
+          "note": "WACC × terminal growth rate grid"
+        },
+        {
+          "label": "Best for",
+          "value": "Stable, cash-generative businesses"
+        }
+      ],
+      "pitfalls": [
+        "Terminal value drives 60–80% of value but is the most uncertain assumption.",
+        "Garbage in, garbage out — DCF is only as good as the underlying business assumptions.",
+        "Works poorly for early-stage or cyclical companies with negative or volatile cash flows."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "Aswath Damodaran (NYU)",
+          "title": "DCF Valuation",
+          "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/dcfhome.html"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "terminal-value",
+      "title": "Terminal Value",
+      "subtitle": "Estimated value of a business at the end of the forecast period — represents all cash flows in perpetuity.",
+      "body": "glossary/terminal-value.md",
+      "difficulty": "advanced",
+      "abbreviation": "TV",
+      "tags": [
+        "valuation",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "continuing value",
+        "horizon value",
+        "residual value"
+      ],
+      "related": [
+        "dcf",
+        "wacc",
+        "fcf",
+        "ev-ebitda",
+        "enterprise-value"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · DCF model"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "FCF_n × (1+g) ($M)",
+        "denominator_label": "WACC minus g (%)",
+        "result_label": "Gordon Growth Terminal Value ($M)",
+        "result_format": "currency",
+        "numerator_default": 206,
+        "denominator_default": 6.5
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Terminal growth rate",
+          "value": "2–3%",
+          "note": "Should not exceed long-run GDP growth"
+        },
+        {
+          "label": "Gordon Growth TV",
+          "value": "FCF × (1+g) / (WACC − g)"
+        },
+        {
+          "label": "Exit multiple cross-check",
+          "value": "Always use both methods"
+        }
+      ],
+      "pitfalls": [
+        "Terminal growth rate above WACC creates mathematical impossibility — always check.",
+        "Exit multiples embed current market biases — depressed multiples in recessions create artificially low TV.",
+        "Terminal year must be normalized (maintenance capex ≈ D&A, zero working capital changes)."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "lbo",
+      "title": "LBO",
+      "subtitle": "Leveraged Buyout — acquiring a company using substantial debt, with the target's assets as collateral.",
+      "body": "glossary/lbo.md",
+      "difficulty": "advanced",
+      "abbreviation": "LBO",
+      "tags": [
+        "corporate-finance",
+        "private-equity",
+        "leverage"
+      ],
+      "aliases": [
+        "leveraged buyout",
+        "management buyout",
+        "mbo",
+        "pe buyout"
+      ],
+      "related": [
+        "wacc",
+        "dcf",
+        "terminal-value",
+        "net-working-capital",
+        "debt-to-equity",
+        "leverage"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · M&A analysis"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Typical leverage",
+          "value": "5–8× EBITDA"
+        },
+        {
+          "label": "Target IRR",
+          "value": "20–25%+"
+        },
+        {
+          "label": "Target MOIC",
+          "value": "2.5–4.0×"
+        },
+        {
+          "label": "PE hold period",
+          "value": "4–7 years (typical)"
+        }
+      ],
+      "pitfalls": [
+        "High leverage amplifies downside as much as upside — 20% EBITDA decline can wipe equity.",
+        "Covenant violations can trigger lender acceleration before cash flow insolvency.",
+        "Dividend recapitalizations increase leverage post-acquisition, adding risk for remaining debtholders."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "net-working-capital",
+      "title": "Net Working Capital",
+      "subtitle": "Current assets minus current liabilities — operational liquidity and its effect on free cash flow.",
+      "body": "glossary/net-working-capital.md",
+      "difficulty": "intermediate",
+      "abbreviation": "NWC",
+      "tags": [
+        "corporate-finance",
+        "accounting",
+        "cash-flow"
+      ],
+      "aliases": [
+        "nwc",
+        "working capital",
+        "operating working capital"
+      ],
+      "related": [
+        "fcf",
+        "dcf",
+        "ebitda",
+        "lbo",
+        "revenue"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · cash flow analysis"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Cash conversion cycle",
+          "value": "DSO + DIO − DPO"
+        },
+        {
+          "label": "Amazon CCC",
+          "value": "~−25 days",
+          "note": "Negative: suppliers fund the business"
+        },
+        {
+          "label": "Growing NWC = ",
+          "value": "Cash outflow (tied up in operations)"
+        }
+      ],
+      "pitfalls": [
+        "NWC includes non-cash items — positive NWC doesn't mean you have that cash.",
+        "M&A NWC peg disputes are common — understand the target before closing.",
+        "Aggressive payables extension or receivables acceleration distorts NWC ahead of quarter-end."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "buyback-yield",
+      "title": "Buyback Yield",
+      "subtitle": "Annual share repurchase spend as a percentage of market cap — part of total shareholder yield.",
+      "body": "glossary/buyback-yield.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "corporate-finance",
+        "valuation",
+        "shareholder-returns"
+      ],
+      "aliases": [
+        "repurchase yield",
+        "share buyback yield",
+        "total shareholder yield"
+      ],
+      "related": [
+        "dividend-yield",
+        "free-cash-flow-yield",
+        "fcf",
+        "eps",
+        "market-cap"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · shareholder return"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · yield columns"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL (major repurchaser)",
+          "ticker": "AAPL",
+          "metric": "market_cap"
+        },
+        {
+          "label": "MSFT buybacks",
+          "ticker": "MSFT",
+          "metric": "market_cap"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Total shareholder yield",
+          "value": "Dividend + Buyback yield"
+        },
+        {
+          "label": "Value-creating buyback",
+          "value": "Buy below intrinsic value"
+        },
+        {
+          "label": "Red flag",
+          "value": "Buybacks funded by increasing debt"
+        }
+      ],
+      "pitfalls": [
+        "Buybacks financed by debt add leverage risk — the yield is not truly free.",
+        "Gross buyback yield overstates return if large SBC (stock-based comp) issuance offsets it.",
+        "Companies often buy most aggressively near market tops — capital allocation quality varies."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "free-cash-flow-yield",
+      "title": "FCF Yield",
+      "subtitle": "Free cash flow divided by market cap — the cash earnings yield an investor receives.",
+      "body": "glossary/free-cash-flow-yield.md",
+      "difficulty": "intermediate",
+      "abbreviation": "FCF Yield",
+      "tags": [
+        "valuation",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "free cash flow yield",
+        "fcf yield",
+        "price to free cash flow yield"
+      ],
+      "related": [
+        "fcf",
+        "buyback-yield",
+        "earnings-yield",
+        "price-to-fcf",
+        "ev-ebitda"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · yield columns"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Free cash flow ($B)",
+        "denominator_label": "Market cap ($B)",
+        "result_label": "FCF Yield (%)",
+        "result_format": "percentage",
+        "numerator_default": 68,
+        "denominator_default": 3100
+      },
+      "live_examples": [
+        {
+          "label": "AAPL FCF",
+          "ticker": "AAPL",
+          "metric": "price"
+        },
+        {
+          "label": "MSFT FCF",
+          "ticker": "MSFT",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "FCF yield > risk-free",
+          "value": "Basic equity attractiveness hurdle"
+        },
+        {
+          "label": "High FCF yield (> 5%)",
+          "value": "Value territory for quality businesses"
+        },
+        {
+          "label": "SBC adjustment",
+          "value": "Subtract SBC from FCF for true economic yield"
+        }
+      ],
+      "pitfalls": [
+        "FCF is lumpy — use 3-year average for stable yield calculation.",
+        "SBC not deducted from GAAP operating cash flow — inflates reported FCF for tech companies.",
+        "Very low FCF yield may reflect growth investment, not permanent overvaluation."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "tail-risk",
+      "title": "Tail Risk",
+      "subtitle": "The probability and impact of extreme, low-frequency events far beyond normal distribution predictions.",
+      "body": "glossary/tail-risk.md",
+      "difficulty": "advanced",
+      "tags": [
+        "risk",
+        "portfolio",
+        "statistics"
+      ],
+      "aliases": [
+        "fat tail risk",
+        "black swan risk",
+        "extreme risk"
+      ],
+      "related": [
+        "var",
+        "cvar",
+        "volatility",
+        "drawdown",
+        "sortino-ratio",
+        "vix"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk analytics"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "3σ events (actual vs normal)",
+          "value": "6× more frequent than predicted"
+        },
+        {
+          "label": "Black Monday 1987",
+          "value": "~25σ event"
+        },
+        {
+          "label": "Options hedge cost",
+          "value": "1–2% of portfolio/year for tail protection"
+        }
+      ],
+      "pitfalls": [
+        "VaR models explicitly ignore what happens in the tail — they define, not measure, tail risk.",
+        "Over-hedging via expensive OTM puts creates persistent drag exceeding the benefit in most regimes.",
+        "Historical simulation assumes the future resembles the past — it often doesn't in crises."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "cvar",
+      "title": "CVaR",
+      "subtitle": "Conditional Value at Risk — the average loss in worst-case scenarios beyond the VaR threshold.",
+      "body": "glossary/cvar.md",
+      "difficulty": "advanced",
+      "abbreviation": "CVaR",
+      "tags": [
+        "risk",
+        "portfolio",
+        "statistics"
+      ],
+      "aliases": [
+        "conditional value at risk",
+        "expected shortfall",
+        "es",
+        "cvar 95",
+        "average var"
+      ],
+      "related": [
+        "var",
+        "tail-risk",
+        "drawdown",
+        "volatility",
+        "sortino-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk metrics"
+        }
+      ],
+      "calculator": {
+        "kind": "formula",
+        "formula": "Average of worst (1−α)% of returns",
+        "result_label": "CVaR",
+        "result_format": "currency",
+        "numerator_default": 31000
+      },
+      "rules_of_thumb": [
+        {
+          "label": "CVaR vs VaR",
+          "value": "CVaR always ≥ VaR at same confidence level"
+        },
+        {
+          "label": "Basel III shift",
+          "value": "From VaR to ES (97.5%) for internal models"
+        },
+        {
+          "label": "CVaR 95%",
+          "value": "Average of worst 5% of daily returns"
+        }
+      ],
+      "pitfalls": [
+        "CVaR is still model-dependent — if distribution assumptions are wrong, CVaR estimates are wrong.",
+        "Historical simulation CVaR relies on past tail events being representative of future tails.",
+        "Crisis correlations spike, making portfolio CVaR much worse than sum-of-parts CVaR suggests."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "sortino-ratio",
+      "title": "Sortino Ratio",
+      "subtitle": "Risk-adjusted return using only downside volatility — penalizing harmful risk, not upside moves.",
+      "body": "glossary/sortino-ratio.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "risk",
+        "performance",
+        "portfolio"
+      ],
+      "aliases": [
+        "sortino",
+        "downside deviation ratio"
+      ],
+      "related": [
+        "sharpe-ratio",
+        "drawdown",
+        "information-ratio",
+        "tail-risk",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · performance metrics"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Annualized excess return (%)",
+        "denominator_label": "Annualized downside deviation (%)",
+        "result_label": "Sortino Ratio",
+        "result_format": "ratio",
+        "numerator_default": 6.6,
+        "denominator_default": 6.9
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Good Sortino",
+          "value": "> 1.0"
+        },
+        {
+          "label": "Excellent",
+          "value": "> 2.0"
+        },
+        {
+          "label": "Better than Sharpe for",
+          "value": "Trend-following, positively skewed strategies"
+        }
+      ],
+      "pitfalls": [
+        "Requires sufficient data to estimate downside deviation reliably.",
+        "A low Sortino ratio doesn't mean absolute safety — measures relative to return, not absolute loss.",
+        "As with Sharpe, past Sortino ratios don't guarantee future performance."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "information-ratio",
+      "title": "Information Ratio",
+      "subtitle": "Active return per unit of tracking error — the primary metric for evaluating active fund management.",
+      "body": "glossary/information-ratio.md",
+      "difficulty": "advanced",
+      "abbreviation": "IR",
+      "tags": [
+        "performance",
+        "portfolio",
+        "active-management"
+      ],
+      "aliases": [
+        "ir",
+        "appraisal ratio",
+        "active sharpe"
+      ],
+      "related": [
+        "sharpe-ratio",
+        "alpha",
+        "sortino-ratio",
+        "beta",
+        "tracking-error"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · performance attribution"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Active return (annualized, %)",
+        "denominator_label": "Tracking error (annualized, %)",
+        "result_label": "Information Ratio",
+        "result_format": "ratio",
+        "numerator_default": 1.94,
+        "denominator_default": 0.6
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Acceptable",
+          "value": "> 0.5"
+        },
+        {
+          "label": "Good",
+          "value": "> 0.75"
+        },
+        {
+          "label": "Excellent",
+          "value": "> 1.0"
+        },
+        {
+          "label": "Average active fund",
+          "value": "~0 (after fees)"
+        }
+      ],
+      "pitfalls": [
+        "Minimum 3–5 years of data needed for statistical significance.",
+        "Strong past IR doesn't guarantee future IR — manager skill can decay.",
+        "A single big concentrated bet that worked can inflate IR meaninglessly."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "ulcer-index",
+      "title": "Ulcer Index",
+      "subtitle": "Measures depth and duration of portfolio drawdowns — the 'stress' of holding through losses.",
+      "body": "glossary/ulcer-index.md",
+      "difficulty": "advanced",
+      "abbreviation": "UI",
+      "tags": [
+        "risk",
+        "portfolio",
+        "drawdown"
+      ],
+      "aliases": [
+        "ulcer index",
+        "martin ratio",
+        "ulcer performance index"
+      ],
+      "related": [
+        "drawdown",
+        "sortino-ratio",
+        "sharpe-ratio",
+        "cvar",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk metrics"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "S&P 500 (long-run)",
+          "value": "UI ≈ 5–7"
+        },
+        {
+          "label": "Low UI",
+          "value": "< 5 (shallow or brief drawdowns)"
+        },
+        {
+          "label": "High UI",
+          "value": "> 10 (significant prolonged drawdowns)"
+        },
+        {
+          "label": "Martin Ratio",
+          "value": "Excess return / Ulcer Index (higher = better)"
+        }
+      ],
+      "pitfalls": [
+        "Ulcer Index depends heavily on measurement period; one severe bear market dominates.",
+        "Rising markets artificially suppress UI even for risky strategies not yet tested.",
+        "Less widely reported than max drawdown — must compute from raw data."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "peg-ratio",
+      "title": "PEG Ratio",
+      "subtitle": "P/E ratio divided by expected earnings growth rate — a growth-adjusted valuation shorthand.",
+      "body": "glossary/peg-ratio.md",
+      "difficulty": "intermediate",
+      "abbreviation": "PEG",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "peg",
+        "price earnings growth ratio"
+      ],
+      "related": [
+        "pe-ratio",
+        "eps",
+        "price-to-sales",
+        "earnings-yield",
+        "ev-ebitda"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · ratio columns"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "P/E ratio",
+        "denominator_label": "EPS growth rate (%)",
+        "result_label": "PEG ratio",
+        "result_format": "ratio",
+        "numerator_default": 25,
+        "denominator_default": 20
+      },
+      "live_examples": [
+        {
+          "label": "NVDA P/E",
+          "ticker": "NVDA",
+          "metric": "pe_ratio"
+        },
+        {
+          "label": "AAPL P/E",
+          "ticker": "AAPL",
+          "metric": "pe_ratio"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "PEG = 1.0",
+          "value": "Peter Lynch's 'fair value' heuristic"
+        },
+        {
+          "label": "PEG < 0.5",
+          "value": "Potentially cheap relative to growth"
+        },
+        {
+          "label": "PEG > 2.0",
+          "value": "Expensive relative to growth"
+        }
+      ],
+      "pitfalls": [
+        "Growth rate estimates are highly uncertain — analyst 3-5yr growth estimates are notoriously inaccurate.",
+        "PEG breaks down for negative EPS or negative growth.",
+        "Quality of growth matters: debt-funded growth deserves lower multiple than organic."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "price-to-sales",
+      "title": "Price-to-Sales",
+      "subtitle": "Market cap divided by revenue — the go-to valuation for unprofitable growth companies.",
+      "body": "glossary/price-to-sales.md",
+      "difficulty": "intermediate",
+      "abbreviation": "P/S",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "ps ratio",
+        "p/s ratio",
+        "price to revenue",
+        "price/sales"
+      ],
+      "related": [
+        "pe-ratio",
+        "peg-ratio",
+        "ev-revenue",
+        "earnings-yield",
+        "enterprise-value"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · ratio columns"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Market cap ($M)",
+        "denominator_label": "Annual revenue ($M)",
+        "result_label": "P/S ratio",
+        "result_format": "ratio",
+        "numerator_default": 5000,
+        "denominator_default": 500
+      },
+      "rules_of_thumb": [
+        {
+          "label": "SaaS (mature)",
+          "value": "5–15×"
+        },
+        {
+          "label": "Retail (thin margins)",
+          "value": "0.1–0.5×"
+        },
+        {
+          "label": "Rule of 40 check",
+          "value": "Revenue growth% + margin% > 40% justifies high P/S"
+        }
+      ],
+      "pitfalls": [
+        "P/S ignores profitability entirely — a company burning cash at 10× P/S is burning its market cap.",
+        "EV/Revenue is strictly better for cross-company comparison (adjusts for debt).",
+        "Comparing P/S across sectors is meaningless without margin context."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "enterprise-value",
+      "title": "Enterprise Value",
+      "subtitle": "Total cost to acquire a business — market cap plus net debt — capital structure neutral.",
+      "body": "glossary/enterprise-value.md",
+      "difficulty": "intermediate",
+      "abbreviation": "EV",
+      "tags": [
+        "valuation",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "ev",
+        "firm value",
+        "total enterprise value",
+        "tev"
+      ],
+      "related": [
+        "ev-ebitda",
+        "market-cap",
+        "ev-revenue",
+        "dcf",
+        "debt-to-equity"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · stock detail"
+        }
+      ],
+      "calculator": {
+        "kind": "formula",
+        "formula": "Market Cap + Total Debt + Preferred + Minority Interest − Cash",
+        "result_label": "Enterprise Value",
+        "result_format": "currency",
+        "numerator_default": 12700
+      },
+      "live_examples": [
+        {
+          "label": "AAPL market cap",
+          "ticker": "AAPL",
+          "metric": "market_cap"
+        },
+        {
+          "label": "MSFT market cap",
+          "ticker": "MSFT",
+          "metric": "market_cap"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "EV = Mkt Cap + Net Debt",
+          "value": "Simplified formula"
+        },
+        {
+          "label": "Negative EV",
+          "value": "Cash > market cap + debt — deep value signal"
+        },
+        {
+          "label": "EV multiples",
+          "value": "Capital-structure neutral vs. P/E"
+        }
+      ],
+      "pitfalls": [
+        "Stranded cash (overseas, restricted) isn't truly accessible — may not fully offset debt.",
+        "Minority interest is often forgotten; omitting it understates EV.",
+        "Operating leases should be capitalized in EV post-IFRS 16."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "earnings-yield",
+      "title": "Earnings Yield",
+      "subtitle": "EPS divided by share price — the inverse of P/E, comparable to bond yields.",
+      "body": "glossary/earnings-yield.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "e/p ratio",
+        "earnings to price",
+        "equity yield"
+      ],
+      "related": [
+        "pe-ratio",
+        "eps",
+        "free-cash-flow-yield",
+        "peg-ratio",
+        "dividend-yield"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        },
+        {
+          "screen": "economics",
+          "label": "Economics · equity vs bonds"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "EPS (TTM, $)",
+        "denominator_label": "Share price ($)",
+        "result_label": "Earnings yield (%)",
+        "result_format": "percentage",
+        "numerator_default": 6.3,
+        "denominator_default": 175.0
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Equity risk premium",
+          "value": "Earnings yield − Risk-free rate"
+        },
+        {
+          "label": "Attractive vs bonds",
+          "value": "Earnings yield > 10yr Treasury yield"
+        },
+        {
+          "label": "CAPE yield",
+          "value": "1 / Shiller CAPE — long-run valuation signal"
+        }
+      ],
+      "pitfalls": [
+        "Trailing earnings yield at cycle peaks overstates the true yield on normalized earnings.",
+        "Negative earnings make the yield meaningless.",
+        "The Fed Model (earnings yield vs bonds) assumes inflation affects both assets equally — it doesn't."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "price-to-fcf",
+      "title": "Price-to-FCF",
+      "subtitle": "Market cap divided by free cash flow — a cash-based alternative to P/E.",
+      "body": "glossary/price-to-fcf.md",
+      "difficulty": "intermediate",
+      "abbreviation": "P/FCF",
+      "tags": [
+        "valuation",
+        "equities",
+        "ratios"
+      ],
+      "aliases": [
+        "price to free cash flow",
+        "p/fcf",
+        "price-to-free-cash-flow"
+      ],
+      "related": [
+        "fcf",
+        "free-cash-flow-yield",
+        "pe-ratio",
+        "ev-ebitda",
+        "enterprise-value"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Market cap ($B)",
+        "denominator_label": "Free cash flow ($B)",
+        "result_label": "Price-to-FCF",
+        "result_format": "ratio",
+        "numerator_default": 80,
+        "denominator_default": 10
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Mature software",
+          "value": "20–35×"
+        },
+        {
+          "label": "Industrial",
+          "value": "10–20×"
+        },
+        {
+          "label": "Energy (at cycle)",
+          "value": "5–10×"
+        }
+      ],
+      "pitfalls": [
+        "FCF is lumpy — use 3-year average to avoid capex spike distortion.",
+        "GAAP FCF doesn't deduct SBC; true economic P/FCF is higher for high-SBC companies.",
+        "Maintenance vs. growth capex distinction matters — high growth capex depresses FCF legitimately."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "ev-revenue",
+      "title": "EV/Revenue",
+      "subtitle": "Enterprise value divided by revenue — capital-structure-neutral price-to-sales for growth companies.",
+      "body": "glossary/ev-revenue.md",
+      "difficulty": "intermediate",
+      "abbreviation": "EV/Rev",
+      "tags": [
+        "valuation",
+        "equities",
+        "saas"
+      ],
+      "aliases": [
+        "ev/revenue",
+        "ev/sales",
+        "enterprise value to revenue",
+        "enterprise value to sales"
+      ],
+      "related": [
+        "enterprise-value",
+        "price-to-sales",
+        "ev-ebitda",
+        "earnings-yield",
+        "free-cash-flow-yield"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · valuation"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Enterprise value ($B)",
+        "denominator_label": "Annual revenue ($B)",
+        "result_label": "EV/Revenue",
+        "result_format": "ratio",
+        "numerator_default": 10.5,
+        "denominator_default": 0.7
+      },
+      "live_examples": [
+        {
+          "label": "Snowflake",
+          "ticker": "SNOW",
+          "metric": "price"
+        },
+        {
+          "label": "Salesforce",
+          "ticker": "CRM",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "High-growth SaaS",
+          "value": "10–30×"
+        },
+        {
+          "label": "Mature SaaS",
+          "value": "5–15×"
+        },
+        {
+          "label": "Retail / low margin",
+          "value": "0.3–1.5×"
+        },
+        {
+          "label": "FCF implied multiple",
+          "value": "EV/Revenue ÷ FCF margin"
+        }
+      ],
+      "pitfalls": [
+        "Revenue quality (recurring vs. one-time) matters hugely — same ratio, very different durability.",
+        "High EV/Revenue doesn't tell you when the company will generate meaningful cash flow.",
+        "Comparing EV/Revenue across sectors is meaningless without margin expectations."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "coupon-rate",
+      "title": "Coupon Rate",
+      "subtitle": "The annual interest percentage a bond pays on its face value — fixed at issuance.",
+      "body": "glossary/coupon-rate.md",
+      "difficulty": "beginner",
+      "tags": [
+        "fixed-income",
+        "bonds",
+        "rates"
+      ],
+      "aliases": [
+        "bond coupon",
+        "coupon",
+        "interest rate bond"
+      ],
+      "related": [
+        "yield-to-maturity",
+        "par-value",
+        "duration",
+        "credit-spread",
+        "treasury-securities"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bond detail"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Bond at par",
+          "value": "Coupon rate = current yield = YTM"
+        },
+        {
+          "label": "Bond at discount",
+          "value": "Coupon < current yield < YTM"
+        },
+        {
+          "label": "Bond at premium",
+          "value": "Coupon > current yield > YTM"
+        }
+      ],
+      "pitfalls": [
+        "Coupon rate is NOT yield — a high coupon bond trading at premium may have lower YTM than expected.",
+        "For callable bonds, the relevant yield is yield-to-call, not YTM.",
+        "Zero coupon bonds have no reinvestment risk but maximum duration risk."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "par-value",
+      "title": "Par Value",
+      "subtitle": "The face value of a bond — the principal repaid at maturity and the base for coupon calculation.",
+      "body": "glossary/par-value.md",
+      "difficulty": "beginner",
+      "abbreviation": "Face Value",
+      "tags": [
+        "fixed-income",
+        "bonds"
+      ],
+      "aliases": [
+        "face value",
+        "principal",
+        "nominal value",
+        "par"
+      ],
+      "related": [
+        "coupon-rate",
+        "yield-to-maturity",
+        "duration",
+        "yield-spread",
+        "treasury-securities"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bond detail"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Standard US bond par",
+          "value": "$1,000"
+        },
+        {
+          "label": "Price above 100",
+          "value": "Premium to par"
+        },
+        {
+          "label": "Price below 100",
+          "value": "Discount to par"
+        }
+      ],
+      "pitfalls": [
+        "Par value is not fair value — bonds regularly trade significantly above and below par.",
+        "For callable bonds, call price is typically above par (call premium).",
+        "Inflation erodes the real value of par repayment over the bond's life."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "yield-spread",
+      "title": "Yield Spread",
+      "subtitle": "The difference in yield between a bond and a benchmark Treasury — the price of credit risk.",
+      "body": "glossary/yield-spread.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "fixed-income",
+        "credit",
+        "bonds"
+      ],
+      "aliases": [
+        "credit spread",
+        "bond spread",
+        "spread over treasury"
+      ],
+      "related": [
+        "credit-spread",
+        "high-yield-bond",
+        "investment-grade",
+        "spread-to-treasury",
+        "duration"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bond data"
+        },
+        {
+          "screen": "economics",
+          "label": "Economics · credit"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "IG corporate (A-rated)",
+          "value": "60–120 bps typical"
+        },
+        {
+          "label": "High-yield (B-rated)",
+          "value": "350–600 bps typical"
+        },
+        {
+          "label": "Crisis widening",
+          "value": "Can 3–5× in severe recessions"
+        }
+      ],
+      "pitfalls": [
+        "Spread can widen from liquidity concerns even when credit quality is unchanged.",
+        "Z-spread and OAS are more rigorous than simple spread to Treasury — use them for callable bonds.",
+        "Single-name spreads can blow out from company-specific events unrelated to market conditions."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "investment-grade",
+      "title": "Investment Grade",
+      "subtitle": "Credit rating of BBB-/Baa3 or above — the threshold for institutional bond mandates.",
+      "body": "glossary/investment-grade.md",
+      "difficulty": "beginner",
+      "abbreviation": "IG",
+      "tags": [
+        "fixed-income",
+        "credit",
+        "ratings"
+      ],
+      "aliases": [
+        "ig bonds",
+        "investment grade bonds",
+        "ig credit",
+        "bbb rated"
+      ],
+      "related": [
+        "credit-spread",
+        "yield-spread",
+        "high-yield-bond",
+        "spread-to-treasury",
+        "duration"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bonds"
+        },
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · fixed income"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AGG (IG aggregate)",
+          "ticker": "AGG",
+          "metric": "price"
+        },
+        {
+          "label": "LQD (IG corporate)",
+          "ticker": "LQD",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "IG floor rating",
+          "value": "BBB− (S&P) / Baa3 (Moody's)"
+        },
+        {
+          "label": "BBB 5yr default rate",
+          "value": "~2.5%"
+        },
+        {
+          "label": "Fallen angel",
+          "value": "IG downgraded to HY → forced selling"
+        }
+      ],
+      "pitfalls": [
+        "Ratings lag fundamental deterioration — Enron and Lehman were IG-rated days before failure.",
+        "BBB is the largest IG component and most vulnerable to recession downgrades (BBB cliff).",
+        "IG does not mean zero default risk — it means relatively low probability."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "spread-to-treasury",
+      "title": "Spread to Treasury",
+      "subtitle": "A bond's yield minus the matching-maturity Treasury yield — isolating pure credit and liquidity premium.",
+      "body": "glossary/spread-to-treasury.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "fixed-income",
+        "credit",
+        "bonds"
+      ],
+      "aliases": [
+        "treasury spread",
+        "benchmark spread",
+        "g-spread"
+      ],
+      "related": [
+        "yield-spread",
+        "credit-spread",
+        "investment-grade",
+        "high-yield-bond",
+        "duration"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · bond data"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "BBB spread (typical)",
+          "value": "100–200 bps"
+        },
+        {
+          "label": "HY B-rated",
+          "value": "350–600 bps"
+        },
+        {
+          "label": "Carry trade",
+          "value": "Spread is the carry above risk-free rate"
+        }
+      ],
+      "pitfalls": [
+        "Spread conflates credit risk and liquidity premium — can widen for liquidity reasons alone.",
+        "OAS is more appropriate than simple spread to Treasury for callable or MBS bonds.",
+        "TIPS-based spread provides inflation-adjusted comparison — different from nominal spread."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "order-book",
+      "title": "Order Book",
+      "subtitle": "Real-time ledger of all outstanding buy and sell limit orders — the mechanism of price discovery.",
+      "body": "glossary/order-book.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "market-structure"
+      ],
+      "aliases": [
+        "limit order book",
+        "level 2",
+        "market depth",
+        "dom"
+      ],
+      "related": [
+        "bid-ask-spread",
+        "nbbo",
+        "market-maker",
+        "liquidity",
+        "slippage"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · order book / Level 2"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Order book imbalance > 80% bid",
+          "value": "Short-term bullish pressure signal"
+        },
+        {
+          "label": "Deep book",
+          "value": "Low price impact per unit of order flow"
+        },
+        {
+          "label": "Level 1 vs Level 2",
+          "value": "L1: best bid/ask; L2: full depth"
+        }
+      ],
+      "pitfalls": [
+        "Visible order book is only displayed liquidity — dark pools and icebergs hide the full picture.",
+        "Quote stuffing (fake orders canceled in microseconds) can simulate false liquidity.",
+        "Thin books mean large orders cause significant slippage regardless of headline spreads."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "momentum",
+      "title": "Momentum",
+      "subtitle": "The tendency of recent winners to keep winning (and losers to keep losing) over intermediate horizons.",
+      "body": "glossary/momentum.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "factor",
+        "strategy"
+      ],
+      "aliases": [
+        "price momentum",
+        "trend following",
+        "relative strength",
+        "wml"
+      ],
+      "related": [
+        "mean-reversion",
+        "beta",
+        "alpha",
+        "volatility",
+        "sector-rotation"
+      ],
+      "seen_in": [
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · momentum screen"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · factor analysis"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "MTUM (momentum ETF)",
+          "ticker": "MTUM",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Measurement period",
+          "value": "12 months − 1 month (skip last month)"
+        },
+        {
+          "label": "Historical premium",
+          "value": "8–12% annualized (gross, before costs)"
+        },
+        {
+          "label": "Momentum crash trigger",
+          "value": "Sharp recovery after bear market"
+        }
+      ],
+      "pitfalls": [
+        "High turnover makes momentum tax-inefficient in taxable accounts.",
+        "Momentum crashes happen without warning and can eliminate years of gains in weeks.",
+        "Transaction costs compete away the premium in less liquid markets."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "AQR Capital",
+          "title": "Value and Momentum Everywhere",
+          "url": "https://www.aqr.com/Insights/Research/Journal-Article/Value-and-Momentum-Everywhere"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "mean-reversion",
+      "title": "Mean Reversion",
+      "subtitle": "The tendency of extreme price, spread, or ratio values to return toward their long-run average.",
+      "body": "glossary/mean-reversion.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "strategy",
+        "statistics"
+      ],
+      "aliases": [
+        "reversion to mean",
+        "mean reverting",
+        "statistical arbitrage basis"
+      ],
+      "related": [
+        "momentum",
+        "volatility",
+        "vix",
+        "correlation",
+        "sharpe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · pairs / spread"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "VIX mean reversion",
+          "value": "Long-run average ~19; spikes revert quickly"
+        },
+        {
+          "label": "Valuations",
+          "value": "CAPE mean-reverts over 5–20 year horizons"
+        },
+        {
+          "label": "Half-life",
+          "value": "Speed of mean reversion; shorter = faster reversion"
+        }
+      ],
+      "pitfalls": [
+        "Mean reversion strategies fail catastrophically when the 'mean' itself shifts permanently.",
+        "Averaging down in individual stocks assuming mean reversion can lead to large losses.",
+        "Mean reversion in individual stocks is much weaker than in spreads and aggregate data."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "position-sizing",
+      "title": "Position Sizing",
+      "subtitle": "Determining how much capital to allocate to a trade based on risk tolerance and stop distance.",
+      "body": "glossary/position-sizing.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "risk",
+        "discipline"
+      ],
+      "aliases": [
+        "trade sizing",
+        "bet sizing",
+        "position size"
+      ],
+      "related": [
+        "kelly-criterion",
+        "risk-reward-ratio",
+        "average-true-range",
+        "r-multiple",
+        "stop-loss-order"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · risk management"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Risk $ per trade ($)",
+        "denominator_label": "Risk per share (Entry − Stop, $)",
+        "result_label": "Position size (shares)",
+        "result_format": "ratio",
+        "numerator_default": 1000,
+        "denominator_default": 2.0
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Max risk per trade",
+          "value": "0.5–2% of account"
+        },
+        {
+          "label": "Formula",
+          "value": "Risk $ ÷ (Entry − Stop)"
+        },
+        {
+          "label": "Correlation awareness",
+          "value": "Two 0.9-correlated positions = one position risk"
+        }
+      ],
+      "pitfalls": [
+        "Oversizing is the most common cause of account blowup.",
+        "Position sizing in dollar terms without considering price level leads to inconsistent risk.",
+        "Stop-loss slippage in volatile instruments makes calculated risk estimates optimistic."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "risk-reward-ratio",
+      "title": "Risk/Reward Ratio",
+      "subtitle": "Potential loss versus potential gain on a trade — establishes a minimum standard for trade quality.",
+      "body": "glossary/risk-reward-ratio.md",
+      "difficulty": "beginner",
+      "abbreviation": "R:R",
+      "tags": [
+        "trading",
+        "discipline"
+      ],
+      "aliases": [
+        "risk reward",
+        "r:r ratio",
+        "reward to risk"
+      ],
+      "related": [
+        "expected-value",
+        "r-multiple",
+        "position-sizing",
+        "stop-loss-order",
+        "kelly-criterion"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · trade setup"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Distance to target ($)",
+        "denominator_label": "Distance to stop ($)",
+        "result_label": "Reward-to-risk ratio",
+        "result_format": "ratio",
+        "numerator_default": 7.0,
+        "denominator_default": 2.5
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Minimum standard",
+          "value": "1:2 reward-to-risk"
+        },
+        {
+          "label": "Breakeven win rate at 1:2",
+          "value": "33.3%"
+        },
+        {
+          "label": "At 1:3",
+          "value": "Need only 25% win rate to break even"
+        }
+      ],
+      "pitfalls": [
+        "R:R is only as good as the stop and target placements — arbitrary numbers are meaningless.",
+        "A 1:5 R:R trade with 5% win rate is a losing system — R:R must pair with realistic win rate.",
+        "Most trades are not binary; partial profits and trailing stops complicate simple R:R math."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "average-true-range",
+      "title": "Average True Range",
+      "subtitle": "Volatility indicator measuring average daily price range including gaps — used for stop placement and sizing.",
+      "body": "glossary/average-true-range.md",
+      "difficulty": "intermediate",
+      "abbreviation": "ATR",
+      "tags": [
+        "trading",
+        "technical-analysis",
+        "volatility"
+      ],
+      "aliases": [
+        "atr",
+        "true range",
+        "wilder atr"
+      ],
+      "related": [
+        "position-sizing",
+        "volatility",
+        "stop-loss-order",
+        "risk-reward-ratio",
+        "drawdown"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · technical indicators"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · volatility columns"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Risk $ per trade ($)",
+        "denominator_label": "ATR × multiplier ($)",
+        "result_label": "Position size (shares)",
+        "result_format": "ratio",
+        "numerator_default": 500,
+        "denominator_default": 8.4
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Standard period",
+          "value": "14 bars (Wilder's original)"
+        },
+        {
+          "label": "Volatility stop",
+          "value": "1.5–3× ATR from entry"
+        },
+        {
+          "label": "ATR scales with √time",
+          "value": "Weekly ATR ≈ Daily ATR × √5"
+        }
+      ],
+      "pitfalls": [
+        "ATR is backward-looking — doesn't predict future volatility.",
+        "ATR gives magnitude not direction — a high ATR stock can be trending or whipsawing.",
+        "Short-period ATR (< 5 bars) is very noisy; 14+ periods recommended."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "margin",
+      "title": "Margin",
+      "subtitle": "Borrowed funds used to control a larger position — amplifying both gains and losses.",
+      "body": "glossary/margin.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "leverage",
+        "risk"
+      ],
+      "aliases": [
+        "margin account",
+        "buying on margin",
+        "reg t margin",
+        "margin loan"
+      ],
+      "related": [
+        "margin-call",
+        "leverage",
+        "short-selling",
+        "liquidation-price",
+        "position-sizing"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · margin details"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Reg T initial margin",
+          "value": "50% (U.S. equities)"
+        },
+        {
+          "label": "Maintenance margin (FINRA)",
+          "value": "25% minimum"
+        },
+        {
+          "label": "Margin call trigger",
+          "value": "Equity / Position < maintenance %"
+        }
+      ],
+      "pitfalls": [
+        "Margin amplifies losses exactly as much as gains — a 50% leveraged position loses 100% equity on a 33% move.",
+        "Interest costs compound silently — a marginally profitable trade becomes a loss over months.",
+        "Brokers can increase margin requirements without notice, triggering unexpected calls."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "short-selling",
+      "title": "Short Selling",
+      "subtitle": "Borrowing and selling shares you don't own, profiting if the price falls — with unlimited loss potential.",
+      "body": "glossary/short-selling.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "strategy",
+        "risk"
+      ],
+      "aliases": [
+        "shorting",
+        "going short",
+        "short position",
+        "short stock"
+      ],
+      "related": [
+        "short-interest",
+        "days-to-cover",
+        "margin",
+        "margin-call",
+        "liquidity"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · short positions"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · short thesis"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Max loss",
+          "value": "Unlimited (stock can rise indefinitely)"
+        },
+        {
+          "label": "Max gain",
+          "value": "100% (stock goes to zero)"
+        },
+        {
+          "label": "Borrow cost (easy)",
+          "value": "0.1–0.5%/year"
+        },
+        {
+          "label": "Hard to borrow",
+          "value": "5–300%+/year"
+        }
+      ],
+      "pitfalls": [
+        "The market can stay irrational longer than you can stay solvent — timing matters enormously.",
+        "Short sellers owe dividends paid during the short period.",
+        "Short gains are always short-term capital gains regardless of holding period."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "gdp",
+      "title": "GDP",
+      "subtitle": "Gross Domestic Product — total value of goods and services produced in a country, the primary economic size measure.",
+      "body": "glossary/gdp.md",
+      "difficulty": "beginner",
+      "abbreviation": "GDP",
+      "tags": [
+        "macro",
+        "economics"
+      ],
+      "aliases": [
+        "gross domestic product",
+        "real gdp",
+        "nominal gdp",
+        "gdp growth"
+      ],
+      "related": [
+        "inflation-cpi",
+        "real-interest-rate",
+        "federal-funds-rate",
+        "carry-trade"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · GDP"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "GDP formula",
+          "value": "C + I + G + (X−M)"
+        },
+        {
+          "label": "US potential growth",
+          "value": "~2.0–2.5%/year real"
+        },
+        {
+          "label": "Technical recession",
+          "value": "2 consecutive quarters of negative real GDP"
+        }
+      ],
+      "pitfalls": [
+        "GDP is released with ~30-day lag and revised twice — initial estimates can be significantly wrong.",
+        "Debt-financed government spending inflates GDP temporarily without genuine wealth creation.",
+        "GDP growth alone doesn't indicate distribution of income or sustainability."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "BEA",
+          "title": "GDP Release",
+          "url": "https://www.bea.gov/data/gdp/gross-domestic-product"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "inflation-cpi",
+      "title": "Inflation / CPI",
+      "subtitle": "Consumer Price Index — monthly measure of average price change for a basket of consumer goods and services.",
+      "body": "glossary/inflation-cpi.md",
+      "difficulty": "beginner",
+      "abbreviation": "CPI",
+      "tags": [
+        "macro",
+        "economics",
+        "inflation"
+      ],
+      "aliases": [
+        "consumer price index",
+        "headline cpi",
+        "core cpi",
+        "inflation rate"
+      ],
+      "related": [
+        "real-interest-rate",
+        "tips",
+        "breakeven-inflation",
+        "federal-funds-rate",
+        "gdp"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · inflation"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · macro events"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Fed target",
+          "value": "2% PCE (not CPI)",
+          "note": "CPI runs ~20–30 bps above PCE"
+        },
+        {
+          "label": "Shelter lag",
+          "value": "12–18 months",
+          "note": "CPI shelter lags actual market rents"
+        },
+        {
+          "label": "Biggest weight",
+          "value": "Housing/shelter at ~33%"
+        }
+      ],
+      "pitfalls": [
+        "CPI-U may not reflect your personal inflation basket — housing, healthcare, and commuting vary widely.",
+        "Shelter inflation in CPI lags actual market rents by 12–18 months — over/understates turn direction.",
+        "Seasonally adjusted vs unadjusted CPI are different; financial media sometimes mixes them."
+      ],
+      "external_links": [
+        {
+          "type": "reference",
+          "source": "BLS",
+          "title": "CPI Data",
+          "url": "https://www.bls.gov/cpi/"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "carry-trade",
+      "title": "Carry Trade",
+      "subtitle": "Borrowing in a low-rate currency and investing in a high-rate currency — earning the interest rate differential.",
+      "body": "glossary/carry-trade.md",
+      "difficulty": "advanced",
+      "tags": [
+        "macro",
+        "fx",
+        "strategy"
+      ],
+      "aliases": [
+        "fx carry",
+        "currency carry",
+        "interest rate differential trade"
+      ],
+      "related": [
+        "real-interest-rate",
+        "federal-funds-rate",
+        "sofr",
+        "gdp",
+        "correlation"
+      ],
+      "seen_in": [
+        {
+          "screen": "economics",
+          "label": "Economics · FX and rates"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · FX"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Classic pair",
+          "value": "Borrow JPY, invest in USD/AUD/NZD"
+        },
+        {
+          "label": "Carry crash risk",
+          "value": "Funding currency appreciation wipes carry income"
+        },
+        {
+          "label": "Annualized carry (typical)",
+          "value": "3–5% in calm markets"
+        }
+      ],
+      "pitfalls": [
+        "Carry trades are highly correlated with risk sentiment — unwind simultaneously in crises.",
+        "EM carry adds political risk, convertibility risk, and liquidity risk on top of rate differential.",
+        "Leverage amplifies disasters proportionally — carry with leverage is 'nickels vs steamroller.'"
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dollar-cost-averaging",
+      "title": "Dollar-Cost Averaging",
+      "subtitle": "Investing a fixed amount at regular intervals regardless of price — removing market timing from the equation.",
+      "body": "glossary/dollar-cost-averaging.md",
+      "difficulty": "beginner",
+      "abbreviation": "DCA",
+      "tags": [
+        "portfolio",
+        "strategy",
+        "behavioral"
+      ],
+      "aliases": [
+        "dca",
+        "systematic investing",
+        "automatic investing",
+        "periodic investment"
+      ],
+      "related": [
+        "rebalancing",
+        "sector-rotation",
+        "expense-ratio",
+        "volatility"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · automated investing"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "DCA vs lump sum",
+          "value": "Lump sum wins ~2/3 of time in trending bull markets"
+        },
+        {
+          "label": "Best DCA scenario",
+          "value": "Declining then recovering market"
+        },
+        {
+          "label": "Behavioral benefit",
+          "value": "Removes market timing anxiety"
+        }
+      ],
+      "pitfalls": [
+        "DCA does NOT guarantee a profit or protect against permanent loss in a declining asset.",
+        "In secular bull markets, DCA costs returns vs. immediate lump sum.",
+        "DCA into a single declining stock provides no diversification — only timing diversification."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "rebalancing",
+      "title": "Rebalancing",
+      "subtitle": "Realigning portfolio allocations back to target — selling winners and buying laggards systematically.",
+      "body": "glossary/rebalancing.md",
+      "difficulty": "beginner",
+      "tags": [
+        "portfolio",
+        "strategy",
+        "risk-management"
+      ],
+      "aliases": [
+        "portfolio rebalancing",
+        "rebalance",
+        "tactical rebalancing"
+      ],
+      "related": [
+        "dollar-cost-averaging",
+        "sector-rotation",
+        "correlation",
+        "beta",
+        "sharpe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · allocation management"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Annual rebalancing",
+          "value": "Nearly as effective as more frequent; lower costs"
+        },
+        {
+          "label": "Threshold trigger",
+          "value": "5–10% drift from target"
+        },
+        {
+          "label": "Rebalancing bonus",
+          "value": "Real in range-bound markets; costs in trends"
+        }
+      ],
+      "pitfalls": [
+        "Rebalancing in taxable accounts triggers capital gains — use tax-advantaged accounts first.",
+        "Rigid rebalancing to a wrong target allocation is worse than having the right allocation.",
+        "Rebalancing across highly correlated assets provides minimal diversification benefit."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "sector-rotation",
+      "title": "Sector Rotation",
+      "subtitle": "Shifting portfolio allocations between stock market sectors in anticipation of business cycle changes.",
+      "body": "glossary/sector-rotation.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "portfolio",
+        "macro",
+        "strategy"
+      ],
+      "aliases": [
+        "sector rotation strategy",
+        "cyclical rotation",
+        "defensive rotation"
+      ],
+      "related": [
+        "momentum",
+        "beta",
+        "correlation",
+        "rebalancing",
+        "smart-beta"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · sector performance"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · sector analysis"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "XLK (Tech)",
+          "ticker": "XLK",
+          "metric": "price"
+        },
+        {
+          "label": "XLU (Utilities)",
+          "ticker": "XLU",
+          "metric": "price"
+        },
+        {
+          "label": "XLF (Financials)",
+          "ticker": "XLF",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Rising rates favor",
+          "value": "Financials, Energy"
+        },
+        {
+          "label": "Recession rotation",
+          "value": "Utilities, Staples, Healthcare"
+        },
+        {
+          "label": "Early recovery",
+          "value": "Financials, Discretionary, Tech"
+        }
+      ],
+      "pitfalls": [
+        "Sectors often lead the cycle — by the time rotation is obvious, most of the move has occurred.",
+        "Business cycles don't follow scripts — 2020 recession lasted only 2 months.",
+        "Frequent sector rotation generates tax events and transaction costs that compete away alpha."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "ex-dividend-date",
+      "title": "Ex-Dividend Date",
+      "subtitle": "The cutoff date after which new buyers don't receive the upcoming dividend.",
+      "body": "glossary/ex-dividend-date.md",
+      "difficulty": "beginner",
+      "abbreviation": "Ex-Date",
+      "tags": [
+        "equities",
+        "dividends",
+        "corporate-events"
+      ],
+      "aliases": [
+        "ex-date",
+        "ex-div date",
+        "ex dividend"
+      ],
+      "related": [
+        "dividend-yield",
+        "buyback-yield",
+        "eps",
+        "put-call-parity"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · dividend calendar"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · dividend data"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Buy by",
+          "value": "Day before ex-date (T+1 settlement)"
+        },
+        {
+          "label": "Ex-date price drop",
+          "value": "≈ Dividend amount at open"
+        },
+        {
+          "label": "Payment lag",
+          "value": "Typically 2–4 weeks after record date"
+        }
+      ],
+      "pitfalls": [
+        "Dividend capture (buy before ex-date, sell after) is generally not profitable — price drops offset dividend.",
+        "Confusing ex-date with record date or payment date — only ex-date matters for receiving dividend.",
+        "Short sellers owe dividends to the share lender on ex-dates."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "revenue",
+      "title": "Revenue",
+      "subtitle": "Total sales from primary business activities — the top line of the income statement.",
+      "body": "glossary/revenue.md",
+      "difficulty": "beginner",
+      "tags": [
+        "accounting",
+        "equities",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "sales",
+        "top line",
+        "net revenue",
+        "gross revenue"
+      ],
+      "related": [
+        "net-income",
+        "ebitda",
+        "price-to-sales",
+        "ev-revenue",
+        "fcf"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · income statement"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · stock fundamentals"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "AAPL revenue",
+          "ticker": "AAPL",
+          "metric": "market_cap"
+        },
+        {
+          "label": "MSFT revenue",
+          "ticker": "MSFT",
+          "metric": "market_cap"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Recurring > transactional",
+          "value": "Higher quality multiple"
+        },
+        {
+          "label": "Revenue recognition",
+          "value": "Earned over time, not when cash received (ASC 606)"
+        },
+        {
+          "label": "Red flag",
+          "value": "Revenue growing faster than cash collections"
+        }
+      ],
+      "pitfalls": [
+        "Revenue is the most easily manipulated metric via channel stuffing and aggressive recognition.",
+        "Identical revenue can represent very different economics depending on margin and capital requirements.",
+        "Revenue growth alone without a profitability roadmap is only valuable if unit economics support it."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "net-income",
+      "title": "Net Income",
+      "subtitle": "Bottom-line profit after all expenses, interest, and taxes — the basis for EPS.",
+      "body": "glossary/net-income.md",
+      "difficulty": "beginner",
+      "abbreviation": "Net Profit",
+      "tags": [
+        "accounting",
+        "equities",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "net profit",
+        "bottom line",
+        "net earnings",
+        "earnings"
+      ],
+      "related": [
+        "eps",
+        "ebitda",
+        "revenue",
+        "pe-ratio",
+        "fcf"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · income statement"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · stock fundamentals"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Income statement order",
+          "value": "Revenue → Gross Profit → EBIT → EBT → Net Income"
+        },
+        {
+          "label": "GAAP vs non-GAAP",
+          "value": "Verify what's excluded from 'adjusted' figures"
+        },
+        {
+          "label": "Net margin (healthy)",
+          "value": "Varies widely; 15–25% for quality tech"
+        }
+      ],
+      "pitfalls": [
+        "Net income is the most manipulated line — accruals, estimates, and one-time charges all affect it.",
+        "Declining share count from buybacks can grow EPS even when absolute net income is flat.",
+        "Recurring 'one-time' charges signal quality issues — verify the consistency over time."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "debt-to-equity",
+      "title": "Debt-to-Equity",
+      "subtitle": "Total debt divided by shareholders' equity — a measure of financial leverage and solvency risk.",
+      "body": "glossary/debt-to-equity.md",
+      "difficulty": "beginner",
+      "abbreviation": "D/E",
+      "tags": [
+        "corporate-finance",
+        "accounting",
+        "leverage"
+      ],
+      "aliases": [
+        "d/e ratio",
+        "debt equity ratio",
+        "leverage ratio"
+      ],
+      "related": [
+        "leverage",
+        "net-working-capital",
+        "wacc",
+        "lbo",
+        "enterprise-value"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · balance sheet"
+        },
+        {
+          "screen": "watchlist",
+          "label": "Watchlist · financial health"
+        }
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Total debt ($M)",
+        "denominator_label": "Total equity ($M)",
+        "result_label": "D/E ratio",
+        "result_format": "ratio",
+        "numerator_default": 2000,
+        "denominator_default": 1000
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Tech (asset-light)",
+          "value": "0.1–0.5×"
+        },
+        {
+          "label": "Utilities (regulated)",
+          "value": "1.5–3.0×"
+        },
+        {
+          "label": "Banks",
+          "value": "8–15× (leverage is the model)"
+        }
+      ],
+      "pitfalls": [
+        "Use market value equity (not book value) for meaningful comparison.",
+        "D/E without interest coverage is incomplete — high D/E with strong FCF can be manageable.",
+        "Off-balance-sheet liabilities (operating leases, pensions) inflate true leverage beyond D/E."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "leverage",
+      "title": "Leverage",
+      "subtitle": "Using borrowed capital to amplify returns — and risks — beyond what equity alone would allow.",
+      "body": "glossary/leverage.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "finance",
+        "risk",
+        "corporate-finance"
+      ],
+      "aliases": [
+        "financial leverage",
+        "leverage ratio",
+        "gearing"
+      ],
+      "related": [
+        "margin",
+        "debt-to-equity",
+        "lbo",
+        "margin-call",
+        "wacc"
+      ],
+      "seen_in": [
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · balance sheet"
+        },
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · leverage analysis"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Leverage multiplier",
+          "value": "Total Assets / Equity"
+        },
+        {
+          "label": "Optimal Kelly leverage",
+          "value": "~2.7× for S&P 500 long-term"
+        },
+        {
+          "label": "2× ETF long-term",
+          "value": "Does NOT return 2× — volatility drag erodes it"
+        }
+      ],
+      "pitfalls": [
+        "A 50% loss requires a 100% gain to recover; leverage accelerates this problem.",
+        "Daily-reset leveraged ETFs experience volatility drag — unsuitable for buy-and-hold.",
+        "Margin calls force delevering at the worst possible time (market bottoms)."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "margin-call",
+      "title": "Margin Call",
+      "subtitle": "Broker demand to deposit more funds when account equity falls below the maintenance margin threshold.",
+      "body": "glossary/margin-call.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "trading",
+        "risk",
+        "leverage"
+      ],
+      "aliases": [
+        "margin call notice",
+        "maintenance margin call",
+        "house call"
+      ],
+      "related": [
+        "margin",
+        "leverage",
+        "liquidation-price",
+        "short-selling",
+        "var"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · margin management"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Maintenance margin (FINRA)",
+          "value": "25% minimum"
+        },
+        {
+          "label": "Margin call trigger",
+          "value": "Equity / Position < maintenance level"
+        },
+        {
+          "label": "Response window",
+          "value": "24–72 hours (varies by broker)"
+        }
+      ],
+      "pitfalls": [
+        "Brokers can increase requirements without notice — especially during volatility.",
+        "Meeting a margin call by selling other positions extends pain in a downturn.",
+        "Crypto exchanges often auto-liquidate instantly with no grace period."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "circuit-breaker",
+      "title": "Circuit Breaker",
+      "subtitle": "Automatic trading halt triggered by extreme price declines — a market-wide or individual stock pause.",
+      "body": "glossary/circuit-breaker.md",
+      "difficulty": "beginner",
+      "tags": [
+        "market-structure",
+        "regulation",
+        "risk"
+      ],
+      "aliases": [
+        "market circuit breaker",
+        "trading halt",
+        "mwcb",
+        "luld"
+      ],
+      "related": [
+        "vix",
+        "volatility",
+        "tail-risk",
+        "liquidity",
+        "market-maker"
+      ],
+      "seen_in": [
+        {
+          "screen": "markets",
+          "label": "Markets · market status"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Level 1 (S&P −7%)",
+          "value": "15-minute halt"
+        },
+        {
+          "label": "Level 2 (S&P −13%)",
+          "value": "15-minute halt"
+        },
+        {
+          "label": "Level 3 (S&P −20%)",
+          "value": "Market closed for day"
+        },
+        {
+          "label": "Single stock LULD",
+          "value": "5% band; 5-minute pause at limit"
+        }
+      ],
+      "pitfalls": [
+        "Circuit breakers can create front-running as investors rush to exit before a halt.",
+        "China's circuit breaker (2016) was withdrawn after it paradoxically accelerated selling.",
+        "Options strategies can become dangerous when the underlying halts — hedges become unexecutable."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "benchmark",
+      "title": "Benchmark",
+      "subtitle": "A standard index used to evaluate investment performance — the baseline all returns are measured against.",
+      "body": "glossary/benchmark.md",
+      "difficulty": "beginner",
+      "tags": [
+        "portfolio",
+        "performance",
+        "indexing"
+      ],
+      "aliases": [
+        "benchmark index",
+        "performance benchmark",
+        "reference index"
+      ],
+      "related": [
+        "alpha",
+        "beta",
+        "information-ratio",
+        "tracking-error",
+        "sharpe-ratio"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · performance attribution"
+        },
+        {
+          "screen": "equity_research",
+          "label": "Equity Research · relative returns"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "S&P 500",
+          "ticker": "^GSPC",
+          "metric": "price"
+        },
+        {
+          "label": "Russell 2000",
+          "ticker": "^RUT",
+          "metric": "price"
+        },
+        {
+          "label": "MSCI EAFE",
+          "ticker": "EFA",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "Good benchmark criteria",
+          "value": "Investable, measurable, pre-specified"
+        },
+        {
+          "label": "Closet indexing threshold",
+          "value": "Active share < 60%"
+        },
+        {
+          "label": "Alpha vs benchmark",
+          "value": "Portfolio return − Benchmark return"
+        }
+      ],
+      "pitfalls": [
+        "Using an inappropriate benchmark makes performance look spectacular or terrible based on cycle, not skill.",
+        "Survivorship bias in peer benchmarks: failed funds leave the peer group, inflating historical comparisons.",
+        "Changing benchmarks retroactively to make performance look better is a significant red flag."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "smart-beta",
+      "title": "Smart Beta",
+      "subtitle": "Rules-based factor investing strategies that tilt away from market-cap weights to capture risk premia.",
+      "body": "glossary/smart-beta.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Factor ETF",
+      "tags": [
+        "portfolio",
+        "etf",
+        "factor-investing"
+      ],
+      "aliases": [
+        "factor investing",
+        "strategic beta",
+        "factor etf",
+        "systematic investing"
+      ],
+      "related": [
+        "benchmark",
+        "alpha",
+        "beta",
+        "momentum",
+        "tracking-error",
+        "sector-rotation"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · factor exposure"
+        },
+        {
+          "screen": "markets",
+          "label": "Markets · ETF screening"
+        }
+      ],
+      "live_examples": [
+        {
+          "label": "MTUM (momentum)",
+          "ticker": "MTUM",
+          "metric": "price"
+        },
+        {
+          "label": "QUAL (quality)",
+          "ticker": "QUAL",
+          "metric": "price"
+        },
+        {
+          "label": "VLUE (value)",
+          "ticker": "VLUE",
+          "metric": "price"
+        }
+      ],
+      "rules_of_thumb": [
+        {
+          "label": "5 core factors",
+          "value": "Value, Momentum, Quality, Low-vol, Size"
+        },
+        {
+          "label": "Factor cycle length",
+          "value": "Years — requires patience"
+        },
+        {
+          "label": "Smart beta fee range",
+          "value": "0.15–0.40% vs 0.03% for plain index"
+        }
+      ],
+      "pitfalls": [
+        "Factor premia can be crowded out — more money chasing a factor narrows future expected returns.",
+        "Factor zoo problem: hundreds of claimed factors, many from data mining.",
+        "Value factor had multi-year underperformance (2010–2020) testing even committed investors."
+      ],
+      "external_links": [
+        {
+          "type": "deep_dive",
+          "source": "AQR Capital",
+          "title": "Factor Investing Overview",
+          "url": "https://www.aqr.com/Insights/Research/Topic-Overview/Factor-Investing"
+        }
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "correlation",
+      "title": "Correlation",
+      "subtitle": "Statistical measure of how closely two assets move together, ranging from −1 to +1.",
+      "body": "glossary/correlation.md",
+      "difficulty": "intermediate",
+      "tags": [
+        "portfolio",
+        "statistics",
+        "risk"
+      ],
+      "aliases": [
+        "pearson correlation",
+        "correlation coefficient",
+        "asset correlation"
+      ],
+      "related": [
+        "beta",
+        "volatility",
+        "sharpe-ratio",
+        "rebalancing",
+        "tail-risk",
+        "mean-reversion"
+      ],
+      "seen_in": [
+        {
+          "screen": "portfolio",
+          "label": "Portfolio · correlation matrix"
+        }
+      ],
+      "calculator": {
+        "kind": "formula",
+        "formula": "Cov(X,Y) / (σX × σY)",
+        "result_label": "Correlation coefficient",
+        "result_format": "ratio",
+        "numerator_default": 0.65
+      },
+      "rules_of_thumb": [
+        {
+          "label": "Perfect diversifier",
+          "value": "ρ = −1.0"
+        },
+        {
+          "label": "No benefit",
+          "value": "ρ = +1.0"
+        },
+        {
+          "label": "US equities / US bonds (pre-2022)",
+          "value": "~−0.30 (diversified)"
+        },
+        {
+          "label": "In crisis",
+          "value": "All risky assets → ρ ≈ +0.8"
+        }
+      ],
+      "pitfalls": [
+        "Historical correlation is not stable — it shifts with market regime, especially post-2022 equity/bond.",
+        "Correlation measures linear relationships; tail co-movement requires copula analysis.",
+        "Diversification across 'uncorrelated' strategies often fails in liquidity crises."
+      ],
+      "updated": "2026-05-06"
     }
   ]
 }
