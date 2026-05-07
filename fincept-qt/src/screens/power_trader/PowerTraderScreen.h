@@ -3,66 +3,82 @@
 #include "screens/power_trader/PowerTraderTypes.h"
 
 #include <QLabel>
-#include <QSplitter>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QPushButton>
 #include <QStackedWidget>
+#include <QTabWidget>
 #include <QWidget>
 
+// Forward declarations to avoid full header pulls in .h
 namespace fincept::screens {
-class LeaderboardPanel;
+class OverviewPanel;
+class RankingsPanel;
+class MemberProfilePanel;
 class TradesFeedPanel;
-class MemberDetailPanel;
-} // namespace fincept::screens
+}
 
 namespace fincept::power_trader {
 
-/// Top-level POWER TRADER screen — tracks U.S. congressional stock trade
-/// disclosures filed under the STOCK Act.
+/// Main POWER TRADER screen.
 ///
-/// Layout (horizontal QSplitter):
-///   Left  (250px): LeaderboardPanel  — member ranking table
-///   Center (flex): TradesFeedPanel   — chronological trade feed + filters
-///   Right (300px): MemberDetailPanel — per-member detail
-///
-/// Registered as screen_id "power_trader" in DockScreenRouter.
+/// Layout:
+///   Left sidebar (200px) — searchable member list, sorted by alpha by default
+///   Right area (flex)    — QTabWidget with 4 tabs:
+///     OVERVIEW   big-picture: stat tiles, sector exposure, committee correlation
+///     RANKINGS   8 ranking dimensions with visual bar charts
+///     MEMBER     full per-member deep dive: portfolio curve + holdings + signals
+///     FEED       chronological trade disclosure feed (filterable)
 class PowerTraderScreen : public QWidget {
     Q_OBJECT
   public:
     explicit PowerTraderScreen(QWidget* parent = nullptr);
 
   signals:
-    /// Emitted when the user wants to cross-navigate to another screen
-    /// (e.g. open a ticker in Equity Research). Connected in MainWindow.
     void navigate_to_screen(QString screen_id, QString ticker);
 
+  protected:
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
+
   private slots:
-    void on_data_loaded(PowerTraderSummary summary);
-    void on_error_occurred(QString error);
+    void on_data_loaded(fincept::power_trader::PowerTraderSummary summary);
+    void on_error(const QString& msg);
     void on_member_selected(const QString& member_id);
 
   private:
     void build_ui();
+    QWidget* build_top_bar();
+    QWidget* build_member_sidebar();
+    void populate_member_list(const QVector<CongressMember>& members);
+    void show_content();
     void show_loading();
     void show_error(const QString& msg);
-    void show_content();
-    void update_timestamp();
 
-    // Top bar
-    QLabel*  last_updated_label_ = nullptr;
+    // ── Top bar ───────────────────────────────────────────────────────────────
+    QLabel*      timestamp_lbl_ = nullptr;
+    QPushButton* refresh_btn_   = nullptr;
 
-    // Content stacker: 0=loading, 1=error, 2=content
-    QStackedWidget* stack_      = nullptr;
-    QWidget*        loading_pg_ = nullptr;
-    QWidget*        error_pg_   = nullptr;
-    QWidget*        content_pg_ = nullptr;
-    QLabel*         error_msg_  = nullptr;
+    // ── Sidebar ───────────────────────────────────────────────────────────────
+    QLineEdit*   member_search_ = nullptr;
+    QListWidget* member_list_   = nullptr;
 
-    // Content panels
-    QSplitter*                     splitter_    = nullptr;
-    fincept::screens::LeaderboardPanel*  leaderboard_ = nullptr;
-    fincept::screens::TradesFeedPanel*   feed_        = nullptr;
-    fincept::screens::MemberDetailPanel* detail_      = nullptr;
+    // ── Main tabs ─────────────────────────────────────────────────────────────
+    QTabWidget*                  tab_widget_      = nullptr;
+    screens::OverviewPanel*      overview_panel_  = nullptr;
+    screens::RankingsPanel*      rankings_panel_  = nullptr;
+    screens::MemberProfilePanel* member_panel_    = nullptr;
+    screens::TradesFeedPanel*    feed_panel_      = nullptr;
 
-    PowerTraderSummary summary_;
+    // ── Loading / error / content stack ──────────────────────────────────────
+    QStackedWidget* stack_       = nullptr;
+    QLabel*         loading_lbl_ = nullptr;
+    QLabel*         error_lbl_   = nullptr;
+    QWidget*        content_area_= nullptr;
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    PowerTraderSummary current_summary_;
+    QString            selected_member_id_;
 };
 
 } // namespace fincept::power_trader

@@ -1,21 +1,18 @@
 // src/screens/power_trader/PowerTraderScreen.cpp
 #include "screens/power_trader/PowerTraderScreen.h"
 
-#include "screens/power_trader/LeaderboardPanel.h"
-#include "screens/power_trader/MemberDetailPanel.h"
+#include "screens/power_trader/MemberProfilePanel.h"
+#include "screens/power_trader/OverviewPanel.h"
 #include "screens/power_trader/PowerTraderService.h"
+#include "screens/power_trader/RankingsPanel.h"
 #include "screens/power_trader/TradesFeedPanel.h"
 #include "ui/theme/Theme.h"
 
-#include <QFrame>
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
+#include <QListWidgetItem>
+#include <QShowEvent>
 #include <QSplitter>
-#include <QStackedWidget>
 #include <QVBoxLayout>
-
-#include <algorithm>
 
 namespace fincept::power_trader {
 
@@ -23,227 +20,308 @@ PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
 
     auto& svc = PowerTraderService::instance();
-    connect(&svc, &PowerTraderService::data_loaded,
-            this, &PowerTraderScreen::on_data_loaded);
-    connect(&svc, &PowerTraderService::error_occurred,
-            this, &PowerTraderScreen::on_error_occurred);
+    connect(&svc, &PowerTraderService::data_loaded,   this, &PowerTraderScreen::on_data_loaded);
+    connect(&svc, &PowerTraderService::error_occurred,this, &PowerTraderScreen::on_error);
+}
 
-    show_loading();
-    svc.load_data();
+void PowerTraderScreen::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    if (!PowerTraderService::instance().is_loaded()) {
+        show_loading();
+        PowerTraderService::instance().load_data();
+    } else {
+        // Re-emit cached data so panels refresh on tab re-activation
+        PowerTraderService::instance().load_data();
+    }
+}
+
+void PowerTraderScreen::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
 }
 
 // ── UI construction ───────────────────────────────────────────────────────────
 
 void PowerTraderScreen::build_ui() {
-    setStyleSheet(QString("QWidget { background:%1; color:%2; }")
+    setStyleSheet(QString("background:%1; color:%2;")
                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
+    root->addWidget(build_top_bar());
 
-    // ── Top bar ───────────────────────────────────────────────────────────────
-    auto* top_bar = new QWidget(this);
-    top_bar->setFixedHeight(52);
-    top_bar->setStyleSheet(
-        QString("QWidget { background:%1; border-bottom:1px solid %2; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED()));
+    // ── Three-state stack: loading | error | content ──────────────────────────
+    stack_ = new QStackedWidget;
 
-    auto* top_layout = new QHBoxLayout(top_bar);
-    top_layout->setContentsMargins(16, 0, 16, 0);
-    top_layout->setSpacing(12);
+    // Page 0 — loading
+    auto* loading_page = new QWidget;
+    {
+        auto* ll = new QVBoxLayout(loading_page);
+        loading_lbl_ = new QLabel("Loading congressional trade data…");
+        loading_lbl_->setAlignment(Qt::AlignCenter);
+        loading_lbl_->setStyleSheet(QString("color:%1; font-size:14px;")
+                                         .arg(ui::colors::TEXT_SECONDARY()));
+        ll->addStretch();
+        ll->addWidget(loading_lbl_);
+        ll->addStretch();
+    }
+    stack_->addWidget(loading_page);
 
-    // Title group
-    auto* title_group = new QWidget(top_bar);
-    title_group->setStyleSheet("QWidget { background:transparent; }");
-    auto* tg_layout = new QVBoxLayout(title_group);
-    tg_layout->setContentsMargins(0, 0, 0, 0);
-    tg_layout->setSpacing(1);
+    // Page 1 — error
+    auto* error_page = new QWidget;
+    {
+        auto* el = new QVBoxLayout(error_page);
+        error_lbl_ = new QLabel;
+        error_lbl_->setAlignment(Qt::AlignCenter);
+        error_lbl_->setWordWrap(true);
+        error_lbl_->setStyleSheet(QString("color:%1; font-size:13px;")
+                                       .arg(ui::colors::NEGATIVE()));
+        el->addStretch();
+        el->addWidget(error_lbl_);
+        el->addStretch();
+    }
+    stack_->addWidget(error_page);
 
-    auto* title_label = new QLabel(QStringLiteral("POWER TRADER"), title_group);
-    title_label->setStyleSheet(
-        QString("QLabel { color:%1; font-size:15px; font-weight:700;"
-                " letter-spacing:1.5px; background:transparent; }")
-            .arg(ui::colors::AMBER()));
-    tg_layout->addWidget(title_label);
+    // Page 2 — content
+    content_area_ = new QWidget;
+    {
+        auto* hl = new QHBoxLayout(content_area_);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->setSpacing(0);
+        hl->addWidget(build_member_sidebar());
 
-    auto* subtitle_label = new QLabel(
-        QStringLiteral("Tracking congressional stock disclosures (STOCK Act)"), title_group);
-    subtitle_label->setStyleSheet(
-        QString("QLabel { color:%1; font-size:10px; background:transparent; }")
-            .arg(ui::colors::TEXT_SECONDARY()));
-    tg_layout->addWidget(subtitle_label);
+        // ── Tabs ──────────────────────────────────────────────────────────────
+        tab_widget_ = new QTabWidget;
+        tab_widget_->setDocumentMode(true);
+        tab_widget_->setStyleSheet(QString(R"(
+            QTabWidget::pane { border:0; background:%1; }
+            QTabBar::tab {
+                background:%2; color:%3; padding:8px 20px;
+                border:0; border-bottom:2px solid transparent;
+                font-size:11px; font-weight:700; letter-spacing:1px;
+            }
+            QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
+            QTabBar::tab:hover:!selected { color:%5; }
+        )").arg(ui::colors::BG_BASE(), ui::colors::BG_SURFACE(),
+                ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(),
+                ui::colors::TEXT_PRIMARY()));
 
-    top_layout->addWidget(title_group);
-    top_layout->addStretch();
+        overview_panel_ = new screens::OverviewPanel;
+        rankings_panel_ = new screens::RankingsPanel;
+        member_panel_   = new screens::MemberProfilePanel;
+        feed_panel_     = new screens::TradesFeedPanel;
 
-    // Last updated timestamp
-    last_updated_label_ = new QLabel(QStringLiteral("—"), top_bar);
-    last_updated_label_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:10px; background:transparent; }")
-            .arg(ui::colors::TEXT_TERTIARY()));
-    top_layout->addWidget(last_updated_label_);
+        tab_widget_->addTab(overview_panel_, "Overview");
+        tab_widget_->addTab(rankings_panel_, "Rankings");
+        tab_widget_->addTab(member_panel_,   "Member");
+        tab_widget_->addTab(feed_panel_,     "Feed");
 
-    // Refresh button
-    auto* refresh_btn = new QPushButton(QStringLiteral("⟳  Refresh"), top_bar);
-    refresh_btn->setFixedHeight(28);
-    refresh_btn->setCursor(Qt::PointingHandCursor);
-    refresh_btn->setStyleSheet(
-        QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                "  border-radius:3px; padding:0 12px; font-size:11px; font-weight:600; }"
-                "QPushButton:hover { background:%4; border-color:%2; }"
-                "QPushButton:pressed { background:%5; }")
-            .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER(), ui::colors::AMBER_DIM(),
-                 ui::colors::BG_RAISED(), ui::colors::BG_BASE()));
-    connect(refresh_btn, &QPushButton::clicked, this, [this]() {
+        connect(overview_panel_, &screens::OverviewPanel::member_selected,
+                this, &PowerTraderScreen::on_member_selected);
+        connect(rankings_panel_, &screens::RankingsPanel::member_selected,
+                this, &PowerTraderScreen::on_member_selected);
+        connect(feed_panel_,     &screens::TradesFeedPanel::member_selected,
+                this, &PowerTraderScreen::on_member_selected);
+        connect(member_panel_,   &screens::MemberProfilePanel::navigate_to_markets,
+                this, [this](const QString& ticker) {
+                    emit navigate_to_screen(QStringLiteral("markets"), ticker);
+                });
+
+        hl->addWidget(tab_widget_, 1);
+    }
+    stack_->addWidget(content_area_);
+
+    root->addWidget(stack_, 1);
+    show_loading();
+}
+
+QWidget* PowerTraderScreen::build_top_bar() {
+    auto* bar = new QWidget;
+    bar->setFixedHeight(46);
+    bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                           .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* hl = new QHBoxLayout(bar);
+    hl->setContentsMargins(14, 0, 14, 0);
+    hl->setSpacing(10);
+
+    auto* title = new QLabel("POWER TRADER");
+    title->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700; "
+                                 "letter-spacing:2px;").arg(ui::colors::AMBER()));
+    auto* sub = new QLabel("Congressional Stock Disclosures · STOCK Act");
+    sub->setStyleSheet(QString("color:%1; font-size:11px;")
+                           .arg(ui::colors::TEXT_TERTIARY()));
+
+    timestamp_lbl_ = new QLabel;
+    timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:10px;")
+                                       .arg(ui::colors::TEXT_TERTIARY()));
+
+    refresh_btn_ = new QPushButton("\xe2\x9f\xb3 Refresh");
+    refresh_btn_->setFixedHeight(26);
+    refresh_btn_->setCursor(Qt::PointingHandCursor);
+    refresh_btn_->setStyleSheet(
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                "border-radius:2px;padding:2px 10px;font-size:11px;font-weight:600;}"
+                "QPushButton:hover{border-color:%1;background:%3;}")
+            .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
+    connect(refresh_btn_, &QPushButton::clicked, this, [this]() {
         show_loading();
         PowerTraderService::instance().load_data();
     });
-    top_layout->addWidget(refresh_btn);
 
-    root->addWidget(top_bar);
-
-    // ── Content stacker ───────────────────────────────────────────────────────
-    stack_ = new QStackedWidget(this);
-
-    // Page 0 — Loading
-    loading_pg_ = new QWidget(this);
-    {
-        auto* ll = new QVBoxLayout(loading_pg_);
-        ll->setAlignment(Qt::AlignCenter);
-        auto* lbl = new QLabel(QStringLiteral("Loading congressional trade data…"), loading_pg_);
-        lbl->setAlignment(Qt::AlignCenter);
-        lbl->setStyleSheet(QString("QLabel { color:%1; font-size:13px; }").arg(ui::colors::TEXT_SECONDARY()));
-        ll->addWidget(lbl);
-    }
-    stack_->addWidget(loading_pg_);
-
-    // Page 1 — Error
-    error_pg_ = new QWidget(this);
-    {
-        auto* el = new QVBoxLayout(error_pg_);
-        el->setAlignment(Qt::AlignCenter);
-        error_msg_ = new QLabel(QStringLiteral("Error"), error_pg_);
-        error_msg_->setAlignment(Qt::AlignCenter);
-        error_msg_->setWordWrap(true);
-        error_msg_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:13px; max-width:400px; }")
-                .arg(ui::colors::NEGATIVE()));
-        el->addWidget(error_msg_);
-
-        auto* retry_btn = new QPushButton(QStringLiteral("Retry"), error_pg_);
-        retry_btn->setFixedSize(120, 32);
-        retry_btn->setCursor(Qt::PointingHandCursor);
-        retry_btn->setStyleSheet(
-            QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                    "  border-radius:3px; font-size:12px; }"
-                    "QPushButton:hover { background:%4; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER(), ui::colors::AMBER_DIM(),
-                     ui::colors::BG_RAISED()));
-        connect(retry_btn, &QPushButton::clicked, this, [this]() {
-            show_loading();
-            PowerTraderService::instance().load_data();
-        });
-        el->addWidget(retry_btn, 0, Qt::AlignCenter);
-    }
-    stack_->addWidget(error_pg_);
-
-    // Page 2 — Content
-    content_pg_ = new QWidget(this);
-    {
-        auto* cl = new QVBoxLayout(content_pg_);
-        cl->setContentsMargins(0, 0, 0, 0);
-        cl->setSpacing(0);
-
-        splitter_ = new QSplitter(Qt::Horizontal, content_pg_);
-        splitter_->setHandleWidth(1);
-        splitter_->setStyleSheet(
-            QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
-
-        leaderboard_ = new fincept::screens::LeaderboardPanel(splitter_);
-        feed_        = new fincept::screens::TradesFeedPanel(splitter_);
-        detail_      = new fincept::screens::MemberDetailPanel(splitter_);
-
-        splitter_->addWidget(leaderboard_);
-        splitter_->addWidget(feed_);
-        splitter_->addWidget(detail_);
-
-        // Set initial sizes: 250 / flex / 300
-        splitter_->setSizes({250, 9999, 300});
-        splitter_->setStretchFactor(0, 0);
-        splitter_->setStretchFactor(1, 1);
-        splitter_->setStretchFactor(2, 0);
-
-        cl->addWidget(splitter_);
-    }
-    stack_->addWidget(content_pg_);
-
-    root->addWidget(stack_, 1);
-
-    // ── Wire panel cross-selection signals ────────────────────────────────────
-    connect(leaderboard_, &fincept::screens::LeaderboardPanel::member_selected,
-            this, &PowerTraderScreen::on_member_selected);
-    connect(feed_, &fincept::screens::TradesFeedPanel::member_selected,
-            this, &PowerTraderScreen::on_member_selected);
+    hl->addWidget(title);
+    hl->addWidget(sub);
+    hl->addStretch();
+    hl->addWidget(timestamp_lbl_);
+    hl->addWidget(refresh_btn_);
+    return bar;
 }
 
-// ── State transitions ─────────────────────────────────────────────────────────
+QWidget* PowerTraderScreen::build_member_sidebar() {
+    auto* sidebar = new QWidget;
+    sidebar->setFixedWidth(200);
+    sidebar->setStyleSheet(QString("background:%1; border-right:1px solid %2;")
+                               .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* vl = new QVBoxLayout(sidebar);
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
 
-void PowerTraderScreen::show_loading() {
-    stack_->setCurrentIndex(0);
+    auto* hdr = new QLabel("MEMBERS");
+    hdr->setFixedHeight(32);
+    hdr->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    hdr->setStyleSheet(
+        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1.5px;"
+                "padding-left:10px; border-bottom:1px solid %2;")
+            .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+    vl->addWidget(hdr);
+
+    member_search_ = new QLineEdit;
+    member_search_->setPlaceholderText("Search\xe2\x80\xa6");
+    member_search_->setFixedHeight(30);
+    member_search_->setStyleSheet(
+        QString("QLineEdit{background:%1;color:%2;border:none;border-bottom:1px solid %3;"
+                "padding:0 8px;font-size:11px;}"
+                "QLineEdit:focus{border-bottom-color:%4;}")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+                 ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    connect(member_search_, &QLineEdit::textChanged, this, [this](const QString& t) {
+        for (int i = 0; i < member_list_->count(); ++i) {
+            auto* item = member_list_->item(i);
+            item->setHidden(!t.isEmpty() &&
+                            !item->text().contains(t, Qt::CaseInsensitive));
+        }
+    });
+    vl->addWidget(member_search_);
+
+    member_list_ = new QListWidget;
+    member_list_->setFrameShape(QFrame::NoFrame);
+    member_list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    member_list_->setStyleSheet(
+        QString("QListWidget{background:%1;border:none;outline:none;}"
+                "QListWidget::item{padding:6px 10px;border-bottom:1px solid %2;"
+                "font-size:11px;color:%3;}"
+                "QListWidget::item:selected{background:rgba(217,119,6,0.15);color:%4;}"
+                "QListWidget::item:hover:!selected{background:%5;}"
+                "QScrollBar:vertical{width:4px;background:%1;}"
+                "QScrollBar::handle:vertical{background:%2;}")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY(), ui::colors::AMBER(),
+                 ui::colors::BG_RAISED()));
+    connect(member_list_, &QListWidget::currentItemChanged, this,
+            [this](QListWidgetItem* cur, QListWidgetItem*) {
+                if (!cur) return;
+                const QString mid = cur->data(Qt::UserRole).toString();
+                if (!mid.isEmpty())
+                    on_member_selected(mid);
+            });
+    vl->addWidget(member_list_, 1);
+    return sidebar;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& members) {
+    member_list_->clear();
+    auto sorted = members;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const CongressMember& a, const CongressMember& b) {
+                  return a.alpha_ytd > b.alpha_ytd;
+              });
+    for (const auto& m : sorted) {
+        auto* item = new QListWidgetItem;
+        const QString sign = m.alpha_ytd >= 0 ? "+" : "";
+        item->setText(m.full_name + "\n" + sign
+                      + QString::number(m.alpha_ytd, 'f', 1) + "% alpha");
+        item->setData(Qt::UserRole,     m.id);
+        item->setData(Qt::UserRole + 1, m.party);
+        member_list_->addItem(item);
+    }
+}
+
+void PowerTraderScreen::show_loading() { stack_->setCurrentIndex(0); }
 void PowerTraderScreen::show_error(const QString& msg) {
-    error_msg_->setText(msg);
+    error_lbl_->setText("Failed to load data:\n" + msg);
     stack_->setCurrentIndex(1);
 }
+void PowerTraderScreen::show_content() { stack_->setCurrentIndex(2); }
 
-void PowerTraderScreen::show_content() {
-    stack_->setCurrentIndex(2);
-}
-
-void PowerTraderScreen::update_timestamp() {
-    if (!summary_.loaded || !summary_.last_updated.isValid()) {
-        last_updated_label_->setText(QStringLiteral("—"));
-        return;
-    }
-    last_updated_label_->setText(
-        QStringLiteral("Updated ") +
-        summary_.last_updated.toLocalTime().toString(QStringLiteral("yyyy-MM-dd hh:mm")));
-}
-
-// ── Slot handlers ─────────────────────────────────────────────────────────────
+// ── Slots ─────────────────────────────────────────────────────────────────────
 
 void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
-    summary_ = summary;
-    update_timestamp();
+    current_summary_ = summary;
+    timestamp_lbl_->setText(
+        QString("Updated %1")
+            .arg(summary.last_updated.toLocalTime().toString("hh:mm")));
 
-    leaderboard_->set_members(summary_.members);
-    feed_->set_trades(summary_.recent_trades);
-    detail_->clear();
+    populate_member_list(summary.members);
+
+    const auto sectors = PowerTraderService::instance().sector_breakdown();
+    const auto insider_signals = PowerTraderService::instance().committee_insider_signals();
+
+    overview_panel_->set_data(summary, sectors, insider_signals);
+    rankings_panel_->set_data(summary);
+    feed_panel_->set_trades(summary.recent_trades);
+
+    // Pre-select highest-alpha member on first load
+    if (selected_member_id_.isEmpty() && !summary.members.isEmpty()) {
+        auto sorted = summary.members;
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const CongressMember& a, const CongressMember& b) {
+                      return a.alpha_ytd > b.alpha_ytd;
+                  });
+        selected_member_id_ = sorted.first().id;
+    }
+    if (!selected_member_id_.isEmpty())
+        on_member_selected(selected_member_id_);
 
     show_content();
 }
 
-void PowerTraderScreen::on_error_occurred(QString error) {
-    show_error(error.isEmpty()
-                   ? QStringLiteral("Failed to load congressional trade data.\nPlease try again.")
-                   : error);
+void PowerTraderScreen::on_error(const QString& msg) {
+    show_error(msg);
 }
 
 void PowerTraderScreen::on_member_selected(const QString& member_id) {
-    // Find member struct
-    const auto& members = summary_.members;
-    auto it = std::find_if(members.begin(), members.end(),
-                           [&](const CongressMember& m) { return m.id == member_id; });
-    if (it == members.end())
-        return;
+    selected_member_id_ = member_id;
 
-    leaderboard_->set_selected(member_id);
-    feed_->set_selected_member(member_id);
+    // Sync sidebar highlight without triggering recursive signal
+    for (int i = 0; i < member_list_->count(); ++i) {
+        auto* item = member_list_->item(i);
+        if (item->data(Qt::UserRole).toString() == member_id) {
+            member_list_->blockSignals(true);
+            member_list_->setCurrentItem(item);
+            member_list_->blockSignals(false);
+            break;
+        }
+    }
 
-    const auto trades = PowerTraderService::instance().trades_for_member(member_id);
-    detail_->set_member(*it, trades);
+    CongressMember member;
+    for (const auto& m : current_summary_.members)
+        if (m.id == member_id) { member = m; break; }
+    if (member.id.isEmpty()) return;
+
+    member_panel_->set_member(member);
+    feed_panel_->set_selected_member(member_id);
+    tab_widget_->setCurrentWidget(member_panel_);
 }
 
 } // namespace fincept::power_trader

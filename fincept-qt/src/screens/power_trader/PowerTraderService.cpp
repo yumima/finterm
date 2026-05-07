@@ -497,4 +497,358 @@ void PowerTraderService::generate_mock_data() {
     emit data_loaded(summary_);
 }
 
+// ── Static classification maps ────────────────────────────────────────────────
+
+const QHash<QString, QString>& PowerTraderService::ticker_sector_map() {
+    static const QHash<QString, QString> m = {
+        {"LMT","Defense"},  {"RTX","Defense"},  {"NOC","Defense"}, {"GD","Defense"},
+        {"BA","Defense"},   {"LDOS","Defense"}, {"SAIC","Defense"},{"RKLB","Aerospace"},
+        {"ASTR","Aerospace"},{"SPCE","Aerospace"},
+        {"CVX","Energy"},   {"XOM","Energy"},   {"SLB","Energy"},  {"HAL","Energy"},
+        {"PSX","Energy"},   {"PXD","Energy"},   {"OXY","Energy"},  {"NEE","Energy"},
+        {"DUK","Energy"},
+        {"JPM","Financials"},{"BAC","Financials"},{"WFC","Financials"},{"C","Financials"},
+        {"GS","Financials"}, {"MS","Financials"}, {"BX","Financials"},{"KKR","Financials"},
+        {"AXP","Financials"},{"V","Financials"},  {"MA","Financials"},
+        {"SPGI","Financials"},{"ICE","Financials"},{"SCHW","Financials"},{"BLK","Financials"},
+        {"AAPL","Technology"},{"MSFT","Technology"},{"AMZN","Technology"},
+        {"GOOGL","Technology"},{"GOOG","Technology"},{"META","Technology"},
+        {"NVDA","Technology"},{"AMD","Technology"},{"QCOM","Technology"},
+        {"TSM","Technology"}, {"TSLA","Technology"},{"CRM","Technology"},
+        {"JNJ","Healthcare"}, {"PFE","Healthcare"},{"ABBV","Healthcare"},
+        {"MRK","Healthcare"}, {"UNH","Healthcare"},{"CVS","Healthcare"},
+        {"DIS","Consumer"},   {"CMCSA","Consumer"},{"NFLX","Consumer"},
+        {"SBUX","Consumer"},  {"COST","Consumer"}, {"HD","Consumer"},
+        {"LOW","Consumer"},   {"WM","Industrials"},{"BRK-B","Financials"},
+        {"SPY","ETF"},        {"VTI","ETF"},
+    };
+    return m;
+}
+
+const QHash<QString, QString>& PowerTraderService::ticker_committee_map() {
+    static const QHash<QString, QString> m = {
+        {"LMT","Armed Services"},  {"RTX","Armed Services"}, {"NOC","Armed Services"},
+        {"GD","Armed Services"},   {"BA","Armed Services"},  {"LDOS","Armed Services"},
+        {"SAIC","Armed Services"}, {"RKLB","Armed Services"},{"ASTR","Armed Services"},
+        {"CVX","Energy"},  {"XOM","Energy"},  {"SLB","Energy"},  {"HAL","Energy"},
+        {"PSX","Energy"},  {"PXD","Energy"},  {"OXY","Energy"},  {"NEE","Energy"},
+        {"DUK","Energy"},
+        {"JPM","Banking"}, {"BAC","Banking"}, {"WFC","Banking"}, {"C","Banking"},
+        {"GS","Banking"},  {"MS","Banking"},  {"BX","Banking"},  {"KKR","Banking"},
+        {"AXP","Finance"}, {"V","Financial Services"},{"MA","Financial Services"},
+        {"AAPL","Commerce"},{"MSFT","Commerce"},{"AMZN","Commerce"},
+        {"GOOGL","Commerce"},{"META","Commerce"},{"NVDA","Commerce"},
+        {"JNJ","Health"},  {"PFE","Health"},  {"ABBV","Health"},
+        {"MRK","Health"},  {"UNH","Health"},  {"CVS","Health"},
+    };
+    return m;
+}
+
+// ── Portfolio reconstruction ──────────────────────────────────────────────────
+
+MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) const {
+    const auto trades = trades_for_member(member_id);
+    MemberPortfolio portfolio;
+    portfolio.member_id = member_id;
+
+    if (trades.isEmpty())
+        return portfolio;
+
+    // Aggregate net position per ticker (using midpoints of STOCK/ETF trades only)
+    QHash<QString, MemberHolding> positions;
+    const auto& sec_map  = ticker_sector_map();
+
+    // Work through trades chronologically for NAV series
+    auto sorted = trades;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const PoliticalTrade& a, const PoliticalTrade& b) {
+                  return a.transaction_date < b.transaction_date;
+              });
+
+    QMap<QDate, double> cumulative_nav;  // date → running invested amount
+    double running_cost = 0;
+
+    for (const auto& t : sorted) {
+        if (t.asset_type != AssetType::Stock && t.asset_type != AssetType::ETF)
+            continue;
+
+        const double midpoint = (t.amount_low + t.amount_high) / 2.0;
+        auto& h = positions[t.ticker];
+        h.ticker     = t.ticker;
+        h.asset_name = t.asset_name;
+        h.sector     = sec_map.value(t.ticker, QStringLiteral("Other"));
+
+        if (t.direction == TradeDirection::Buy) {
+            h.est_cost_basis += midpoint;
+            h.buy_count++;
+            running_cost += midpoint;
+        } else if (t.direction == TradeDirection::Sell) {
+            const double reduce = qMin(midpoint, h.est_cost_basis);
+            h.est_cost_basis   -= reduce;
+            h.sell_count++;
+            running_cost -= reduce;
+        }
+
+        if (!t.committee_relevance.isEmpty()) {
+            h.committee_overlap = true;
+            h.committee_name    = t.committee_relevance;
+        }
+
+        cumulative_nav[t.transaction_date] = qMax(0.0, running_cost);
+    }
+
+    // Build NAV series (one point per trade date)
+    for (auto it = cumulative_nav.begin(); it != cumulative_nav.end(); ++it)
+        portfolio.nav_series.append({it.key(), it.value()});
+
+    // Only keep net-long positions
+    double total_cost = 0;
+    for (const auto& h : positions) {
+        if (h.est_cost_basis > 500.0) {  // filter tiny residuals
+            portfolio.holdings.append(h);
+            total_cost += h.est_cost_basis;
+        }
+    }
+    portfolio.est_total_cost = total_cost;
+
+    // Estimate market value: apply hypothetical 15% gain as a proxy when no live price
+    // (real implementation should call MarketDataService per ticker)
+    for (auto& h : portfolio.holdings) {
+        // Rough P&L proxy: tech up ~30%, defense up ~15%, energy up ~10% YTD
+        double sector_gain = 0.15;
+        if (h.sector == QStringLiteral("Technology"))  sector_gain = 0.28;
+        else if (h.sector == QStringLiteral("Defense"))sector_gain = 0.17;
+        else if (h.sector == QStringLiteral("Energy"))  sector_gain = 0.09;
+        else if (h.sector == QStringLiteral("Financials")) sector_gain = 0.22;
+        else if (h.sector == QStringLiteral("Healthcare"))  sector_gain = 0.08;
+        else if (h.sector == QStringLiteral("ETF"))          sector_gain = 0.12;
+
+        h.est_market_value = h.est_cost_basis * (1.0 + sector_gain);
+        h.est_pnl          = h.est_market_value - h.est_cost_basis;
+        h.est_pnl_pct      = sector_gain * 100.0;
+        h.est_weight       = total_cost > 0 ? (h.est_cost_basis / total_cost) * 100.0 : 0;
+    }
+
+    // Sort by weight descending
+    std::sort(portfolio.holdings.begin(), portfolio.holdings.end(),
+              [](const MemberHolding& a, const MemberHolding& b) {
+                  return a.est_cost_basis > b.est_cost_basis;
+              });
+
+    double total_value = 0;
+    double total_pnl   = 0;
+    for (const auto& h : portfolio.holdings) {
+        total_value += h.est_market_value;
+        total_pnl   += h.est_pnl;
+    }
+    portfolio.est_total_value   = total_value;
+    portfolio.est_total_pnl     = total_pnl;
+    portfolio.est_total_pnl_pct = total_cost > 0 ? (total_pnl / total_cost) * 100.0 : 0;
+
+    // Derived stats
+    portfolio.net_buyer_90d     = net_buyer_amount(member_id, 90);
+    portfolio.avg_signal_score  = avg_signal_score(member_id);
+    portfolio.avg_lag_days      = avg_disclosure_lag(member_id);
+    const auto bp               = best_pick(member_id);
+    portfolio.best_pick_ticker  = bp.first;
+    portfolio.best_pick_pnl_pct = bp.second;
+
+    return portfolio;
+}
+
+// ── Sector breakdown ──────────────────────────────────────────────────────────
+
+QVector<SectorExposure> PowerTraderService::sector_breakdown() const {
+    const auto& sec_map = ticker_sector_map();
+    QHash<QString, SectorExposure> sectors;
+
+    for (const auto& t : summary_.recent_trades) {
+        if (t.direction == TradeDirection::Sell) continue;
+        const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
+        auto& s = sectors[sector];
+        s.sector = sector;
+        const double mid = (t.amount_low + t.amount_high) / 2.0;
+        s.total_est_amount += mid;
+        s.trade_count++;
+        if (!s.top_tickers.contains(t.ticker) && s.top_tickers.size() < 5)
+            s.top_tickers.append(t.ticker);
+        if (!s.members.contains(t.member_id))
+            s.members.append(t.member_id);
+    }
+
+    double grand_total = 0;
+    for (const auto& s : sectors) grand_total += s.total_est_amount;
+    for (auto& s : sectors) {
+        s.pct_of_all  = grand_total > 0 ? (s.total_est_amount / grand_total) * 100.0 : 0;
+        s.member_count = s.members.size();
+    }
+
+    auto result = sectors.values().toVector();
+    std::sort(result.begin(), result.end(),
+              [](const SectorExposure& a, const SectorExposure& b) {
+                  return a.total_est_amount > b.total_est_amount;
+              });
+    return result;
+}
+
+// ── Committee insider signals ─────────────────────────────────────────────────
+
+QVector<CommitteeInsiderSignal> PowerTraderService::committee_insider_signals() const {
+    const auto& sec_map  = ticker_sector_map();
+
+    // For each member, compute how many of their trades fall in their committee's sector
+    QHash<QString, CommitteeInsiderSignal> committee_sigs;
+
+    for (const auto& t : summary_.recent_trades) {
+        if (t.committee_relevance.isEmpty()) continue;
+        const QString key = t.member_id + QStringLiteral(":") + t.committee_relevance;
+        auto& sig = committee_sigs[key];
+        sig.member_id   = t.member_id;
+        sig.member_name = t.member_name;
+        sig.party       = t.party;
+        sig.committee   = t.committee_relevance;
+        sig.ticker      = t.ticker;
+        sig.sector      = sec_map.value(t.ticker, QStringLiteral("Other"));
+        sig.amount_midpoint += (t.amount_low + t.amount_high) / 2.0;
+        sig.transaction_date = t.transaction_date;
+        sig.signal_score     = qMax(sig.signal_score, t.signal_score);
+        sig.overlap_trades++;
+    }
+
+    // Total trades per member
+    QHash<QString, int> total_trades;
+    for (const auto& t : summary_.recent_trades)
+        total_trades[t.member_id]++;
+
+    auto result = committee_sigs.values().toVector();
+    for (auto& sig : result) {
+        sig.total_trades  = total_trades.value(sig.member_id, 1);
+        sig.overlap_pct   = (double)sig.overlap_trades / sig.total_trades * 100.0;
+    }
+    std::sort(result.begin(), result.end(),
+              [](const CommitteeInsiderSignal& a, const CommitteeInsiderSignal& b) {
+                  return a.overlap_pct > b.overlap_pct;
+              });
+    return result;
+}
+
+// ── Rankings ──────────────────────────────────────────────────────────────────
+
+QVector<RankedMember> PowerTraderService::ranked_members(RankingDimension dim) const {
+    QVector<RankedMember> result;
+    result.reserve(summary_.members.size());
+
+    for (const auto& m : summary_.members) {
+        RankedMember r;
+        r.member = m;
+
+        switch (dim) {
+        case RankingDimension::Alpha:
+            r.rank_value = m.alpha_ytd;
+            r.rank_label = (m.alpha_ytd >= 0 ? QStringLiteral("+") : QString())
+                           + QString::number(m.alpha_ytd, 'f', 1) + QStringLiteral("%");
+            break;
+        case RankingDimension::Return:
+            r.rank_value = m.portfolio_return_ytd;
+            r.rank_label = (m.portfolio_return_ytd >= 0 ? QStringLiteral("+") : QString())
+                           + QString::number(m.portfolio_return_ytd, 'f', 1) + QStringLiteral("%");
+            break;
+        case RankingDimension::NetWorth: {
+            r.rank_value = m.estimated_net_worth;
+            const double v = m.estimated_net_worth;
+            if      (v >= 1e9) r.rank_label = QStringLiteral("$%1B").arg(v/1e9, 0,'f',1);
+            else if (v >= 1e6) r.rank_label = QStringLiteral("$%1M").arg(v/1e6, 0,'f',1);
+            else               r.rank_label = QStringLiteral("$%1K").arg(v/1e3, 0,'f',0);
+            break;
+        }
+        case RankingDimension::NetBuyer: {
+            const double nb = net_buyer_amount(m.id, 90);
+            r.rank_value = nb;
+            if (nb >= 1e6) r.rank_label = QStringLiteral("$%1M").arg(nb/1e6, 0,'f',1);
+            else           r.rank_label = QStringLiteral("$%1K").arg(nb/1e3, 0,'f',0);
+            break;
+        }
+        case RankingDimension::Frequency:
+            r.rank_value = m.trade_count_ytd;
+            r.rank_label = QString::number(m.trade_count_ytd) + QStringLiteral(" trades");
+            break;
+        case RankingDimension::AvgSignal: {
+            const double s = avg_signal_score(m.id);
+            r.rank_value = s;
+            r.rank_label = QString::number(s, 'f', 1) + QStringLiteral("/100");
+            break;
+        }
+        case RankingDimension::DisclosureLag: {
+            const double l = avg_disclosure_lag(m.id);
+            r.rank_value = -l;  // negate: higher lag = worse rank
+            r.rank_label = QString::number(l, 'f', 1) + QStringLiteral("d avg");
+            break;
+        }
+        case RankingDimension::BestPick: {
+            const auto bp = best_pick(m.id);
+            r.rank_value  = bp.second;
+            r.rank_label  = bp.first.isEmpty() ? QStringLiteral("–")
+                            : bp.first + QStringLiteral(" +")
+                              + QString::number(bp.second, 'f', 0) + QStringLiteral("%");
+            break;
+        }
+        }
+        result.append(r);
+    }
+
+    std::sort(result.begin(), result.end(),
+              [](const RankedMember& a, const RankedMember& b) {
+                  return a.rank_value > b.rank_value;
+              });
+    for (int i = 0; i < result.size(); ++i)
+        result[i].rank = i + 1;
+
+    return result;
+}
+
+// ── Per-member derived stats ──────────────────────────────────────────────────
+
+double PowerTraderService::net_buyer_amount(const QString& mid, int days) const {
+    const QDate cutoff = QDate::currentDate().addDays(-days);
+    double net = 0;
+    for (const auto& t : summary_.recent_trades) {
+        if (t.member_id != mid) continue;
+        if (t.transaction_date < cutoff) continue;
+        const double v = (t.amount_low + t.amount_high) / 2.0;
+        if (t.direction == TradeDirection::Buy)  net += v;
+        if (t.direction == TradeDirection::Sell) net -= v;
+    }
+    return net;
+}
+
+double PowerTraderService::avg_signal_score(const QString& mid) const {
+    double sum = 0; int n = 0;
+    for (const auto& t : summary_.recent_trades)
+        if (t.member_id == mid) { sum += t.signal_score; ++n; }
+    return n > 0 ? sum / n : 0;
+}
+
+double PowerTraderService::avg_disclosure_lag(const QString& mid) const {
+    double sum = 0; int n = 0;
+    for (const auto& t : summary_.recent_trades)
+        if (t.member_id == mid) { sum += t.disclosure_lag_days; ++n; }
+    return n > 0 ? sum / n : 0;
+}
+
+QPair<QString, double> PowerTraderService::best_pick(const QString& mid) const {
+    const auto& sec_map = ticker_sector_map();
+    QString best_ticker;
+    double best_pct = 0;
+    for (const auto& t : summary_.recent_trades) {
+        if (t.member_id != mid || t.direction != TradeDirection::Buy) continue;
+        const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
+        double gain = 15;
+        if (sector == QStringLiteral("Technology"))  gain = 28;
+        else if (sector == QStringLiteral("Defense"))gain = 17;
+        else if (sector == QStringLiteral("Financials")) gain = 22;
+        if (gain > best_pct) { best_pct = gain; best_ticker = t.ticker; }
+    }
+    return {best_ticker, best_pct};
+}
+
 } // namespace fincept::power_trader
