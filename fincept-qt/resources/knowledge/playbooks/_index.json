@@ -587,6 +587,263 @@
         }
       ],
       "updated": "2026-05-03"
+    },
+    {
+      "id": "trade-an-earnings-event",
+      "title": "How to Trade an Earnings Event",
+      "subtitle": "Pre-positioning, managing IV crush, and reading the post-earnings reaction.",
+      "body": "playbooks/trade-an-earnings-event.md",
+      "difficulty": "intermediate",
+      "tags": ["earnings", "options", "events", "volatility"],
+      "aliases": ["earnings trade", "trade earnings", "earnings play"],
+      "related": ["implied-volatility", "earnings-season", "read-an-earnings-release", "iv-crush"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · earnings tab"},
+        {"screen": "markets", "label": "Markets · earnings calendar"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See upcoming earnings"}
+      ],
+      "rules_of_thumb": [
+        {"label": "IV crush", "value": "30–60%", "note": "IV typically drops 30–60% the day after earnings"},
+        {"label": "Strangle break-even", "value": "= implied move", "note": "Options price in the expected move; you need more to profit"}
+      ],
+      "pitfalls": [
+        "Buying options into earnings — IV crush destroys most of the premium even on correct direction.",
+        "Sizing too large — earnings are binary events; tail moves happen."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "read-a-fed-statement",
+      "title": "How to Read a Fed Statement",
+      "subtitle": "What to watch in the FOMC statement, dot plot, and press conference — and what moves markets.",
+      "body": "playbooks/read-a-fed-statement.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "rates", "fed", "process", "events"],
+      "aliases": ["fomc statement", "read the fed", "fed press conference"],
+      "related": ["inflation-and-rates", "yield-curve", "build-a-macro-view"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · rates panel"},
+        {"screen": "news", "label": "News · macro events"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "Live rates and Fed data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Initial reaction", "value": "Noise — wait 20–30 min", "note": "Algorithms react to words; comprehension takes longer"},
+        {"label": "What actually moves markets", "value": "Path, not decision", "note": "A 25bps hike with hawkish press conference > 50bps hike with dovish press conference"}
+      ],
+      "pitfalls": [
+        "Reading the new statement without comparing to the previous one — the change is the signal.",
+        "Trading the first 5-minute reaction — it frequently reverses as the press conference clarifies intent."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "manage-a-losing-trade",
+      "title": "How to Manage a Losing Trade",
+      "subtitle": "Averaging down, cutting losses, hedging — a framework for trades moving against you.",
+      "body": "playbooks/manage-a-losing-trade.md",
+      "difficulty": "intermediate",
+      "tags": ["risk", "process", "psychology", "discipline"],
+      "aliases": ["losing trade", "trade management", "cut losses", "averaging down"],
+      "related": ["use-stop-losses-well", "size-a-position", "behavioral-biases", "build-a-thesis"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio · positions"},
+        {"screen": "equity_trading", "label": "Equity Trading · open positions"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": "", "hint": "Review open positions"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Thesis vs. price", "value": "Thesis invalidation = cut; price movement alone = hold", "note": "Never confuse a stock being down with a thesis being wrong"},
+        {"label": "Adding to a loser", "value": "Treat as a new trade", "note": "New entry, new stop, new target — independently justified"}
+      ],
+      "pitfalls": [
+        "Averaging down without re-evaluating the thesis — 'it's cheaper' is not a thesis.",
+        "Moving stops to avoid booking the loss — the loss is already real."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "build-an-options-strategy",
+      "title": "How to Build a Multi-Leg Options Strategy",
+      "subtitle": "Choose the right structure for your view — from debit spreads to iron condors.",
+      "body": "playbooks/build-an-options-strategy.md",
+      "difficulty": "advanced",
+      "tags": ["options", "derivatives", "process", "strategy"],
+      "aliases": ["multi-leg options", "options strategy", "iron condor setup", "credit spread setup"],
+      "related": ["options-basics", "implied-volatility", "theta", "delta", "vertical-spread", "read-an-option-chain"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives · option chain"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": "SPY", "hint": "Build a spread on SPY"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Credit spread minimum", "value": "1/3 the width of the spread", "note": "Collect at least this or the risk/reward isn't there"},
+        {"label": "Standard short-delta strike", "value": "25–35 delta", "note": "~65–75% probability of expiring OTM"}
+      ],
+      "pitfalls": [
+        "Choosing a structure before defining the view — the structure must follow the thesis.",
+        "Selling premium in low-IV environments — thin premiums for real risk."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "research-a-sector",
+      "title": "How to Research a Sector From Scratch",
+      "subtitle": "Top-down framework: value chain, cycle position, key metrics, and catalysts.",
+      "body": "playbooks/research-a-sector.md",
+      "difficulty": "intermediate",
+      "tags": ["process", "equities", "research", "sector", "fundamentals"],
+      "aliases": ["sector research", "sector analysis", "industry research"],
+      "related": ["evaluate-a-stock", "build-a-thesis", "leading-indicators", "credit-spread"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · sector view"},
+        {"screen": "markets", "label": "Markets · sectors"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": "XLF", "hint": "Financials sector ETF"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Metrics to track", "value": "3–5 sector-specific KPIs", "note": "Generic ratios (P/E) often mislead across sectors"},
+        {"label": "Best entry timing", "value": "Trough margins, consolidating", "note": "Cyclicals bought at peak margins are value traps"}
+      ],
+      "pitfalls": [
+        "Using generic P/E across all sectors — sector-specific multiples matter.",
+        "Confusing a good sector narrative with a good entry price — crowded themes are expensive themes."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "analyze-a-bond",
+      "title": "How to Analyze a Corporate Bond",
+      "subtitle": "Yield, spread, duration, credit quality — assessing whether a bond is worth owning.",
+      "body": "playbooks/analyze-a-bond.md",
+      "difficulty": "intermediate",
+      "tags": ["bonds", "fixed-income", "process", "credit", "research"],
+      "aliases": ["bond analysis", "corporate bond research", "analyze fixed income"],
+      "related": ["yield-to-maturity", "duration", "credit-spread", "high-yield-bond", "analyze-a-bond"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · bonds panel"},
+        {"screen": "portfolio", "label": "Portfolio · fixed income"}
+      ],
+      "actions": [
+        {"label": "Open Markets", "screen": "markets", "ticker": "", "hint": "Bond market data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Interest coverage floor", "value": "2x EBIT/interest", "note": "Below this starts to stress"},
+        {"label": "Investment grade leverage", "value": "<3x debt/EBITDA", "note": "IG average; HY typically 4–7x"}
+      ],
+      "pitfalls": [
+        "Comparing yields without comparing spreads — a 7% yield in a 4% rate environment is very different credit compensation than in a 6.5% environment.",
+        "Ignoring call provisions — callable bonds often get called when it's worst for you as a holder."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "build-a-macro-view",
+      "title": "How to Build a Macro View",
+      "subtitle": "Regime identification, cross-asset implications, and falsification criteria — top-down done correctly.",
+      "body": "playbooks/build-a-macro-view.md",
+      "difficulty": "advanced",
+      "tags": ["macro", "process", "rates", "allocation", "regime"],
+      "aliases": ["macro view", "top down view", "macro framework", "regime analysis"],
+      "related": ["yield-curve", "inflation-and-rates", "leading-indicators", "allocate-across-assets", "interpret-an-inversion"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · macro panel"},
+        {"screen": "portfolio", "label": "Portfolio · allocation view"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "Macro data dashboard"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Regime variables", "value": "Growth direction × Inflation direction", "note": "4 quadrants determine asset class tilts"},
+        {"label": "Leading indicator lead time", "value": "3–6 months before GDP inflects", "note": "PMI, yield curve, credit spreads are forward-looking"}
+      ],
+      "pitfalls": [
+        "Confusing level with direction — decelerating 2% growth is a different regime than accelerating 2% growth.",
+        "Correct view, wrong asset — a well-priced macro view generates zero return; check what's priced in."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "read-crypto-onchain",
+      "title": "How to Read Crypto On-Chain Data",
+      "subtitle": "MVRV, NVT, exchange flows, and hash rate — the blockchain's real-time market signals.",
+      "body": "playbooks/read-crypto-onchain.md",
+      "difficulty": "intermediate",
+      "tags": ["crypto", "on-chain", "process", "research"],
+      "aliases": ["on-chain analysis", "crypto on-chain data", "mvrv analysis", "bitcoin on-chain"],
+      "related": ["mvrv-ratio", "hash-rate", "funding-rate", "liquidation-price"],
+      "seen_in": [
+        {"screen": "crypto_trading", "label": "Crypto · on-chain panel"}
+      ],
+      "actions": [
+        {"label": "Open Crypto", "screen": "crypto_trading", "ticker": "BTC-USD", "hint": "Crypto market and on-chain data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "MVRV bottom zone", "value": "<1.0", "note": "Market below aggregate cost basis — historical capitulation zone"},
+        {"label": "MVRV top zone", "value": ">3.5", "note": "Prior cycle tops occurred here (2017: 4.7, 2021: 3.8)"}
+      ],
+      "pitfalls": [
+        "Using on-chain data for short-term timing — MVRV and NVT operate on weeks-to-months timescales.",
+        "Treating a single on-chain signal as definitive — use as one input among several."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "size-leverage-position",
+      "title": "How to Size a Leveraged Position",
+      "subtitle": "Margin, liquidation price, Kelly sizing — the math of not getting forced out before you're right.",
+      "body": "playbooks/size-leverage-position.md",
+      "difficulty": "advanced",
+      "tags": ["leverage", "risk", "sizing", "futures", "crypto", "process"],
+      "aliases": ["leverage sizing", "margin position sizing", "leveraged position", "liquidation buffer"],
+      "related": ["kelly-criterion", "margin-call", "futures-mechanics", "size-a-position", "liquidation-price"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures · position sizing"},
+        {"screen": "crypto_trading", "label": "Crypto · perpetuals"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": "ES1!", "hint": "E-mini S&P futures"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Stop-to-liquidation buffer", "value": "≥2–3x", "note": "Liquidation must be unreachable if stop is honored"},
+        {"label": "Dollar risk per trade", "value": "1–2% of portfolio", "note": "Independent of leverage ratio — absolute dollar loss at stop"}
+      ],
+      "pitfalls": [
+        "Setting leverage before setting stop distance — the stop placement should determine the leverage, not vice versa.",
+        "Ignoring funding/carry costs on leveraged positions held for weeks — 8% annual carry at 5:1 leverage = 40% annual headwind."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "interpret-volatility-surface",
+      "title": "How to Read a Volatility Surface",
+      "subtitle": "Term structure, skew, wings — what the options market is actually pricing and why it matters.",
+      "body": "playbooks/interpret-volatility-surface.md",
+      "difficulty": "advanced",
+      "tags": ["options", "volatility", "derivatives", "process"],
+      "aliases": ["vol surface", "volatility surface", "term structure options", "options skew"],
+      "related": ["implied-volatility", "volatility-skew", "theta", "vega", "build-an-options-strategy"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives · vol surface"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": "SPY", "hint": "Vol surface for SPY"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Normal term structure", "value": "Short IV < Long IV", "note": "Calm near-term; typical baseline"},
+        {"label": "Equity put skew", "value": "25-delta put IV > 25-delta call IV", "note": "Always present in equity indices — crash insurance premium"}
+      ],
+      "pitfalls": [
+        "Reading only ATM IV and ignoring the shape — skew and term structure contain as much information as the level.",
+        "Selling the most expensive part of the surface without understanding why — it may be priced correctly."
+      ],
+      "updated": "2026-05-06"
     }
   ]
 }

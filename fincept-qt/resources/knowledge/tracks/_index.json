@@ -108,6 +108,161 @@
         {"type": "deep_dive", "source": "Vanguard", "title": "Principles for Investing Success", "url": "https://corporate.vanguard.com/content/dam/corp/research/pdf/Principles-of-Investing-Success.pdf"}
       ],
       "updated": "2026-05-04"
+    },
+    {
+      "id": "track-crypto-trader",
+      "title": "Path: Crypto Trader",
+      "subtitle": "From spot basics to perpetual futures, on-chain signals, and DeFi mechanics.",
+      "body": "tracks/track-crypto-trader.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "crypto", "trading", "derivatives", "on-chain", "defi"],
+      "aliases": ["crypto trading track", "crypto curriculum"],
+      "related": ["funding-rate", "liquidation-price", "hash-rate", "mvrv-ratio", "gas-fee"],
+      "seen_in": [
+        {"screen": "crypto_trading", "label": "Crypto · trading panel"}
+      ],
+      "actions": [
+        {"label": "Open Crypto", "screen": "crypto_trading", "ticker": "BTC-USD", "hint": "Live crypto markets"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "funding-rate", "label": "Understand perpetual funding"},
+        {"step": 2, "entry": "liquidation-price", "label": "Calculate your liquidation level"},
+        {"step": 3, "entry": "mvrv-ratio", "label": "On-chain valuation"},
+        {"step": 4, "entry": "hash-rate", "label": "Network security signals"},
+        {"step": 5, "entry": "gas-fee", "label": "DeFi cost structure"},
+        {"step": 6, "entry": "volatility-skew", "label": "Crypto options skew"},
+        {"step": 7, "entry": "kelly-criterion", "label": "Position sizing in volatile markets"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "track-macro-investor",
+      "title": "Path: Macro Investor",
+      "subtitle": "Top-down investing: rates, FX, commodities, and identifying regime shifts before the market prices them.",
+      "body": "tracks/track-macro-investor.md",
+      "difficulty": "advanced",
+      "tags": ["track", "macro", "rates", "fx", "commodities", "regime"],
+      "aliases": ["macro investor track", "top-down investing path"],
+      "related": ["yield-curve", "inflation-and-rates", "carry-trade", "credit-spread", "gdp"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · macro panel"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "Macro data dashboard"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "yield-curve", "label": "The primary macro signal"},
+        {"step": 2, "entry": "inflation-and-rates", "label": "The core relationship"},
+        {"step": 3, "entry": "gdp", "label": "Reading growth cycles"},
+        {"step": 4, "entry": "leading-indicators", "label": "Getting ahead of GDP"},
+        {"step": 5, "entry": "credit-spread", "label": "The bond market's risk read"},
+        {"step": 6, "entry": "carry-trade", "label": "Cross-currency positioning"},
+        {"step": 7, "entry": "contango", "label": "Commodity futures signals"},
+        {"step": 8, "entry": "beta", "label": "Calibrating equity exposure"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "track-options-income",
+      "title": "Path: Options Income",
+      "subtitle": "Covered calls, cash-secured puts, and spreads for systematic yield — without blowing up.",
+      "body": "tracks/track-options-income.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "options", "income", "premium-selling", "theta"],
+      "aliases": ["options income track", "covered call track", "premium selling path"],
+      "related": ["covered-call", "cash-secured-put", "theta", "implied-volatility", "vertical-spread"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives · option chain"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": "AAPL", "hint": "Option chain"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "options-basics", "label": "The foundation"},
+        {"step": 2, "entry": "implied-volatility", "label": "What you're selling"},
+        {"step": 3, "entry": "theta", "label": "Your income engine"},
+        {"step": 4, "entry": "covered-call", "label": "Core strategy #1"},
+        {"step": 5, "entry": "cash-secured-put", "label": "Core strategy #2"},
+        {"step": 6, "entry": "vertical-spread", "label": "Defined-risk selling"},
+        {"step": 7, "entry": "vega", "label": "IV sensitivity of the position"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "track-quant-systematic",
+      "title": "Path: Quant & Systematic Trading",
+      "subtitle": "Factor models, backtesting rigor, and execution — building strategies that hold up out of sample.",
+      "body": "tracks/track-quant-systematic.md",
+      "difficulty": "advanced",
+      "tags": ["track", "quant", "systematic", "backtesting", "execution", "factor"],
+      "aliases": ["quant track", "systematic trading path", "algo trading curriculum"],
+      "related": ["expected-value", "r-multiple", "drawdown", "correlation", "slippage"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": "", "hint": "Build and test a strategy"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "expected-value", "label": "The foundation of any systematic strategy"},
+        {"step": 2, "entry": "r-multiple", "label": "Standardizing trade outcomes"},
+        {"step": 3, "entry": "beta", "label": "Factor exposure you're taking"},
+        {"step": 4, "entry": "drawdown", "label": "The primary strategy risk metric"},
+        {"step": 5, "entry": "correlation", "label": "Why uncorrelated strategies beat better strategies"},
+        {"step": 6, "entry": "slippage", "label": "The invisible tax on systematic trading"},
+        {"step": 7, "entry": "bid-ask-spread", "label": "Transaction cost modeling"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "track-day-trader",
+      "title": "Path: Day Trader Foundations",
+      "subtitle": "Tape reading, intraday setups, risk-per-trade discipline, and habits that separate survivors from statistics.",
+      "body": "tracks/track-day-trader.md",
+      "difficulty": "intermediate",
+      "tags": ["track", "day-trading", "intraday", "execution", "psychology"],
+      "aliases": ["day trading track", "intraday trading path", "day trader curriculum"],
+      "related": ["r-multiple", "bid-ask-spread", "liquidity", "market-order", "limit-order", "volatility", "behavioral-biases"],
+      "seen_in": [
+        {"screen": "equity_trading", "label": "Equity Trading"}
+      ],
+      "actions": [
+        {"label": "Open Equity Trading", "screen": "equity_trading", "ticker": "SPY", "hint": "Live market for practice"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "r-multiple", "label": "The unit of trade analysis"},
+        {"step": 2, "entry": "bid-ask-spread", "label": "The intraday transaction tax"},
+        {"step": 3, "entry": "liquidity", "label": "Your exit must be real"},
+        {"step": 4, "entry": "market-order", "label": "Order type selection"},
+        {"step": 5, "entry": "volatility", "label": "ATR as your risk ruler"},
+        {"step": 6, "entry": "behavioral-biases", "label": "Where most day traders fail"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "track-long-term-investor",
+      "title": "Path: Long-Term & Retirement Investor",
+      "subtitle": "Asset allocation, tax efficiency, compounding, and surviving your own worst behavioral impulses.",
+      "body": "tracks/track-long-term-investor.md",
+      "difficulty": "beginner",
+      "tags": ["track", "long-term", "retirement", "compounding", "allocation", "tax"],
+      "aliases": ["long term investing track", "retirement investing path", "passive investing curriculum"],
+      "related": ["compound-interest", "drawdown", "allocate-across-assets", "beta", "expense-ratio"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio · overview"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": "", "hint": "Review your allocation"}
+      ],
+      "curriculum": [
+        {"step": 1, "entry": "compound-interest", "label": "Why time horizon is your biggest edge"},
+        {"step": 2, "entry": "drawdown", "label": "The enemy of compounding"},
+        {"step": 3, "entry": "allocate-across-assets", "label": "The most important decision"},
+        {"step": 4, "entry": "beta", "label": "Calibrating equity exposure to time horizon"},
+        {"step": 5, "entry": "yield-to-maturity", "label": "What bonds actually return"},
+        {"step": 6, "entry": "expense-ratio", "label": "The cost that compounds against you"}
+      ],
+      "updated": "2026-05-06"
     }
   ]
 }

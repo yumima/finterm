@@ -1,0 +1,308 @@
+// src/screens/power_trader/TradesFeedPanel.cpp
+#include "screens/power_trader/TradesFeedPanel.h"
+
+#include "ui/theme/Theme.h"
+
+#include <QDate>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QLabel>
+#include <QVBoxLayout>
+
+namespace fincept::screens {
+
+static const QStringList kFeedCols = {
+    "DISCLOSED", "MEMBER", "PTY", "TICKER", "B/S", "AMOUNT", "LAG", "SIG"
+};
+
+static constexpr const char* kPartyD = "#3b82f6";
+static constexpr const char* kPartyR = "#ef4444";
+static constexpr const char* kPartyI = "#eab308";
+
+static const char* party_color(const QString& p) {
+    if (p == QStringLiteral("D")) return kPartyD;
+    if (p == QStringLiteral("R")) return kPartyR;
+    return kPartyI;
+}
+
+static QString combo_style() {
+    return QString(
+        "QComboBox { background:%1; color:%2; border:1px solid %3;"
+        "  border-radius:3px; padding:3px 6px; font-size:11px; }"
+        "QComboBox::drop-down { border:none; width:16px; }"
+        "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3; "
+        "  selection-background-color:%4; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_MED(), ui::colors::AMBER_DIM());
+}
+
+static QString lineedit_style() {
+    return QString(
+        "QLineEdit { background:%1; color:%2; border:1px solid %3;"
+        "  border-radius:3px; padding:3px 8px; font-size:11px; }"
+        "QLineEdit:focus { border:1px solid %4; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_MED(), ui::colors::AMBER());
+}
+
+static QString dateedit_style() {
+    return QString(
+        "QDateEdit { background:%1; color:%2; border:1px solid %3;"
+        "  border-radius:3px; padding:3px 6px; font-size:11px; }"
+        "QDateEdit::drop-down { border:none; width:16px; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_MED());
+}
+
+TradesFeedPanel::TradesFeedPanel(QWidget* parent) : QWidget(parent) {
+    build_ui();
+}
+
+void TradesFeedPanel::build_ui() {
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    // ── Section header ────────────────────────────────────────────────────────
+    auto* hdr_label = new QLabel(QStringLiteral("TRADE DISCLOSURES"), this);
+    hdr_label->setStyleSheet(
+        QString("QLabel { background:%1; color:%2; font-size:9px; font-weight:700;"
+                " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+    layout->addWidget(hdr_label);
+
+    // ── Filter bar ────────────────────────────────────────────────────────────
+    auto* filter_row = new QWidget(this);
+    filter_row->setStyleSheet(
+        QString("QWidget { background:%1; border-bottom:1px solid %2; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* filter_layout = new QHBoxLayout(filter_row);
+    filter_layout->setContentsMargins(8, 6, 8, 6);
+    filter_layout->setSpacing(8);
+
+    ticker_filter_ = new QLineEdit(this);
+    ticker_filter_->setPlaceholderText(QStringLiteral("Filter ticker…"));
+    ticker_filter_->setMaximumWidth(120);
+    ticker_filter_->setStyleSheet(lineedit_style());
+    filter_layout->addWidget(ticker_filter_);
+
+    party_filter_ = new QComboBox(this);
+    party_filter_->addItems({QStringLiteral("All Parties"),
+                              QStringLiteral("Democrat (D)"),
+                              QStringLiteral("Republican (R)")});
+    party_filter_->setStyleSheet(combo_style());
+    filter_layout->addWidget(party_filter_);
+
+    chamber_filter_ = new QComboBox(this);
+    chamber_filter_->addItems({QStringLiteral("All Chambers"),
+                                QStringLiteral("Senate"),
+                                QStringLiteral("House")});
+    chamber_filter_->setStyleSheet(combo_style());
+    filter_layout->addWidget(chamber_filter_);
+
+    auto* from_label = new QLabel(QStringLiteral("From"), this);
+    from_label->setStyleSheet(QString("QLabel { color:%1; font-size:11px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    filter_layout->addWidget(from_label);
+
+    date_from_ = new QDateEdit(QDate::currentDate().addDays(-90), this);
+    date_from_->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    date_from_->setCalendarPopup(true);
+    date_from_->setStyleSheet(dateedit_style());
+    filter_layout->addWidget(date_from_);
+
+    auto* to_label = new QLabel(QStringLiteral("To"), this);
+    to_label->setStyleSheet(QString("QLabel { color:%1; font-size:11px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    filter_layout->addWidget(to_label);
+
+    date_to_ = new QDateEdit(QDate::currentDate(), this);
+    date_to_->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    date_to_->setCalendarPopup(true);
+    date_to_->setStyleSheet(dateedit_style());
+    filter_layout->addWidget(date_to_);
+
+    filter_layout->addStretch();
+    layout->addWidget(filter_row);
+
+    // Connect filter controls
+    connect(ticker_filter_,  &QLineEdit::textChanged,    this, &TradesFeedPanel::apply_filters);
+    connect(party_filter_,   QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TradesFeedPanel::apply_filters);
+    connect(chamber_filter_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &TradesFeedPanel::apply_filters);
+    connect(date_from_, &QDateEdit::dateChanged, this, &TradesFeedPanel::apply_filters);
+    connect(date_to_,   &QDateEdit::dateChanged, this, &TradesFeedPanel::apply_filters);
+
+    // ── Table ─────────────────────────────────────────────────────────────────
+    table_ = new QTableWidget(this);
+    table_->setColumnCount(kFeedCols.size());
+    table_->setHorizontalHeaderLabels(kFeedCols);
+    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setShowGrid(false);
+    table_->setAlternatingRowColors(false);
+    table_->verticalHeader()->setVisible(false);
+    table_->setFocusPolicy(Qt::NoFocus);
+
+    auto* h = table_->horizontalHeader();
+    h->setMinimumSectionSize(20);
+    h->setStretchLastSection(false);
+    h->setSectionResizeMode(0, QHeaderView::Fixed);    // DISCLOSED
+    h->resizeSection(0, 84);
+    h->setSectionResizeMode(1, QHeaderView::Stretch);  // MEMBER
+    h->setSectionResizeMode(2, QHeaderView::Fixed);    // PTY
+    h->resizeSection(2, 32);
+    h->setSectionResizeMode(3, QHeaderView::Fixed);    // TICKER
+    h->resizeSection(3, 62);
+    h->setSectionResizeMode(4, QHeaderView::Fixed);    // B/S
+    h->resizeSection(4, 44);
+    h->setSectionResizeMode(5, QHeaderView::Fixed);    // AMOUNT
+    h->resizeSection(5, 130);
+    h->setSectionResizeMode(6, QHeaderView::Fixed);    // LAG
+    h->resizeSection(6, 40);
+    h->setSectionResizeMode(7, QHeaderView::Fixed);    // SIG
+    h->resizeSection(7, 40);
+
+    table_->setStyleSheet(
+        QString("QTableWidget { background:%1; color:%2; border:none;"
+                "  font-size:11px; font-family:Consolas,monospace;"
+                "  gridline-color:transparent; }"
+                "QTableWidget::item { padding:3px 6px; border-bottom:1px solid %3; }"
+                "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
+                "QTableWidget::item:hover { background:%4; }"
+                "QScrollBar:vertical { width:4px; background:%1; }"
+                "QScrollBar::handle:vertical { background:%3; min-height:16px; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                 ui::colors::BORDER_DIM(), ui::colors::BG_HOVER()));
+
+    h->setStyleSheet(
+        QString("QHeaderView::section { background:%1; color:%2; border:none;"
+                "  border-bottom:2px solid %3; border-right:1px solid %4;"
+                "  padding:4px 6px; font-size:9px; font-weight:700; letter-spacing:0.5px; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+                 ui::colors::AMBER(), ui::colors::BORDER_DIM()));
+
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
+        if (row < 0 || row >= table_->rowCount())
+            return;
+        auto* item = table_->item(row, 1);
+        if (!item)
+            return;
+        const QString id = item->data(Qt::UserRole).toString();
+        if (!id.isEmpty())
+            emit member_selected(id);
+    });
+
+    layout->addWidget(table_);
+}
+
+void TradesFeedPanel::set_trades(const QVector<power_trader::PoliticalTrade>& trades) {
+    trades_ = trades;
+    apply_filters();
+}
+
+void TradesFeedPanel::set_selected_member(const QString& member_id) {
+    selected_member_id_ = member_id;
+}
+
+void TradesFeedPanel::apply_filters() {
+    const QString ticker_text = ticker_filter_->text().trimmed().toUpper();
+    const int party_idx   = party_filter_->currentIndex();   // 0=All,1=D,2=R
+    const int chamber_idx = chamber_filter_->currentIndex(); // 0=All,1=Senate,2=House
+    const QDate from_date = date_from_->date();
+    const QDate to_date   = date_to_->date();
+
+    QVector<power_trader::PoliticalTrade> visible;
+    visible.reserve(trades_.size());
+
+    for (const auto& t : trades_) {
+        if (!ticker_text.isEmpty() && !t.ticker.toUpper().contains(ticker_text))
+            continue;
+        if (party_idx == 1 && t.party != QStringLiteral("D"))
+            continue;
+        if (party_idx == 2 && t.party != QStringLiteral("R"))
+            continue;
+        if (chamber_idx == 1 && t.chamber != power_trader::MemberChamber::Senate)
+            continue;
+        if (chamber_idx == 2 && t.chamber != power_trader::MemberChamber::House)
+            continue;
+        if (t.disclosure_date < from_date || t.disclosure_date > to_date)
+            continue;
+        visible.append(t);
+    }
+
+    populate_table(visible);
+}
+
+void TradesFeedPanel::populate_table(const QVector<power_trader::PoliticalTrade>& visible) {
+    table_->setRowCount(visible.size());
+
+    for (int r = 0; r < visible.size(); ++r) {
+        const auto& t = visible[r];
+        table_->setRowHeight(r, 26);
+
+        auto set_item = [&](int col, const QString& text, const char* color = nullptr,
+                            Qt::Alignment align = Qt::AlignLeft | Qt::AlignVCenter) {
+            auto* item = new QTableWidgetItem(text);
+            item->setTextAlignment(align);
+            item->setForeground(QColor(color ? color : ui::colors::TEXT_PRIMARY()));
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+            table_->setItem(r, col, item);
+        };
+
+        // DISCLOSED date
+        set_item(0, t.disclosure_date.toString(QStringLiteral("yyyy-MM-dd")),
+                 ui::colors::TEXT_SECONDARY, Qt::AlignLeft | Qt::AlignVCenter);
+
+        // MEMBER — store member_id in UserRole
+        auto* name_item = new QTableWidgetItem(t.member_name);
+        name_item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        name_item->setForeground(QColor(ui::colors::CYAN()));
+        name_item->setData(Qt::UserRole, t.member_id);
+        name_item->setFlags(name_item->flags() & ~Qt::ItemIsEditable);
+        table_->setItem(r, 1, name_item);
+
+        // PTY
+        set_item(2, t.party, party_color(t.party), Qt::AlignCenter);
+
+        // TICKER
+        set_item(3, t.ticker, ui::colors::TEXT_PRIMARY, Qt::AlignLeft | Qt::AlignVCenter);
+
+        // B/S — color coded
+        const bool is_buy = t.direction == power_trader::TradeDirection::Buy;
+        const bool is_sell= t.direction == power_trader::TradeDirection::Sell;
+        const char* dir_color = is_buy  ? ui::colors::POSITIVE
+                               : is_sell ? ui::colors::NEGATIVE
+                               : ui::colors::TEXT_SECONDARY;
+        set_item(4, power_trader::direction_label(t.direction), dir_color, Qt::AlignCenter);
+
+        // AMOUNT
+        set_item(5, t.amount_range_label, ui::colors::TEXT_SECONDARY);
+
+        // LAG — warn if > 30 days
+        {
+            auto* lag_item = new QTableWidgetItem(QString::number(t.disclosure_lag_days));
+            lag_item->setTextAlignment(Qt::AlignCenter);
+            const char* lag_color = t.disclosure_lag_days > 30
+                                        ? ui::colors::WARNING
+                                        : ui::colors::TEXT_SECONDARY;
+            lag_item->setForeground(QColor(lag_color));
+            lag_item->setFlags(lag_item->flags() & ~Qt::ItemIsEditable);
+            table_->setItem(r, 6, lag_item);
+        }
+
+        // SIG — amber highlight if >= 60
+        {
+            auto* sig_item = new QTableWidgetItem(QString::number(t.signal_score, 'f', 0));
+            sig_item->setTextAlignment(Qt::AlignCenter);
+            const char* sig_color = t.signal_score >= 60
+                                        ? ui::colors::AMBER
+                                        : ui::colors::TEXT_TERTIARY;
+            sig_item->setForeground(QColor(sig_color));
+            sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
+            table_->setItem(r, 7, sig_item);
+        }
+    }
+}
+
+} // namespace fincept::screens

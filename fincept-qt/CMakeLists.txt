@@ -1028,6 +1028,11 @@ set(SCREEN_SOURCES
     src/screens/knowledge/LiveDataPanel.cpp
     src/screens/knowledge/PeerChartPanel.cpp
     src/screens/knowledge/RailWidget.cpp
+    src/screens/power_trader/PowerTraderScreen.cpp
+    src/screens/power_trader/PowerTraderService.cpp
+    src/screens/power_trader/LeaderboardPanel.cpp
+    src/screens/power_trader/TradesFeedPanel.cpp
+    src/screens/power_trader/MemberDetailPanel.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
     src/screens/relationship_map/RelationshipGraphScene.cpp
@@ -1254,6 +1259,13 @@ set(SCREEN_SOURCES
     # Alpha Arena
     src/screens/alpha_arena/AlphaArenaScreen.cpp
 
+    # Pre-IPO / Private Market Tracking
+    src/screens/pre_ipo/CompanyListPanel.cpp
+    src/screens/pre_ipo/CompanyDetailPanel.cpp
+    src/screens/pre_ipo/IpoPipelinePanel.cpp
+    src/screens/pre_ipo/PreIpoScreen.cpp
+    src/services/pre_ipo/PreIpoService.cpp
+
     # Alternative Investments
     src/screens/alt_investments/AltInvestmentsScreen.cpp
 
@@ -1304,6 +1316,7 @@ set(SCREEN_SOURCES
     src/screens/portfolio/PortfolioFFNView.cpp
     src/screens/portfolio/PortfolioFuturesView.cpp
     src/screens/portfolio/PortfolioInsightsPanel.cpp
+
     src/screens/agent_config/AgentConfigScreen.cpp
     src/screens/agent_config/AgentsViewPanel.cpp
     src/screens/agent_config/SystemViewPanel.cpp
@@ -1377,6 +1390,16 @@ set_source_files_properties(
     src/screens/algo_trading/StrategyListPanel.cpp
     src/screens/alpha_arena/AlphaArenaScreen.cpp
     src/screens/alt_investments/AltInvestmentsScreen.cpp
+    src/screens/pre_ipo/CompanyListPanel.cpp
+    src/screens/pre_ipo/CompanyDetailPanel.cpp
+    src/screens/pre_ipo/IpoPipelinePanel.cpp
+    src/screens/pre_ipo/PreIpoScreen.cpp
+    src/services/pre_ipo/PreIpoService.cpp
+    src/screens/power_trader/PowerTraderScreen.cpp
+    src/screens/power_trader/PowerTraderService.cpp
+    src/screens/power_trader/LeaderboardPanel.cpp
+    src/screens/power_trader/TradesFeedPanel.cpp
+    src/screens/power_trader/MemberDetailPanel.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/ForgotPasswordScreen.cpp
     src/screens/auth/LockScreen.cpp

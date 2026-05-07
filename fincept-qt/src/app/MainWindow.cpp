@@ -20,6 +20,7 @@
 #include "screens/algo_trading/AlgoTradingScreen.h"
 #include "screens/alpha_arena/AlphaArenaScreen.h"
 #include "screens/alt_investments/AltInvestmentsScreen.h"
+#include "screens/pre_ipo/PreIpoScreen.h"
 #include "screens/asia_markets/AsiaMarketsScreen.h"
 #include "screens/auth/ForgotPasswordScreen.h"
 #include "screens/auth/LockScreen.h"
@@ -54,6 +55,7 @@
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
 #include "screens/knowledge/KnowledgeScreen.h"
+#include "screens/power_trader/PowerTraderScreen.h"
 #include "screens/info/PrivacyScreen.h"
 #include "screens/info/TermsScreen.h"
 #include "screens/info/TrademarksScreen.h"
@@ -1108,6 +1110,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("equity_research", []() { return new screens::EquityResearchScreen; });
     dock_router_->register_factory("ma_analytics", []() { return new screens::MAAnalyticsScreen; });
     dock_router_->register_factory("alt_investments", []() { return new screens::AltInvestmentsScreen; });
+    dock_router_->register_factory("pre_ipo", []() { return new screens::PreIpoScreen; });
     dock_router_->register_factory("geopolitics", []() { return new screens::GeopoliticsScreen; });
     dock_router_->register_factory("maritime", []() { return new screens::MaritimeScreen; });
     dock_router_->register_factory("surface_analytics", []() { return new fincept::surface::SurfaceAnalyticsScreen; });
@@ -1132,6 +1135,18 @@ void MainWindow::setup_dock_screens() {
                         SymbolContext::instance().set_group_symbol(
                             SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     }
+                    dock_router_->navigate(id);
+                });
+        return screen;
+    });
+
+    dock_router_->register_factory("power_trader", [this]() {
+        auto* screen = new power_trader::PowerTraderScreen;
+        connect(screen, &power_trader::PowerTraderScreen::navigate_to_screen, this,
+                [this](const QString& id, const QString& ticker) {
+                    if (!ticker.isEmpty())
+                        SymbolContext::instance().set_group_symbol(
+                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     dock_router_->navigate(id);
                 });
         return screen;

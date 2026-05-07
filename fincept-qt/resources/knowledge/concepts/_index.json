@@ -675,6 +675,359 @@
         }
       ],
       "updated": "2026-05-03"
+    },
+    {
+      "id": "macro-cycles",
+      "title": "Macro Cycles",
+      "subtitle": "How the business cycle and credit cycle drive asset prices, sector rotation, and risk appetite.",
+      "body": "concepts/macro-cycles.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "cycles", "asset-allocation", "rates"],
+      "aliases": ["business cycle", "economic cycle", "credit cycle", "NBER recession"],
+      "related": ["yield-curve", "inflation-and-rates", "sector-rotation", "credit-markets"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · macro panel"},
+        {"screen": "economics", "label": "Economics · indicators"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "See macro indicators"},
+        {"label": "Open Markets", "screen": "markets", "ticker": "", "hint": "Sector performance"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Full cycle length", "value": "5–10 years", "note": "Historical average in US"},
+        {"label": "Market leads economy", "value": "6–12 months", "note": "Price before data"},
+        {"label": "Best sector early cycle", "value": "Financials / Consumer Disc", "note": "Rate cuts + credit expansion"},
+        {"label": "Best sector late cycle", "value": "Energy / Materials", "note": "Inflation picks up"}
+      ],
+      "pitfalls": [
+        "Calling cycle phase too early — the market leads economic data by 6–12 months.",
+        "Assuming every cycle looks the same — 2020 was the shortest recession on record.",
+        "Acting on lagging indicators (unemployment, CPI) as if they are timely signals."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "NBER", "title": "US Business Cycle Expansions and Contractions", "url": "https://www.nber.org/research/business-cycle-dating"},
+        {"type": "reference", "source": "Conference Board", "title": "Leading Economic Index (LEI)", "url": "https://www.conference-board.org/topics/us-leading-indicators"},
+        {"type": "primer", "source": "Investopedia", "title": "Business Cycle", "url": "https://www.investopedia.com/terms/b/businesscycle.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "reading-balance-sheet",
+      "title": "Reading the Balance Sheet",
+      "subtitle": "Assets, liabilities, equity — and the ratios that reveal financial health and hidden risk.",
+      "body": "concepts/reading-balance-sheet.md",
+      "difficulty": "beginner",
+      "tags": ["fundamentals", "accounting", "balance-sheet", "ratios"],
+      "aliases": ["balance sheet", "assets liabilities equity", "current ratio", "debt-to-equity", "net debt"],
+      "related": ["reading-financials", "earnings-season"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · balance sheet tab"}
+      ],
+      "actions": [
+        {"label": "Open AAPL Balance Sheet", "screen": "equity_research", "ticker": "AAPL"},
+        {"label": "Open MSFT Balance Sheet", "screen": "equity_research", "ticker": "MSFT"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Current ratio", "value": "> 1.5× healthy for most industries"},
+        {"label": "Net debt / EBITDA", "value": "> 4× is stressed", "note": "Industry context matters"},
+        {"label": "Rising DSO", "value": "Warning sign", "note": "Customers stretching payments"},
+        {"label": "Goodwill > 50% equity", "value": "Watch for impairment risk"}
+      ],
+      "pitfalls": [
+        "Trusting book equity without adjusting for goodwill and intangibles — book value can be misleading.",
+        "Ignoring off-balance-sheet items: operating leases (pre-2019), pension underfunding, contingent liabilities.",
+        "Treating negative equity as always catastrophic — some high-buyback companies run persistently negative book equity."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SEC", "title": "Beginners' Guide to Financial Statements", "url": "https://www.sec.gov/reportspubs/investor-publications/investorpubsbegfinstmtguide"},
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "Financial Statement Analysis", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/fundgrowth.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "earnings-season",
+      "title": "Earnings Season",
+      "subtitle": "EPS beats, revenue surprises, guidance, analyst estimates, and why stock reactions aren't obvious.",
+      "body": "concepts/earnings-season.md",
+      "difficulty": "beginner",
+      "tags": ["earnings", "fundamentals", "equities", "options"],
+      "aliases": ["earnings", "EPS beat", "earnings report", "guidance", "whisper number", "IV crush"],
+      "related": ["reading-financials", "reading-balance-sheet", "options-basics", "greeks-deep-dive"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · earnings tab"},
+        {"screen": "news", "label": "News · earnings releases"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research (earnings)", "screen": "equity_research", "ticker": "AAPL"},
+        {"label": "Open News", "screen": "news", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "Average large-cap earnings move", "value": "4–5%", "note": "Day of report"},
+        {"label": "Expected move", "value": "~1× ATM straddle price"},
+        {"label": "EPS beat threshold", "value": "3–5% above consensus", "note": "For a meaningful positive surprise"},
+        {"label": "Guidance > actual", "value": "Market reacts to guidance first"}
+      ],
+      "pitfalls": [
+        "Buying the earnings beat without reading the guidance — a beat with cut guidance usually sells off.",
+        "Buying options into earnings without accounting for IV crush — you need a large move to overcome the vol collapse.",
+        "Anchoring to the headline EPS — segment margins and revenue composition matter more.",
+        "Ignoring estimate revision trends after the print — revisions drive multi-week price action."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FactSet", "title": "Earnings Insight (S&P 500 beat rates)", "url": "https://advantage.factset.com/hubfs/Website/Resources%20Section/Research%20Desk/Earnings%20Insight/EarningsInsight_Current.pdf"},
+        {"type": "primer", "source": "Investopedia", "title": "Earnings Season", "url": "https://www.investopedia.com/terms/e/earnings-season.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "fed-policy",
+      "title": "Understanding Fed Policy",
+      "subtitle": "The dual mandate, rate decisions, QE/QT, forward guidance, and how to read FOMC communications.",
+      "body": "concepts/fed-policy.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "rates", "fed", "monetary-policy"],
+      "aliases": ["federal reserve", "FOMC", "fed funds rate", "QE", "QT", "dot plot", "forward guidance", "quantitative easing"],
+      "related": ["inflation-and-rates", "yield-curve", "macro-cycles", "bonds-primer"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · rates panel"},
+        {"screen": "news", "label": "News · FOMC events"}
+      ],
+      "actions": [
+        {"label": "Open Economics (rates)", "screen": "economics", "ticker": ""},
+        {"label": "Open News", "screen": "news", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "Transmission lag", "value": "12–18+ months", "note": "Rate changes take time to flow through economy"},
+        {"label": "Dot plot accuracy", "value": "Often wrong > 200 bps within 12 months"},
+        {"label": "FOMC meetings", "value": "8 per year", "note": "Quarterly include dot plot + SEP"},
+        {"label": "Jackson Hole", "value": "August", "note": "Most important speech venue of the year"}
+      ],
+      "pitfalls": [
+        "Taking the dot plot as a rate commitment — it's a survey snapshot, not a schedule.",
+        "Confusing a pause with a pivot — the Fed pauses for many months before cutting.",
+        "Ignoring real rates — nominal rate minus inflation is what drives investment decisions.",
+        "Assuming the Fed's reaction function is static — it changes with Chair, data, and political context."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Federal Reserve", "title": "FOMC Meeting Calendars and Information", "url": "https://www.federalreserve.gov/monetarypolicy/fomc.htm"},
+        {"type": "reference", "source": "Federal Reserve", "title": "Summary of Economic Projections (Dot Plot)", "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"},
+        {"type": "primer", "source": "Investopedia", "title": "Federal Open Market Committee (FOMC)", "url": "https://www.investopedia.com/terms/f/fomc.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "sector-rotation",
+      "title": "Sector Rotation",
+      "subtitle": "How capital moves through the 11 GICS sectors across the business cycle and how to position for it.",
+      "body": "concepts/sector-rotation.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "equities", "sectors", "asset-allocation"],
+      "aliases": ["sector rotation", "GICS sectors", "cyclicals vs defensives", "sector ETFs"],
+      "related": ["macro-cycles", "inflation-and-rates", "yield-curve", "fed-policy"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · sector performance"},
+        {"screen": "equity_research", "label": "Equity Research · sector view"}
+      ],
+      "actions": [
+        {"label": "Open Markets (sectors)", "screen": "markets", "ticker": ""},
+        {"label": "Open Economics", "screen": "economics", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "Early cycle leaders", "value": "Financials, Consumer Disc, Industrials"},
+        {"label": "Late cycle leaders", "value": "Energy, Materials, Health Care"},
+        {"label": "Recession leaders", "value": "Staples, Utilities, Health Care"},
+        {"label": "Rate sensitivity", "value": "Utilities and REITs most rate-sensitive"}
+      ],
+      "pitfalls": [
+        "Rotating after the data confirms the cycle — markets price rotation 6–12 months early.",
+        "Treating sectors as monolithic — within Technology, mega-caps and small-cap growth behave very differently.",
+        "Ignoring the distorting effect of mega-cap concentration in index-weighted sectors (especially XLK).",
+        "Conflating sector rotation with stock picking — sector calls can be right while individual stocks underperform."
+      ],
+      "external_links": [
+        {"type": "primer", "source": "Fidelity", "title": "Sector Investing and the Business Cycle", "url": "https://www.fidelity.com/learning-center/trading-investing/markets-sectors/sector-investing-business-cycle"},
+        {"type": "reference", "source": "MSCI", "title": "GICS Sector Classification", "url": "https://www.msci.com/our-solutions/indexes/gics"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dark-pools-order-flow",
+      "title": "Dark Pools and Order Flow",
+      "subtitle": "Payment for order flow, internalization, and what really happens to your orders before they fill.",
+      "body": "concepts/dark-pools-order-flow.md",
+      "difficulty": "intermediate",
+      "tags": ["microstructure", "execution", "trading", "regulation"],
+      "aliases": ["dark pool", "payment for order flow", "PFOF", "internalization", "wholesaler", "order routing"],
+      "related": ["market-microstructure"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · order book"},
+        {"screen": "equity_trading", "label": "Equity Trading · execution quality"}
+      ],
+      "actions": [
+        {"label": "Open Markets (order book)", "screen": "markets", "ticker": ""},
+        {"label": "Open Equity Trading", "screen": "equity_trading", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "Dark pool % of US equity volume", "value": "~38–42%"},
+        {"label": "PFOF brokers", "value": "Route retail flow to wholesalers for rebate"},
+        {"label": "Price improvement (typical retail)", "value": "< 0.5 cents/share on liquid names"},
+        {"label": "Rule 606 reports", "value": "Published quarterly — check your broker's routing"}
+      ],
+      "pitfalls": [
+        "Assuming 'price improvement' over NBBO means best possible execution — the comparison should be to the true fair value mid-point.",
+        "Using market orders in thin names or pre/post-market — execution quality collapses.",
+        "Ignoring PFOF on options — the per-contract payment is much larger relative to spread there.",
+        "Not reading Rule 606 reports — most retail traders have no idea where their orders go."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SEC", "title": "Equity Market Structure — Rule 606 Disclosures", "url": "https://www.sec.gov/marketstructure/data"},
+        {"type": "deep_dive", "source": "SEC", "title": "Staff Report on Equity and Options Market Structure Conditions (Jan 2021)", "url": "https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf"},
+        {"type": "primer", "source": "Investopedia", "title": "Payment for Order Flow", "url": "https://www.investopedia.com/terms/p/paymentoforderflow.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "credit-markets",
+      "title": "Credit Markets",
+      "subtitle": "Investment grade, high yield, CDS, credit spreads — and what they signal about the economic cycle.",
+      "body": "concepts/credit-markets.md",
+      "difficulty": "intermediate",
+      "tags": ["credit", "fixed-income", "macro", "bonds"],
+      "aliases": ["investment grade", "high yield", "junk bonds", "credit spread", "OAS", "CDS", "fallen angel", "CDX"],
+      "related": ["bonds-primer", "macro-cycles", "yield-curve", "inflation-and-rates"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · credit spreads panel"},
+        {"screen": "gov_data", "label": "Gov Data · credit data"}
+      ],
+      "actions": [
+        {"label": "Open Economics (credit spreads)", "screen": "economics", "ticker": ""},
+        {"label": "Open Gov Data", "screen": "gov_data", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "IG spreads (tight)", "value": "< 100 bps = late-cycle complacency"},
+        {"label": "HY spreads (stressed)", "value": "> 650 bps = recession risk elevated"},
+        {"label": "HY leads equity", "value": "Spreads often widen 2–6 weeks before equities sell off"},
+        {"label": "Recovery rate (senior unsecured)", "value": "~30–40% historical average"},
+        {"label": "IG/HY boundary", "value": "BBB- (S&P) / Baa3 (Moody's)"}
+      ],
+      "pitfalls": [
+        "Ignoring credit spreads during equity rallies — if HY is widening, question the rally.",
+        "Buying fallen angels at the downgrade — forced selling creates overshoot, but timing is tricky.",
+        "Confusing coupon yield with yield-to-worst on callable bonds — YTW is the correct metric.",
+        "Underestimating covenant erosion in 'cov-lite' deals — fewer protections matter in restructuring."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "ICE / Bloomberg", "title": "US Corporate Bond Index Spreads (OAS)", "url": "https://fred.stlouisfed.org/series/BAMLC0A0CM"},
+        {"type": "reference", "source": "FRED", "title": "US High Yield OAS (ICE BofA)", "url": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"},
+        {"type": "primer", "source": "Investopedia", "title": "Credit Default Swap (CDS)", "url": "https://www.investopedia.com/terms/c/creditdefaultswap.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "currency-fx",
+      "title": "Currency and FX Markets",
+      "subtitle": "Carry trades, purchasing power parity, central bank intervention, and FX effects on portfolios.",
+      "body": "concepts/currency-fx.md",
+      "difficulty": "intermediate",
+      "tags": ["fx", "macro", "currency", "global"],
+      "aliases": ["FX", "forex", "exchange rate", "carry trade", "DXY", "purchasing power parity", "PPP"],
+      "related": ["macro-cycles", "inflation-and-rates", "bonds-primer", "fed-policy"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · FX pairs"},
+        {"screen": "economics", "label": "Economics · DXY panel"}
+      ],
+      "actions": [
+        {"label": "Open Markets (FX)", "screen": "markets", "ticker": ""},
+        {"label": "Open Economics", "screen": "economics", "ticker": ""}
+      ],
+      "rules_of_thumb": [
+        {"label": "Daily FX volume", "value": "~$7.5 trillion", "note": "Largest market in the world"},
+        {"label": "Safe havens in risk-off", "value": "USD, JPY, CHF appreciate"},
+        {"label": "Carry unwind", "value": "Violent and fast — funding currencies spike"},
+        {"label": "PPP as anchor", "value": "Currencies can deviate 30–50% from PPP for years"}
+      ],
+      "pitfalls": [
+        "Ignoring FX when investing internationally — currency can add or subtract 20–30% over a cycle.",
+        "Treating USD strength as permanent — the dollar goes through decade-long cycles.",
+        "Not accounting for hedging costs — when US rates are high, hedging international exposure can cost 3–5%/year.",
+        "Expecting PPP to mean-revert quickly — it can take years or decades."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "BIS", "title": "Triennial Central Bank Survey — FX Turnover", "url": "https://www.bis.org/statistics/rpfx22.htm"},
+        {"type": "primer", "source": "The Economist", "title": "Big Mac Index", "url": "https://www.economist.com/big-mac-index"},
+        {"type": "primer", "source": "Investopedia", "title": "Carry Trade", "url": "https://www.investopedia.com/terms/c/currencycarrytrade.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "crypto-on-chain",
+      "title": "Crypto On-Chain Fundamentals",
+      "subtitle": "MVRV, NVT, hash rate, active addresses — reading the blockchain as a fundamental analyst.",
+      "body": "concepts/crypto-on-chain.md",
+      "difficulty": "intermediate",
+      "tags": ["crypto", "bitcoin", "on-chain", "fundamentals"],
+      "aliases": ["on-chain", "MVRV", "NVT", "hash rate", "realized cap", "active addresses", "SOPR"],
+      "related": ["market-microstructure"],
+      "seen_in": [
+        {"screen": "crypto", "label": "Crypto · on-chain metrics"}
+      ],
+      "actions": [
+        {"label": "Open Crypto screen", "screen": "crypto", "ticker": "BTC"}
+      ],
+      "rules_of_thumb": [
+        {"label": "MVRV > 3.5", "value": "High-risk zone, historically near cycle tops"},
+        {"label": "MVRV < 1", "value": "Average holder in loss — historically near bottoms"},
+        {"label": "Hash rate rising", "value": "Miners adding equipment; bullish long-term signal"},
+        {"label": "Exchange outflows", "value": "Coins leaving to cold storage = holder conviction"}
+      ],
+      "pitfalls": [
+        "Reading single-metric signals in isolation — on-chain analysis works best as a multi-factor framework.",
+        "Confusing exchange wallet internal transfers with new on-chain demand — inflates volume metrics.",
+        "Applying Bitcoin on-chain frameworks directly to altcoins — smaller networks are easier to manipulate.",
+        "Ignoring macro conditions — on-chain fundamentals can be strong while macro headwinds dominate short-term."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Glassnode", "title": "On-Chain Market Intelligence", "url": "https://glassnode.com"},
+        {"type": "primer", "source": "CoinMetrics", "title": "On-Chain Data Guide", "url": "https://coinmetrics.io/learn"},
+        {"type": "deep_dive", "source": "Willy Woo", "title": "NVT Signal", "url": "https://woobull.com/introducing-nvt-signal-a-new-leading-indicator-to-identify-bitcoin-tops-and-bottoms/"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "commodities-basis",
+      "title": "Commodities Basis Trading",
+      "subtitle": "Cash vs. futures price, basis risk, roll yield, contango and backwardation in commodity markets.",
+      "body": "concepts/commodities-basis.md",
+      "difficulty": "advanced",
+      "tags": ["commodities", "futures", "basis", "derivatives"],
+      "aliases": ["commodity basis", "roll yield", "contango", "backwardation", "basis risk", "cash price"],
+      "related": ["futures-mechanics", "macro-cycles"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures · commodity curve"},
+        {"screen": "markets", "label": "Markets · commodities panel"}
+      ],
+      "actions": [
+        {"label": "Open Futures (crude oil curve)", "screen": "futures", "ticker": "CL"},
+        {"label": "Open Futures (natural gas)", "screen": "futures", "ticker": "NG"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Contango = negative roll yield", "value": "Sell low, buy high each roll"},
+        {"label": "Backwardation = positive roll yield", "value": "Sell high, buy low each roll"},
+        {"label": "Front-month ETF underperformance", "value": "In persistent contango, ETF lags spot significantly"},
+        {"label": "Basis convergence", "value": "Approaches zero at futures expiration"}
+      ],
+      "pitfalls": [
+        "Buying commodity ETFs expecting to track spot price — in deep contango they won't; check the fund methodology.",
+        "Ignoring roll dates — large open interest rolling creates predictable price pressure around roll windows.",
+        "Treating basis risk as small — in agricultural commodities, local basis can swing more than the hedge saves.",
+        "Confusing backwardation with an unconditionally bullish signal — gold backwardation signals delivery stress, not necessarily general demand."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "EIA", "title": "Weekly Petroleum Status Report (inventory data)", "url": "https://www.eia.gov/petroleum/supply/weekly/"},
+        {"type": "reference", "source": "CME Group", "title": "Commodity Product Specs", "url": "https://www.cmegroup.com/trading/energy.html"},
+        {"type": "primer", "source": "Investopedia", "title": "Roll Yield", "url": "https://www.investopedia.com/terms/r/rollyield.asp"}
+      ],
+      "updated": "2026-05-06"
     }
   ]
 }

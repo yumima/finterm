@@ -146,6 +146,263 @@
         {"type": "reference", "source": "Federal Reserve", "title": "Federal Reserve Actions in Response to COVID-19", "url": "https://www.federalreserve.gov/covid-19.htm"}
       ],
       "updated": "2026-05-04"
+    },
+    {
+      "id": "case-yen-carry-2024",
+      "title": "Yen Carry Trade Unwind (2024)",
+      "subtitle": "How a BOJ rate surprise triggered the fastest global deleveraging in years.",
+      "body": "cases/case-yen-carry-2024.md",
+      "difficulty": "advanced",
+      "tags": ["fx", "carry-trade", "japan", "deleveraging", "systemic"],
+      "aliases": ["yen carry 2024", "boj 2024 crash", "carry unwind"],
+      "related": ["carry-trade", "beta", "volatility", "margin-call", "liquidity"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · FX panel"},
+        {"screen": "futures", "label": "Futures · FX futures"}
+      ],
+      "actions": [
+        {"label": "Open Markets", "screen": "markets", "ticker": "", "hint": "See FX rates"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Carry trade risk signal", "value": "VIX spike", "note": "Carry unwinds fastest when volatility spikes suddenly"},
+        {"label": "Yen as safe haven", "value": "JPY strengthens in risk-off", "note": "Opposite of carry funding direction"}
+      ],
+      "pitfalls": [
+        "Carry trades look like free money until they don't — exit is simultaneous and violent.",
+        "Cross-asset contagion is underestimated: yen carry funded global equity positions."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-uk-gilt-2022",
+      "title": "UK Gilt Crisis — September 2022",
+      "subtitle": "Truss's mini-budget triggered an LDI margin spiral that forced the BOE to abandon QT within days.",
+      "body": "cases/case-uk-gilt-2022.md",
+      "difficulty": "advanced",
+      "tags": ["bonds", "rates", "uk", "pension", "ldi", "fiscal"],
+      "aliases": ["uk gilt crisis", "truss mini-budget", "ldi crisis", "gilt crash 2022"],
+      "related": ["duration", "margin-call", "yield-curve", "liquidity", "credit-spread"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · rates panel"},
+        {"screen": "markets", "label": "Markets · bonds panel"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "See UK rates"}
+      ],
+      "rules_of_thumb": [
+        {"label": "LDI leverage", "value": "~£1.5T exposed", "note": "Estimate of UK pension LDI overlay at time of crisis"},
+        {"label": "BOE emergency purchase", "value": "£65B pledged", "note": "BOE backstop announced Sep 28; only ~£19B ultimately deployed"}
+      ],
+      "pitfalls": [
+        "Leveraged duration matching inside pension funds creates hidden systemic fragility.",
+        "Unfunded fiscal expansion in a tightening cycle causes an immediate market verdict, not a gradual one."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-archegos-2021",
+      "title": "Archegos Capital — March 2021",
+      "subtitle": "Bill Hwang's hidden swap positions collapsed, costing prime brokers $10B and erasing $100B in market cap.",
+      "body": "cases/case-archegos-2021.md",
+      "difficulty": "advanced",
+      "tags": ["leverage", "swaps", "prime-broker", "concentration", "fraud"],
+      "aliases": ["archegos", "bill hwang", "archegos collapse"],
+      "related": ["margin-call", "liquidity", "float", "leverage"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · holdings"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": "PARA", "hint": "ViacomCBS (now Paramount)"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Leverage ratio (estimated)", "value": "5–8:1", "note": "Total notional ~$100B on ~$10–15B equity"},
+        {"label": "First-mover advantage", "value": "Decisive", "note": "Goldman sold $22B first; Nomura waited and lost $2.9B"}
+      ],
+      "pitfalls": [
+        "Total return swaps hide position concentration from public filings and from other prime brokers.",
+        "In a forced unwind, prime brokers defect rationally — the first to sell minimizes losses."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-terra-luna-2022",
+      "title": "Terra/Luna Collapse — May 2022",
+      "subtitle": "An algorithmic stablecoin's circular backing collapsed under selling pressure, wiping $40B in 72 hours.",
+      "body": "cases/case-terra-luna-2022.md",
+      "difficulty": "intermediate",
+      "tags": ["crypto", "stablecoin", "defi", "death-spiral", "fraud"],
+      "aliases": ["terra luna", "ust depeg", "luna crash", "do kwon"],
+      "related": ["stablecoin", "liquidity", "margin-call", "reflexivity"],
+      "seen_in": [
+        {"screen": "crypto_trading", "label": "Crypto · market panel"}
+      ],
+      "actions": [
+        {"label": "Open Crypto", "screen": "crypto_trading", "ticker": "BTC-USD", "hint": "Crypto markets"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Anchor yield at peak", "value": "~20% APY", "note": "Artificial demand driver that was the Achilles heel"},
+        {"label": "Time to collapse", "value": "72 hours", "note": "From depeg start to LUNA near-zero"}
+      ],
+      "pitfalls": [
+        "Circular stablecoin backing (UST backed by LUNA backed by UST) is reflexive, not stable.",
+        "Unsustainably high yield on a 'stable' asset is a warning sign, not a feature."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-enron-2001",
+      "title": "Enron — Anatomy of an Accounting Fraud (2001)",
+      "subtitle": "SPV manipulation, mark-to-market abuse, and how the seventh-largest US company went to zero.",
+      "body": "cases/case-enron-2001.md",
+      "difficulty": "intermediate",
+      "tags": ["fraud", "accounting", "equities", "audit", "short-selling"],
+      "aliases": ["enron", "enron fraud", "enron collapse"],
+      "related": ["fcf", "credit-spread", "build-a-thesis", "short-selling"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · fundamentals tab"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "Practice reading financials for quality"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Red flag #1", "value": "Off-balance-sheet complexity", "note": "Hundreds of SPVs with no clear purpose"},
+        {"label": "Red flag #2", "value": "Negative operating cash flow vs. positive reported earnings", "note": "The most reliable accounting fraud signal"}
+      ],
+      "pitfalls": [
+        "Analyst consensus can be systematically wrong when investment banking relationships create conflicts.",
+        "Mark-to-market of illiquid/long-duration assets is opinion, not fact — easily manipulated."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-dotcom-2000",
+      "title": "Dot-Com Bubble — 1999–2002",
+      "subtitle": "Nasdaq rose 400% then fell 78% — the canonical case of narrative detachment from valuation.",
+      "body": "cases/case-dotcom-2000.md",
+      "difficulty": "beginner",
+      "tags": ["equities", "bubble", "valuation", "technology", "behavioral"],
+      "aliases": ["dotcom bubble", "tech bubble 2000", "nasdaq crash 2000", "internet bubble"],
+      "related": ["pe-ratio", "fcf", "behavioral-biases", "terminal-value", "discount-rate"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation tab"},
+        {"screen": "markets", "label": "Markets · equity panel"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": "CSCO", "hint": "Cisco — peak P/E ~130x in 2000"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Nasdaq peak to trough", "value": "−78% (March 2000 to Oct 2002)", "note": "15 years to recover the peak"},
+        {"label": "Terminal value share of DCF", "value": ">90% for dot-coms", "note": "When terminal value dominates, assumptions dominate"}
+      ],
+      "pitfalls": [
+        "Being right about the industry (internet was transformative) does not protect against buying at 100x sales.",
+        "\"This time it's different\" is maximally wrong at peak bubble conditions."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-asian-crisis-1997",
+      "title": "Asian Financial Crisis — 1997",
+      "subtitle": "Fixed FX pegs, hot money flows, and currency mismatches collapsed regional economies in 18 months.",
+      "body": "cases/case-asian-crisis-1997.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "fx", "emerging-markets", "imf", "contagion"],
+      "aliases": ["asian crisis", "asian financial crisis 1997", "thai baht crisis"],
+      "related": ["carry-trade", "yield-curve", "liquidity", "credit-spread", "case-ltcm-1998"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · FX panel"},
+        {"screen": "markets", "label": "Markets · EM panel"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "See FX and rates data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "GDP peak-to-trough (Indonesia)", "value": "−13.7%", "note": "Worst among the affected economies"},
+        {"label": "Thai baht devaluation", "value": "−60% in 1997", "note": "The trigger peg that broke first"}
+      ],
+      "pitfalls": [
+        "Borrowing in foreign currency with local-currency revenues is hidden leverage on your own exchange rate.",
+        "Hot money inflows finance long-duration investments — when confidence reverses, the outflow is abrupt."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-flash-crash-2010",
+      "title": "Flash Crash — May 6, 2010",
+      "subtitle": "HFT liquidity withdrawal and an algorithmic sell order sent the Dow down 1,000 points in 36 minutes.",
+      "body": "cases/case-flash-crash-2010.md",
+      "difficulty": "intermediate",
+      "tags": ["microstructure", "hft", "liquidity", "equities", "futures"],
+      "aliases": ["flash crash", "2010 flash crash", "may 6 crash"],
+      "related": ["liquidity", "market-order", "volatility", "futures-mechanics"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · equity panel"},
+        {"screen": "futures", "label": "Futures · equity futures"}
+      ],
+      "actions": [
+        {"label": "Open Markets", "screen": "markets", "ticker": "", "hint": "See equity market data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Duration of crash", "value": "36 minutes from start to low", "note": "Recovery was nearly as fast"},
+        {"label": "Waddell & Reed order", "value": "$4.1B E-mini sell", "note": "75,000 contracts with no price limit triggered the cascade"}
+      ],
+      "pitfalls": [
+        "HFT liquidity disappears simultaneously in stress — the moment you most need it.",
+        "Market orders in thin markets fill at stub quotes ($0.01) — use limit orders during high-volatility conditions."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-nickel-lme-2022",
+      "title": "LME Nickel Short Squeeze — March 2022",
+      "subtitle": "Tsingshan's 150,000-ton short exploded to $101K/ton; LME cancelled billions in trades.",
+      "body": "cases/case-nickel-lme-2022.md",
+      "difficulty": "advanced",
+      "tags": ["commodities", "short-squeeze", "futures", "lme", "concentration"],
+      "aliases": ["nickel squeeze", "lme nickel 2022", "tsingshan nickel", "xiang guangda"],
+      "related": ["futures-mechanics", "margin-call", "liquidity", "short-selling"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures · metals panel"},
+        {"screen": "markets", "label": "Markets · commodities panel"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": "NI1!", "hint": "Nickel futures"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Price move", "value": "+250% in 2 trading days", "note": "From ~$29K to $101K per ton"},
+        {"label": "Tsingshan short size", "value": "~150–200K metric tons", "note": "Multiple weeks of global production"}
+      ],
+      "pitfalls": [
+        "Physical production of a commodity does not allow delivery against financial contracts with different spec — basis risk is real.",
+        "Exchange trade cancellation socializes losses from those who profited — exchange credibility is the casualty."
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "case-fed-pivot-2022",
+      "title": "Fed Inflation Response — 2022–2023",
+      "subtitle": "Fastest rate-hiking cycle since the 1980s repriced every asset class and toppled SVB.",
+      "body": "cases/case-fed-pivot-2022.md",
+      "difficulty": "intermediate",
+      "tags": ["macro", "rates", "fed", "inflation", "equities", "bonds"],
+      "aliases": ["fed 2022", "rate hike cycle 2022", "fed pivot", "zero to five percent"],
+      "related": ["yield-curve", "duration", "inflation-and-rates", "case-svb-2023", "discount-rate"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics · rates panel"},
+        {"screen": "markets", "label": "Markets · macro panel"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": "", "hint": "See interest rate data"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Total hike size", "value": "525bps (0→5.25%)", "note": "Fastest since Volcker 1980s"},
+        {"label": "US Agg Bond Index 2022", "value": "−13.1%", "note": "Worst bond year on record"}
+      ],
+      "pitfalls": [
+        "Zero rates create fragility (SVB duration mismatch) that only becomes visible when rates rise.",
+        "Stocks AND bonds can fall simultaneously in supply-driven inflation — 60/40 has regime dependencies."
+      ],
+      "updated": "2026-05-06"
     }
   ]
 }
