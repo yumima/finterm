@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "regulators",
+    "label": "REGULATORS",
+    "description": "Who makes the rules, what the rules are, and why they matter — the regulatory framework every trader operates inside.",
+    "order": 40
+  },
+  "entries": [
+    {
+      "id": "sec",
+      "title": "SEC — U.S. Securities and Exchange Commission",
+      "subtitle": "Primary regulator of U.S. securities markets: disclosure rules, insider trading enforcement, broker-dealer oversight.",
+      "body": "regulators/sec.md",
+      "difficulty": "beginner",
+      "tags": ["regulation", "compliance", "law", "equities"],
+      "aliases": ["securities and exchange commission", "sec enforcement", "sec filings"],
+      "related": ["reg-fd", "insider-trading-rules", "reg-t"],
+      "rules_of_thumb": [
+        {"label": "8-K filing deadline", "value": "4 business days", "note": "Companies must file 8-K for material events within 4 business days"},
+        {"label": "13F threshold", "value": "$100M AUM", "note": "Institutional managers above this must disclose equity holdings quarterly"},
+        {"label": "13D filing trigger", "value": "5% beneficial ownership", "note": "Must file within 10 days of crossing 5% in any class"}
+      ],
+      "pitfalls": [
+        "Tipping MNPI to others is itself illegal even if you don't trade — tipper can be liable for tippee's profits.",
+        "10b5-1 plans are not a blank check — plans adopted immediately before known bad news invite SEC scrutiny.",
+        "Selective disclosure happens subtly; detailed analyst Q&A before public guidance release can violate Reg FD."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SEC", "title": "SEC.gov — Regulatory Actions", "url": "https://www.sec.gov/litigation/litreleases.shtml"},
+        {"type": "reference", "source": "SEC", "title": "EDGAR Full-Text Search", "url": "https://efts.sec.gov/LATEST/search-index?q=%22form+10-K%22&dateRange=custom"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "finra",
+      "title": "FINRA — Financial Industry Regulatory Authority",
+      "subtitle": "Self-regulatory organization overseeing broker-dealers: suitability, PDT rule, margin requirements.",
+      "body": "regulators/finra.md",
+      "difficulty": "beginner",
+      "tags": ["regulation", "compliance", "law", "broker-dealer"],
+      "aliases": ["financial industry regulatory authority", "finra rules", "finra arbitration"],
+      "related": ["pdt-rule", "reg-t", "sec"],
+      "rules_of_thumb": [
+        {"label": "PDT minimum equity", "value": "$25,000", "note": "Required if you execute 4+ day trades in 5 business days"},
+        {"label": "Maintenance margin floor", "value": "25%", "note": "FINRA minimum; most brokers enforce 30%"},
+        {"label": "Day trading buying power", "value": "4× overnight equity", "note": "Available to PDT accounts with $25K+ equity"}
+      ],
+      "pitfalls": [
+        "PDT window is rolling 5 business days, not a calendar week — Monday doesn't reset the counter.",
+        "Selling in a taxable account and rebuying in an IRA within 30 days triggers a wash sale that permanently disallows the loss.",
+        "Good faith violations in cash accounts (trading on unsettled funds) result in 90-day restrictions."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FINRA", "title": "BrokerCheck — Verify Your Broker", "url": "https://brokercheck.finra.org/"},
+        {"type": "reference", "source": "FINRA", "title": "FINRA Rule 4210 — Margin Requirements", "url": "https://www.finra.org/rules-guidance/rulebooks/finra-rules/4210"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "cftc",
+      "title": "CFTC — Commodity Futures Trading Commission",
+      "subtitle": "Federal regulator of futures, options on futures, and OTC derivatives: position limits, swap reporting, COT data.",
+      "body": "regulators/cftc.md",
+      "difficulty": "intermediate",
+      "tags": ["regulation", "compliance", "law", "futures", "derivatives"],
+      "aliases": ["commodity futures trading commission", "cftc enforcement", "cot report regulator"],
+      "related": ["pdt-rule", "sec", "frb"],
+      "rules_of_thumb": [
+        {"label": "COT report lag", "value": "3 business days", "note": "Published Friday for Tuesday positioning data"},
+        {"label": "Margin type", "value": "Performance bond, not a loan", "note": "Futures margin is a good-faith deposit, not borrowed money"},
+        {"label": "Swap clearing threshold", "value": "Dodd-Frank Title VII", "note": "Standardized swaps must clear through a CCP"}
+      ],
+      "pitfalls": [
+        "Physical commodity production does not automatically allow delivery against financial futures — basis risk and contract specs differ.",
+        "Spoofing (placing orders with intent to cancel) is a criminal offense under Dodd-Frank, even if no trade executes.",
+        "Hedge exemptions from position limits require demonstrable underlying business exposure — claiming them without it is an enforcement priority."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "CFTC", "title": "Commitments of Traders Reports", "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm"},
+        {"type": "reference", "source": "NFA", "title": "NFA — National Futures Association", "url": "https://www.nfa.futures.org/"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "frb",
+      "title": "Federal Reserve Board — The Fed",
+      "subtitle": "U.S. central bank: monetary policy, bank regulation, Reg T margin rules, stress testing.",
+      "body": "regulators/frb.md",
+      "difficulty": "intermediate",
+      "tags": ["regulation", "compliance", "law", "monetary-policy", "banks"],
+      "aliases": ["federal reserve", "fed", "fomc", "federal reserve board", "central bank"],
+      "related": ["reg-t", "sec", "occ"],
+      "rules_of_thumb": [
+        {"label": "FOMC meetings per year", "value": "8 scheduled", "note": "Plus potential emergency meetings; each one can reprice the entire market"},
+        {"label": "Reg T initial margin", "value": "50%", "note": "Maximum 2:1 leverage on equity purchases in margin accounts"},
+        {"label": "Fed dot plot cadence", "value": "4× per year", "note": "Published quarterly with FOMC projections; markets trade off the median dot"}
+      ],
+      "pitfalls": [
+        "Zero interest rates create hidden fragility (SVB duration mismatch) that only becomes visible when rates rise.",
+        "Stocks and bonds can fall simultaneously in supply-driven inflation — the Fed's dual mandate creates a dilemma.",
+        "Overreliance on 'the Fed will rescue us' is moral hazard — not every stress event triggers Fed intervention."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Federal Reserve", "title": "FOMC Meeting Calendars and Information", "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"},
+        {"type": "reference", "source": "Federal Reserve", "title": "Regulation T — Extensions of Credit by Brokers and Dealers", "url": "https://www.federalreserve.gov/supervisionreg/regttoc.htm"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "occ",
+      "title": "OCC — Office of the Comptroller of the Currency",
+      "subtitle": "Charters and supervises nationally chartered banks (N.A.); oversees bank derivatives activities.",
+      "body": "regulators/occ.md",
+      "difficulty": "intermediate",
+      "tags": ["regulation", "compliance", "law", "banks"],
+      "aliases": ["office of the comptroller of the currency", "occ bank regulator", "national bank regulator"],
+      "related": ["frb", "sec"],
+      "rules_of_thumb": [
+        {"label": "OCC scope", "value": "~70% of U.S. commercial banking assets", "note": "Nationally chartered (N.A.) banks — JPMorgan, Citi, BofA, Wells"},
+        {"label": "Loan-to-one-borrower limit", "value": "15% of capital", "note": "25% with qualifying collateral; a common enforcement finding"},
+        {"label": "Derivatives report cadence", "value": "Quarterly", "note": "OCC publishes notional and credit exposure data for top bank dealers"}
+      ],
+      "pitfalls": [
+        "A major OCC consent order signals operational risk problems and management distraction — can suppress bank stock performance for years.",
+        "Third-party risk: banks cannot outsource their regulatory obligations — vendor failures become the bank's regulatory problem.",
+        "CRA rating below 'Satisfactory' can block acquisitions and branch expansions — a silent constraint on bank growth strategy."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "OCC", "title": "OCC Quarterly Derivatives Report", "url": "https://www.occ.gov/publications-and-resources/publications/quarterly-report-on-bank-derivatives-activities/index-derivatives-quarterly-report.html"},
+        {"type": "reference", "source": "OCC", "title": "OCC Enforcement Actions", "url": "https://www.occ.gov/topics/charters-and-licensing/enforcement-actions/index-enforcement-actions.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "wash-sale-rule",
+      "title": "IRS Wash Sale Rule",
+      "subtitle": "30-day window around a loss sale that disallows the deduction if you repurchase the same security.",
+      "body": "regulators/wash-sale-rule.md",
+      "difficulty": "beginner",
+      "tags": ["regulation", "compliance", "law", "tax", "trading"],
+      "aliases": ["wash sale", "irc 1091", "tax loss harvesting rule", "wash sale 30 days"],
+      "related": ["pdt-rule", "insider-trading-rules"],
+      "rules_of_thumb": [
+        {"label": "Restriction window", "value": "61 days total", "note": "30 days before + sale date + 30 days after"},
+        {"label": "Disallowed loss fate", "value": "Added to cost basis of replacement shares", "note": "Loss is deferred, not permanently lost (except IRA repurchase)"},
+        {"label": "Crypto status (2025)", "value": "Not covered by wash sale rule", "note": "IRS has not extended wash sale to crypto — losses can be harvested and immediately repurchased"}
+      ],
+      "pitfalls": [
+        "IRA repurchase triggers a permanent loss disallowance, not just deferral — selling at a loss in taxable and rebuying in an IRA within 30 days is especially costly.",
+        "Broker wash sale reporting is per-account only — cross-account wash sales (brokerage + IRA) are your responsibility to track.",
+        "December losses with a 30-day look-forward carry into January of the next tax year — year-end tax-loss harvesting requires careful scheduling."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "IRS", "title": "Publication 550 — Investment Income and Expenses (Wash Sales)", "url": "https://www.irs.gov/publications/p550#en_US_2023_publink100010601"},
+        {"type": "reference", "source": "IRS", "title": "IRC Section 1091", "url": "https://www.law.cornell.edu/uscode/text/26/1091"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "pdt-rule",
+      "title": "Pattern Day Trader Rule",
+      "subtitle": "FINRA Rule 4210: 4+ day trades in 5 business days requires $25,000 minimum equity in margin accounts.",
+      "body": "regulators/pdt-rule.md",
+      "difficulty": "beginner",
+      "tags": ["regulation", "compliance", "law", "day-trading", "margin"],
+      "aliases": ["pdt", "pattern day trader", "25k rule", "day trading rule", "finra 4210"],
+      "related": ["reg-t", "finra", "wash-sale-rule"],
+      "rules_of_thumb": [
+        {"label": "Minimum equity", "value": "$25,000", "note": "Must be maintained at all times once flagged as PDT"},
+        {"label": "Day trading buying power", "value": "4× maintenance excess", "note": "Intraday only; overnight positions revert to Reg T (2×)"},
+        {"label": "Restriction on underfunded call", "value": "90 days closing-only", "note": "If margin call is not met in 5 business days"}
+      ],
+      "pitfalls": [
+        "The 5-day window is rolling, not weekly — Monday does not reset the counter.",
+        "Depositing to meet $25K and then withdrawing back below it within 5 business days triggers a 90-day restriction.",
+        "Options day trades count toward the PDT limit exactly the same as stock day trades."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FINRA", "title": "Day-Trading Margin Requirements: Know the Rules", "url": "https://www.finra.org/investors/learn-to-invest/advanced-investing/day-trading-your-dollars-at-risk"},
+        {"type": "reference", "source": "SEC", "title": "Margin: Borrowing Money to Pay for Stocks", "url": "https://www.sec.gov/investor/pubs/margin.htm"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "reg-t",
+      "title": "Regulation T — Federal Reserve Margin Requirements",
+      "subtitle": "Sets the 50% initial margin requirement for equity purchases — the legal limit on stock-buying leverage.",
+      "body": "regulators/reg-t.md",
+      "difficulty": "beginner",
+      "tags": ["regulation", "compliance", "law", "margin", "leverage"],
+      "aliases": ["regulation t", "reg t margin", "50 percent margin", "initial margin requirement"],
+      "related": ["pdt-rule", "finra", "frb"],
+      "rules_of_thumb": [
+        {"label": "Initial margin (equities)", "value": "50%", "note": "Maximum 2:1 leverage on initial equity purchase"},
+        {"label": "Reg T call resolution", "value": "5 business days", "note": "Time to deposit funds after a Reg T deficiency"},
+        {"label": "Portfolio margin threshold", "value": "$100,000 equity", "note": "Risk-based margin available above this level; typically allows ~6:1 for hedged books"}
+      ],
+      "pitfalls": [
+        "Maximum Reg T leverage (2:1) means a 50% adverse move wipes out all equity — maintenance margin calls arrive much earlier at ~25–30%.",
+        "Day trade margin (4×) reverts to Reg T (2×) if any position is held overnight — many traders are surprised by margin calls on next-day open.",
+        "Margin interest compounds daily and is a real drag on long-held leveraged positions even without price movement."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Federal Reserve", "title": "Regulation T — Extensions of Credit by Brokers and Dealers", "url": "https://www.federalreserve.gov/supervisionreg/regttoc.htm"},
+        {"type": "reference", "source": "FINRA", "title": "Margin Account Requirements", "url": "https://www.finra.org/investors/learn-to-invest/advanced-investing/margin-borrowing-basics"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "reg-fd",
+      "title": "Regulation FD — Fair Disclosure",
+      "subtitle": "SEC rule prohibiting selective disclosure of material non-public information to select investors.",
+      "body": "regulators/reg-fd.md",
+      "difficulty": "intermediate",
+      "tags": ["regulation", "compliance", "law", "disclosure", "investor-relations"],
+      "aliases": ["regulation fd", "fair disclosure", "selective disclosure", "mnpi disclosure rule"],
+      "related": ["insider-trading-rules", "sec"],
+      "rules_of_thumb": [
+        {"label": "Intentional disclosure", "value": "Simultaneous public disclosure required", "note": "Same-day 8-K or press release when any material info is shared selectively"},
+        {"label": "Unintentional disclosure", "value": "Prompt correction required", "note": "Before market open next day if discovered after 4pm"},
+        {"label": "Social media validity", "value": "Acceptable if pre-designated", "note": "Posts satisfy Reg FD if the channel is disclosed as an investor communications channel"}
+      ],
+      "pitfalls": [
+        "Off-the-record guidance to analysts is not protected — the SEC applies an objective materiality standard regardless of the speaker's intent.",
+        "Expert network channel checks become illegal if the expert shares confidential company information rather than industry knowledge.",
+        "Due diligence under NDA is a Reg FD carve-out, but the NDA must be in place before any material disclosure."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SEC", "title": "Regulation FD — Final Rule Text", "url": "https://www.sec.gov/rules/final/33-7881.htm"},
+        {"type": "reference", "source": "SEC", "title": "Compliance and Disclosure Interpretations: Regulation FD", "url": "https://www.sec.gov/divisions/corpfin/guidance/regfd-interp.htm"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "insider-trading-rules",
+      "title": "Insider Trading Rules",
+      "subtitle": "Trading on material non-public information is illegal under Rule 10b-5; includes tipping, misappropriation, and congressional trading.",
+      "body": "regulators/insider-trading-rules.md",
+      "difficulty": "intermediate",
+      "tags": ["regulation", "compliance", "law", "insider-trading", "enforcement"],
+      "aliases": ["insider trading", "mnpi trading", "rule 10b-5", "stock act", "10b5-1", "tipping"],
+      "related": ["reg-fd", "sec"],
+      "rules_of_thumb": [
+        {"label": "Criminal penalty (max)", "value": "20 years + $5M fine (individuals)", "note": "Criminal insider trading charges brought by DOJ; SEC handles civil side"},
+        {"label": "STOCK Act disclosure deadline", "value": "45 days", "note": "Congressional members must disclose trades over $1,000 within 45 days"},
+        {"label": "10b5-1 cooling-off period", "value": "90–120 days", "note": "Required between plan adoption and first trade for officers/directors (2023 SEC rule)"}
+      ],
+      "pitfalls": [
+        "Tipping MNPI without trading is still illegal — the tipper is liable for the tippee's profits if a personal benefit was received.",
+        "'I didn't know it was material' is not a defense — materiality is judged by an objective reasonable investor standard.",
+        "Unusual options activity before material announcements is the primary SEC surveillance signal — statistical anomalies trigger investigations before human intelligence does."
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SEC", "title": "SEC Insider Trading Overview", "url": "https://www.sec.gov/insider-trading"},
+        {"type": "reference", "source": "SEC", "title": "Rule 10b5-1 and Insider Trading", "url": "https://www.sec.gov/rules/final/2022/33-11138.pdf"}
+      ],
+      "updated": "2026-05-06"
+    }
+  ]
+}

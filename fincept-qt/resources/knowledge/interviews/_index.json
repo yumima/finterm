@@ -1,0 +1,219 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "interviews",
+    "label": "INTERVIEWS",
+    "description": "Investment wisdom extracted from legendary investors — the frameworks, principles, and mental models that have stood the test of time.",
+    "order": 50
+  },
+  "entries": [
+    {
+      "id": "buffett-circle-of-competence",
+      "title": "Warren Buffett — Circle of Competence",
+      "subtitle": "Invest only in what you understand deeply: moats, compounding, and why temperament beats intellect.",
+      "body": "interviews/buffett-circle-of-competence.md",
+      "difficulty": "intermediate",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "value"],
+      "aliases": ["buffett", "warren buffett", "circle of competence", "moat investing", "berkshire hathaway"],
+      "related": ["pe-ratio", "roe", "fcf", "terminal-value", "graham-value"],
+      "rules_of_thumb": [
+        {"label": "Circle of competence", "value": "Only invest in what you can explain simply", "note": "If you can't describe the business clearly, you don't understand it well enough to own it"},
+        {"label": "Moat test", "value": "Will this advantage hold for 10 years?", "note": "Brand, switching costs, network effects, low-cost production — name the moat specifically"},
+        {"label": "20-punch-card rule", "value": "Imagine only 20 investments in a lifetime", "note": "Forces genuine conviction over trading activity"},
+        {"label": "Time on compounding", "value": "Never interrupt unnecessarily", "note": "Tax cost of selling a winner is real; pre-tax compounding is a structural advantage"}
+      ],
+      "pitfalls": [
+        "Buffett doesn't just buy cheap stocks — he pays fair prices for exceptional businesses. The moat quality matters more than the P/E multiple.",
+        "Confusing using a product with understanding the business — consumer familiarity is the start of research, not the end.",
+        "Over-diversification is protection against ignorance, not a virtue — if you genuinely understand 5 businesses, concentrating in them beats 50 you don't."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Berkshire Hathaway", "title": "Annual Letters to Shareholders (1977–present)", "url": "https://www.berkshirehathaway.com/letters/letters.html"},
+        {"type": "deep_dive", "source": "Warren Buffett", "title": "The Superinvestors of Graham-and-Doddsville (1984)", "url": "https://www8.gsb.columbia.edu/articles/columbia-business/superinvestors"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "munger-mental-models",
+      "title": "Charlie Munger — Latticework of Mental Models",
+      "subtitle": "Multi-disciplinary thinking, inversion, and systematically avoiding stupidity over trying to be brilliant.",
+      "body": "interviews/munger-mental-models.md",
+      "difficulty": "intermediate",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "psychology"],
+      "aliases": ["munger", "charlie munger", "mental models", "inversion", "poor charlies almanack"],
+      "related": ["behavioral-biases", "buffett-circle-of-competence", "graham-value"],
+      "rules_of_thumb": [
+        {"label": "Inversion first", "value": "Find all the ways to fail before finding the ways to succeed", "note": "'Tell me where I'm going to die and I'll never go there' — the most reliable path to success is eliminating failure modes"},
+        {"label": "Bias checklist", "value": "Run your reasoning against 25 cognitive biases", "note": "Confirmation, social proof, authority, commitment, incentive-caused bias are the most dangerous in investing"},
+        {"label": "Aggressive patience", "value": "Act decisively when you have a clear edge, nothing otherwise", "note": "Most activity reduces returns through taxes, friction, and errors"},
+        {"label": "Destroy your best ideas", "value": "Work as hard to find the bear case as the bull case", "note": "If you can't construct a compelling case against your thesis, you haven't thought hard enough"}
+      ],
+      "pitfalls": [
+        "Mental models is about cross-disciplinary frameworks applied to specific situations — being generally well-read is necessary but not sufficient.",
+        "Inversion is a stress-testing tool, not a pessimistic worldview — Munger was optimistic about human progress while ruthless about specific investment risk.",
+        "Updating beliefs when evidence changes is a virtue in Munger's framework — he viewed slow belief-updating as commitment bias, one of the most damaging flaws."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Poor Charlie's Almanack", "title": "Poor Charlie's Almanack (book)", "url": "https://www.poorcharliesalmanack.com/"},
+        {"type": "primer", "source": "USC", "title": "A Lesson on Elementary, Worldly Wisdom (1994 speech)", "url": "https://old.ycombinator.com/munger.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dalio-principles",
+      "title": "Ray Dalio — Debt Cycles and the All-Weather Portfolio",
+      "subtitle": "Long-term debt cycles, risk parity portfolio construction, and radical transparency in decision-making.",
+      "body": "interviews/dalio-principles.md",
+      "difficulty": "advanced",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "macro", "portfolio"],
+      "aliases": ["dalio", "ray dalio", "all weather portfolio", "bridgewater", "risk parity", "debt cycle"],
+      "related": ["yield-curve", "inflation-and-rates", "duration", "carry-trade"],
+      "rules_of_thumb": [
+        {"label": "All-Weather four environments", "value": "Rising/falling growth × rising/falling inflation", "note": "Gold, long bonds, commodities, equities perform in different regimes — balance the risk exposure across all four"},
+        {"label": "Risk parity vs. 60/40", "value": "60/40 has 90%+ of risk in equities", "note": "Dollar diversification is not risk diversification — measure volatility contribution, not dollar weight"},
+        {"label": "Debt cycle template", "value": "75–100 year long cycles, 5–8 year short cycles", "note": "Most crises are variations of the same deleveraging pattern — understanding the template helps contextualize current conditions"},
+        {"label": "Believability weighting", "value": "Weight views by track record and relevant expertise", "note": "Not all opinions are equal — a decision system should reflect this explicitly"}
+      ],
+      "pitfalls": [
+        "All-Weather in unlevered form is heavily bonds and gold — it weathers all cycles but can lag significantly during equity bull markets.",
+        "The debt cycle framework is structural, not a timing tool — Dalio has been wrong on near-term predictions despite being right on structural dynamics.",
+        "Radical transparency is a specific organizational adaptation, not a universally applicable management philosophy — it requires enormous institutional commitment."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Bridgewater", "title": "How the Economic Machine Works (30-min video)", "url": "https://www.youtube.com/watch?v=PHe0bXAIuk0"},
+        {"type": "deep_dive", "source": "Ray Dalio", "title": "Principles (book)", "url": "https://www.principles.com/"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "lynch-growth-investing",
+      "title": "Peter Lynch — Tenbaggers and Growth at a Reasonable Price",
+      "subtitle": "Invest in what you observe, use PEG ratio, hold through volatility, and know when the story changes.",
+      "body": "interviews/lynch-growth-investing.md",
+      "difficulty": "intermediate",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "growth"],
+      "aliases": ["lynch", "peter lynch", "tenbagger", "garp", "peg ratio", "fidelity magellan"],
+      "related": ["pe-ratio", "peg-ratio", "eps", "fcf", "buffett-circle-of-competence"],
+      "rules_of_thumb": [
+        {"label": "PEG ratio fair value", "value": "PEG = 1.0", "note": "P/E divided by EPS growth rate — below 1 is potentially cheap, above 2 is expensive relative to growth"},
+        {"label": "Two-minute thesis test", "value": "Can you explain why you own it in 2 minutes?", "note": "If not, you don't understand the investment well enough to hold through adversity"},
+        {"label": "Tenbagger math", "value": "One 10× in 10 positions = 100% portfolio gain", "note": "Justifies holding growth positions through normal volatility instead of selling at 50–100%"},
+        {"label": "Sell signal", "value": "The thesis, not the price", "note": "Sell when the story changes materially, not because the stock is down or you have a profit"}
+      ],
+      "pitfalls": [
+        "Invest in what you know means understanding the business economics — not just using the product. Consumer familiarity is the starting point, not the investment thesis.",
+        "PEG ratio breaks down for cyclical businesses (earnings at cycle peak inflate the denominator), very early-stage companies, and asset-heavy businesses.",
+        "Lynch ran a large fund by necessity; he argued individuals with 8–12 positions will outperform those with 100+ because depth of research matters more than breadth."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Peter Lynch", "title": "One Up on Wall Street (book)", "url": "https://www.simonandschuster.com/books/One-Up-On-Wall-Street/Peter-Lynch/9780743200400"},
+        {"type": "deep_dive", "source": "Peter Lynch", "title": "Beating the Street (book)", "url": "https://www.simonandschuster.com/books/Beating-the-Street/Peter-Lynch/9780671759209"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "simons-quant-approach",
+      "title": "Jim Simons — The Medallion Fund and Quantitative Investing",
+      "subtitle": "Signal over noise, capacity constraints, honest backtesting, and why organizational structure beats individual genius.",
+      "body": "interviews/simons-quant-approach.md",
+      "difficulty": "advanced",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "quant", "systematic"],
+      "aliases": ["simons", "jim simons", "medallion fund", "renaissance technologies", "quant investing", "systematic trading"],
+      "related": ["alpha", "volatility", "market-microstructure"],
+      "rules_of_thumb": [
+        {"label": "Signal validation requirement", "value": "Plausible reason + statistical significance + out-of-sample test", "note": "All three must hold — a signal that only passes two is likely noise"},
+        {"label": "Capacity discipline", "value": "Know the capacity of your strategy", "note": "As capital deployed increases, market impact degrades the edge — Medallion stayed small deliberately"},
+        {"label": "Diversification at signal level", "value": "Many uncorrelated signals, none dominant", "note": "Portfolio construction applies to signals as well as positions — no single signal should be capable of being fatal"},
+        {"label": "Transaction costs first", "value": "Model full costs before committing to a strategy", "note": "Commissions + bid-ask spread + market impact + financing — most strategies that look good gross net to zero"}
+      ],
+      "pitfalls": [
+        "Overfitting is the primary failure mode in quantitative investing — patterns that worked historically are often noise. Out-of-sample testing is mandatory, not optional.",
+        "Medallion required world-class mathematicians, vast proprietary datasets, and 35 years of iteration — the principles are accessible but replication is not.",
+        "Quant does not mean high-frequency — Simons's approach spans multiple time horizons including days to weeks. Systematic trading is the defining characteristic, not speed."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Gregory Zuckerman", "title": "The Man Who Solved the Market (book)", "url": "https://www.penguinrandomhouse.com/books/557877/the-man-who-solved-the-market-by-gregory-zuckerman/"},
+        {"type": "primer", "source": "TED", "title": "Jim Simons: The mathematician who cracked Wall Street (TED Talk)", "url": "https://www.ted.com/talks/jim_simons_the_mathematician_who_cracked_wall_street"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "soros-reflexivity",
+      "title": "George Soros — Theory of Reflexivity",
+      "subtitle": "Markets are always wrong, feedback loops drive booms and busts, and asymmetric macro bets exploit late-stage cycles.",
+      "body": "interviews/soros-reflexivity.md",
+      "difficulty": "advanced",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "macro", "fx"],
+      "aliases": ["soros", "george soros", "reflexivity", "quantum fund", "boom bust", "breaking the pound"],
+      "related": ["carry-trade", "yield-curve", "volatility", "behavioral-biases", "dalio-principles"],
+      "rules_of_thumb": [
+        {"label": "Reflexivity definition", "value": "Prices affect fundamentals; fundamentals affect prices — feedback, not one-way causation", "note": "Rising asset prices improve collateral → more lending → higher prices; this self-reinforcing loop is reflexivity"},
+        {"label": "Boom-bust arc", "value": "Real trend → misperception amplifies → recognition gap → reversal → overshoot", "note": "The arc is patterned even if timing is unpredictable — positioning against late-stage reflexive cycles is the macro trade"},
+        {"label": "Hypothesis testing", "value": "Make a provisional bet, use market reaction as feedback", "note": "If the market behaves as the thesis predicts, add; if it doesn't, exit and reassess"},
+        {"label": "Asymmetry requirement", "value": "Limited loss if wrong, large gain if right", "note": "The best reflexivity trades have structurally capped downside — like the pound peg where the cost of defending the peg rose nonlinearly"}
+      ],
+      "pitfalls": [
+        "Reflexivity doesn't mean markets are random — it means they have predictable feedback patterns. The unpredictability is in timing, not in whether the cycle exists.",
+        "Soros didn't break the Bank of England alone — he was the largest participant in a trade dozens of macro funds were running. The fundamental imbalance was the cause.",
+        "Reflexivity amplifies genuine trends; it doesn't create value from nothing. The most powerful cycles start from a real underlying economic development."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "George Soros", "title": "The Alchemy of Finance (book)", "url": "https://www.wiley.com/en-us/The+Alchemy+of+Finance%2C+2nd+Edition-p-9780471445494"},
+        {"type": "primer", "source": "Soros Fund Management", "title": "Fallibility, Reflexivity, and the Human Uncertainty Principle (lecture)", "url": "https://www.georgesoros.com/2014/01/13/fallibility-reflexivity-and-the-human-uncertainty-principle/"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "marks-risk",
+      "title": "Howard Marks — Second-Level Thinking and Market Cycles",
+      "subtitle": "Risk is not volatility, what is priced in matters more than what is true, and the cycle tells you when to be aggressive.",
+      "body": "interviews/marks-risk.md",
+      "difficulty": "advanced",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "risk", "cycles"],
+      "aliases": ["marks", "howard marks", "second level thinking", "oaktree capital", "market cycles", "distressed debt"],
+      "related": ["credit-spread", "high-yield-bond", "volatility", "behavioral-biases", "dalio-principles"],
+      "rules_of_thumb": [
+        {"label": "Second-level thinking test", "value": "Not 'is this good?' but 'is this better or worse than what's priced in?'", "note": "Consensus knowledge is already in the price — your edge requires being different AND correct"},
+        {"label": "Risk proxy indicators", "value": "Tight spreads + low VIX + aggressive deal terms + 'everyone knows' narratives", "note": "When these cluster, risk is high even if recent volatility is low"},
+        {"label": "Cycle positioning", "value": "More aggressive when pessimism is widespread and prices are depressed", "note": "The contrarian move is buying during fear as often as selling during greed"},
+        {"label": "Downside control first", "value": "'If we avoid the losers, the winners take care of themselves'", "note": "Expected return is irrelevant if the distribution of outcomes includes permanent capital loss"}
+      ],
+      "pitfalls": [
+        "Marks is not a perma-bear — his framework calls for maximum aggressiveness when prices are depressed and pessimism is widespread. Misreading this leads to sitting out bull markets.",
+        "Second-level thinking does not mean being contrarian for its own sake — sometimes consensus is right. The requirement is independent analysis, which often but not always leads to contrarian conclusions.",
+        "Marks explicitly states he cannot predict when markets will peak — his framework identifies elevated risk levels, not correction timing."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Oaktree Capital", "title": "Marks Memos (free archive, 1990–present)", "url": "https://www.oaktreecapital.com/insights/memos"},
+        {"type": "deep_dive", "source": "Howard Marks", "title": "The Most Important Thing (book)", "url": "https://www.columbiauniversitypress.com/9780231153683"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "graham-value",
+      "title": "Benjamin Graham — Margin of Safety and Mr. Market",
+      "subtitle": "Buy at a significant discount to intrinsic value; treat market prices as opportunities, not signals of truth.",
+      "body": "interviews/graham-value.md",
+      "difficulty": "intermediate",
+      "tags": ["investors", "philosophy", "wisdom", "strategy", "value"],
+      "aliases": ["graham", "benjamin graham", "margin of safety", "mr market", "intelligent investor", "net net stocks", "security analysis"],
+      "related": ["pe-ratio", "pb-ratio", "fcf", "buffett-circle-of-competence", "marks-risk"],
+      "rules_of_thumb": [
+        {"label": "Margin of safety", "value": "Buy significantly below conservative intrinsic value estimate", "note": "The more uncertain the valuation, the larger the required discount — 20–30% for stable businesses, 40–50%+ for uncertain ones"},
+        {"label": "Mr. Market test", "value": "Is Mr. Market offering this below what it's worth?", "note": "Treat market prices as input to your decision when they're attractive, not as signals of what's true"},
+        {"label": "Net-net screen", "value": "Current assets − all liabilities > market cap", "note": "The most extreme form of value investing — buying below liquidation value of liquid assets alone"},
+        {"label": "Intrinsic value is a range", "value": "Use multiple methods (earnings power, book value, replacement cost)", "note": "Convergence of multiple conservative methods increases confidence; divergence signals uncertainty"}
+      ],
+      "pitfalls": [
+        "Graham evolved beyond net-net deep value later in life — buying companies simply because they're statistically cheap doesn't work if the business quality is genuinely poor.",
+        "Value investing appears 'dead' in any period when growth stocks massively outperform; the principle (buy below intrinsic value) is regime-independent even when cheap stocks are in a long cycle of underperformance.",
+        "The Intelligent Investor's specific stock examples are dated; the Mr. Market allegory and margin of safety concept are as applicable now as in 1949."
+      ],
+      "external_links": [
+        {"type": "deep_dive", "source": "Benjamin Graham", "title": "The Intelligent Investor (book — updated with commentary by Jason Zweig)", "url": "https://www.harpercollins.com/products/the-intelligent-investor-rev-ed-benjamin-grahamjason-zweig"},
+        {"type": "deep_dive", "source": "Benjamin Graham / David Dodd", "title": "Security Analysis (book)", "url": "https://www.mhprofessional.com/security-analysis-seventh-edition-9781264932665-usa"}
+      ],
+      "updated": "2026-05-06"
+    }
+  ]
+}

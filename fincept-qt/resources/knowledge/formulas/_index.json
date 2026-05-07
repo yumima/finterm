@@ -1,0 +1,1161 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "formulas",
+    "label": "FORMULAS",
+    "description": "Interactive formula library — every key ratio and metric with variables, worked examples, and calculators.",
+    "order": 5
+  },
+  "entries": [
+    {
+      "id": "wacc",
+      "title": "WACC",
+      "subtitle": "Weighted Average Cost of Capital — the blended required return on a firm's capital.",
+      "body": "formulas/wacc.md",
+      "difficulty": "intermediate",
+      "abbreviation": "WACC",
+      "tags": ["corporate-finance", "valuation", "dcf"],
+      "aliases": ["weighted average cost of capital", "discount rate", "hurdle rate", "cost of capital"],
+      "related": ["dcf", "capm", "beta-formula", "gordon-growth"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See valuation metrics"}
+      ],
+      "live_examples": [
+        {"label": "AAPL beta", "ticker": "AAPL", "metric": "beta"},
+        {"label": "AAPL dividend yield", "ticker": "AAPL", "metric": "dividend_yield"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Typical range (US large cap)", "value": "7–12%", "note": "Higher for riskier companies"},
+        {"label": "Risk-free rate component", "value": "4–5%", "note": "Current 10-year Treasury"},
+        {"label": "Equity risk premium", "value": "5–6%", "note": "Historical US ERP"}
+      ],
+      "pitfalls": [
+        "Using book-value weights instead of market-value weights — overstates debt cost for leveraged firms.",
+        "Ignoring the tax shield on debt — after-tax cost of debt = rate × (1 - tax rate).",
+        "Applying the same WACC to all divisions of a conglomerate — each business has its own risk profile.",
+        "Holding WACC constant across all projection years in a DCF — capital structure and rates evolve."
+      ],
+      "calculator": {
+        "kind": "wacc",
+        "numerator_label": "After-tax cost of debt × Debt weight + Cost of equity × Equity weight",
+        "denominator_label": "Not applicable (WACC is additive)",
+        "result_label": "WACC",
+        "result_format": "percent",
+        "numerator_default": 0.0,
+        "denominator_default": 0.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "WACC Explained", "url": "https://www.investopedia.com/terms/w/wacc.asp"},
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "Cost of Capital", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/wacc.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "capm",
+      "title": "CAPM",
+      "subtitle": "Capital Asset Pricing Model — derives required equity return from beta and the equity risk premium.",
+      "body": "formulas/capm.md",
+      "difficulty": "intermediate",
+      "abbreviation": "CAPM",
+      "tags": ["corporate-finance", "valuation", "risk"],
+      "aliases": ["capital asset pricing model", "cost of equity", "security market line", "sml"],
+      "related": ["wacc", "beta-formula", "dcf", "treynor-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "Check beta and cost of equity"}
+      ],
+      "live_examples": [
+        {"label": "AAPL beta", "ticker": "AAPL", "metric": "beta"},
+        {"label": "MSFT beta", "ticker": "MSFT", "metric": "beta"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Risk-free rate (10y UST)", "value": "4–5%", "note": "Use 10-year maturity to match investment horizon"},
+        {"label": "Equity risk premium (US)", "value": "5–6%", "note": "Damodaran implied ERP"},
+        {"label": "Typical large-cap Re", "value": "8–12%", "note": "Depends on beta and ERP"}
+      ],
+      "pitfalls": [
+        "Using the 3-month T-bill as Rf for a long-horizon DCF — match maturity to cash flow duration.",
+        "Taking beta from a 1-year daily regression — too noisy; use 3–5 year monthly betas.",
+        "Applying a single global ERP to emerging market equities without a country risk premium.",
+        "Confusing expected return (ex ante) with realized return (ex post)."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Rf + β × ERP",
+        "denominator_label": "Not applicable (CAPM is additive)",
+        "result_label": "Cost of Equity (Re)",
+        "result_format": "percent",
+        "numerator_default": 4.5,
+        "denominator_default": 0.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Capital Asset Pricing Model (CAPM)", "url": "https://www.investopedia.com/terms/c/capm.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "dcf",
+      "title": "DCF",
+      "subtitle": "Discounted Cash Flow — intrinsic value as the present value of future free cash flows.",
+      "body": "formulas/dcf.md",
+      "difficulty": "advanced",
+      "abbreviation": "DCF",
+      "tags": ["valuation", "corporate-finance", "dcf"],
+      "aliases": ["discounted cash flow", "intrinsic value", "present value analysis", "npv analysis"],
+      "related": ["wacc", "free-cash-flow-formula", "gordon-growth", "capm"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"},
+        {"screen": "markets", "label": "Markets · stock detail"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "Build a DCF model"}
+      ],
+      "live_examples": [
+        {"label": "AAPL free cash flow", "ticker": "AAPL", "metric": "free_cash_flow"},
+        {"label": "MSFT free cash flow", "ticker": "MSFT", "metric": "free_cash_flow"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Terminal value share of total", "value": "60–80%", "note": "Small changes in g or r dominate DCF value"},
+        {"label": "Terminal growth rate", "value": "2–3%", "note": "Should not exceed long-run nominal GDP growth"},
+        {"label": "Forecast horizon", "value": "5–10 years", "note": "Longer for high-growth companies"}
+      ],
+      "pitfalls": [
+        "Terminal value often represents 70–80% of total DCF value — always run sensitivity tables on g and r.",
+        "Using nominal cash flows with a real discount rate (or vice versa).",
+        "Projecting FCF as a revenue percentage without ensuring capex and WC assumptions are consistent.",
+        "Setting terminal growth above long-run GDP — implies the company eventually dwarfs the global economy."
+      ],
+      "calculator": {
+        "kind": "dcf",
+        "numerator_label": "Sum of PV(FCF years 1–n) + PV(Terminal Value)",
+        "denominator_label": "Not applicable (DCF is a sum)",
+        "result_label": "Enterprise Value",
+        "result_format": "currency",
+        "numerator_default": 0.0,
+        "denominator_default": 0.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Discounted Cash Flow (DCF)", "url": "https://www.investopedia.com/terms/d/dcf.asp"},
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "DCF Valuation", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/dcf.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "gordon-growth",
+      "title": "Gordon Growth Model",
+      "subtitle": "Dividend Discount Model — stock price as the present value of growing perpetual dividends.",
+      "body": "formulas/gordon-growth.md",
+      "difficulty": "intermediate",
+      "abbreviation": "GGM / DDM",
+      "tags": ["valuation", "dividends", "equities"],
+      "aliases": ["gordon growth model", "dividend discount model", "ddm", "growing perpetuity", "constant growth model"],
+      "related": ["dcf", "wacc", "capm", "pe-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"}
+      ],
+      "actions": [
+        {"label": "Open KO in Equity Research", "screen": "equity_research", "ticker": "KO", "hint": "Classic dividend payer for DDM"}
+      ],
+      "live_examples": [
+        {"label": "KO dividend yield", "ticker": "KO", "metric": "dividend_yield"},
+        {"label": "JNJ dividend yield", "ticker": "JNJ", "metric": "dividend_yield"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Terminal growth rate (perpetuity)", "value": "2–3%", "note": "Must be less than discount rate r"},
+        {"label": "Typical dividend growth (consumer staples)", "value": "4–6%", "note": "Steady dividend growers"},
+        {"label": "Sensitivity rule", "value": "r − g spread", "note": "Halving the spread doubles the fair value"}
+      ],
+      "pitfalls": [
+        "Setting g ≥ r — produces a negative or infinite result; meaningless.",
+        "Using current dividend yield (D/P) instead of forward dividend D₁ = D₀ × (1+g).",
+        "Applying to high-growth companies — constant-growth assumption is invalid when g is expected to change.",
+        "Ignoring share buybacks — companies returning cash via buybacks are undervalued by a pure DDM."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "D₁ — forward annual dividend ($)",
+        "denominator_label": "r − g (cost of equity minus growth rate)",
+        "result_label": "Intrinsic Value (P)",
+        "result_format": "currency",
+        "numerator_default": 2.10,
+        "denominator_default": 0.04
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Gordon Growth Model", "url": "https://www.investopedia.com/terms/g/gordongrowthmodel.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "sharpe-ratio",
+      "title": "Sharpe Ratio",
+      "subtitle": "Risk-adjusted return per unit of total volatility — the universal fund comparison metric.",
+      "body": "formulas/sharpe-ratio.md",
+      "difficulty": "beginner",
+      "abbreviation": "Sharpe",
+      "tags": ["risk", "performance", "portfolio"],
+      "aliases": ["sharpe ratio", "reward-to-variability ratio", "risk-adjusted return"],
+      "related": ["sortino-ratio", "treynor-ratio", "information-ratio", "max-drawdown"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"},
+        {"screen": "watchlist", "label": "Watchlist · performance columns"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Benchmark Sharpe ratio"}
+      ],
+      "live_examples": [
+        {"label": "SPY return", "ticker": "SPY", "metric": "return_1y"},
+        {"label": "SPY volatility", "ticker": "SPY", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Acceptable", "value": "0.5 – 1.0", "note": "Typical passive equity funds"},
+        {"label": "Good", "value": "1.0 – 2.0", "note": "Target for active strategies"},
+        {"label": "Excellent", "value": "> 2.0", "note": "Rare over multi-year periods in liquid markets"}
+      ],
+      "pitfalls": [
+        "Comparing Sharpe ratios computed over different periods without annualizing consistently.",
+        "Not subtracting the risk-free rate — inflates Sharpe when rates are high.",
+        "Using Sharpe for non-normal return distributions (options selling, merger arb) — overstates risk-adjusted performance.",
+        "Interpreting a high Sharpe as 'safe' — large drawdowns can coexist with high Sharpe."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Portfolio Return − Risk-Free Rate (%)",
+        "denominator_label": "Portfolio Volatility σ (%)",
+        "result_label": "Sharpe Ratio",
+        "result_format": "ratio",
+        "numerator_default": 7.5,
+        "denominator_default": 15.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Sharpe Ratio", "url": "https://www.investopedia.com/terms/s/sharperatio.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "sortino-ratio",
+      "title": "Sortino Ratio",
+      "subtitle": "Risk-adjusted return penalizing only downside volatility — an improvement over Sharpe for asymmetric strategies.",
+      "body": "formulas/sortino-ratio.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Sortino",
+      "tags": ["risk", "performance", "portfolio"],
+      "aliases": ["sortino ratio", "downside deviation ratio"],
+      "related": ["sharpe-ratio", "treynor-ratio", "information-ratio", "var-parametric"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Compare risk metrics"}
+      ],
+      "live_examples": [
+        {"label": "SPY return", "ticker": "SPY", "metric": "return_1y"},
+        {"label": "SPY volatility", "ticker": "SPY", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Acceptable", "value": "> 1.0", "note": "Earns excess return per unit of downside risk"},
+        {"label": "Strong", "value": "> 2.0", "note": "Top-decile risk-adjusted performance"},
+        {"label": "Sortino vs Sharpe", "value": "Sortino ≥ Sharpe", "note": "Sortino is always ≥ Sharpe for the same portfolio"}
+      ],
+      "pitfalls": [
+        "Using total volatility instead of downside deviation — that is Sharpe, not Sortino.",
+        "Setting the target return to zero when a meaningful hurdle exists.",
+        "Comparing Sortinos computed with different target returns.",
+        "Over-relying on Sortino for short return histories — downside deviation is noisy with few observations."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Portfolio Return − Target Return (%)",
+        "denominator_label": "Downside Deviation σ_d (%)",
+        "result_label": "Sortino Ratio",
+        "result_format": "ratio",
+        "numerator_default": 7.5,
+        "denominator_default": 6.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Sortino Ratio", "url": "https://www.investopedia.com/terms/s/sortinoratio.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "information-ratio",
+      "title": "Information Ratio",
+      "subtitle": "Active return per unit of tracking error — the primary measure of active management consistency.",
+      "body": "formulas/information-ratio.md",
+      "difficulty": "intermediate",
+      "abbreviation": "IR",
+      "tags": ["performance", "active-management", "portfolio"],
+      "aliases": ["information ratio", "appraisal ratio", "active management ratio"],
+      "related": ["sharpe-ratio", "sortino-ratio", "r-squared", "beta-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · performance"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Use as benchmark"}
+      ],
+      "live_examples": [
+        {"label": "SPY benchmark return", "ticker": "SPY", "metric": "return_1y"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Weak", "value": "0 – 0.30", "note": "Very few active managers sustain this"},
+        {"label": "Acceptable", "value": "0.30 – 0.50", "note": "Median active fund over full cycles"},
+        {"label": "Good", "value": "0.50 – 0.75", "note": "Top-quartile active management"},
+        {"label": "Excellent", "value": "> 0.75", "note": "Top-decile; rare over multi-year periods"}
+      ],
+      "pitfalls": [
+        "High IR from low tracking error — hugging the benchmark can produce a respectable IR on tiny active return.",
+        "Using a mismatched benchmark — an equity fund benchmarked to a bond index produces meaningless IR.",
+        "Treating IR as stationary — it degrades if the manager's edge becomes crowded.",
+        "Annualizing tracking error incorrectly — multiply monthly TE by sqrt(12) only when returns are approximately independent."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Portfolio Return − Benchmark Return (%)",
+        "denominator_label": "Tracking Error (%)",
+        "result_label": "Information Ratio",
+        "result_format": "ratio",
+        "numerator_default": 2.5,
+        "denominator_default": 4.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Information Ratio", "url": "https://www.investopedia.com/terms/i/informationratio.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "treynor-ratio",
+      "title": "Treynor Ratio",
+      "subtitle": "Excess return per unit of systematic risk (beta) — appropriate for funds held within a diversified portfolio.",
+      "body": "formulas/treynor-ratio.md",
+      "difficulty": "intermediate",
+      "abbreviation": "Treynor",
+      "tags": ["performance", "risk", "portfolio"],
+      "aliases": ["treynor ratio", "reward-to-volatility ratio"],
+      "related": ["sharpe-ratio", "sortino-ratio", "beta-formula", "capm"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Benchmark Treynor"}
+      ],
+      "live_examples": [
+        {"label": "AAPL beta", "ticker": "AAPL", "metric": "beta"},
+        {"label": "SPY return", "ticker": "SPY", "metric": "return_1y"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Market Treynor", "value": "= ERP", "note": "By definition, market β = 1"},
+        {"label": "Use case", "value": "Fund within a portfolio", "note": "Use Sharpe for standalone investments"},
+        {"label": "Higher is better", "value": "Compare within asset class", "note": "Absolute level less meaningful than relative ranking"}
+      ],
+      "pitfalls": [
+        "Using Treynor for a standalone investment — total volatility matters; use Sharpe instead.",
+        "Using beta estimated over too short a period — 60-month betas are standard.",
+        "Comparing Treynor across funds benchmarked to different indices.",
+        "A positive Treynor in a bear market may simply reflect low beta, not skill."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Portfolio Return − Risk-Free Rate (%)",
+        "denominator_label": "Portfolio Beta",
+        "result_label": "Treynor Ratio",
+        "result_format": "ratio",
+        "numerator_default": 8.5,
+        "denominator_default": 0.80
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Treynor Ratio", "url": "https://www.investopedia.com/terms/t/treynorratio.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "kelly-criterion",
+      "title": "Kelly Criterion",
+      "subtitle": "Optimal fraction of capital to risk per bet to maximize long-run compounded wealth.",
+      "body": "formulas/kelly-criterion.md",
+      "difficulty": "advanced",
+      "abbreviation": "Kelly",
+      "tags": ["risk", "position-sizing", "trading"],
+      "aliases": ["kelly criterion", "kelly formula", "optimal bet size", "kelly fraction"],
+      "related": ["position-size-formula", "var-parametric", "max-drawdown", "sharpe-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk management"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See risk/reward setup"}
+      ],
+      "live_examples": [
+        {"label": "AAPL volatility", "ticker": "AAPL", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Practical usage", "value": "Half-Kelly (f*/2)", "note": "Reduces variance; accounts for edge estimation error"},
+        {"label": "f* > 1", "value": "Leverage required", "note": "Use with extreme caution"},
+        {"label": "f* < 0", "value": "Negative edge", "note": "Do not bet"}
+      ],
+      "pitfalls": [
+        "Treating estimated probabilities as exact — Kelly is very sensitive to p and b inputs.",
+        "Using full Kelly in leveraged or illiquid instruments — produces terrifying drawdowns.",
+        "Ignoring correlation across simultaneous positions — multi-asset Kelly requires a covariance matrix.",
+        "Applying Kelly to strategies with non-stationary edge."
+      ],
+      "calculator": {
+        "kind": "kelly",
+        "numerator_label": "b × p − q  (net odds × win prob − lose prob)",
+        "denominator_label": "b (net odds)",
+        "result_label": "Kelly Fraction f*",
+        "result_format": "percent",
+        "numerator_default": 0.375,
+        "denominator_default": 1.5
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Kelly Criterion", "url": "https://www.investopedia.com/articles/trading/04/091504.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "var-parametric",
+      "title": "Parametric VaR",
+      "subtitle": "Value at Risk — maximum likely loss over a horizon at a given confidence level, assuming normal returns.",
+      "body": "formulas/var-parametric.md",
+      "difficulty": "intermediate",
+      "abbreviation": "VaR",
+      "tags": ["risk", "portfolio", "regulatory"],
+      "aliases": ["value at risk", "var", "parametric var", "normal var"],
+      "related": ["cvar", "max-drawdown", "sortino-ratio", "sharpe-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "See portfolio risk metrics"}
+      ],
+      "live_examples": [
+        {"label": "SPY volatility", "ticker": "SPY", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Common confidence level (trading)", "value": "99%", "note": "Basel III standard"},
+        {"label": "Common confidence level (risk mgmt)", "value": "95%", "note": "Daily monitoring"},
+        {"label": "Scaling rule", "value": "VaR_t = VaR_1 × √t", "note": "Assumes i.i.d. returns"}
+      ],
+      "pitfalls": [
+        "Treating VaR as the maximum possible loss — it is a percentile threshold, not a ceiling.",
+        "Using parametric VaR for options-heavy portfolios — normal distribution assumption breaks down.",
+        "Failing to account for correlation breakdown in stress periods.",
+        "Annualizing daily VaR by multiplying by 252 instead of sqrt(252)."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Portfolio Value × σ × z-score",
+        "denominator_label": "Not applicable (multiply by √t for multi-day)",
+        "result_label": "VaR ($)",
+        "result_format": "currency",
+        "numerator_default": 27960.0,
+        "denominator_default": 1.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Value At Risk (VaR)", "url": "https://www.investopedia.com/terms/v/var.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "cvar",
+      "title": "CVaR / Expected Shortfall",
+      "subtitle": "Average loss in the tail beyond VaR — answers how bad it gets when VaR is breached.",
+      "body": "formulas/cvar.md",
+      "difficulty": "advanced",
+      "abbreviation": "CVaR / ES",
+      "tags": ["risk", "portfolio", "regulatory"],
+      "aliases": ["cvar", "conditional value at risk", "expected shortfall", "es", "tail risk", "average var"],
+      "related": ["var-parametric", "max-drawdown", "kelly-criterion", "sortino-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "View tail risk metrics"}
+      ],
+      "live_examples": [
+        {"label": "SPY volatility", "ticker": "SPY", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "CVaR vs VaR ratio (normal)", "value": "~1.2–1.3×", "note": "At 95% confidence, normal tails"},
+        {"label": "Basel IV metric", "value": "ES at 97.5%", "note": "Replaced 99% VaR for market risk capital"},
+        {"label": "Fat tails", "value": "CVaR/VaR > 2×", "note": "Equity portfolios in crisis periods"}
+      ],
+      "pitfalls": [
+        "Confusing CVaR with 'the worst-case loss' — it is the average of the tail, not an absolute worst case.",
+        "Estimating CVaR from short return histories — the tail is defined by few observations; very noisy.",
+        "Ignoring the distinction between parametric and historical CVaR during stress periods.",
+        "Treating CVaR as complete without scenario analysis — black-swan events may not appear in any sample."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "σ × φ(z) / (1−α) × Portfolio Value",
+        "denominator_label": "Not applicable (CVaR is a mean, not a ratio)",
+        "result_label": "CVaR ($)",
+        "result_format": "currency",
+        "numerator_default": 24552.0,
+        "denominator_default": 1.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Conditional Value at Risk (CVaR)", "url": "https://www.investopedia.com/terms/c/conditional_value_at_risk.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "max-drawdown",
+      "title": "Maximum Drawdown",
+      "subtitle": "Largest peak-to-trough portfolio decline over a period — the most intuitive measure of downside risk.",
+      "body": "formulas/max-drawdown.md",
+      "difficulty": "beginner",
+      "abbreviation": "MDD",
+      "tags": ["risk", "performance", "portfolio"],
+      "aliases": ["maximum drawdown", "max drawdown", "mdd", "peak to trough", "calmar ratio"],
+      "related": ["var-parametric", "cvar", "sharpe-ratio", "kelly-criterion"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · performance"},
+        {"screen": "watchlist", "label": "Watchlist · risk columns"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Historical drawdown chart"}
+      ],
+      "live_examples": [
+        {"label": "SPY 52-week range", "ticker": "SPY", "metric": "week_52_range"},
+        {"label": "AAPL 52-week range", "ticker": "AAPL", "metric": "week_52_range"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Typical equity bear market", "value": "20–35%", "note": "S&P 500 in a standard recession"},
+        {"label": "Recovery asymmetry", "value": "50% drawdown = 100% recovery needed", "note": "Losses compound in reverse"},
+        {"label": "Calmar ratio target", "value": "> 1.0", "note": "Annualized return exceeds max drawdown magnitude"}
+      ],
+      "pitfalls": [
+        "Measuring MDD over a short history that excludes known crisis periods.",
+        "Treating MDD as complete downside risk without considering CVaR or scenario analysis.",
+        "Comparing MDD across strategies with different time periods.",
+        "Ignoring time to recovery — depth and duration are both relevant."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Trough Value − Peak Value ($)",
+        "denominator_label": "Peak Value ($)",
+        "result_label": "Maximum Drawdown",
+        "result_format": "percent",
+        "numerator_default": -131.87,
+        "denominator_default": 479.98
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Maximum Drawdown (MDD)", "url": "https://www.investopedia.com/terms/m/maximum-drawdown-mdd.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "pe-formula",
+      "title": "P/E Formula",
+      "subtitle": "Price-to-Earnings — how much investors pay per dollar of earnings, with full worked example.",
+      "body": "formulas/pe-formula.md",
+      "difficulty": "beginner",
+      "abbreviation": "P/E",
+      "tags": ["valuation", "equities", "ratios"],
+      "aliases": ["price to earnings", "p/e ratio", "price-earnings", "earnings multiple", "pe ratio"],
+      "related": ["ev-ebitda-formula", "peg-formula", "roe-formula", "free-cash-flow-formula"],
+      "seen_in": [
+        {"screen": "markets", "label": "Markets · stock detail card"},
+        {"screen": "equity_research", "label": "Equity Research · valuation"},
+        {"screen": "watchlist", "label": "Watchlist · ratio columns"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Markets", "screen": "markets", "ticker": "AAPL", "hint": "See current P/E"},
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "Full valuation metrics"}
+      ],
+      "live_examples": [
+        {"label": "AAPL P/E", "ticker": "AAPL", "metric": "pe_ratio"},
+        {"label": "MSFT P/E", "ticker": "MSFT", "metric": "pe_ratio"},
+        {"label": "AAPL fwd P/E", "ticker": "AAPL", "metric": "forward_pe"}
+      ],
+      "rules_of_thumb": [
+        {"label": "S&P 500 long-run avg", "value": "~16×"},
+        {"label": "Mature sector (industrials)", "value": "10–20×"},
+        {"label": "Growth software", "value": "30–60×", "note": "Justified by growth rate"},
+        {"label": "Negative EPS", "value": "N/M", "note": "P/E is meaningless when earnings are negative"}
+      ],
+      "pitfalls": [
+        "Comparing P/E across sectors without context (banks vs SaaS — useless).",
+        "Using trailing P/E at cyclical troughs — EPS is depressed; the stock looks expensive when it may not be.",
+        "Ignoring leverage — two companies with the same P/E can have very different risk profiles.",
+        "Trusting adjusted EPS without checking what management excluded."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Share price ($)",
+        "denominator_label": "EPS (TTM or forward, $)",
+        "result_label": "P/E",
+        "result_format": "ratio",
+        "numerator_default": 175.0,
+        "denominator_default": 6.3
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Price-to-Earnings (P/E) Ratio", "url": "https://www.investopedia.com/terms/p/price-earningsratio.asp"},
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "Price-Earnings Ratio", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/pe.html"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "ev-ebitda-formula",
+      "title": "EV/EBITDA Formula",
+      "subtitle": "Enterprise value as a multiple of operating earnings — compares companies across capital structures.",
+      "body": "formulas/ev-ebitda-formula.md",
+      "difficulty": "intermediate",
+      "abbreviation": "EV/EBITDA",
+      "tags": ["valuation", "equities", "ratios", "corporate-finance"],
+      "aliases": ["ev ebitda", "enterprise value to ebitda", "ebitda multiple", "ev multiple"],
+      "related": ["pe-formula", "peg-formula", "free-cash-flow-formula", "dcf"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"},
+        {"screen": "markets", "label": "Markets · company data"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See EV/EBITDA"},
+        {"label": "Open MSFT in Equity Research", "screen": "equity_research", "ticker": "MSFT", "hint": "Compare multiples"}
+      ],
+      "live_examples": [
+        {"label": "AAPL EV/EBITDA", "ticker": "AAPL", "metric": "ev_ebitda"},
+        {"label": "MSFT EV/EBITDA", "ticker": "MSFT", "metric": "ev_ebitda"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Technology (mature)", "value": "15–25×"},
+        {"label": "Industrials", "value": "8–12×"},
+        {"label": "Energy", "value": "4–8×"},
+        {"label": "Capital-intensive warning", "value": "Check CapEx", "note": "EBITDA overstates FCF for high-capex businesses"}
+      ],
+      "pitfalls": [
+        "Treating EBITDA as a cash flow proxy for capex-heavy businesses — a pipeline company with $500 mn EBITDA and $450 mn capex has almost no FCF.",
+        "Not using market-value debt — if bonds trade at a discount, using face value overstates debt in EV.",
+        "Including operating lease debt but not adjusting EBITDA — stay consistent post-IFRS 16/ASC 842.",
+        "Comparing across GAAP and IFRS reporters without adjustment."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Enterprise Value ($mn) — Market Cap + Debt − Cash",
+        "denominator_label": "EBITDA ($mn) — trailing twelve months",
+        "result_label": "EV/EBITDA",
+        "result_format": "ratio",
+        "numerator_default": 26500.0,
+        "denominator_default": 2500.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "EV/EBITDA", "url": "https://www.investopedia.com/terms/e/ebitda-ev-multiple.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "peg-formula",
+      "title": "PEG Ratio",
+      "subtitle": "P/E adjusted for expected growth — penalizes expensive multiples without the earnings growth to justify them.",
+      "body": "formulas/peg-formula.md",
+      "difficulty": "beginner",
+      "abbreviation": "PEG",
+      "tags": ["valuation", "equities", "ratios", "growth"],
+      "aliases": ["peg ratio", "price earnings growth", "price-earnings-to-growth", "growth-adjusted pe"],
+      "related": ["pe-formula", "ev-ebitda-formula", "roe-formula", "cagr"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · valuation"},
+        {"screen": "watchlist", "label": "Watchlist · ratio columns"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See PEG ratio"}
+      ],
+      "live_examples": [
+        {"label": "AAPL P/E", "ticker": "AAPL", "metric": "pe_ratio"},
+        {"label": "AAPL fwd P/E", "ticker": "AAPL", "metric": "forward_pe"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Lynch's fair value", "value": "1.0", "note": "Multiple equals growth rate"},
+        {"label": "Potentially cheap", "value": "< 1.0", "note": "Growth more than justifies P/E"},
+        {"label": "Expensive", "value": "> 2.0", "note": "Even after growth adjustment"}
+      ],
+      "pitfalls": [
+        "Using a single-year growth estimate instead of a multi-year CAGR.",
+        "Applying PEG to mature, low-growth companies — not meaningful below ~10% EPS growth.",
+        "Taking analyst consensus growth forecasts at face value — systematically optimistic.",
+        "Ignoring quality — two stocks with identical PEGs can have very different return profiles."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Trailing or Forward P/E",
+        "denominator_label": "Expected EPS Growth Rate (%)",
+        "result_label": "PEG Ratio",
+        "result_format": "ratio",
+        "numerator_default": 25.0,
+        "denominator_default": 15.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Price/Earnings-to-Growth (PEG) Ratio", "url": "https://www.investopedia.com/terms/p/pegratio.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "r-squared",
+      "title": "R-Squared",
+      "subtitle": "Coefficient of determination — the fraction of portfolio variance explained by the benchmark.",
+      "body": "formulas/r-squared.md",
+      "difficulty": "intermediate",
+      "abbreviation": "R²",
+      "tags": ["statistics", "performance", "portfolio"],
+      "aliases": ["r squared", "r2", "coefficient of determination", "r-squared", "variance explained"],
+      "related": ["beta-formula", "information-ratio", "sharpe-ratio", "treynor-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Equity Research", "screen": "equity_research", "ticker": "SPY", "hint": "Benchmark for R² calculation"}
+      ],
+      "live_examples": [
+        {"label": "SPY return", "ticker": "SPY", "metric": "return_1y"},
+        {"label": "AAPL beta", "ticker": "AAPL", "metric": "beta"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Closet indexer warning", "value": "R² > 85%", "note": "Fund moves nearly in lockstep with benchmark"},
+        {"label": "Meaningful active risk", "value": "R² < 70%", "note": "Fund takes substantial independent positions"},
+        {"label": "Hedge fund / macro", "value": "R² < 50%", "note": "Largely independent of benchmark"}
+      ],
+      "pitfalls": [
+        "High R² does not imply good performance — a closet indexer underperforming by 1% annually can have R² ≈ 0.99.",
+        "Using R² to infer causation — correlation is not causation.",
+        "Computing R² over too short a period — 36–60 months is standard.",
+        "R² is always non-negative — it cannot tell you the direction of the relationship."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Cov(Portfolio, Benchmark)²",
+        "denominator_label": "Var(Portfolio) × Var(Benchmark)",
+        "result_label": "R-Squared",
+        "result_format": "percent",
+        "numerator_default": 0.0,
+        "denominator_default": 0.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "R-Squared", "url": "https://www.investopedia.com/terms/r/r-squared.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "beta-formula",
+      "title": "Beta Formula",
+      "subtitle": "Systematic risk measure — how much a stock moves per 1% move in the market.",
+      "body": "formulas/beta-formula.md",
+      "difficulty": "beginner",
+      "abbreviation": "β",
+      "tags": ["risk", "equities", "statistics"],
+      "aliases": ["beta", "systematic risk", "market sensitivity", "covariance over variance"],
+      "related": ["capm", "wacc", "treynor-ratio", "r-squared"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk metrics"},
+        {"screen": "markets", "label": "Markets · stock detail"},
+        {"screen": "watchlist", "label": "Watchlist · risk columns"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Markets", "screen": "markets", "ticker": "AAPL", "hint": "See beta in risk section"},
+        {"label": "Open NVDA in Equity Research", "screen": "equity_research", "ticker": "NVDA", "hint": "High-beta example"}
+      ],
+      "live_examples": [
+        {"label": "AAPL beta", "ticker": "AAPL", "metric": "beta"},
+        {"label": "MSFT beta", "ticker": "MSFT", "metric": "beta"},
+        {"label": "JNJ beta (defensive)", "ticker": "JNJ", "metric": "beta"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Market beta", "value": "1.0", "note": "By definition"},
+        {"label": "Defensive stocks", "value": "0.3 – 0.7", "note": "Utilities, consumer staples"},
+        {"label": "High-growth tech", "value": "1.3 – 2.0", "note": "Amplifies market moves"}
+      ],
+      "pitfalls": [
+        "Using daily returns for beta estimation — microstructure noise biases beta downward; use monthly.",
+        "Not adjusting for dividends — use total return series.",
+        "Assuming beta is stable — it changes with leverage, business mix, and market regime.",
+        "Applying historical beta to a company that underwent major transformation."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Cov(Stock returns, Market returns)",
+        "denominator_label": "Var(Market returns)",
+        "result_label": "Beta (β)",
+        "result_format": "ratio",
+        "numerator_default": 0.00296,
+        "denominator_default": 0.00185
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Beta", "url": "https://www.investopedia.com/terms/b/beta.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "duration-formula",
+      "title": "Duration",
+      "subtitle": "Macaulay and Modified Duration — bond price sensitivity to interest rate changes.",
+      "body": "formulas/duration-formula.md",
+      "difficulty": "intermediate",
+      "abbreviation": "D_mod",
+      "tags": ["fixed-income", "bonds", "risk", "rates"],
+      "aliases": ["duration", "macaulay duration", "modified duration", "dv01", "interest rate sensitivity", "dollar duration"],
+      "related": ["black-scholes", "compound-interest", "dcf"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · bond analytics"}
+      ],
+      "actions": [
+        {"label": "Open TLT in Markets", "screen": "markets", "ticker": "TLT", "hint": "Long-duration Treasury ETF"},
+        {"label": "Open SHY in Markets", "screen": "markets", "ticker": "SHY", "hint": "Short-duration comparison"}
+      ],
+      "live_examples": [
+        {"label": "TLT price", "ticker": "TLT", "metric": "price"},
+        {"label": "SHY price", "ticker": "SHY", "metric": "price"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Zero-coupon bond", "value": "Duration = Maturity", "note": "No interim cash flows"},
+        {"label": "10-year Treasury (4.5% coupon)", "value": "~8 years", "note": "Coupon payments shorten duration"},
+        {"label": "DV01 rule", "value": "1 bp move × duration × price", "note": "Dollar sensitivity per basis point"}
+      ],
+      "pitfalls": [
+        "Confusing Macaulay Duration (time measure) with Modified Duration (price sensitivity) — they are related but different.",
+        "Ignoring convexity for large rate moves — duration is a linear approximation.",
+        "Using Modified Duration for callable or puttable bonds — use Effective Duration instead.",
+        "Mismatching the yield convention — Macaulay ÷ (1 + y/m) must match coupon frequency."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Macaulay Duration (years)",
+        "denominator_label": "1 + y/m  (yield per period + 1)",
+        "result_label": "Modified Duration",
+        "result_format": "ratio",
+        "numerator_default": 4.51,
+        "denominator_default": 1.0225
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Bond Duration", "url": "https://www.investopedia.com/terms/d/duration.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "black-scholes",
+      "title": "Black-Scholes",
+      "subtitle": "Closed-form European option pricing model — the foundational framework for all options valuation.",
+      "body": "formulas/black-scholes.md",
+      "difficulty": "advanced",
+      "abbreviation": "BSM",
+      "tags": ["options", "derivatives", "valuation"],
+      "aliases": ["black scholes", "bsm", "black-scholes-merton", "option pricing model", "european option price"],
+      "related": ["put-call-parity-formula", "duration-formula", "var-parametric"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · options"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "View options chain"}
+      ],
+      "live_examples": [
+        {"label": "AAPL volatility", "ticker": "AAPL", "metric": "volatility"},
+        {"label": "AAPL price", "ticker": "AAPL", "metric": "price"}
+      ],
+      "rules_of_thumb": [
+        {"label": "ATM call delta", "value": "~0.50", "note": "At-the-money option has ~50% delta"},
+        {"label": "Theta decay accelerates", "value": "Last 30 days", "note": "Time decay is fastest near expiry"},
+        {"label": "Vega peaks at ATM", "value": "Declines ITM/OTM", "note": "ATM options most sensitive to vol changes"}
+      ],
+      "pitfalls": [
+        "Treating Black-Scholes price as the 'true' price — normal distribution assumption underestimates tail risk.",
+        "Ignoring the volatility smile/skew — implied vol is not constant across strikes.",
+        "Using historical volatility instead of implied volatility for pricing.",
+        "Applying to American options without adjustment — Black-Scholes prices European options only."
+      ],
+      "calculator": {
+        "kind": "black_scholes",
+        "numerator_label": "S × N(d₁) − K × e^(−rT) × N(d₂)",
+        "denominator_label": "Not applicable (call price formula)",
+        "result_label": "Call Price (C)",
+        "result_format": "currency",
+        "numerator_default": 10.73,
+        "denominator_default": 1.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Black-Scholes Model", "url": "https://www.investopedia.com/terms/b/blackscholes.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "put-call-parity-formula",
+      "title": "Put-Call Parity",
+      "subtitle": "No-arbitrage link between European call and put prices — C − P = S − PV(K).",
+      "body": "formulas/put-call-parity-formula.md",
+      "difficulty": "intermediate",
+      "abbreviation": "PCP",
+      "tags": ["options", "derivatives", "arbitrage"],
+      "aliases": ["put call parity", "pcp", "synthetic options", "options parity"],
+      "related": ["black-scholes", "compound-interest", "duration-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · options"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "View options chain for parity check"}
+      ],
+      "live_examples": [
+        {"label": "AAPL price", "ticker": "AAPL", "metric": "price"},
+        {"label": "AAPL volatility", "ticker": "AAPL", "metric": "volatility"}
+      ],
+      "rules_of_thumb": [
+        {"label": "European options", "value": "C − P = S − PV(K)", "note": "Exact equality for European options"},
+        {"label": "American options", "value": "Inequality only", "note": "Early exercise breaks exact parity"},
+        {"label": "Dividend adjustment", "value": "Subtract PV(dividends) from S", "note": "For stocks paying discrete dividends"}
+      ],
+      "pitfalls": [
+        "Applying put-call parity to American options as if it were an equality.",
+        "Forgetting dividends — discrete dividends before expiry break the parity formula.",
+        "Treating parity deviations as vol signals — deviations in liquid markets are almost always explained by dividends, borrow, or bid-ask spreads.",
+        "Mixing discrete and continuous discounting conventions in the same formula."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "C − P (call minus put price)",
+        "denominator_label": "S − PV(K)  =  S − K×e^(−rT)",
+        "result_label": "Parity Check (should equal 0)",
+        "result_format": "currency",
+        "numerator_default": 1.94,
+        "denominator_default": 1.94
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Put-Call Parity", "url": "https://www.investopedia.com/terms/p/putcallparity.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "compound-interest",
+      "title": "Compound Interest",
+      "subtitle": "FV = PV × (1 + r)^n — the foundational time-value formula underlying all of finance.",
+      "body": "formulas/compound-interest.md",
+      "difficulty": "beginner",
+      "abbreviation": "FV",
+      "tags": ["fundamentals", "time-value", "savings"],
+      "aliases": ["compound interest", "future value", "fv formula", "time value of money", "rule of 72"],
+      "related": ["cagr", "dcf", "gordon-growth"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · education"}
+      ],
+      "actions": [
+        {"label": "Open SPY in Markets", "screen": "markets", "ticker": "SPY", "hint": "Compound returns over time"}
+      ],
+      "live_examples": [
+        {"label": "SPY 10-year return", "ticker": "SPY", "metric": "return_10y"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Rule of 72", "value": "72 ÷ rate = years to double", "note": "Quick doubling time estimate"},
+        {"label": "At 10%", "value": "~7.2 years to double", "note": "S&P 500 long-run average"},
+        {"label": "Compounding frequency", "value": "Monthly > Annual", "note": "More frequent = higher effective rate"}
+      ],
+      "pitfalls": [
+        "Confusing nominal rate with the periodic rate — 12% annual compounded monthly uses r = 1% per month.",
+        "Confusing real and nominal returns — compound nominal at nominal rate; real wealth at real return.",
+        "Treating compound interest as additive — mentally adding returns year by year understates terminal wealth.",
+        "Ignoring tax drag — taxes on dividends and realized gains each year reduce the effective compounding rate."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "PV — present value / initial investment ($)",
+        "denominator_label": "(1 + r)^n — growth factor",
+        "result_label": "Future Value (FV)",
+        "result_format": "currency",
+        "numerator_default": 10000.0,
+        "denominator_default": 1.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Compound Interest", "url": "https://www.investopedia.com/terms/c/compoundinterest.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "cagr",
+      "title": "CAGR",
+      "subtitle": "Compound Annual Growth Rate — the smoothed annual return rate that equates start value to end value over n years.",
+      "body": "formulas/cagr.md",
+      "difficulty": "beginner",
+      "abbreviation": "CAGR",
+      "tags": ["fundamentals", "returns", "valuation"],
+      "aliases": ["cagr", "compound annual growth rate", "annualized return", "geometric mean return"],
+      "related": ["compound-interest", "peg-formula", "dcf", "roe-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · financials"},
+        {"screen": "markets", "label": "Markets · stock detail"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See revenue and EPS CAGR"},
+        {"label": "Open SPY in Markets", "screen": "markets", "ticker": "SPY", "hint": "Long-run CAGR chart"}
+      ],
+      "live_examples": [
+        {"label": "AAPL return 5y", "ticker": "AAPL", "metric": "return_5y"},
+        {"label": "SPY return 10y", "ticker": "SPY", "metric": "return_10y"}
+      ],
+      "rules_of_thumb": [
+        {"label": "US large-cap equity", "value": "9–11%", "note": "Long-run nominal CAGR"},
+        {"label": "Bonds (agg)", "value": "4–6%", "note": "Long-run nominal"},
+        {"label": "Geometric vs arithmetic", "value": "Arithmetic always ≥ CAGR", "note": "Difference grows with volatility"}
+      ],
+      "pitfalls": [
+        "Using CAGR to imply smoothness — a fund with 9% CAGR could have had years of −40%.",
+        "Comparing CAGRs over different periods without adjusting for starting conditions.",
+        "Annualizing returns from less than 1 year of data — introduces extreme noise.",
+        "Ignoring reinvestment assumption — CAGR assumes all cash flows reinvested at the same rate."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "End Value / Start Value",
+        "denominator_label": "Raise to power (1/n years), then subtract 1",
+        "result_label": "CAGR",
+        "result_format": "percent",
+        "numerator_default": 18500.0,
+        "denominator_default": 10000.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Compound Annual Growth Rate (CAGR)", "url": "https://www.investopedia.com/terms/c/cagr.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "position-size-formula",
+      "title": "Position Sizing",
+      "subtitle": "Kelly / fixed fractional / R-multiple — how much capital to risk per trade.",
+      "body": "formulas/position-size-formula.md",
+      "difficulty": "intermediate",
+      "abbreviation": "f*",
+      "tags": ["trading", "risk", "position-sizing"],
+      "aliases": ["position sizing", "fixed fractional", "r multiple sizing", "risk per trade", "trade size"],
+      "related": ["kelly-criterion", "var-parametric", "max-drawdown", "sharpe-ratio"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · risk management"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See risk metrics for sizing"}
+      ],
+      "live_examples": [
+        {"label": "AAPL volatility", "ticker": "AAPL", "metric": "volatility"},
+        {"label": "AAPL ATR", "ticker": "AAPL", "metric": "atr"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Conservative risk per trade", "value": "0.5–1%", "note": "10 losses → ~9.5% account drawdown"},
+        {"label": "Aggressive risk per trade", "value": "2–3%", "note": "10 losses → ~20% account drawdown"},
+        {"label": "Kelly in practice", "value": "Half-Kelly", "note": "Use 50% of Kelly fraction to reduce variance"}
+      ],
+      "pitfalls": [
+        "Setting stop too tight to avoid a large position — stop must be at a technically meaningful level, not sized backwards.",
+        "Ignoring correlated positions — two 1% risk positions with 0.9 correlation effectively double the risk.",
+        "Using the same risk % regardless of setup quality — scale risk with conviction.",
+        "Failing to reduce size during drawdown — Kelly naturally scales down; never override by trading bigger."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Account × Risk % ($)",
+        "denominator_label": "Entry Price − Stop Price ($)",
+        "result_label": "Number of Shares",
+        "result_format": "ratio",
+        "numerator_default": 1000.0,
+        "denominator_default": 6.5
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Fixed Fractional Position Sizing", "url": "https://www.investopedia.com/articles/trading/05/fixedfractional.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "roe-formula",
+      "title": "ROE Formula",
+      "subtitle": "Return on Equity — net income as a percentage of shareholders' equity, with DuPont decomposition.",
+      "body": "formulas/roe-formula.md",
+      "difficulty": "beginner",
+      "abbreviation": "ROE",
+      "tags": ["valuation", "corporate-finance", "profitability"],
+      "aliases": ["return on equity", "roe", "dupont analysis", "dupont decomposition", "return on shareholders equity"],
+      "related": ["wacc", "free-cash-flow-formula", "pe-formula", "ev-ebitda-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · financials"},
+        {"screen": "markets", "label": "Markets · company data"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See ROE vs peers"},
+        {"label": "Open MSFT in Equity Research", "screen": "equity_research", "ticker": "MSFT", "hint": "Compare ROE"}
+      ],
+      "live_examples": [
+        {"label": "AAPL ROE", "ticker": "AAPL", "metric": "roe"},
+        {"label": "MSFT ROE", "ticker": "MSFT", "metric": "roe"}
+      ],
+      "rules_of_thumb": [
+        {"label": "Technology sector", "value": "20–50%+"},
+        {"label": "Consumer staples", "value": "20–35%"},
+        {"label": "Utilities", "value": "8–13%", "note": "Regulated returns"},
+        {"label": "Banks", "value": "10–15%", "note": "Capital requirements constrain ROE"}
+      ],
+      "pitfalls": [
+        "High ROE from high leverage is not the same as high ROE from high margins — use DuPont to distinguish.",
+        "Negative equity (after aggressive buybacks) makes ROE meaningless — use ROIC instead.",
+        "Comparing ROE across sectors without adjustment.",
+        "Not averaging equity — using ending equity overstates ROE when equity grew significantly."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Net Income ($)",
+        "denominator_label": "Average Shareholders' Equity ($)",
+        "result_label": "ROE",
+        "result_format": "percent",
+        "numerator_default": 93700.0,
+        "denominator_default": 71600.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Return on Equity (ROE)", "url": "https://www.investopedia.com/terms/r/returnonequity.asp"},
+        {"type": "deep_dive", "source": "Investopedia", "title": "DuPont Analysis", "url": "https://www.investopedia.com/terms/d/dupontanalysis.asp"}
+      ],
+      "updated": "2026-05-06"
+    },
+    {
+      "id": "free-cash-flow-formula",
+      "title": "Free Cash Flow Formula",
+      "subtitle": "FCF = Operating Cash Flow − CapEx — the cash available after funding operations and reinvestment.",
+      "body": "formulas/free-cash-flow-formula.md",
+      "difficulty": "beginner",
+      "abbreviation": "FCF",
+      "tags": ["valuation", "corporate-finance", "cash-flow"],
+      "aliases": ["free cash flow", "fcf", "fcff", "fcfe", "owner earnings", "cash flow from operations minus capex"],
+      "related": ["dcf", "wacc", "ev-ebitda-formula", "roe-formula"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research · financials"},
+        {"screen": "markets", "label": "Markets · company data"}
+      ],
+      "actions": [
+        {"label": "Open AAPL in Equity Research", "screen": "equity_research", "ticker": "AAPL", "hint": "See FCF and FCF yield"},
+        {"label": "Open MSFT in Equity Research", "screen": "equity_research", "ticker": "MSFT", "hint": "Compare FCF margins"}
+      ],
+      "live_examples": [
+        {"label": "AAPL free cash flow", "ticker": "AAPL", "metric": "free_cash_flow"},
+        {"label": "MSFT free cash flow", "ticker": "MSFT", "metric": "free_cash_flow"}
+      ],
+      "rules_of_thumb": [
+        {"label": "FCF yield (undervalued signal)", "value": "> 5%", "note": "FCF / Market Cap"},
+        {"label": "FCF > Net Income", "value": "High-quality earner", "note": "Suggests conservative accounting"},
+        {"label": "Cash conversion ratio", "value": "FCF / EBITDA near 1.0", "note": "Indicates efficient capital deployment"}
+      ],
+      "pitfalls": [
+        "Using reported CapEx without distinguishing maintenance from growth capex — understates true free cash generation.",
+        "Ignoring lease payments under IFRS 16 / ASC 842 — distorts CFO comparisons across periods.",
+        "Treating short-term negative FCF as terminal — capex-heavy growth phases temporarily depress FCF.",
+        "Comparing FCF without adjusting for working capital seasonality."
+      ],
+      "calculator": {
+        "kind": "ratio",
+        "numerator_label": "Operating Cash Flow (CFO, $)",
+        "denominator_label": "Capital Expenditures (CapEx, $) — subtract",
+        "result_label": "Free Cash Flow (FCF)",
+        "result_format": "currency",
+        "numerator_default": 118000.0,
+        "denominator_default": 10700.0
+      },
+      "external_links": [
+        {"type": "primer", "source": "Investopedia", "title": "Free Cash Flow (FCF)", "url": "https://www.investopedia.com/terms/f/freecashflow.asp"},
+        {"type": "deep_dive", "source": "Aswath Damodaran (NYU)", "title": "Free Cash Flow to Firm", "url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/lectures/fcff.html"}
+      ],
+      "updated": "2026-05-06"
+    }
+  ]
+}
