@@ -2,6 +2,7 @@
 #pragma once
 #include "screens/power_trader/PowerTraderTypes.h"
 
+#include <QButtonGroup>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -10,25 +11,28 @@
 #include <QTabWidget>
 #include <QWidget>
 
-// Forward declarations to avoid full header pulls in .h
+// Forward declarations
 namespace fincept::screens {
 class OverviewPanel;
 class RankingsPanel;
 class MemberProfilePanel;
 class TradesFeedPanel;
+class CommitteePanel;
+class PartyPanel;
+class InsiderWatchPanel;
+class CabinetPanel;
 }
 
 namespace fincept::power_trader {
 
-/// Main POWER TRADER screen.
+/// Main POWER TRADER screen — wide-screen layout.
 ///
-/// Layout:
-///   Left sidebar (200px) — searchable member list, sorted by alpha by default
-///   Right area (flex)    — QTabWidget with 4 tabs:
-///     OVERVIEW   big-picture: stat tiles, sector exposure, committee correlation
-///     RANKINGS   8 ranking dimensions with visual bar charts
-///     MEMBER     full per-member deep dive: portfolio curve + holdings + signals
-///     FEED       chronological trade disclosure feed (filterable)
+/// Structure:
+///   Top bar    — title · data sources · refresh · last-updated
+///   Body strip — [ALL] [SENATE] [HOUSE] body-filter buttons
+///   Content    — left sidebar (searchable member list, 240px)
+///                + right tab widget (7 tabs):
+///                  OVERVIEW · RANKINGS · MEMBER · FEED · COMMITTEE · PARTY · INSIDER WATCH
 class PowerTraderScreen : public QWidget {
     Q_OBJECT
   public:
@@ -45,36 +49,47 @@ class PowerTraderScreen : public QWidget {
     void on_data_loaded(fincept::power_trader::PowerTraderSummary summary);
     void on_error(const QString& msg);
     void on_member_selected(const QString& member_id);
+    void on_body_filter_changed(BodyFilter body);
 
   private:
     void build_ui();
     QWidget* build_top_bar();
+    QWidget* build_body_strip();
     QWidget* build_member_sidebar();
     void populate_member_list(const QVector<CongressMember>& members);
     void show_content();
     void show_loading();
     void show_error(const QString& msg);
+    void refresh_all_panels();
 
     // ── Top bar ───────────────────────────────────────────────────────────────
     QLabel*      timestamp_lbl_ = nullptr;
     QPushButton* refresh_btn_   = nullptr;
+
+    // ── Body strip ────────────────────────────────────────────────────────────
+    QButtonGroup* body_btn_group_ = nullptr;
+    BodyFilter    active_body_    = BodyFilter::All;
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
     QLineEdit*   member_search_ = nullptr;
     QListWidget* member_list_   = nullptr;
 
     // ── Main tabs ─────────────────────────────────────────────────────────────
-    QTabWidget*                  tab_widget_      = nullptr;
-    screens::OverviewPanel*      overview_panel_  = nullptr;
-    screens::RankingsPanel*      rankings_panel_  = nullptr;
-    screens::MemberProfilePanel* member_panel_    = nullptr;
-    screens::TradesFeedPanel*    feed_panel_      = nullptr;
+    QTabWidget*                  tab_widget_       = nullptr;
+    screens::OverviewPanel*      overview_panel_   = nullptr;
+    screens::RankingsPanel*      rankings_panel_   = nullptr;
+    screens::MemberProfilePanel* member_panel_     = nullptr;
+    screens::TradesFeedPanel*    feed_panel_       = nullptr;
+    screens::CommitteePanel*     committee_panel_  = nullptr;
+    screens::PartyPanel*         party_panel_      = nullptr;
+    screens::InsiderWatchPanel*  insider_panel_    = nullptr;
+    screens::CabinetPanel*       cabinet_panel_    = nullptr;
 
     // ── Loading / error / content stack ──────────────────────────────────────
-    QStackedWidget* stack_       = nullptr;
-    QLabel*         loading_lbl_ = nullptr;
-    QLabel*         error_lbl_   = nullptr;
-    QWidget*        content_area_= nullptr;
+    QStackedWidget* stack_        = nullptr;
+    QLabel*         loading_lbl_  = nullptr;
+    QLabel*         error_lbl_    = nullptr;
+    QWidget*        content_area_ = nullptr;
 
     // ── State ─────────────────────────────────────────────────────────────────
     PowerTraderSummary current_summary_;

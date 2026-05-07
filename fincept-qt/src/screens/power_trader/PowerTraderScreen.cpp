@@ -1,18 +1,22 @@
 // src/screens/power_trader/PowerTraderScreen.cpp
 #include "screens/power_trader/PowerTraderScreen.h"
 
+#include "screens/power_trader/CabinetPanel.h"
+#include "screens/power_trader/CommitteePanel.h"
+#include "screens/power_trader/InsiderWatchPanel.h"
 #include "screens/power_trader/MemberProfilePanel.h"
 #include "screens/power_trader/OverviewPanel.h"
+#include "screens/power_trader/PartyPanel.h"
 #include "screens/power_trader/PowerTraderService.h"
 #include "screens/power_trader/RankingsPanel.h"
 #include "screens/power_trader/TradesFeedPanel.h"
 #include "ui/theme/Theme.h"
 
+#include <QButtonGroup>
 #include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
 #include <QShowEvent>
-#include <QSplitter>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -20,10 +24,9 @@ namespace fincept::power_trader {
 
 PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
-
     auto& svc = PowerTraderService::instance();
-    connect(&svc, &PowerTraderService::data_loaded,   this, &PowerTraderScreen::on_data_loaded);
-    connect(&svc, &PowerTraderService::error_occurred,this, &PowerTraderScreen::on_error);
+    connect(&svc, &PowerTraderService::data_loaded,    this, &PowerTraderScreen::on_data_loaded);
+    connect(&svc, &PowerTraderService::error_occurred, this, &PowerTraderScreen::on_error);
 }
 
 void PowerTraderScreen::showEvent(QShowEvent* e) {
@@ -32,14 +35,10 @@ void PowerTraderScreen::showEvent(QShowEvent* e) {
         show_loading();
         PowerTraderService::instance().load_data();
     } else {
-        // Re-emit cached data so panels refresh on tab re-activation
         PowerTraderService::instance().load_data();
     }
 }
-
-void PowerTraderScreen::hideEvent(QHideEvent* e) {
-    QWidget::hideEvent(e);
-}
+void PowerTraderScreen::hideEvent(QHideEvent* e) { QWidget::hideEvent(e); }
 
 // ── UI construction ───────────────────────────────────────────────────────────
 
@@ -51,8 +50,8 @@ void PowerTraderScreen::build_ui() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
     root->addWidget(build_top_bar());
+    root->addWidget(build_body_strip());
 
-    // ── Three-state stack: loading | error | content ──────────────────────────
     stack_ = new QStackedWidget;
 
     // Page 0 — loading
@@ -61,11 +60,9 @@ void PowerTraderScreen::build_ui() {
         auto* ll = new QVBoxLayout(loading_page);
         loading_lbl_ = new QLabel("Loading congressional trade data…");
         loading_lbl_->setAlignment(Qt::AlignCenter);
-        loading_lbl_->setStyleSheet(QString("color:%1; font-size:14px;")
-                                         .arg(ui::colors::TEXT_SECONDARY()));
-        ll->addStretch();
-        ll->addWidget(loading_lbl_);
-        ll->addStretch();
+        loading_lbl_->setStyleSheet(
+            QString("color:%1; font-size:14px;").arg(ui::colors::TEXT_SECONDARY()));
+        ll->addStretch(); ll->addWidget(loading_lbl_); ll->addStretch();
     }
     stack_->addWidget(loading_page);
 
@@ -76,11 +73,9 @@ void PowerTraderScreen::build_ui() {
         error_lbl_ = new QLabel;
         error_lbl_->setAlignment(Qt::AlignCenter);
         error_lbl_->setWordWrap(true);
-        error_lbl_->setStyleSheet(QString("color:%1; font-size:13px;")
-                                       .arg(ui::colors::NEGATIVE()));
-        el->addStretch();
-        el->addWidget(error_lbl_);
-        el->addStretch();
+        error_lbl_->setStyleSheet(
+            QString("color:%1; font-size:13px;").arg(ui::colors::NEGATIVE()));
+        el->addStretch(); el->addWidget(error_lbl_); el->addStretch();
     }
     stack_->addWidget(error_page);
 
@@ -92,15 +87,15 @@ void PowerTraderScreen::build_ui() {
         hl->setSpacing(0);
         hl->addWidget(build_member_sidebar());
 
-        // ── Tabs ──────────────────────────────────────────────────────────────
+        // ── Tab bar ───────────────────────────────────────────────────────────
         tab_widget_ = new QTabWidget;
         tab_widget_->setDocumentMode(true);
         tab_widget_->setStyleSheet(QString(R"(
             QTabWidget::pane { border:0; background:%1; }
             QTabBar::tab {
-                background:%2; color:%3; padding:8px 20px;
+                background:%2; color:%3; padding:8px 16px;
                 border:0; border-bottom:2px solid transparent;
-                font-size:11px; font-weight:700; letter-spacing:1px;
+                font-size:10px; font-weight:700; letter-spacing:1px;
             }
             QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
             QTabBar::tab:hover:!selected { color:%5; }
@@ -108,23 +103,36 @@ void PowerTraderScreen::build_ui() {
                 ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(),
                 ui::colors::TEXT_PRIMARY()));
 
-        overview_panel_ = new screens::OverviewPanel;
-        rankings_panel_ = new screens::RankingsPanel;
-        member_panel_   = new screens::MemberProfilePanel;
-        feed_panel_     = new screens::TradesFeedPanel;
+        overview_panel_  = new screens::OverviewPanel;
+        rankings_panel_  = new screens::RankingsPanel;
+        member_panel_    = new screens::MemberProfilePanel;
+        feed_panel_      = new screens::TradesFeedPanel;
+        committee_panel_ = new screens::CommitteePanel;
+        party_panel_     = new screens::PartyPanel;
+        insider_panel_   = new screens::InsiderWatchPanel;
+        cabinet_panel_   = new screens::CabinetPanel;
 
-        tab_widget_->addTab(overview_panel_, "Overview");
-        tab_widget_->addTab(rankings_panel_, "Rankings");
-        tab_widget_->addTab(member_panel_,   "Member");
-        tab_widget_->addTab(feed_panel_,     "Feed");
+        tab_widget_->addTab(overview_panel_,  "Overview");
+        tab_widget_->addTab(rankings_panel_,  "Rankings");
+        tab_widget_->addTab(member_panel_,    "Member");
+        tab_widget_->addTab(feed_panel_,      "Feed");
+        tab_widget_->addTab(committee_panel_, "By Committee");
+        tab_widget_->addTab(party_panel_,     "Party Intel");
+        tab_widget_->addTab(insider_panel_,   "⚠ Insider Watch");
+        tab_widget_->addTab(cabinet_panel_,   "Cabinet");
 
-        connect(overview_panel_, &screens::OverviewPanel::member_selected,
+        // Connections
+        connect(overview_panel_,  &screens::OverviewPanel::member_selected,
                 this, &PowerTraderScreen::on_member_selected);
-        connect(rankings_panel_, &screens::RankingsPanel::member_selected,
+        connect(rankings_panel_,  &screens::RankingsPanel::member_selected,
                 this, &PowerTraderScreen::on_member_selected);
-        connect(feed_panel_,     &screens::TradesFeedPanel::member_selected,
+        connect(feed_panel_,      &screens::TradesFeedPanel::member_selected,
                 this, &PowerTraderScreen::on_member_selected);
-        connect(member_panel_,   &screens::MemberProfilePanel::navigate_to_markets,
+        connect(committee_panel_, &screens::CommitteePanel::member_selected,
+                this, &PowerTraderScreen::on_member_selected);
+        connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
+                this, &PowerTraderScreen::on_member_selected);
+        connect(member_panel_,    &screens::MemberProfilePanel::navigate_to_markets,
                 this, [this](const QString& ticker) {
                     emit navigate_to_screen(QStringLiteral("markets"), ticker);
                 });
@@ -147,7 +155,6 @@ QWidget* PowerTraderScreen::build_top_bar() {
     vl->setContentsMargins(14, 6, 14, 4);
     vl->setSpacing(3);
 
-    // ── Row 1: title + subtitle + timestamp + refresh ─────────────────────────
     auto* row1 = new QHBoxLayout;
     row1->setSpacing(10);
 
@@ -157,7 +164,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
 
     auto* sub = new QLabel("Congressional Stock Disclosures · STOCK Act");
     sub->setStyleSheet(QString("color:%1; font-size:11px;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+                           .arg(ui::colors::TEXT_SECONDARY()));
 
     timestamp_lbl_ = new QLabel;
     timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:10px;")
@@ -182,7 +189,6 @@ QWidget* PowerTraderScreen::build_top_bar() {
     row1->addWidget(timestamp_lbl_);
     row1->addWidget(refresh_btn_);
 
-    // ── Row 2: data source links ──────────────────────────────────────────────
     auto* row2 = new QHBoxLayout;
     row2->setSpacing(0);
 
@@ -191,15 +197,13 @@ QWidget* PowerTraderScreen::build_top_bar() {
                                .arg(ui::colors::TEXT_TERTIARY()));
     row2->addWidget(src_lbl);
 
-    // Helper: create a clickable link label
     struct Source { const char* label; const char* url; };
     static const Source sources[] = {
-        {"Senate eFTS",           "https://efts.senate.gov/"},
-        {"House Disclosures",     "https://disclosures.house.gov/"},
-        {"ProPublica Congress",   "https://projects.propublica.org/api-docs/congress-api/"},
-        {"OpenSecrets",           "https://www.opensecrets.org/api"},
+        {"Senate eFTS",      "https://efts.senate.gov/"},
+        {"House FDS",        "https://disclosures-clerk.house.gov/"},
+        {"Congress.gov API", "https://api.congress.gov/"},
+        {"OGE Form 278",     "https://www.oge.gov/web/oge.nsf/Public+Financial+Disclosure+Reports"},
     };
-
     const QString btn_ss =
         QString("QPushButton{color:%1;font-size:10px;text-decoration:underline;"
                 "background:transparent;border:none;padding:0;margin:0;}"
@@ -209,13 +213,12 @@ QWidget* PowerTraderScreen::build_top_bar() {
     bool first = true;
     for (const auto& src : sources) {
         if (!first) {
-            auto* sep = new QLabel("\xc2\xb7");  // middle dot separator
+            auto* sep = new QLabel("\xc2\xb7");
             sep->setStyleSheet(QString("color:%1; font-size:10px; padding:0 5px;")
                                    .arg(ui::colors::BORDER_BRIGHT()));
             row2->addWidget(sep);
         }
         first = false;
-
         auto* btn = new QPushButton(src.label);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFlat(true);
@@ -233,20 +236,80 @@ QWidget* PowerTraderScreen::build_top_bar() {
     return bar;
 }
 
+QWidget* PowerTraderScreen::build_body_strip() {
+    auto* strip = new QWidget;
+    strip->setFixedHeight(34);
+    strip->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+
+    auto* hl = new QHBoxLayout(strip);
+    hl->setContentsMargins(10, 4, 14, 4);
+    hl->setSpacing(4);
+
+    auto* lbl = new QLabel("BODY:");
+    lbl->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; letter-spacing:0.5px;")
+                           .arg(ui::colors::TEXT_TERTIARY()));
+    hl->addWidget(lbl);
+
+    struct Btn { const char* label; BodyFilter filter; };
+    const Btn btns[] = {
+        {"ALL",     BodyFilter::All},
+        {"SENATE",  BodyFilter::Senate},
+        {"HOUSE",   BodyFilter::House},
+        {"CABINET", BodyFilter::Cabinet},
+    };
+
+    body_btn_group_ = new QButtonGroup(this);
+    body_btn_group_->setExclusive(true);
+
+    const QString pill_base =
+        QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
+                "border-radius:2px;padding:3px 12px;font-size:11px;font-weight:700;"
+                "letter-spacing:0.5px;}"
+                "QPushButton:checked{background:%4;color:%5;border-color:%4;}"
+                "QPushButton:hover:!checked{border-color:%2;}")
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(),
+                 ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM(), ui::colors::AMBER());
+
+    for (const auto& b : btns) {
+        auto* btn = new QPushButton(b.label);
+        btn->setCheckable(true);
+        btn->setStyleSheet(pill_base);
+        btn->setCursor(Qt::PointingHandCursor);
+        const BodyFilter bf = b.filter;
+        connect(btn, &QPushButton::clicked, this, [this, bf]() {
+            on_body_filter_changed(bf);
+        });
+        body_btn_group_->addButton(btn);
+        hl->addWidget(btn);
+        if (b.filter == BodyFilter::All)
+            btn->setChecked(true);
+    }
+
+    hl->addStretch();
+
+    auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
+    info->setStyleSheet(QString("color:%1; font-size:11px; font-style:italic;")
+                            .arg(ui::colors::TEXT_TERTIARY()));
+    hl->addWidget(info);
+
+    return strip;
+}
+
 QWidget* PowerTraderScreen::build_member_sidebar() {
     auto* sidebar = new QWidget;
-    sidebar->setFixedWidth(200);
+    sidebar->setFixedWidth(240);
     sidebar->setStyleSheet(QString("background:%1; border-right:1px solid %2;")
                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* vl = new QVBoxLayout(sidebar);
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
-    auto* hdr = new QLabel("MEMBERS");
+    auto* hdr = new QLabel("MEMBERS  ·  RANKED BY ALPHA");
     hdr->setFixedHeight(32);
     hdr->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     hdr->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1.5px;"
+        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:0.5px;"
                 "padding-left:10px; border-bottom:1px solid %2;")
             .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
     vl->addWidget(hdr);
@@ -274,7 +337,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     member_list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     member_list_->setStyleSheet(
         QString("QListWidget{background:%1;border:none;outline:none;}"
-                "QListWidget::item{padding:6px 10px;border-bottom:1px solid %2;"
+                "QListWidget::item{padding:5px 10px;border-bottom:1px solid %2;"
                 "font-size:11px;color:%3;}"
                 "QListWidget::item:selected{background:rgba(217,119,6,0.15);color:%4;}"
                 "QListWidget::item:hover:!selected{background:%5;}"
@@ -305,11 +368,13 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
               });
     for (const auto& m : sorted) {
         auto* item = new QListWidgetItem;
-        const QString sign = m.alpha_ytd >= 0 ? "+" : "";
-        item->setText(m.full_name + "\n" + sign
-                      + QString::number(m.alpha_ytd, 'f', 1) + "% alpha");
-        item->setData(Qt::UserRole,     m.id);
-        item->setData(Qt::UserRole + 1, m.party);
+        const QString party_tag = m.party.isEmpty() ? "" : "[" + m.party + "] ";
+        const QString chb_tag   = m.chamber == MemberChamber::Senate ? "SEN" : "HSE";
+        const QString sign      = m.alpha_ytd >= 0 ? "+" : "";
+        item->setText(party_tag + m.full_name + "\n"
+                      + chb_tag + "  " + m.state + "  "
+                      + sign + QString::number(m.alpha_ytd, 'f', 1) + "% alpha");
+        item->setData(Qt::UserRole, m.id);
         member_list_->addItem(item);
     }
 }
@@ -331,12 +396,19 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
 
     populate_member_list(summary.members);
 
-    const auto sectors = PowerTraderService::instance().sector_breakdown();
-    const auto insider_signals = PowerTraderService::instance().committee_insider_signals();
+    const auto sectors          = PowerTraderService::instance().sector_breakdown();
+    const auto insider_signals  = PowerTraderService::instance().committee_insider_signals();
+    const auto committee_groups = PowerTraderService::instance().committee_groups();
+    const auto watch_list       = PowerTraderService::instance().insider_watch_list();
+    const auto cmtes            = PowerTraderService::instance().available_committees();
 
-    overview_panel_->set_data(summary, sectors, insider_signals);
-    rankings_panel_->set_data(summary);
-    feed_panel_->set_trades(summary.recent_trades);
+    overview_panel_ ->set_data(summary, sectors, insider_signals);
+    rankings_panel_ ->set_data(summary);
+    feed_panel_     ->set_trades(summary.recent_trades);
+    feed_panel_     ->set_available_committees(cmtes);
+    committee_panel_->set_data(summary, committee_groups);
+    party_panel_    ->set_data(summary);
+    insider_panel_  ->set_data(watch_list);
 
     // Pre-select highest-alpha member on first load
     if (selected_member_id_.isEmpty() && !summary.members.isEmpty()) {
@@ -360,7 +432,6 @@ void PowerTraderScreen::on_error(const QString& msg) {
 void PowerTraderScreen::on_member_selected(const QString& member_id) {
     selected_member_id_ = member_id;
 
-    // Sync sidebar highlight without triggering recursive signal
     for (int i = 0; i < member_list_->count(); ++i) {
         auto* item = member_list_->item(i);
         if (item->data(Qt::UserRole).toString() == member_id) {
@@ -379,6 +450,32 @@ void PowerTraderScreen::on_member_selected(const QString& member_id) {
     member_panel_->set_member(member);
     feed_panel_->set_selected_member(member_id);
     tab_widget_->setCurrentWidget(member_panel_);
+}
+
+void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
+    active_body_ = body;
+
+    if (body == BodyFilter::Cabinet) {
+        tab_widget_->setCurrentWidget(cabinet_panel_);
+        cabinet_panel_->activate();
+        return;
+    }
+
+    if (!PowerTraderService::instance().is_loaded()) return;
+
+    const auto filtered  = PowerTraderService::instance().filtered_summary(body);
+    const auto sectors   = PowerTraderService::instance().sector_breakdown();
+    const auto signals   = PowerTraderService::instance().committee_insider_signals();
+    const auto cmte_grps = PowerTraderService::instance().committee_groups();
+    const auto watch     = PowerTraderService::instance().insider_watch_list();
+
+    populate_member_list(filtered.members);
+    overview_panel_ ->set_data(filtered, sectors, signals);
+    rankings_panel_ ->set_data(filtered);
+    feed_panel_     ->set_trades(filtered.recent_trades);
+    committee_panel_->set_data(filtered, cmte_grps);
+    party_panel_    ->set_data(filtered);
+    insider_panel_  ->set_data(watch);
 }
 
 } // namespace fincept::power_trader

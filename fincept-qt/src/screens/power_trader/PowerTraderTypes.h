@@ -13,6 +13,7 @@ namespace fincept::power_trader {
 enum class TradeDirection { Buy, Sell, Exchange, Other };
 enum class AssetType { Stock, Option, Bond, ETF, MutualFund, Crypto, Other };
 enum class MemberChamber { Senate, House };
+enum class BodyFilter    { All, Senate, House, Cabinet };
 
 enum class RankingDimension {
     Alpha,         // alpha vs SPY YTD (portfolio_return - spy_return)
@@ -145,6 +146,112 @@ struct RankedMember {
     double rank_value = 0;   // the value for the chosen RankingDimension
     QString rank_label;      // formatted display string
     int     rank        = 0; // 1 = best
+};
+
+// ── Insider watch entry ───────────────────────────────────────────────────────
+
+struct InsiderWatchEntry {
+    QString member_id;
+    QString member_name;
+    QString party;
+    MemberChamber chamber;
+    QString state;
+    QStringList committees;
+
+    // ── Composite insider score (0–100) ───────────────────────────────────────
+    double insider_score     = 0;   // weighted aggregate
+
+    // ── Score components (each 0–100, weighted into insider_score) ────────────
+    double cmte_overlap_score  = 0; // trades in committee-relevant sectors
+    double timing_score        = 0; // speed of disclosure after trade
+    double concentration_score = 0; // % of portfolio in one sector
+    double size_score          = 0; // average trade size vs peers
+    double pattern_score       = 0; // cluster: multiple members same ticker/window
+    double return_score        = 0; // estimated YTD alpha
+
+    // ── Human-readable evidence ────────────────────────────────────────────────
+    QString top_ticker;             // highest-signal ticker for this member
+    QString top_committee;          // committee driving the overlap
+    QString top_sector;             // sector most concentrated in
+    int     committee_trades    = 0; // trades with committee relevance
+    int     total_trades        = 0;
+    double  cmte_overlap_pct    = 0; // committee_trades / total_trades * 100
+    double  avg_disclosure_lag  = 0; // average days to disclose
+    double  biggest_trade_amt   = 0; // midpoint of largest single trade
+    QStringList evidence_bullets;   // 3–5 plain-English red flags
+};
+
+// ── Committee group ───────────────────────────────────────────────────────────
+
+struct CommitteeGroup {
+    QString     committee;
+    int         member_count     = 0;
+    int         trade_count      = 0;
+    double      total_est_amount = 0;
+    double      avg_signal_score = 0;
+    double      correlation_pct  = 0;  // % of trades touching committee-relevant tickers
+    QStringList member_ids;
+    QStringList top_tickers;           // up to 5
+    QString     top_sector;
+};
+
+// ── Party aggregate stats ─────────────────────────────────────────────────────
+
+struct PartyStats {
+    QString party;                     // "D", "R", "I"
+    int     member_count      = 0;
+    int     trade_count_90d   = 0;
+    double  total_disc_90d    = 0;     // estimated $ value of all trades (90d)
+    double  avg_signal        = 0;
+    double  avg_lag           = 0;
+    double  net_bought_90d    = 0;     // net buys – sells ($)
+    int     net_buyer_count   = 0;     // members net-buying last 90d
+    int     net_seller_count  = 0;
+    QVector<SectorExposure> top_sectors;
+    QStringList top_tickers;
+};
+
+// ── Cabinet (Executive Branch OGE Form 278) ───────────────────────────────────
+
+struct CabinetHolding {
+    QString asset_name;
+    QString ticker;
+    QString asset_type;          // "Stock","Bond","ETF","Fund","Real Estate","Business Interest","Crypto","Other"
+    QString sector;
+    double  value_min          = 0;
+    double  value_max          = 0;
+    QString value_range_label;
+    bool    is_conflict        = false;  // overlaps regulatory domain
+    QString conflict_note;               // plain English e.g. "Treasury Sec oversees banks"
+};
+
+struct CabinetMember {
+    QString id;
+    QString full_name;
+    QString title;               // "Secretary of Defense"
+    QString department;
+    QString party;               // "R" or "D"
+    int     disclosure_year    = 0;
+    double  est_total_min      = 0;
+    double  est_total_max      = 0;
+    double  conflict_score     = 0;  // 0–100
+    int     conflict_count     = 0;
+    QStringList regulated_sectors;
+    QVector<CabinetHolding> holdings;
+    QStringList conflict_flags;
+    QVector<SectorExposure> sector_breakdown;
+    QString source_url;
+    QString data_source;
+};
+
+struct CabinetSummary {
+    QVector<CabinetMember> members;
+    QDateTime last_updated;
+    bool      loaded          = false;
+    int       disclosure_year = 0;
+    double    total_est_min   = 0;
+    double    total_est_max   = 0;
+    QString   data_note;
 };
 
 // ── Summary ───────────────────────────────────────────────────────────────────

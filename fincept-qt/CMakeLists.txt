@@ -1036,6 +1036,10 @@ set(SCREEN_SOURCES
     src/screens/power_trader/OverviewPanel.cpp
     src/screens/power_trader/RankingsPanel.cpp
     src/screens/power_trader/MemberProfilePanel.cpp
+    src/screens/power_trader/CommitteePanel.cpp
+    src/screens/power_trader/PartyPanel.cpp
+    src/screens/power_trader/InsiderWatchPanel.cpp
+    src/screens/power_trader/CabinetPanel.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
     src/screens/relationship_map/RelationshipGraphScene.cpp
@@ -1406,6 +1410,10 @@ set_source_files_properties(
     src/screens/power_trader/OverviewPanel.cpp
     src/screens/power_trader/RankingsPanel.cpp
     src/screens/power_trader/MemberProfilePanel.cpp
+    src/screens/power_trader/CommitteePanel.cpp
+    src/screens/power_trader/PartyPanel.cpp
+    src/screens/power_trader/InsiderWatchPanel.cpp
+    src/screens/power_trader/CabinetPanel.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/ForgotPasswordScreen.cpp
     src/screens/auth/LockScreen.cpp

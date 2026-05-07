@@ -2,6 +2,7 @@
 #include "screens/power_trader/PowerTraderService.h"
 
 #include "core/logging/Logger.h"
+#include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 
 #include <QDate>
@@ -46,30 +47,39 @@ void PowerTraderService::load_data() {
     }
 
     loading_ = true;
-    LOG_INFO("PowerTrader", "Loading congressional trade data (stub: mock generator)");
+    LOG_INFO("PowerTrader", "Loading congressional trade data from Senate eFTS + House FDS");
 
-    // ── STUB: generate mock data synchronously ────────────────────────────────
-    // When the real Python script `senate_disclosures` is ready, replace this
-    // block with:
-    //
-    //   QPointer<PowerTraderService> self = this;
-    //   QJsonObject payload;
-    //   payload["limit"] = 100;
-    //   python::PythonWorker::instance().submit(
-    //       "senate_disclosures", payload,
-    //       [self](bool ok, QJsonObject result, QString err) {
-    //           if (!self) return;
-    //           self->on_daemon_response(ok, result, err);
-    //       },
-    //       python::PythonWorker::kNetworkActionTimeoutMs);
-    //
-    // The rest of this file (parse_summary, signals) will work unchanged.
+    QPointer<PowerTraderService> self = this;
+    QJsonObject req;
+    req[QStringLiteral("days_back")] = 90;
 
-    generate_mock_data();
-    loading_ = false;
+    python::PythonRunner::instance().run(
+        QStringLiteral("senate_disclosures_data.py"),
+        {QStringLiteral("all_data"),
+         QString::fromUtf8(QJsonDocument(req).toJson(QJsonDocument::Compact))},
+        [self](python::PythonResult result) {
+            if (!self) return;
+            self->loading_ = false;
+            if (!self->refresh_timer_->isActive())
+                self->refresh_timer_->start();
 
-    if (!refresh_timer_->isActive())
-        refresh_timer_->start();
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                LOG_ERROR("PowerTrader",
+                          "senate_disclosures_data.py failed: " + result.error.left(300));
+                emit self->error_occurred(
+                    QStringLiteral("Failed to load congressional disclosure data"));
+                return;
+            }
+            const QString json_str = python::extract_json(result.output);
+            const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
+            if (!doc.isObject()) {
+                LOG_ERROR("PowerTrader", "senate_disclosures_data.py returned invalid JSON");
+                emit self->error_occurred(
+                    QStringLiteral("Invalid data format from congressional disclosures"));
+                return;
+            }
+            self->parse_summary(doc.object());
+        });
 }
 
 QVector<CongressMember> PowerTraderService::members() const {
@@ -849,6 +859,453 @@ QPair<QString, double> PowerTraderService::best_pick(const QString& mid) const {
         if (gain > best_pct) { best_pct = gain; best_ticker = t.ticker; }
     }
     return {best_ticker, best_pct};
+}
+
+// ── Cabinet data ──────────────────────────────────────────────────────────────
+
+void PowerTraderService::load_cabinet_data() {
+    if (cabinet_loading_) return;
+    cabinet_loading_ = true;
+    LOG_INFO("PowerTrader", "Loading cabinet financial disclosures (OGE Form 278)");
+
+    QPointer<PowerTraderService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("oge_cabinet_data.py"),
+        {QStringLiteral("cabinet_data"), QStringLiteral("{}")},
+        [self](python::PythonResult result) {
+            if (!self) return;
+            self->cabinet_loading_ = false;
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                LOG_ERROR("PowerTrader", "oge_cabinet_data.py failed: " + result.error.left(200));
+                return;
+            }
+            const QString json_str = python::extract_json(result.output);
+            const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
+            if (!doc.isObject()) {
+                LOG_ERROR("PowerTrader", "oge_cabinet_data.py returned invalid JSON");
+                return;
+            }
+            self->parse_cabinet(doc.object());
+        });
+}
+
+void PowerTraderService::parse_cabinet(const QJsonObject& root) {
+    CabinetSummary cs;
+    cs.last_updated   = QDateTime::currentDateTimeUtc();
+    cs.loaded         = true;
+    cs.disclosure_year= root[QStringLiteral("disclosure_year")].toInt(2025);
+    cs.total_est_min  = root[QStringLiteral("total_est_min")].toDouble();
+    cs.total_est_max  = root[QStringLiteral("total_est_max")].toDouble();
+    cs.data_note      = root[QStringLiteral("data_note")].toString();
+
+    const auto members_arr = root[QStringLiteral("members")].toArray();
+    cs.members.reserve(members_arr.size());
+
+    for (const auto& v : members_arr) {
+        const auto obj = v.toObject();
+        CabinetMember m;
+        m.id              = obj[QStringLiteral("id")].toString();
+        m.full_name       = obj[QStringLiteral("full_name")].toString();
+        m.title           = obj[QStringLiteral("title")].toString();
+        m.department      = obj[QStringLiteral("department")].toString();
+        m.party           = obj[QStringLiteral("party")].toString();
+        m.disclosure_year = obj[QStringLiteral("disclosure_year")].toInt();
+        m.est_total_min   = obj[QStringLiteral("est_total_min")].toDouble();
+        m.est_total_max   = obj[QStringLiteral("est_total_max")].toDouble();
+        m.conflict_score  = obj[QStringLiteral("conflict_score")].toDouble();
+        m.conflict_count  = obj[QStringLiteral("conflict_count")].toInt();
+        m.source_url      = obj[QStringLiteral("source_url")].toString();
+        m.data_source     = obj[QStringLiteral("data_source")].toString();
+
+        for (const auto& c : obj[QStringLiteral("regulated_sectors")].toArray())
+            m.regulated_sectors.append(c.toString());
+        for (const auto& f : obj[QStringLiteral("conflict_flags")].toArray())
+            m.conflict_flags.append(f.toString());
+
+        for (const auto& hv : obj[QStringLiteral("holdings")].toArray()) {
+            const auto ho = hv.toObject();
+            CabinetHolding h;
+            h.asset_name         = ho[QStringLiteral("asset_name")].toString();
+            h.ticker             = ho[QStringLiteral("ticker")].toString();
+            h.asset_type         = ho[QStringLiteral("asset_type")].toString();
+            h.sector             = ho[QStringLiteral("sector")].toString();
+            h.value_min          = ho[QStringLiteral("value_min")].toDouble();
+            h.value_max          = ho[QStringLiteral("value_max")].toDouble();
+            h.value_range_label  = ho[QStringLiteral("value_range_label")].toString();
+            h.is_conflict        = ho[QStringLiteral("is_conflict")].toBool();
+            h.conflict_note      = ho[QStringLiteral("conflict_note")].toString();
+            m.holdings.append(h);
+        }
+
+        for (const auto& sv : obj[QStringLiteral("sector_breakdown")].toArray()) {
+            const auto so = sv.toObject();
+            SectorExposure se;
+            se.sector            = so[QStringLiteral("sector")].toString();
+            se.total_est_amount  = so[QStringLiteral("est_amount")].toDouble();
+            m.sector_breakdown.append(se);
+        }
+
+        cs.members.append(m);
+    }
+
+    cabinet_ = cs;
+    LOG_INFO("PowerTrader", QString("Cabinet data loaded: %1 members").arg(cs.members.size()));
+    emit cabinet_data_loaded(cs);
+}
+
+QVector<CabinetMember> PowerTraderService::cabinet_conflict_ranking() const {
+    auto result = cabinet_.members;
+    std::sort(result.begin(), result.end(),
+              [](const CabinetMember& a, const CabinetMember& b) {
+                  return a.conflict_score > b.conflict_score;
+              });
+    return result;
+}
+
+QVector<SectorExposure> PowerTraderService::cabinet_sector_exposure() const {
+    QHash<QString, SectorExposure> sectors;
+    for (const auto& m : cabinet_.members) {
+        for (const auto& se : m.sector_breakdown) {
+            auto& s = sectors[se.sector];
+            s.sector            = se.sector;
+            s.total_est_amount += se.total_est_amount;
+            s.member_count++;
+            if (!s.members.contains(m.id)) s.members.append(m.id);
+        }
+    }
+    auto result = sectors.values().toVector();
+    std::sort(result.begin(), result.end(),
+              [](const SectorExposure& a, const SectorExposure& b) {
+                  return a.total_est_amount > b.total_est_amount;
+              });
+    return result;
+}
+
+// ── Committee groups ──────────────────────────────────────────────────────────
+
+QVector<CommitteeGroup> PowerTraderService::committee_groups() const {
+    const auto& sec_map = ticker_sector_map();
+    QHash<QString, CommitteeGroup> groups;
+
+    // Seed one group per committee found in any member
+    for (const auto& m : summary_.members) {
+        for (const auto& c : m.committees) {
+            if (c.trimmed().isEmpty()) continue;
+            auto& g       = groups[c];
+            g.committee   = c;
+            if (!g.member_ids.contains(m.id)) {
+                g.member_ids.append(m.id);
+                g.member_count++;
+            }
+        }
+    }
+
+    // Aggregate trades
+    for (const auto& t : summary_.recent_trades) {
+        const QString cmte = t.committee_relevance;
+        if (cmte.isEmpty()) continue;
+        auto& g = groups[cmte];
+        g.committee = cmte;
+        g.trade_count++;
+        g.total_est_amount += (t.amount_low + t.amount_high) / 2.0;
+        g.avg_signal_score += t.signal_score;
+        if (!t.ticker.isEmpty() && !g.top_tickers.contains(t.ticker) && g.top_tickers.size() < 5)
+            g.top_tickers.append(t.ticker);
+        const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
+        if (g.top_sector.isEmpty()) g.top_sector = sector;
+    }
+
+    // Compute correlation_pct (trades in cmte-relevant tickers / total trades for those members)
+    QHash<QString, int> member_total;
+    for (const auto& t : summary_.recent_trades)
+        member_total[t.member_id]++;
+
+    QVector<CommitteeGroup> result;
+    for (auto it = groups.begin(); it != groups.end(); ++it) {
+        auto& g = it.value();
+        if (g.trade_count > 0)
+            g.avg_signal_score /= g.trade_count;
+        // correlation: trades-with-overlap / (total trades of members on this committee)
+        int total_for_members = 0;
+        for (const auto& mid : g.member_ids)
+            total_for_members += member_total.value(mid, 0);
+        g.correlation_pct = total_for_members > 0
+                            ? (g.trade_count * 100.0) / total_for_members
+                            : 0;
+        if (g.member_count > 0 || g.trade_count > 0)
+            result.append(g);
+    }
+
+    std::sort(result.begin(), result.end(),
+              [](const CommitteeGroup& a, const CommitteeGroup& b) {
+                  return a.trade_count > b.trade_count;
+              });
+    return result;
+}
+
+// ── Party stats ───────────────────────────────────────────────────────────────
+
+PartyStats PowerTraderService::party_stats(const QString& party) const {
+    const auto& sec_map = ticker_sector_map();
+    PartyStats ps;
+    ps.party = party;
+    const QDate cutoff = QDate::currentDate().addDays(-90);
+
+    QHash<QString, double> ticker_amt;
+    QHash<QString, SectorExposure> sectors;
+
+    for (const auto& m : summary_.members)
+        if (m.party == party) {
+            ps.member_count++;
+            const double nb = net_buyer_amount(m.id, 90);
+            ps.net_bought_90d += nb;
+            if (nb > 0)  ps.net_buyer_count++;
+            if (nb < 0)  ps.net_seller_count++;
+        }
+
+    for (const auto& t : summary_.recent_trades) {
+        if (t.party != party) continue;
+        if (t.disclosure_date < cutoff) continue;
+        ps.trade_count_90d++;
+        const double mid = (t.amount_low + t.amount_high) / 2.0;
+        ps.total_disc_90d += mid;
+        ps.avg_signal     += t.signal_score;
+        ps.avg_lag        += t.disclosure_lag_days;
+        ticker_amt[t.ticker] += mid;
+
+        const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
+        auto& se  = sectors[sector];
+        se.sector = sector;
+        se.total_est_amount += mid;
+        se.trade_count++;
+        if (!se.members.contains(t.member_id)) se.members.append(t.member_id);
+    }
+
+    if (ps.trade_count_90d > 0) {
+        ps.avg_signal /= ps.trade_count_90d;
+        ps.avg_lag    /= ps.trade_count_90d;
+    }
+
+    // Top tickers by amount
+    QVector<QPair<double, QString>> sorted_tickers;
+    for (auto it = ticker_amt.begin(); it != ticker_amt.end(); ++it)
+        sorted_tickers.append({it.value(), it.key()});
+    std::sort(sorted_tickers.begin(), sorted_tickers.end(),
+              [](const auto& a, const auto& b) { return a.first > b.first; });
+    for (int i = 0; i < qMin(5, sorted_tickers.size()); ++i)
+        ps.top_tickers.append(sorted_tickers[i].second);
+
+    // Top sectors
+    ps.top_sectors = sectors.values().toVector();
+    for (auto& s : ps.top_sectors) s.member_count = s.members.size();
+    std::sort(ps.top_sectors.begin(), ps.top_sectors.end(),
+              [](const SectorExposure& a, const SectorExposure& b) {
+                  return a.total_est_amount > b.total_est_amount;
+              });
+    if (ps.top_sectors.size() > 6)
+        ps.top_sectors.resize(6);
+
+    return ps;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+QStringList PowerTraderService::available_committees() const {
+    QSet<QString> seen;
+    QStringList   cmtes;
+    for (const auto& m : summary_.members)
+        for (const auto& c : m.committees)
+            if (!c.isEmpty() && !seen.contains(c)) {
+                seen.insert(c);
+                cmtes.append(c);
+            }
+    cmtes.sort();
+    return cmtes;
+}
+
+QVector<PoliticalTrade> PowerTraderService::trades_by_committee(const QString& committee) const {
+    if (committee.isEmpty()) return summary_.recent_trades;
+    QVector<PoliticalTrade> out;
+    for (const auto& t : summary_.recent_trades)
+        if (t.committee_relevance.contains(committee, Qt::CaseInsensitive))
+            out.append(t);
+    return out;
+}
+
+PowerTraderSummary PowerTraderService::filtered_summary(BodyFilter body) const {
+    if (body == BodyFilter::All || body == BodyFilter::Cabinet) return summary_;
+    PowerTraderSummary s = summary_;
+    const MemberChamber want = (body == BodyFilter::Senate)
+                               ? MemberChamber::Senate : MemberChamber::House;
+    auto& mems = s.members;
+    mems.erase(std::remove_if(mems.begin(), mems.end(),
+               [&](const CongressMember& m){ return m.chamber != want; }), mems.end());
+    auto& trades = s.recent_trades;
+    trades.erase(std::remove_if(trades.begin(), trades.end(),
+                 [&](const PoliticalTrade& t){ return t.chamber != want; }), trades.end());
+    return s;
+}
+
+// ── Insider watch list ────────────────────────────────────────────────────────
+
+QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
+    const auto& sec_map = ticker_sector_map();
+
+    // Peer-level benchmarks
+    double peer_avg_trade_size  = 0;
+    int    total_trades_all     = summary_.recent_trades.size();
+    for (const auto& t : summary_.recent_trades)
+        peer_avg_trade_size += (t.amount_low + t.amount_high) / 2.0;
+    if (total_trades_all > 0) peer_avg_trade_size /= total_trades_all;
+
+    // Cluster detection: ticker → list of (member_id, trade_date) within 14-day window
+    QHash<QString, QVector<QPair<QString, QDate>>> ticker_cluster;
+    for (const auto& t : summary_.recent_trades)
+        if (!t.ticker.isEmpty())
+            ticker_cluster[t.ticker].append({t.member_id, t.transaction_date});
+
+    // Build one entry per member
+    QHash<QString, InsiderWatchEntry> entries;
+    for (const auto& m : summary_.members) {
+        InsiderWatchEntry e;
+        e.member_id  = m.id;
+        e.member_name= m.full_name;
+        e.party      = m.party;
+        e.chamber    = m.chamber;
+        e.state      = m.state;
+        e.committees = m.committees;
+        entries[m.id] = e;
+    }
+
+    // Pass 1: per-trade scoring
+    for (const auto& t : summary_.recent_trades) {
+        if (!entries.contains(t.member_id)) continue;
+        auto& e = entries[t.member_id];
+        e.total_trades++;
+
+        const double mid       = (t.amount_low + t.amount_high) / 2.0;
+        const QString sector   = sec_map.value(t.ticker, QStringLiteral("Other"));
+        const bool cmte_match  = !t.committee_relevance.isEmpty();
+
+        if (cmte_match) {
+            e.committee_trades++;
+            if (e.top_ticker.isEmpty() || t.signal_score > 0) e.top_ticker    = t.ticker;
+            if (e.top_committee.isEmpty()) e.top_committee = t.committee_relevance;
+        }
+        if (e.top_sector.isEmpty()) e.top_sector = sector;
+
+        e.avg_disclosure_lag += t.disclosure_lag_days;
+        if (mid > e.biggest_trade_amt) {
+            e.biggest_trade_amt = mid;
+            if (e.top_ticker.isEmpty()) e.top_ticker = t.ticker;
+        }
+    }
+
+    // Pass 2: compute scores per member
+    for (auto it = entries.begin(); it != entries.end(); ++it) {
+        auto& e = it.value();
+        if (e.total_trades == 0) continue;
+
+        e.avg_disclosure_lag /= e.total_trades;
+        e.cmte_overlap_pct = (e.total_trades > 0)
+                             ? (e.committee_trades * 100.0 / e.total_trades) : 0;
+
+        // ── cmte_overlap_score (0-35) ──────────────────────────────────────────
+        // More committee-relevant trades = higher score
+        e.cmte_overlap_score = qMin(35.0, e.cmte_overlap_pct * 0.35);
+
+        // ── timing_score (0-25) ───────────────────────────────────────────────
+        // Very fast disclosure (< 10d) is normal; very slow (> 45d) is a flag
+        // We reward short lag after sells (possible selling before bad news)
+        // and penalise long lag (burying a disclosure)
+        if (e.avg_disclosure_lag > 45)       e.timing_score = 25;
+        else if (e.avg_disclosure_lag > 30)  e.timing_score = 18;
+        else if (e.avg_disclosure_lag > 20)  e.timing_score = 10;
+        else if (e.avg_disclosure_lag <= 5)  e.timing_score = 12; // suspiciously fast
+        else                                 e.timing_score = 5;
+
+        // ── size_score (0-15) ─────────────────────────────────────────────────
+        // Trade size relative to the peer average
+        if (peer_avg_trade_size > 0) {
+            double ratio = e.biggest_trade_amt / peer_avg_trade_size;
+            e.size_score = qMin(15.0, ratio * 5.0);
+        }
+
+        // ── pattern_score (0-15) ──────────────────────────────────────────────
+        // Coordinated trades: same ticker, multiple members, within 14 days
+        double cluster_pts = 0;
+        const QDate cutoff_cluster = QDate::currentDate().addDays(-90);
+        for (const auto& t : summary_.recent_trades) {
+            if (t.member_id != e.member_id || t.transaction_date < cutoff_cluster) continue;
+            if (t.ticker.isEmpty()) continue;
+            const auto& peers = ticker_cluster.value(t.ticker);
+            int same_window = 0;
+            for (const auto& [pid, pdate] : peers) {
+                if (pid != e.member_id && qAbs(pdate.daysTo(t.transaction_date)) <= 14)
+                    same_window++;
+            }
+            if (same_window >= 3) cluster_pts += 15;
+            else if (same_window >= 2) cluster_pts += 8;
+            else if (same_window >= 1) cluster_pts += 3;
+        }
+        e.pattern_score = qMin(15.0, cluster_pts);
+
+        // ── return_score (0-10) ───────────────────────────────────────────────
+        // Members with high alpha vs SPY = potentially acting on inside info
+        const CongressMember* mem = nullptr;
+        for (const auto& m : summary_.members)
+            if (m.id == e.member_id) { mem = &m; break; }
+        if (mem && mem->alpha_ytd > 0)
+            e.return_score = qMin(10.0, mem->alpha_ytd / 3.0);
+
+        // ── composite ─────────────────────────────────────────────────────────
+        e.insider_score = e.cmte_overlap_score
+                        + e.timing_score
+                        + e.size_score
+                        + e.pattern_score
+                        + e.return_score;
+        e.insider_score = qMin(100.0, e.insider_score);
+
+        // ── evidence bullets ──────────────────────────────────────────────────
+        if (e.cmte_overlap_pct > 50)
+            e.evidence_bullets.append(
+                QString("%1% of trades in committee-relevant sectors (%2)")
+                    .arg(int(e.cmte_overlap_pct)).arg(e.top_committee));
+        if (e.avg_disclosure_lag > 40)
+            e.evidence_bullets.append(
+                QString("Average disclosure lag %1 days — above 45-day STOCK Act deadline")
+                    .arg(int(e.avg_disclosure_lag)));
+        if (e.biggest_trade_amt > 250'000)
+            e.evidence_bullets.append(
+                QString("Largest single trade ~$%1 in %2")
+                    .arg(e.biggest_trade_amt >= 1e6
+                         ? QString::number(e.biggest_trade_amt/1e6,'f',1)+"M"
+                         : QString::number(e.biggest_trade_amt/1e3,'f',0)+"K")
+                    .arg(e.top_ticker));
+        if (e.pattern_score > 8)
+            e.evidence_bullets.append(
+                QStringLiteral("Coordinated trades: other members traded same tickers within 14 days"));
+        if (e.return_score > 6 && mem)
+            e.evidence_bullets.append(
+                QString("YTD alpha +%1% above SPY").arg(mem->alpha_ytd,'f',1));
+        if (e.evidence_bullets.isEmpty())
+            e.evidence_bullets.append(QStringLiteral("Low insider signal — no strong flags detected"));
+    }
+
+    // Collect members with trades
+    QVector<InsiderWatchEntry> result;
+    for (const auto& e : entries)
+        if (e.total_trades > 0)
+            result.append(e);
+
+    // Sort: insider_score desc, then cmte_overlap_pct desc
+    std::sort(result.begin(), result.end(),
+              [](const InsiderWatchEntry& a, const InsiderWatchEntry& b) {
+                  if (qAbs(a.insider_score - b.insider_score) > 0.5)
+                      return a.insider_score > b.insider_score;
+                  return a.cmte_overlap_pct > b.cmte_overlap_pct;
+              });
+    return result;
 }
 
 } // namespace fincept::power_trader

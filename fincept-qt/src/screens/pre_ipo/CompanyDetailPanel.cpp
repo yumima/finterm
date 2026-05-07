@@ -71,7 +71,7 @@ QWidget* CompanyDetailPanel::build_placeholder() {
     vl->setAlignment(Qt::AlignCenter);
     auto* lbl = new QLabel("Select a company to view details");
     lbl->setStyleSheet(
-        QString("color:%1; font-size:13px;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:13px;").arg(colors::TEXT_SECONDARY()));
     lbl->setAlignment(Qt::AlignCenter);
     vl->addWidget(lbl);
     return w;
@@ -105,7 +105,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
 
     meta_lbl_ = new QLabel;
     meta_lbl_->setStyleSheet(
-        QString("color:%1; font-size:11px; background:transparent;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
 
     hdr_layout->addWidget(name_lbl_);
     hdr_layout->addWidget(sector_lbl_);
@@ -149,7 +149,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
 
     auto* ipo_header = new QLabel("IPO STATUS");
     ipo_header->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; background:transparent;")
             .arg(colors::TEXT_SECONDARY()));
     ipo_layout->addWidget(ipo_header);
 
@@ -157,15 +157,15 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     ipo_row->setSpacing(10);
 
     status_badge_ = new QLabel;
-    status_badge_->setStyleSheet("font-size:11px; font-weight:700; border-radius:4px; padding:3px 10px;");
+    status_badge_->setStyleSheet("font-size:12px; font-weight:700; border-radius:4px; padding:3px 10px;");
 
     window_lbl_ = new QLabel;
     window_lbl_->setStyleSheet(
-        QString("color:%1; font-size:11px; background:transparent;").arg(colors::TEXT_PRIMARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_PRIMARY()));
 
     s1_date_lbl_ = new QLabel;
     s1_date_lbl_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
 
     ipo_row->addWidget(status_badge_);
     ipo_row->addWidget(window_lbl_);
@@ -179,7 +179,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     // ── Funding rounds table ──────────────────────────────────────────────────
     auto* rounds_header_lbl = new QLabel("FUNDING ROUNDS");
     rounds_header_lbl->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
             .arg(colors::TEXT_SECONDARY()));
     vl->addWidget(rounds_header_lbl);
     vl->addSpacing(6);
@@ -206,7 +206,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
 
     rounds_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:1px solid %3;"
-                "  font-size:11px; gridline-color:transparent; }"
+                "  font-size:12px; gridline-color:transparent; }"
                 "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.15); color:%2; }"
                 "QScrollBar:vertical { width:4px; background:%1; }"
@@ -215,7 +215,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
 
     hdr->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
-                "  border-bottom:2px solid %3; padding:4px 8px; font-size:10px; font-weight:700; }")
+                "  border-bottom:2px solid %3; padding:4px 8px; font-size:12px; font-weight:700; }")
             .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), colors::AMBER()));
 
     vl->addWidget(rounds_table_);
@@ -226,7 +226,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     // ── Key Investors ─────────────────────────────────────────────────────────
     auto* inv_header = new QLabel("KEY INVESTORS");
     inv_header->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
             .arg(colors::TEXT_SECONDARY()));
     vl->addWidget(inv_header);
     vl->addSpacing(6);
@@ -243,7 +243,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     // ── Public Comparables ────────────────────────────────────────────────────
     auto* comps_header = new QLabel("PUBLIC COMPARABLES");
     comps_header->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
             .arg(colors::TEXT_SECONDARY()));
     vl->addWidget(comps_header);
     vl->addSpacing(6);
@@ -261,7 +261,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     // ── Tags ──────────────────────────────────────────────────────────────────
     auto* tags_header = new QLabel("TAGS");
     tags_header->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
             .arg(colors::TEXT_SECONDARY()));
     vl->addWidget(tags_header);
     vl->addSpacing(6);
@@ -279,7 +279,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     // ── Description ───────────────────────────────────────────────────────────
     auto* desc_header = new QLabel("ABOUT");
     desc_header->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
             .arg(colors::TEXT_SECONDARY()));
     vl->addWidget(desc_header);
     vl->addSpacing(6);
@@ -358,7 +358,7 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
     }
     status_badge_->setText(sl);
     status_badge_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; background:%2;"
+        QString("color:%1; font-size:12px; font-weight:700; background:%2;"
                 "  border-radius:4px; padding:3px 10px;")
             .arg(badge_fg, badge_bg));
 
@@ -428,7 +428,7 @@ void CompanyDetailPanel::rebuild_investors(const QStringList& investors) {
     for (const auto& inv : investors) {
         auto* lbl = new QLabel("• " + inv);
         lbl->setStyleSheet(
-            QString("color:%1; font-size:11px; background:transparent;")
+            QString("color:%1; font-size:12px; background:transparent;")
                 .arg(colors::TEXT_PRIMARY()));
         investors_layout_->addWidget(lbl);
     }
@@ -444,7 +444,7 @@ void CompanyDetailPanel::rebuild_comps_chips(const QStringList& tickers) {
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(
             QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                    "  border-radius:3px; padding:3px 10px; font-size:11px; font-weight:600; }"
+                    "  border-radius:3px; padding:3px 10px; font-size:12px; font-weight:600; }"
                     "QPushButton:hover { background:%4; border-color:%5; color:%6; }")
                 .arg(colors::BG_SURFACE(), colors::CYAN(), colors::BORDER_DIM(),
                      colors::BG_RAISED(), colors::CYAN(), colors::TEXT_PRIMARY()));
@@ -465,7 +465,7 @@ void CompanyDetailPanel::rebuild_tags(const QStringList& tags) {
     for (const auto& tag : tags) {
         auto* lbl = new QLabel(tag);
         lbl->setStyleSheet(
-            QString("color:%1; font-size:10px; background:rgba(107,114,128,0.2);"
+            QString("color:%1; font-size:12px; background:rgba(107,114,128,0.2);"
                     "  border-radius:3px; padding:2px 8px;")
                 .arg(colors::TEXT_SECONDARY()));
         tags_layout_->addWidget(lbl);
@@ -489,7 +489,7 @@ QWidget* CompanyDetailPanel::make_metric_tile(const QString& label, const QStrin
 
     auto* lbl = new QLabel(label);
     lbl->setStyleSheet(
-        QString("color:%1; font-size:9px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
             .arg(colors::TEXT_SECONDARY()));
 
     auto* val_lbl = new QLabel(value);

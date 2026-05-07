@@ -58,9 +58,9 @@ QString OverviewPanel::fmt_pct(double v) {
 static QLabel* make_section_header(const QString& title, QWidget* parent) {
     auto* lbl = new QLabel(title, parent);
     lbl->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:9px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
                 " letter-spacing:1.5px; padding:5px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     return lbl;
 }
 
@@ -204,9 +204,9 @@ void OverviewPanel::build_ui() {
 
             auto* cap = new QLabel(spec.label, tile);
             cap->setStyleSheet(
-                QString("QLabel { color:%1; font-size:9px; font-weight:700;"
+                QString("QLabel { color:%1; font-size:11px; font-weight:700;"
                         " letter-spacing:1px; background:transparent; border:none; }")
-                    .arg(ui::colors::TEXT_TERTIARY()));
+                    .arg(ui::colors::TEXT_SECONDARY()));
             tl->addWidget(cap);
 
             auto* val = new QLabel(QStringLiteral("—"), tile);
@@ -323,9 +323,9 @@ void OverviewPanel::build_ui() {
 
         signal_table_->setStyleSheet(
             QString("QTableWidget { background:%1; color:%2; border:none;"
-                    "  font-size:11px; font-family:Consolas,monospace;"
+                    "  font-size:12px; font-family:Consolas,monospace;"
                     "  gridline-color:transparent; }"
-                    "QTableWidget::item { padding:3px 6px; border-bottom:1px solid %3; }"
+                    "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                     "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
                     "QTableWidget::item:hover { background:%4; }"
                     "QScrollBar:vertical { width:4px; background:%1; }"
@@ -336,7 +336,7 @@ void OverviewPanel::build_ui() {
         h->setStyleSheet(
             QString("QHeaderView::section { background:%1; color:%2; border:none;"
                     "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                    "  padding:4px 6px; font-size:9px; font-weight:700;"
+                    "  padding:4px 8px; font-size:12px; font-weight:700;"
                     "  letter-spacing:0.5px; }")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                      ui::colors::AMBER(), ui::colors::BORDER_DIM()));
@@ -461,7 +461,7 @@ void OverviewPanel::populate_alpha_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), alpha_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_TERTIARY()));
+            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
@@ -519,7 +519,7 @@ void OverviewPanel::populate_sector_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), sector_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_TERTIARY()));
+            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
@@ -602,7 +602,7 @@ void OverviewPanel::populate_signal_table() {
                 QString::number(static_cast<int>(sig.signal_score)));
             sig_item->setTextAlignment(Qt::AlignCenter);
             sig_item->setForeground(
-                QColor(sig.signal_score > 70 ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY()));
+                QColor(sig.signal_score > 70 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
             // Store numeric value for sort
             sig_item->setData(Qt::UserRole, sig.signal_score);

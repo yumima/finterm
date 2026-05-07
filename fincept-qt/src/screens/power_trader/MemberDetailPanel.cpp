@@ -37,9 +37,9 @@ static QLabel* make_stat_label(QWidget* parent, const QString& caption) {
     vl->setSpacing(2);
 
     auto* cap = new QLabel(caption, w);
-    cap->setStyleSheet(QString("QLabel { color:%1; font-size:9px; font-weight:700;"
+    cap->setStyleSheet(QString("QLabel { color:%1; font-size:11px; font-weight:700;"
                                " letter-spacing:0.8px; background:transparent; }")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+                           .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(cap);
 
     auto* val = new QLabel(QStringLiteral("—"), w);
@@ -63,9 +63,9 @@ void MemberDetailPanel::build_ui() {
     // ── Section header ────────────────────────────────────────────────────────
     auto* hdr_label = new QLabel(QStringLiteral("MEMBER DETAIL"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:9px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     root_layout->addWidget(hdr_label);
 
     // ── Placeholder ───────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ void MemberDetailPanel::build_ui() {
         pl->setAlignment(Qt::AlignCenter);
         auto* msg = new QLabel(QStringLiteral("Select a member\nto view details"), placeholder_);
         msg->setAlignment(Qt::AlignCenter);
-        msg->setStyleSheet(QString("QLabel { color:%1; font-size:13px; }").arg(ui::colors::TEXT_TERTIARY()));
+        msg->setStyleSheet(QString("QLabel { color:%1; font-size:13px; }").arg(ui::colors::TEXT_SECONDARY()));
         pl->addWidget(msg);
     }
     root_layout->addWidget(placeholder_);
@@ -163,9 +163,9 @@ void MemberDetailPanel::build_ui() {
     {
         auto* cap = new QLabel(QStringLiteral("COMMITTEES"), detail_widget_);
         cap->setStyleSheet(
-            QString("QLabel { color:%1; font-size:9px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:11px; font-weight:700;"
                     " letter-spacing:1.2px; background:transparent; margin-top:4px; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(cap);
 
         committees_label_ = new QLabel(QStringLiteral("—"), detail_widget_);
@@ -185,9 +185,9 @@ void MemberDetailPanel::build_ui() {
 
         auto* cap = new QLabel(QStringLiteral("TRADE HISTORY (LAST 20)"), detail_widget_);
         cap->setStyleSheet(
-            QString("QLabel { color:%1; font-size:9px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:11px; font-weight:700;"
                     " letter-spacing:1.2px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(cap);
     }
 
@@ -220,7 +220,7 @@ void MemberDetailPanel::build_ui() {
 
     hist_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:11px; font-family:Consolas,monospace;"
+                "  font-size:12px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
                 "QTableWidget::item { padding:2px 5px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -231,7 +231,7 @@ void MemberDetailPanel::build_ui() {
     hh->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:3px 5px; font-size:9px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:3px 5px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -361,7 +361,7 @@ void MemberDetailPanel::populate(const power_trader::CongressMember& member,
             auto* item = new QTableWidgetItem(QString::number(t.signal_score, 'f', 0));
             item->setTextAlignment(Qt::AlignCenter);
             item->setForeground(
-                QColor(t.signal_score >= 60 ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY()));
+                QColor(t.signal_score >= 60 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
             item->setFlags(item->flags() & ~Qt::ItemIsEditable);
             hist_table_->setItem(r, 5, item);
         }

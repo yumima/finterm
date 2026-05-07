@@ -17,7 +17,8 @@ using namespace fincept::pre_ipo;
 // ── Constructor ───────────────────────────────────────────────────────────────
 
 CompanyListPanel::CompanyListPanel(QWidget* parent) : QWidget(parent) {
-    setFixedWidth(240);
+    setMinimumWidth(240);
+    setMaximumWidth(340);
     build_ui();
 }
 
@@ -55,7 +56,7 @@ void CompanyListPanel::build_ui() {
     tb_layout->setContentsMargins(12, 0, 12, 0);
     auto* title_lbl = new QLabel("COMPANIES");
     title_lbl->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1.5px; background:transparent;")
+        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.5px; background:transparent;")
             .arg(colors::TEXT_SECONDARY()));
     tb_layout->addWidget(title_lbl);
     tb_layout->addStretch();
@@ -129,7 +130,7 @@ void CompanyListPanel::build_ui() {
         btn->setFixedHeight(22);
         btn->setStyleSheet(
             QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                    "  border-radius:11px; padding:0 8px; font-size:10px; font-weight:600; }"
+                    "  border-radius:11px; padding:0 8px; font-size:12px; font-weight:600; }"
                     "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
                     "QPushButton:hover:!checked { color:%5; border-color:%5; }")
                 .arg(colors::TEXT_TERTIARY(), colors::BORDER_DIM(),
@@ -293,7 +294,7 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
     if (c.last_valuation_usd > 0) {
         auto* val_badge = new QLabel(valuation_label(c.last_valuation_usd));
         val_badge->setStyleSheet(
-            QString("color:%1; font-size:9px; font-weight:700;"
+            QString("color:%1; font-size:11px; font-weight:700;"
                     "  background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.3);"
                     "  border-radius:3px; padding:1px 5px;")
                 .arg(colors::AMBER()));
@@ -308,7 +309,7 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
 
     auto* sector_lbl = new QLabel(c.sector);
     sector_lbl->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row2->addWidget(sector_lbl, 1);
 
     row2->addWidget(make_status_badge(c.ipo_status, card));
@@ -366,7 +367,7 @@ QWidget* CompanyListPanel::make_status_badge(IpoStatus status, QWidget* parent) 
 
     auto* badge = new QLabel(label, parent);
     badge->setStyleSheet(
-        QString("color:%1; font-size:9px; font-weight:700; background:%2;"
+        QString("color:%1; font-size:11px; font-weight:700; background:%2;"
                 "  border-radius:3px; padding:1px 5px;")
             .arg(fg, bg));
     badge->setAlignment(Qt::AlignCenter);

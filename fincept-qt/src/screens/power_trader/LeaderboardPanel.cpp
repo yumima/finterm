@@ -37,9 +37,9 @@ void LeaderboardPanel::build_ui() {
     // Section header
     auto* hdr_label = new QLabel(QStringLiteral("LEADERBOARD"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:9px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     layout->addWidget(hdr_label);
 
     table_ = new QTableWidget(this);
@@ -75,9 +75,9 @@ void LeaderboardPanel::build_ui() {
 
     table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:11px; font-family:Consolas,monospace;"
+                "  font-size:12px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
-                "QTableWidget::item { padding:3px 6px; border-bottom:1px solid %3; }"
+                "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
                 "QTableWidget::item:hover { background:%4; }"
                 "QScrollBar:vertical { width:4px; background:%1; }"
@@ -88,7 +88,7 @@ void LeaderboardPanel::build_ui() {
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:9px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -149,7 +149,7 @@ void LeaderboardPanel::populate_table() {
 
         // Rank
         set_item(0, QString::number(r + 1),
-                 ui::colors::TEXT_TERTIARY, Qt::AlignCenter);
+                 ui::colors::TEXT_SECONDARY, Qt::AlignCenter);
 
         // Name — store member_id in UserRole
         auto* name_item = new QTableWidgetItem(m.full_name);

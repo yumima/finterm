@@ -39,6 +39,25 @@ class PowerTraderService : public QObject {
     /// Committee → sector insider correlation signals.
     QVector<CommitteeInsiderSignal> committee_insider_signals() const;
 
+    /// Grouped view: one CommitteeGroup per committee found in member data.
+    QVector<CommitteeGroup> committee_groups() const;
+
+    /// Aggregate stats for a single party ("D", "R", "I").
+    PartyStats party_stats(const QString& party) const;
+
+    /// All unique committee names found in current member data (sorted).
+    QStringList available_committees() const;
+
+    /// All trades where committee_relevance == committee (or any if committee is empty).
+    QVector<PoliticalTrade> trades_by_committee(const QString& committee) const;
+
+    /// Filter summary by body (Senate / House only).
+    PowerTraderSummary filtered_summary(BodyFilter body) const;
+
+    // ── Insider watch ─────────────────────────────────────────────────────────
+    /// Compute multi-factor insider watch list, sorted by insider_score desc.
+    QVector<InsiderWatchEntry> insider_watch_list() const;
+
     // ── Rankings ──────────────────────────────────────────────────────────────
     /// Return all members ranked by the given dimension (rank 1 = best/highest).
     QVector<RankedMember> ranked_members(RankingDimension dim) const;
@@ -50,8 +69,18 @@ class PowerTraderService : public QObject {
     /// Ticker + estimated gain% for the member's best single position.
     QPair<QString, double> best_pick(const QString& member_id) const;
 
+    // ── Cabinet (OGE Form 278) ────────────────────────────────────────────────
+    void load_cabinet_data();
+    bool is_cabinet_loaded() const { return cabinet_.loaded; }
+    CabinetSummary cabinet_summary() const { return cabinet_; }
+    /// Members sorted by conflict_score descending.
+    QVector<CabinetMember> cabinet_conflict_ranking() const;
+    /// Cabinet-wide sector exposure (sum of all member holdings by sector).
+    QVector<SectorExposure> cabinet_sector_exposure() const;
+
   signals:
     void data_loaded(fincept::power_trader::PowerTraderSummary summary);
+    void cabinet_data_loaded(fincept::power_trader::CabinetSummary summary);
     void error_occurred(QString error);
 
   private:
@@ -60,6 +89,7 @@ class PowerTraderService : public QObject {
 
     void on_daemon_response(bool ok, const QJsonObject& result, const QString& error);
     void parse_summary(const QJsonObject& root);
+    void parse_cabinet(const QJsonObject& root);
     void generate_mock_data();
 
     static CongressMember make_member(const QString& id, const QString& name,
@@ -77,7 +107,9 @@ class PowerTraderService : public QObject {
                                      AssetType asset_type = AssetType::Stock);
 
     PowerTraderSummary summary_;
-    bool loading_ = false;
+    CabinetSummary     cabinet_;
+    bool loading_         = false;
+    bool cabinet_loading_ = false;
 
     QTimer* refresh_timer_ = nullptr;
     static constexpr int kRefreshIntervalMs = 6 * 60 * 60 * 1000;

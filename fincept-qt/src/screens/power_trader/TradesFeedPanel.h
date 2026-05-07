@@ -18,6 +18,7 @@ class TradesFeedPanel : public QWidget {
 
     void set_trades(const QVector<power_trader::PoliticalTrade>& trades);
     void set_selected_member(const QString& member_id);
+    void set_available_committees(const QStringList& committees);
 
   signals:
     void member_selected(QString member_id);
@@ -27,12 +28,13 @@ class TradesFeedPanel : public QWidget {
     void apply_filters();
     void populate_table(const QVector<power_trader::PoliticalTrade>& visible);
 
-    QLineEdit*   ticker_filter_  = nullptr;
-    QComboBox*   party_filter_   = nullptr;
-    QComboBox*   chamber_filter_ = nullptr;
-    QDateEdit*   date_from_      = nullptr;
-    QDateEdit*   date_to_        = nullptr;
-    QTableWidget* table_         = nullptr;
+    QLineEdit*   ticker_filter_    = nullptr;
+    QComboBox*   party_filter_     = nullptr;
+    QComboBox*   chamber_filter_   = nullptr;
+    QComboBox*   committee_filter_ = nullptr;
+    QDateEdit*   date_from_        = nullptr;
+    QDateEdit*   date_to_          = nullptr;
+    QTableWidget* table_           = nullptr;
 
     QVector<power_trader::PoliticalTrade> trades_;
     QString selected_member_id_;
