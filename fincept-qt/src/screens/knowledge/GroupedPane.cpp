@@ -5,6 +5,7 @@
 #include <QButtonGroup>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QScrollArea>
 #include <QSettings>
 #include <QStackedWidget>
 #include <QToolButton>
@@ -26,8 +27,8 @@ QString tab_button_ss(bool active) {
     const QString bg     = active ? ui::colors::BG_RAISED() : ui::colors::BG_SURFACE();
     const QString border = active ? ui::colors::AMBER()     : ui::colors::BORDER_BRIGHT();
     return QString("QToolButton { color: %1; background: %2; border: 1px solid %3;"
-                   " padding: 4px 12px; font-size: 10px; font-weight: bold;"
-                   " letter-spacing: 1.4px; %4 }"
+                   " padding: 3px 9px; font-size: 10px; font-weight: bold;"
+                   " letter-spacing: 1px; %4 }"
                    "QToolButton:hover { color: %5; border-color: %5;"
                    "                    background: %6; }")
         .arg(fg, bg, border, MONO, ui::colors::AMBER(), ui::colors::BG_RAISED());
@@ -43,32 +44,50 @@ GroupedPane::GroupedPane(const QString& group_id, const QString& title, QWidget*
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ── Header bar: group label · segmented sub-tab buttons ───────────────────
-    btn_row_ = new QWidget(this);
-    btn_row_->setFixedHeight(46);
-    btn_row_->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")
-                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-    auto* hl = new QHBoxLayout(btn_row_);
-    hl->setContentsMargins(12, 0, 12, 0);
-    hl->setSpacing(8);
+    // ── Header bar: group label · scrollable sub-tab buttons ─────────────────
+    // Wrapped in a QScrollArea so a pane with many sub-tabs (e.g. REFERENCE
+    // with Formulas · Regulators · Interviews) never clips the rightmost tab.
+    auto* header_container = new QWidget(this);
+    header_container->setFixedHeight(46);
+    header_container->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")
+                                        .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* hc_layout = new QHBoxLayout(header_container);
+    hc_layout->setContentsMargins(12, 0, 12, 0);
+    hc_layout->setSpacing(8);
 
-    auto* lbl = new QLabel(title, btn_row_);
+    auto* lbl = new QLabel(title, header_container);
     lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; font-weight: bold;"
                                " letter-spacing: 1.6px; %2")
                            .arg(ui::colors::AMBER(), MONO));
-    hl->addWidget(lbl);
+    hc_layout->addWidget(lbl);
 
-    auto* sep = new QLabel("·", btn_row_);
+    auto* sep = new QLabel("\xc2\xb7", header_container);
     sep->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::BORDER_BRIGHT(), MONO));
-    hl->addWidget(sep);
+    hc_layout->addWidget(sep);
+
+    // Scrollable button strip — buttons are added inside btn_row_ which sits
+    // inside a horizontally-scrolling QScrollArea so tabs never get clipped.
+    auto* btn_scroll = new QScrollArea(header_container);
+    btn_scroll->setFrameShape(QFrame::NoFrame);
+    btn_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    btn_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    btn_scroll->setWidgetResizable(true);
+    btn_scroll->setStyleSheet("QScrollArea{border:none;background:transparent;}");
+
+    btn_row_ = new QWidget(btn_scroll);
+    btn_row_->setStyleSheet("background:transparent;");
+    auto* hl = new QHBoxLayout(btn_row_);
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(6);
 
     btn_group_ = new QButtonGroup(this);
     btn_group_->setExclusive(true);
 
-    // Buttons are added by addSubPane(); push a stretch now so they pack left.
-    hl->addStretch();
+    hl->addStretch(); // buttons inserted before this stretch in addSubPane()
+    btn_scroll->setWidget(btn_row_);
+    hc_layout->addWidget(btn_scroll, 1);
 
-    root->addWidget(btn_row_);
+    root->addWidget(header_container);
 
     // ── Stack of sub-panes ────────────────────────────────────────────────────
     stack_ = new QStackedWidget(this);

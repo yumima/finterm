@@ -196,7 +196,7 @@ void KnowledgeScreen::build_layout() {
 
     // ── REFERENCE pane (Formulas · Regulators · Interviews) ──────────────────
     reference_pane_ = new GroupedPane("reference", "REFERENCE", split);
-    reference_pane_->setMinimumWidth(240);
+    reference_pane_->setMinimumWidth(260);
     for (const auto& cat_id : REFERENCE_CATS) {
         if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
             const auto* meta = loader.category(cat_id);
