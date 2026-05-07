@@ -39,6 +39,22 @@ private:
     QVector<power_trader::NavPoint> filtered_series(const QString& period) const;
 };
 
+// ── SectorPieChart ────────────────────────────────────────────────────────────
+/// QPainter donut chart for sector allocation.
+class SectorPieChart : public QWidget {
+    Q_OBJECT
+public:
+    struct Slice { QString sector; double pct; QColor color; double corr_score; };
+    explicit SectorPieChart(QWidget* parent = nullptr);
+    void set_slices(const QVector<Slice>& slices);
+    QSize sizeHint() const override { return {220, 220}; }
+    QSize minimumSizeHint() const override { return {160, 160}; }
+protected:
+    void paintEvent(QPaintEvent*) override;
+private:
+    QVector<Slice> slices_;
+};
+
 // ── MemberProfilePanel ────────────────────────────────────────────────────────
 /// Full-detail profile panel for a single Congress member.
 /// Displayed inside the POWER TRADER screen when a member row is clicked.
@@ -70,6 +86,9 @@ private:
     void build_holdings_table(QWidget* parent, QVBoxLayout* vl);
     void build_trades_section(QWidget* parent, QVBoxLayout* vl);
     void build_ranking_section(QWidget* parent, QVBoxLayout* vl);
+    void build_committees_section(QWidget* parent, QVBoxLayout* vl);
+    void build_sector_section(QWidget* parent, QVBoxLayout* vl);
+    void build_insights_section(QWidget* parent, QVBoxLayout* vl);
 
     void populate_header(const power_trader::CongressMember& m,
                          const power_trader::MemberPortfolio& p);
@@ -81,6 +100,14 @@ private:
     void populate_holdings(const power_trader::MemberPortfolio& p);
     void populate_trades(const QVector<power_trader::PoliticalTrade>& trades);
     void populate_rankings(const QString& member_id);
+    void populate_committees(const power_trader::CongressMember& m,
+                             const QVector<power_trader::CommitteeInsiderSignal>& insider_sigs,
+                             const QVector<power_trader::PoliticalTrade>& trades);
+    void populate_sector(const power_trader::MemberPortfolio& portfolio,
+                         const QVector<power_trader::CommitteeInsiderSignal>& insider_sigs);
+    void populate_insights(const power_trader::CongressMember& m,
+                           const power_trader::MemberPortfolio& portfolio,
+                           const QVector<power_trader::PoliticalTrade>& trades);
 
     static QString fmt_dollar(double v);   // also used by NavChart (via free fn)
     static QString fmt_pct(double v, bool show_sign = true);
@@ -117,6 +144,17 @@ private:
 
     // ── Section 6: ranking comparison ─────────────────────────────────────────
     QWidget* rank_cards_row_      = nullptr;
+
+    // ── Section 7: committees ─────────────────────────────────────────────────
+    QWidget* committees_container_ = nullptr;
+
+    // ── Section 8: sector allocation ─────────────────────────────────────────
+    SectorPieChart* sector_pie_   = nullptr;
+    QWidget*       sector_legend_ = nullptr;
+    QLabel*        insider_score_ = nullptr;  // "Insider Index: 74/100"
+
+    // ── Section 9: trader insights ────────────────────────────────────────────
+    QWidget* insights_container_  = nullptr;
 
     // ── State ─────────────────────────────────────────────────────────────────
     power_trader::CongressMember current_member_;

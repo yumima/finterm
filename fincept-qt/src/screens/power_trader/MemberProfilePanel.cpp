@@ -70,6 +70,46 @@ QString MemberProfilePanel::fmt_pct(double v, bool show_sign) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Committee → sector mapping (file-local helper)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Returns the sector keywords associated with a given committee name.
+/// A committee "overlaps" a holding sector if any sector keyword appears
+/// (case-insensitive) in the holding's sector string.
+static QStringList committee_sectors(const QString& committee) {
+    const QString c = committee.toLower();
+    if (c.contains(QLatin1String("armed services")))
+        return { QStringLiteral("Defense"), QStringLiteral("Aerospace") };
+    if (c.contains(QLatin1String("intelligence")))
+        return { QStringLiteral("Technology"), QStringLiteral("Cybersecurity") };
+    if (c.contains(QLatin1String("finance")) || c.contains(QLatin1String("banking")))
+        return { QStringLiteral("Financials"), QStringLiteral("Banking") };
+    if (c.contains(QLatin1String("energy")))
+        return { QStringLiteral("Energy"), QStringLiteral("Utilities") };
+    if (c.contains(QLatin1String("commerce")))
+        return { QStringLiteral("Technology"), QStringLiteral("Consumer") };
+    if (c.contains(QLatin1String("health")))
+        return { QStringLiteral("Healthcare"), QStringLiteral("Biotech") };
+    if (c.contains(QLatin1String("appropriations")))
+        return { QStringLiteral("cross-sector") };
+    if (c.contains(QLatin1String("foreign relations")))
+        return { QStringLiteral("Defense"), QStringLiteral("International") };
+    if (c.contains(QLatin1String("homeland security")))
+        return { QStringLiteral("Defense"), QStringLiteral("Cybersecurity") };
+    return {};
+}
+
+/// Returns true if the given sector string matches any of the committee's sectors.
+static bool sector_matches_committee(const QString& sector, const QString& committee) {
+    const QStringList cmte_sectors = committee_sectors(committee);
+    for (const QString& cs : cmte_sectors) {
+        if (sector.contains(cs, Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NavChart implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -307,6 +347,102 @@ void NavChart::leaveEvent(QEvent* event) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SectorPieChart implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
+SectorPieChart::SectorPieChart(QWidget* parent) : QWidget(parent) {
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    setAttribute(Qt::WA_OpaquePaintEvent, false);
+}
+
+void SectorPieChart::set_slices(const QVector<Slice>& slices) {
+    slices_ = slices;
+    update();
+}
+
+void SectorPieChart::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    p.fillRect(rect(), QColor(ui::colors::BG_BASE()));
+
+    const int side = qMin(width(), height());
+    const double outer_r = side * 0.90 / 2.0;
+    const double inner_r = outer_r * 0.55;
+    const QPointF center(width() / 2.0, height() / 2.0);
+
+    if (slices_.isEmpty()) {
+        // Draw empty ring placeholder
+        p.setPen(QPen(QColor(ui::colors::BORDER_DIM()), 2));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(center, outer_r, outer_r);
+        p.setPen(QColor(ui::colors::TEXT_TERTIARY()));
+        p.setFont(QFont("Consolas", 8));
+        p.drawText(rect(), Qt::AlignCenter, QStringLiteral("NO DATA"));
+        return;
+    }
+
+    // Draw slices
+    // We track cumulative angle in 1/16th-degree units (Qt's arc unit)
+    const double gap_deg = 0.5; // 0.5-degree gap between slices
+    const double gap16 = gap_deg * 16.0;
+
+    // Compute total pct so we can normalize
+    double total_pct = 0.0;
+    for (const auto& sl : slices_) total_pct += sl.pct;
+    if (total_pct < 1e-6) total_pct = 1.0;
+
+    const QRectF donut_rect(center.x() - outer_r, center.y() - outer_r,
+                             outer_r * 2.0, outer_r * 2.0);
+
+    double angle_deg = 90.0; // Start at 12 o'clock
+
+    for (const auto& sl : slices_) {
+        const double span_deg = (sl.pct / total_pct) * 360.0;
+        if (span_deg < 0.1) { angle_deg += span_deg; continue; }
+
+        // Shorten by gap on each side
+        const double half_gap = (slices_.size() > 1) ? gap_deg * 0.5 : 0.0;
+        const double start16  = qRound((angle_deg + half_gap) * 16.0);
+        const double span16   = qRound((span_deg - gap_deg) * 16.0);
+
+        if (span16 < 1) { angle_deg += span_deg; continue; }
+
+        // Build donut arc path using QPainterPath
+        QPainterPath path;
+        path.arcMoveTo(donut_rect, angle_deg + half_gap);
+        path.arcTo(donut_rect, angle_deg + half_gap, span_deg - gap_deg);
+
+        // Arc back along inner circle
+        const QRectF inner_rect(center.x() - inner_r, center.y() - inner_r,
+                                 inner_r * 2.0, inner_r * 2.0);
+        path.arcTo(inner_rect, angle_deg + half_gap + span_deg - gap_deg, -(span_deg - gap_deg));
+        path.closeSubpath();
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(sl.color);
+        p.drawPath(path);
+
+        angle_deg += span_deg;
+    }
+
+    // Punch out center hole with background color
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(ui::colors::BG_BASE()));
+    p.drawEllipse(center, inner_r - 1.0, inner_r - 1.0);
+
+    // Center text: "SECTOR\nALLOCATION"
+    p.setPen(QColor(ui::colors::TEXT_TERTIARY()));
+    QFont center_font("Consolas", 7);
+    center_font.setBold(false);
+    p.setFont(center_font);
+    const QRectF text_rect(center.x() - inner_r * 0.85, center.y() - inner_r * 0.5,
+                            inner_r * 1.7, inner_r);
+    p.drawText(text_rect, Qt::AlignCenter | Qt::TextWordWrap,
+               QStringLiteral("SECTOR\nALLOCATION"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MemberProfilePanel implementation
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -366,6 +502,9 @@ void MemberProfilePanel::build_ui() {
     build_holdings_table(content_, vl);
     build_trades_section(content_, vl);
     build_ranking_section(content_, vl);
+    build_committees_section(content_, vl);
+    build_sector_section(content_, vl);
+    build_insights_section(content_, vl);
     vl->addStretch();
 
     scroll_area_->setVisible(false);
@@ -704,6 +843,92 @@ void MemberProfilePanel::build_ranking_section(QWidget* parent, QVBoxLayout* vl)
     vl->addWidget(row);
 }
 
+void MemberProfilePanel::build_committees_section(QWidget* parent, QVBoxLayout* vl) {
+    auto* hdr_label = new QLabel(
+        QStringLiteral("COMMITTEE MEMBERSHIPS & SECTOR OVERLAP"), parent);
+    hdr_label->setStyleSheet(section_header_style());
+    vl->addWidget(hdr_label);
+
+    committees_container_ = new QWidget(parent);
+    committees_container_->setStyleSheet(
+        QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
+    auto* cvl = new QVBoxLayout(committees_container_);
+    cvl->setContentsMargins(10, 8, 10, 8);
+    cvl->setSpacing(6);
+    // Content filled by populate_committees()
+
+    vl->addWidget(committees_container_);
+}
+
+void MemberProfilePanel::build_sector_section(QWidget* parent, QVBoxLayout* vl) {
+    auto* hdr_label = new QLabel(
+        QStringLiteral("SECTOR ALLOCATION & INSIDER CORRELATION"), parent);
+    hdr_label->setStyleSheet(section_header_style());
+    vl->addWidget(hdr_label);
+
+    auto* outer = new QWidget(parent);
+    outer->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
+    auto* outer_vl = new QVBoxLayout(outer);
+    outer_vl->setContentsMargins(10, 8, 10, 8);
+    outer_vl->setSpacing(8);
+
+    // Top row: pie chart + legend
+    auto* chart_row = new QWidget(outer);
+    chart_row->setStyleSheet("QWidget { background:transparent; }");
+    auto* chart_hl = new QHBoxLayout(chart_row);
+    chart_hl->setContentsMargins(0, 0, 0, 0);
+    chart_hl->setSpacing(16);
+
+    sector_pie_ = new SectorPieChart(chart_row);
+    chart_hl->addWidget(sector_pie_);
+
+    sector_legend_ = new QWidget(chart_row);
+    sector_legend_->setStyleSheet("QWidget { background:transparent; }");
+    auto* legend_vl = new QVBoxLayout(sector_legend_);
+    legend_vl->setContentsMargins(0, 0, 0, 0);
+    legend_vl->setSpacing(4);
+    legend_vl->addStretch();
+    // Content filled by populate_sector()
+    chart_hl->addWidget(sector_legend_, 1);
+
+    outer_vl->addWidget(chart_row);
+
+    // Insider score label (centered, below chart+legend)
+    insider_score_ = new QLabel(QStringLiteral("Insider Index: — / 100"), outer);
+    insider_score_->setAlignment(Qt::AlignCenter);
+    insider_score_->setStyleSheet(
+        QString("QLabel { color:%1; font-size:13px; font-weight:700;"
+                " font-family:Consolas,monospace; background:transparent; padding:4px 0; }")
+            .arg(ui::colors::AMBER()));
+    outer_vl->addWidget(insider_score_);
+
+    vl->addWidget(outer);
+}
+
+void MemberProfilePanel::build_insights_section(QWidget* parent, QVBoxLayout* vl) {
+    auto* hdr_label = new QLabel(QStringLiteral("TRADER PROFILE"), parent);
+    hdr_label->setStyleSheet(section_header_style());
+    vl->addWidget(hdr_label);
+
+    auto* outer = new QWidget(parent);
+    outer->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
+    auto* outer_vl = new QVBoxLayout(outer);
+    outer_vl->setContentsMargins(10, 8, 10, 8);
+    outer_vl->setSpacing(0);
+
+    insights_container_ = new QWidget(outer);
+    insights_container_->setStyleSheet("QWidget { background:transparent; }");
+    // We use a flow-like wrap — implemented as a QWidget with a fixed FlowLayout
+    // For simplicity use a QGridLayout that wraps chips at 4 per row
+    auto* flow = new QGridLayout(insights_container_);
+    flow->setContentsMargins(0, 0, 0, 0);
+    flow->setSpacing(6);
+    // Content filled by populate_insights()
+
+    outer_vl->addWidget(insights_container_);
+    vl->addWidget(outer);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void MemberProfilePanel::set_member(const power_trader::CongressMember& member) {
@@ -758,6 +983,9 @@ void MemberProfilePanel::populate(const power_trader::CongressMember& member,
     populate_holdings(portfolio);
     populate_trades(trades);
     populate_rankings(member.id);
+    populate_committees(member, insider_signals, trades);
+    populate_sector(portfolio, insider_signals);
+    populate_insights(member, portfolio, trades);
 }
 
 void MemberProfilePanel::populate_header(const power_trader::CongressMember& m,
@@ -1216,6 +1444,520 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
     }
 
     hl->addStretch();
+}
+
+// ── Section 7: populate_committees ───────────────────────────────────────────
+
+void MemberProfilePanel::populate_committees(
+    const power_trader::CongressMember& m,
+    const QVector<power_trader::CommitteeInsiderSignal>& insider_sigs,
+    const QVector<power_trader::PoliticalTrade>& trades)
+{
+    // Clear old layout contents
+    auto* cvl = qobject_cast<QVBoxLayout*>(committees_container_->layout());
+    if (cvl) {
+        while (cvl->count() > 0) {
+            auto* item = cvl->takeAt(0);
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+    }
+    if (!cvl) return;
+
+    if (m.committees.isEmpty()) {
+        auto* none = new QLabel(QStringLiteral("No committee data available"),
+                                committees_container_);
+        none->setStyleSheet(
+            QString("QLabel { color:%1; font-size:11px; background:transparent; }")
+                .arg(ui::colors::TEXT_TERTIARY()));
+        cvl->addWidget(none);
+        return;
+    }
+
+    const int total_trades = trades.size();
+
+    // Build per-committee overlap_pct from insider signals
+    QHash<QString, double> cmte_overlap_pct;
+    for (const auto& sig : insider_sigs) {
+        const double existing = cmte_overlap_pct.value(sig.committee, -1.0);
+        if (sig.overlap_pct > existing)
+            cmte_overlap_pct[sig.committee] = sig.overlap_pct;
+    }
+
+    for (const QString& committee : m.committees) {
+        // Count trades matching this committee
+        int cmte_trade_count = 0;
+        for (const auto& t : trades) {
+            if (t.committee_relevance == committee)
+                ++cmte_trade_count;
+        }
+        const double trade_pct = total_trades > 0
+            ? (100.0 * cmte_trade_count / total_trades)
+            : 0.0;
+
+        // Determine sector labels for this committee
+        const QStringList sectors = committee_sectors(committee);
+        const QString sector_str = sectors.isEmpty()
+            ? QStringLiteral("General")
+            : sectors.join(QStringLiteral(" · "));
+
+        // Card widget
+        auto* card = new QWidget(committees_container_);
+        card->setStyleSheet(
+            QString("QWidget { background:%1; border:1px solid %2;"
+                    " border-radius:3px; }")
+                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+
+        auto* card_vl = new QVBoxLayout(card);
+        card_vl->setContentsMargins(10, 8, 10, 8);
+        card_vl->setSpacing(4);
+
+        // Committee name row
+        auto* name_row = new QWidget(card);
+        name_row->setStyleSheet("QWidget { background:transparent; }");
+        auto* name_hl = new QHBoxLayout(name_row);
+        name_hl->setContentsMargins(0, 0, 0, 0);
+        name_hl->setSpacing(8);
+
+        auto* cmte_name_lbl = new QLabel(committee, name_row);
+        cmte_name_lbl->setStyleSheet(
+            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+                    " background:transparent; }").arg(ui::colors::AMBER()));
+        name_hl->addWidget(cmte_name_lbl, 1);
+
+        // Trade count badge
+        auto* count_lbl = new QLabel(
+            QString("%1 / %2 trades (%3%)")
+                .arg(cmte_trade_count)
+                .arg(total_trades)
+                .arg(trade_pct, 0, 'f', 0),
+            name_row);
+        const char* count_color = trade_pct > 60.0 ? ui::colors::NEGATIVE
+                                : trade_pct > 30.0 ? ui::colors::WARNING
+                                : ui::colors::TEXT_TERTIARY;
+        count_lbl->setStyleSheet(
+            QString("QLabel { color:%1; font-size:10px; font-weight:600;"
+                    " font-family:Consolas,monospace; background:transparent; }")
+                .arg(count_color));
+        name_hl->addWidget(count_lbl);
+        card_vl->addWidget(name_row);
+
+        // Oversight sectors label
+        auto* sectors_lbl = new QLabel(sector_str, card);
+        sectors_lbl->setStyleSheet(
+            QString("QLabel { color:%1; font-size:10px; background:transparent; }")
+                .arg(ui::colors::TEXT_TERTIARY()));
+        card_vl->addWidget(sectors_lbl);
+
+        // Progress bar for trade %
+        auto* bar_outer = new QFrame(card);
+        bar_outer->setFixedHeight(4);
+        bar_outer->setStyleSheet(
+            QString("QFrame { background:%1; border-radius:2px; border:none; }")
+                .arg(ui::colors::BORDER_DIM()));
+
+        auto* bar_inner = new QWidget(bar_outer);
+        // Cap visual at full width; clamp
+        const int bar_w = qMax(2, qMin(qRound(trade_pct / 100.0 * 300), 300));
+        bar_inner->setGeometry(0, 0, bar_w, 4);
+        bar_inner->setStyleSheet(
+            QString("QWidget { background:%1; border-radius:2px; border:none; }")
+                .arg(count_color));
+        card_vl->addWidget(bar_outer);
+
+        cvl->addWidget(card);
+    }
+}
+
+// ── Section 8: populate_sector ────────────────────────────────────────────────
+
+void MemberProfilePanel::populate_sector(
+    const power_trader::MemberPortfolio& portfolio,
+    const QVector<power_trader::CommitteeInsiderSignal>& insider_sigs)
+{
+    // ── Sector color map ──────────────────────────────────────────────────────
+    static const QHash<QString, QColor> kSectorColors = {
+        { QStringLiteral("Technology"),  QColor("#22d3ee") },
+        { QStringLiteral("Defense"),     QColor("#ef4444") },
+        { QStringLiteral("Financials"),  QColor("#3b82f6") },
+        { QStringLiteral("Energy"),      QColor("#f97316") },
+        { QStringLiteral("Healthcare"),  QColor("#22c55e") },
+        { QStringLiteral("Consumer"),    QColor("#a855f7") },
+        { QStringLiteral("ETF"),         QColor("#94a3b8") },
+        { QStringLiteral("Other"),       QColor("#64748b") },
+    };
+
+    auto sector_color = [&](const QString& sector) -> QColor {
+        for (auto it = kSectorColors.cbegin(); it != kSectorColors.cend(); ++it) {
+            if (sector.contains(it.key(), Qt::CaseInsensitive))
+                return it.value();
+        }
+        return QColor("#64748b");
+    };
+
+    // ── Aggregate holdings by sector ─────────────────────────────────────────
+    QHash<QString, double> sector_weight;  // sector -> sum of est_weight
+    for (const auto& h : portfolio.holdings) {
+        const QString sec = h.sector.isEmpty() ? QStringLiteral("Other") : h.sector;
+        sector_weight[sec] += h.est_weight;
+    }
+
+    // ── Compute correlation score per sector ──────────────────────────────────
+    // Find the max overlap_pct from insider signals where committee overlaps sector
+    QHash<QString, double> sector_corr;
+    for (const auto& sig : insider_sigs) {
+        for (auto it = sector_weight.cbegin(); it != sector_weight.cend(); ++it) {
+            if (sector_matches_committee(it.key(), sig.committee)) {
+                const double existing = sector_corr.value(it.key(), 0.0);
+                if (sig.overlap_pct > existing)
+                    sector_corr[it.key()] = sig.overlap_pct;
+            }
+        }
+    }
+
+    // ── Build slices ──────────────────────────────────────────────────────────
+    QVector<SectorPieChart::Slice> slices;
+    slices.reserve(sector_weight.size());
+    for (auto it = sector_weight.cbegin(); it != sector_weight.cend(); ++it) {
+        SectorPieChart::Slice sl;
+        sl.sector     = it.key();
+        sl.pct        = it.value();
+        sl.color      = sector_color(it.key());
+        sl.corr_score = sector_corr.value(it.key(), 0.0);
+        slices.append(sl);
+    }
+    // Sort by pct descending
+    std::sort(slices.begin(), slices.end(),
+              [](const SectorPieChart::Slice& a, const SectorPieChart::Slice& b) {
+                  return a.pct > b.pct;
+              });
+
+    sector_pie_->set_slices(slices);
+
+    // ── Rebuild legend ────────────────────────────────────────────────────────
+    auto* legend_vl = qobject_cast<QVBoxLayout*>(sector_legend_->layout());
+    if (legend_vl) {
+        while (legend_vl->count() > 0) {
+            auto* item = legend_vl->takeAt(0);
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+    } else {
+        legend_vl = new QVBoxLayout(sector_legend_);
+        legend_vl->setContentsMargins(0, 0, 0, 0);
+        legend_vl->setSpacing(4);
+    }
+
+    for (const auto& sl : slices) {
+        auto* row = new QWidget(sector_legend_);
+        row->setStyleSheet("QWidget { background:transparent; }");
+        auto* hl = new QHBoxLayout(row);
+        hl->setContentsMargins(0, 2, 0, 2);
+        hl->setSpacing(6);
+
+        // Colored dot
+        auto* dot = new QLabel(QStringLiteral("●"), row);
+        dot->setStyleSheet(
+            QString("QLabel { color:%1; font-size:10px; background:transparent; }")
+                .arg(sl.color.name()));
+        dot->setFixedWidth(14);
+        hl->addWidget(dot);
+
+        // Sector name
+        auto* name_lbl = new QLabel(sl.sector, row);
+        name_lbl->setStyleSheet(
+            QString("QLabel { color:%1; font-size:10px; background:transparent; }")
+                .arg(ui::colors::TEXT_PRIMARY()));
+        hl->addWidget(name_lbl, 1);
+
+        // Pct
+        auto* pct_lbl = new QLabel(
+            QString("%1%").arg(sl.pct, 0, 'f', 1), row);
+        pct_lbl->setStyleSheet(
+            QString("QLabel { color:%1; font-size:10px; font-weight:600;"
+                    " font-family:Consolas,monospace; background:transparent; }")
+                .arg(ui::colors::TEXT_SECONDARY()));
+        pct_lbl->setFixedWidth(44);
+        pct_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        hl->addWidget(pct_lbl);
+
+        // Narrow allocation bar (40px wide, 4px tall, inline via a small widget)
+        auto* mini_bar = new QFrame(row);
+        mini_bar->setFixedSize(40, 4);
+        mini_bar->setStyleSheet(
+            QString("QFrame { background:%1; border-radius:2px; border:none; }")
+                .arg(ui::colors::BORDER_DIM()));
+        auto* mini_fill = new QWidget(mini_bar);
+        const int fw = qMax(1, qRound(sl.pct / 100.0 * 40));
+        mini_fill->setGeometry(0, 0, fw, 4);
+        mini_fill->setStyleSheet(
+            QString("QWidget { background:%1; border-radius:2px; border:none; }")
+                .arg(sl.color.name()));
+        hl->addWidget(mini_bar);
+
+        // Committee overlap badge if corr > 0
+        if (sl.corr_score > 0.0) {
+            auto* cmte_badge = new QLabel(QStringLiteral("CMTE ●"), row);
+            cmte_badge->setStyleSheet(
+                QString("QLabel { color:%1; font-size:8px; font-weight:700;"
+                        " background:rgba(217,119,6,0.15); border:1px solid %1;"
+                        " border-radius:3px; padding:0px 4px; }")
+                    .arg(ui::colors::AMBER()));
+            hl->addWidget(cmte_badge);
+        }
+
+        legend_vl->addWidget(row);
+    }
+    legend_vl->addStretch();
+
+    // ── Compute Insider Index ─────────────────────────────────────────────────
+    double total_pct = 0.0;
+    for (const auto& sl : slices) total_pct += sl.pct;
+    double insider_idx = 0.0;
+    if (total_pct > 0.0) {
+        for (const auto& sl : slices)
+            insider_idx += (sl.pct / total_pct) * sl.corr_score;
+    }
+    // Scale to 0–100 (corr_score is already 0–100, so this is a weighted average)
+    const int idx_int = qRound(insider_idx);
+
+    const char* score_color = idx_int > 80 ? ui::colors::NEGATIVE
+                            : idx_int > 70 ? ui::colors::WARNING
+                            : ui::colors::AMBER;
+    insider_score_->setText(
+        QString("Insider Index: %1 / 100").arg(idx_int));
+    insider_score_->setStyleSheet(
+        QString("QLabel { color:%1; font-size:13px; font-weight:700;"
+                " font-family:Consolas,monospace; background:transparent; padding:4px 0; }")
+            .arg(score_color));
+}
+
+// ── Section 9: populate_insights ─────────────────────────────────────────────
+
+void MemberProfilePanel::populate_insights(
+    const power_trader::CongressMember& m,
+    const power_trader::MemberPortfolio& portfolio,
+    const QVector<power_trader::PoliticalTrade>& trades)
+{
+    // Clear old chips
+    auto* grid = qobject_cast<QGridLayout*>(insights_container_->layout());
+    if (grid) {
+        while (grid->count() > 0) {
+            auto* item = grid->takeAt(0);
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+    }
+    if (!grid) return;
+
+    // ── Compute stats from trades ─────────────────────────────────────────────
+    const QDate today = QDate::currentDate();
+    const QDate cutoff_90d = today.addDays(-90);
+
+    double sum_lag          = 0.0;
+    int    late_count       = 0;  // lag > 30
+    double net_flow_90d     = 0.0;
+    int    total_trade_cnt  = trades.size();
+    int    cmte_overlap_cnt = 0;
+
+    QHash<QString, int>    ticker_count;   // for most traded
+    QHash<QString, int>    ticker_buy_cnt; // for conviction
+    int stock_count = 0, option_count = 0, etf_count = 0;
+
+    // best pick tracking
+    double best_pnl_pct    = 0.0;
+    QString best_ticker;
+
+    for (const auto& t : trades) {
+        sum_lag += t.disclosure_lag_days;
+        if (t.disclosure_lag_days > 30) ++late_count;
+
+        if (!t.committee_relevance.isEmpty()) ++cmte_overlap_cnt;
+
+        ticker_count[t.ticker]++;
+        if (t.direction == power_trader::TradeDirection::Buy)
+            ticker_buy_cnt[t.ticker]++;
+
+        // Asset type
+        switch (t.asset_type) {
+            case power_trader::AssetType::Option: ++option_count; break;
+            case power_trader::AssetType::ETF:    ++etf_count;    break;
+            default:                               ++stock_count;  break;
+        }
+
+        // Net flow 90d
+        if (t.transaction_date >= cutoff_90d) {
+            const double mid = (t.amount_low + t.amount_high) / 2.0;
+            if (t.direction == power_trader::TradeDirection::Buy)
+                net_flow_90d += mid;
+            else if (t.direction == power_trader::TradeDirection::Sell)
+                net_flow_90d -= mid;
+        }
+    }
+
+    const double avg_lag = total_trade_cnt > 0
+        ? sum_lag / total_trade_cnt : 0.0;
+    const double late_pct = total_trade_cnt > 0
+        ? (100.0 * late_count / total_trade_cnt) : 0.0;
+
+    // Most traded ticker
+    QString most_traded_ticker;
+    int most_traded_n = 0;
+    for (auto it = ticker_count.cbegin(); it != ticker_count.cend(); ++it) {
+        if (it.value() > most_traded_n) {
+            most_traded_n = it.value();
+            most_traded_ticker = it.key();
+        }
+    }
+
+    // Conviction picks (buy_count >= 2)
+    QVector<QPair<QString, int>> conviction_picks;
+    for (auto it = ticker_buy_cnt.cbegin(); it != ticker_buy_cnt.cend(); ++it) {
+        if (it.value() >= 2)
+            conviction_picks.append({ it.key(), it.value() });
+    }
+    std::sort(conviction_picks.begin(), conviction_picks.end(),
+              [](const QPair<QString,int>& a, const QPair<QString,int>& b) {
+                  return a.second > b.second;
+              });
+
+    // Asset mix
+    const int asset_total = stock_count + option_count + etf_count;
+    const int stock_pct   = asset_total > 0 ? qRound(100.0 * stock_count  / asset_total) : 0;
+    const int option_pct  = asset_total > 0 ? qRound(100.0 * option_count / asset_total) : 0;
+    const int etf_pct     = asset_total > 0 ? qRound(100.0 * etf_count    / asset_total) : 0;
+
+    // Best pick from portfolio
+    for (const auto& h : portfolio.holdings) {
+        if (h.est_pnl_pct > best_pnl_pct) {
+            best_pnl_pct = h.est_pnl_pct;
+            best_ticker  = h.ticker;
+        }
+    }
+
+    // Committee overlap %
+    const double cmte_pct = total_trade_cnt > 0
+        ? (100.0 * cmte_overlap_cnt / total_trade_cnt) : 0.0;
+
+    // ── Helper: make a chip widget ────────────────────────────────────────────
+    struct ChipSpec {
+        QString text;
+        const char* fg_color;
+        const char* bg_color;   // nullptr = BG_RAISED
+        const char* bd_color;   // nullptr = BORDER_DIM
+    };
+
+    QVector<ChipSpec> chips;
+
+    // 1. Avg lag
+    chips.append({
+        QString("Avg Lag: %1d").arg(qRound(avg_lag)),
+        avg_lag > 35.0 ? ui::colors::NEGATIVE
+      : avg_lag > 20.0 ? ui::colors::AMBER
+      : ui::colors::TEXT_SECONDARY,
+        nullptr, nullptr
+    });
+
+    // 2. Late filers %
+    chips.append({
+        QString("Late (>30d): %1%").arg(qRound(late_pct)),
+        late_pct > 40.0 ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
+        nullptr, nullptr
+    });
+
+    // 3. Net flow 90d
+    {
+        const bool net_buy = net_flow_90d >= 0;
+        chips.append({
+            net_buy
+                ? QString("Net Buyer: +%1").arg(fmt_dollar_free(net_flow_90d))
+                : QString("Net Seller: %1").arg(fmt_dollar_free(net_flow_90d)),
+            net_buy ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
+            nullptr, nullptr
+        });
+    }
+
+    // 4. Most traded
+    if (!most_traded_ticker.isEmpty()) {
+        chips.append({
+            QString("Top Pick: %1 (%2 trades)").arg(most_traded_ticker).arg(most_traded_n),
+            ui::colors::TEXT_PRIMARY,
+            nullptr, nullptr
+        });
+    }
+
+    // 5. Conviction picks
+    if (!conviction_picks.isEmpty()) {
+        QString conv_str = QStringLiteral("Conviction:");
+        const int max_show = qMin(3, (int)conviction_picks.size());
+        for (int i = 0; i < max_show; ++i) {
+            conv_str += QString(" %1×%2")
+                .arg(conviction_picks[i].first)
+                .arg(conviction_picks[i].second);
+        }
+        chips.append({ conv_str, ui::colors::CYAN, nullptr, nullptr });
+    }
+
+    // 6. Asset mix
+    chips.append({
+        QString("Stocks: %1%  Options: %2%  ETFs: %3%")
+            .arg(stock_pct).arg(option_pct).arg(etf_pct),
+        ui::colors::TEXT_SECONDARY,
+        nullptr, nullptr
+    });
+
+    // 7. Best pick
+    if (!best_ticker.isEmpty()) {
+        chips.append({
+            QString("Best Pick: %1 +%2%")
+                .arg(best_ticker).arg(best_pnl_pct, 0, 'f', 1),
+            ui::colors::CYAN,
+            nullptr, nullptr
+        });
+    }
+
+    // 8. Total trades
+    chips.append({
+        QString("%1 trades on record").arg(total_trade_cnt),
+        ui::colors::TEXT_TERTIARY,
+        nullptr, nullptr
+    });
+
+    // 9. Committee overlap warning (prominent, red bg) if overlap > 60%
+    if (cmte_pct > 60.0) {
+        chips.append({
+            QString("⚠ %1/%2 trades (%3%) match committee sectors")
+                .arg(cmte_overlap_cnt).arg(total_trade_cnt).arg(qRound(cmte_pct)),
+            "white",
+            ui::colors::NEGATIVE,
+            ui::colors::NEGATIVE
+        });
+    }
+
+    // ── Add chip widgets to grid (4 per row) ─────────────────────────────────
+    const QString chip_base_style =
+        QString("QLabel { background:%1; color:%%fg%%; border:1px solid %2;"
+                " border-radius:12px; padding:4px 10px; font-size:10px; }")
+            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
+
+    int col = 0, row_idx = 0;
+    for (const auto& chip : chips) {
+        auto* lbl = new QLabel(chip.text, insights_container_);
+        lbl->setWordWrap(false);
+
+        const QString bg = chip.bg_color
+            ? QString(chip.bg_color) : QString(ui::colors::BG_RAISED());
+        const QString bd = chip.bd_color
+            ? QString(chip.bd_color) : QString(ui::colors::BORDER_DIM());
+        lbl->setStyleSheet(
+            QString("QLabel { background:%1; color:%2; border:1px solid %3;"
+                    " border-radius:12px; padding:4px 10px; font-size:10px; }")
+                .arg(bg, QString(chip.fg_color), bd));
+
+        grid->addWidget(lbl, row_idx, col);
+        ++col;
+        if (col >= 4) { col = 0; ++row_idx; }
+    }
 }
 
 } // namespace fincept::screens
