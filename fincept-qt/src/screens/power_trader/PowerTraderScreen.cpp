@@ -8,10 +8,12 @@
 #include "screens/power_trader/TradesFeedPanel.h"
 #include "ui/theme/Theme.h"
 
+#include <QDesktopServices>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace fincept::power_trader {
@@ -137,16 +139,22 @@ void PowerTraderScreen::build_ui() {
 
 QWidget* PowerTraderScreen::build_top_bar() {
     auto* bar = new QWidget;
-    bar->setFixedHeight(46);
+    bar->setFixedHeight(62);
     bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
                            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-    auto* hl = new QHBoxLayout(bar);
-    hl->setContentsMargins(14, 0, 14, 0);
-    hl->setSpacing(10);
+
+    auto* vl = new QVBoxLayout(bar);
+    vl->setContentsMargins(14, 6, 14, 4);
+    vl->setSpacing(3);
+
+    // ── Row 1: title + subtitle + timestamp + refresh ─────────────────────────
+    auto* row1 = new QHBoxLayout;
+    row1->setSpacing(10);
 
     auto* title = new QLabel("POWER TRADER");
     title->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700; "
                                  "letter-spacing:2px;").arg(ui::colors::AMBER()));
+
     auto* sub = new QLabel("Congressional Stock Disclosures · STOCK Act");
     sub->setStyleSheet(QString("color:%1; font-size:11px;")
                            .arg(ui::colors::TEXT_TERTIARY()));
@@ -156,11 +164,11 @@ QWidget* PowerTraderScreen::build_top_bar() {
                                        .arg(ui::colors::TEXT_TERTIARY()));
 
     refresh_btn_ = new QPushButton("\xe2\x9f\xb3 Refresh");
-    refresh_btn_->setFixedHeight(26);
+    refresh_btn_->setFixedHeight(22);
     refresh_btn_->setCursor(Qt::PointingHandCursor);
     refresh_btn_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "border-radius:2px;padding:2px 10px;font-size:11px;font-weight:600;}"
+                "border-radius:2px;padding:1px 8px;font-size:10px;font-weight:600;}"
                 "QPushButton:hover{border-color:%1;background:%3;}")
             .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
     connect(refresh_btn_, &QPushButton::clicked, this, [this]() {
@@ -168,11 +176,60 @@ QWidget* PowerTraderScreen::build_top_bar() {
         PowerTraderService::instance().load_data();
     });
 
-    hl->addWidget(title);
-    hl->addWidget(sub);
-    hl->addStretch();
-    hl->addWidget(timestamp_lbl_);
-    hl->addWidget(refresh_btn_);
+    row1->addWidget(title);
+    row1->addWidget(sub);
+    row1->addStretch();
+    row1->addWidget(timestamp_lbl_);
+    row1->addWidget(refresh_btn_);
+
+    // ── Row 2: data source links ──────────────────────────────────────────────
+    auto* row2 = new QHBoxLayout;
+    row2->setSpacing(0);
+
+    auto* src_lbl = new QLabel("Data:");
+    src_lbl->setStyleSheet(QString("color:%1; font-size:10px;")
+                               .arg(ui::colors::TEXT_TERTIARY()));
+    row2->addWidget(src_lbl);
+
+    // Helper: create a clickable link label
+    struct Source { const char* label; const char* url; };
+    static const Source sources[] = {
+        {"Senate eFTS",           "https://efts.senate.gov/"},
+        {"House Disclosures",     "https://disclosures.house.gov/"},
+        {"ProPublica Congress",   "https://projects.propublica.org/api-docs/congress-api/"},
+        {"OpenSecrets",           "https://www.opensecrets.org/api"},
+    };
+
+    const QString btn_ss =
+        QString("QPushButton{color:%1;font-size:10px;text-decoration:underline;"
+                "background:transparent;border:none;padding:0;margin:0;}"
+                "QPushButton:hover{color:%2;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER());
+
+    bool first = true;
+    for (const auto& src : sources) {
+        if (!first) {
+            auto* sep = new QLabel("\xc2\xb7");  // middle dot separator
+            sep->setStyleSheet(QString("color:%1; font-size:10px; padding:0 5px;")
+                                   .arg(ui::colors::BORDER_BRIGHT()));
+            row2->addWidget(sep);
+        }
+        first = false;
+
+        auto* btn = new QPushButton(src.label);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFlat(true);
+        btn->setStyleSheet(btn_ss);
+        const QString url = QString::fromLatin1(src.url);
+        connect(btn, &QPushButton::clicked, this, [url]() {
+            QDesktopServices::openUrl(QUrl(url));
+        });
+        row2->addWidget(btn);
+    }
+    row2->addStretch();
+
+    vl->addLayout(row1);
+    vl->addLayout(row2);
     return bar;
 }
 
