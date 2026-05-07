@@ -95,7 +95,7 @@ void PowerTraderScreen::build_ui() {
             QTabBar::tab {
                 background:%2; color:%3; padding:8px 16px;
                 border:0; border-bottom:2px solid transparent;
-                font-size:10px; font-weight:700; letter-spacing:1px;
+                font-size:12px; font-weight:700; letter-spacing:1px;
             }
             QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
             QTabBar::tab:hover:!selected { color:%5; }
@@ -163,11 +163,11 @@ QWidget* PowerTraderScreen::build_top_bar() {
                                  "letter-spacing:2px;").arg(ui::colors::AMBER()));
 
     auto* sub = new QLabel("Congressional Stock Disclosures · STOCK Act");
-    sub->setStyleSheet(QString("color:%1; font-size:11px;")
+    sub->setStyleSheet(QString("color:%1; font-size:12px;")
                            .arg(ui::colors::TEXT_SECONDARY()));
 
     timestamp_lbl_ = new QLabel;
-    timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:10px;")
+    timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:12px;")
                                        .arg(ui::colors::TEXT_TERTIARY()));
 
     refresh_btn_ = new QPushButton("\xe2\x9f\xb3 Refresh");
@@ -175,7 +175,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     refresh_btn_->setCursor(Qt::PointingHandCursor);
     refresh_btn_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "border-radius:2px;padding:1px 8px;font-size:10px;font-weight:600;}"
+                "border-radius:2px;padding:1px 8px;font-size:12px;font-weight:600;}"
                 "QPushButton:hover{border-color:%1;background:%3;}")
             .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
     connect(refresh_btn_, &QPushButton::clicked, this, [this]() {
@@ -193,7 +193,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     row2->setSpacing(0);
 
     auto* src_lbl = new QLabel("Data:");
-    src_lbl->setStyleSheet(QString("color:%1; font-size:10px;")
+    src_lbl->setStyleSheet(QString("color:%1; font-size:12px;")
                                .arg(ui::colors::TEXT_TERTIARY()));
     row2->addWidget(src_lbl);
 
@@ -205,7 +205,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
         {"OGE Form 278",     "https://www.oge.gov/web/oge.nsf/Public+Financial+Disclosure+Reports"},
     };
     const QString btn_ss =
-        QString("QPushButton{color:%1;font-size:10px;text-decoration:underline;"
+        QString("QPushButton{color:%1;font-size:12px;text-decoration:underline;"
                 "background:transparent;border:none;padding:0;margin:0;}"
                 "QPushButton:hover{color:%2;}")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER());
@@ -214,7 +214,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     for (const auto& src : sources) {
         if (!first) {
             auto* sep = new QLabel("\xc2\xb7");
-            sep->setStyleSheet(QString("color:%1; font-size:10px; padding:0 5px;")
+            sep->setStyleSheet(QString("color:%1; font-size:12px; padding:0 5px;")
                                    .arg(ui::colors::BORDER_BRIGHT()));
             row2->addWidget(sep);
         }
@@ -247,7 +247,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
     hl->setSpacing(4);
 
     auto* lbl = new QLabel("BODY:");
-    lbl->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; letter-spacing:0.5px;")
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
                            .arg(ui::colors::TEXT_TERTIARY()));
     hl->addWidget(lbl);
 
@@ -264,7 +264,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
     const QString pill_base =
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
-                "border-radius:2px;padding:3px 12px;font-size:11px;font-weight:700;"
+                "border-radius:2px;padding:3px 12px;font-size:12px;font-weight:700;"
                 "letter-spacing:0.5px;}"
                 "QPushButton:checked{background:%4;color:%5;border-color:%4;}"
                 "QPushButton:hover:!checked{border-color:%2;}")
@@ -289,7 +289,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
     hl->addStretch();
 
     auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
-    info->setStyleSheet(QString("color:%1; font-size:11px; font-style:italic;")
+    info->setStyleSheet(QString("color:%1; font-size:12px; font-style:italic;")
                             .arg(ui::colors::TEXT_TERTIARY()));
     hl->addWidget(info);
 
@@ -309,7 +309,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     hdr->setFixedHeight(32);
     hdr->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     hdr->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:0.5px;"
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;"
                 "padding-left:10px; border-bottom:1px solid %2;")
             .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
     vl->addWidget(hdr);
@@ -319,7 +319,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     member_search_->setFixedHeight(30);
     member_search_->setStyleSheet(
         QString("QLineEdit{background:%1;color:%2;border:none;border-bottom:1px solid %3;"
-                "padding:0 8px;font-size:11px;}"
+                "padding:0 8px;font-size:12px;}"
                 "QLineEdit:focus{border-bottom-color:%4;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::BORDER_DIM(), ui::colors::AMBER()));
@@ -338,7 +338,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     member_list_->setStyleSheet(
         QString("QListWidget{background:%1;border:none;outline:none;}"
                 "QListWidget::item{padding:5px 10px;border-bottom:1px solid %2;"
-                "font-size:11px;color:%3;}"
+                "font-size:12px;color:%3;}"
                 "QListWidget::item:selected{background:rgba(217,119,6,0.15);color:%4;}"
                 "QListWidget::item:hover:!selected{background:%5;}"
                 "QScrollBar:vertical{width:4px;background:%1;}"

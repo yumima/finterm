@@ -4,6 +4,7 @@
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
 
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QScrollArea>
@@ -14,7 +15,7 @@ namespace fincept::screens {
 // ── Styling helpers ───────────────────────────────────────────────────────────
 
 static QString section_hdr() {
-    return QString("background:%1;color:%2;font-size:11px;font-weight:700;"
+    return QString("background:%1;color:%2;font-size:12px;font-weight:700;"
                    "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
@@ -34,7 +35,7 @@ static QString table_ss() {
 static QString hdr_ss() {
     return QString("QHeaderView::section{background:%1;color:%2;border:none;"
                    "border-bottom:2px solid %3;border-right:1px solid %4;"
-                   "padding:5px 10px;font-size:10px;font-weight:700;}")
+                   "padding:5px 10px;font-size:12px;font-weight:700;}")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::AMBER(), ui::colors::BORDER_MED());
 }
@@ -55,7 +56,7 @@ static QWidget* make_stat_tile(const QString& label, QLabel*& value_out, QWidget
     vl->setSpacing(2);
 
     auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:0.5px;"
+    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;"
                                "background:transparent;")
                            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
@@ -122,7 +123,7 @@ void CabinetPanel::build_content_page() {
 
         source_note_ = new QLabel;
         source_note_->setStyleSheet(
-            QString("color:%1;font-size:10px;font-style:italic;")
+            QString("color:%1;font-size:12px;font-style:italic;")
                 .arg(ui::colors::TEXT_TERTIARY()));
         source_note_->setWordWrap(true);
         hl->addWidget(source_note_);
@@ -130,20 +131,21 @@ void CabinetPanel::build_content_page() {
         root->addWidget(hdr);
     }
 
-    // ── Stat tiles row ────────────────────────────────────────────────────────
+    // ── Stat tiles: 2-row × 3-column grid (Bloomberg-style) ─────────────────
     {
         auto* tiles = new QWidget;
         tiles->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
                                  .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
-        auto* tl = new QHBoxLayout(tiles);
-        tl->setContentsMargins(10, 8, 10, 8);
-        tl->setSpacing(8);
+        auto* tg = new QGridLayout(tiles);
+        tg->setContentsMargins(10, 8, 10, 8);
+        tg->setSpacing(6);
 
-        tl->addWidget(make_stat_tile("CABINET MEMBERS",      stat_members_));
-        tl->addWidget(make_stat_tile("TOTAL HOLDINGS (MIN)", stat_total_lo_));
-        tl->addWidget(make_stat_tile("TOTAL HOLDINGS (MAX)", stat_total_hi_));
-        tl->addWidget(make_stat_tile("AVG CONFLICT SCORE",   stat_avg_conf_));
-        tl->addWidget(make_stat_tile("HIGHEST CONFLICT",     stat_top_conf_));
+        tg->addWidget(make_stat_tile("CABINET MEMBERS",      stat_members_),  0, 0);
+        tg->addWidget(make_stat_tile("TOTAL HOLDINGS (MIN)", stat_total_lo_), 0, 1);
+        tg->addWidget(make_stat_tile("TOTAL HOLDINGS (MAX)", stat_total_hi_), 0, 2);
+        tg->addWidget(make_stat_tile("AVG CONFLICT SCORE",   stat_avg_conf_), 1, 0);
+        tg->addWidget(make_stat_tile("HIGHEST CONFLICT",     stat_top_conf_), 1, 1);
+        // col (1,2) intentionally empty — leaves room for future stat
 
         root->addWidget(tiles);
     }
@@ -203,7 +205,7 @@ void CabinetPanel::build_content_page() {
             QTabBar::tab {
                 background:%2; color:%3; padding:6px 16px;
                 border:0; border-bottom:2px solid transparent;
-                font-size:10px; font-weight:700; letter-spacing:0.5px;
+                font-size:12px; font-weight:700; letter-spacing:0.5px;
             }
             QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
             QTabBar::tab:hover:!selected { color:%5; }
@@ -340,7 +342,7 @@ void CabinetPanel::build_content_page() {
 
         c_domain_ = new QLabel;
         c_domain_->setStyleSheet(
-            QString("color:%1;font-size:11px;padding:8px 14px;"
+            QString("color:%1;font-size:12px;padding:8px 14px;"
                     "background:%2;border-bottom:1px solid %3;")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
         c_domain_->setWordWrap(true);
@@ -668,7 +670,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
 
     if (m.conflict_flags.isEmpty()) {
         auto* none_lbl = new QLabel("No conflict flags detected — holdings do not overlap regulatory domain.");
-        none_lbl->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
+        none_lbl->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         none_lbl->setWordWrap(true);
         c_flags_layout_->addWidget(none_lbl);
     } else {
@@ -676,7 +678,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
             auto* lbl = new QLabel("⚠  " + flag);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(
-                QString("color:#ef4444;font-size:11px;"
+                QString("color:#ef4444;font-size:12px;"
                         "background:rgba(239,68,68,0.08);"
                         "border-left:3px solid #ef4444;"
                         "padding:6px 10px;border-radius:2px;"));
@@ -685,7 +687,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
         // Show conflict holdings table
         auto* ch_hdr = new QLabel("CONFLICTED HOLDINGS DETAIL");
         ch_hdr->setStyleSheet(
-            QString("color:%1;font-size:11px;font-weight:700;letter-spacing:0.5px;"
+            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;"
                     "margin-top:12px;").arg(ui::colors::TEXT_TERTIARY()));
         c_flags_layout_->addWidget(ch_hdr);
 
@@ -700,17 +702,17 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
             hll->setSpacing(8);
 
             auto* an = new QLabel(h.asset_name);
-            an->setStyleSheet(QString("color:%1;font-size:11px;font-weight:600;")
+            an->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;")
                                   .arg(ui::colors::TEXT_PRIMARY()));
             hll->addWidget(an);
             hll->addStretch();
 
             auto* tk = new QLabel(h.ticker.isEmpty() ? h.asset_type : h.ticker);
-            tk->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::CYAN()));
+            tk->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
             hll->addWidget(tk);
 
             auto* vr = new QLabel(h.value_range_label);
-            vr->setStyleSheet(QString("color:%1;font-size:11px;font-family:Consolas,monospace;")
+            vr->setStyleSheet(QString("color:%1;font-size:12px;font-family:Consolas,monospace;")
                                   .arg(ui::colors::AMBER()));
             hll->addWidget(vr);
             c_flags_layout_->addWidget(hl);

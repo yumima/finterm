@@ -56,7 +56,7 @@ void CompanyListPanel::build_ui() {
     tb_layout->setContentsMargins(12, 0, 12, 0);
     auto* title_lbl = new QLabel("COMPANIES");
     title_lbl->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.5px; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px; background:transparent;")
             .arg(colors::TEXT_SECONDARY()));
     tb_layout->addWidget(title_lbl);
     tb_layout->addStretch();
@@ -76,7 +76,7 @@ void CompanyListPanel::build_ui() {
     search_edit_->setClearButtonEnabled(true);
     search_edit_->setStyleSheet(
         QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
-                "  border-radius:3px; padding:3px 8px; font-size:11px; }"
+                "  border-radius:3px; padding:3px 8px; font-size:12px; }"
                 "QLineEdit:focus { border-color:%4; }")
             .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(),
                  colors::BORDER_DIM(), colors::BORDER_MED()));
@@ -230,7 +230,7 @@ void CompanyListPanel::apply_filter() {
     if (inserted == 0) {
         auto* empty = new QLabel("No companies match");
         empty->setStyleSheet(
-            QString("color:%1; font-size:11px; padding:20px;").arg(colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; padding:20px;").arg(colors::TEXT_TERTIARY()));
         empty->setAlignment(Qt::AlignCenter);
         list_layout_->insertWidget(0, empty);
     }
@@ -294,7 +294,7 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
     if (c.last_valuation_usd > 0) {
         auto* val_badge = new QLabel(valuation_label(c.last_valuation_usd));
         val_badge->setStyleSheet(
-            QString("color:%1; font-size:11px; font-weight:700;"
+            QString("color:%1; font-size:12px; font-weight:700;"
                     "  background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.3);"
                     "  border-radius:3px; padding:1px 5px;")
                 .arg(colors::AMBER()));
@@ -367,7 +367,7 @@ QWidget* CompanyListPanel::make_status_badge(IpoStatus status, QWidget* parent) 
 
     auto* badge = new QLabel(label, parent);
     badge->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; background:%2;"
+        QString("color:%1; font-size:12px; font-weight:700; background:%2;"
                 "  border-radius:3px; padding:1px 5px;")
             .arg(fg, bg));
     badge->setAlignment(Qt::AlignCenter);

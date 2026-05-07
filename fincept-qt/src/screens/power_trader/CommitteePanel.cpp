@@ -12,7 +12,7 @@
 namespace fincept::screens {
 
 static QString section_header_style() {
-    return QString("QLabel{background:%1;color:%2;font-size:11px;font-weight:700;"
+    return QString("QLabel{background:%1;color:%2;font-size:12px;font-weight:700;"
                    "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;}")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
@@ -32,7 +32,7 @@ static QString table_style() {
 static QString header_style() {
     return QString("QHeaderView::section{background:%1;color:%2;border:none;"
                    "border-bottom:2px solid %3;border-right:1px solid %4;"
-                   "padding:5px 8px;font-size:10px;font-weight:700;letter-spacing:0.5px;}")
+                   "padding:5px 8px;font-size:12px;font-weight:700;letter-spacing:0.5px;}")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::AMBER(), ui::colors::BORDER_MED());
 }
@@ -111,7 +111,7 @@ void CommitteePanel::build_ui() {
         // Stats row
         detail_stats_ = new QLabel;
         detail_stats_->setStyleSheet(
-            QString("color:%1;font-size:11px;padding:6px 14px;"
+            QString("color:%1;font-size:12px;padding:6px 14px;"
                     "background:%2;border-bottom:1px solid %3;")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
         detail_stats_->setWordWrap(true);
@@ -125,12 +125,12 @@ void CommitteePanel::build_ui() {
         ir->setContentsMargins(14, 6, 14, 6);
 
         detail_tickers_ = new QLabel;
-        detail_tickers_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::CYAN()));
+        detail_tickers_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
         ir->addWidget(detail_tickers_);
         ir->addStretch();
         detail_members_ = new QLabel;
         detail_members_->setStyleSheet(
-            QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
         ir->addWidget(detail_members_);
         rl->addWidget(info_row);
 

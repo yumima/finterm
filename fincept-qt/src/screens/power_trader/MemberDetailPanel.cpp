@@ -37,7 +37,7 @@ static QLabel* make_stat_label(QWidget* parent, const QString& caption) {
     vl->setSpacing(2);
 
     auto* cap = new QLabel(caption, w);
-    cap->setStyleSheet(QString("QLabel { color:%1; font-size:11px; font-weight:700;"
+    cap->setStyleSheet(QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                                " letter-spacing:0.8px; background:transparent; }")
                            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(cap);
@@ -63,7 +63,7 @@ void MemberDetailPanel::build_ui() {
     // ── Section header ────────────────────────────────────────────────────────
     auto* hdr_label = new QLabel(QStringLiteral("MEMBER DETAIL"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     root_layout->addWidget(hdr_label);
@@ -115,7 +115,7 @@ void MemberDetailPanel::build_ui() {
         party_badge_->setFixedSize(28, 20);
         party_badge_->setAlignment(Qt::AlignCenter);
         party_badge_->setStyleSheet(
-            QString("QLabel { background:%1; color:white; font-size:10px; font-weight:700;"
+            QString("QLabel { background:%1; color:white; font-size:12px; font-weight:700;"
                     " border-radius:3px; }")
                 .arg(ui::colors::BG_RAISED()));
         row->addWidget(party_badge_);
@@ -125,7 +125,7 @@ void MemberDetailPanel::build_ui() {
 
         meta_label_ = new QLabel(QStringLiteral("—"), detail_widget_);
         meta_label_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
                 .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(meta_label_);
     }
@@ -163,7 +163,7 @@ void MemberDetailPanel::build_ui() {
     {
         auto* cap = new QLabel(QStringLiteral("COMMITTEES"), detail_widget_);
         cap->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                     " letter-spacing:1.2px; background:transparent; margin-top:4px; }")
                 .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(cap);
@@ -171,7 +171,7 @@ void MemberDetailPanel::build_ui() {
         committees_label_ = new QLabel(QStringLiteral("—"), detail_widget_);
         committees_label_->setWordWrap(true);
         committees_label_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
                 .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(committees_label_);
     }
@@ -185,7 +185,7 @@ void MemberDetailPanel::build_ui() {
 
         auto* cap = new QLabel(QStringLiteral("TRADE HISTORY (LAST 20)"), detail_widget_);
         cap->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                     " letter-spacing:1.2px; background:transparent; }")
                 .arg(ui::colors::TEXT_SECONDARY()));
         dv->addWidget(cap);
@@ -231,7 +231,7 @@ void MemberDetailPanel::build_ui() {
     hh->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:3px 5px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:3px 5px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -267,7 +267,7 @@ void MemberDetailPanel::populate(const power_trader::CongressMember& member,
     // Party badge
     party_badge_->setText(member.party);
     party_badge_->setStyleSheet(
-        QString("QLabel { background:%1; color:white; font-size:10px; font-weight:700;"
+        QString("QLabel { background:%1; color:white; font-size:12px; font-weight:700;"
                 " border-radius:3px; }")
             .arg(party_color(member.party)));
 

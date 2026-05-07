@@ -66,7 +66,7 @@ void TradesFeedPanel::build_ui() {
     // ── Section header ────────────────────────────────────────────────────────
     auto* hdr_label = new QLabel(QStringLiteral("TRADE DISCLOSURES"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:0.5px; padding:6px 12px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     layout->addWidget(hdr_label);
@@ -109,7 +109,7 @@ void TradesFeedPanel::build_ui() {
     filter_layout->addWidget(committee_filter_);
 
     auto* from_label = new QLabel(QStringLiteral("From"), this);
-    from_label->setStyleSheet(QString("QLabel { color:%1; font-size:11px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    from_label->setStyleSheet(QString("QLabel { color:%1; font-size:12px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
     filter_layout->addWidget(from_label);
 
     date_from_ = new QDateEdit(QDate::currentDate().addDays(-90), this);
@@ -119,7 +119,7 @@ void TradesFeedPanel::build_ui() {
     filter_layout->addWidget(date_from_);
 
     auto* to_label = new QLabel(QStringLiteral("To"), this);
-    to_label->setStyleSheet(QString("QLabel { color:%1; font-size:11px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    to_label->setStyleSheet(QString("QLabel { color:%1; font-size:12px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
     filter_layout->addWidget(to_label);
 
     date_to_ = new QDateEdit(QDate::currentDate(), this);
@@ -191,7 +191,7 @@ void TradesFeedPanel::build_ui() {
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 

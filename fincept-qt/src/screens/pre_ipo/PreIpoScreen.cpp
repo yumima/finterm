@@ -141,7 +141,7 @@ QWidget* PreIpoScreen::build_top_bar() {
 
     auto* subtitle = new QLabel("Private Market Tracking");
     subtitle->setStyleSheet(
-        QString("color:%1; font-size:11px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(subtitle);
 
     hl->addStretch();
@@ -154,7 +154,7 @@ QWidget* PreIpoScreen::build_top_bar() {
     // Universe count badge
     auto* badge = new QLabel("PRIVATE MARKETS");
     badge->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; background:rgba(217,119,6,0.15);"
+        QString("color:%1; font-size:12px; font-weight:700; background:rgba(217,119,6,0.15);"
                 "  border:1px solid rgba(217,119,6,0.35); border-radius:3px; padding:2px 8px;")
             .arg(colors::AMBER()));
     hl->addWidget(badge);

@@ -179,7 +179,7 @@ void RankingsPanel::build_ui() {
     // ── Section header ────────────────────────────────────────────────────────
     auto* hdr = new QLabel(QStringLiteral("RANKINGS"), this);
     hdr->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     root->addWidget(hdr);
@@ -276,7 +276,7 @@ void RankingsPanel::build_ui() {
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -297,7 +297,7 @@ void RankingsPanel::build_ui() {
         this);
     footer_label_->setWordWrap(true);
     footer_label_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:11px; padding:5px 10px;"
+        QString("QLabel { color:%1; font-size:12px; padding:5px 10px;"
                 " border-top:1px solid %2; background:%3; }")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_SURFACE()));
     root->addWidget(footer_label_);
@@ -312,7 +312,7 @@ void RankingsPanel::apply_pill_styles() {
                 QString("QPushButton {"
                         "  background:%1; color:%2; border:none;"
                         "  border-radius:4px; padding:0 12px;"
-                        "  font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                        "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                         "QPushButton:hover { background:%3; }")
                     .arg(ui::colors::AMBER(), ui::colors::BG_BASE(),
                          ui::colors::AMBER()));
@@ -321,7 +321,7 @@ void RankingsPanel::apply_pill_styles() {
                 QString("QPushButton {"
                         "  background:transparent; color:%1; border:1px solid %2;"
                         "  border-radius:4px; padding:0 12px;"
-                        "  font-size:10px; font-weight:600; letter-spacing:0.5px; }"
+                        "  font-size:12px; font-weight:600; letter-spacing:0.5px; }"
                         "QPushButton:hover { background:%3; color:%4; border-color:%4; }")
                     .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
                          ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY()));

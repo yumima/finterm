@@ -58,7 +58,7 @@ QString OverviewPanel::fmt_pct(double v) {
 static QLabel* make_section_header(const QString& title, QWidget* parent) {
     auto* lbl = new QLabel(title, parent);
     lbl->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:11px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:5px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     return lbl;
@@ -81,7 +81,7 @@ class BarRow : public QWidget {
 
     explicit BarRow(const Config& cfg, QWidget* parent = nullptr)
         : QWidget(parent), cfg_(cfg) {
-        setFixedHeight(24);
+        setFixedHeight(30);
         setCursor(cfg_.clickable ? Qt::PointingHandCursor : Qt::ArrowCursor);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     }
@@ -100,18 +100,18 @@ class BarRow : public QWidget {
 
         const int w   = width();
         const int h   = height();
-        const int lw  = 130; // left label width
-        const int rw  = 60;  // right label width
+        const int lw  = 150; // left label width
+        const int rw  = 72;  // right label width
         const int pad = 6;
         const int bar_x     = lw + pad;
         const int bar_w_max = w - lw - rw - pad * 2;
         const int bar_y     = h / 2 - 4;
-        const int bar_h     = 8;
+        const int bar_h     = 10;
 
         // Left label
         p.setPen(cfg_.left_color);
         QFont lf = p.font();
-        lf.setPixelSize(11);
+        lf.setPixelSize(13);
         p.setFont(lf);
         p.drawText(QRect(0, 0, lw, h), Qt::AlignLeft | Qt::AlignVCenter,
                    p.fontMetrics().elidedText(cfg_.left_label, Qt::ElideRight, lw));
@@ -129,7 +129,7 @@ class BarRow : public QWidget {
         // Right label
         p.setPen(cfg_.right_color);
         QFont rf = p.font();
-        rf.setPixelSize(11);
+        rf.setPixelSize(13);
         rf.setBold(true);
         p.setFont(rf);
         p.drawText(QRect(w - rw, 0, rw, h), Qt::AlignRight | Qt::AlignVCenter,
@@ -162,139 +162,134 @@ void OverviewPanel::build_ui() {
     scroll_area_ = new QScrollArea(this);
     scroll_area_->setWidgetResizable(true);
     scroll_area_->setFrameShape(QFrame::NoFrame);
-    scroll_area_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll_area_->setStyleSheet(
         QString("QScrollArea { background:%1; border:none; }"
-                "QScrollBar:vertical { width:4px; background:%1; }"
-                "QScrollBar::handle:vertical { background:%2; min-height:20px; }")
-            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+                "QScrollBar:vertical { width:8px; background:%1; border-radius:4px; }"
+                "QScrollBar::handle:vertical { background:%2; min-height:30px; border-radius:4px; }"
+                "QScrollBar:horizontal { height:8px; background:%1; border-radius:4px; }"
+                "QScrollBar::handle:horizontal { background:%2; min-width:30px; border-radius:4px; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT()));
 
     scroll_body_ = new QWidget(this);
     scroll_body_->setStyleSheet(
         QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
 
     auto* body_layout = new QVBoxLayout(scroll_body_);
-    body_layout->setContentsMargins(12, 12, 12, 12);
-    body_layout->setSpacing(12);
+    body_layout->setContentsMargins(0, 0, 0, 0);
+    body_layout->setSpacing(0);
 
-    // ── Row 1: 4 stat tiles ───────────────────────────────────────────────────
+    // ── Bloomberg 3-column layout ─────────────────────────────────────────────
+    // COL 1 (left):  2×2 stat grid + sector exposure bars
+    // COL 2 (center): top traders alpha chart
+    // COL 3 (right):  committee insider correlation table
+    auto* three_col = new QHBoxLayout();
+    three_col->setContentsMargins(0, 0, 0, 0);
+    three_col->setSpacing(0);
+
+    // ── COLUMN 1: stats + sectors ─────────────────────────────────────────────
+    auto* col1 = new QWidget(scroll_body_);
+    col1->setStyleSheet(
+        QString("QWidget { background:%1; border-right:1px solid %2; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
     {
-        auto* tiles_row = new QHBoxLayout();
-        tiles_row->setSpacing(8);
+        auto* c1l = new QVBoxLayout(col1);
+        c1l->setContentsMargins(0, 0, 0, 0);
+        c1l->setSpacing(0);
 
-        struct TileSpec { QString label; QLabel** value_ptr; };
-        QVector<TileSpec> specs = {
-            { QStringLiteral("MEMBERS TRACKED"),      &stat_members_   },
-            { QStringLiteral("TOTAL DISCLOSED (EST)"), &stat_disclosed_ },
-            { QStringLiteral("BEAT SPY"),              &stat_beat_spy_  },
-            { QStringLiteral("MOST ACTIVE CMTE"),      &stat_cmte_      },
+        // 2×2 stat tile grid
+        auto* grid_wrap = new QWidget(col1);
+        grid_wrap->setStyleSheet(
+            QString("QWidget { background:%1; border-bottom:1px solid %2; }")
+                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+        auto* grid = new QGridLayout(grid_wrap);
+        grid->setContentsMargins(8, 8, 8, 8);
+        grid->setSpacing(6);
+
+        const QString tile_ss =
+            QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
+                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
+        const QString cap_ss =
+            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+                    " letter-spacing:0.5px; background:transparent; border:none; }")
+                .arg(ui::colors::TEXT_SECONDARY());
+        const QString val_ss =
+            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+                    " font-family:Consolas,monospace; background:transparent; border:none; }")
+                .arg(ui::colors::AMBER());
+
+        struct TileSpec { QString label; QLabel** ptr; int row; int col; };
+        const QVector<TileSpec> specs = {
+            { QStringLiteral("MEMBERS TRACKED"),       &stat_members_,  0, 0 },
+            { QStringLiteral("TOTAL DISCLOSED (EST)"), &stat_disclosed_, 0, 1 },
+            { QStringLiteral("BEAT SPY"),               &stat_beat_spy_, 1, 0 },
+            { QStringLiteral("MOST ACTIVE CMTE"),       &stat_cmte_,     1, 1 },
         };
 
-        for (auto& spec : specs) {
-            auto* tile = new QWidget(scroll_body_);
-            tile->setStyleSheet(
-                QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
-                    .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
-            tile->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-            tile->setMinimumHeight(60);
-
-            auto* tl = new QVBoxLayout(tile);
-            tl->setContentsMargins(10, 8, 10, 8);
-            tl->setSpacing(3);
-
+        for (const auto& spec : specs) {
+            auto* tile = new QWidget(grid_wrap);
+            tile->setStyleSheet(tile_ss);
+            auto* tvl = new QVBoxLayout(tile);
+            tvl->setContentsMargins(10, 6, 10, 6);
+            tvl->setSpacing(2);
             auto* cap = new QLabel(spec.label, tile);
-            cap->setStyleSheet(
-                QString("QLabel { color:%1; font-size:11px; font-weight:700;"
-                        " letter-spacing:1px; background:transparent; border:none; }")
-                    .arg(ui::colors::TEXT_SECONDARY()));
-            tl->addWidget(cap);
-
-            auto* val = new QLabel(QStringLiteral("—"), tile);
-            val->setStyleSheet(
-                QString("QLabel { color:%1; font-size:18px; font-weight:700;"
-                        " font-family:Consolas,monospace; background:transparent; border:none; }")
-                    .arg(ui::colors::AMBER()));
-            tl->addWidget(val);
-
-            *spec.value_ptr = val;
-            tiles_row->addWidget(tile);
+            cap->setStyleSheet(cap_ss);
+            tvl->addWidget(cap);
+            *spec.ptr = new QLabel(QStringLiteral("—"), tile);
+            (*spec.ptr)->setStyleSheet(val_ss);
+            tvl->addWidget(*spec.ptr);
+            grid->addWidget(tile, spec.row, spec.col);
         }
+        c1l->addWidget(grid_wrap);
 
-        body_layout->addLayout(tiles_row);
+        // Sector exposure bars below stat grid
+        auto* sec_hdr = make_section_header(QStringLiteral("SECTOR EXPOSURE"), col1);
+        c1l->addWidget(sec_hdr);
+
+        sector_chart_ = new QWidget(col1);
+        sector_chart_->setStyleSheet("QWidget { background:transparent; border:none; }");
+        auto* sc_layout = new QVBoxLayout(sector_chart_);
+        sc_layout->setContentsMargins(10, 6, 10, 6);
+        sc_layout->setSpacing(3);
+        c1l->addWidget(sector_chart_);
+        c1l->addStretch();
     }
 
-    // ── Row 2: two side-by-side chart panels ──────────────────────────────────
+    // ── COLUMN 2: top traders alpha chart ─────────────────────────────────────
+    auto* col2 = new QWidget(scroll_body_);
+    col2->setStyleSheet(
+        QString("QWidget { background:%1; border-right:1px solid %2; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
     {
-        auto* row2 = new QHBoxLayout();
-        row2->setSpacing(8);
+        auto* c2l = new QVBoxLayout(col2);
+        c2l->setContentsMargins(0, 0, 0, 0);
+        c2l->setSpacing(0);
+        c2l->addWidget(make_section_header(QStringLiteral("TOP TRADERS  ·  ALPHA vs SPY YTD"), col2));
 
-        // LEFT — TOP TRADERS - ALPHA YTD
-        {
-            auto* panel = new QWidget(scroll_body_);
-            panel->setStyleSheet(
-                QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
-                    .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-            panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-            auto* pl = new QVBoxLayout(panel);
-            pl->setContentsMargins(0, 0, 0, 8);
-            pl->setSpacing(0);
-            pl->addWidget(make_section_header(QStringLiteral("TOP TRADERS — ALPHA YTD"), panel));
-
-            alpha_chart_ = new QWidget(panel);
-            alpha_chart_->setStyleSheet("QWidget { background:transparent; border:none; }");
-            auto* ac_layout = new QVBoxLayout(alpha_chart_);
-            ac_layout->setContentsMargins(10, 6, 10, 4);
-            ac_layout->setSpacing(2);
-            pl->addWidget(alpha_chart_);
-
-            row2->addWidget(panel);
-        }
-
-        // RIGHT — SECTOR EXPOSURE
-        {
-            auto* panel = new QWidget(scroll_body_);
-            panel->setStyleSheet(
-                QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
-                    .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-            panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-            auto* pl = new QVBoxLayout(panel);
-            pl->setContentsMargins(0, 0, 0, 8);
-            pl->setSpacing(0);
-            pl->addWidget(make_section_header(QStringLiteral("SECTOR EXPOSURE"), panel));
-
-            sector_chart_ = new QWidget(panel);
-            sector_chart_->setStyleSheet("QWidget { background:transparent; border:none; }");
-            auto* sc_layout = new QVBoxLayout(sector_chart_);
-            sc_layout->setContentsMargins(10, 6, 10, 4);
-            sc_layout->setSpacing(2);
-            pl->addWidget(sector_chart_);
-
-            row2->addWidget(panel);
-        }
-
-        body_layout->addLayout(row2);
+        alpha_chart_ = new QWidget(col2);
+        alpha_chart_->setStyleSheet("QWidget { background:transparent; border:none; }");
+        auto* ac_layout = new QVBoxLayout(alpha_chart_);
+        ac_layout->setContentsMargins(10, 6, 10, 6);
+        ac_layout->setSpacing(3);
+        c2l->addWidget(alpha_chart_);
+        c2l->addStretch();
     }
 
-    // ── Row 3: committee insider correlation table ────────────────────────────
+    // ── COLUMN 3: committee signal table ──────────────────────────────────────
+    auto* col3 = new QWidget(scroll_body_);
+    col3->setStyleSheet(
+        QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
     {
-        auto* panel = new QWidget(scroll_body_);
-        panel->setStyleSheet(
-            QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-
-        auto* pl = new QVBoxLayout(panel);
-        pl->setContentsMargins(0, 0, 0, 0);
-        pl->setSpacing(0);
-        pl->addWidget(make_section_header(
-            QStringLiteral("COMMITTEE INSIDER CORRELATION"), panel));
+        auto* c3l = new QVBoxLayout(col3);
+        c3l->setContentsMargins(0, 0, 0, 0);
+        c3l->setSpacing(0);
+        c3l->addWidget(make_section_header(
+            QStringLiteral("COMMITTEE INSIDER CORRELATION"), col3));
 
         static const QStringList kSigCols = {
             "MEMBER", "PARTY", "COMMITTEE", "SECTOR", "OVERLAP", "SIGNAL"
         };
 
-        signal_table_ = new QTableWidget(panel);
+        signal_table_ = new QTableWidget(col3);
         signal_table_->setColumnCount(kSigCols.size());
         signal_table_->setHorizontalHeaderLabels(kSigCols);
         signal_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -308,18 +303,12 @@ void OverviewPanel::build_ui() {
 
         auto* h = signal_table_->horizontalHeader();
         h->setMinimumSectionSize(20);
-        h->setStretchLastSection(false);
-        h->setSectionResizeMode(0, QHeaderView::Interactive); h->resizeSection(0, 180); h->setStretchLastSection(true);
-        h->setSectionResizeMode(1, QHeaderView::Fixed);     // PARTY
-        h->resizeSection(1, 44);
-        h->setSectionResizeMode(2, QHeaderView::Fixed);     // COMMITTEE
-        h->resizeSection(2, 140);
-        h->setSectionResizeMode(3, QHeaderView::Fixed);     // SECTOR
-        h->resizeSection(3, 110);
-        h->setSectionResizeMode(4, QHeaderView::Fixed);     // OVERLAP
-        h->resizeSection(4, 110);
-        h->setSectionResizeMode(5, QHeaderView::Fixed);     // SIGNAL
-        h->resizeSection(5, 60);
+        h->setSectionResizeMode(0, QHeaderView::Interactive); h->resizeSection(0, 160); h->setStretchLastSection(true);
+        h->setSectionResizeMode(1, QHeaderView::Fixed);  h->resizeSection(1, 36);   // PARTY
+        h->setSectionResizeMode(2, QHeaderView::Fixed);  h->resizeSection(2, 140);  // COMMITTEE
+        h->setSectionResizeMode(3, QHeaderView::Fixed);  h->resizeSection(3, 100);  // SECTOR
+        h->setSectionResizeMode(4, QHeaderView::Fixed);  h->resizeSection(4, 80);   // OVERLAP
+        h->setSectionResizeMode(5, QHeaderView::Fixed);  h->resizeSection(5, 56);   // SIGNAL
 
         signal_table_->setStyleSheet(
             QString("QTableWidget { background:%1; color:%2; border:none;"
@@ -328,24 +317,27 @@ void OverviewPanel::build_ui() {
                     "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                     "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
                     "QTableWidget::item:hover { background:%4; }"
-                    "QScrollBar:vertical { width:4px; background:%1; }"
-                    "QScrollBar::handle:vertical { background:%3; min-height:16px; }")
+                    "QScrollBar:vertical { width:8px; background:%1; border-radius:4px; }"
+                    "QScrollBar::handle:vertical { background:%3; min-height:24px; border-radius:4px; }")
                 .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-                     ui::colors::BORDER_DIM(), ui::colors::BG_HOVER()));
+                     ui::colors::BORDER_MED(), ui::colors::BG_HOVER()));
 
         h->setStyleSheet(
             QString("QHeaderView::section { background:%1; color:%2; border:none;"
                     "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                    "  padding:4px 8px; font-size:12px; font-weight:700;"
+                    "  padding:5px 8px; font-size:12px; font-weight:700;"
                     "  letter-spacing:0.5px; }")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
-                     ui::colors::AMBER(), ui::colors::BORDER_DIM()));
+                     ui::colors::AMBER(), ui::colors::BORDER_MED()));
 
-        pl->addWidget(signal_table_);
-        body_layout->addWidget(panel);
+        c3l->addWidget(signal_table_, 1);
     }
 
-    body_layout->addStretch();
+    three_col->addWidget(col1, 1);
+    three_col->addWidget(col2, 1);
+    three_col->addWidget(col3, 1);
+    body_layout->addLayout(three_col, 1);
+
     scroll_area_->setWidget(scroll_body_);
     root->addWidget(scroll_area_, 1);
 }
@@ -461,7 +453,7 @@ void OverviewPanel::populate_alpha_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), alpha_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_SECONDARY()));
+            QString("QLabel { color:%1; font-size:12px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
@@ -519,7 +511,7 @@ void OverviewPanel::populate_sector_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), sector_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:11px; }").arg(ui::colors::TEXT_SECONDARY()));
+            QString("QLabel { color:%1; font-size:12px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
