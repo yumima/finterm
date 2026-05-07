@@ -184,7 +184,8 @@ KNOWN_MEMBERS: Dict[str, Dict] = {
 
 # ── HTTP helper ───────────────────────────────────────────────────────────────
 
-def _get(url: str, params: dict = None, timeout: int = 20) -> dict:
+def _get(url: str, params: dict = None, timeout: int = 8) -> dict:
+    """HTTP GET with a short timeout so the script never hangs the UI."""
     if requests is None:
         return {"error": "requests not available"}
     try:
@@ -339,7 +340,7 @@ def _fetch_senate_gov_members() -> List[Dict]:
     Fetch Senate roster from senate.gov (no API key needed).
     Returns only senators; House members fall back to KNOWN_MEMBERS.
     """
-    data = _get(SENATE_CONTACT_JSON, timeout=15)
+    data = _get(SENATE_CONTACT_JSON, timeout=8)
     if "error" in data or not isinstance(data, list):
         return []
     members = []
@@ -559,7 +560,7 @@ def _parse_house_fd_zip(year: int, cutoff: date) -> list:
             with open(cache_file, "rb") as f:
                 zip_data = f.read()
         else:
-            resp = requests.get(zip_url, timeout=30,
+            resp = requests.get(zip_url, timeout=10,
                                 headers={"User-Agent": "FinceptTerminal/1.0"})
             if resp.status_code != 200:
                 return []
@@ -709,18 +710,37 @@ def compute_signal_score(trade: dict, member: dict) -> float:
 
 # ── Full summary builder ───────────────────────────────────────────────────────
 
+def _network_available() -> bool:
+    """Quick DNS probe — returns False within ~3s if offline."""
+    if requests is None:
+        return False
+    try:
+        requests.head("https://efts.senate.gov", timeout=3)
+        return True
+    except Exception:
+        return False
+
+
 def build_all_data(days_back: int = 90) -> dict:
     """
     Build {members, trades} compatible with PowerTraderService.parse_summary().
-    Fetches live trade data from Senate eFTS + House FDS.
+    Fetches live trade data from Senate eFTS + House FDS when online;
+    falls back to KNOWN_MEMBERS representative data when offline.
     Member party/state/committees come from dynamic Congress.gov / senate.gov roster.
     """
     # Pre-load roster so _enrich_member() is fast for all subsequent calls
     _load_roster()
 
+    if not _network_available():
+        return _build_fallback_data()
+
     senate_filings = fetch_senate_ptrs(days_back=days_back)
     house_filings  = fetch_house_ptrs(days_back=days_back)
     all_filings    = senate_filings + house_filings
+
+    # If both live sources returned nothing, use fallback data
+    if not all_filings:
+        return _build_fallback_data()
 
     member_map: Dict[str, dict] = {}
     trades = []
@@ -786,6 +806,102 @@ def build_all_data(days_back: int = 90) -> dict:
                 "direction":           t.get("direction", "Other"),
                 "asset_type":          t.get("asset_type", "Stock"),
                 "data_source":         filing.get("data_source", "Senate eFTS"),
+            })
+
+    trades.sort(key=lambda x: x.get("disclosure_date", ""), reverse=True)
+    return {"members": list(member_map.values()), "trades": trades}
+
+
+def _build_fallback_data() -> dict:
+    """
+    Generate representative data from KNOWN_MEMBERS when live sources are
+    unavailable (offline / API timeout).  Clearly labelled as demo data.
+    The C++ service also has its own mock fallback; this one runs inside Python
+    so the data_source field reflects the true state.
+    """
+    from datetime import datetime as _dt
+    import random as _random
+    _random.seed(42)   # deterministic so the UI doesn't flicker on refresh
+
+    tickers_by_sector = {
+        "Defense":    ["LMT", "RTX", "NOC", "GD", "LDOS"],
+        "Technology": ["NVDA", "MSFT", "AAPL", "GOOGL", "META", "AMD"],
+        "Financials": ["JPM", "GS", "MS", "BX", "V"],
+        "Healthcare": ["UNH", "JNJ", "ABBV", "PFE", "MRK"],
+        "Energy":     ["XOM", "CVX", "COP", "SLB", "OXY"],
+    }
+    amounts = [
+        (1001, 15000, "$1,001 – $15,000"),
+        (15001, 50000, "$15,001 – $50,000"),
+        (50001, 100000, "$50,001 – $100,000"),
+        (100001, 250000, "$100,001 – $250,000"),
+        (250001, 500000, "$250,001 – $500,000"),
+    ]
+
+    today = date.today()
+    member_map: Dict[str, dict] = {}
+    trades = []
+    trade_idx = 0
+
+    for name, v in KNOWN_MEMBERS.items():
+        member_id = _make_member_id(name)
+        full_name = " ".join(w.capitalize() for w in name.split())
+        chamber   = v["chamber"]
+        party     = v["party"]
+        committees = v["committees"]
+
+        if member_id not in member_map:
+            member_map[member_id] = {
+                "id": member_id, "full_name": full_name,
+                "party": party, "chamber": chamber,
+                "state": v["state"], "district": "",
+                "committees": committees,
+                "term_start": "", "estimated_net_worth": 0.0,
+                "trade_count_ytd": 0, "portfolio_return_ytd": 0.0, "spy_return_ytd": 0.0,
+            }
+
+        # Pick 2-4 trades per member from their relevant sectors
+        related_sectors = [
+            s for c in committees
+            for s, ts in tickers_by_sector.items()
+            if any(kw.lower() in c.lower() for kw in
+                   ["Armed", "Defense", "Finance", "Banking", "Commerce",
+                    "Energy", "Health", "Intelligence"])
+        ] or list(tickers_by_sector.keys())[:2]
+
+        n_trades = _random.randint(2, 4)
+        for _ in range(n_trades):
+            sector  = _random.choice(related_sectors[:3] or list(tickers_by_sector.keys()))
+            ticker  = _random.choice(tickers_by_sector.get(sector, ["SPY"]))
+            lo, hi, label = _random.choice(amounts)
+            direction = "Buy" if _random.random() > 0.3 else "Sell"
+            txn_days_ago = _random.randint(3, 85)
+            lag_days     = _random.randint(5, 45)
+            tx_date  = (today - timedelta(days=txn_days_ago)).isoformat()
+            dis_date = (today - timedelta(days=max(0, txn_days_ago - lag_days))).isoformat()
+            cmte_rel = committees[0] if committees else ""
+            score    = compute_signal_score(
+                {"ticker": ticker, "amount_high": hi, "disclosure_lag_days": lag_days,
+                 "committee_relevance": cmte_rel},
+                {"committees": committees})
+
+            trade_idx += 1
+            member_map[member_id]["trade_count_ytd"] += 1
+            trades.append({
+                "id": f"demo-{trade_idx:05d}",
+                "member_id": member_id, "member_name": full_name,
+                "party": party, "chamber": chamber,
+                "transaction_date": tx_date, "disclosure_date": dis_date,
+                "disclosure_lag_days": lag_days,
+                "ticker": ticker, "asset_name": ticker,
+                "amount_low": float(lo), "amount_high": float(hi),
+                "amount_range_label": label,
+                "committee_relevance": cmte_rel,
+                "signal_score": score,
+                "source_url": "",
+                "direction": direction,
+                "asset_type": "Stock",
+                "data_source": "Demo (offline — live source unavailable)",
             })
 
     trades.sort(key=lambda x: x.get("disclosure_date", ""), reverse=True)

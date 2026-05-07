@@ -64,21 +64,25 @@ void PowerTraderService::load_data() {
                 self->refresh_timer_->start();
 
             if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_ERROR("PowerTrader",
-                          "senate_disclosures_data.py failed: " + result.error.left(300));
-                emit self->error_occurred(
-                    QStringLiteral("Failed to load congressional disclosure data"));
+                LOG_WARN("PowerTrader",
+                         "senate_disclosures_data.py failed — using demo data: "
+                         + result.error.left(200));
+                self->generate_mock_data();
                 return;
             }
             const QString json_str = python::extract_json(result.output);
             const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
             if (!doc.isObject()) {
-                LOG_ERROR("PowerTrader", "senate_disclosures_data.py returned invalid JSON");
-                emit self->error_occurred(
-                    QStringLiteral("Invalid data format from congressional disclosures"));
+                LOG_WARN("PowerTrader", "Invalid JSON from senate_disclosures_data.py — using demo data");
+                self->generate_mock_data();
                 return;
             }
             self->parse_summary(doc.object());
+            // If live sources returned nothing, fall back to demo data so the UI is never blank.
+            if (self->summary_.members.isEmpty()) {
+                LOG_INFO("PowerTrader", "Live data empty — using demo data");
+                self->generate_mock_data();
+            }
         });
 }
 
