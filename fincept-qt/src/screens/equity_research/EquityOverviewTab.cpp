@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityOverviewTab.cpp
 #include "screens/equity_research/EquityOverviewTab.h"
 
+#include "screens/knowledge/HelpHint.h"
 #include "services/equity/EquityResearchService.h"
 #include "ui/theme/Theme.h"
 
@@ -58,7 +59,9 @@ QFrame* make_panel(const QString& title, const char* title_color) {
     return f;
 }
 
-QLabel* add_row(QFrame* panel, const QString& key, const char* val_color) {
+// entry_id: if non-empty, appends a HelpHint "?" button after the key label
+QLabel* add_row(QFrame* panel, const QString& key, const char* val_color,
+                const QString& entry_id = {}) {
     auto* hl = new QHBoxLayout;
     hl->setSpacing(4);
     hl->setContentsMargins(0, 0, 0, 0);
@@ -75,6 +78,11 @@ QLabel* add_row(QFrame* panel, const QString& key, const char* val_color) {
     v->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
     hl->addWidget(k);
+    if (!entry_id.isEmpty()) {
+        auto* hint = new fincept::knowledge::HelpHint(entry_id, panel);
+        hint->setFixedSize(14, 14);
+        hl->addWidget(hint);
+    }
     hl->addWidget(v, 1);
     static_cast<QVBoxLayout*>(panel->layout())->addLayout(hl);
     return v;
@@ -472,31 +480,31 @@ QWidget* EquityOverviewTab::build_trading_panel() {
     high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     prev_close_val_ = add_row(p, "PREV CLOSE", ui::colors::TEXT_PRIMARY);
-    vol_val_ = add_row(p, "VOLUME", YELLOW);
+    vol_val_ = add_row(p, "VOLUME", YELLOW, "volume");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }
 
 QWidget* EquityOverviewTab::build_valuation_panel() {
     auto* p = make_panel("VALUATION", CYAN);
-    mktcap_val_ = add_row(p, "MARKET CAP", CYAN);
-    pe_val_ = add_row(p, "P/E RATIO", YELLOW);
-    fwd_pe_val_ = add_row(p, "FWD P/E", YELLOW);
-    peg_val_ = add_row(p, "PEG RATIO", YELLOW);
-    pb_val_ = add_row(p, "P/B RATIO", CYAN);
-    div_val_ = add_row(p, "DIV YIELD", ui::colors::POSITIVE);
-    beta_val_ = add_row(p, "BETA", ui::colors::TEXT_PRIMARY);
+    mktcap_val_ = add_row(p, "MARKET CAP", CYAN,  "market-cap");
+    pe_val_     = add_row(p, "P/E RATIO",  YELLOW,"pe-ratio");
+    fwd_pe_val_ = add_row(p, "FWD P/E",    YELLOW,"pe-ratio");
+    peg_val_    = add_row(p, "PEG RATIO",  YELLOW,"peg-ratio");
+    pb_val_     = add_row(p, "P/B RATIO",  CYAN,  "pb-ratio");
+    div_val_    = add_row(p, "DIV YIELD",  ui::colors::POSITIVE, "dividend-yield");
+    beta_val_   = add_row(p, "BETA",       ui::colors::TEXT_PRIMARY, "beta");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }
 
 QWidget* EquityOverviewTab::build_share_stats_panel() {
     auto* p = make_panel("SHARE STATS", PURPLE);
-    shares_out_val_ = add_row(p, "SHARES OUT", CYAN);
-    float_val_ = add_row(p, "FLOAT", CYAN);
-    insiders_val_ = add_row(p, "INSIDERS", YELLOW);
-    institutions_val_ = add_row(p, "INSTITUTIONS", YELLOW);
-    short_pct_val_ = add_row(p, "SHORT %", ui::colors::NEGATIVE);
+    shares_out_val_  = add_row(p, "SHARES OUT",    CYAN, "market-cap");
+    float_val_       = add_row(p, "FLOAT",         CYAN, "float");
+    insiders_val_    = add_row(p, "INSIDERS",      YELLOW);
+    institutions_val_= add_row(p, "INSTITUTIONS",  YELLOW);
+    short_pct_val_   = add_row(p, "SHORT %",       ui::colors::NEGATIVE, "short-interest");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }

@@ -13,6 +13,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -23,9 +24,13 @@ namespace {
 
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 
-// Sub-tab assignment for the new 3-pane cockpit.
-const QStringList BASICS_CATS   = {"glossary", "concepts"};
-const QStringList PRACTICE_CATS = {"cases", "tracks", "playbooks"};
+// Sub-tab assignment — 3 content panes around the rail.
+//   BASICS   : reference lookup — Glossary · Concepts · Abbreviations
+//   REFERENCE: deeper reference — Formulas · Regulators · Interviews
+//   PRACTICE : learning paths   — Cases · Tracks · Playbooks
+const QStringList BASICS_CATS    = {"glossary", "concepts"};
+const QStringList REFERENCE_CATS = {"formulas", "regulators", "interviews"};
+const QStringList PRACTICE_CATS  = {"cases", "tracks", "playbooks"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
@@ -111,7 +116,24 @@ void KnowledgeScreen::build_layout() {
 
     root->addWidget(cmd);
 
-    // ── 3-pane horizontal splitter ────────────────────────────────────────────
+    // ── Recently viewed bar ───────────────────────────────────────────────────
+    recent_bar_ = new QWidget(this);
+    recent_bar_->setFixedHeight(30);
+    recent_bar_->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                                   .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    recent_hl_ = new QHBoxLayout(recent_bar_);
+    recent_hl_->setContentsMargins(14, 4, 14, 4);
+    recent_hl_->setSpacing(6);
+    auto* recent_lbl = new QLabel("RECENT:", recent_bar_);
+    recent_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;"
+                                      "letter-spacing:1px;background:transparent;")
+                                  .arg(ui::colors::TEXT_TERTIARY()));
+    recent_hl_->addWidget(recent_lbl);
+    recent_hl_->addStretch();
+    recent_bar_->setVisible(false); // hidden until there's something to show
+    root->addWidget(recent_bar_);
+
+    // ── 4-pane horizontal splitter ────────────────────────────────────────────
     auto* split = new QSplitter(Qt::Horizontal, this);
     split->setHandleWidth(1);
     split->setStyleSheet(QString("QSplitter::handle { background: %1; }").arg(ui::colors::BORDER_DIM()));
@@ -152,17 +174,9 @@ void KnowledgeScreen::build_layout() {
     }
     split->addWidget(basics_pane_);
 
-    // ── CONTEXT (rail) ────────────────────────────────────────────────────────
-    rail_ = new RailWidget(split);
-    rail_->setMinimumWidth(320);
-    split->addWidget(rail_);
-    connect(rail_, &RailWidget::open_entry, this, &KnowledgeScreen::open_entry);
-    connect(rail_, &RailWidget::request_action, this,
-            [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
-
-    // ── PRACTICE pane (Cases, Tracks, Playbooks) ──────────────────────────────
+    // ── PRACTICE pane ─────────────────────────────────────────────────────────
     practice_pane_ = new GroupedPane("practice", "PRACTICE", split);
-    practice_pane_->setMinimumWidth(280);
+    practice_pane_->setMinimumWidth(240);
     for (const auto& cat_id : PRACTICE_CATS) {
         if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
             const auto* meta = loader.category(cat_id);
@@ -172,11 +186,32 @@ void KnowledgeScreen::build_layout() {
     }
     split->addWidget(practice_pane_);
 
-    // 30 / 40 / 30 default split — context rail in centre, adjacent to both.
-    split->setSizes({300, 420, 300});
-    split->setStretchFactor(0, 3);
-    split->setStretchFactor(1, 4);
-    split->setStretchFactor(2, 3);
+    // ── CONTEXT rail ──────────────────────────────────────────────────────────
+    rail_ = new RailWidget(split);
+    rail_->setMinimumWidth(320);
+    split->addWidget(rail_);
+    connect(rail_, &RailWidget::open_entry, this, &KnowledgeScreen::open_entry);
+    connect(rail_, &RailWidget::request_action, this,
+            [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
+
+    // ── REFERENCE pane (Formulas · Regulators · Interviews) ──────────────────
+    reference_pane_ = new GroupedPane("reference", "REFERENCE", split);
+    reference_pane_->setMinimumWidth(240);
+    for (const auto& cat_id : REFERENCE_CATS) {
+        if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
+            const auto* meta = loader.category(cat_id);
+            const QString lbl = meta ? meta->label : cat_id.toUpper();
+            reference_pane_->addSubPane(lbl, *it);
+        }
+    }
+    split->addWidget(reference_pane_);
+
+    // BASICS | PRACTICE | CONTEXT (rail) | REFERENCE — 25/20/35/20
+    split->setSizes({250, 200, 360, 200});
+    split->setStretchFactor(0, 25);
+    split->setStretchFactor(1, 20);
+    split->setStretchFactor(2, 35);
+    split->setStretchFactor(3, 20);
 
     root->addWidget(split, 1);
 
@@ -184,6 +219,7 @@ void KnowledgeScreen::build_layout() {
     // already restored their own active entries at construction, so this also
     // makes the rail / breadcrumb reflect the user's last-viewed entry.
     basics_pane_->restoreActiveSubTab();
+    if (reference_pane_) reference_pane_->restoreActiveSubTab();
     practice_pane_->restoreActiveSubTab();
 
     // Trigger the rail to follow whichever sub-tab is currently active in BASICS
@@ -207,8 +243,10 @@ void KnowledgeScreen::build_layout() {
                 rail_->set_entry(ContentLoader::instance().entry(id));
         }
     };
-    connect(basics_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
-    connect(practice_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(basics_pane_,     &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    if (reference_pane_)
+        connect(reference_pane_,  &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(practice_pane_,   &GroupedPane::subPaneActivated, this, refresh_from_subpane);
 
     // ── Search wiring (typeahead routes into the right column) ────────────────
     connect(search_, &QLineEdit::textChanged, this, &KnowledgeScreen::on_search);
@@ -246,12 +284,44 @@ void KnowledgeScreen::open_entry(const QString& entry_id) {
         return;
 
     auto* col = *it;
-    // Make sure the hosting super-pane has this column visible, then open the entry.
-    if (basics_pane_ && basics_pane_->subPaneCount() > 0)
-        basics_pane_->showSubPane(col); // no-op if column not in basics
-    if (practice_pane_ && practice_pane_->subPaneCount() > 0)
-        practice_pane_->showSubPane(col); // no-op if column not in practice
-    col->open_entry(id); // emits entry_activated → on_category_active
+    if (basics_pane_)    basics_pane_->showSubPane(col);
+    if (reference_pane_) reference_pane_->showSubPane(col);
+    if (practice_pane_)  practice_pane_->showSubPane(col);
+    col->open_entry(id);
+
+    // Track in recently viewed (deduplicated, most recent first)
+    recently_viewed_.removeAll(id);
+    recently_viewed_.prepend(id);
+    if (recently_viewed_.size() > kMaxRecent)
+        recently_viewed_.resize(kMaxRecent);
+    update_recent_bar();
+}
+
+void KnowledgeScreen::update_recent_bar() {
+    // Remove all chips (keep the "RECENT:" label at index 0)
+    while (recent_hl_->count() > 2)  // label + stretch
+        if (auto* item = recent_hl_->takeAt(1)) {
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+
+    const auto& loader = ContentLoader::instance();
+    for (const auto& rid : recently_viewed_) {
+        const auto* e = loader.entry(rid);
+        if (!e) continue;
+        auto* chip = new QPushButton(e->title, recent_bar_);
+        chip->setFlat(true);
+        chip->setCursor(Qt::PointingHandCursor);
+        chip->setStyleSheet(
+            QString("QPushButton{color:%1;font-size:10px;background:%2;border:1px solid %3;"
+                    "border-radius:10px;padding:1px 8px;}"
+                    "QPushButton:hover{border-color:%4;color:%4;}")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
+                     ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        connect(chip, &QPushButton::clicked, this, [this, rid]() { open_entry(rid); });
+        recent_hl_->insertWidget(recent_hl_->count() - 1, chip); // before stretch
+    }
+    recent_bar_->setVisible(!recently_viewed_.isEmpty());
 }
 
 void KnowledgeScreen::on_category_active(CategoryColumn* col, const QString& entry_id) {
@@ -262,7 +332,9 @@ void KnowledgeScreen::on_category_active(CategoryColumn* col, const QString& ent
         QString cat = e->category;
         if (auto* c = ContentLoader::instance().category(e->category))
             cat = c->label;
-        const QString group = BASICS_CATS.contains(e->category) ? "BASICS" : "PRACTICE";
+        const QString group = BASICS_CATS.contains(e->category)    ? "BASICS"
+                            : REFERENCE_CATS.contains(e->category) ? "REFERENCE"
+                                                                    : "PRACTICE";
         breadcrumb_->setText(QString("Cockpit · %1 / %2 · %3").arg(group, cat, e->title));
     }
     Q_UNUSED(col);
