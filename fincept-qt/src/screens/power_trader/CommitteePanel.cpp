@@ -80,7 +80,7 @@ void CommitteePanel::build_ui() {
         committee_list_->setFocusPolicy(Qt::NoFocus);
 
         auto* ch = committee_list_->horizontalHeader();
-        ch->setSectionResizeMode(0, QHeaderView::Stretch);
+        ch->setSectionResizeMode(0, QHeaderView::Interactive); ch->resizeSection(0, 240); ch->setStretchLastSection(true);
         ch->setSectionResizeMode(1, QHeaderView::Fixed);
         ch->resizeSection(1, 52);
         ch->setSectionResizeMode(2, QHeaderView::Fixed);
@@ -151,10 +151,10 @@ void CommitteePanel::build_ui() {
         trade_table_->setFocusPolicy(Qt::NoFocus);
 
         auto* th = trade_table_->horizontalHeader();
-        th->setSectionResizeMode(0, QHeaderView::Stretch);
+        th->setSectionResizeMode(0, QHeaderView::Interactive); th->resizeSection(0, 180);
         th->setSectionResizeMode(1, QHeaderView::Fixed); th->resizeSection(1, 30);
         th->setSectionResizeMode(2, QHeaderView::Fixed); th->resizeSection(2, 60);
-        th->setSectionResizeMode(3, QHeaderView::Stretch);
+        th->setSectionResizeMode(3, QHeaderView::Interactive); th->resizeSection(3, 200); th->setStretchLastSection(true);
         th->setSectionResizeMode(4, QHeaderView::Fixed); th->resizeSection(4, 44);
         th->setSectionResizeMode(5, QHeaderView::Fixed); th->resizeSection(5, 130);
         th->setSectionResizeMode(6, QHeaderView::Fixed); th->resizeSection(6, 40);

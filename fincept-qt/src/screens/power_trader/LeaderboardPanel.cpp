@@ -61,7 +61,7 @@ void LeaderboardPanel::build_ui() {
     // Fixed width for rank + party + chamber; NAME stretches
     h->setSectionResizeMode(0, QHeaderView::Fixed);   // #
     h->resizeSection(0, 28);
-    h->setSectionResizeMode(1, QHeaderView::Stretch);  // NAME
+    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 160); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // PTY
     h->resizeSection(2, 32);
     h->setSectionResizeMode(3, QHeaderView::Fixed);    // CHB

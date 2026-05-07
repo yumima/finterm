@@ -157,12 +157,12 @@ void TradesFeedPanel::build_ui() {
     h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);    // DISCLOSED
     h->resizeSection(0, 84);
-    h->setSectionResizeMode(1, QHeaderView::Stretch);  // MEMBER
+    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 200); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // PTY
     h->resizeSection(2, 28);
     h->setSectionResizeMode(3, QHeaderView::Fixed);    // CHB
     h->resizeSection(3, 38);
-    h->setSectionResizeMode(4, QHeaderView::Stretch);  // CMTE
+    h->setSectionResizeMode(4, QHeaderView::Interactive); h->resizeSection(4, 160);
     h->setSectionResizeMode(5, QHeaderView::Fixed);    // TICKER
     h->resizeSection(5, 62);
     h->setSectionResizeMode(6, QHeaderView::Fixed);    // B/S

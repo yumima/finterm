@@ -74,7 +74,7 @@ void IpoPipelinePanel::build_ui() {
 
     auto* hdr = pipeline_table_->horizontalHeader();
     hdr->setStretchLastSection(true);
-    hdr->setSectionResizeMode(0, QHeaderView::Stretch);
+    hdr->setSectionResizeMode(0, QHeaderView::Interactive); hdr->resizeSection(0, 180); hdr->setStretchLastSection(true);
     hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     hdr->setMinimumSectionSize(30);

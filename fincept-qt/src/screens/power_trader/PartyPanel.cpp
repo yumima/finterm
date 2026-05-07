@@ -124,7 +124,7 @@ void PartyPanel::build_ui() {
     d_layout->addWidget(make_divider(QStringLiteral("TOP SECTORS  (90 days)")));
     d_sectors_ = make_table({"SECTOR", "$AMOUNT", "TRADES"});
     d_sectors_->setMinimumHeight(160);
-    d_sectors_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    d_sectors_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive); d_sectors_->horizontalHeader()->resizeSection(0, 120); d_sectors_->horizontalHeader()->setStretchLastSection(true);
     d_sectors_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
     d_sectors_->horizontalHeader()->resizeSection(1, 90);
     d_sectors_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
@@ -136,7 +136,7 @@ void PartyPanel::build_ui() {
     d_tickers_->setMinimumHeight(160);
     d_tickers_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     d_tickers_->horizontalHeader()->resizeSection(0, 70);
-    d_tickers_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    d_tickers_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive); d_tickers_->horizontalHeader()->resizeSection(1, 80); d_tickers_->horizontalHeader()->setStretchLastSection(true);
     d_tickers_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     d_tickers_->horizontalHeader()->resizeSection(2, 60);
     d_layout->addWidget(d_tickers_);
@@ -167,7 +167,7 @@ void PartyPanel::build_ui() {
     r_layout->addWidget(make_divider(QStringLiteral("TOP SECTORS  (90 days)")));
     r_sectors_ = make_table({"SECTOR", "$AMOUNT", "TRADES"});
     r_sectors_->setMinimumHeight(160);
-    r_sectors_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    r_sectors_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive); r_sectors_->horizontalHeader()->resizeSection(0, 120); r_sectors_->horizontalHeader()->setStretchLastSection(true);
     r_sectors_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
     r_sectors_->horizontalHeader()->resizeSection(1, 90);
     r_sectors_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
@@ -179,7 +179,7 @@ void PartyPanel::build_ui() {
     r_tickers_->setMinimumHeight(160);
     r_tickers_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     r_tickers_->horizontalHeader()->resizeSection(0, 70);
-    r_tickers_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    r_tickers_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive); r_tickers_->horizontalHeader()->resizeSection(1, 80); r_tickers_->horizontalHeader()->setStretchLastSection(true);
     r_tickers_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     r_tickers_->horizontalHeader()->resizeSection(2, 60);
     r_layout->addWidget(r_tickers_);

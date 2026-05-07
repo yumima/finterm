@@ -208,7 +208,7 @@ void MemberDetailPanel::build_ui() {
     hh->setStretchLastSection(false);
     hh->setSectionResizeMode(0, QHeaderView::Fixed);  // DATE
     hh->resizeSection(0, 84);
-    hh->setSectionResizeMode(1, QHeaderView::Stretch); // TICKER
+    hh->setSectionResizeMode(1, QHeaderView::Interactive); hh->resizeSection(1, 80); hh->setStretchLastSection(true);
     hh->setSectionResizeMode(2, QHeaderView::Fixed);  // B/S
     hh->resizeSection(2, 44);
     hh->setSectionResizeMode(3, QHeaderView::Fixed);  // AMOUNT

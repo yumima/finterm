@@ -309,7 +309,7 @@ void OverviewPanel::build_ui() {
         auto* h = signal_table_->horizontalHeader();
         h->setMinimumSectionSize(20);
         h->setStretchLastSection(false);
-        h->setSectionResizeMode(0, QHeaderView::Stretch);   // MEMBER
+        h->setSectionResizeMode(0, QHeaderView::Interactive); h->resizeSection(0, 180); h->setStretchLastSection(true);
         h->setSectionResizeMode(1, QHeaderView::Fixed);     // PARTY
         h->resizeSection(1, 44);
         h->setSectionResizeMode(2, QHeaderView::Fixed);     // COMMITTEE

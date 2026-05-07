@@ -82,6 +82,7 @@ private:
     // ── Sections ──────────────────────────────────────────────────────────────
     void build_header_bar(QWidget* parent, QVBoxLayout* vl);
     void build_stat_tiles(QWidget* parent, QVBoxLayout* vl);
+    void build_stat_tiles_compact(QWidget* parent, QVBoxLayout* vl); // side-panel version
     void build_chart_section(QWidget* parent, QVBoxLayout* vl);
     void build_holdings_table(QWidget* parent, QVBoxLayout* vl);
     void build_trades_section(QWidget* parent, QVBoxLayout* vl);

@@ -253,7 +253,7 @@ void RankingsPanel::build_ui() {
     h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);    // RANK
     h->resizeSection(0, 30);
-    h->setSectionResizeMode(1, QHeaderView::Stretch);  // NAME
+    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 180); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // PARTY
     h->resizeSection(2, 28);
     h->setSectionResizeMode(3, QHeaderView::Fixed);    // VALUE

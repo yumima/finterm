@@ -93,7 +93,7 @@ void InsiderWatchPanel::build_ui() {
 
         auto* wh = watch_table_->horizontalHeader();
         wh->setSectionResizeMode(0, QHeaderView::Fixed); wh->resizeSection(0, 28);
-        wh->setSectionResizeMode(1, QHeaderView::Stretch);
+        wh->setSectionResizeMode(1, QHeaderView::Interactive); wh->resizeSection(1, 200); wh->setStretchLastSection(true);
         wh->setSectionResizeMode(2, QHeaderView::Fixed); wh->resizeSection(2, 28);
         wh->setSectionResizeMode(3, QHeaderView::Fixed); wh->resizeSection(3, 38);
         wh->setSectionResizeMode(4, QHeaderView::Fixed); wh->resizeSection(4, 52);
@@ -181,7 +181,7 @@ void InsiderWatchPanel::build_ui() {
     score_breakdown_->setFocusPolicy(Qt::NoFocus);
     score_breakdown_->setMinimumHeight(170);
     auto* bh = score_breakdown_->horizontalHeader();
-    bh->setSectionResizeMode(0, QHeaderView::Stretch);
+    bh->setSectionResizeMode(0, QHeaderView::Interactive); bh->resizeSection(0, 200);
     bh->setSectionResizeMode(1, QHeaderView::Fixed); bh->resizeSection(1, 60);
     bh->setSectionResizeMode(2, QHeaderView::Fixed); bh->resizeSection(2, 60);
     bh->setStyleSheet(

@@ -195,14 +195,14 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     rounds_table_->verticalHeader()->setVisible(false);
     rounds_table_->setFocusPolicy(Qt::NoFocus);
     rounds_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    rounds_table_->setMaximumHeight(200);
+    rounds_table_->setMinimumHeight(120);
 
     auto* hdr = rounds_table_->horizontalHeader();
     hdr->setStretchLastSection(true);
     hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    hdr->setSectionResizeMode(3, QHeaderView::Stretch);
+    hdr->setSectionResizeMode(3, QHeaderView::Interactive); hdr->resizeSection(3, 180);
 
     rounds_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:1px solid %3;"

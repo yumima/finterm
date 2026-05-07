@@ -177,7 +177,7 @@ void CabinetPanel::build_content_page() {
 
         auto* mh = member_table_->horizontalHeader();
         mh->setSectionResizeMode(0, QHeaderView::Fixed); mh->resizeSection(0, 24);
-        mh->setSectionResizeMode(1, QHeaderView::Stretch);
+        mh->setSectionResizeMode(1, QHeaderView::Interactive); mh->resizeSection(1, 220); mh->setStretchLastSection(true);
         mh->setSectionResizeMode(2, QHeaderView::Fixed); mh->resizeSection(2, 60);
         mh->setSectionResizeMode(3, QHeaderView::Fixed); mh->resizeSection(3, 70);
         mh->setStyleSheet(hdr_ss());
@@ -242,8 +242,8 @@ void CabinetPanel::build_content_page() {
         o_ranking_table_->setMinimumHeight(300);
         auto* orh = o_ranking_table_->horizontalHeader();
         orh->setSectionResizeMode(0, QHeaderView::Fixed); orh->resizeSection(0, 28);
-        orh->setSectionResizeMode(1, QHeaderView::Stretch);
-        orh->setSectionResizeMode(2, QHeaderView::Stretch);
+        orh->setSectionResizeMode(1, QHeaderView::Interactive); orh->resizeSection(1, 200);
+        orh->setSectionResizeMode(2, QHeaderView::Interactive); orh->resizeSection(2, 240); orh->setStretchLastSection(true);
         orh->setSectionResizeMode(3, QHeaderView::Fixed); orh->resizeSection(3, 70);
         orh->setSectionResizeMode(4, QHeaderView::Fixed); orh->resizeSection(4, 120);
         orh->setStyleSheet(hdr_ss());
@@ -267,7 +267,7 @@ void CabinetPanel::build_content_page() {
         o_sector_table_->setShowGrid(false);
         o_sector_table_->verticalHeader()->setVisible(false);
         auto* osh = o_sector_table_->horizontalHeader();
-        osh->setSectionResizeMode(0, QHeaderView::Stretch);
+        osh->setSectionResizeMode(0, QHeaderView::Interactive); osh->resizeSection(0, 130); osh->setStretchLastSection(true);
         osh->setSectionResizeMode(1, QHeaderView::Fixed); osh->resizeSection(1, 110);
         osh->setSectionResizeMode(2, QHeaderView::Fixed); osh->resizeSection(2, 60);
         osh->setStyleSheet(hdr_ss());
@@ -305,7 +305,7 @@ void CabinetPanel::build_content_page() {
         h_table_->setShowGrid(false);
         h_table_->verticalHeader()->setVisible(false);
         auto* hth = h_table_->horizontalHeader();
-        hth->setSectionResizeMode(0, QHeaderView::Stretch);
+        hth->setSectionResizeMode(0, QHeaderView::Interactive); hth->resizeSection(0, 240); hth->setStretchLastSection(true);
         hth->setSectionResizeMode(1, QHeaderView::Fixed); hth->resizeSection(1, 60);
         hth->setSectionResizeMode(2, QHeaderView::Fixed); hth->resizeSection(2, 90);
         hth->setSectionResizeMode(3, QHeaderView::Fixed); hth->resizeSection(3, 100);
@@ -386,7 +386,7 @@ void CabinetPanel::build_content_page() {
         s_table_->setShowGrid(false);
         s_table_->verticalHeader()->setVisible(false);
         auto* sth = s_table_->horizontalHeader();
-        sth->setSectionResizeMode(0, QHeaderView::Stretch);
+        sth->setSectionResizeMode(0, QHeaderView::Interactive); sth->resizeSection(0, 130); sth->setStretchLastSection(true);
         sth->setSectionResizeMode(1, QHeaderView::Fixed); sth->resizeSection(1, 110);
         sth->setSectionResizeMode(2, QHeaderView::Fixed); sth->resizeSection(2, 80);
         sth->setSectionResizeMode(3, QHeaderView::Fixed); sth->resizeSection(3, 60);

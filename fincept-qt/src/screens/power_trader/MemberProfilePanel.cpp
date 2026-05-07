@@ -496,9 +496,41 @@ void MemberProfilePanel::build_ui() {
     vl->setContentsMargins(0, 0, 0, 16);
     vl->setSpacing(0);
 
-    build_header_bar(content_, vl);
-    build_stat_tiles(content_, vl);
-    build_chart_section(content_, vl);
+    // ── Wide-screen top row: info LEFT | chart RIGHT ──────────────────────────
+    // Left pane: compact member info (name, stats) — not stretched horizontally
+    // Right pane: NAV chart fills available width naturally
+    auto* top_split = new QSplitter(Qt::Horizontal, content_);
+    top_split->setHandleWidth(1);
+    top_split->setChildrenCollapsible(false);
+    top_split->setStyleSheet(
+        QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
+
+    auto* info_pane = new QWidget(top_split);
+    info_pane->setMinimumWidth(230);
+    info_pane->setMaximumWidth(320);
+    info_pane->setStyleSheet(
+        QString("QWidget { background:%1; border-right:1px solid %2; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* info_vl = new QVBoxLayout(info_pane);
+    info_vl->setContentsMargins(0, 0, 0, 0);
+    info_vl->setSpacing(0);
+    build_header_bar(info_pane, info_vl);
+    build_stat_tiles_compact(info_pane, info_vl);
+    info_vl->addStretch();
+
+    auto* chart_pane = new QWidget(top_split);
+    chart_pane->setStyleSheet(
+        QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
+    auto* chart_vl = new QVBoxLayout(chart_pane);
+    chart_vl->setContentsMargins(0, 0, 0, 0);
+    chart_vl->setSpacing(0);
+    build_chart_section(chart_pane, chart_vl);
+
+    top_split->setStretchFactor(0, 0);  // info pane: fixed width
+    top_split->setStretchFactor(1, 1);  // chart pane: fills available width
+    vl->addWidget(top_split);
+
+    // ── Full-width content below: tables, rankings, committees, sector ────────
     build_holdings_table(content_, vl);
     build_trades_section(content_, vl);
     build_ranking_section(content_, vl);
@@ -608,6 +640,55 @@ void MemberProfilePanel::build_stat_tiles(QWidget* parent, QVBoxLayout* vl) {
     hl->addStretch();  // push tiles left; remaining space stays empty
 
     vl->addWidget(row);
+}
+
+void MemberProfilePanel::build_stat_tiles_compact(QWidget* parent, QVBoxLayout* vl) {
+    // Compact vertical stat list for the left info pane.
+    // Each row: label (left) + value (right). No horizontal stretch — values stay close.
+    auto* box = new QWidget(parent);
+    box->setStyleSheet(
+        QString("QWidget { background:%1; border-top:1px solid %2; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* bvl = new QVBoxLayout(box);
+    bvl->setContentsMargins(12, 8, 12, 8);
+    bvl->setSpacing(4);
+
+    const QString lbl_ss =
+        QString("color:%1;font-size:11px;font-weight:600;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY());
+    const QString val_ss =
+        QString("color:%1;font-size:13px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY());
+
+    struct StatRow { const char* caption; QLabel** ptr; };
+    const StatRow rows[] = {
+        {"Portfolio *",  &tile_portfolio_val_},
+        {"YTD Return",   &tile_ytd_return_},
+        {"Alpha vs SPY", &tile_alpha_},
+        {"Cmte Trades",  &tile_cmte_trades_},
+    };
+
+    for (const auto& sr : rows) {
+        auto* row = new QWidget(box);
+        row->setStyleSheet("background:transparent;");
+        auto* hl = new QHBoxLayout(row);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->setSpacing(4);
+
+        auto* lbl = new QLabel(sr.caption, row);
+        lbl->setStyleSheet(lbl_ss);
+        hl->addWidget(lbl);
+        hl->addStretch();
+
+        *sr.ptr = new QLabel(QStringLiteral("—"), row);
+        (*sr.ptr)->setStyleSheet(val_ss);
+        (*sr.ptr)->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        hl->addWidget(*sr.ptr);
+
+        bvl->addWidget(row);
+    }
+
+    vl->addWidget(box);
 }
 
 void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
@@ -722,7 +803,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);   // TICKER
     h->resizeSection(0, 70);
-    h->setSectionResizeMode(1, QHeaderView::Stretch); // COMPANY
+    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 220); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);   // SECTOR
     h->resizeSection(2, 90);
     h->setSectionResizeMode(3, QHeaderView::Fixed);   // EST. COST
@@ -799,7 +880,7 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     h->resizeSection(1, 64);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // B/S
     h->resizeSection(2, 44);
-    h->setSectionResizeMode(3, QHeaderView::Stretch);  // AMOUNT
+    h->setSectionResizeMode(3, QHeaderView::Interactive); h->resizeSection(3, 140);
     h->setSectionResizeMode(4, QHeaderView::Fixed);    // LAG
     h->resizeSection(4, 44);
     h->setSectionResizeMode(5, QHeaderView::Fixed);    // SIGNAL
