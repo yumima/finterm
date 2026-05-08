@@ -196,6 +196,23 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
     s.is_demo = !s.recent_trades.isEmpty() && s.recent_trades.first().is_demo;
 
     summary_ = s;
+
+    // Derive portfolio_return_ytd / alpha_ytd for each member from trade history.
+    // The live Senate/House sources don't provide these directly — compute from
+    // estimated sector-based holdings using the same logic as compute_portfolio().
+    // SPY YTD proxy: ~12% (update this to a fetched value in a future phase).
+    static constexpr double kSpyYtd = 12.2;
+    for (auto& m : summary_.members) {
+        if (m.portfolio_return_ytd == 0.0) {
+            const auto p = compute_portfolio(m.id);
+            if (p.est_total_cost > 100.0) {
+                m.portfolio_return_ytd = p.est_total_pnl_pct;
+                m.spy_return_ytd       = kSpyYtd;
+                m.alpha_ytd            = m.portfolio_return_ytd - kSpyYtd;
+            }
+        }
+    }
+
     LOG_INFO("PowerTrader", QString("Loaded %1 members, %2 trades%3")
                  .arg(s.members.size()).arg(s.recent_trades.size())
                  .arg(s.is_demo ? QStringLiteral(" [DEMO]") : QString()));
