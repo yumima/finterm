@@ -53,7 +53,7 @@ void IpoPipelinePanel::build_ui() {
     ph_layout->setContentsMargins(10, 0, 10, 0);
     auto* ph_lbl = new QLabel("IPO PIPELINE");
     ph_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:700; letter-spacing:1.2px; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.2px; background:transparent;")
             .arg(colors::AMBER()));
     ph_layout->addWidget(ph_lbl);
     ph_layout->addStretch();
@@ -81,7 +81,7 @@ void IpoPipelinePanel::build_ui() {
 
     pipeline_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:13px; gridline-color:transparent; }"
+                "  font-size:12px; gridline-color:transparent; }"
                 "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.12); color:%2; }"
                 "QScrollBar:vertical { width:3px; background:%1; }"
@@ -90,7 +90,7 @@ void IpoPipelinePanel::build_ui() {
 
     hdr->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
-                "  border-bottom:2px solid %3; padding:3px 6px; font-size:13px; font-weight:700; }")
+                "  border-bottom:2px solid %3; padding:3px 6px; font-size:12px; font-weight:700; }")
             .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
 
     root->addWidget(pipeline_table_);
@@ -111,14 +111,14 @@ void IpoPipelinePanel::build_ui() {
     fh_layout->setContentsMargins(10, 0, 10, 0);
     auto* fh_lbl = new QLabel("DEAL FLOW FEED");
     fh_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:700; letter-spacing:1.2px; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.2px; background:transparent;")
             .arg(colors::CYAN()));
     fh_layout->addWidget(fh_lbl);
     fh_layout->addStretch();
 
     auto* form_d_badge = new QLabel("Form D");
     form_d_badge->setStyleSheet(
-        QString("color:%1; font-size:13px; background:rgba(6,182,212,0.18);"
+        QString("color:%1; font-size:12px; background:rgba(6,182,212,0.18);"
                 "  border:1px solid rgba(6,182,212,0.3); border-radius:3px; padding:1px 5px;")
             .arg(colors::CYAN()));
     fh_layout->addWidget(form_d_badge);
@@ -221,13 +221,13 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
 
     auto* name_lbl = new QLabel(f.company_name);
     name_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:600; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:600; background:transparent;")
             .arg(colors::TEXT_PRIMARY()));
     row1->addWidget(name_lbl, 1);
 
     auto* exempt_lbl = new QLabel(f.exemption);
     exempt_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; background:rgba(6,182,212,0.15);"
+        QString("color:%1; font-size:12px; background:rgba(6,182,212,0.15);"
                 "  border-radius:2px; padding:1px 4px;")
             .arg(colors::CYAN()));
     row1->addWidget(exempt_lbl);
@@ -239,7 +239,7 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
 
     auto* date_lbl = new QLabel(f.filed_date.toString("MMM d, yyyy"));
     date_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; background:transparent;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_TERTIARY()));
     row2->addWidget(date_lbl, 1);
 
     const QString amt = f.amount_raised > 0
@@ -247,7 +247,7 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
         : "—";
     auto* amt_lbl = new QLabel(amt);
     amt_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:600; background:transparent;")
+        QString("color:%1; font-size:12px; font-weight:600; background:transparent;")
             .arg(colors::POSITIVE()));
     row2->addWidget(amt_lbl);
     vl->addLayout(row2);
@@ -257,7 +257,7 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
     row3->setSpacing(4);
     auto* type_lbl = new QLabel(f.offering_type + " · " + f.state);
     type_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row3->addWidget(type_lbl);
     vl->addLayout(row3);
 

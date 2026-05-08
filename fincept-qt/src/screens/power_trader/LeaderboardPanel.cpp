@@ -37,7 +37,7 @@ void LeaderboardPanel::build_ui() {
     // Section header
     auto* hdr_label = new QLabel(QStringLiteral("LEADERBOARD"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:13px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     layout->addWidget(hdr_label);
@@ -75,7 +75,7 @@ void LeaderboardPanel::build_ui() {
 
     table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:13px; font-family:Consolas,monospace;"
+                "  font-size:12px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
                 "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -88,7 +88,7 @@ void LeaderboardPanel::build_ui() {
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:13px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 

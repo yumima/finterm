@@ -129,7 +129,7 @@ QWidget* PreIpoScreen::build_top_bar() {
 
     auto* title_lbl = new QLabel("PRE-IPO");
     title_lbl->setStyleSheet(
-        QString("color:%1; font-size:16px; font-weight:800; letter-spacing:2px; background:transparent;")
+        QString("color:%1; font-size:14px; font-weight:800; letter-spacing:2px; background:transparent;")
             .arg(colors::AMBER()));
     hl->addWidget(title_lbl);
 
@@ -141,20 +141,20 @@ QWidget* PreIpoScreen::build_top_bar() {
 
     auto* subtitle = new QLabel("Private Market Tracking");
     subtitle->setStyleSheet(
-        QString("color:%1; font-size:13px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(subtitle);
 
     hl->addStretch();
 
     status_lbl_ = new QLabel("Loading…");
     status_lbl_->setStyleSheet(
-        QString("color:%1; font-size:13px; background:transparent;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_TERTIARY()));
     hl->addWidget(status_lbl_);
 
     // Universe count badge
     auto* badge = new QLabel("PRIVATE MARKETS");
     badge->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:700; background:rgba(217,119,6,0.15);"
+        QString("color:%1; font-size:12px; font-weight:700; background:rgba(217,119,6,0.15);"
                 "  border:1px solid rgba(217,119,6,0.35); border-radius:3px; padding:2px 8px;")
             .arg(colors::AMBER()));
     hl->addWidget(badge);

@@ -12,13 +12,13 @@
 namespace fincept::screens {
 
 static QString section_header_style() {
-    return QString("QLabel{background:%1;color:%2;font-size:13px;font-weight:700;"
+    return QString("QLabel{background:%1;color:%2;font-size:12px;font-weight:700;"
                    "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;}")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
 
 static QString table_style() {
-    return QString("QTableWidget{background:%1;color:%2;border:none;font-size:13px;"
+    return QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
                    "font-family:Consolas,monospace;gridline-color:transparent;}"
                    "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
                    "QTableWidget::item:selected{background:rgba(217,119,6,0.18);color:%2;}"
@@ -32,7 +32,7 @@ static QString table_style() {
 static QString header_style() {
     return QString("QHeaderView::section{background:%1;color:%2;border:none;"
                    "border-bottom:2px solid %3;border-right:1px solid %4;"
-                   "padding:5px 8px;font-size:13px;font-weight:700;letter-spacing:0.5px;}")
+                   "padding:5px 8px;font-size:12px;font-weight:700;letter-spacing:0.5px;}")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::AMBER(), ui::colors::BORDER_MED());
 }
@@ -103,7 +103,7 @@ void CommitteePanel::build_ui() {
 
         detail_title_ = new QLabel(QStringLiteral("Select a committee"));
         detail_title_->setStyleSheet(
-            QString("color:%1;font-size:14px;font-weight:700;padding:10px 14px;"
+            QString("color:%1;font-size:13px;font-weight:700;padding:10px 14px;"
                     "border-bottom:1px solid %2;background:%3;")
                 .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_SURFACE()));
         rl->addWidget(detail_title_);
@@ -111,7 +111,7 @@ void CommitteePanel::build_ui() {
         // Stats row
         detail_stats_ = new QLabel;
         detail_stats_->setStyleSheet(
-            QString("color:%1;font-size:13px;padding:6px 14px;"
+            QString("color:%1;font-size:12px;padding:6px 14px;"
                     "background:%2;border-bottom:1px solid %3;")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
         detail_stats_->setWordWrap(true);
@@ -125,12 +125,12 @@ void CommitteePanel::build_ui() {
         ir->setContentsMargins(14, 6, 14, 6);
 
         detail_tickers_ = new QLabel;
-        detail_tickers_->setStyleSheet(QString("color:%1;font-size:13px;").arg(ui::colors::CYAN()));
+        detail_tickers_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
         ir->addWidget(detail_tickers_);
         ir->addStretch();
         detail_members_ = new QLabel;
         detail_members_->setStyleSheet(
-            QString("color:%1;font-size:13px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
         ir->addWidget(detail_members_);
         rl->addWidget(info_row);
 

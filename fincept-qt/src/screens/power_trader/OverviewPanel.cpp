@@ -58,7 +58,7 @@ QString OverviewPanel::fmt_pct(double v) {
 static QLabel* make_section_header(const QString& title, QWidget* parent) {
     auto* lbl = new QLabel(title, parent);
     lbl->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:13px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:5px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     return lbl;
@@ -111,7 +111,7 @@ class BarRow : public QWidget {
         // Left label
         p.setPen(cfg_.left_color);
         QFont lf = p.font();
-        lf.setPixelSize(14);
+        lf.setPixelSize(12);
         p.setFont(lf);
         p.drawText(QRect(0, 0, lw, h), Qt::AlignLeft | Qt::AlignVCenter,
                    p.fontMetrics().elidedText(cfg_.left_label, Qt::ElideRight, lw));
@@ -129,7 +129,7 @@ class BarRow : public QWidget {
         // Right label
         p.setPen(cfg_.right_color);
         QFont rf = p.font();
-        rf.setPixelSize(14);
+        rf.setPixelSize(12);
         rf.setBold(true);
         p.setFont(rf);
         p.drawText(QRect(w - rw, 0, rw, h), Qt::AlignRight | Qt::AlignVCenter,
@@ -209,11 +209,11 @@ void OverviewPanel::build_ui() {
             QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
                 .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
         const QString cap_ss =
-            QString("QLabel { color:%1; font-size:13px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                     " letter-spacing:0.5px; background:transparent; border:none; }")
                 .arg(ui::colors::TEXT_SECONDARY());
         const QString val_ss =
-            QString("QLabel { color:%1; font-size:20px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
                     " font-family:Consolas,monospace; background:transparent; border:none; }")
                 .arg(ui::colors::AMBER());
 
@@ -312,7 +312,7 @@ void OverviewPanel::build_ui() {
 
         signal_table_->setStyleSheet(
             QString("QTableWidget { background:%1; color:%2; border:none;"
-                    "  font-size:13px; font-family:Consolas,monospace;"
+                    "  font-size:12px; font-family:Consolas,monospace;"
                     "  gridline-color:transparent; }"
                     "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                     "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -325,7 +325,7 @@ void OverviewPanel::build_ui() {
         h->setStyleSheet(
             QString("QHeaderView::section { background:%1; color:%2; border:none;"
                     "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                    "  padding:5px 8px; font-size:13px; font-weight:700;"
+                    "  padding:5px 8px; font-size:12px; font-weight:700;"
                     "  letter-spacing:0.5px; }")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                      ui::colors::AMBER(), ui::colors::BORDER_MED()));
@@ -453,7 +453,7 @@ void OverviewPanel::populate_alpha_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), alpha_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:13px; }").arg(ui::colors::TEXT_SECONDARY()));
+            QString("QLabel { color:%1; font-size:12px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
@@ -511,7 +511,7 @@ void OverviewPanel::populate_sector_chart() {
     if (sorted.isEmpty()) {
         auto* empty = new QLabel(QStringLiteral("No data"), sector_chart_);
         empty->setStyleSheet(
-            QString("QLabel { color:%1; font-size:13px; }").arg(ui::colors::TEXT_SECONDARY()));
+            QString("QLabel { color:%1; font-size:12px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
         return;
     }
