@@ -84,6 +84,7 @@ private:
     void build_stat_tiles(QWidget* parent, QVBoxLayout* vl);
     void build_stat_tiles_compact(QWidget* parent, QVBoxLayout* vl); // side-panel version
     void build_chart_section(QWidget* parent, QVBoxLayout* vl);
+    void build_signal_analysis_section(QWidget* parent, QVBoxLayout* vl);
     void build_holdings_table(QWidget* parent, QVBoxLayout* vl);
     void build_trades_section(QWidget* parent, QVBoxLayout* vl);
     void build_ranking_section(QWidget* parent, QVBoxLayout* vl);
@@ -99,6 +100,9 @@ private:
                         const QVector<power_trader::CommitteeInsiderSignal>& insider_signals,
                         const QStringList& committees);
     void populate_holdings(const power_trader::MemberPortfolio& p);
+    void populate_signal_analysis(const power_trader::CongressMember& m,
+                                  const power_trader::MemberPortfolio& p,
+                                  const QVector<power_trader::PoliticalTrade>& trades);
     void populate_trades(const QVector<power_trader::PoliticalTrade>& trades);
     void populate_rankings(const QString& member_id);
     void populate_committees(const power_trader::CongressMember& m,
@@ -142,6 +146,9 @@ private:
 
     // ── Section 5: recent trades ──────────────────────────────────────────────
     QTableWidget* trades_table_   = nullptr;
+
+    // ── Signal analysis ───────────────────────────────────────────────────────
+    QWidget*      signal_analysis_ = nullptr;  // populated in populate_signal_analysis
 
     // ── Section 6: ranking comparison ─────────────────────────────────────────
     QWidget* rank_cards_row_      = nullptr;

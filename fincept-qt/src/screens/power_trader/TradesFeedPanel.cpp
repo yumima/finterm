@@ -156,25 +156,25 @@ void TradesFeedPanel::build_ui() {
     h->setMinimumSectionSize(20);
     h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);    // DISCLOSED
-    h->resizeSection(0, 84);
+    h->resizeSection(0, 92);
     h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 200); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // PTY
-    h->resizeSection(2, 28);
+    h->resizeSection(2, 38);
     h->setSectionResizeMode(3, QHeaderView::Fixed);    // CHB
-    h->resizeSection(3, 38);
+    h->resizeSection(3, 44);
     h->setSectionResizeMode(4, QHeaderView::Interactive); h->resizeSection(4, 160);
     h->setSectionResizeMode(5, QHeaderView::Fixed);    // TICKER
     h->resizeSection(5, 62);
     h->setSectionResizeMode(6, QHeaderView::Fixed);    // B/S
-    h->resizeSection(6, 44);
+    h->resizeSection(6, 54);
     h->setSectionResizeMode(7, QHeaderView::Fixed);    // AMOUNT
-    h->resizeSection(7, 130);
+    h->resizeSection(7, 160);
     h->setSectionResizeMode(8, QHeaderView::Fixed);    // LAG
     h->resizeSection(8, 40);
     h->setSectionResizeMode(9, QHeaderView::Fixed);    // SIG
     h->resizeSection(9, 40);
     h->setSectionResizeMode(10, QHeaderView::Fixed);   // SOURCE
-    h->resizeSection(10, 80);
+    h->resizeSection(10, 88);
 
     table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"

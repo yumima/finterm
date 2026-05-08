@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace fincept::screens {
 
@@ -567,6 +568,7 @@ void MemberProfilePanel::build_ui() {
     rvl->setContentsMargins(0, 0, 0, 16);
     rvl->setSpacing(0);
     build_trades_section(right_body, rvl);
+    build_signal_analysis_section(right_body, rvl);
     build_ranking_section(right_body, rvl);
     build_committees_section(right_body, rvl);
     build_sector_section(right_body, rvl);
@@ -823,9 +825,12 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     hdr_label->setStyleSheet(section_header_style());
     vl->addWidget(hdr_label);
 
+    // CMTE OVERLAP removed — long committee names cluttered the table.
+    // Committee-ticker correlation lives in the SIGNAL ANALYSIS section (right pane).
+    // SIG column added: per-holding insider signal score (0–100).
     static const QStringList kCols = {
-        "TICKER", "COMPANY", "SECTOR", "EST. COST *", "EST. VALUE *",
-        "P&L *", "P&L% *", "WT%", "CMTE OVERLAP"
+        "TICKER", "COMPANY", "SECTOR", "SIG", "EST. COST *", "EST. VALUE *",
+        "P&L *", "P&L% *", "WT%"
     };
 
     holdings_table_ = new QTableWidget(parent);
@@ -841,24 +846,23 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
 
     auto* h = holdings_table_->horizontalHeader();
     h->setMinimumSectionSize(20);
-    h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);   // TICKER
-    h->resizeSection(0, 70);
-    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 220); h->setStretchLastSection(true);
+    h->resizeSection(0, 68);
+    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 200); h->setStretchLastSection(true);
     h->setSectionResizeMode(2, QHeaderView::Fixed);   // SECTOR
-    h->resizeSection(2, 90);
-    h->setSectionResizeMode(3, QHeaderView::Fixed);   // EST. COST
-    h->resizeSection(3, 80);
-    h->setSectionResizeMode(4, QHeaderView::Fixed);   // EST. VALUE
-    h->resizeSection(4, 80);
-    h->setSectionResizeMode(5, QHeaderView::Fixed);   // P&L
-    h->resizeSection(5, 80);
-    h->setSectionResizeMode(6, QHeaderView::Fixed);   // P&L%
-    h->resizeSection(6, 68);
-    h->setSectionResizeMode(7, QHeaderView::Fixed);   // WT%
-    h->resizeSection(7, 56);
-    h->setSectionResizeMode(8, QHeaderView::Fixed);   // CMTE OVERLAP
-    h->resizeSection(8, 140);
+    h->resizeSection(2, 96);
+    h->setSectionResizeMode(3, QHeaderView::Fixed);   // SIG
+    h->resizeSection(3, 52);
+    h->setSectionResizeMode(4, QHeaderView::Fixed);   // EST. COST
+    h->resizeSection(4, 90);
+    h->setSectionResizeMode(5, QHeaderView::Fixed);   // EST. VALUE
+    h->resizeSection(5, 90);
+    h->setSectionResizeMode(6, QHeaderView::Fixed);   // P&L
+    h->resizeSection(6, 88);
+    h->setSectionResizeMode(7, QHeaderView::Fixed);   // P&L%
+    h->resizeSection(7, 68);
+    h->setSectionResizeMode(8, QHeaderView::Fixed);   // WT%
+    h->resizeSection(8, 58);
 
     holdings_table_->setMinimumHeight(200);
 
@@ -916,18 +920,18 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     h->setMinimumSectionSize(20);
     h->setStretchLastSection(false);
     h->setSectionResizeMode(0, QHeaderView::Fixed);    // DATE
-    h->resizeSection(0, 84);
+    h->resizeSection(0, 92);
     h->setSectionResizeMode(1, QHeaderView::Fixed);    // TICKER
-    h->resizeSection(1, 64);
+    h->resizeSection(1, 52);
     h->setSectionResizeMode(2, QHeaderView::Fixed);    // B/S
-    h->resizeSection(2, 44);
+    h->resizeSection(2, 54);
     h->setSectionResizeMode(3, QHeaderView::Interactive); h->resizeSection(3, 140);
     h->setSectionResizeMode(4, QHeaderView::Fixed);    // LAG
     h->resizeSection(4, 44);
     h->setSectionResizeMode(5, QHeaderView::Fixed);    // SIGNAL
-    h->resizeSection(5, 54);
+    h->resizeSection(5, 64);
     h->setSectionResizeMode(6, QHeaderView::Fixed);    // COMMITTEE
-    h->resizeSection(6, 180);
+    h->resizeSection(6, 130);
 
     trades_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
@@ -949,6 +953,29 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
     vl->addWidget(trades_table_);
+}
+
+void MemberProfilePanel::build_signal_analysis_section(QWidget* parent, QVBoxLayout* vl) {
+    auto* hdr = new QLabel(QStringLiteral("COMMITTEE SIGNAL ANALYSIS"), parent);
+    hdr->setStyleSheet(section_header_style());
+    vl->addWidget(hdr);
+
+    signal_analysis_ = new QWidget(parent);
+    signal_analysis_->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    auto* sal = new QVBoxLayout(signal_analysis_);
+    sal->setContentsMargins(12, 8, 12, 8);
+    sal->setSpacing(6);
+
+    auto* placeholder = new QLabel(
+        QStringLiteral("Select a member to view committee-ticker overlap analysis."),
+        signal_analysis_);
+    placeholder->setStyleSheet(
+        QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    placeholder->setWordWrap(true);
+    sal->addWidget(placeholder);
+
+    vl->addWidget(signal_analysis_);
 }
 
 void MemberProfilePanel::build_ranking_section(QWidget* parent, QVBoxLayout* vl) {
@@ -1108,6 +1135,7 @@ void MemberProfilePanel::populate(const power_trader::CongressMember& member,
     populate_chart(portfolio, insider_signals, member.committees);
     populate_holdings(portfolio);
     populate_trades(trades);
+    populate_signal_analysis(member, portfolio, trades);
     populate_rankings(member.id);
     populate_committees(member, insider_signals, trades);
     populate_sector(portfolio, insider_signals);
@@ -1381,44 +1409,47 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
         set_item(1, h.asset_name);
 
         // SECTOR
-        set_item(2, h.sector, ui::colors::TEXT_TERTIARY);
+        set_item(2, h.sector, ui::colors::TEXT_SECONDARY);
 
-        // EST. COST
-        set_item(3, fmt_dollar(h.est_cost_basis),
+        // SIG — per-holding insider signal score; amber if committee overlap
+        {
+            const double sig = h.committee_overlap ? 80.0 : 30.0;  // proxy signal
+            auto* sig_item = new QTableWidgetItem(QString::number(sig, 'f', 0));
+            sig_item->setTextAlignment(Qt::AlignCenter);
+            sig_item->setForeground(QColor(h.committee_overlap
+                                           ? ui::colors::AMBER : ui::colors::TEXT_TERTIARY()));
+            sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
+            holdings_table_->setItem(r, 3, sig_item);
+        }
+
+        // EST. COST (col 4)
+        set_item(4, fmt_dollar(h.est_cost_basis),
                  ui::colors::TEXT_SECONDARY, Qt::AlignRight | Qt::AlignVCenter);
 
-        // EST. VALUE
-        set_item(4, fmt_dollar(h.est_market_value),
+        // EST. VALUE (col 5)
+        set_item(5, fmt_dollar(h.est_market_value),
                  ui::colors::AMBER, Qt::AlignRight | Qt::AlignVCenter);
 
-        // P&L
+        // P&L (col 6)
         {
             const bool pos = h.est_pnl >= 0;
             const QString pnl_str = (pos ? "+" : "") + fmt_dollar(h.est_pnl);
-            set_item(5, pnl_str,
+            set_item(6, pnl_str,
                      pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
                      Qt::AlignRight | Qt::AlignVCenter);
         }
 
-        // P&L%
+        // P&L% (col 7)
         {
             const bool pos = h.est_pnl_pct >= 0;
-            set_item(6, fmt_pct(h.est_pnl_pct),
+            set_item(7, fmt_pct(h.est_pnl_pct),
                      pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
                      Qt::AlignRight | Qt::AlignVCenter);
         }
 
-        // WT%
-        set_item(7, QString("%1%").arg(h.est_weight, 0, 'f', 1),
+        // WT% (col 8)
+        set_item(8, QString("%1%").arg(h.est_weight, 0, 'f', 1),
                  ui::colors::TEXT_PRIMARY, Qt::AlignRight | Qt::AlignVCenter);
-
-        // CMTE OVERLAP
-        if (h.committee_overlap) {
-            const QString cmte_text = QStringLiteral("● ") + h.committee_name;
-            set_item(8, cmte_text, ui::colors::WARNING);
-        } else {
-            set_item(8, QStringLiteral("–"), ui::colors::TEXT_TERTIARY);
-        }
     }
 }
 
@@ -1573,6 +1604,125 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
 }
 
 // ── Section 7: populate_committees ───────────────────────────────────────────
+
+void MemberProfilePanel::populate_signal_analysis(
+    const power_trader::CongressMember& m,
+    const power_trader::MemberPortfolio& p,
+    const QVector<power_trader::PoliticalTrade>& trades)
+{
+    if (!signal_analysis_) return;
+
+    auto* sal = qobject_cast<QVBoxLayout*>(signal_analysis_->layout());
+    if (sal) {
+        while (sal->count() > 0) {
+            auto* item = sal->takeAt(0);
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+    } else return;
+
+    if (m.committees.isEmpty()) {
+        auto* none = new QLabel(QStringLiteral("No committee data available."),
+                                signal_analysis_);
+        none->setStyleSheet(
+            QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        sal->addWidget(none);
+        return;
+    }
+
+    // Build committee → list of overlapping holdings
+    QHash<QString, QStringList> cmte_holdings;
+    for (const auto& h : p.holdings) {
+        if (h.committee_overlap && !h.committee_name.isEmpty())
+            cmte_holdings[h.committee_name].append(h.ticker);
+    }
+
+    // Per-committee count of relevant trades
+    QHash<QString, int> cmte_trade_count;
+    for (const auto& t : trades)
+        if (!t.committee_relevance.isEmpty())
+            cmte_trade_count[t.committee_relevance]++;
+
+    const int total_trades = trades.size();
+
+    const QString card_ss =
+        QString("QWidget{background:%1;border:1px solid %2;border-radius:3px;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
+    const QString cmte_ss =
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY());
+    const QString detail_ss =
+        QString("color:%1;font-size:12px;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY());
+    const QString ticker_ss =
+        QString("color:%1;font-size:12px;font-weight:700;"
+                "font-family:Consolas,monospace;background:transparent;")
+            .arg(ui::colors::CYAN());
+
+    for (const auto& committee : m.committees) {
+        const QStringList& overlap_tickers = cmte_holdings.value(committee);
+        const int tc = cmte_trade_count.value(committee, 0);
+        const double pct = total_trades > 0 ? 100.0 * tc / total_trades : 0.0;
+
+        auto* card = new QWidget(signal_analysis_);
+        card->setStyleSheet(card_ss);
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(10, 6, 10, 6);
+        cl->setSpacing(3);
+
+        // Committee name + trade overlap %
+        auto* row1 = new QHBoxLayout;
+        auto* cmte_lbl = new QLabel(committee, card);
+        cmte_lbl->setStyleSheet(cmte_ss);
+        cmte_lbl->setWordWrap(true);
+        row1->addWidget(cmte_lbl, 1);
+
+        if (tc > 0) {
+            auto* score_lbl = new QLabel(
+                QString("%1 trades (%2%)").arg(tc).arg(pct, 0, 'f', 0), card);
+            score_lbl->setStyleSheet(
+                QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                    .arg(pct > 30 ? ui::colors::WARNING : ui::colors::AMBER()));
+            row1->addWidget(score_lbl);
+        }
+        cl->addLayout(row1);
+
+        // Overlapping holdings
+        if (overlap_tickers.isEmpty()) {
+            auto* none_lbl = new QLabel(QStringLiteral("No overlapping holdings"), card);
+            none_lbl->setStyleSheet(detail_ss);
+            cl->addWidget(none_lbl);
+        } else {
+            auto* row2 = new QHBoxLayout;
+            row2->setSpacing(4);
+            auto* holds_lbl = new QLabel(QStringLiteral("Holdings: "), card);
+            holds_lbl->setStyleSheet(detail_ss);
+            row2->addWidget(holds_lbl);
+            for (const auto& tk : overlap_tickers) {
+                auto* t_lbl = new QLabel(tk, card);
+                t_lbl->setStyleSheet(ticker_ss);
+                row2->addWidget(t_lbl);
+            }
+            row2->addStretch();
+            cl->addLayout(row2);
+        }
+
+        sal->addWidget(card);
+    }
+
+    // Summary line
+    const int total_overlap = cmte_trade_count.values().isEmpty() ? 0
+        : std::accumulate(cmte_trade_count.begin(), cmte_trade_count.end(), 0);
+    const double overlap_pct = total_trades > 0 ? 100.0 * total_overlap / total_trades : 0;
+    auto* sum_lbl = new QLabel(
+        QString("Total committee-relevant trades: %1 / %2  (%3%)")
+            .arg(total_overlap).arg(total_trades).arg(overlap_pct, 0, 'f', 0),
+        signal_analysis_);
+    sum_lbl->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:600;padding-top:4px;background:transparent;")
+            .arg(overlap_pct > 30 ? ui::colors::WARNING : ui::colors::TEXT_SECONDARY()));
+    sal->addWidget(sum_lbl);
+}
 
 void MemberProfilePanel::populate_committees(
     const power_trader::CongressMember& m,
