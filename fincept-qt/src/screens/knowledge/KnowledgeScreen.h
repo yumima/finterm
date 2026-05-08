@@ -53,7 +53,7 @@ class KnowledgeScreen : public QWidget {
     QLabel* count_label_ = nullptr;
 
     GroupedPane* basics_pane_    = nullptr;
-    GroupedPane* reference_pane_ = nullptr;  // FORMULAS · REGULATORS · INTERVIEWS
+    GroupedPane* reference_pane_ = nullptr;  // FORMULAS · REGULATORS
     GroupedPane* practice_pane_  = nullptr;
 
     QHash<QString, CategoryColumn*> category_cols_;

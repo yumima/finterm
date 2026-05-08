@@ -42,7 +42,7 @@ def _get(url: str, params: dict = None, timeout: int = 20) -> dict:
 
 # ── Form D ────────────────────────────────────────────────────────────────────
 
-def fetch_form_d(days_back: int = 7) -> list:
+def fetch_form_d(days_back: int = 180) -> list:
     """
     Fetch recent Form D filings from EDGAR full-text search.
     Form D = Regulation D private placement notice.
@@ -117,7 +117,7 @@ def fetch_ipo_pipeline(days_back: int = 90) -> list:
 
 # ── Daemon action handler ─────────────────────────────────────────────────────
 
-def build_all_data(days_back_fd: int = 30, days_back_ipo: int = 90) -> dict:
+def build_all_data(days_back_fd: int = 180, days_back_ipo: int = 90) -> dict:
     """
     Build combined summary for PreIpoService.parse_sec_summary().
     Returns:

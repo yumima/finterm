@@ -2,9 +2,11 @@
 Senate / House Financial Disclosures — Periodic Transaction Reports (PTR)
 Real congressional trade data under the STOCK Act (2012).
 
-Sources:
-  Senate PTRs: https://efts.senate.gov/LATEST/search-index  (no key)
-  House FDS:   https://disclosures-clerk.house.gov/public_disc/financial-pdfs/<yr>FD.zip (no key)
+Sources (in priority order):
+  1. Senate PTRs: https://efts.senate.gov/LATEST/search-index  (no key)
+  2. House FDS:   https://disclosures-clerk.house.gov/public_disc/financial-pdfs/<yr>FD.zip (no key)
+  3. Finnhub API: https://finnhub.io/api/v1/stock/congressional-trading (free, 60 req/min)
+     Set FINNHUB_API_KEY env var for Option C fallback (free key at finnhub.io)
   Member roster:
     Congress.gov API — set CONGRESS_GOV_API_KEY env var (free at api.congress.gov)
     Senate.gov JSON  — https://www.senate.gov/senators/senators-contact.json (no key fallback)
@@ -23,6 +25,7 @@ import os
 import re
 import io
 import time
+import math
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta, datetime
@@ -721,12 +724,150 @@ def _network_available() -> bool:
         return False
 
 
+# ── Finnhub congressional fallback (Option C) ─────────────────────────────────
+# Used when Senate eFTS and House FDS both return nothing (e.g. network issues,
+# no PTR filings in date range). Finnhub free tier: 60 req/min, no sign-up barrier.
+# Set FINNHUB_API_KEY env var; without a key this is skipped gracefully.
+
+FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY', '')
+FINNHUB_CONGRESSIONAL = "https://finnhub.io/api/v1/stock/congressional-trading"
+
+# Top tickers most commonly traded by Congress members (sourced from research).
+# Querying these 30 symbols covers the majority of high-signal congressional trades.
+_CONGRESSIONAL_WATCHLIST = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD",
+    "JPM", "BAC", "GS", "V", "MA", "BX", "SCHW",
+    "LMT", "RTX", "NOC", "BA", "GD", "PLTR", "LDOS",
+    "XOM", "CVX", "COP", "NEE",
+    "UNH", "JNJ", "PFE", "ABBV",
+]
+
+
+def _fetch_finnhub_congressional(days_back: int = 90) -> list:
+    """
+    Fetch congressional trades from Finnhub for the top watchlist tickers.
+    Returns filings in the same format as fetch_senate_ptrs() so they can be
+    merged directly into build_all_data().
+    Requires FINNHUB_API_KEY environment variable.
+    """
+    if not FINNHUB_API_KEY or requests is None:
+        return []
+
+    start = (date.today() - timedelta(days=days_back)).isoformat()
+    end   = date.today().isoformat()
+    filings: List[dict] = []
+    seen_ids: set = set()
+
+    for ticker in _CONGRESSIONAL_WATCHLIST:
+        try:
+            r = requests.get(
+                FINNHUB_CONGRESSIONAL,
+                params={"symbol": ticker, "from": start, "to": end,
+                        "token": FINNHUB_API_KEY},
+                timeout=8,
+                headers={"User-Agent": "FinceptTerminal/1.0"}
+            )
+            r.raise_for_status()
+            data = r.json()
+        except Exception:
+            continue
+
+        for trade in data.get("data", []):
+            name = trade.get("name", "").strip()
+            if not name:
+                continue
+
+            tx_date  = trade.get("transactionDate", "")
+            fil_date = trade.get("filingDate",      "")
+            amount   = trade.get("amount", 0) or 0
+            tx_type  = (trade.get("transaction", "") or "").lower()
+            comment  = trade.get("comment", "") or ""
+
+            # Deduplicate by natural key
+            key = f"{name}|{ticker}|{tx_date}|{amount}"
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+
+            direction = "Buy" if "purchase" in tx_type or "buy" in tx_type else \
+                        "Sell" if "sale" in tx_type or "sell" in tx_type else "Other"
+
+            # Estimate amount range bracket from midpoint
+            lo = hi = float(amount)
+            if   amount >= 1_000_000: lo, hi, lbl = 500_001, 1_000_000, "$500,001 – $1,000,000"
+            elif amount >= 500_000:   lo, hi, lbl = 250_001,   500_000, "$250,001 – $500,000"
+            elif amount >= 250_000:   lo, hi, lbl = 100_001,   250_000, "$100,001 – $250,000"
+            elif amount >= 100_000:   lo, hi, lbl =  50_001,   100_000, "$50,001 – $100,000"
+            elif amount >= 50_000:    lo, hi, lbl =  15_001,    50_000, "$15,001 – $50,000"
+            elif amount >= 15_000:    lo, hi, lbl =   1_001,    15_000, "$1,001 – $15,000"
+            else:                     lbl = f"~${int(amount):,}"
+
+            # Compute lag
+            try:
+                lag = max(0, (date.fromisoformat(fil_date[:10])
+                              - date.fromisoformat(tx_date[:10])).days)
+            except Exception:
+                lag = 0
+
+            enrich   = _enrich_member(name, "")
+            cmte_rel = _compute_committee_relevance(ticker, enrich.get("committees", []))
+            score    = compute_signal_score(
+                {"ticker": ticker, "amount_high": hi,
+                 "disclosure_lag_days": lag, "committee_relevance": cmte_rel},
+                {"committees": enrich.get("committees", [])})
+
+            filings.append({
+                "member_name":         name,
+                "chamber":             "senate" if enrich.get("chamber","").lower() == "senate" else "house",
+                "party":               enrich.get("party", ""),
+                "state":               enrich.get("state", ""),
+                "committees":          enrich.get("committees", []),
+                "filed_date":          fil_date[:10] if fil_date else "",
+                "disclosure_lag_days": lag,
+                "data_source":         "Finnhub",
+                "filing_url":          "",
+                "trades": [{
+                    "ticker":             ticker,
+                    "asset_name":         trade.get("asset", ticker),
+                    "asset_type":         "Stock",
+                    "direction":          direction,
+                    "transaction_date":   tx_date[:10] if tx_date else "",
+                    "amount_low":         float(lo),
+                    "amount_high":        float(hi),
+                    "amount_range_label": lbl,
+                    "committee_relevance": cmte_rel,
+                }],
+            })
+
+        time.sleep(1.1)  # stay within 60 req/min free tier (1 sec gap is safe)
+
+    return filings
+
+
+def _compute_committee_relevance(ticker: str, committees: List[str]) -> str:
+    """Thin wrapper used by Finnhub fallback path (TICKER_COMMITTEE_MAP removed)."""
+    return _compute_committee_relevance_impl(ticker, committees)
+
+
+def _compute_committee_relevance_impl(ticker: str, committees: List[str]) -> str:
+    cmte_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), "")
+    if not cmte_for_ticker:
+        return ""
+    for c in committees:
+        if cmte_for_ticker.lower()[:8] in c.lower() or c.lower()[:8] in cmte_for_ticker.lower():
+            return c
+    return ""
+
+
 def build_all_data(days_back: int = 90) -> dict:
     """
     Build {members, trades} compatible with PowerTraderService.parse_summary().
-    Fetches live trade data from Senate eFTS + House FDS.
-    Returns empty result when offline or when sources return nothing — the
-    C++ caller will show an error state rather than fake data.
+
+    Source priority:
+      1. Senate eFTS  (primary, authoritative)
+      2. House FDS    (primary, authoritative)
+      3. Finnhub API  (Option C fallback — set FINNHUB_API_KEY env var)
+      4. Empty result  (C++ caller shows error state)
     """
     # Fast-fail offline: probe before any network calls (avoids 8s _load_roster timeout)
     if not _network_available():
@@ -740,7 +881,10 @@ def build_all_data(days_back: int = 90) -> dict:
     all_filings    = senate_filings + house_filings
 
     if not all_filings:
-        return {"members": [], "trades": []}
+        # Option C: try Finnhub as secondary source
+        all_filings = _fetch_finnhub_congressional(days_back=days_back)
+        if not all_filings:
+            return {"members": [], "trades": []}
 
     member_map: Dict[str, dict] = {}
     trades = []

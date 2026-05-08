@@ -46,7 +46,7 @@ GroupedPane::GroupedPane(const QString& group_id, const QString& title, QWidget*
 
     // ── Header bar: group label · scrollable sub-tab buttons ─────────────────
     // Wrapped in a QScrollArea so a pane with many sub-tabs (e.g. REFERENCE
-    // with Formulas · Regulators · Interviews) never clips the rightmost tab.
+    // with Formulas · Regulators) never clips the rightmost tab.
     auto* header_container = new QWidget(this);
     header_container->setFixedHeight(46);
     header_container->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")

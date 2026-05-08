@@ -27,10 +27,11 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 // Sub-tab assignment — 3 content panes around the rail.
 //   BASICS   : core reference   — Glossary · Concepts · Abbreviations
 //   PRACTICE : applied learning — Formulas · Tracks · Playbooks
-//   REFERENCE: context & study  — Cases · Regulators · Interviews
+//   REFERENCE: context & study  — Cases · Regulators
+//   (Interviews removed — was placeholder content with no real data)
 const QStringList BASICS_CATS    = {"glossary", "concepts"};
 const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks"};
-const QStringList REFERENCE_CATS = {"cases", "regulators", "interviews"};
+const QStringList REFERENCE_CATS = {"cases", "regulators"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
@@ -194,7 +195,7 @@ void KnowledgeScreen::build_layout() {
     connect(rail_, &RailWidget::request_action, this,
             [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
 
-    // ── REFERENCE pane (Formulas · Regulators · Interviews) ──────────────────
+    // ── REFERENCE pane (Cases · Regulators) ──────────────────
     reference_pane_ = new GroupedPane("reference", "REFERENCE", split);
     reference_pane_->setMinimumWidth(260);
     for (const auto& cat_id : REFERENCE_CATS) {
