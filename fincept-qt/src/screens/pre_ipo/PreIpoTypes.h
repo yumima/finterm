@@ -32,7 +32,8 @@ struct FundingRound {
     double  amount_usd        = 0;  // millions
     double  implied_valuation  = 0;  // post-money, billions
     double  price_per_share    = 0;  // USD per share at this round (0 if unknown)
-    int     shares_thousands   = 0;  // shares sold in thousands (0 if unknown)
+    int     shares_thousands   = 0;  // shares sold in thousands; Form D doesn't
+                                     // disclose this — always 0 from SEC data
     QStringList lead_investors;
 };
 

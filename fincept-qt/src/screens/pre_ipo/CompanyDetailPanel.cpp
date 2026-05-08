@@ -100,10 +100,8 @@ QWidget* CompanyDetailPanel::build_detail_view() {
             QString("color:%1;font-size:20px;font-weight:700;background:transparent;")
                 .arg(colors::AMBER()));
         row1->addWidget(name_lbl_);
-        row1->addSpacing(8);
-        status_badge_ = new QLabel;
-        status_badge_->setStyleSheet("font-size:12px;font-weight:700;border-radius:4px;padding:2px 8px;");
-        row1->addWidget(status_badge_);
+        // Note: status_badge_ is created in the IPO STATUS section below —
+        // do NOT construct it here to avoid a double-construction leak.
         row1->addStretch();
         hl->addLayout(row1);
 

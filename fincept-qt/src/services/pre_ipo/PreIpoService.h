@@ -61,7 +61,8 @@ class PreIpoService : public QObject {
     QVector<pre_ipo::PrivateCompany> companies_;
     QVector<pre_ipo::FormDFiling>    form_d_;
     QVector<pre_ipo::S1Filing>       pipeline_;
-    bool loaded_ = false;
+    bool loaded_  = false;
+    bool loading_ = false;   // guard against concurrent Python spawns
 };
 
 } // namespace fincept::services

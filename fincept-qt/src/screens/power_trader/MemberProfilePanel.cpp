@@ -46,11 +46,15 @@ static QString section_header_style() {
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
 
-// Creates a fixed-height section header label — prevents auto-scaling expansion
+// Creates a correctly-sized section header label that works across DPI scales.
+// Height is derived from the label's actual font metrics rather than a hardcoded
+// pixel value, so it scales correctly on HiDPI (1.5x, 2x) displays.
 static QLabel* make_section_hdr(const QString& title, QWidget* parent) {
     auto* lbl = new QLabel(title, parent);
     lbl->setStyleSheet(section_header_style());
-    lbl->setFixedHeight(26);
+    // Compute height from font metrics + 4px vertical padding (2px each side)
+    const int h = QFontMetrics(lbl->font()).height() + 8;
+    lbl->setFixedHeight(qMax(h, 22));   // at least 22px on any DPI
     return lbl;
 }
 

@@ -1,6 +1,7 @@
 // src/services/pre_ipo/PreIpoService.cpp
 #include "services/pre_ipo/PreIpoService.h"
 
+#include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 
 #include <QDateTime>
@@ -30,21 +31,28 @@ void PreIpoService::load_data() {
 }
 
 void PreIpoService::load_from_sec() {
+    if (loading_) return;   // prevent concurrent spawns
+    loading_ = true;
+
     QPointer<PreIpoService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form_d_data.py"),
         {QStringLiteral("all_data"), QStringLiteral("{}")},
         [self](python::PythonResult result) {
             if (!self) return;
+            self->loading_ = false;  // always clear the guard
 
             if (!result.success || result.output.trimmed().isEmpty()) {
-                self->build_fallback_data();
-                return;
+                LOG_WARN("PreIpo", "sec_form_d_data.py failed: " + result.error.left(200));
+                emit self->error_occurred(
+                    QStringLiteral("SEC EDGAR data unavailable. Check network connection."));
+                return;  // loaded_ stays false so a retry is possible
             }
             const QString json_str = python::extract_json(result.output);
             const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
-            if (!doc.isObject() || doc.object().isEmpty()) {
-                self->build_fallback_data();
+            if (!doc.isObject()) {
+                LOG_WARN("PreIpo", "Invalid JSON from sec_form_d_data.py");
+                emit self->error_occurred(QStringLiteral("Invalid SEC data format."));
                 return;
             }
             self->parse_sec_summary(doc.object());
@@ -108,12 +116,14 @@ void PreIpoService::parse_sec_summary(const QJsonObject& root) {
             form_d_.append(f);
     }
 
-    // If both are empty (e.g. network offline), fall back to company list
-    if (companies_.isEmpty() && pipeline_.isEmpty())
-        build_fallback_data();
-    else {
-        emit_loaded();
+    if (companies_.isEmpty() && pipeline_.isEmpty()) {
+        // Both empty after a successful parse means no SEC data in the date range.
+        // Show an error rather than fake data.
+        emit error_occurred(
+            QStringLiteral("No SEC EDGAR data found in the selected date range."));
+        return;  // loaded_ stays false — retry will re-fetch
     }
+    emit_loaded();
 }
 
 void PreIpoService::emit_loaded() {

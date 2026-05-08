@@ -5,9 +5,11 @@ Fetches private placement filings (Form D) and IPO filings (S-1, F-1) from EDGAR
 All data is public — no API key required.
 EDGAR full-text search: https://efts.sec.gov/LATEST/search-index
 
-Actions (daemon):
-  form_d_filings     — recent Reg D private placements
-  ipo_pipeline       — recent S-1 / F-1 / S-11 filings
+Actions (PythonRunner):
+  all_data           — combined {form_d_companies, s1_filings, recent_form_d}
+                       for PreIpoService.parse_sec_summary()
+  form_d_filings     — recent Reg D private placements (flat list)
+  ipo_pipeline       — recent S-1 / F-1 / S-11 filings (flat list)
 """
 
 import json
@@ -204,7 +206,64 @@ def _fallback_ipo_pipeline() -> list:
 
 # ── Daemon action handler ─────────────────────────────────────────────────────
 
+def build_all_data(days_back_fd: int = 30, days_back_ipo: int = 90) -> dict:
+    """
+    Build combined summary for PreIpoService.parse_sec_summary().
+    Returns:
+      form_d_companies — Form D filers grouped by company, with rounds array
+      s1_filings       — Recent S-1/F-1 IPO pipeline
+      recent_form_d    — Flat list of all recent Form D filings
+    """
+    form_d = fetch_form_d(days_back=days_back_fd)
+    ipo    = fetch_ipo_pipeline(days_back=days_back_ipo)
+
+    # Group Form D filings by company to create a company + rounds structure.
+    # Multiple Form D filings from the same issuer become separate rounds.
+    companies: dict = {}
+    for f in form_d:
+        name = f.get("company_name", "").strip()
+        if not name:
+            continue
+        cid = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        if cid not in companies:
+            companies[cid] = {
+                "id":     cid,
+                "name":   name,
+                "sector": "",   # Form D does not disclose sector
+                "state":  f.get("state", ""),
+                "rounds": [],
+            }
+        companies[cid]["rounds"].append({
+            "date":      f.get("filed_date", ""),
+            "amount_m":  f.get("amount_raised", 0),
+            "exemption": f.get("exemption", ""),
+        })
+
+    # Map S-1 filers to the keys expected by parse_sec_summary
+    s1_filings = [
+        {
+            "company_name": f.get("company_name", ""),
+            "filed_date":   f.get("filed_date", ""),
+            "edgar_url":    f.get("edgar_url", ""),
+        }
+        for f in ipo
+        if f.get("company_name")
+    ]
+
+    return {
+        "form_d_companies": list(companies.values()),
+        "s1_filings":       s1_filings,
+        "recent_form_d":    form_d,
+    }
+
+
 def handle_action(action: str, payload: dict) -> object:
+    if action == "all_data":
+        return build_all_data(
+            days_back_fd=payload.get("days_back_fd", 30),
+            days_back_ipo=payload.get("days_back_ipo", 90),
+        )
+
     if action == "form_d_filings":
         days = payload.get("days_back", 7)
         return fetch_form_d(days_back=days)

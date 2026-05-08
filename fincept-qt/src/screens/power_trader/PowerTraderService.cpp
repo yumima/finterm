@@ -202,10 +202,16 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
     // Derive portfolio_return_ytd / alpha_ytd for each member from trade history.
     // The live Senate/House sources don't provide these directly — compute from
     // estimated sector-based holdings using the same logic as compute_portfolio().
-    // SPY YTD proxy: ~12% (update this to a fetched value in a future phase).
-    static constexpr double kSpyYtd = 12.2;
+    // SPY YTD proxy used when live SPY data isn't fetched.
+    // ~12% reflects approximate S&P 500 average annual return.
+    // TODO: replace with a live fetch from MarketDataService once wired.
+    static const double kSpyYtd = 12.2;
     for (auto& m : summary_.members) {
-        if (m.portfolio_return_ytd == 0.0) {
+        // Only compute when the field hasn't been set by live data and the
+        // member has enough trade history (cost basis > $100) to estimate.
+        const bool needs_computation =
+            qAbs(m.portfolio_return_ytd) < 1e-9 && m.trade_count_ytd > 0;
+        if (needs_computation) {
             const auto p = compute_portfolio(m.id);
             if (p.est_total_cost > 100.0) {
                 m.portfolio_return_ytd = p.est_total_pnl_pct;
