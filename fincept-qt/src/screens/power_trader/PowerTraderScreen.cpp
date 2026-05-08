@@ -244,28 +244,8 @@ QWidget* PowerTraderScreen::build_top_bar() {
     }
     row2->addStretch();
 
-    // ── Demo data banner (hidden by default, shown when live source unavailable) ─
-    demo_banner_ = new QWidget(bar);
-    demo_banner_->setStyleSheet(
-        QStringLiteral("background:#78350f; border-top:1px solid #d97706;"));
-    demo_banner_->setFixedHeight(20);
-    demo_banner_->setVisible(false);
-    auto* bl = new QHBoxLayout(demo_banner_);
-    bl->setContentsMargins(10, 0, 10, 0);
-    auto* blbl = new QLabel(
-        QStringLiteral("⚠  DEMO DATA  ·  Live congressional disclosure source unavailable  ·  "
-                        "Connect to the internet and refresh to load real data"),
-        demo_banner_);
-    blbl->setStyleSheet(QStringLiteral("color:#fbbf24;font-size:12px;font-weight:600;"
-                                       "background:transparent;"));
-    bl->addWidget(blbl);
-    bl->addStretch();
-
     vl->addLayout(row1);
     vl->addLayout(row2);
-    vl->addWidget(demo_banner_);
-
-    bar->setFixedHeight(demo_banner_->isVisible() ? 82 : 62);
     return bar;
 }
 
@@ -426,13 +406,6 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
     timestamp_lbl_->setText(
         QString("Updated %1")
             .arg(summary.last_updated.toLocalTime().toString("hh:mm")));
-
-    // Show/hide demo banner and resize top bar accordingly
-    if (demo_banner_) {
-        demo_banner_->setVisible(summary.is_demo);
-        if (auto* bar = demo_banner_->parentWidget())
-            bar->setFixedHeight(summary.is_demo ? 82 : 62);
-    }
 
     populate_member_list(summary.members);
 

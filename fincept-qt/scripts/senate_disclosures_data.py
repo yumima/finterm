@@ -724,13 +724,13 @@ def _network_available() -> bool:
 def build_all_data(days_back: int = 90) -> dict:
     """
     Build {members, trades} compatible with PowerTraderService.parse_summary().
-    Fetches live trade data from Senate eFTS + House FDS when online;
-    falls back to KNOWN_MEMBERS representative data when offline.
-    Member party/state/committees come from dynamic Congress.gov / senate.gov roster.
+    Fetches live trade data from Senate eFTS + House FDS.
+    Returns empty result when offline or when sources return nothing — the
+    C++ caller will show an error state rather than fake data.
     """
     # Fast-fail offline: probe before any network calls (avoids 8s _load_roster timeout)
     if not _network_available():
-        return _build_fallback_data()
+        return {"members": [], "trades": []}
 
     # Pre-load roster only when online so _enrich_member() is fast for live calls
     _load_roster()
@@ -739,9 +739,8 @@ def build_all_data(days_back: int = 90) -> dict:
     house_filings  = fetch_house_ptrs(days_back=days_back)
     all_filings    = senate_filings + house_filings
 
-    # If both live sources returned nothing, use fallback data
     if not all_filings:
-        return _build_fallback_data()
+        return {"members": [], "trades": []}
 
     member_map: Dict[str, dict] = {}
     trades = []

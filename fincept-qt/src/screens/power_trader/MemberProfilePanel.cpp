@@ -42,8 +42,16 @@ static const char* party_color(const QString& p) {
 static QString section_header_style() {
     return QString(
         "QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-        " letter-spacing:0.5px; padding:3px 10px; border-bottom:1px solid %3; }")
+        " letter-spacing:0.5px; padding:0px 10px; border-bottom:1px solid %3; }")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
+}
+
+// Creates a fixed-height section header label — prevents auto-scaling expansion
+static QLabel* make_section_hdr(const QString& title, QWidget* parent) {
+    auto* lbl = new QLabel(title, parent);
+    lbl->setStyleSheet(section_header_style());
+    lbl->setFixedHeight(26);
+    return lbl;
 }
 
 // Format dollar amount with K/M/B suffix — free function used by NavChart + panel
@@ -771,9 +779,7 @@ void MemberProfilePanel::build_stat_tiles_compact(QWidget* parent, QVBoxLayout* 
 
 void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
     // Chart fills the full width of its pane — committee exposure moved to Row 4.
-    auto* hdr_label = new QLabel(QStringLiteral("PORTFOLIO GROWTH CURVE"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("PORTFOLIO GROWTH CURVE"), parent));
 
     auto* left_vl = vl;   // write directly into the parent layout
     left_vl->setContentsMargins(0, 0, 0, 0);
@@ -832,10 +838,7 @@ void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
 }
 
 void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(
-        QStringLiteral("ESTIMATED HOLDINGS *"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("ESTIMATED HOLDINGS *"), parent));
 
     // CMTE OVERLAP removed — long committee names cluttered the table.
     // Committee-ticker correlation lives in the SIGNAL ANALYSIS section (right pane).
@@ -899,9 +902,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
 }
 
 void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(QStringLiteral("RECENT TRADES (LAST 15)"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("RECENT TRADES (LAST 15)"), parent));
 
     static const QStringList kCols = {
         "DATE", "TICKER", "B/S", "AMOUNT", "LAG", "SIGNAL", "COMMITTEE"
@@ -956,9 +957,7 @@ void MemberProfilePanel::build_combined_analysis_section(QWidget* parent, QVBoxL
     //   • Committee membership + sector mapping
     //   • Stock-committee matching (which holdings overlap which committees)
     //   • Insider signal score + evidence
-    auto* hdr = new QLabel(QStringLiteral("SIGNAL & INSIDER ANALYSIS"), parent);
-    hdr->setStyleSheet(section_header_style());
-    vl->addWidget(hdr);
+    vl->addWidget(make_section_hdr(QStringLiteral("SIGNAL & INSIDER ANALYSIS"), parent));
 
     auto* scroll = new QScrollArea(parent);
     scroll->setWidgetResizable(true);
@@ -990,9 +989,7 @@ void MemberProfilePanel::build_combined_analysis_section(QWidget* parent, QVBoxL
 }
 
 void MemberProfilePanel::build_signal_analysis_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr = new QLabel(QStringLiteral("COMMITTEE SIGNAL ANALYSIS"), parent);
-    hdr->setStyleSheet(section_header_style());
-    vl->addWidget(hdr);
+    vl->addWidget(make_section_hdr(QStringLiteral("COMMITTEE SIGNAL ANALYSIS"), parent));
 
     signal_analysis_ = new QWidget(parent);
     signal_analysis_->setStyleSheet(
@@ -1013,28 +1010,22 @@ void MemberProfilePanel::build_signal_analysis_section(QWidget* parent, QVBoxLay
 }
 
 void MemberProfilePanel::build_ranking_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(QStringLiteral("HOW THEY COMPARE"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("HOW THEY COMPARE"), parent));
 
     auto* row = new QWidget(parent);
     row->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
     auto* hl = new QHBoxLayout(row);
-    hl->setContentsMargins(10, 10, 10, 10);
+    hl->setContentsMargins(10, 8, 10, 8);
     hl->setSpacing(8);
 
     rank_cards_row_ = row;
-    // Cards are populated by populate_rankings()
-
     hl->addStretch();
     vl->addWidget(row);
+    vl->addStretch();  // pushes header+cards to top, prevents vertical expansion
 }
 
 void MemberProfilePanel::build_committees_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(
-        QStringLiteral("COMMITTEE MEMBERSHIPS & SECTOR OVERLAP"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("COMMITTEE MEMBERSHIPS & SECTOR OVERLAP"), parent));
 
     committees_container_ = new QWidget(parent);
     committees_container_->setStyleSheet(
@@ -1048,10 +1039,7 @@ void MemberProfilePanel::build_committees_section(QWidget* parent, QVBoxLayout* 
 }
 
 void MemberProfilePanel::build_sector_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(
-        QStringLiteral("SECTOR ALLOCATION & INSIDER CORRELATION"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("SECTOR ALLOCATION & INSIDER CORRELATION"), parent));
 
     auto* outer = new QWidget(parent);
     outer->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
@@ -1093,9 +1081,7 @@ void MemberProfilePanel::build_sector_section(QWidget* parent, QVBoxLayout* vl) 
 }
 
 void MemberProfilePanel::build_insights_section(QWidget* parent, QVBoxLayout* vl) {
-    auto* hdr_label = new QLabel(QStringLiteral("TRADER PROFILE"), parent);
-    hdr_label->setStyleSheet(section_header_style());
-    vl->addWidget(hdr_label);
+    vl->addWidget(make_section_hdr(QStringLiteral("TRADER PROFILE"), parent));
 
     auto* outer = new QWidget(parent);
     outer->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
@@ -1114,6 +1100,7 @@ void MemberProfilePanel::build_insights_section(QWidget* parent, QVBoxLayout* vl
 
     outer_vl->addWidget(insights_container_);
     vl->addWidget(outer);
+    vl->addStretch();  // pins content to top, prevents header expanding
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
