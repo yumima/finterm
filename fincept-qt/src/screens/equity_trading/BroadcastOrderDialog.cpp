@@ -89,7 +89,7 @@ void BroadcastOrderDialog::setup_ui() {
         if (account.state == ConnectionState::Connected)
             cb->setStyleSheet(QString("QCheckBox { color: %1; }").arg(colors::TEXT_PRIMARY()));
         else
-            cb->setStyleSheet(QString("QCheckBox { color: %1; }").arg(colors::TEXT_TERTIARY()));
+            cb->setStyleSheet(QString("QCheckBox { color: %1; }").arg(colors::TEXT_SECONDARY()));
 
         list_layout->addWidget(cb);
         account_cbs_.append(cb);

@@ -24,7 +24,7 @@ void PlanningView::build_ui() {
     tabs_->setDocumentMode(true);
     tabs_->setStyleSheet(QString("QTabWidget::pane { border:0; background:%1; }"
                                  "QTabBar::tab { background:%2; color:%3; padding:6px 14px; border:0;"
-                                 "  border-bottom:2px solid transparent; font-size:9px; font-weight:700;"
+                                 "  border-bottom:2px solid transparent; font-size:12px; font-weight:700;"
                                  "  letter-spacing:0.5px; }"
                                  "QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }"
                                  "QTabBar::tab:hover { color:%5; }")
@@ -55,7 +55,7 @@ QWidget* PlanningView::build_retirement_tab() {
 
     auto* input_title = new QLabel("RETIREMENT CALCULATOR");
     input_title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     input_layout->addWidget(input_title);
 
     auto* form = new QFormLayout;
@@ -66,11 +66,11 @@ QWidget* PlanningView::build_retirement_tab() {
         sb->setFixedHeight(26);
         sb->setStyleSheet(
             QString("QDoubleSpinBox { background:%1; color:%2; border:1px solid %3;"
-                    "  padding:0 8px; font-size:11px; }"
+                    "  padding:0 8px; font-size:12px; }"
                     "QDoubleSpinBox:focus { border-color:%4; }")
                 .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     };
-    auto label_style = QString("color:%1; font-size:10px;").arg(ui::colors::TEXT_SECONDARY());
+    auto label_style = QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY());
 
     current_age_ = new QDoubleSpinBox;
     current_age_->setRange(18, 100);
@@ -147,7 +147,7 @@ QWidget* PlanningView::build_retirement_tab() {
     calc_btn->setFixedHeight(28);
     calc_btn->setCursor(Qt::PointingHandCursor);
     calc_btn->setStyleSheet(
-        QString("QPushButton { background:%1; color:#000; border:none; font-size:10px; font-weight:700; }"
+        QString("QPushButton { background:%1; color:#000; border:none; font-size:12px; font-weight:700; }"
                 "QPushButton:hover { background:%2; }")
             .arg(ui::colors::AMBER(), ui::colors::WARNING()));
     connect(calc_btn, &QPushButton::clicked, this, &PlanningView::recalculate);
@@ -180,7 +180,7 @@ QWidget* PlanningView::build_retirement_tab() {
 
         auto* lbl = new QLabel(label);
         lbl->setStyleSheet(
-            QString("color:%1; font-size:8px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(lbl);
 
         val_label = new QLabel("--");
@@ -224,7 +224,7 @@ QWidget* PlanningView::build_goals_tab() {
                             "and track your progress toward each target.");
     desc->setAlignment(Qt::AlignCenter);
     desc->setWordWrap(true);
-    desc->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_TERTIARY()));
+    desc->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(desc);
 
     return w;
@@ -246,7 +246,7 @@ QWidget* PlanningView::build_savings_tab() {
                             "affect your long-term wealth accumulation.");
     desc->setAlignment(Qt::AlignCenter);
     desc->setWordWrap(true);
-    desc->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_TERTIARY()));
+    desc->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(desc);
 
     return w;

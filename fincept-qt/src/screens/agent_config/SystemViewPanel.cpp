@@ -28,8 +28,8 @@ static QLabel* make_stat_value(const QString& text, const char* color) {
 static QLabel* make_stat_label(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setAlignment(Qt::AlignCenter);
-    lbl->setStyleSheet(QString("color:%1;font-size:9px;font-weight:600;letter-spacing:1px;padding-top:2px;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;padding-top:2px;")
+                           .arg(ui::colors::TEXT_SECONDARY()));
     return lbl;
 }
 
@@ -52,7 +52,7 @@ static QWidget* make_section_card(const QString& title, QVBoxLayout** content_la
 
     auto* title_lbl = new QLabel(title);
     title_lbl->setStyleSheet(
-        QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     hdr_layout->addWidget(title_lbl);
     hdr_layout->addStretch();
 
@@ -61,7 +61,7 @@ static QWidget* make_section_card(const QString& title, QVBoxLayout** content_la
         (*action_btn)->setCursor(Qt::PointingHandCursor);
         (*action_btn)
             ->setStyleSheet(QString("QPushButton { background:transparent;color:%1;border:1px solid %2;"
-                                    "padding:2px 8px;font-size:9px;font-weight:600; }"
+                                    "padding:2px 8px;font-size:12px;font-weight:600; }"
                                     "QPushButton:hover { background:%2; }")
                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
         hdr_layout->addWidget(*action_btn);
@@ -115,7 +115,7 @@ void SystemViewPanel::build_ui() {
     auto* refresh_btn = new QPushButton("REFRESH");
     refresh_btn->setCursor(Qt::PointingHandCursor);
     refresh_btn->setStyleSheet(QString("QPushButton { background:transparent;color:%1;border:1px solid %2;"
-                                       "padding:4px 12px;font-size:10px;font-weight:600;letter-spacing:1px; }"
+                                       "padding:4px 12px;font-size:12px;font-weight:600;letter-spacing:1px; }"
                                        "QPushButton:hover { background:%2; }")
                                    .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     connect(refresh_btn, &QPushButton::clicked, this, [this]() {
@@ -194,7 +194,7 @@ QWidget* SystemViewPanel::build_llm_section() {
     }
 
     auto* placeholder = new QLabel("Loading LLM providers...");
-    placeholder->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;").arg(ui::colors::TEXT_TERTIARY()));
+    placeholder->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;").arg(ui::colors::TEXT_SECONDARY()));
     llm_list_layout_->addWidget(placeholder);
 
     return card;
@@ -204,7 +204,7 @@ QWidget* SystemViewPanel::build_tools_section() {
     auto* card = make_section_card("AVAILABLE TOOLS", &tools_list_layout_);
 
     auto* placeholder = new QLabel("Loading tools...");
-    placeholder->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;").arg(ui::colors::TEXT_TERTIARY()));
+    placeholder->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;").arg(ui::colors::TEXT_SECONDARY()));
     tools_list_layout_->addWidget(placeholder);
 
     return card;
@@ -218,7 +218,7 @@ QWidget* SystemViewPanel::build_sysinfo_section() {
 
     auto* ver_title = new QLabel("VERSION");
     ver_title->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;letter-spacing:1px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     version_label_ = new QLabel("--");
     version_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
     info_grid->addWidget(ver_title, 0, 0);
@@ -226,7 +226,7 @@ QWidget* SystemViewPanel::build_sysinfo_section() {
 
     auto* fw_title = new QLabel("FRAMEWORK");
     fw_title->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;letter-spacing:1px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     framework_label_ = new QLabel("--");
     framework_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
     info_grid->addWidget(fw_title, 1, 0);
@@ -257,7 +257,7 @@ void SystemViewPanel::populate_llm_list() {
     auto providers = LlmConfigRepository::instance().list_providers();
     if (!providers.is_ok()) {
         auto* err = new QLabel("Failed to load LLM providers.");
-        err->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::NEGATIVE()));
+        err->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::NEGATIVE()));
         llm_list_layout_->addWidget(err);
         return;
     }
@@ -268,7 +268,7 @@ void SystemViewPanel::populate_llm_list() {
     if (list.isEmpty()) {
         auto* empty = new QLabel("No LLM providers configured. Go to Settings → LLM to add one.");
         empty->setWordWrap(true);
-        empty->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;").arg(ui::colors::TEXT_TERTIARY()));
+        empty->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;").arg(ui::colors::TEXT_SECONDARY()));
         llm_list_layout_->addWidget(empty);
         return;
     }
@@ -281,7 +281,7 @@ void SystemViewPanel::populate_llm_list() {
 
         if (p.is_active) {
             auto* badge = new QLabel("ACTIVE");
-            badge->setStyleSheet(QString("color:%1;font-size:8px;font-weight:700;background:%2;padding:1px 5px;")
+            badge->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:%2;padding:1px 5px;")
                                      .arg(ui::colors::POSITIVE(), ui::colors::BG_RAISED()));
             hl->addWidget(badge);
         }
@@ -291,14 +291,14 @@ void SystemViewPanel::populate_llm_list() {
         hl->addWidget(name);
 
         auto* model = new QLabel(p.model);
-        model->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
+        model->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         hl->addWidget(model);
 
         hl->addStretch();
 
         const bool has_key = !p.api_key.isEmpty();
         auto* key_status = new QLabel(has_key ? "KEY SET" : "NO KEY");
-        key_status->setStyleSheet(QString("color:%1;font-size:9px;font-weight:600;")
+        key_status->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;")
                                       .arg(has_key ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
         hl->addWidget(key_status);
 
@@ -314,7 +314,7 @@ void SystemViewPanel::populate_tools_list(const services::AgentToolsInfo& info) 
 
     if (info.categories.isEmpty()) {
         auto* empty = new QLabel("No tools loaded.");
-        empty->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;").arg(ui::colors::TEXT_TERTIARY()));
+        empty->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;").arg(ui::colors::TEXT_SECONDARY()));
         tools_list_layout_->addWidget(empty);
         return;
     }
@@ -323,7 +323,7 @@ void SystemViewPanel::populate_tools_list(const services::AgentToolsInfo& info) 
         QJsonArray tools = info.tools[cat].toArray();
 
         auto* cat_lbl = new QLabel(QString("%1  (%2)").arg(cat.toUpper()).arg(tools.size()));
-        cat_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:600;letter-spacing:1px;padding-top:4px;")
+        cat_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;padding-top:4px;")
                                    .arg(ui::colors::AMBER()));
         tools_list_layout_->addWidget(cat_lbl);
 
@@ -333,7 +333,7 @@ void SystemViewPanel::populate_tools_list(const services::AgentToolsInfo& info) 
 
         auto* tools_lbl = new QLabel(names.join(", "));
         tools_lbl->setWordWrap(true);
-        tools_lbl->setStyleSheet(QString("color:%1;font-size:11px;padding-left:8px;").arg(ui::colors::TEXT_PRIMARY()));
+        tools_lbl->setStyleSheet(QString("color:%1;font-size:12px;padding-left:8px;").arg(ui::colors::TEXT_PRIMARY()));
         tools_list_layout_->addWidget(tools_lbl);
     }
 }
@@ -372,9 +372,9 @@ void SystemViewPanel::setup_connections() {
 
         if (!info.features.isEmpty()) {
             auto* feat_header = new QLabel("FEATURES");
-            feat_header->setStyleSheet(QString("color:%1;font-size:9px;font-weight:600;"
+            feat_header->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
                                                "letter-spacing:1px;padding-top:8px;")
-                                           .arg(ui::colors::TEXT_TERTIARY()));
+                                           .arg(ui::colors::TEXT_SECONDARY()));
             features_layout_->addWidget(feat_header);
 
             auto* flow = new QWidget(this);
@@ -384,7 +384,7 @@ void SystemViewPanel::setup_connections() {
 
             for (const auto& feat : info.features) {
                 auto* badge = new QLabel(feat.toUpper().replace('_', ' '));
-                badge->setStyleSheet(QString("color:%1;font-size:9px;background:%2;padding:2px 6px;")
+                badge->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:2px 6px;")
                                          .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED()));
                 flow_layout->addWidget(badge);
             }

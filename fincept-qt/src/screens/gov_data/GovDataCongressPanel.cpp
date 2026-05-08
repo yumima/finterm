@@ -26,11 +26,11 @@ static QString congress_extra_qss() {
     const auto& t = ThemeManager::instance().tokens();
     QString s;
     s += QString("QSpinBox { background:%1; color:%2; border:1px solid %3;"
-                 "  font-size:11px; padding:2px 6px; }")
+                 "  font-size:12px; padding:2px 6px; }")
              .arg(t.bg_base, t.text_primary, t.border_dim);
     s += "QSpinBox::up-button, QSpinBox::down-button { width:14px; }";
     s += QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                 "  font-size:11px; padding:2px 6px; }")
+                 "  font-size:12px; padding:2px 6px; }")
              .arg(t.bg_base, t.text_primary, t.border_dim);
     s += "QComboBox::drop-down { border:none; }";
     s += QString("QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3; }")
@@ -148,7 +148,7 @@ QWidget* GovDataCongressPanel::build_toolbar() {
 
     // Congress number
     auto lbl_style =
-        QString("color:%1; font-size:9px; font-weight:700; background:transparent;").arg(colors::TEXT_TERTIARY());
+        QString("color:%1; font-size:12px; font-weight:700; background:transparent;").arg(colors::TEXT_SECONDARY());
     auto* cong_lbl = new QLabel("CONGRESS");
     cong_lbl->setStyleSheet(lbl_style);
     hl->addWidget(cong_lbl);

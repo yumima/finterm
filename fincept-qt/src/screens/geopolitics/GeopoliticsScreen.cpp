@@ -140,7 +140,7 @@ QWidget* GeopoliticsScreen::build_top_bar() {
                                    "padding:4px 14px; border:none;"
                                    "background:transparent; font-weight:400; }"
                                    "QPushButton:hover { color:%4; background:rgba(%5,0.06); }")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::TINY)
                                .arg(ui::fonts::DATA_FAMILY)
                                .arg(tabs[i].color)
@@ -154,7 +154,7 @@ QWidget* GeopoliticsScreen::build_top_bar() {
 
     auto* clock_label = new QLabel("UTC --:--", bar);
     clock_label->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; min-width:68px;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(ui::fonts::TINY)
                                    .arg(ui::fonts::DATA_FAMILY));
     hl->addWidget(clock_label);
@@ -216,7 +216,7 @@ QWidget* GeopoliticsScreen::build_filter_panel() {
                            .arg(ui::colors::NEGATIVE());
 
     auto label_style = QString("color:%1; font-size:%2px; font-weight:700; font-family:%3; letter-spacing:1px;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY);
 
@@ -289,7 +289,7 @@ QWidget* GeopoliticsScreen::build_filter_panel() {
     auto* legend_title = new QLabel("LEGEND", panel);
     legend_title->setStyleSheet(
         QString("color:%1; font-size:%2px; font-weight:700; font-family:%3; letter-spacing:1px;")
-            .arg(ui::colors::TEXT_TERTIARY())
+            .arg(ui::colors::TEXT_SECONDARY())
             .arg(ui::fonts::TINY)
             .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(legend_title);
@@ -328,7 +328,7 @@ QWidget* GeopoliticsScreen::build_status_bar() {
     hl->setSpacing(16);
 
     auto s = QString("color:%1; font-size:%2px; font-family:%3;")
-                 .arg(ui::colors::TEXT_TERTIARY())
+                 .arg(ui::colors::TEXT_SECONDARY())
                  .arg(ui::fonts::TINY)
                  .arg(ui::fonts::DATA_FAMILY);
     auto sv = QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
@@ -414,7 +414,7 @@ void GeopoliticsScreen::on_tab_changed(int index) {
                                                    "padding:4px 14px; border:none;"
                                                    "background:transparent; font-weight:400; }"
                                                    "QPushButton:hover { color:%4; background:rgba(%5,0.06); }")
-                                               .arg(ui::colors::TEXT_TERTIARY())
+                                               .arg(ui::colors::TEXT_SECONDARY())
                                                .arg(ui::fonts::TINY)
                                                .arg(ui::fonts::DATA_FAMILY)
                                                .arg(colors[i])

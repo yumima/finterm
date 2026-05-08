@@ -108,7 +108,7 @@ void NewsWidget::populate(const QJsonArray& articles) {
         if (!publisher.isEmpty()) {
             auto* src = new QLabel(publisher);
             src->setStyleSheet(
-                QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
             rl->addWidget(src);
         }
 

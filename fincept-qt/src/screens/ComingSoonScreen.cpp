@@ -28,12 +28,12 @@ ComingSoonScreen::ComingSoonScreen(const QString& tab_name, QWidget* parent) : Q
     sub->setAlignment(Qt::AlignCenter);
     sub->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;background:transparent;"
                                "letter-spacing:3px;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+                           .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(sub);
 
     auto* desc = new QLabel("This module is under active development.\nIt will be available in a future update.");
     desc->setAlignment(Qt::AlignCenter);
-    desc->setStyleSheet(QString("color:%1;font-size:13px;background:transparent;").arg(ui::colors::TEXT_DIM()));
+    desc->setStyleSheet(QString("color:%1;font-size:13px;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(desc);
 }
 

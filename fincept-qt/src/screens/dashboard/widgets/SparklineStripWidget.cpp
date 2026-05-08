@@ -222,10 +222,10 @@ void SparklineStripWidget::on_theme_changed() {
 
 void SparklineStripWidget::apply_styles() {
     const QString sym_css =
-        QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
     const QString last_css =
-        QString("color:%1;font-size:11px;font-weight:600;background:transparent;")
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
     for (auto it = rows_.begin(); it != rows_.end(); ++it) {
         if (it->symbol)

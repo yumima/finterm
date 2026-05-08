@@ -350,7 +350,7 @@ void MAAnalyticsScreen::update_sidebar_selection() {
                                                  "padding:4px 8px; border:1px solid %4;"
                                                  "background:%5; font-weight:%6; }"
                                                  "QPushButton:hover { background:rgba(%7,0.1); color:%8; }")
-                                             .arg(active ? mod.color.name() : ui::colors::TEXT_TERTIARY())
+                                             .arg(active ? mod.color.name() : ui::colors::TEXT_SECONDARY())
                                              .arg(ui::fonts::TINY)
                                              .arg(ui::fonts::DATA_FAMILY)
                                              .arg(active ? QString("rgba(%1,0.3)").arg(rgb) : "transparent")
@@ -445,7 +445,7 @@ void MAAnalyticsScreen::refresh_theme() {
     // Subtitle
     if (subtitle_label_)
         subtitle_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; letter-spacing:1px;")
-                                           .arg(ui::colors::TEXT_TERTIARY())
+                                           .arg(ui::colors::TEXT_SECONDARY())
                                            .arg(ui::fonts::TINY)
                                            .arg(ui::fonts::DATA_FAMILY()));
 
@@ -473,7 +473,7 @@ void MAAnalyticsScreen::refresh_theme() {
         for (auto* cat : cat_labels)
             cat->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;"
                                        "padding:8px 12px 4px 12px; letter-spacing:1px;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(ui::fonts::TINY)
                                    .arg(ui::fonts::DATA_FAMILY()));
     }
@@ -523,7 +523,7 @@ void MAAnalyticsScreen::refresh_theme() {
         auto stat_labels = stats_card_->findChildren<QLabel*>("maStatLabel");
         for (auto* lbl : stat_labels)
             lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(ui::fonts::TINY)
                                    .arg(ui::fonts::DATA_FAMILY()));
         auto stat_values = stats_card_->findChildren<QLabel*>("maStatValue");
@@ -538,7 +538,7 @@ void MAAnalyticsScreen::refresh_theme() {
     if (tips_label_)
         tips_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; line-height:1.4;"
                                            "background:%4; border:1px solid %5; padding:8px;")
-                                       .arg(ui::colors::TEXT_TERTIARY())
+                                       .arg(ui::colors::TEXT_SECONDARY())
                                        .arg(ui::fonts::TINY)
                                        .arg(ui::fonts::DATA_FAMILY())
                                        .arg(ui::colors::BG_RAISED())
@@ -554,7 +554,7 @@ void MAAnalyticsScreen::refresh_theme() {
         auto status_labels = status_bar_->findChildren<QLabel*>("maStatusLabel");
         for (auto* lbl : status_labels)
             lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(ui::fonts::TINY)
                                    .arg(ui::fonts::DATA_FAMILY()));
         auto* mod_val = status_bar_->findChild<QLabel*>("maStatusModule");

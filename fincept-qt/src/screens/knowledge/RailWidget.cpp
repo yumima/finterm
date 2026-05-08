@@ -35,7 +35,7 @@ LinkTypeStyle link_type_style(const QString& type) {
 QString section_label_ss() {
     return QString("color: %1; font-size: 10px; font-weight: bold; letter-spacing: 1.5px;"
                    " background: transparent; padding: 8px 0 2px 0; %2")
-        .arg(ui::colors::TEXT_TERTIARY(), MONO);
+        .arg(ui::colors::TEXT_SECONDARY(), MONO);
 }
 QString panel_ss() {
     return QString("background: %1; border: 1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM());
@@ -104,7 +104,7 @@ void RailWidget::rebuild() {
     if (!current_) {
         auto* lbl = new QLabel(QString("<i>Click an entry in any column to see its finterm context here.</i>"), inner);
         lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
         lbl->setWordWrap(true);
         rl->addWidget(lbl);
         rl->addStretch();
@@ -179,7 +179,7 @@ void RailWidget::rebuild() {
             if (!r.note.isEmpty()) {
                 auto* note = new QLabel(QString::fromUtf8("   %1").arg(r.note), container);
                 note->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                                        .arg(ui::colors::TEXT_DIM(), MONO));
+                                        .arg(ui::colors::TEXT_SECONDARY(), MONO));
                 note->setWordWrap(true);
                 cl->addWidget(note);
             }
@@ -293,7 +293,7 @@ void RailWidget::rebuild() {
             type_lbl->setFixedWidth(74);
             type_lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 1px;"
                                             " background: transparent; %2")
-                                        .arg(ui::colors::TEXT_TERTIARY(), MONO));
+                                        .arg(ui::colors::TEXT_SECONDARY(), MONO));
             rrl->addWidget(type_lbl);
 
             auto* btn = new QPushButton(QString("%1 · %2").arg(link.source, link.title), row);

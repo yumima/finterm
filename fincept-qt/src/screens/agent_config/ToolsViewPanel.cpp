@@ -32,11 +32,11 @@ static QString panel_style(const QString& border_side = "right") {
 }
 
 static QString section_title_style() {
-    return QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER());
+    return QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER());
 }
 
 static QString badge_style(const QString& color = ui::colors::CYAN) {
-    return QString("color:%1;font-size:10px;background:%2;padding:1px 6px;"
+    return QString("color:%1;font-size:12px;background:%2;padding:1px 6px;"
                    "border-radius:2px;font-weight:600;")
         .arg(color, ui::colors::BG_RAISED());
 }
@@ -62,24 +62,24 @@ static QString tree_style() {
 
 static QString btn_primary_style() {
     return QString("QPushButton{background:%1;color:%2;border:none;padding:7px;"
-                   "font-size:11px;font-weight:700;letter-spacing:1px;}"
+                   "font-size:12px;font-weight:700;letter-spacing:1px;}"
                    "QPushButton:hover{background:%3;}"
                    "QPushButton:disabled{background:%4;color:%5;}")
-        .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(), ui::colors::TEXT_DIM());
+        .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString btn_secondary_style() {
     return QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                   "padding:5px 10px;font-size:10px;font-weight:600;}"
+                   "padding:5px 10px;font-size:12px;font-weight:600;}"
                    "QPushButton:hover{background:%3;color:%4;}"
                    "QPushButton:disabled{color:%5;border-color:%6;}")
         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::TEXT_DIM(), ui::colors::BORDER_DIM());
+             ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM());
 }
 
 static QString btn_danger_style() {
     return QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                   "padding:5px 10px;font-size:10px;font-weight:600;}"
+                   "padding:5px 10px;font-size:12px;font-weight:600;}"
                    "QPushButton:hover{background:%1;color:%2;}")
         .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY());
 }
@@ -92,7 +92,7 @@ static QString input_style() {
 }
 
 static QString radio_style() {
-    return QString("QRadioButton{color:%1;font-size:11px;spacing:6px;}"
+    return QString("QRadioButton{color:%1;font-size:12px;spacing:6px;}"
                    "QRadioButton::indicator{width:12px;height:12px;border:1px solid %2;"
                    "background:%3;}"
                    "QRadioButton::indicator:checked{background:%4;border-color:%4;}")
@@ -101,7 +101,7 @@ static QString radio_style() {
 
 static QString combo_style() {
     return QString("QComboBox{background:%1;color:%2;border:1px solid %3;"
-                   "padding:5px 8px;font-size:11px;}"
+                   "padding:5px 8px;font-size:12px;}"
                    "QComboBox:focus{border-color:%4;}"
                    "QComboBox::drop-down{border:none;width:20px;}"
                    "QComboBox QAbstractItemView{background:%1;color:%2;"
@@ -204,7 +204,7 @@ QWidget* ToolsViewPanel::build_left_panel() {
     vl->addWidget(target_combo_);
 
     target_status_ = new QLabel("No target selected");
-    target_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:4px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    target_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:4px 0;").arg(ui::colors::TEXT_SECONDARY()));
     target_status_->setWordWrap(true);
     vl->addWidget(target_status_);
 
@@ -273,7 +273,7 @@ QWidget* ToolsViewPanel::build_center_panel() {
     header->addStretch();
 
     auto* hint = new QLabel("● = already assigned");
-    hint->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::TEXT_TERTIARY()));
+    hint->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     header->addWidget(hint);
     vl->addLayout(header);
 
@@ -739,7 +739,7 @@ void ToolsViewPanel::assign_to_target() {
         const QString msg = QString("✓ %1 tool(s) added to %2").arg(selected_tools_.size()).arg(name);
         target_status_->setText(msg);
         target_status_->setStyleSheet(
-            QString("color:%1;font-size:11px;padding:2px 0;font-weight:600;").arg(ui::colors::POSITIVE()));
+            QString("color:%1;font-size:12px;padding:2px 0;font-weight:600;").arg(ui::colors::POSITIVE()));
         LOG_INFO("ToolsViewPanel", msg);
 
         // Notify other panels to reload this agent's tool list immediately
@@ -755,12 +755,12 @@ void ToolsViewPanel::assign_to_target() {
                     QString("Target: %1 (%2)")
                         .arg(target_combo_->currentText(), radio_agent_->isChecked() ? "Agent" : "Team"));
                 target_status_->setStyleSheet(
-                    QString("color:%1;font-size:11px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
+                    QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
             }
         });
     } else {
         target_status_->setText(QString("Error saving to %1").arg(name));
-        target_status_->setStyleSheet(QString("color:%1;font-size:11px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+        target_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
     }
 }
 

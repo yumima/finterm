@@ -233,7 +233,7 @@ class TradeFlowChordWidget : public QWidget {
         // ── Scale axis labels ────────────────────────────────────────────────
         QFont sf(FONT, 7);
         p.setFont(sf);
-        p.setPen(QColor(ui::colors::TEXT_DIM()));
+        p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
 
         // Import scale — above center
         int sx = cx - 50;
@@ -415,7 +415,7 @@ QWidget* TradeVizScreen::build_filter_bar() {
     clock_label_ = new QLabel(QDateTime::currentDateTime().toString("HH:mm:ss"));
     clock_label_->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
                                         " font-family: 'Consolas','Courier New',monospace;")
-                                    .arg(ui::colors::TEXT_TERTIARY()));
+                                    .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(clock_label_);
 
     // Persist filter selections so the user returns to the same country/period

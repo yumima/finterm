@@ -969,7 +969,7 @@ bool DockScreenRouter::eventFilter(QObject* obj, QEvent* event) {
                           "  color:#ffffff;"
                           "  border:1px solid #d97706;"
                           "  padding:0 4px;"
-                          "  font-size:11px;"
+                          "  font-size:12px;"
                           "  font-family:'Consolas',monospace;"
                           "}");
     // Map label rect into the tab frame's coordinate space

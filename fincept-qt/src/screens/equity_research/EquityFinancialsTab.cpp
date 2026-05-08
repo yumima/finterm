@@ -52,7 +52,7 @@ QFrame* section_frame(const QString& title, const QString& color) {
     auto* hdr = new QHBoxLayout;
     hdr->setSpacing(6);
     auto* title_lbl = new QLabel(title);
-    title_lbl->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; "
+    title_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; "
                                      "letter-spacing:1px; background:transparent; border:0;")
                                  .arg(color));
     hdr->addWidget(title_lbl);
@@ -78,7 +78,7 @@ QWidget* metric_card(const QString& label, QLabel*& val_out, QLabel*& sub_out, c
     vl->setSpacing(2);
 
     auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600; letter-spacing:1px; "
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600; letter-spacing:1px; "
                                "background:transparent; border:0;")
                            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
@@ -92,7 +92,7 @@ QWidget* metric_card(const QString& label, QLabel*& val_out, QLabel*& sub_out, c
     if (!initial_sub.isNull()) {
         sub_out = new QLabel(initial_sub.isEmpty() ? "" : initial_sub);
         sub_out->setStyleSheet(
-            QString("color:%1; font-size:9px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
         vl->addWidget(sub_out);
     } else {
         sub_out = nullptr;
@@ -107,10 +107,10 @@ QLabel* ratio_row(QWidget* parent_vl_owner, const QString& label, const QString&
     hl->setContentsMargins(0, 0, 0, 0);
     auto* k = new QLabel(label);
     k->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     auto* v = new QLabel("—");
     v->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:600; background:transparent; border:0;").arg(color));
+        QString("color:%1; font-size:12px; font-weight:600; background:transparent; border:0;").arg(color));
     v->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     hl->addWidget(k);
     hl->addStretch();
@@ -125,10 +125,10 @@ QTableWidget* make_table() {
     t->setStyleSheet(QString(R"(
         QTableWidget {
             background:%1; alternate-background-color:%2;
-            gridline-color:%3; color:%4; border:0; font-size:10px;
+            gridline-color:%3; color:%4; border:0; font-size:12px;
         }
         QHeaderView::section {
-            background:%5; color:%6; font-size:9px; font-weight:700;
+            background:%5; color:%6; font-size:12px; font-weight:700;
             padding:4px; border:0; border-bottom:1px solid %3;
         }
         QTableWidget::item { padding:2px 6px; }
@@ -193,7 +193,7 @@ void EquityFinancialsTab::build_ui() {
         QString(R"(
         QPushButton {
             background:transparent; color:%1; border:1px solid %2;
-            border-radius:3px; padding:4px 14px; font-size:11px; font-weight:700;
+            border-radius:3px; padding:4px 14px; font-size:12px; font-weight:700;
         }
         QPushButton:checked { background:%3; color:%4; border-color:%3; }
         QPushButton:hover:!checked { border-color:%3; background:%5; }
@@ -216,7 +216,7 @@ void EquityFinancialsTab::build_ui() {
     export_btn->setStyleSheet(QString(R"(
         QPushButton {
             background:transparent; color:%1; border:1px solid %1;
-            border-radius:3px; padding:4px 14px; font-size:11px; font-weight:700;
+            border-radius:3px; padding:4px 14px; font-size:12px; font-weight:700;
         }
         QPushButton:hover { background:%1; color:#000; }
     )")
@@ -376,7 +376,7 @@ QWidget* EquityFinancialsTab::build_income_view() {
         rvl->setContentsMargins(0, 0, 0, 0);
         rvl->setSpacing(6);
         auto* ret_title = new QLabel("RETURN METRICS");
-        ret_title->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; "
+        ret_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; "
                                          "background:transparent; border:0;")
                                      .arg(kCyan));
         rvl->addWidget(ret_title);
@@ -395,7 +395,7 @@ QWidget* EquityFinancialsTab::build_income_view() {
         dvl->setContentsMargins(10, 8, 10, 8);
         dvl->setSpacing(6);
         auto* dp_title = new QLabel("DUPONT ANALYSIS");
-        dp_title->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; "
+        dp_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; "
                                         "background:transparent; border:0;")
                                     .arg(kPurple));
         dvl->addWidget(dp_title);
@@ -412,7 +412,7 @@ QWidget* EquityFinancialsTab::build_income_view() {
             out->setAlignment(Qt::AlignCenter);
             auto* lbl = new QLabel(label_text);
             lbl->setStyleSheet(
-                QString("color:%1; font-size:9px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
             lbl->setAlignment(Qt::AlignCenter);
             col->addWidget(out);
             col->addWidget(lbl);
@@ -421,7 +421,7 @@ QWidget* EquityFinancialsTab::build_income_view() {
         auto make_op = [&](const QString& sym) {
             auto* op = new QLabel(sym);
             op->setStyleSheet(
-                QString("color:%1; font-size:16px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1; font-size:16px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
             op->setAlignment(Qt::AlignCenter);
             formula_hl->addWidget(op);
         };
@@ -511,7 +511,7 @@ QWidget* EquityFinancialsTab::build_balance_view() {
         lvl->setContentsMargins(0, 0, 0, 0);
         lvl->setSpacing(4);
         auto* lt = new QLabel("LIQUIDITY");
-        lt->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; "
+        lt->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; "
                                   "background:transparent; border:0;")
                               .arg(kCyan));
         lvl->addWidget(lt);
@@ -528,7 +528,7 @@ QWidget* EquityFinancialsTab::build_balance_view() {
         evl->setContentsMargins(0, 0, 0, 0);
         evl->setSpacing(4);
         auto* et = new QLabel("LEVERAGE / SOLVENCY");
-        et->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; "
+        et->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; "
                                   "background:transparent; border:0;")
                               .arg(kOrange));
         evl->addWidget(et);
@@ -832,7 +832,7 @@ static void style_chart(QChart* chart) {
 static QBarCategoryAxis* make_x_axis(const QStringList& cats) {
     auto* ax = new QBarCategoryAxis;
     ax->append(cats);
-    ax->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    ax->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     ax->setLabelsFont(QFont("monospace", 8));
     ax->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     return ax;
@@ -840,7 +840,7 @@ static QBarCategoryAxis* make_x_axis(const QStringList& cats) {
 
 static QValueAxis* make_y_axis(const QString& fmt = "%.1fB") {
     auto* ay = new QValueAxis;
-    ay->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    ay->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     ay->setLabelsFont(QFont("monospace", 8));
     ay->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     ay->setLabelFormat(fmt);

@@ -331,7 +331,7 @@ void TradesFeedPanel::populate_table(const QVector<power_trader::PoliticalTrade>
             auto* sig_item = new QTableWidgetItem(QString::number(t.signal_score, 'f', 0));
             sig_item->setTextAlignment(Qt::AlignCenter);
             sig_item->setForeground(QColor(t.signal_score >= 60
-                                           ? ui::colors::AMBER : ui::colors::TEXT_TERTIARY()));
+                                           ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
             table_->setItem(r, 9, sig_item);
         }

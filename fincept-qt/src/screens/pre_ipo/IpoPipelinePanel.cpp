@@ -240,7 +240,7 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
 
     auto* date_lbl = new QLabel(f.filed_date.toString("MMM d, yyyy"));
     date_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row2->addWidget(date_lbl, 1);
 
     const QString amt = f.amount_raised > 0

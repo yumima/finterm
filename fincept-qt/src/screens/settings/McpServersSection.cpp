@@ -216,7 +216,7 @@ QWidget* McpServersSection::build_servers_tab() {
 
     detail_lbl_ = new QLabel("Select a server to view details.");
     detail_lbl_->setWordWrap(true);
-    detail_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_TERTIARY()) + ";");
+    detail_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
     dvl->addWidget(detail_lbl_);
 
     // Start/Stop buttons
@@ -536,13 +536,13 @@ void McpServersSection::refresh_server_detail(const QString& server_id) {
                                      QString(ui::colors::TEXT_SECONDARY()) +
                                      ";'>Status: %2</span><br>"
                                      "<span style='color:" +
-                                     QString(ui::colors::TEXT_TERTIARY()) +
+                                     QString(ui::colors::TEXT_SECONDARY()) +
                                      ";'>Command: %3 %4</span><br>"
                                      "<span style='color:" +
-                                     QString(ui::colors::TEXT_TERTIARY()) +
+                                     QString(ui::colors::TEXT_SECONDARY()) +
                                      ";'>Category: %5</span><br>"
                                      "<span style='color:" +
-                                     QString(ui::colors::TEXT_TERTIARY()) + ";'>Auto-start: %6</span>")
+                                     QString(ui::colors::TEXT_SECONDARY()) + ";'>Auto-start: %6</span>")
                                  .arg(cfg.name, status_str, cfg.command, cfg.args.join(' '),
                                       cfg.category.isEmpty() ? "-" : cfg.category, cfg.auto_start ? "Yes" : "No"));
 

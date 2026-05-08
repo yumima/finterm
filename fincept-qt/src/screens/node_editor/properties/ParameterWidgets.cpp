@@ -203,7 +203,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
                                           " border: 1px solid %3; font-family: Consolas;"
                                           " font-size: 10px; padding: 0 6px; }"
                                           "QPushButton:hover { background: %3; }")
-                                      .arg(ui::colors::BORDER_MED(), ui::colors::AMBER(), ui::colors::TEXT_DIM()));
+                                      .arg(ui::colors::BORDER_MED(), ui::colors::AMBER(), ui::colors::TEXT_SECONDARY()));
         rl->addWidget(import_btn);
 
         layout->addWidget(row);
@@ -213,7 +213,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
             auto* hint = new QLabel("Accepted: " + allowed_exts.join(", ").toUpper() +
                                     "  •  Or pick an already-imported file above");
             hint->setStyleSheet(
-                QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_SECONDARY()));
             hint->setWordWrap(true);
             layout->addWidget(hint);
         }
@@ -308,7 +308,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         refresh_btn->setStyleSheet(QString("QPushButton { background:%1; color:#7c3aed;"
                                            " border:1px solid %1; font-size:13px; }"
                                            "QPushButton:hover { background:%2; }")
-                                       .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_DIM()));
+                                       .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY()));
         rl->addWidget(refresh_btn);
         layout->addWidget(row);
 
@@ -344,7 +344,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         layout->addWidget(combo);
 
         auto* hint = new QLabel("Leave blank to use the LLM assigned to the agent in Agent Config");
-        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:10px;").arg(ui::colors::TEXT_TERTIARY()));
+        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         hint->setWordWrap(true);
         layout->addWidget(hint);
 
@@ -413,12 +413,12 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         refresh_btn->setStyleSheet(QString("QPushButton { background:%1; color:#6366f1;"
                                            " border:1px solid %1; font-size:13px; }"
                                            "QPushButton:hover { background:%2; }")
-                                       .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_DIM()));
+                                       .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY()));
         rl->addWidget(refresh_btn);
         layout->addWidget(row);
 
         auto* hint = new QLabel("All Fincept internal tools. Input JSON flows in as arguments.");
-        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:10px;").arg(ui::colors::TEXT_TERTIARY()));
+        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         hint->setWordWrap(true);
         layout->addWidget(hint);
 

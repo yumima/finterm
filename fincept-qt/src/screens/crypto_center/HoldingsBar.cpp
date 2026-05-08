@@ -167,7 +167,7 @@ void HoldingsBar::apply_theme() {
         "QWidget#holdingsBar { background:%1; border-bottom:1px solid %2; }"
 
         // Metric labels
-        "QLabel#holdingsBarLabel { color:%3; font-family:%4; font-size:9px;"
+        "QLabel#holdingsBarLabel { color:%3; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.5px; background:transparent; }"
         "QLabel#holdingsBarValue { color:%5; font-family:%4; font-size:14px;"
         "  font-weight:600; background:transparent; }"
@@ -177,29 +177,29 @@ void HoldingsBar::apply_theme() {
         "  background:transparent; }"
 
         // Discount chip
-        "QLabel#holdingsBarDiscountChip { color:%8; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarDiscountChip { color:%8; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:rgba(34,197,94,0.10);"
         "  border:1px solid %8; padding:2px 8px; }"
 
         // Feed status (5 variants)
-        "QLabel#holdingsBarFeedIdle { color:%3; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarFeedIdle { color:%3; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent;"
         "  padding:2px 6px; }"
-        "QLabel#holdingsBarFeedConnecting { color:%6; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarFeedConnecting { color:%6; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent;"
         "  padding:2px 6px; }"
-        "QLabel#holdingsBarFeedLive { color:%8; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarFeedLive { color:%8; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent;"
         "  padding:2px 6px; }"
-        "QLabel#holdingsBarFeedStale { color:%6; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarFeedStale { color:%6; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent;"
         "  padding:2px 6px; }"
-        "QLabel#holdingsBarFeedError { color:%9; font-family:%4; font-size:10px;"
+        "QLabel#holdingsBarFeedError { color:%9; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent;"
         "  padding:2px 6px; }"
 
         // RPC chip
-        "QLabel#holdingsBarRpcChip { color:%3; font-family:%4; font-size:9px;"
+        "QLabel#holdingsBarRpcChip { color:%3; font-family:%4; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:%10;"
         "  border:1px solid %2; padding:2px 6px; }"
     )

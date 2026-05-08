@@ -32,13 +32,13 @@ void PortfolioTxnPanel::build_ui() {
 
     auto* title = new QLabel("TRANSACTION HISTORY");
     title->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(title);
 
     hl->addStretch();
 
     count_label_ = new QLabel;
-    count_label_->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600;").arg(ui::colors::TEXT_TERTIARY()));
+    count_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(count_label_);
 
     layout->addWidget(header);
@@ -61,21 +61,21 @@ void PortfolioTxnPanel::build_ui() {
 
     table_->setStyleSheet(QString("QTableWidget {"
                                   "  background:%1; color:%2; border:none;"
-                                  "  font-size:11px; font-family:%3; gridline-color:%4;"
+                                  "  font-size:12px; font-family:%3; gridline-color:%4;"
                                   "}"
                                   "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %4; }"
                                   "QTableWidget::item:selected { background:%5; color:%2; }"
                                   "QHeaderView::section {"
                                   "  background:%6; color:%7; border:none;"
                                   "  border-bottom:2px solid %4; border-right:1px solid %4;"
-                                  "  font-size:10px; font-weight:700;"
+                                  "  font-size:12px; font-weight:700;"
                                   "  letter-spacing:0.5px; padding:4px 8px; }"
                                   "QScrollBar:vertical { background:%1; width:5px; }"
                                   "QScrollBar::handle:vertical { background:%4; min-height:20px; }"
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0px; }")
                               .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
                                    ui::colors::BORDER_DIM(), ui::colors::BG_HOVER(), ui::colors::BG_SURFACE(),
-                                   ui::colors::TEXT_TERTIARY()));
+                                   ui::colors::TEXT_SECONDARY()));
 
     table_->verticalHeader()->setDefaultSectionSize(24);
 
@@ -150,7 +150,7 @@ void PortfolioTxnPanel::populate() {
 
         // Notes
         auto* notes_item = new QTableWidgetItem(t.notes);
-        notes_item->setForeground(QColor(ui::colors::TEXT_TERTIARY()));
+        notes_item->setForeground(QColor(ui::colors::TEXT_SECONDARY()));
         table_->setItem(row, 6, notes_item);
     }
 
@@ -183,7 +183,7 @@ void PortfolioTxnPanel::refresh_theme() {
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0px; }")
                               .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
                                    ui::colors::BORDER_DIM(), ui::colors::BG_HOVER(), ui::colors::BG_SURFACE(),
-                                   ui::colors::TEXT_TERTIARY()));
+                                   ui::colors::TEXT_SECONDARY()));
 
     populate();
 }

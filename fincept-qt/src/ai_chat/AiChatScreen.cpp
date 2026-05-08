@@ -617,7 +617,7 @@ QWidget* AiChatScreen::build_input_area() {
     attach_badge_ = new QLabel;
     attach_badge_->setVisible(false);
     attach_badge_->setMaximumWidth(160);
-    attach_badge_->setStyleSheet(QString("color:%1;font-size:10px;background:rgba(217,119,6,0.12);"
+    attach_badge_->setStyleSheet(QString("color:%1;font-size:12px;background:rgba(217,119,6,0.12);"
                                          "border:1px solid #78350f;border-radius:0px;padding:2px 6px;%2")
                                      .arg(col::AMBER(), "font-family:'Consolas',monospace;"));
     hl->addWidget(attach_badge_);

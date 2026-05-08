@@ -55,7 +55,7 @@ static QString cat_hex(int i) {
 
 static QLabel* make_sep(QWidget* parent) {
     auto* s = new QLabel("|", parent);
-    s->setStyleSheet(QString("color:%1; font-size:11px; background:transparent;"
+    s->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;"
                              " font-family:%2;")
                          .arg(colors::BORDER_MED())
                          .arg(MONO));
@@ -64,7 +64,7 @@ static QLabel* make_sep(QWidget* parent) {
 
 static QString btn_inactive() {
     return QString("QPushButton { background:%1; border:1px solid %2; color:%3;"
-                   " font-size:11px; font-weight:bold; font-family:%4;"
+                   " font-size:12px; font-weight:bold; font-family:%4;"
                    " padding:0 10px; }"
                    "QPushButton:hover { background:%5; color:%6; border-color:%7; }")
         .arg(colors::BG_RAISED())
@@ -211,7 +211,7 @@ QWidget* SurfaceAnalyticsScreen::build_category_bar() {
         if (active) {
             btn->setStyleSheet(QString("QPushButton { background:#b45309; color:%1;"
                                        " border:none; border-bottom:2px solid %2;"
-                                       " padding:0 14px; font-size:11px; font-weight:bold;"
+                                       " padding:0 14px; font-size:12px; font-weight:bold;"
                                        " font-family:%3; }"
                                        "QPushButton:hover { background:#b45309; }")
                                    .arg(colors::TEXT_PRIMARY())
@@ -219,10 +219,10 @@ QWidget* SurfaceAnalyticsScreen::build_category_bar() {
                                    .arg(MONO));
         } else {
             btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1;"
-                                       " border:none; padding:0 14px; font-size:11px;"
+                                       " border:none; padding:0 14px; font-size:12px;"
                                        " font-family:%2; }"
                                        "QPushButton:hover { background:%3; color:%4; }")
-                                   .arg(colors::TEXT_TERTIARY())
+                                   .arg(colors::TEXT_SECONDARY())
                                    .arg(MONO)
                                    .arg(colors::BG_RAISED())
                                    .arg(colors::TEXT_SECONDARY()));
@@ -302,7 +302,7 @@ QWidget* SurfaceAnalyticsScreen::build_surface_bar() {
 
     // Category label prefix
     auto* cat_lbl = new QLabel(QString("■ %1").arg(categories[active_category_].name), bar);
-    cat_lbl->setStyleSheet(QString("color:%1; font-size:11px; font-weight:bold; background:transparent;"
+    cat_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:bold; background:transparent;"
                                    " font-family:%2;")
                                .arg(acol)
                                .arg(MONO));
@@ -318,7 +318,7 @@ QWidget* SurfaceAnalyticsScreen::build_surface_bar() {
 
         if (active) {
             btn->setStyleSheet(QString("QPushButton { background:rgba(217,119,6,0.12); border:1px solid %1; color:%2;"
-                                       " font-size:11px; font-weight:bold; font-family:%3; padding:0 8px; }"
+                                       " font-size:12px; font-weight:bold; font-family:%3; padding:0 8px; }"
                                        "QPushButton:hover { background:%2; color:%4; }")
                                    .arg(colors::AMBER_DIM())
                                    .arg(colors::AMBER())
@@ -326,7 +326,7 @@ QWidget* SurfaceAnalyticsScreen::build_surface_bar() {
                                    .arg(colors::BG_BASE()));
         } else {
             btn->setStyleSheet(QString("QPushButton { background:transparent; border:none; color:%1;"
-                                       " font-size:11px; font-family:%2; padding:0 8px; }"
+                                       " font-size:12px; font-family:%2; padding:0 8px; }"
                                        "QPushButton:hover { color:%3; border-bottom:1px solid %4; }")
                                    .arg(colors::TEXT_SECONDARY())
                                    .arg(MONO)
@@ -1139,7 +1139,7 @@ void SurfaceAnalyticsScreen::update_line_view() {
 void SurfaceAnalyticsScreen::apply_view_mode_buttons() {
     auto active = [&]() {
         return QString("QPushButton { background:rgba(217,119,6,0.18); color:%1; "
-                       "border:1px solid %2; padding:0 10px; font-size:11px; "
+                       "border:1px solid %2; padding:0 10px; font-size:12px; "
                        "font-weight:bold; font-family:%3; }")
             .arg(colors::AMBER())
             .arg(colors::AMBER_DIM())

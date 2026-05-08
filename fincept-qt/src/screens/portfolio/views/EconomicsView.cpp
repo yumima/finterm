@@ -29,11 +29,11 @@ void EconomicsView::build_ui() {
 
     auto* ind_title = new QLabel("PORTFOLIO ECONOMICS OVERVIEW");
     ind_title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     ind_layout->addWidget(ind_title);
 
     auto* ind_note = new QLabel("Per-holding contribution to portfolio value, P&L, and risk");
-    ind_note->setStyleSheet(QString("color:%1; font-size:9px;").arg(ui::colors::TEXT_TERTIARY()));
+    ind_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     ind_layout->addWidget(ind_note);
 
     indicators_table_ = new QTableWidget;
@@ -51,10 +51,10 @@ void EconomicsView::build_ui() {
     indicators_table_->setColumnWidth(3, 110);
     indicators_table_->setColumnWidth(4, 110);
     indicators_table_->setColumnWidth(5, 110);
-    indicators_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:11px; }"
+    indicators_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:12px; }"
                                              "QTableWidget::item { padding:3px 8px; border-bottom:1px solid %3; }"
                                              "QHeaderView::section { background:%4; color:%5; border:none;"
-                                             "  border-bottom:2px solid %6; padding:3px 8px; font-size:9px;"
+                                             "  border-bottom:2px solid %6; padding:3px 8px; font-size:12px;"
                                              "  font-weight:700; letter-spacing:0.5px; }")
                                          .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                                               ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
@@ -75,11 +75,11 @@ void EconomicsView::build_ui() {
 
     auto* sens_title = new QLabel("PORTFOLIO FACTOR SENSITIVITY");
     sens_title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     sens_layout->addWidget(sens_title);
 
     auto* sens_note = new QLabel("Estimated portfolio impact from macro factor shocks, weighted by holdings");
-    sens_note->setStyleSheet(QString("color:%1; font-size:9px;").arg(ui::colors::TEXT_TERTIARY()));
+    sens_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     sens_layout->addWidget(sens_note);
 
     sensitivity_table_ = new QTableWidget;

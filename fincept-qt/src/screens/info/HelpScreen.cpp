@@ -84,7 +84,7 @@ static QWidget* section_header(const QString& title, const QString& subtitle = {
     if (!subtitle.isEmpty()) {
         auto* s = new QLabel(subtitle);
         s->setStyleSheet(
-            QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
+            QString("color: %1; font-size: 11px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
         vl->addWidget(s);
     }
     return w;
@@ -138,7 +138,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
         auto* gh = new QLabel(QString::fromUtf8("📦  open source · file issues on GitHub"));
         gh->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
                                   " font-family:'Consolas','Courier New',monospace;")
-                              .arg(colors::TEXT_TERTIARY()));
+                              .arg(colors::TEXT_SECONDARY()));
         hl->addWidget(gh);
 
         vl->addWidget(hero);
@@ -196,7 +196,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
             auto* desc_lbl = new QLabel(a.desc);
             desc_lbl->setStyleSheet(
-                QString("background: transparent; color: %1; font-size: 10px; %2").arg(colors::TEXT_TERTIARY(), MF));
+                QString("background: transparent; color: %1; font-size: 10px; %2").arg(colors::TEXT_SECONDARY(), MF));
             bl->addWidget(desc_lbl);
 
             if (col == 3) {

@@ -182,7 +182,7 @@ void QuickTradeWidget::apply_styles() {
     sym_label_->setStyleSheet(QString("color: %1; font-size: 14px; font-weight: bold; background: transparent;")
                                   .arg(ui::colors::TEXT_PRIMARY()));
     change_label_->setStyleSheet(
-        QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     price_label_->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     bid_label_->setStyleSheet(
@@ -196,10 +196,10 @@ void QuickTradeWidget::apply_styles() {
     order_type_->setStyleSheet(combo_style());
 
     qty_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     qty_input_->setStyleSheet(input_style());
     price_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     price_input_->setStyleSheet(input_style(ui::colors::BORDER_DIM()));
 
     est_total_->setStyleSheet(

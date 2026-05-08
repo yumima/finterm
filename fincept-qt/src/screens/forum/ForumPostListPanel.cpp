@@ -85,7 +85,7 @@ void ForumPostListPanel::build_ui() {
 
     count_label_ = new QLabel;
     count_label_->setStyleSheet(
-        QString("color:%1;font-size:11px;background:transparent;%2").arg(ui::colors::TEXT_TERTIARY(), M(11)));
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
 
     hdr_hl->addWidget(hash);
     hdr_hl->addWidget(channel_label_, 1);
@@ -261,12 +261,12 @@ void ForumPostListPanel::rebuild_feed() {
         lbl->setAlignment(Qt::AlignCenter);
         lbl->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:1.5px;"
                                    "background:transparent;%2")
-                               .arg(ui::colors::TEXT_TERTIARY(), M(13)));
+                               .arg(ui::colors::TEXT_SECONDARY(), M(13)));
 
         auto* sub = new QLabel("Be the first to start a discussion");
         sub->setAlignment(Qt::AlignCenter);
         sub->setStyleSheet(
-            QString("color:%1;font-size:11px;background:transparent;%2").arg(ui::colors::TEXT_DIM(), M(11)));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
 
         el->addWidget(icon);
         el->addWidget(lbl);
@@ -309,24 +309,24 @@ void ForumPostListPanel::rebuild_feed() {
             new QLabel(post.author_display_name.isEmpty() ? "?" : post.author_display_name.left(2).toUpper());
         avatar->setFixedSize(24, 24);
         avatar->setAlignment(Qt::AlignCenter);
-        avatar->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;background:%2;"
+        avatar->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:%2;"
                                       "border-radius:12px;%3")
                                   .arg(ui::colors::BG_BASE(), det_color(post.author_display_name), M(9)));
 
         auto* author = new QLabel(post.author_display_name.left(16));
-        author->setStyleSheet(QString("color:%1;font-size:11px;font-weight:600;"
+        author->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
                                       "background:transparent;%2")
                                   .arg(ui::colors::TEXT_PRIMARY(), M(11)));
 
         auto* cat_chip = new QLabel(post.category_name.toUpper().left(12));
-        cat_chip->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;background:transparent;"
+        cat_chip->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;"
                                         "border:1px solid %1;padding:1px 6px;letter-spacing:0.5px;"
                                         "border-radius:8px;%2")
                                     .arg(cat_color, M(9)));
 
         auto* time_lbl = new QLabel(rel_time(post.created_at));
         time_lbl->setStyleSheet(
-            QString("color:%1;font-size:10px;background:transparent;%2").arg(ui::colors::TEXT_DIM(), M(10)));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
 
         top_hl->addWidget(avatar);
         top_hl->addWidget(author);
@@ -357,7 +357,7 @@ void ForumPostListPanel::rebuild_feed() {
 
         auto mk_eng = [&](const QString& icon, const QString& val, const QString& color) {
             auto* lbl = new QLabel(icon + " " + val);
-            lbl->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;%2").arg(color, M(10)));
+            lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;%2").arg(color, M(10)));
             return lbl;
         };
 
@@ -371,7 +371,7 @@ void ForumPostListPanel::rebuild_feed() {
 
         if (post.reply_count > 5) {
             auto* hot = new QLabel("● HOT");
-            hot->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;"
+            hot->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                        "background:rgba(220,38,38,0.08);padding:1px 6px;"
                                        "border-radius:6px;%2")
                                    .arg(ui::colors::NEGATIVE(), M(9)));
@@ -406,7 +406,7 @@ void ForumPostListPanel::rebuild_feed() {
                                         "border-top:1px solid %3;font-size:12px;font-weight:600;%4}"
                                         "QPushButton:hover{color:%5;"
                                         "background:rgba(217,119,6,0.04);}")
-                                    .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_TERTIARY(),
+                                    .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(),
                                          ui::colors::BORDER_DIM(), M(12), ui::colors::AMBER()));
         int next = current_page_.page + 1;
         connect(more_btn, &QPushButton::clicked, this, [this, next]() { emit load_more_requested(next); });

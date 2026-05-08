@@ -82,7 +82,7 @@ void ComponentCard::build_ui() {
     cat_row->setContentsMargins(0, 0, 0, 0);
     cat_row->setSpacing(0);
     auto* cat = new QLabel(meta_.category.toUpper(), body);
-    cat->setStyleSheet(QString("color:%1;font-size:10px;letter-spacing:1.5px;font-weight:700;")
+    cat->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:1.5px;font-weight:700;")
                            .arg(category_color(meta_.category)));
     cat_row->addWidget(cat);
     cat_row->addStretch(1);
@@ -98,7 +98,7 @@ void ComponentCard::build_ui() {
 
     auto* desc = new QLabel(body);
     desc->setWordWrap(true);
-    desc->setStyleSheet("color:#9ca3af;font-size:11px;");
+    desc->setStyleSheet("color:#9ca3af;font-size:12px;");
     const QString text = meta_.description.isEmpty() ? QStringLiteral(" ") : meta_.description;
     desc->setText(text);
     desc->setMaximumHeight(36); // clamps to ~2 lines

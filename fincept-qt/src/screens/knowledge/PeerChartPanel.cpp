@@ -51,7 +51,7 @@ PeerChartPanel::PeerChartPanel(const QStringList& peers, const QString& metric, 
 
     status_ = new QLabel(QString("Loading peer comparison (%1)…").arg(metric_), this);
     status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
     root->addWidget(status_);
 
     view_ = new QChartView(this);
@@ -129,7 +129,7 @@ void PeerChartPanel::load() {
 
                     auto* y = new QValueAxis;
                     y->setRange(0, maxv * 1.15);
-                    y->setLabelsColor(QColor(ui::colors::TEXT_DIM()));
+                    y->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
                     QFont yf = y->labelsFont();
                     yf.setFamily("Consolas");
                     yf.setPointSize(8);

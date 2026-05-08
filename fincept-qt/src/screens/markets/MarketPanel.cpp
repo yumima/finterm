@@ -155,7 +155,7 @@ void MarketPanel::setup_table_columns() {
 void MarketPanel::open_cols_dropdown() {
     auto* menu = new QMenu(this);
     menu->setStyleSheet(
-        QString("QMenu{background:%1;border:1px solid %2;color:%3;font-size:11px;font-family:monospace;}"
+        QString("QMenu{background:%1;border:1px solid %2;color:%3;font-size:12px;font-family:monospace;}"
                 "QMenu::item{padding:4px 16px;}"
                 "QMenu::item:selected{background:%4;}"
                 "QMenu::indicator{width:12px;height:12px;}")
@@ -358,16 +358,16 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
         for (int ci = 0; ci < cols.size(); ++ci) {
             const QString& col = cols[ci];
             if      (col == "SYMBOL") table_->setItem(row, ci, mk(q.symbol, ui::colors::TEXT_PRIMARY(), Qt::AlignLeft | Qt::AlignVCenter));
-            else if (col == "NAME")   table_->setItem(row, ci, mk(q.name,   ui::colors::TEXT_DIM(),     Qt::AlignLeft | Qt::AlignVCenter));
+            else if (col == "NAME")   table_->setItem(row, ci, mk(q.name,   ui::colors::TEXT_SECONDARY(),     Qt::AlignLeft | Qt::AlignVCenter));
             else if (col == "LAST")   table_->setItem(row, ci, mk(QString::number(q.price,  'f', prec), ui::colors::AMBER()));
             else if (col == "CHG")    table_->setItem(row, ci, mk(QString("%1 %2").arg(arr).arg(std::abs(q.change),     0, 'f', 2), cc));
             else if (col == "CHG%")   table_->setItem(row, ci, mk(QString("%1%2%").arg(arr).arg(std::abs(q.change_pct), 0, 'f', 2), cc));
             else if (col == "HIGH")   table_->setItem(row, ci, mk(QString::number(q.high, 'f', 2), ui::colors::TEXT_SECONDARY()));
             else if (col == "LOW")    table_->setItem(row, ci, mk(QString::number(q.low,  'f', 2), ui::colors::TEXT_SECONDARY()));
-            else if (col == "VOL")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_DIM()));  // TODO: wire volume from API response
-            else if (col == "BID")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_DIM()));
-            else if (col == "ASK")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_DIM()));
-            else if (col == "OPEN")   table_->setItem(row, ci, mk("--", ui::colors::TEXT_DIM()));
+            else if (col == "VOL")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));  // TODO: wire volume from API response
+            else if (col == "BID")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
+            else if (col == "ASK")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
+            else if (col == "OPEN")   table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
         }
     }
 }
@@ -427,7 +427,7 @@ void MarketPanel::refresh_theme() {
         QString("QPushButton{background:transparent;color:%1;border:none;"
                 "font-size:%2px;font-family:'%3';padding:0 4px;}"
                 "QPushButton:hover{color:%4;}")
-            .arg(ui::colors::TEXT_DIM()).arg(fbtn).arg(ff).arg(ui::colors::TEXT_PRIMARY());
+            .arg(ui::colors::TEXT_SECONDARY()).arg(fbtn).arg(ff).arg(ui::colors::TEXT_PRIMARY());
     if (cols_btn_)   cols_btn_->setStyleSheet(btn_ss);
     if (edit_btn_)   edit_btn_->setStyleSheet(btn_ss);
     if (delete_btn_) delete_btn_->setStyleSheet(btn_ss);
@@ -445,7 +445,7 @@ void MarketPanel::refresh_theme() {
     if (loading_label_)
         loading_label_->setStyleSheet(
             QString("color:%1;font-size:%2px;font-family:'%3';background:transparent;letter-spacing:2px;")
-                .arg(ui::colors::TEXT_DIM()).arg(fdata).arg(ff));
+                .arg(ui::colors::TEXT_SECONDARY()).arg(fdata).arg(ff));
 
     if (loading_widget_)
         loading_widget_->setStyleSheet(
@@ -456,7 +456,7 @@ void MarketPanel::refresh_theme() {
             QString("QPushButton{background:transparent;color:%1;border:none;"
                     "font-size:%2px;font-family:'%3';padding:0 4px;}"
                     "QPushButton:hover{color:%4;}")
-                .arg(ui::colors::TEXT_DIM()).arg(fbtn).arg(ff).arg(ui::colors::TEXT_PRIMARY()));
+                .arg(ui::colors::TEXT_SECONDARY()).arg(fbtn).arg(ff).arg(ui::colors::TEXT_PRIMARY()));
 
     if (table_) {
         table_->setStyleSheet(
@@ -468,7 +468,7 @@ void MarketPanel::refresh_theme() {
                     "border-bottom:1px solid %5;font-size:%6px;font-weight:600;"
                     "font-family:'%7';padding:0 4px;}")
                 .arg(ui::colors::BG_BASE(), ui::colors::BG_SURFACE(), ui::colors::BG_BASE(),
-                     ui::colors::TEXT_DIM(), ui::colors::BORDER_DIM())
+                     ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM())
                 .arg(fhdr).arg(ff));
     }
 }

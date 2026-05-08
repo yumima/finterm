@@ -64,7 +64,7 @@ AbbreviationsColumn::AbbreviationsColumn(QWidget* parent) : QWidget(parent) {
     auto* lbl = new QLabel("ABBREVIATIONS", header);
     lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; font-weight: bold;"
                                " letter-spacing: 1.5px; %2")
-                           .arg(ui::colors::TEXT_TERTIARY(), MONO));
+                           .arg(ui::colors::TEXT_SECONDARY(), MONO));
     hl->addWidget(lbl);
 
     filter_ = new QLineEdit(header);

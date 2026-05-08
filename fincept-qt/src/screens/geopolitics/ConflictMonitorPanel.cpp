@@ -131,7 +131,7 @@ void ConflictMonitorPanel::build_ui() {
 
     stats_label_ = new QLabel("No data", sidebar);
     stats_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                    .arg(ui::colors::TEXT_TERTIARY())
+                                    .arg(ui::colors::TEXT_SECONDARY())
                                     .arg(ui::fonts::SMALL)
                                     .arg(ui::fonts::DATA_FAMILY));
     svl->addWidget(stats_label_);
@@ -170,7 +170,7 @@ void ConflictMonitorPanel::build_ui() {
     grid->setColumnStretch(1, 1);
 
     auto field_label_style = QString("color:%1; font-size:%2px; font-family:%3;")
-                                 .arg(ui::colors::TEXT_TERTIARY())
+                                 .arg(ui::colors::TEXT_SECONDARY())
                                  .arg(ui::fonts::TINY)
                                  .arg(ui::fonts::DATA_FAMILY);
     auto value_style = QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")

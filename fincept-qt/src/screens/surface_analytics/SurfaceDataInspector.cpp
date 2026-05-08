@@ -25,7 +25,7 @@ using namespace fincept::ui;
 namespace {
 
 QString section_header_qss() {
-    return QString("background:%1; color:%2; font-size:9px; font-weight:bold; "
+    return QString("background:%1; color:%2; font-size:12px; font-weight:bold; "
                    "padding:4px 8px; border-bottom:1px solid %3;")
         .arg(colors::BG_SURFACE())
         .arg(colors::TEXT_SECONDARY())
@@ -34,11 +34,11 @@ QString section_header_qss() {
 
 QString table_qss() {
     return QString("QTableView { background:%1; color:%2; gridline-color:%3; "
-                   "border:none; font-size:10px; font-family:Consolas; "
+                   "border:none; font-size:12px; font-family:Consolas; "
                    "selection-background-color:%4; selection-color:%5; }"
                    "QHeaderView::section { background:%6; color:%7; padding:3px 6px; "
                    "border:none; border-right:1px solid %3; border-bottom:1px solid %3; "
-                   "font-size:9px; font-weight:bold; }")
+                   "font-size:12px; font-weight:bold; }")
         .arg(colors::BG_BASE())
         .arg(colors::TEXT_PRIMARY())
         .arg(colors::BORDER_DIM())
@@ -50,10 +50,10 @@ QString table_qss() {
 
 QString tab_qss() {
     return QString("QTabBar::tab { background:%1; color:%2; padding:4px 12px; "
-                   "border:1px solid %3; border-bottom:none; font-size:9px; }"
+                   "border:1px solid %3; border-bottom:none; font-size:12px; }"
                    "QTabBar::tab:selected { background:%4; color:%5; }")
         .arg(colors::BG_BASE())
-        .arg(colors::TEXT_DIM())
+        .arg(colors::TEXT_SECONDARY())
         .arg(colors::BORDER_DIM())
         .arg(colors::BG_SURFACE())
         .arg(colors::TEXT_PRIMARY());
@@ -61,7 +61,7 @@ QString tab_qss() {
 
 QString small_btn_qss() {
     return QString("QPushButton { background:%1; color:%2; border:1px solid %3; "
-                   "padding:3px 10px; font-size:9px; border-radius:2px; }"
+                   "padding:3px 10px; font-size:12px; border-radius:2px; }"
                    "QPushButton:hover { background:%3; color:%4; }")
         .arg(colors::BG_RAISED())
         .arg(colors::TEXT_SECONDARY())
@@ -147,12 +147,12 @@ void SurfaceDataInspector::setup_ui() {
         auto* row = new QHBoxLayout();
         row->setSpacing(6);
         auto* k = new QLabel(key, lin_body);
-        k->setStyleSheet(QString("color:%1; font-size:9px; font-family:Consolas;")
-                             .arg(colors::TEXT_DIM()));
+        k->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
+                             .arg(colors::TEXT_SECONDARY()));
         k->setMinimumWidth(72);
         row->addWidget(k);
         target = new QLabel("—", lin_body);
-        target->setStyleSheet(QString("color:%1; font-size:10px; font-family:Consolas;")
+        target->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
                                   .arg(colors::TEXT_PRIMARY()));
         target->setWordWrap(true);
         row->addWidget(target, 1);
@@ -192,17 +192,17 @@ void SurfaceDataInspector::setup_ui() {
     auto* dot_row = new QHBoxLayout();
     dot_row->setSpacing(6);
     status_dot_ = new QLabel("●", status_body);
-    status_dot_->setStyleSheet(QString("color:%1; font-size:14px;").arg(colors::TEXT_DIM()));
+    status_dot_->setStyleSheet(QString("color:%1; font-size:14px;").arg(colors::TEXT_SECONDARY()));
     dot_row->addWidget(status_dot_);
     status_label_ = new QLabel("Idle", status_body);
     status_label_->setWordWrap(true);
-    status_label_->setStyleSheet(QString("color:%1; font-size:10px;").arg(colors::TEXT_PRIMARY()));
+    status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_PRIMARY()));
     dot_row->addWidget(status_label_, 1);
     status_l->addLayout(dot_row);
 
     error_label_ = new QLabel("", status_body);
     error_label_->setWordWrap(true);
-    error_label_->setStyleSheet(QString("color:%1; font-size:9px; font-family:Consolas;")
+    error_label_->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
                                     .arg(colors::NEGATIVE()));
     status_l->addWidget(error_label_);
 
@@ -309,7 +309,7 @@ void SurfaceDataInspector::on_view_raw_clicked() {
     auto* lay = new QVBoxLayout(&dlg);
     auto* edit = new QPlainTextEdit(&dlg);
     edit->setReadOnly(true);
-    edit->setStyleSheet(QString("background:%1; color:%2; font-family:Consolas; font-size:10px;")
+    edit->setStyleSheet(QString("background:%1; color:%2; font-family:Consolas; font-size:12px;")
                             .arg(colors::BG_BASE())
                             .arg(colors::TEXT_PRIMARY()));
     edit->setPlainText(raw_output_.isEmpty() ? "(no response captured yet)" : raw_output_);

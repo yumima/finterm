@@ -88,7 +88,7 @@ void EquityBottomPanel::setup_holdings_tab() {
         cv->setContentsMargins(0, 0, 0, 0);
         cv->setSpacing(1);
         auto* cap = new QLabel(caption);
-        cap->setStyleSheet(QString("color:%1;font-size:10px;letter-spacing:0.5px;")
+        cap->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:0.5px;")
                                .arg(fincept::ui::colors::TEXT_SECONDARY()));
         auto* val = new QLabel("--");
         val->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;")
@@ -110,7 +110,7 @@ void EquityBottomPanel::setup_holdings_tab() {
     holdings_import_btn_->setEnabled(false);
     holdings_import_btn_->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:4px 12px;"
-                "font-size:11px;font-weight:700;letter-spacing:0.5px;}"
+                "font-size:12px;font-weight:700;letter-spacing:0.5px;}"
                 "QPushButton:hover{background:%4;color:#000;}"
                 "QPushButton:disabled{color:%5;border-color:%3;}")
             .arg(fincept::ui::colors::PANEL(), fincept::ui::colors::ORANGE(),
@@ -593,8 +593,8 @@ static void fill_trade_row(QTableWidget* table, int row, const trading::BrokerTr
     QStringList decoded;
     for (const auto& c : t.conditions)
         decoded.append(codes.contains(c) ? codes[c] : c);
-    set(4, decoded.join(", "), QColor(fincept::ui::colors::TEXT_TERTIARY()));
-    set(5, t.tape, QColor(fincept::ui::colors::TEXT_TERTIARY()));
+    set(4, decoded.join(", "), QColor(fincept::ui::colors::TEXT_SECONDARY()));
+    set(5, t.tape, QColor(fincept::ui::colors::TEXT_SECONDARY()));
 }
 
 void EquityBottomPanel::set_time_sales(const QVector<trading::BrokerTrade>& trades) {
@@ -638,11 +638,11 @@ void EquityBottomPanel::setup_calendar_tab() {
     clock_status_label_ = new QLabel("● MARKET --");
     clock_status_label_->setObjectName("calClockStatus");
     clock_status_label_->setStyleSheet(
-        QString("color: %1; font-size: 11px; font-weight: 700;").arg(fincept::ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 11px; font-weight: 700;").arg(fincept::ui::colors::TEXT_SECONDARY()));
 
     clock_next_label_ = new QLabel("");
     clock_next_label_->setObjectName("calClockNext");
-    clock_next_label_->setStyleSheet(QString("color: %1; font-size: 10px;").arg(fincept::ui::colors::TEXT_TERTIARY()));
+    clock_next_label_->setStyleSheet(QString("color: %1; font-size: 10px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
 
     banner_lay->addWidget(clock_status_label_);
     banner_lay->addWidget(clock_next_label_);

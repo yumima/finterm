@@ -35,7 +35,7 @@ HelpHint::HelpHint(QString entry_id, QWidget* parent) : QPushButton(parent), ent
                           " border-radius: 8px; font-size: 9px; font-weight: bold;"
                           " font-family: 'Consolas','Courier New',monospace; padding: 0; }"
                           "QPushButton:hover { color: %3; border-color: %3; background: %4; }")
-                      .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
+                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
                            ui::colors::BG_RAISED()));
     connect(this, &QPushButton::clicked, this, &HelpHint::show_popover);
 }
@@ -72,7 +72,7 @@ void HelpHint::show_popover() {
             auto* abbr = new QLabel(entry->abbreviation, popover);
             abbr->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;"
                                         " font-family: 'Consolas','Courier New',monospace;")
-                                    .arg(ui::colors::TEXT_TERTIARY()));
+                                    .arg(ui::colors::TEXT_SECONDARY()));
             vl->addWidget(abbr);
         }
         if (!entry->subtitle.isEmpty()) {

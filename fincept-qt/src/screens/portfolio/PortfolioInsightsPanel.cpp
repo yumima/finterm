@@ -169,7 +169,7 @@ void PortfolioInsightsPanel::build_ui() {
     const QString amber = ui::colors::AMBER();
     const QString text1 = ui::colors::TEXT_PRIMARY();
     const QString text2 = ui::colors::TEXT_SECONDARY();
-    const QString text3 = ui::colors::TEXT_TERTIARY();
+    const QString text3 = ui::colors::TEXT_SECONDARY();
 
     // Opaque background — this is the whole fix for the previous overlap bug.
     setStyleSheet(QString("#PortfolioInsightsPanel { background:%1; border-left:1px solid %2; }")
@@ -188,11 +188,11 @@ void PortfolioInsightsPanel::build_ui() {
     hl->setSpacing(8);
 
     auto* title = new QLabel("PORTFOLIO INSIGHTS");
-    title->setStyleSheet(QString("color:%1; font-size:11px; font-weight:800; letter-spacing:2px;").arg(amber));
+    title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:800; letter-spacing:2px;").arg(amber));
     hl->addWidget(title);
 
     header_status_ = new QLabel;
-    header_status_->setStyleSheet(QString("color:%1; font-size:10px;").arg(text2));
+    header_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(text2));
     hl->addWidget(header_status_);
     hl->addStretch();
 
@@ -222,7 +222,7 @@ void PortfolioInsightsPanel::build_ui() {
         b->setCursor(Qt::PointingHandCursor);
         b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none;"
                                  "  border-bottom:2px solid transparent; padding:8px 0;"
-                                 "  font-size:10px; font-weight:700; letter-spacing:1.5px; }"
+                                 "  font-size:12px; font-weight:700; letter-spacing:1.5px; }"
                                  "QPushButton:checked { color:%2; border-bottom:2px solid %2;"
                                  "  background:rgba(217,119,6,0.06); }"
                                  "QPushButton:hover:!checked { color:%3; }")
@@ -252,7 +252,7 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
     const QString amber = ui::colors::AMBER();
     const QString text1 = ui::colors::TEXT_PRIMARY();
     const QString text2 = ui::colors::TEXT_SECONDARY();
-    const QString text3 = ui::colors::TEXT_TERTIARY();
+    const QString text3 = ui::colors::TEXT_SECONDARY();
 
     auto* page = new QWidget;
     page->setStyleSheet(QString("background:%1;").arg(bg));
@@ -268,7 +268,7 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
     cl->setSpacing(10);
 
     auto* label = new QLabel("ANALYSIS TYPE");
-    label->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1.5px;").arg(text3));
+    label->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(text3));
     cl->addWidget(label);
 
     auto* pill_row = new QHBoxLayout;
@@ -279,7 +279,7 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
         p->setCursor(Qt::PointingHandCursor);
         p->setFixedHeight(28);
         p->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                                 "  padding:0 14px; font-size:10px; font-weight:700; letter-spacing:1px; }"
+                                 "  padding:0 14px; font-size:12px; font-weight:700; letter-spacing:1px; }"
                                  "QPushButton:checked { background:rgba(217,119,6,0.15); color:%4;"
                                  "  border:1px solid %4; }"
                                  "QPushButton:hover:!checked { color:%5; border:1px solid %5; }")
@@ -300,7 +300,7 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
     ai_run_->setCursor(Qt::PointingHandCursor);
     ai_run_->setFixedHeight(36);
     ai_run_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                   "  font-size:11px; font-weight:700; letter-spacing:2px; }"
+                                   "  font-size:12px; font-weight:700; letter-spacing:2px; }"
                                    "QPushButton:hover { background:%3; }"
                                    "QPushButton:disabled { background:%4; color:%5; }")
                                .arg(amber, bg, ui::colors::AMBER_DIM(), border_dim, text3));
@@ -308,7 +308,7 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
     cl->addWidget(ai_run_);
 
     ai_meta_ = new QLabel;
-    ai_meta_->setStyleSheet(QString("color:%1; font-size:9px;").arg(text3));
+    ai_meta_->setStyleSheet(QString("color:%1; font-size:12px;").arg(text3));
     cl->addWidget(ai_meta_);
 
     lay->addWidget(cfg);
@@ -335,7 +335,7 @@ QWidget* PortfolioInsightsPanel::build_agent_page() {
     const QString amber = ui::colors::AMBER();
     const QString text1 = ui::colors::TEXT_PRIMARY();
     const QString text2 = ui::colors::TEXT_SECONDARY();
-    const QString text3 = ui::colors::TEXT_TERTIARY();
+    const QString text3 = ui::colors::TEXT_SECONDARY();
 
     auto* page = new QWidget;
     page->setStyleSheet(QString("background:%1;").arg(bg));
@@ -350,13 +350,13 @@ QWidget* PortfolioInsightsPanel::build_agent_page() {
     cl->setSpacing(8);
 
     auto* label = new QLabel("SELECT AGENT");
-    label->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1.5px;").arg(text3));
+    label->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(text3));
     cl->addWidget(label);
 
     agent_cb_ = new QComboBox;
     agent_cb_->setFixedHeight(30);
     agent_cb_->setStyleSheet(QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                                     "  padding:0 10px; font-size:11px; }"
+                                     "  padding:0 10px; font-size:12px; }"
                                      "QComboBox::drop-down { border:none; width:20px; }"
                                      "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
                                      "  selection-background-color:rgba(217,119,6,0.15); }")
@@ -375,14 +375,14 @@ QWidget* PortfolioInsightsPanel::build_agent_page() {
 
     agent_desc_ = new QLabel;
     agent_desc_->setWordWrap(true);
-    agent_desc_->setStyleSheet(QString("color:%1; font-size:10px; line-height:1.5;").arg(text2));
+    agent_desc_->setStyleSheet(QString("color:%1; font-size:12px; line-height:1.5;").arg(text2));
     cl->addWidget(agent_desc_);
 
     agent_run_ = new QPushButton("RUN AGENT");
     agent_run_->setCursor(Qt::PointingHandCursor);
     agent_run_->setFixedHeight(36);
     agent_run_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                      "  font-size:11px; font-weight:700; letter-spacing:2px; }"
+                                      "  font-size:12px; font-weight:700; letter-spacing:2px; }"
                                       "QPushButton:hover { background:%3; }"
                                       "QPushButton:disabled { background:%4; color:%5; }")
                                   .arg(amber, bg, ui::colors::AMBER_DIM(), border_dim, text3));
@@ -390,7 +390,7 @@ QWidget* PortfolioInsightsPanel::build_agent_page() {
     cl->addWidget(agent_run_);
 
     agent_meta_ = new QLabel;
-    agent_meta_->setStyleSheet(QString("color:%1; font-size:9px;").arg(text3));
+    agent_meta_->setStyleSheet(QString("color:%1; font-size:12px;").arg(text3));
     cl->addWidget(agent_meta_);
 
     lay->addWidget(cfg);
@@ -663,8 +663,8 @@ void PortfolioInsightsPanel::render_empty(QTextBrowser* target, const QString& h
         return;
     QString safe = hint;
     safe.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
-    target->setHtml(QString("<div style='color:%1; font-size:11px; line-height:1.7; padding-top:8px;'>%2</div>")
-                        .arg(ui::colors::TEXT_TERTIARY(), safe));
+    target->setHtml(QString("<div style='color:%1; font-size:12px; line-height:1.7; padding-top:8px;'>%2</div>")
+                        .arg(ui::colors::TEXT_SECONDARY(), safe));
 }
 
 } // namespace fincept::screens

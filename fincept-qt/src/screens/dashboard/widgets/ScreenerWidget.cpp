@@ -84,7 +84,7 @@ ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", p
 void ScreenerWidget::apply_styles() {
     filter_bar_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     filter_lbl_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY()));
+                                   .arg(ui::colors::TEXT_SECONDARY()));
     filter_combo_->setStyleSheet(
         QString("QComboBox { background: %1; color: %2; border: 1px solid %3; font-size: 10px; padding: 2px 6px; }"
                 "QComboBox::drop-down { border: none; }"
@@ -93,14 +93,14 @@ void ScreenerWidget::apply_styles() {
             .arg(ui::colors::TEXT_PRIMARY())
             .arg(ui::colors::BORDER_MED()));
     count_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     header_->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")
                                .arg(ui::colors::BG_RAISED())
                                .arg(ui::colors::BORDER_DIM()));
     for (auto* lbl : header_labels_) {
         lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_TERTIARY()));
+                               .arg(ui::colors::TEXT_SECONDARY()));
     }
 
     scroll_->setStyleSheet(

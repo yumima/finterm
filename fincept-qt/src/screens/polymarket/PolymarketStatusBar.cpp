@@ -42,7 +42,7 @@ PolymarketStatusBar::PolymarketStatusBar(QWidget* parent) : QWidget(parent) {
     // Next session
     next_session_ = new QLabel;
     next_session_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     next_session_->setVisible(false);
     hl->addWidget(next_session_);
 
@@ -52,13 +52,13 @@ PolymarketStatusBar::PolymarketStatusBar(QWidget* parent) : QWidget(parent) {
     view_label_ = new QLabel("MARKETS");
     view_label_->setStyleSheet(
         QString("color: %1; font-size: 8px; font-weight: 600; background: transparent;")
-            .arg(colors::TEXT_DIM()));
+            .arg(colors::TEXT_SECONDARY()));
     hl->addWidget(view_label_);
 
     // Count
     count_label_ = new QLabel;
     count_label_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(count_label_);
 
     // Divider
@@ -84,7 +84,7 @@ PolymarketStatusBar::PolymarketStatusBar(QWidget* parent) : QWidget(parent) {
     // WS
     ws_label_ = new QLabel;
     ws_label_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(ws_label_);
     set_ws_status(false);
 }
@@ -112,7 +112,7 @@ void PolymarketStatusBar::set_ws_status(bool connected) {
     } else {
         ws_label_->setText("○ OFF");
         ws_label_->setStyleSheet(
-            QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_DIM()));
+            QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     }
 }
 

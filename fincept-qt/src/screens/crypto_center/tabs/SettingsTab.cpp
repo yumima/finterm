@@ -256,11 +256,11 @@ void SettingsTab::apply_theme() {
         "QWidget#settingsTab { background:%1; }"
         "QFrame#settingsTabPanel { background:%2; border:1px solid %3; }"
         "QWidget#settingsTabPanelHead { background:%4; border-bottom:1px solid %3; }"
-        "QLabel#settingsTabPanelTitle { color:%5; font-family:%6; font-size:11px;"
+        "QLabel#settingsTabPanelTitle { color:%5; font-family:%6; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
-        "QLabel#settingsTabPanelStatus { color:%7; font-family:%6; font-size:10px;"
+        "QLabel#settingsTabPanelStatus { color:%7; font-family:%6; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
-        "QLabel#settingsTabHint { color:%8; font-family:%6; font-size:11px;"
+        "QLabel#settingsTabHint { color:%8; font-family:%6; font-size:12px;"
         "  background:transparent; }"
 
         // Inputs
@@ -270,16 +270,16 @@ void SettingsTab::apply_theme() {
 
         // Buttons
         "QPushButton#settingsTabButton { background:%4; color:%8; border:1px solid %3;"
-        "  font-family:%6; font-size:11px; font-weight:700; letter-spacing:1px; padding:0 14px; }"
+        "  font-family:%6; font-size:12px; font-weight:700; letter-spacing:1px; padding:0 14px; }"
         "QPushButton#settingsTabButton:hover { background:%10; color:%9; border-color:%11; }"
         "QPushButton#settingsTabDangerButton { background:rgba(220,38,38,0.10); color:%12;"
-        "  border:1px solid %13; font-family:%6; font-size:11px; font-weight:700;"
+        "  border:1px solid %13; font-family:%6; font-size:12px; font-weight:700;"
         "  letter-spacing:1px; padding:0 14px; }"
         "QPushButton#settingsTabDangerButton:hover { background:%12; color:%9; }"
 
         // Toggle
         "QPushButton#settingsTabToggle { background:transparent; color:%7; border:1px solid %3;"
-        "  font-family:%6; font-size:10px; font-weight:700; letter-spacing:1.2px;"
+        "  font-family:%6; font-size:12px; font-weight:700; letter-spacing:1.2px;"
         "  padding:0 14px; }"
         "QPushButton#settingsTabToggle:hover { color:%9; border-color:%11; }"
         "QPushButton#settingsTabToggle:checked { background:rgba(217,119,6,0.12);"

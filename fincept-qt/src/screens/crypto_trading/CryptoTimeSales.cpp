@@ -23,7 +23,7 @@ inline QColor kRowOdd() {
     return QColor(colors::ROW_ALT());
 }
 inline QColor kTextDim() {
-    return QColor(colors::TEXT_DIM());
+    return QColor(colors::TEXT_SECONDARY());
 }
 inline QColor kTextSec() {
     return QColor(colors::TEXT_SECONDARY());

@@ -98,7 +98,7 @@ FuturesPanelBase::FuturesPanelBase(const QString& title, QWidget* parent) : QWid
     header->addStretch();
 
     status_label_ = new QLabel;
-    status_label_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-3)));
+    status_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
     header->addWidget(status_label_);
 
     root->addLayout(header);
@@ -115,7 +115,7 @@ void FuturesPanelBase::apply_theme() {
     if (title_label_)
         title_label_->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(0)));
     if (status_label_)
-        status_label_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-3)));
+        status_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
 }
 
 void FuturesPanelBase::set_status(const QString& s, const QString& color) {
@@ -219,7 +219,7 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     row->addWidget(symbol_combo_);
 
     contango_label_ = new QLabel;
-    contango_label_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), true, fonts::font_px(-2)));
+    contango_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(-2)));
     row->addStretch();
     row->addWidget(contango_label_);
     layout()->addItem(row);
@@ -241,7 +241,7 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     placeholder_ = new QLabel(stack_host);
     placeholder_->setAlignment(Qt::AlignCenter);
     placeholder_->setWordWrap(true);
-    placeholder_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-1)));
+    placeholder_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     stack->addWidget(placeholder_);
 
     layout()->addWidget(stack_host);
@@ -359,7 +359,7 @@ void FuturesTermStructurePanel::render(const QVector<TermStructurePoint>& pts) {
     x_axis->setTickCount(std::min<int>(static_cast<int>(pts.size()), 8));
     x_axis->setLabelFormat("%d");
     x_axis->setGridLineColor(QColor(colors::BORDER_DIM()));
-    x_axis->setLabelsBrush(QColor(colors::TEXT_DIM()));
+    x_axis->setLabelsBrush(QColor(colors::TEXT_SECONDARY()));
 
     auto* y_axis = new QValueAxis;
     if (std::isfinite(min_v) && std::isfinite(max_v) && max_v > min_v) {
@@ -368,7 +368,7 @@ void FuturesTermStructurePanel::render(const QVector<TermStructurePoint>& pts) {
     }
     y_axis->setLabelFormat("%.2f");
     y_axis->setGridLineColor(QColor(colors::BORDER_DIM()));
-    y_axis->setLabelsBrush(QColor(colors::TEXT_DIM()));
+    y_axis->setLabelsBrush(QColor(colors::TEXT_SECONDARY()));
 
     chart->addAxis(x_axis, Qt::AlignBottom);
     chart->addAxis(y_axis, Qt::AlignLeft);
@@ -397,7 +397,7 @@ FuturesSpreadPanel::FuturesSpreadPanel(QWidget* parent) : FuturesPanelBase("SPRE
     leg1_combo_ = new QComboBox;
     leg2_combo_ = new QComboBox;
     auto* dash = new QLabel("−");
-    dash->setStyleSheet(lbl_ss(colors::TEXT_DIM(), true));
+    dash->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true));
     row->addWidget(leg1_combo_);
     row->addWidget(dash);
     row->addWidget(leg2_combo_);
@@ -512,7 +512,7 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
     placeholder_ = new QLabel(stack_host);
     placeholder_->setAlignment(Qt::AlignCenter);
     placeholder_->setWordWrap(true);
-    placeholder_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-1)));
+    placeholder_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     stack->addWidget(placeholder_);
 
     layout()->addWidget(stack_host);
@@ -800,7 +800,7 @@ void FuturesChartPanel::render(const QVector<HistoryPoint>& pts) {
     auto* x_axis = new QDateTimeAxis;
     x_axis->setFormat("MMM dd");
     x_axis->setTickCount(6);
-    x_axis->setLabelsBrush(QColor(colors::TEXT_DIM()));
+    x_axis->setLabelsBrush(QColor(colors::TEXT_SECONDARY()));
     x_axis->setGridLineColor(QColor(colors::BORDER_DIM()));
 
     auto* y_axis = new QValueAxis;
@@ -809,7 +809,7 @@ void FuturesChartPanel::render(const QVector<HistoryPoint>& pts) {
         y_axis->setRange(min_v - pad, max_v + pad);
     }
     y_axis->setLabelFormat("%.2f");
-    y_axis->setLabelsBrush(QColor(colors::TEXT_DIM()));
+    y_axis->setLabelsBrush(QColor(colors::TEXT_SECONDARY()));
     y_axis->setGridLineColor(QColor(colors::BORDER_DIM()));
 
     chart->addAxis(x_axis, Qt::AlignBottom);

@@ -236,7 +236,7 @@ QWidget* PolymarketDetailPanel::create_trade_page() {
     auto* msg_lbl = new QLabel("Connect an account\nto place orders");
     msg_lbl->setAlignment(Qt::AlignCenter);
     msg_lbl->setStyleSheet(
-        QString("color: %1; font-size: 11px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 11px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     nal->addWidget(icon_lbl);
     nal->addWidget(msg_lbl);
     ticket_stack_->addWidget(no_acct); // index 0
@@ -387,7 +387,7 @@ QWidget* PolymarketDetailPanel::create_trade_page() {
     ticket_status_lbl_->setAlignment(Qt::AlignCenter);
     ticket_status_lbl_->setWordWrap(true);
     ticket_status_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 10px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 10px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     fl->addWidget(ticket_status_lbl_);
 
     fl->addStretch(1);
@@ -403,7 +403,7 @@ void PolymarketDetailPanel::refresh_ticket_side_style() {
     const QString active_bg   = is_buy ? colors::POSITIVE() : colors::NEGATIVE();
     const QString inactive_bg = colors::BG_RAISED();
     const QString active_text   = "#0A0A0A";
-    const QString inactive_text = colors::TEXT_DIM();
+    const QString inactive_text = colors::TEXT_SECONDARY();
 
     ticket_buy_btn_->setStyleSheet(
         QString("QPushButton { background: %1; color: %2; border: none; "
@@ -424,7 +424,7 @@ void PolymarketDetailPanel::refresh_ticket_side_style() {
                 "QPushButton:disabled { background: %4; color: %5; }")
             .arg(active_bg, active_text,
                  QColor(active_bg).lighter(115).name(),
-                 colors::BG_RAISED(), colors::TEXT_DIM()));
+                 colors::BG_RAISED(), colors::TEXT_SECONDARY()));
 }
 
 void PolymarketDetailPanel::on_submit_clicked() {
@@ -459,7 +459,7 @@ void PolymarketDetailPanel::on_submit_clicked() {
     req.size       = size;
 
     ticket_status_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 10px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 10px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     ticket_status_lbl_->setText("Submitting…");
     ticket_submit_btn_->setEnabled(false);
     emit place_order(req);
@@ -549,7 +549,7 @@ QWidget* PolymarketDetailPanel::create_comments_page() {
     vl->setSpacing(8);
     auto* empty = new QLabel("No comments yet");
     empty->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     empty->setAlignment(Qt::AlignCenter);
     vl->addWidget(empty);
     vl->addStretch(1);
@@ -573,7 +573,7 @@ QWidget* PolymarketDetailPanel::create_related_page() {
     vl->setSpacing(6);
     auto* empty = new QLabel("No related markets");
     empty->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     empty->setAlignment(Qt::AlignCenter);
     vl->addWidget(empty);
     vl->addStretch(1);
@@ -763,7 +763,7 @@ void PolymarketDetailPanel::set_comments(const QVector<pmx::Comment>& comments) 
     if (comments.isEmpty()) {
         auto* empty = new QLabel("No comments yet");
         empty->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_DIM()));
+            QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY()));
         empty->setAlignment(Qt::AlignCenter);
         vl->addWidget(empty);
     } else {
@@ -791,7 +791,7 @@ void PolymarketDetailPanel::set_comments(const QVector<pmx::Comment>& comments) 
                 QDateTime::fromSecsSinceEpoch(c.created_at, QTimeZone::UTC).toString("yyyy-MM-dd HH:mm") +
                 (c.likes > 0 ? QString("  · %1 likes").arg(c.likes) : ""));
             meta->setStyleSheet(
-                QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_DIM()));
+                QString("color: %1; font-size: 8px; background: transparent;").arg(colors::TEXT_SECONDARY()));
 
             cvl->addWidget(author);
             cvl->addWidget(body);
@@ -813,7 +813,7 @@ void PolymarketDetailPanel::set_related_markets(const QVector<PredictionMarket>&
     if (markets.isEmpty()) {
         auto* empty = new QLabel("No related markets");
         empty->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_DIM()));
+            QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY()));
         empty->setAlignment(Qt::AlignCenter);
         vl->addWidget(empty);
     } else {
@@ -870,7 +870,7 @@ void PolymarketDetailPanel::set_polymarket_extras_enabled(bool enabled) {
             auto* empty = new QLabel(msg);
             empty->setStyleSheet(
                 QString("color: %1; font-size: 12px; background: transparent;")
-                    .arg(colors::TEXT_DIM()));
+                    .arg(colors::TEXT_SECONDARY()));
             empty->setAlignment(Qt::AlignCenter);
             vl->addWidget(empty);
             vl->addStretch(1);

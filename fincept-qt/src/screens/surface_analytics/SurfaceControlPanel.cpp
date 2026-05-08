@@ -33,7 +33,7 @@ namespace {
 
 QString section_title_qss() {
     return QString("QGroupBox { background:%1; border:1px solid %2; border-radius:3px; "
-                   "margin-top:10px; padding:10px 8px 8px 8px; color:%3; font-size:9px; "
+                   "margin-top:10px; padding:10px 8px 8px 8px; color:%3; font-size:12px; "
                    "font-weight:bold; }"
                    "QGroupBox::title { subcontrol-origin:margin; subcontrol-position:top left; "
                    "left:10px; padding:0 4px; color:%4; }")
@@ -45,7 +45,7 @@ QString section_title_qss() {
 
 QString line_edit_qss() {
     return QString("QLineEdit { background:%1; color:%2; border:1px solid %3; "
-                   "padding:4px 6px; font-size:10px; border-radius:2px; }"
+                   "padding:4px 6px; font-size:12px; border-radius:2px; }"
                    "QLineEdit:focus { border-color:%4; }")
         .arg(colors::BG_HOVER())
         .arg(colors::TEXT_PRIMARY())
@@ -55,7 +55,7 @@ QString line_edit_qss() {
 
 QString combo_qss() {
     return QString("QComboBox { background:%1; color:%2; border:1px solid %3; "
-                   "padding:3px 6px; font-size:10px; border-radius:2px; }"
+                   "padding:3px 6px; font-size:12px; border-radius:2px; }"
                    "QComboBox::drop-down { border:none; width:18px; }"
                    "QComboBox QAbstractItemView { background:%1; color:%2; "
                    "selection-background-color:%4; }")
@@ -67,27 +67,27 @@ QString combo_qss() {
 
 QString small_btn_qss() {
     return QString("QToolButton, QPushButton { background:%1; color:%2; border:1px solid %3; "
-                   "padding:3px 8px; font-size:9px; border-radius:2px; }"
+                   "padding:3px 8px; font-size:12px; border-radius:2px; }"
                    "QToolButton:hover, QPushButton:hover { background:%3; color:%4; }"
                    "QPushButton:disabled { background:%1; color:%5; border-color:%1; }")
         .arg(colors::BG_RAISED())
         .arg(colors::TEXT_SECONDARY())
         .arg(colors::BORDER_MED())
         .arg(colors::TEXT_PRIMARY())
-        .arg(colors::TEXT_DIM());
+        .arg(colors::TEXT_SECONDARY());
 }
 
 QString fetch_btn_qss(bool enabled) {
     if (!enabled) {
         return QString("QPushButton { background:%1; color:%2; border:1px solid %3; "
-                       "padding:8px 12px; font-size:10px; font-weight:bold; border-radius:2px; }")
+                       "padding:8px 12px; font-size:12px; font-weight:bold; border-radius:2px; }")
             .arg(colors::BG_HOVER())
-            .arg(colors::TEXT_DIM())
+            .arg(colors::TEXT_SECONDARY())
             .arg(colors::BORDER_DIM());
     }
     return QString("QPushButton { background:rgba(31,77,153,255); color:%1; "
                    "border:1px solid rgba(64,140,255,140); padding:8px 12px; "
-                   "font-size:10px; font-weight:bold; border-radius:2px; }"
+                   "font-size:12px; font-weight:bold; border-radius:2px; }"
                    "QPushButton:hover { background:rgba(46,102,191,255); }")
         .arg(colors::INFO());
 }
@@ -143,7 +143,7 @@ void SurfaceControlPanel::setup_ui() {
 
     // ── Header ─────────────────────────────────────────────────────────────
     auto* header = new QLabel("CONTROL PANEL", this);
-    header->setStyleSheet(QString("background:%1; color:%2; font-size:10px; font-weight:bold; "
+    header->setStyleSheet(QString("background:%1; color:%2; font-size:12px; font-weight:bold; "
                                   "padding:8px 10px; border-bottom:1px solid %3;")
                               .arg(colors::BG_SURFACE())
                               .arg(colors::TEXT_PRIMARY())
@@ -161,28 +161,28 @@ void SurfaceControlPanel::setup_ui() {
 
     auto* prov_title = new QLabel("DATA PROVIDERS", providers_box_);
     prov_title->setStyleSheet(
-        QString("color:%1; font-size:9px; font-weight:bold; letter-spacing:0.5px;")
-            .arg(colors::TEXT_DIM()));
+        QString("color:%1; font-size:12px; font-weight:bold; letter-spacing:0.5px;")
+            .arg(colors::TEXT_SECONDARY()));
     prov_layout->addWidget(prov_title);
 
     auto add_provider_row = [&](const QString& key, const QString& label) {
         auto* row = new QHBoxLayout();
         row->setSpacing(5);
         auto* dot = new QLabel("●", providers_box_);
-        dot->setStyleSheet(QString("color:%1; font-size:11px;").arg(colors::TEXT_DIM()));
+        dot->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
         dot->setFixedWidth(10);
         row->addWidget(dot);
         auto* name_lbl = new QLabel(label, providers_box_);
-        name_lbl->setStyleSheet(QString("color:%1; font-size:10px; font-family:Consolas;")
+        name_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
                                     .arg(colors::TEXT_PRIMARY()));
         name_lbl->setMinimumWidth(80);
         row->addWidget(name_lbl);
         auto* state_lbl = new QLabel("not configured", providers_box_);
-        state_lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_DIM()));
+        state_lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
         row->addWidget(state_lbl, 1);
         auto* detail_lbl = new QLabel("", providers_box_);
-        detail_lbl->setStyleSheet(QString("color:%1; font-size:9px; font-family:Consolas;")
-                                       .arg(colors::TEXT_DIM()));
+        detail_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
+                                       .arg(colors::TEXT_SECONDARY()));
         row->addWidget(detail_lbl);
         prov_layout->addLayout(row);
         provider_dot_[key] = dot;
@@ -267,7 +267,7 @@ QGroupBox* SurfaceControlPanel::build_asset_section() {
     auto* row = new QHBoxLayout();
     row->setSpacing(6);
     auto* ds_lbl = new QLabel("Dataset:", gb);
-    ds_lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_SECONDARY()));
+    ds_lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
     row->addWidget(ds_lbl);
     dataset_combo_ = new QComboBox(gb);
     dataset_combo_->setStyleSheet(combo_qss());
@@ -277,15 +277,15 @@ QGroupBox* SurfaceControlPanel::build_asset_section() {
     l->addLayout(row);
 
     spot_label_ = new QLabel("Spot: —", gb);
-    spot_label_->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_DIM()));
+    spot_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
     l->addWidget(spot_label_);
 
     tier_badge_ = new QLabel("DEMO", gb);
     tier_badge_->setAlignment(Qt::AlignCenter);
     tier_badge_->setStyleSheet(
-        QString("background:%1; color:#000; font-size:9px; font-weight:bold; "
+        QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
                 "padding:2px 6px; border-radius:2px; max-width:80px;")
-            .arg(colors::TEXT_DIM()));
+            .arg(colors::TEXT_SECONDARY()));
     l->addWidget(tier_badge_, 0, Qt::AlignLeft);
 
     return gb;
@@ -308,7 +308,7 @@ QGroupBox* SurfaceControlPanel::build_dates_section() {
         auto* row = new QHBoxLayout();
         row->setSpacing(6);
         auto* lbl = new QLabel(title, gb);
-        lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
         lbl->setMinimumWidth(40);
         row->addWidget(lbl);
         target = new QDateEdit(def, gb);
@@ -357,7 +357,7 @@ QGroupBox* SurfaceControlPanel::build_options_section() {
         auto* row = new QHBoxLayout();
         row->setSpacing(6);
         auto* lbl = new QLabel(title, gb);
-        lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
         lbl->setMinimumWidth(110);
         row->addWidget(lbl);
         target = new QSpinBox(gb);
@@ -382,7 +382,7 @@ QGroupBox* SurfaceControlPanel::build_options_section() {
     auto* iv_row = new QHBoxLayout();
     iv_row->setSpacing(6);
     auto* iv_lbl = new QLabel("IV method:", gb);
-    iv_lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(colors::TEXT_SECONDARY()));
+    iv_lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
     iv_lbl->setMinimumWidth(110);
     iv_row->addWidget(iv_lbl);
     iv_method_combo_ = new QComboBox(gb);
@@ -424,7 +424,7 @@ QGroupBox* SurfaceControlPanel::build_basket_section() {
 
     basket_list_ = new QListWidget(gb);
     basket_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; "
-                                        "border:1px solid %3; font-size:10px; }"
+                                        "border:1px solid %3; font-size:12px; }"
                                         "QListWidget::item:selected { background:%4; color:%5; }")
                                     .arg(colors::BG_HOVER())
                                     .arg(colors::TEXT_PRIMARY())
@@ -450,12 +450,12 @@ QGroupBox* SurfaceControlPanel::build_metrics_section() {
         auto* row = new QHBoxLayout();
         row->setSpacing(6);
         auto* lbl = new QLabel(label, gb);
-        lbl->setStyleSheet(QString("color:%1; font-size:9px; font-family:Consolas;")
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
                                .arg(colors::TEXT_SECONDARY()));
         lbl->setMinimumWidth(80);
         row->addWidget(lbl);
         target = new QLabel("—", gb);
-        target->setStyleSheet(QString("color:%1; font-size:10px; font-family:Consolas; font-weight:bold;")
+        target->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas; font-weight:bold;")
                                   .arg(colors::TEXT_PRIMARY()));
         row->addWidget(target, 1, Qt::AlignRight);
         l->addLayout(row);
@@ -481,7 +481,7 @@ QGroupBox* SurfaceControlPanel::build_lineage_section() {
     lineage_label_ = new QLabel("—", gb);
     lineage_label_->setWordWrap(true);
     lineage_label_->setStyleSheet(
-        QString("color:%1; font-size:9px; font-family:Consolas;").arg(colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; font-family:Consolas;").arg(colors::TEXT_SECONDARY()));
     l->addWidget(lineage_label_);
     return gb;
 }
@@ -506,7 +506,7 @@ void SurfaceControlPanel::set_capability(ChartType type) {
     QColor bg = tier_color(cap.tier);
     tier_badge_->setText(tier_name(cap.tier));
     tier_badge_->setStyleSheet(
-        QString("background:%1; color:#000; font-size:9px; font-weight:bold; "
+        QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
                 "padding:2px 6px; border-radius:2px; max-width:80px;")
             .arg(bg.name()));
 
@@ -772,7 +772,7 @@ void SurfaceControlPanel::set_provider_status(const QString& provider_name,
     auto* dt = provider_detail_.value(provider_name, nullptr);
     if (!dot || !lbl)
         return;
-    QString color = colors::TEXT_DIM();
+    QString color = colors::TEXT_SECONDARY();
     QString text = provider_state;
     if (provider_state == "connected")
         color = colors::POSITIVE();
@@ -780,9 +780,9 @@ void SurfaceControlPanel::set_provider_status(const QString& provider_name,
         color = colors::NEGATIVE();
     else if (provider_state == "configured")
         color = QString("rgb(217,164,6)"); // amber, key set but not yet tested
-    dot->setStyleSheet(QString("color:%1; font-size:11px;").arg(color));
+    dot->setStyleSheet(QString("color:%1; font-size:12px;").arg(color));
     lbl->setText(text);
-    lbl->setStyleSheet(QString("color:%1; font-size:9px;").arg(color));
+    lbl->setStyleSheet(QString("color:%1; font-size:12px;").arg(color));
     if (dt)
         dt->setText(detail);
 }

@@ -23,7 +23,7 @@ QFrame* make_panel(const QString& title) {
 
     auto* label = new QLabel(title);
     label->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px; background:transparent; border:0;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; background:transparent; border:0;")
             .arg(ui::colors::AMBER()));
     layout->addWidget(label);
     return frame;
@@ -40,8 +40,8 @@ QWidget* make_stat_box(const QString& title, QLabel** value_label) {
 
     auto* title_label = new QLabel(title);
     title_label->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px; background:transparent; border:0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; background:transparent; border:0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(title_label);
 
     auto* value = new QLabel("—");
@@ -80,7 +80,7 @@ QString alignment_color(const QString& alignment) {
     if (alignment == "divergent") {
         return ui::colors::NEGATIVE();
     }
-    return ui::colors::TEXT_TERTIARY();
+    return ui::colors::TEXT_SECONDARY();
 }
 
 } // namespace
@@ -124,19 +124,19 @@ void EquitySentimentTab::build_ui() {
 
     auto* title = new QLabel("MARKET SENTIMENT");
     title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:2px; background:transparent; border:0;")
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:2px; background:transparent; border:0;")
             .arg(ui::colors::AMBER()));
     header_layout->addWidget(title);
 
     coverage_label_ = new QLabel;
     coverage_label_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent; border:0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     header_layout->addWidget(coverage_label_);
 
     company_label_ = new QLabel;
     company_label_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg("#22d3ee"));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg("#22d3ee"));
     header_layout->addWidget(company_label_);
 
     header_layout->addStretch();
@@ -144,7 +144,7 @@ void EquitySentimentTab::build_ui() {
     auto* refresh_button = new QPushButton("REFRESH");
     refresh_button->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %2; border-radius:3px; "
-                "padding:4px 12px; font-size:10px; font-weight:700; }"
+                "padding:4px 12px; font-size:12px; font-weight:700; }"
                 "QPushButton:hover { border-color:%3; color:%3; }")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     connect(refresh_button, &QPushButton::clicked, this, [this]() {
@@ -239,13 +239,13 @@ void EquitySentimentTab::populate(const services::equity::MarketSentimentSnapsho
 
             auto* key_label = new QLabel(key);
             key_label->setStyleSheet(
-                QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
+                QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
             row_layout->addWidget(key_label);
 
             auto* value_label = new QLabel(value);
             value_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             value_label->setStyleSheet(
-                QString("color:%1; font-size:11px; font-weight:600; background:transparent; border:0;")
+                QString("color:%1; font-size:12px; font-weight:600; background:transparent; border:0;")
                     .arg(color.isEmpty() ? ui::colors::TEXT_PRIMARY() : color));
             row_layout->addWidget(value_label, 1);
             layout->addWidget(row);
@@ -261,7 +261,7 @@ void EquitySentimentTab::populate(const services::equity::MarketSentimentSnapsho
             auto* empty = new QLabel("No snapshot available.");
             empty->setWordWrap(true);
             empty->setStyleSheet(
-                QString("color:%1; font-size:11px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
             layout->addWidget(empty);
         }
 

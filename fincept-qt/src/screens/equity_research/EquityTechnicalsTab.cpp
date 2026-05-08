@@ -376,8 +376,8 @@ void EquityTechnicalsTab::build_ui() {
         auto* lbl = new QLabel(label);
         lbl->setAlignment(Qt::AlignCenter);
         lbl->setStyleSheet(
-            QString("color:%1;font-size:8px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
-                .arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
+                .arg(ui::colors::TEXT_SECONDARY()));
         cvl->addWidget(out);
         cvl->addWidget(lbl);
         counts->addWidget(w, 1);
@@ -392,8 +392,8 @@ void EquityTechnicalsTab::build_ui() {
 
     total_label_ = new QLabel("0 INDICATORS");
     total_label_->setAlignment(Qt::AlignCenter);
-    total_label_->setStyleSheet(QString("color:%1;font-size:10px;letter-spacing:1px;background:transparent;border:0;")
-                                    .arg(ui::colors::TEXT_TERTIARY()));
+    total_label_->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:1px;background:transparent;border:0;")
+                                    .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(total_label_);
     rp_vl->addStretch();
 
@@ -527,7 +527,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         // Name
         auto* nm = new QLabel(ti.name.toUpper());
         nm->setStyleSheet(
-            QString("color:%1;font-size:10px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
+            QString("color:%1;font-size:12px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(nm);
 
@@ -539,7 +539,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
                                    "background:transparent;border:0;")
                                .arg(ui::colors::TEXT_PRIMARY()));
         auto* sig = new QLabel(signal_text(ti.signal));
-        sig->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;background:transparent;border:0;").arg(sc));
+        sig->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;border:0;").arg(sc));
         sig->setAlignment(Qt::AlignRight | Qt::AlignBottom);
         vr->addWidget(val);
         vr->addStretch();
@@ -556,7 +556,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             auto* desc = new QLabel(interp);
             desc->setWordWrap(true);
             desc->setStyleSheet(
-                QString("color:%1;font-size:10px;background:transparent;border:0;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
             cl->addWidget(desc);
         }
 
@@ -622,7 +622,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
 
         auto* cnt = new QLabel(QString("%1 indicators").arg(cat.inds->size()));
         cnt->setStyleSheet(
-            QString("color:%1;font-size:10px;background:transparent;border:0;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
         hl->addWidget(cnt);
         hl->addStretch();
 
@@ -631,7 +631,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
                 return;
             auto* badge = new QLabel(QString("%1 %2").arg(count).arg(label));
             badge->setStyleSheet(
-                QString("color:%1;font-size:10px;font-weight:700;padding:2px 6px;background:transparent;border:0;")
+                QString("color:%1;font-size:12px;font-weight:700;padding:2px 6px;background:transparent;border:0;")
                     .arg(color));
             hl->addWidget(badge);
         };
@@ -653,8 +653,8 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             auto* l = new QLabel(text);
             l->setAlignment(align | Qt::AlignVCenter);
             l->setStyleSheet(
-                QString("color:%1;font-size:10px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
-                    .arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1;font-size:12px;font-weight:600;letter-spacing:0.5px;background:transparent;border:0;")
+                    .arg(ui::colors::TEXT_SECONDARY()));
             thl->addWidget(l, stretch);
         };
         hdr_lbl("INDICATOR", 2);
@@ -698,7 +698,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             auto* sig_lbl = new QLabel(signal_text(ti.signal));
             sig_lbl->setAlignment(Qt::AlignCenter);
             sig_lbl->setFixedWidth(90);
-            sig_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;background:%2;"
+            sig_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:%2;"
                                            "border-radius:2px;padding:2px 6px;border:0;")
                                        .arg(sc, ui::colors::BG_RAISED()));
             sig_hl->addWidget(sig_lbl);
@@ -733,7 +733,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             auto* interp_lbl = new QLabel(interp.isEmpty() ? "\xe2\x80\x94" : interp);
             interp_lbl->setWordWrap(true);
             interp_lbl->setStyleSheet(
-                QString("color:%1;font-size:11px;background:transparent;border:0;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
             rl->addWidget(interp_lbl, 3);
 
             svl->addWidget(row);

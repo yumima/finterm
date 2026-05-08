@@ -81,7 +81,7 @@ PolymarketOrderBlotter::PolymarketOrderBlotter(QWidget* parent) : QWidget(parent
                 "  border: 1px solid %1; padding: 2px 8px; font-size: 9px; font-weight: 700; }"
                 "QPushButton:hover { background: rgba(239,68,68,0.15); }"
                 "QPushButton:disabled { color: %2; border-color: %2; }")
-            .arg(colors::NEGATIVE(), colors::TEXT_DIM()));
+            .arg(colors::NEGATIVE(), colors::TEXT_SECONDARY()));
     connect(cancel_all_btn, &QPushButton::clicked, this,
             &PolymarketOrderBlotter::on_cancel_all_clicked);
     hhl->addWidget(cancel_all_btn);

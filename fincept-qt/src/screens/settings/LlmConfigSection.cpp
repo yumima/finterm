@@ -328,7 +328,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     field_style(provider_edit_);
     provider_edit_->setStyleSheet(provider_edit_->styleSheet() +
                                   "QLineEdit{background:" + QString(ui::colors::BG_SURFACE()) +
-                                  ";color:" + QString(ui::colors::TEXT_TERTIARY()) + ";}");
+                                  ";color:" + QString(ui::colors::TEXT_SECONDARY()) + ";}");
     form->addRow(p_lbl, provider_edit_);
 
     auto* k_lbl = new QLabel("API Key");
@@ -381,7 +381,7 @@ QWidget* LlmConfigSection::build_form_panel() {
         QString(ui::colors::BG_RAISED()) +
         ";}"
         "QPushButton:disabled{color:" +
-        QString(ui::colors::TEXT_TERTIARY()) + ";border-color:" + QString(ui::colors::BORDER_MED()) + ";}");
+        QString(ui::colors::TEXT_SECONDARY()) + ";border-color:" + QString(ui::colors::BORDER_MED()) + ";}");
     connect(fetch_btn_, &QPushButton::clicked, this, &LlmConfigSection::on_fetch_models);
     model_row->addWidget(fetch_btn_);
 
@@ -423,7 +423,7 @@ QWidget* LlmConfigSection::build_form_panel() {
         QString(ui::colors::AMBER_DIM()) +
         ";}"
         "QPushButton:disabled{background:" +
-        QString(ui::colors::BORDER_BRIGHT()) + ";color:" + QString(ui::colors::TEXT_TERTIARY()) + ";}");
+        QString(ui::colors::BORDER_BRIGHT()) + ";color:" + QString(ui::colors::TEXT_SECONDARY()) + ";}");
     connect(save_btn_, &QPushButton::clicked, this, &LlmConfigSection::on_save_provider);
 
     test_btn_ = new QPushButton("Test Connection");
@@ -971,7 +971,7 @@ QWidget* LlmConfigSection::build_profile_list_panel() {
 
     auto* hint = new QLabel("A profile = named LLM config you can assign to any agent or team.");
     hint->setWordWrap(true);
-    hint->setStyleSheet("color:" + QString(ui::colors::TEXT_TERTIARY()) + ";padding-bottom:4px;");
+    hint->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";padding-bottom:4px;");
     vl->addWidget(hint);
 
     profile_list_ = new QListWidget;

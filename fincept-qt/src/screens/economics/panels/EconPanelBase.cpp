@@ -24,42 +24,42 @@ QString EconPanelBase::panel_style() const {
     int b = QColor(color_).blue();
     return QString("#econToolbar { background:%5; border-bottom:1px solid %6; }"
                    "#econFetchBtn { background:%1; color:%7; border:none;"
-                   "  font-size:10px; font-weight:700; padding:4px 14px; }"
+                   "  font-size:12px; font-weight:700; padding:4px 14px; }"
                    "#econFetchBtn:hover { background:rgba(%2,%3,%4,0.75); }"
                    "#econFetchBtn:disabled { background:%6; color:%8; }"
                    "#econCsvBtn { background:transparent; color:%9; border:1px solid %6;"
-                   "  font-size:10px; font-weight:700; padding:4px 10px; }"
+                   "  font-size:12px; font-weight:700; padding:4px 10px; }"
                    "#econCsvBtn:hover { color:%10; background:%11; }"
                    "QComboBox, QSpinBox, QDateEdit, QLineEdit {"
                    "  background:%7; color:%10; border:1px solid %6;"
-                   "  font-size:11px; padding:2px 6px; }"
+                   "  font-size:12px; padding:2px 6px; }"
                    "QComboBox::drop-down, QDateEdit::drop-down { border:none; }"
                    "QComboBox QAbstractItemView { background:%5; color:%10;"
                    "  border:1px solid %6; }"
                    "QTableWidget { background:%7; color:%10; border:none;"
-                   "  gridline-color:%6; font-size:11px; alternate-background-color:%12; }"
+                   "  gridline-color:%6; font-size:12px; alternate-background-color:%12; }"
                    "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %6; }"
                    "QTableWidget::item:selected { background:rgba(%2,%3,%4,0.1); color:%1; }"
                    "QHeaderView::section { background:%5; color:%9; border:none;"
                    "  border-bottom:2px solid %6; border-right:1px solid %6;"
-                   "  padding:5px 8px; font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                   "  padding:5px 8px; font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                    "#econCardsRow  { background:%7; border-bottom:1px solid %6; }"
                    "#econTitleBar  { background:%12; border-bottom:1px solid %6; }"
                    "#econStatCard { background:%12; border:1px solid %6; }"
                    "#econStatCard:hover { border-color:%13; }"
-                   "#econStatLabel { color:%9; font-size:8px; font-weight:700;"
+                   "#econStatLabel { color:%9; font-size:12px; font-weight:700;"
                    "  letter-spacing:1px; background:transparent; }"
                    "#econStatVal  { color:%1;  font-size:15px; font-weight:700; background:transparent; }"
                    "#econStatPos  { color:%16; font-size:15px; font-weight:700; background:transparent; }"
                    "#econStatNeg  { color:%15; font-size:15px; font-weight:700; background:transparent; }"
-                   "#econStatSub  { color:%14; font-size:9px;  background:transparent; }"
+                   "#econStatSub  { color:%14; font-size:12px;  background:transparent; }"
                    "#econEmptyPage { background:%7; }"
                    "#econEmptyMsg   { color:%9;  font-size:13px; background:transparent; }"
                    "#econLoadingMsg { color:%1;  font-size:13px; background:transparent; }"
                    "#econErrMsg     { color:%15; font-size:12px; background:transparent; }"
-                   "#econTitleLbl { color:%10; font-size:11px; font-weight:700;"
+                   "#econTitleLbl { color:%10; font-size:12px; font-weight:700;"
                    "  background:transparent; }"
-                   "#econRowCount { color:%14; font-size:9px; background:transparent; }"
+                   "#econRowCount { color:%14; font-size:12px; background:transparent; }"
                    "QScrollBar:vertical { background:%7; width:5px; }"
                    "QScrollBar::handle:vertical { background:%6; min-height:20px; }"
                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
@@ -98,7 +98,7 @@ QString EconPanelBase::section_hdr_style() {
 
 QString EconPanelBase::section_lbl_style() {
     using namespace ui::colors;
-    return QString("color:%1; font-size:8px; font-weight:700;"
+    return QString("color:%1; font-size:12px; font-weight:700;"
                    " letter-spacing:1px; background:transparent; padding:4px 10px;")
         .arg(TEXT_TERTIARY());
 }
@@ -106,13 +106,13 @@ QString EconPanelBase::section_lbl_style() {
 QString EconPanelBase::search_input_style() {
     using namespace ui::colors;
     return QString("background:%1; color:%2; border:none;"
-                   " border-bottom:1px solid %3; padding:4px 10px; font-size:11px;")
+                   " border-bottom:1px solid %3; padding:4px 10px; font-size:12px;")
         .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM());
 }
 
 QString EconPanelBase::ctrl_label_style() {
     using namespace ui::colors;
-    return QString("color:%1; font-size:9px; font-weight:700; background:transparent;").arg(TEXT_TERTIARY());
+    return QString("color:%1; font-size:12px; font-weight:700; background:transparent;").arg(TEXT_TERTIARY());
 }
 
 QString EconPanelBase::list_style() const {
@@ -121,7 +121,7 @@ QString EconPanelBase::list_style() const {
     QString rgba = QString("%1,%2,%3").arg(c.red()).arg(c.green()).arg(c.blue());
     return QString("QListWidget { background:transparent; border:none; outline:none; }"
                    "QListWidget::item { color:%1; padding:5px 10px;"
-                   "  border-bottom:1px solid %2; font-size:11px; }"
+                   "  border-bottom:1px solid %2; font-size:12px; }"
                    "QListWidget::item:hover { color:%3; background:%4; }"
                    "QListWidget::item:selected { color:%5; background:rgba(%6,0.1);"
                    "  border-left:2px solid %5; font-weight:700; }")
@@ -131,7 +131,7 @@ QString EconPanelBase::list_style() const {
 
 QString EconPanelBase::notice_style() {
     using namespace ui::colors;
-    return QString("color:%1; font-size:9px; background:transparent;").arg(WARNING());
+    return QString("color:%1; font-size:12px; background:transparent;").arg(WARNING());
 }
 
 // ── Constructor ───────────────────────────────────────────────────────────────

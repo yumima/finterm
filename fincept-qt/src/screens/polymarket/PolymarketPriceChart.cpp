@@ -84,7 +84,7 @@ PolymarketPriceChart::PolymarketPriceChart(QWidget* parent) : QWidget(parent) {
     ccl->setContentsMargins(8, 8, 8, 8);
     auto* empty = new QLabel("Select a market to view its price chart");
     empty->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_DIM()));
+        QString("color: %1; font-size: 12px; background: transparent;").arg(colors::TEXT_SECONDARY()));
     empty->setAlignment(Qt::AlignCenter);
     ccl->addWidget(empty);
     vl->addWidget(chart_container_, 1);
@@ -104,7 +104,7 @@ void PolymarketPriceChart::set_price_history(const PriceHistory& history) {
 
     if (history.points.isEmpty()) {
         auto* empty = new QLabel("No price history available");
-        empty->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(colors::TEXT_DIM()));
+        empty->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(colors::TEXT_SECONDARY()));
         empty->setAlignment(Qt::AlignCenter);
         layout->addWidget(empty);
         return;

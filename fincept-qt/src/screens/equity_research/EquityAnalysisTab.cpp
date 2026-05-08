@@ -37,7 +37,7 @@ QFrame* make_panel(const QString& title, const QString& accent_color) {
     hl->addWidget(bar);
 
     auto* lbl = new QLabel(title);
-    lbl->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px; "
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; "
                                "background:transparent; border:0;")
                            .arg(accent_color));
     hl->addWidget(lbl);
@@ -56,9 +56,9 @@ QWidget* make_card(const QString& label, QLabel*& val_out, const QString& val_co
     vl->setSpacing(3);
 
     auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1px; "
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; "
                                "background:transparent; border:0;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+                           .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
 
     val_out = new QLabel("—");

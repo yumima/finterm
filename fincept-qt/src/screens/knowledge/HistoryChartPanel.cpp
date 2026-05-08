@@ -33,7 +33,7 @@ HistoryChartPanel::HistoryChartPanel(const QString& ticker, const QString& perio
 
     status_ = new QLabel(QString("Loading %1 history…").arg(ticker_), this);
     status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
     root->addWidget(status_);
 
     view_ = new QChartView(this);

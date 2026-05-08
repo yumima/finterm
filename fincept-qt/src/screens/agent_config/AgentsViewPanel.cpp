@@ -20,7 +20,7 @@ namespace fincept::screens {
 
 static QLabel* section_hdr(const QString& text) {
     auto* lbl = new QLabel(text);
-    lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;padding:6px 0 2px 0;")
+    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;padding:6px 0 2px 0;")
                            .arg(ui::colors::AMBER()));
     return lbl;
 }
@@ -64,10 +64,10 @@ QWidget* AgentsViewPanel::build_agent_list_panel() {
 
     auto* hdr = new QHBoxLayout;
     auto* title = new QLabel("AGENTS");
-    title->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER()));
+    title->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER()));
     hdr->addWidget(title);
     list_count_label_ = new QLabel("0");
-    list_count_label_->setStyleSheet(QString("color:%1;font-size:10px;background:%2;padding:1px 6px;border-radius:2px;")
+    list_count_label_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;border-radius:2px;")
                                          .arg(ui::colors::CYAN(), ui::colors::BG_RAISED()));
     hdr->addWidget(list_count_label_);
     hdr->addStretch();
@@ -93,7 +93,7 @@ QWidget* AgentsViewPanel::build_agent_list_panel() {
     auto* refresh_btn = new QPushButton("REFRESH");
     refresh_btn->setCursor(Qt::PointingHandCursor);
     refresh_btn->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:6px;"
-                                       "font-size:10px;font-weight:600;letter-spacing:1px;}"
+                                       "font-size:12px;font-weight:600;letter-spacing:1px;}"
                                        "QPushButton:hover{background:%3;}")
                                    .arg(ui::colors::BG_RAISED(), ui::colors::AMBER(), ui::colors::AMBER_DIM()));
     connect(refresh_btn, &QPushButton::clicked, this, []() {
@@ -125,7 +125,7 @@ QWidget* AgentsViewPanel::build_config_panel() {
     json_toggle_btn_->setCursor(Qt::PointingHandCursor);
     json_toggle_btn_->setStyleSheet(
         QString(
-            "QPushButton{background:transparent;color:%1;border:none;font-size:10px;font-weight:600;padding:4px 8px;}"
+            "QPushButton{background:transparent;color:%1;border:none;font-size:12px;font-weight:600;padding:4px 8px;}"
             "QPushButton:checked{color:%2;}")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     tbl->addWidget(json_toggle_btn_);
@@ -134,7 +134,7 @@ QWidget* AgentsViewPanel::build_config_panel() {
     add_team_btn_ = new QPushButton("+ ADD TO TEAM");
     add_team_btn_->setCursor(Qt::PointingHandCursor);
     add_team_btn_->setStyleSheet(
-        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;font-size:9px;"
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;font-size:12px;"
                 "font-weight:600;padding:3px 8px;}QPushButton:hover{background:%2;}")
             .arg(ui::colors::CYAN(), ui::colors::BG_HOVER()));
     tbl->addWidget(add_team_btn_);
@@ -180,7 +180,7 @@ QWidget* AgentsViewPanel::build_config_panel() {
     vl->addWidget(llm_profile_combo_);
 
     llm_resolved_lbl_ = new QLabel;
-    llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(llm_resolved_lbl_);
 
     // ── INSTRUCTIONS ──
@@ -195,14 +195,14 @@ QWidget* AgentsViewPanel::build_config_panel() {
     vl->addWidget(section_hdr("TOOLS"));
     tools_list_ = new QListWidget;
     tools_list_->setMaximumHeight(100);
-    tools_list_->setStyleSheet(QString("QListWidget{background:%1;border:1px solid %2;color:%3;font-size:11px;}"
+    tools_list_->setStyleSheet(QString("QListWidget{background:%1;border:1px solid %2;color:%3;font-size:12px;}"
                                        "QListWidget::item{padding:2px 6px;}")
                                    .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     vl->addWidget(tools_list_);
 
     // ── FEATURES ──
     vl->addWidget(section_hdr("FEATURES"));
-    const QString chk_style = QString("QCheckBox{color:%1;font-size:11px;spacing:6px;}").arg(ui::colors::TEXT_PRIMARY());
+    const QString chk_style = QString("QCheckBox{color:%1;font-size:12px;spacing:6px;}").arg(ui::colors::TEXT_PRIMARY());
     auto* feat_grid = new QGridLayout;
     reasoning_check_ = new QCheckBox("Reasoning");
     reasoning_check_->setStyleSheet(chk_style);
@@ -231,14 +231,14 @@ QWidget* AgentsViewPanel::build_config_panel() {
     save_btn_->setCursor(Qt::PointingHandCursor);
     save_btn_->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:none;padding:8px 16px;"
-                "font-size:11px;font-weight:600;letter-spacing:1px;}QPushButton:hover{background:%3;}")
+                "font-size:12px;font-weight:600;letter-spacing:1px;}QPushButton:hover{background:%3;}")
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE()));
     acts->addWidget(save_btn_);
     delete_btn_ = new QPushButton("DELETE");
     delete_btn_->setCursor(Qt::PointingHandCursor);
     delete_btn_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %1;padding:8px 16px;"
-                "font-size:11px;font-weight:600;}QPushButton:hover{background:%2;}")
+                "font-size:12px;font-weight:600;}QPushButton:hover{background:%2;}")
             .arg(ui::colors::NEGATIVE(), ui::colors::BG_HOVER()));
     acts->addWidget(delete_btn_);
     acts->addStretch();
@@ -259,7 +259,7 @@ QWidget* AgentsViewPanel::build_config_panel() {
     jl->addWidget(json_editor_);
     auto* apply_btn = new QPushButton("APPLY JSON");
     apply_btn->setCursor(Qt::PointingHandCursor);
-    apply_btn->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:8px;font-size:11px;"
+    apply_btn->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:8px;font-size:12px;"
                                      "font-weight:700;}QPushButton:hover{background:%3;}")
                                  .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE()));
     connect(apply_btn, &QPushButton::clicked, this, [this, stack]() {
@@ -301,17 +301,17 @@ QWidget* AgentsViewPanel::build_query_panel() {
 
     auto* opts = new QHBoxLayout;
     auto_route_check_ = new QCheckBox("Auto-Route");
-    auto_route_check_->setStyleSheet(QString("QCheckBox{color:%1;font-size:10px;}").arg(ui::colors::POSITIVE()));
+    auto_route_check_->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;}").arg(ui::colors::POSITIVE()));
     opts->addWidget(auto_route_check_);
 
     auto* om_lbl = new QLabel("Output:");
-    om_lbl->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::TEXT_SECONDARY()));
+    om_lbl->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     opts->addWidget(om_lbl);
 
     output_model_combo_ = new QComboBox;
     output_model_combo_->addItems({"text", "InvestmentReport", "StockAnalysis", "RiskAssessment", "TradeSignal"});
     output_model_combo_->setStyleSheet(
-        QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 6px;font-size:10px;}"
+        QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 6px;font-size:12px;}"
                 "QComboBox::drop-down{border:none;}"
                 "QComboBox QAbstractItemView{background:%1;color:%2;selection-background-color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::AMBER_DIM()));
@@ -329,25 +329,25 @@ QWidget* AgentsViewPanel::build_query_panel() {
 
     run_btn_ = new QPushButton("RUN AGENT");
     run_btn_->setCursor(Qt::PointingHandCursor);
-    run_btn_->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:8px;font-size:11px;"
+    run_btn_->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:8px;font-size:12px;"
                                     "font-weight:700;letter-spacing:1px;}QPushButton:hover{background:%3;}"
                                     "QPushButton:disabled{background:%4;color:%5;}")
                                 .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(),
-                                     ui::colors::TEXT_TERTIARY()));
+                                     ui::colors::TEXT_SECONDARY()));
     vl->addWidget(run_btn_);
 
     routing_info_label_ = new QLabel;
     routing_info_label_->setWordWrap(true);
-    routing_info_label_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::CYAN()));
+    routing_info_label_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::CYAN()));
     routing_info_label_->hide();
     vl->addWidget(routing_info_label_);
 
     result_status_ = new QLabel;
-    result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(result_status_);
 
     auto* rh = new QLabel("RESULT");
-    rh->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;padding-top:4px;")
+    rh->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;padding-top:4px;")
                           .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(rh);
 
@@ -437,11 +437,11 @@ void AgentsViewPanel::setup_connections() {
         if (r.success) {
             result_display_->setMarkdown(r.response);
             result_status_->setText(QString("Completed in %1ms").arg(r.execution_time_ms));
-            result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::POSITIVE()));
+            result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::POSITIVE()));
         } else {
             result_display_->setPlainText("Error: " + r.error);
             result_status_->setText("FAILED");
-            result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+            result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
         }
     });
 
@@ -473,11 +473,11 @@ void AgentsViewPanel::setup_connections() {
         if (r.success) {
             result_display_->setMarkdown(r.response);
             result_status_->setText(QString("Completed in %1ms").arg(r.execution_time_ms));
-            result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::POSITIVE()));
+            result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::POSITIVE()));
         } else {
             result_display_->setPlainText("Error: " + r.error);
             result_status_->setText("FAILED");
-            result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+            result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
         }
     });
 
@@ -596,10 +596,10 @@ void AgentsViewPanel::refresh_llm_pill() {
             text += " (inherited)";
         llm_resolved_lbl_->setText(text);
         llm_resolved_lbl_->setStyleSheet(
-            QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     } else {
         llm_resolved_lbl_->setText("No provider configured — go to Settings > LLM Config");
-        llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+        llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
     }
 }
 
@@ -753,7 +753,7 @@ void AgentsViewPanel::save_current_config() {
     db.config_json = QString::fromUtf8(QJsonDocument(build_config_from_editor()).toJson(QJsonDocument::Compact));
     services::AgentService::instance().save_config(db);
     result_status_->setText("Config saved");
-    result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::POSITIVE()));
+    result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::POSITIVE()));
 }
 
 void AgentsViewPanel::delete_current_config() {
@@ -761,7 +761,7 @@ void AgentsViewPanel::delete_current_config() {
         return;
     services::AgentService::instance().delete_config(filtered_agents_[selected_agent_idx_].id);
     result_status_->setText("Config deleted");
-    result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::WARNING()));
+    result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::WARNING()));
 }
 
 void AgentsViewPanel::run_query() {
@@ -775,7 +775,7 @@ void AgentsViewPanel::run_query() {
     result_display_->clear();
     routing_info_label_->hide();
     result_status_->setText("Executing...");
-    result_status_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::AMBER()));
+    result_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::AMBER()));
 
     const QJsonObject config = build_config_from_editor();
     auto& svc = services::AgentService::instance();

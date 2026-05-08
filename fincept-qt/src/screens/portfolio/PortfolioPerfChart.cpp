@@ -32,7 +32,7 @@ CrosshairChartView::CrosshairChartView(QChart* chart, QWidget* parent) : QChartV
 
     // Vertical crosshair line (hidden by default)
     v_line_ = new QGraphicsLineItem(chart);
-    QPen crosshair_pen(QColor(ui::colors::TEXT_TERTIARY()), 1, Qt::DashLine);
+    QPen crosshair_pen(QColor(ui::colors::TEXT_SECONDARY()), 1, Qt::DashLine);
     v_line_->setPen(crosshair_pen);
     v_line_->setVisible(false);
     v_line_->setZValue(10);
@@ -41,7 +41,7 @@ CrosshairChartView::CrosshairChartView(QChart* chart, QWidget* parent) : QChartV
     tooltip_ = new QLabel(this);
     tooltip_->setWindowFlags(Qt::ToolTip);
     tooltip_->setStyleSheet(QString("QLabel { background:%1; color:%2; border:1px solid %3;"
-                                    " font-size:10px; font-weight:600; padding:3px 6px; border-radius:3px; }")
+                                    " font-size:12px; font-weight:600; padding:3px 6px; border-radius:3px; }")
                                 .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED()));
     tooltip_->hide();
 }
@@ -135,7 +135,7 @@ void PortfolioPerfChart::build_ui() {
 
     title_label_ = new QLabel("PERFORMANCE");
     title_label_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
     header->addWidget(title_label_);
 
     // ← BACK button: hidden until focus mode is entered. Reverts to portfolio NAV.
@@ -144,7 +144,7 @@ void PortfolioPerfChart::build_ui() {
     back_btn_->setCursor(Qt::PointingHandCursor);
     back_btn_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                "  font-size:9px; font-weight:700; padding:0 8px; border-radius:2px; }"
+                "  font-size:12px; font-weight:700; padding:0 8px; border-radius:2px; }"
                 "QPushButton:hover { color:%3; border-color:%3; }")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
     back_btn_->setVisible(false);
@@ -160,11 +160,11 @@ void PortfolioPerfChart::build_ui() {
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid transparent;"
-                                   "  font-size:9px; font-weight:700; border-radius:2px; }"
+                                   "  font-size:12px; font-weight:700; border-radius:2px; }"
                                    "QPushButton:checked { color:%4; background:%2;"
                                    "  border:1px solid %2; }"
                                    "QPushButton:hover:!checked { color:%3; border-color:%5; }")
-                               .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
                                     ui::colors::BG_BASE(), ui::colors::BORDER_MED()));
 
         if (p == current_period_)
@@ -185,7 +185,7 @@ void PortfolioPerfChart::build_ui() {
     benchmark_btn_->setToolTip("Overlay benchmark index (auto-selected by portfolio currency)");
     benchmark_btn_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                "  font-size:9px; font-weight:700; border-radius:2px; }"
+                "  font-size:12px; font-weight:700; border-radius:2px; }"
                 "QPushButton:checked { color:%4; background:%2; border:1px solid %2; }"
                 "QPushButton:hover:!checked { color:%3; border-color:%3; }")
             .arg(ui::colors::CYAN(), ui::colors::CYAN(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE()));
@@ -208,10 +208,10 @@ void PortfolioPerfChart::build_ui() {
                              "the selected period. Use when comparing different currencies.");
     indexed_btn_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                "  font-size:9px; font-weight:700; border-radius:2px; }"
+                "  font-size:12px; font-weight:700; border-radius:2px; }"
                 "QPushButton:checked { color:%4; background:%2; border:1px solid %2; }"
                 "QPushButton:hover:!checked { color:%3; border-color:%3; }")
-            .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::BG_BASE()));
     connect(indexed_btn_, &QPushButton::clicked, this, [this]() {
         indexed_mode_ = indexed_btn_->isChecked();
@@ -229,11 +229,11 @@ void PortfolioPerfChart::build_ui() {
 
     period_change_label_ = new QLabel;
     period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
+        QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
     info_bar->addWidget(period_change_label_);
 
     auto* sep1 = new QLabel("|");
-    sep1->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::BORDER_MED()));
+    sep1->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::BORDER_MED()));
     info_bar->addWidget(sep1);
 
     total_return_label_ = new QLabel;
@@ -242,20 +242,20 @@ void PortfolioPerfChart::build_ui() {
     info_bar->addWidget(total_return_label_);
 
     auto* sep2 = new QLabel("|");
-    sep2->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::BORDER_MED()));
+    sep2->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::BORDER_MED()));
     info_bar->addWidget(sep2);
 
     nav_label_ = new QLabel;
-    nav_label_->setStyleSheet(QString("color:%1; font-size:11px; font-weight:600;").arg(ui::colors::WARNING()));
+    nav_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::WARNING()));
     info_bar->addWidget(nav_label_);
 
     auto* sep3 = new QLabel("|");
-    sep3->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::BORDER_MED()));
+    sep3->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::BORDER_MED()));
     info_bar->addWidget(sep3);
 
     cost_basis_label_ = new QLabel;
     cost_basis_label_->setStyleSheet(
-        QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     cost_basis_label_->setToolTip("Total cost basis — the dashed horizontal line on the chart.");
     info_bar->addWidget(cost_basis_label_);
 
@@ -503,7 +503,7 @@ void PortfolioPerfChart::update_chart_focus() {
 
     auto* x = new QDateTimeAxis;
     x->setFormat("MMM d");
-    x->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
     x->setRange(QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(pts.first().x())),
@@ -513,7 +513,7 @@ void PortfolioPerfChart::update_chart_focus() {
     area->attachAxis(x);
 
     auto* y = new QValueAxis;
-    y->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y->setLinePenColor(QColor(ui::colors::BORDER_MED()));
     // Guard against a zero-range axis (flat series where all closes are equal,
@@ -536,7 +536,7 @@ void PortfolioPerfChart::update_chart_focus() {
                                       .arg(QString::number(pnl, 'f', 2))
                                       .arg(QString::number(pnl_pct, 'f', 2)));
     period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700;").arg(lc.name()));
+        QString("color:%1; font-size:12px; font-weight:700;").arg(lc.name()));
     total_return_label_->setText(QString("$%1").arg(QString::number(last, 'f', 2)));
     nav_label_->setText(focus_symbol_);
     if (cost_basis_label_)
@@ -681,7 +681,7 @@ void PortfolioPerfChart::update_chart() {
         cost_line->setName("Cost basis");
         cost_line->append(nav_pts.first().x(), cost_disp);
         cost_line->append(nav_pts.last().x(), cost_disp);
-        QPen cp(QColor(ui::colors::TEXT_TERTIARY()), 1, Qt::DashLine);
+        QPen cp(QColor(ui::colors::TEXT_SECONDARY()), 1, Qt::DashLine);
         cost_line->setPen(cp);
         chart->addSeries(cost_line);
     }
@@ -695,7 +695,7 @@ void PortfolioPerfChart::update_chart() {
     else
         x_axis->setFormat("dd MMM");
     x_axis->setTickCount(5);
-    x_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x_axis->setGridLineVisible(false);
     x_axis->setMinorGridLineVisible(false);
     x_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM()), 1));
@@ -706,7 +706,7 @@ void PortfolioPerfChart::update_chart() {
     y_axis->setRange(y_min - padding, y_max + padding);
     y_axis->setLabelFormat(indexed_mode_ ? "%.1f" : "%.0f");
     y_axis->setTickCount(5);
-    y_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y_axis->setGridLinePen(QPen(QColor(ui::colors::BORDER_DIM()), 1, Qt::DotLine));
     y_axis->setMinorGridLineVisible(false);
     y_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM()), 1));
@@ -794,7 +794,7 @@ void PortfolioPerfChart::update_chart() {
                                       .arg(period_pnl_pct >= 0 ? "+" : "")
                                       .arg(QString::number(period_pnl_pct, 'f', 2)));
     period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:600;").arg(pnl_color));
+        QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
 
     const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
     const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
@@ -826,7 +826,7 @@ void PortfolioPerfChart::refresh_theme() {
                                    "QPushButton:checked { color:%4; background:%2;"
                                    "  border:1px solid %2; }"
                                    "QPushButton:hover:!checked { color:%3; border-color:%5; }")
-                               .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
                                     ui::colors::BG_BASE(), ui::colors::BORDER_MED()));
     }
     if (benchmark_btn_) {

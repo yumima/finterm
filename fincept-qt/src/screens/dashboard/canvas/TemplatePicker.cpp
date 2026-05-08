@@ -79,7 +79,7 @@ TemplatePicker::TemplatePicker(QWidget* parent) : QDialog(parent) {
     vl->addWidget(title);
 
     auto* sub = new QLabel("Select a template to reset your dashboard. Current layout will be replaced.");
-    sub->setStyleSheet(QString("color: %1; font-size: 9px;").arg(ui::colors::TEXT_TERTIARY()));
+    sub->setStyleSheet(QString("color: %1; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
     sub->setWordWrap(true);
     vl->addWidget(sub);
 

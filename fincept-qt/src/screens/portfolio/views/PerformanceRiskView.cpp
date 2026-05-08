@@ -38,7 +38,7 @@ void PerformanceRiskView::build_ui() {
 
     auto* chart_title = new QLabel("NAV PERFORMANCE (FROM SNAPSHOTS)");
     chart_title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     period_bar->addWidget(chart_title);
     period_bar->addStretch();
 
@@ -48,10 +48,10 @@ void PerformanceRiskView::build_ui() {
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none;"
-                                   "  font-size:9px; font-weight:700; }"
+                                   "  font-size:12px; font-weight:700; }"
                                    "QPushButton:checked { color:%2; border-bottom:2px solid %2; }"
                                    "QPushButton:hover { color:%3; }")
-                               .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
         if (p == current_period_)
             btn->setChecked(true);
         connect(btn, &QPushButton::clicked, this, [this, period = p]() { set_period(period); });
@@ -82,7 +82,7 @@ void PerformanceRiskView::build_ui() {
     // ── Risk metric cards ──────────────────────────────────────────────────────
     auto* metrics_header = new QLabel("  RISK METRICS");
     metrics_header->setFixedHeight(24);
-    metrics_header->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700;"
+    metrics_header->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;"
                                           "letter-spacing:1px; background:%2;")
                                       .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE()));
     layout->addWidget(metrics_header);
@@ -120,9 +120,9 @@ PerformanceRiskView::MetricCard PerformanceRiskView::add_metric_card(QLayout* pa
     MetricCard mc;
 
     mc.title = new QLabel(title);
-    mc.title->setStyleSheet(QString("color:%1; font-size:8px; font-weight:700;"
+    mc.title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;"
                                     "letter-spacing:0.5px; border:none;")
-                                .arg(ui::colors::TEXT_TERTIARY()));
+                                .arg(ui::colors::TEXT_SECONDARY()));
     cl->addWidget(mc.title);
 
     mc.value = new QLabel("--");
@@ -130,7 +130,7 @@ PerformanceRiskView::MetricCard PerformanceRiskView::add_metric_card(QLayout* pa
     cl->addWidget(mc.value);
 
     mc.desc = new QLabel(desc);
-    mc.desc->setStyleSheet(QString("color:%1; font-size:8px; border:none;").arg(ui::colors::TEXT_TERTIARY()));
+    mc.desc->setStyleSheet(QString("color:%1; font-size:12px; border:none;").arg(ui::colors::TEXT_SECONDARY()));
     cl->addWidget(mc.desc);
 
     auto* grid = static_cast<QGridLayout*>(parent_layout);
@@ -254,7 +254,7 @@ void PerformanceRiskView::update_chart() {
     auto* x_axis = new QDateTimeAxis;
     x_axis->setFormat(current_period_ == "ALL" || current_period_ == "1Y" ? "MMM yy" : "dd MMM");
     x_axis->setTickCount(5);
-    x_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     x_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM())));
     x_axis->setLabelsFont(QFont("monospace", 7));
@@ -264,7 +264,7 @@ void PerformanceRiskView::update_chart() {
     y_axis->setRange(min_val - pad, max_val + pad);
     y_axis->setLabelFormat("%.0f");
     y_axis->setTickCount(4);
-    y_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM())));
     y_axis->setLabelsFont(QFont("monospace", 7));

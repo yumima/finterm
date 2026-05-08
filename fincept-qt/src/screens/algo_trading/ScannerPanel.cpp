@@ -131,7 +131,7 @@ static QWidget* build_condition_row(QVBoxLayout* /*owner_layout*/, QWidget* pare
     rm_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px solid %2;"
                                   " font-size: %3px; font-weight: 700; %4 }"
                                   "QPushButton:hover { color: %5; border-color: %5; }")
-                              .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::BORDER_DIM())
+                              .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
                               .arg(fincept::ui::fonts::TINY)
                               .arg(kMonoFont())
                               .arg(fincept::ui::colors::NEGATIVE()));
@@ -327,7 +327,7 @@ void ScannerPanel::build_ui() {
     add_cond_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px dashed %2;"
                                         " font-size: %3px; font-weight: 700; %4 }"
                                         "QPushButton:hover { color: %5; border-color: %5; }")
-                                    .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::BORDER_DIM())
+                                    .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
                                     .arg(fincept::ui::fonts::TINY)
                                     .arg(kMonoFont())
                                     .arg(fincept::ui::colors::AMBER()));
@@ -438,7 +438,7 @@ void ScannerPanel::build_ui() {
     status_label_ = new QLabel("", content);
     status_label_->setWordWrap(true);
     status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                     .arg(fincept::ui::colors::TEXT_TERTIARY())
+                                     .arg(fincept::ui::colors::TEXT_SECONDARY())
                                      .arg(fincept::ui::fonts::SMALL)
                                      .arg(kMonoFont()));
     main_vl->addWidget(status_label_);
@@ -480,7 +480,7 @@ void ScannerPanel::build_ui() {
             .arg(fincept::ui::colors::TEXT_PRIMARY())
             .arg(fincept::ui::colors::BG_SURFACE())
             .arg(fincept::ui::colors::BG_RAISED())
-            .arg(fincept::ui::colors::TEXT_TERTIARY())
+            .arg(fincept::ui::colors::TEXT_SECONDARY())
             .arg(fincept::ui::colors::BG_HOVER()));
     main_vl->addWidget(results_table_);
     main_vl->addStretch();

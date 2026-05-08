@@ -24,16 +24,16 @@ void PortfolioOrderPanel::build_ui() {
     auto* header_row = new QHBoxLayout;
     auto* title = new QLabel("ORDER ENTRY");
     title->setStyleSheet(
-        QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px;").arg(ui::colors::POSITIVE()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::POSITIVE()));
     header_row->addWidget(title);
     header_row->addStretch();
 
     close_btn_ = new QPushButton("\u2715");
     close_btn_->setFixedSize(18, 18);
     close_btn_->setCursor(Qt::PointingHandCursor);
-    close_btn_->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none; font-size:11px; }"
+    close_btn_->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none; font-size:12px; }"
                                       "QPushButton:hover { color:%2; }")
-                                  .arg(ui::colors::TEXT_TERTIARY(), ui::colors::TEXT_PRIMARY()));
+                                  .arg(ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_PRIMARY()));
     connect(close_btn_, &QPushButton::clicked, this, &PortfolioOrderPanel::close_requested);
     header_row->addWidget(close_btn_);
 
@@ -66,11 +66,11 @@ void PortfolioOrderPanel::build_ui() {
 
         buy_tab_->setStyleSheet(
             QString("QPushButton { background:%1; color:%2; border:none;"
-                    "  font-size:10px; font-weight:700; }")
+                    "  font-size:12px; font-weight:700; }")
                 .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::BG_RAISED(), is_buy ? "#000" : inactive_color));
         sell_tab_->setStyleSheet(
             QString("QPushButton { background:%1; color:%2; border:none;"
-                    "  font-size:10px; font-weight:700; }")
+                    "  font-size:12px; font-weight:700; }")
                 .arg(!is_buy ? ui::colors::NEGATIVE() : ui::colors::BG_RAISED(), !is_buy ? "#fff" : inactive_color));
 
         // Update header and border color
@@ -100,11 +100,11 @@ void PortfolioOrderPanel::build_ui() {
     auto add_info = [&](QLabel*& lbl, const QString& prefix) {
         auto* row = new QHBoxLayout;
         auto* lab = new QLabel(prefix);
-        lab->setStyleSheet(QString("color:%1; font-size:9px;").arg(ui::colors::TEXT_TERTIARY()));
+        lab->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         row->addWidget(lab);
         lbl = new QLabel("--");
         lbl->setAlignment(Qt::AlignRight);
-        lbl->setStyleSheet(QString("color:%1; font-size:10px; font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
         row->addWidget(lbl);
         layout->addLayout(row);
     };
@@ -118,7 +118,7 @@ void PortfolioOrderPanel::build_ui() {
     submit_btn_->setFixedHeight(32);
     submit_btn_->setCursor(Qt::PointingHandCursor);
     submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                       "  font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                        "QPushButton:hover { opacity:0.9; }")
                                    .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE()));
     connect(submit_btn_, &QPushButton::clicked, this, [this]() {
@@ -135,7 +135,7 @@ void PortfolioOrderPanel::build_ui() {
     auto* note = new QLabel("Orders are recorded\nin your portfolio");
     note->setWordWrap(true);
     note->setAlignment(Qt::AlignCenter);
-    note->setStyleSheet(QString("color:%1; font-size:8px;").arg(ui::colors::TEXT_TERTIARY()));
+    note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(note);
 
     update_tabs();
@@ -180,7 +180,7 @@ void PortfolioOrderPanel::update_display() {
     const char* btn_color = (side_ == "BUY") ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
     const char* btn_text_color = (side_ == "BUY") ? "#000" : "#fff";
     submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                       "  font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                        "QPushButton:hover { opacity:0.9; }")
                                    .arg(btn_color, btn_text_color));
 }

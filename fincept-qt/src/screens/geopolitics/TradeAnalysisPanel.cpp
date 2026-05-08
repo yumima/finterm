@@ -66,7 +66,7 @@ static QWidget* make_field(const QString& label_text, QWidget* input, QWidget* p
 
     auto* lbl = new QLabel(label_text, group);
     lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3; letter-spacing:1px;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(lbl);
@@ -77,7 +77,7 @@ static QWidget* make_field(const QString& label_text, QWidget* input, QWidget* p
     if (!hint.isEmpty()) {
         auto* h = new QLabel(hint, group);
         h->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                             .arg(ui::colors::TEXT_TERTIARY())
+                             .arg(ui::colors::TEXT_SECONDARY())
                              .arg(ui::fonts::TINY)
                              .arg(ui::fonts::DATA_FAMILY));
         h->setWordWrap(true);
@@ -107,7 +107,7 @@ void TradeAnalysisPanel::build_ui() {
     hhl->addStretch();
     status_label_ = new QLabel(header);
     status_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                     .arg(ui::colors::TEXT_TERTIARY())
+                                     .arg(ui::colors::TEXT_SECONDARY())
                                      .arg(ui::fonts::SMALL)
                                      .arg(ui::fonts::DATA_FAMILY));
     hhl->addWidget(status_label_);

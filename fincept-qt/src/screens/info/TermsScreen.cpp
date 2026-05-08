@@ -72,7 +72,7 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
 
     auto* subtitle = new QLabel("Open-source software under AGPL-3.0. Use at your own risk.");
     subtitle->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
+        QString("color: %1; font-size: 12px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
     subtitle->setWordWrap(true);
     vl->addWidget(subtitle);
     vl->addSpacing(12);

@@ -21,7 +21,7 @@ PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
 
     auto make_label = [&](const char* color, bool bold = false) {
         auto* lbl = new QLabel;
-        lbl->setStyleSheet(QString("color:%1; font-size:10px; font-weight:%2; letter-spacing:0.3px;")
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:%2; letter-spacing:0.3px;")
                                .arg(color)
                                .arg(bold ? 700 : 400));
         layout->addWidget(lbl);
@@ -30,7 +30,7 @@ PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
 
     auto add_divider = [&]() {
         auto* sep = new QLabel(" | ");
-        sep->setStyleSheet(QString("color:%1; font-size:10px;").arg(ui::colors::BORDER_MED()));
+        sep->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::BORDER_MED()));
         layout->addWidget(sep);
     };
 
@@ -109,7 +109,7 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
 
     double pnl = s.total_unrealized_pnl;
     pnl_label_->setText(QString("P&L %1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)));
-    pnl_label_->setStyleSheet(QString("color:%1; font-size:10px; font-weight:600;")
+    pnl_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;")
                                   .arg(pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 

@@ -1346,17 +1346,17 @@ QWidget* SettingsScreen::build_storage() {
         thl->setContentsMargins(12, 0, 12, 0);
         thl->setSpacing(8);
         auto* th1 = new QLabel("CATEGORY");
-        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th1, 1);
         auto* th2 = new QLabel("ENTRIES");
         th2->setFixedWidth(70);
         th2->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th2);
         auto* th3 = new QLabel("ACTION");
         th3->setFixedWidth(56);
         th3->setAlignment(Qt::AlignCenter);
-        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th3);
         storage_categories_->addWidget(th);
 
@@ -1427,17 +1427,17 @@ QWidget* SettingsScreen::build_storage() {
         thl->setContentsMargins(12, 0, 12, 0);
         thl->setSpacing(8);
         auto* th1 = new QLabel("STORE");
-        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th1, 1);
         auto* th2 = new QLabel("SIZE");
         th2->setFixedWidth(80);
         th2->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th2);
         auto* th3 = new QLabel("ACTION");
         th3->setFixedWidth(56);
         th3->setAlignment(Qt::AlignCenter);
-        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th3);
         bvl->addWidget(th);
 
@@ -1539,7 +1539,7 @@ QWidget* SettingsScreen::build_storage() {
         auto* hint = new QLabel("Execute SQL queries directly against terminal databases. "
                                 "Use SELECT to inspect data, or INSERT/UPDATE/DELETE to modify.");
         hint->setWordWrap(true);
-        hint->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        hint->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         bvl->addWidget(hint);
 
         // DB selector + input + execute
@@ -1573,7 +1573,7 @@ QWidget* SettingsScreen::build_storage() {
 
         // Status line
         sql_status_ = new QLabel("Ready");
-        sql_status_->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        sql_status_->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         bvl->addWidget(sql_status_);
 
         // Results area — scrollable table
@@ -1606,7 +1606,7 @@ QWidget* SettingsScreen::build_storage() {
         trhl->setContentsMargins(0, 0, 0, 0);
         trhl->setSpacing(4);
         auto* trl = new QLabel("Quick:");
-        trl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        trl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         trhl->addWidget(trl);
 
         static const QStringList QUICK_TABLES = {"chat_sessions", "news_articles", "financial_notes", "portfolios",
@@ -1700,7 +1700,7 @@ QWidget* SettingsScreen::build_storage() {
             for (int c = 0; c < cols; ++c) {
                 auto* cl = new QLabel(rec.fieldName(c));
                 cl->setStyleSheet(
-                    QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+                    QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
                 hhl->addWidget(cl, 1);
             }
             sql_results_layout_->addWidget(hdr_row);
@@ -1786,7 +1786,7 @@ QWidget* SettingsScreen::build_storage() {
         cd1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_PRIMARY()));
         cd_vl->addWidget(cd1);
         auto* cd2 = new QLabel("Delete all temporary cached data. Will be re-fetched on next access.");
-        cd2->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        cd2->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         cd_vl->addWidget(cd2);
         cr_hl->addWidget(cache_desc, 1);
         auto* cache_btn = new QPushButton("CLEAR CACHE");
@@ -1826,7 +1826,7 @@ QWidget* SettingsScreen::build_storage() {
         auto* nd2 =
             new QLabel("Permanently delete all databases, files, cache, and UI state. OS keychain is preserved.");
         nd2->setWordWrap(true);
-        nd2->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        nd2->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         nd_vl->addWidget(nd2);
         nr_hl->addWidget(nuke_desc, 1);
         auto* nuke_btn = new QPushButton("DELETE ALL");
@@ -2021,7 +2021,7 @@ QWidget* SettingsScreen::build_data_sources() {
 
         make_stat("TOTAL", total, ui::colors::CYAN());
         make_stat("ACTIVE", active, ui::colors::POSITIVE());
-        make_stat("INACTIVE", total - active, ui::colors::TEXT_DIM());
+        make_stat("INACTIVE", total - active, ui::colors::TEXT_SECONDARY());
         make_stat("PROVIDERS", providers.size(), ui::colors::AMBER());
         vl->addWidget(stat_row);
     }
@@ -2068,7 +2068,7 @@ QWidget* SettingsScreen::build_data_sources() {
 
         auto add_th = [&](const QString& text, int width = 0) {
             auto* lbl = new QLabel(text);
-            lbl->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_DIM()));
+            lbl->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
             if (width > 0) {
                 lbl->setFixedWidth(width);
                 lbl->setAlignment(Qt::AlignCenter);
@@ -2113,7 +2113,7 @@ QWidget* SettingsScreen::build_data_sources() {
                 auto* name_lbl = new QLabel(name);
                 name_lbl->setStyleSheet(
                     QString("color:%1;background:transparent;")
-                        .arg(ds.enabled ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_TERTIARY()));
+                        .arg(ds.enabled ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_SECONDARY()));
                 rhl->addWidget(name_lbl, 1);
 
                 // Type badge
@@ -2122,14 +2122,14 @@ QWidget* SettingsScreen::build_data_sources() {
                 badge->setAlignment(Qt::AlignCenter);
                 badge->setStyleSheet(
                     QString("color:%1;font-weight:700;background:%2;border:1px solid %3;")
-                        .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+                        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
                 rhl->addWidget(badge);
 
                 // Category
                 auto* cat_lbl = new QLabel(ds.category.isEmpty() ? "—" : ds.category);
                 cat_lbl->setFixedWidth(80);
                 cat_lbl->setAlignment(Qt::AlignCenter);
-                cat_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_TERTIARY()));
+                cat_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
                 rhl->addWidget(cat_lbl);
 
                 // Enable toggle
@@ -2142,7 +2142,7 @@ QWidget* SettingsScreen::build_data_sources() {
                     DataSourceRepository::instance().set_enabled(source_id, checked);
                     name_lbl->setStyleSheet(
                         QString("color:%1;background:transparent;")
-                            .arg(checked ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_TERTIARY()));
+                            .arg(checked ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_SECONDARY()));
                     LOG_INFO("DataSources", (checked ? "Enabled: " : "Disabled: ") + source_id);
                 });
                 rhl->addWidget(toggle);
@@ -2154,7 +2154,7 @@ QWidget* SettingsScreen::build_data_sources() {
                 del_btn->setStyleSheet(
                     QString("QPushButton{background:transparent;color:%1;border:none;font-weight:700;}"
                             "QPushButton:hover{color:%2;}")
-                        .arg(ui::colors::TEXT_DIM(), ui::colors::NEGATIVE()));
+                        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
                 connect(del_btn, &QPushButton::clicked, this, [this, source_id, name, row]() {
                     auto answer = QMessageBox::warning(this, "Delete Connection",
                                                        "Delete connection \"" + name + "\"?\n\nThis cannot be undone.",
@@ -2289,7 +2289,7 @@ QWidget* SettingsScreen::build_data_sources() {
         auto* note = new QLabel("For adding new connections, testing connectivity, and import/export, "
                                 "use the full Data Sources screen.");
         note->setWordWrap(true);
-        note->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_DIM()));
+        note->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         bvl->addWidget(note);
 
         static_cast<QVBoxLayout*>(panel->layout())->addWidget(body);
@@ -2763,7 +2763,7 @@ QWidget* SettingsScreen::build_security() {
     auto* audit_note = new QLabel("Recent security events (PIN setup, failed unlocks, inactivity locks).");
     audit_note->setWordWrap(true);
     audit_note->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;")
-                                  .arg(ui::colors::TEXT_DIM()));
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(audit_note);
 
     sec_audit_list_ = new QListWidget;
@@ -2918,7 +2918,7 @@ QWidget* SettingsScreen::build_profiles() {
 
         if (name == pm.active()) {
             auto* badge = new QLabel("ACTIVE");
-            badge->setStyleSheet(QString("color:%1;font-weight:700;font-size:10px;"
+            badge->setStyleSheet(QString("color:%1;font-weight:700;font-size:12px;"
                                          "background:transparent;")
                                      .arg(ui::colors::AMBER()));
             hl->addWidget(badge);
@@ -3018,7 +3018,7 @@ QWidget* SettingsScreen::build_developer() {
         "subscriber count, total publishes, and time since last publish. Refreshes "
         "once per second while this tab is visible.");
     desc->setWordWrap(true);
-    desc->setStyleSheet(QString("color:%1;font-size:11px;")
+    desc->setStyleSheet(QString("color:%1;font-size:12px;")
                             .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(desc);
 

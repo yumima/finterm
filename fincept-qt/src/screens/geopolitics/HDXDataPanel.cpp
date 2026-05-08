@@ -63,7 +63,7 @@ void HDXDataPanel::build_ui() {
                                    "padding:4px 12px; border:none; background:transparent;"
                                    "font-weight:400; }"
                                    "QPushButton:hover { color:%4; background:rgba(%5,0.04); }")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::TINY)
                                .arg(ui::fonts::DATA_FAMILY)
                                .arg(ui::colors::CYAN())
@@ -167,7 +167,7 @@ void HDXDataPanel::build_ui() {
                            .arg(ui::fonts::SMALL);
 
     auto bar_label_style = QString("color:%1; font-size:%2px; font-family:%3; font-weight:700; letter-spacing:1px;")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::TINY)
                                .arg(ui::fonts::DATA_FAMILY);
 
@@ -245,7 +245,7 @@ void HDXDataPanel::on_view_changed(int index) {
                                                     "padding:4px 12px; border:none; background:transparent;"
                                                     "font-weight:400; }"
                                                     "QPushButton:hover { color:%4; background:rgba(%5,0.04); }")
-                                                .arg(ui::colors::TEXT_TERTIARY())
+                                                .arg(ui::colors::TEXT_SECONDARY())
                                                 .arg(ui::fonts::TINY)
                                                 .arg(ui::fonts::DATA_FAMILY)
                                                 .arg(ui::colors::CYAN())

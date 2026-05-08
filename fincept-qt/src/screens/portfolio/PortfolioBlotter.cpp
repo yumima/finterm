@@ -54,7 +54,7 @@ void PortfolioBlotter::build_ui() {
     hdr->setSectionResizeMode(QHeaderView::Stretch);
 
     table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none;"
-                                  "  font-size:11px; font-family:%3; gridline-color:transparent; }"
+                                  "  font-size:12px; font-family:%3; gridline-color:transparent; }"
                                   "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %4; }"
                                   "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
                                   "QTableWidget::item:hover { background:%7; }"
@@ -71,7 +71,7 @@ void PortfolioBlotter::build_ui() {
     // is silently overridden, which is why headers stayed dim grey.
     hdr->setStyleSheet(QString("QHeaderView::section { background:%1; color:%2; border:none;"
                                "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                               "  padding:5px 8px; font-size:10px; font-weight:700;"
+                               "  padding:5px 8px; font-size:12px; font-weight:700;"
                                "  letter-spacing:0.5px; }")
                            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                                 ui::colors::AMBER(), ui::colors::BORDER_DIM()));
@@ -341,7 +341,7 @@ void PortfolioBlotter::populate_table() {
             // Pending: subtle animated-looking flat line in dim color
             QVector<double> pending(8, h.current_price > 0 ? h.current_price : 1.0);
             sparkline->set_data(pending);
-            sparkline->set_color(QColor(ui::colors::TEXT_TERTIARY()));
+            sparkline->set_color(QColor(ui::colors::TEXT_SECONDARY()));
         }
         table_->setCellWidget(r, 9, sparkline);
 
@@ -401,7 +401,7 @@ void PortfolioBlotter::on_context_menu(const QPoint& pos) {
 
     QMenu menu(this);
     menu.setStyleSheet(QString("QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
-                               "QMenu::item { padding:6px 20px 6px 12px; font-size:11px; }"
+                               "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
                                "QMenu::item:selected { background:%4; color:%5; }"
                                "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
                            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),

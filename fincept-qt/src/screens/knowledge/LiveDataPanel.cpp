@@ -103,7 +103,7 @@ void LiveDataPanel::apply_value(int row_index, double raw_value, bool ok) {
     if (!ok || raw_value == 0.0) {
         lbl->setText("n/a");
         lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
         return;
     }
     lbl->setText(format_metric(examples_[row_index].metric, raw_value));

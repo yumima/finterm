@@ -219,11 +219,11 @@ void MarginUsageWidget::on_theme_changed() {
 
 void MarginUsageWidget::apply_styles() {
     header_hint_->setStyleSheet(
-        QString("color:%1;font-size:9px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
 
     const QString row_label_css =
-        QString("color:%1;font-size:10px;background:transparent;").arg(ui::colors::TEXT_TERTIARY());
+        QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
     const QString row_value_css =
         QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
@@ -239,7 +239,7 @@ void MarginUsageWidget::apply_styles() {
 
     if (usage_pct_label_)
         usage_pct_label_->setStyleSheet(
-            QString("color:%1;font-size:10px;font-weight:600;background:transparent;padding-top:4px;")
+            QString("color:%1;font-size:12px;font-weight:600;background:transparent;padding-top:4px;")
                 .arg(ui::colors::TEXT_SECONDARY()));
 
     if (usage_bar_)

@@ -147,7 +147,7 @@ inline QString kStyle() {
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_DIM())       // %11
+        .arg(colors::TEXT_SECONDARY())       // %11
         .arg(colors::BG_HOVER())       // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
@@ -499,7 +499,7 @@ void McpServersScreen::on_install_server(int index) {
     QList<QPair<QString, QLineEdit*>> env_fields;
     if (!e.env_keys.isEmpty()) {
         auto* env_header = new QLabel("Environment Variables");
-        env_header->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(colors::TEXT_SECONDARY()));
+        env_header->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(colors::TEXT_SECONDARY()));
         form->addRow(env_header);
         for (int ki = 0; ki < e.env_keys.size(); ++ki) {
             const QString& key = e.env_keys[ki];

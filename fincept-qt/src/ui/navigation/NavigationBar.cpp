@@ -84,7 +84,7 @@ void NavigationBar::refresh_theme() {
                       .arg(colors::AMBER())         // %3
                       .arg(colors::TEXT_PRIMARY())  // %4
                       .arg(colors::POSITIVE())      // %5
-                      .arg(colors::TEXT_TERTIARY()) // %6
+                      .arg(colors::TEXT_SECONDARY()) // %6
                       .arg(colors::NEGATIVE()));    // %7
 }
 

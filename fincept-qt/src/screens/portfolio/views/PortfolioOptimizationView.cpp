@@ -36,10 +36,10 @@ static void style_table(QTableWidget* t) {
     t->setShowGrid(false);
     t->verticalHeader()->setVisible(false);
     t->horizontalHeader()->setStretchLastSection(true);
-    t->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:11px; }"
+    t->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:12px; }"
                              "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                              "QHeaderView::section { background:%4; color:%5; border:none;"
-                             "  border-bottom:2px solid %6; padding:4px 8px; font-size:9px;"
+                             "  border-bottom:2px solid %6; padding:4px 8px; font-size:12px;"
                              "  font-weight:700; letter-spacing:0.5px; }")
                          .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                               ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
@@ -56,7 +56,7 @@ static QLabel* make_placeholder(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setAlignment(Qt::AlignCenter);
     lbl->setWordWrap(true);
-    lbl->setStyleSheet(QString("color:%1; font-size:11px; padding:40px;").arg(ui::colors::TEXT_TERTIARY()));
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; padding:40px;").arg(ui::colors::TEXT_SECONDARY()));
     return lbl;
 }
 
@@ -76,7 +76,7 @@ void PortfolioOptimizationView::build_ui() {
     tabs_->setDocumentMode(true);
     tabs_->setStyleSheet(QString("QTabWidget::pane { border:0; background:%1; }"
                                  "QTabBar::tab { background:%2; color:%3; padding:6px 14px; border:0;"
-                                 "  border-bottom:2px solid transparent; font-size:9px; font-weight:700;"
+                                 "  border-bottom:2px solid transparent; font-size:12px; font-weight:700;"
                                  "  letter-spacing:0.5px; }"
                                  "QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }"
                                  "QTabBar::tab:hover { color:%5; }")
@@ -108,13 +108,13 @@ QWidget* PortfolioOptimizationView::build_optimize_tab() {
 
     auto add_combo = [&](const QString& label, const QStringList& items) -> QComboBox* {
         auto* lbl = new QLabel(label);
-        lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700;").arg(ui::colors::TEXT_TERTIARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         config->addWidget(lbl);
         auto* cb = new QComboBox;
         cb->addItems(items);
         cb->setFixedHeight(24);
         cb->setStyleSheet(QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                                  "  padding:0 8px; font-size:10px; }"
+                                  "  padding:0 8px; font-size:12px; }"
                                   "QComboBox::drop-down { border:none; }"
                                   "QComboBox QAbstractItemView { background:%1; color:%2; }")
                               .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
@@ -133,18 +133,18 @@ QWidget* PortfolioOptimizationView::build_optimize_tab() {
     run_btn_->setFixedHeight(26);
     run_btn_->setCursor(Qt::PointingHandCursor);
     run_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%5; border:none;"
-                                    "  padding:0 16px; font-size:10px; font-weight:700; }"
+                                    "  padding:0 16px; font-size:12px; font-weight:700; }"
                                     "QPushButton:hover { background:%2; }"
                                     "QPushButton:disabled { background:%3; color:%4; }")
                                 .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_RAISED(),
-                                     ui::colors::TEXT_TERTIARY(), ui::colors::BG_BASE()));
+                                     ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE()));
     connect(run_btn_, &QPushButton::clicked, this, &PortfolioOptimizationView::run_optimization);
     config->addWidget(run_btn_);
 
     layout->addLayout(config);
 
     status_label_ = new QLabel;
-    status_label_->setStyleSheet(QString("color:%1; font-size:10px;").arg(ui::colors::TEXT_TERTIARY()));
+    status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(status_label_);
 
     result_table_ = new QTableWidget;
@@ -163,7 +163,7 @@ QWidget* PortfolioOptimizationView::build_frontier_tab() {
 
     auto* title = new QLabel("EFFICIENT FRONTIER");
     title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
 
     frontier_stack_ = new QStackedWidget;
@@ -225,7 +225,7 @@ QWidget* PortfolioOptimizationView::build_strategies_tab() {
 
     auto* title = new QLabel("STRATEGY COMPARISON  (populated after optimization)");
     title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
 
     strategies_stack_ = new QStackedWidget;
@@ -250,7 +250,7 @@ QWidget* PortfolioOptimizationView::build_compare_tab() {
 
     auto* title = new QLabel("WEIGHT COMPARISON  (all methods, per symbol)");
     title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
 
     compare_stack_ = new QStackedWidget;
@@ -346,7 +346,7 @@ void PortfolioOptimizationView::run_optimization() {
     running_ = true;
     run_btn_->setEnabled(false);
     status_label_->setText("Running optimization…");
-    status_label_->setStyleSheet(QString("color:%1; font-size:10px;").arg(ui::colors::AMBER()));
+    status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::AMBER()));
 
     QJsonArray symbols_arr;
     QJsonArray weights_arr;
@@ -389,7 +389,7 @@ void PortfolioOptimizationView::run_optimization() {
                                                      .arg(ret * 100.0, 0, 'f', 1)
                                                      .arg(vol * 100.0, 0, 'f', 1)
                                                      .arg(sharpe, 0, 'f', 2));
-                    self->status_label_->setStyleSheet(QString("color:%1; font-size:10px;").arg(ui::colors::POSITIVE()));
+                    self->status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
                     self->result_table_->setRowCount(static_cast<int>(self->summary_.holdings.size()));
                     for (int r = 0; r < static_cast<int>(self->summary_.holdings.size()); ++r) {
                         const auto& h = self->summary_.holdings[r];
@@ -443,7 +443,7 @@ void PortfolioOptimizationView::run_optimization() {
                         self->status_label_->setText(
                             QString("Optimization: %1").arg(r.error));
                         self->status_label_->setStyleSheet(
-                            QString("color:%1; font-size:10px;").arg(ui::colors::NEGATIVE()));
+                            QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
                         return;
                     }
 
@@ -461,7 +461,7 @@ void PortfolioOptimizationView::run_optimization() {
                             .arg(vol * 100.0, 0, 'f', 1)
                             .arg(sharpe, 0, 'f', 2));
                     self->status_label_->setStyleSheet(
-                        QString("color:%1; font-size:10px;").arg(ui::colors::POSITIVE()));
+                        QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
 
                     // ── OPTIMIZE results table ────────────────────────────────
                     self->result_table_->setRowCount(
@@ -621,8 +621,8 @@ void PortfolioOptimizationView::update_frontier(const QJsonArray& pts) {
 
     auto* x_axis = new QValueAxis;
     x_axis->setTitleText("Volatility (%)");
-    x_axis->setTitleBrush(QColor(ui::colors::TEXT_TERTIARY()));
-    x_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x_axis->setTitleBrush(QColor(ui::colors::TEXT_SECONDARY()));
+    x_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     x_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM())));
     x_axis->setRange(std::max(0.0, min_x - 2.0), max_x + 2.0);
@@ -634,8 +634,8 @@ void PortfolioOptimizationView::update_frontier(const QJsonArray& pts) {
 
     auto* y_axis = new QValueAxis;
     y_axis->setTitleText("Expected Return (%)");
-    y_axis->setTitleBrush(QColor(ui::colors::TEXT_TERTIARY()));
-    y_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y_axis->setTitleBrush(QColor(ui::colors::TEXT_SECONDARY()));
+    y_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y_axis->setLinePen(QPen(QColor(ui::colors::BORDER_DIM())));
     y_axis->setRange(min_y - 2.0, max_y + 2.0);

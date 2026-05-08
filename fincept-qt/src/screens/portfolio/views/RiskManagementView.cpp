@@ -46,7 +46,7 @@ void RiskManagementView::build_ui() {
     tabs_->setDocumentMode(true);
     tabs_->setStyleSheet(QString("QTabWidget::pane { border:0; background:%1; }"
                                  "QTabBar::tab { background:%2; color:%3; padding:8px 18px; border:0;"
-                                 "  border-bottom:2px solid transparent; font-size:10px; font-weight:700;"
+                                 "  border-bottom:2px solid transparent; font-size:12px; font-weight:700;"
                                  "  letter-spacing:1px; }"
                                  "QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }"
                                  "QTabBar::tab:hover { color:%5; }")
@@ -69,7 +69,7 @@ void RiskManagementView::build_ui() {
     stress_layout->addWidget(stress_title);
 
     auto* stress_note = new QLabel("Estimated impact of historical and hypothetical market scenarios");
-    stress_note->setStyleSheet(QString("color:%1; font-size:9px;").arg(ui::colors::TEXT_TERTIARY()));
+    stress_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     stress_layout->addWidget(stress_note);
 
     stress_table_ = new QTableWidget;
@@ -84,10 +84,10 @@ void RiskManagementView::build_ui() {
     stress_table_->setColumnWidth(1, 240);
     stress_table_->setColumnWidth(2, 100);
     stress_table_->setColumnWidth(3, 120);
-    stress_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:11px; }"
+    stress_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:12px; }"
                                          "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                                          "QHeaderView::section { background:%4; color:%5; border:none;"
-                                         "  border-bottom:2px solid %6; padding:4px 8px; font-size:9px;"
+                                         "  border-bottom:2px solid %6; padding:4px 8px; font-size:12px;"
                                          "  font-weight:700; letter-spacing:0.5px; }")
                                      .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                                           ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
@@ -113,10 +113,10 @@ void RiskManagementView::build_ui() {
     contrib_table_->setShowGrid(false);
     contrib_table_->verticalHeader()->setVisible(false);
     contrib_table_->horizontalHeader()->setStretchLastSection(true);
-    contrib_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:11px; }"
+    contrib_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none; font-size:12px; }"
                                           "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                                           "QHeaderView::section { background:%4; color:%5; border:none;"
-                                          "  border-bottom:2px solid %6; padding:4px 8px; font-size:9px;"
+                                          "  border-bottom:2px solid %6; padding:4px 8px; font-size:12px;"
                                           "  font-weight:700; letter-spacing:0.5px; }")
                                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                                            ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
@@ -205,7 +205,7 @@ void RiskManagementView::update_overview() {
 
         auto* lbl = new QLabel(label);
         lbl->setStyleSheet(
-            QString("color:%1; font-size:8px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(lbl);
 
         auto* val = new QLabel(value);
@@ -214,7 +214,7 @@ void RiskManagementView::update_overview() {
 
         if (!sub.isEmpty()) {
             auto* s = new QLabel(sub);
-            s->setStyleSheet(QString("color:%1; font-size:8px;").arg(ui::colors::TEXT_TERTIARY()));
+            s->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
             cl->addWidget(s);
         }
 

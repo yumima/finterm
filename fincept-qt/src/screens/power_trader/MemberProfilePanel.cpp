@@ -486,7 +486,7 @@ void MemberProfilePanel::build_ui() {
         msg->setAlignment(Qt::AlignCenter);
         msg->setStyleSheet(
             QString("QLabel { color:%1; font-size:13px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         pl->addWidget(msg);
     }
     root->addWidget(placeholder_);
@@ -836,7 +836,7 @@ void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
         QStringLiteral("★ Midpoint estimates of disclosed STOCK Act ranges"), parent);
     note->setStyleSheet(
         QString("QLabel{color:%1;font-size:12px;background:transparent;padding:2px 10px;}")
-            .arg(ui::colors::TEXT_TERTIARY()));
+            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(note);
 
     // cmte_exposure_ kept as null — committee info now lives in Row 4 RIGHT
@@ -1316,14 +1316,14 @@ void MemberProfilePanel::populate_chart(
     cap->setStyleSheet(
         QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                 " letter-spacing:1.2px; background:transparent; }")
-            .arg(ui::colors::TEXT_TERTIARY()));
+            .arg(ui::colors::TEXT_SECONDARY()));
     evl->addWidget(cap);
 
     if (committees.isEmpty()) {
         auto* none = new QLabel(QStringLiteral("No committee data available"), cmte_exposure_);
         none->setStyleSheet(
             QString("QLabel { color:%1; font-size:12px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         evl->addWidget(none);
     } else {
         // Build per-committee overlap_pct from insider signals
@@ -1444,7 +1444,7 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
             auto* sig_item = new QTableWidgetItem(QString::number(sig, 'f', 0));
             sig_item->setTextAlignment(Qt::AlignCenter);
             sig_item->setForeground(QColor(h.committee_overlap
-                                           ? ui::colors::AMBER : ui::colors::TEXT_TERTIARY()));
+                                           ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
             holdings_table_->setItem(r, 3, sig_item);
         }
@@ -1604,7 +1604,7 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
         dim_lbl->setStyleSheet(
             QString("QLabel { color:%1; font-size:12px; font-weight:700;"
                     " letter-spacing:0.8px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         cvl->addWidget(dim_lbl);
 
         // Rank value
@@ -1965,7 +1965,7 @@ void MemberProfilePanel::populate_committees(
                                 committees_container_);
         none->setStyleSheet(
             QString("QLabel { color:%1; font-size:12px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         cvl->addWidget(none);
         return;
     }
@@ -2042,7 +2042,7 @@ void MemberProfilePanel::populate_committees(
         auto* sectors_lbl = new QLabel(sector_str, card);
         sectors_lbl->setStyleSheet(
             QString("QLabel { color:%1; font-size:12px; background:transparent; }")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
         card_vl->addWidget(sectors_lbl);
 
         // Progress bar for trade %

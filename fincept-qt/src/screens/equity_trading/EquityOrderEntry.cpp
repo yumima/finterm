@@ -114,7 +114,7 @@ EquityOrderEntry::EquityOrderEntry(QWidget* parent) : QWidget(parent) {
     // Brokerage info
     brokerage_label_ = new QLabel("");
     brokerage_label_->setObjectName("eqOeBrokerage");
-    brokerage_label_->setStyleSheet(QString("color: %1; font-size: 10px;").arg(colors::TEXT_TERTIARY()));
+    brokerage_label_->setStyleSheet(QString("color: %1; font-size: 10px;").arg(colors::TEXT_SECONDARY()));
     form->addWidget(brokerage_label_);
 
     form->addSpacing(2);

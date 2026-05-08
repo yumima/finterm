@@ -1565,7 +1565,7 @@ DocsScreen::DocsScreen(QWidget* parent) : QWidget(parent) {
     auto* count = new QLabel("35 TOPICS  |  9 CATEGORIES");
     count->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
                                  " font-family: 'Consolas','Courier New',monospace;")
-                             .arg(ui::colors::TEXT_TERTIARY()));
+                             .arg(ui::colors::TEXT_SECONDARY()));
     cmd_hl->addWidget(count);
 
     root->addWidget(cmd);

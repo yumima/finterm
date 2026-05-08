@@ -81,7 +81,7 @@ void NodePalette::build_ui() {
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
                                   "  height: 0; background: none;"
                                   "}")
-                              .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_DIM()));
+                              .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY()));
 
     categories_container_ = new QWidget(this);
     categories_layout_ = new QVBoxLayout(categories_container_);
@@ -139,7 +139,7 @@ void NodePalette::rebuild_categories(const QString& filter) {
 
         auto* count_label = new QLabel(QString::number(filtered.size()));
         count_label->setStyleSheet(
-            QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_SECONDARY()));
         chl->addStretch();
         chl->addWidget(count_label);
 

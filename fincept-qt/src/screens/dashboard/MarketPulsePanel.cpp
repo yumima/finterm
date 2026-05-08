@@ -202,14 +202,14 @@ void MarketPulsePanel::refresh_theme() {
                      ui::colors::POSITIVE_DIM(), ui::colors::POSITIVE()));
     if (fg_score_val_)
         fg_score_val_->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: bold; background: transparent;")
-                                         .arg(ui::colors::TEXT_TERTIARY()));
+                                         .arg(ui::colors::TEXT_SECONDARY()));
     if (fg_score_max_)
         fg_score_max_->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     if (fg_sentiment_)
         fg_sentiment_->setStyleSheet(
             QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; background: transparent;")
-                .arg(ui::colors::TEXT_TERTIARY()));
+                .arg(ui::colors::TEXT_SECONDARY()));
 
     // ── Market Breadth rows ──
     auto style_breadth = [](BreadthRow& row) {
@@ -221,7 +221,7 @@ void MarketPulsePanel::refresh_theme() {
                 QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::POSITIVE()));
         if (row.slash)
             row.slash->setStyleSheet(
-                QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+                QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         if (row.dec)
             row.dec->setStyleSheet(
                 QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::NEGATIVE()));
@@ -259,7 +259,7 @@ void MarketPulsePanel::refresh_theme() {
                 QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(sd.val_color));
         if (sd.row.chg)
             sd.row.chg->setStyleSheet(QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;")
-                                          .arg(ui::colors::TEXT_TERTIARY()));
+                                          .arg(ui::colors::TEXT_SECONDARY()));
     }
 
     // ── Market Hours rows ──
@@ -509,7 +509,7 @@ QWidget* MarketPulsePanel::build_mover_row(const QString& symbol, double change,
     if (!volume.isEmpty()) {
         auto* vol = new QLabel(QString("VOL: %1").arg(volume));
         vol->setStyleSheet(
-            QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         hl->addWidget(vol);
     }
 
@@ -594,7 +594,7 @@ QWidget* MarketPulsePanel::build_stat_row(const QString& label, const QString& v
         chg->setStyleSheet(QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;")
                                .arg(positive                 ? ui::colors::POSITIVE()
                                     : change.startsWith('-') ? ui::colors::NEGATIVE()
-                                                             : ui::colors::TEXT_TERTIARY()));
+                                                             : ui::colors::TEXT_SECONDARY()));
         hl->addWidget(chg);
     }
 

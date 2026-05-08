@@ -33,7 +33,7 @@ void PortfolioHeatmap::build_ui() {
     auto* header = new QHBoxLayout;
     auto* title = new QLabel("HOLDINGS");
     title->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
     header->addWidget(title);
     header->addStretch();
 
@@ -43,10 +43,10 @@ void PortfolioHeatmap::build_ui() {
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                                   "  font-size:9px; font-weight:700; border-radius:2px; }"
+                                   "  font-size:12px; font-weight:700; border-radius:2px; }"
                                    "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
                                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
-                               .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
                                     ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
         header->addWidget(btn);
         return btn;
@@ -102,11 +102,11 @@ void PortfolioHeatmap::build_ui() {
     auto add_detail_row = [&](QLabel*& lbl, const QString& prefix) {
         auto* row = new QHBoxLayout;
         auto* lab = new QLabel(prefix);
-        lab->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600;").arg(ui::colors::TEXT_TERTIARY()));
+        lab->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
         row->addWidget(lab);
         lbl = new QLabel("--");
         lbl->setAlignment(Qt::AlignRight);
-        lbl->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         row->addWidget(lbl);
         dp_layout->addLayout(row);
     };
@@ -125,7 +125,7 @@ void PortfolioHeatmap::build_ui() {
     // Risk gauge
     auto* risk_header = new QLabel("RISK SCORE");
     risk_header->setStyleSheet(
-        QString("color:%1; font-size:8px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(risk_header);
 
     risk_bar_ = new QWidget(this);
@@ -141,26 +141,26 @@ void PortfolioHeatmap::build_ui() {
     // Top movers
     auto* movers_header = new QLabel("TOP MOVERS");
     movers_header->setStyleSheet(
-        QString("color:%1; font-size:8px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(movers_header);
 
     top_gainer_ = new QLabel;
-    top_gainer_->setStyleSheet(QString("color:%1; font-size:10px; font-weight:600;").arg(ui::colors::POSITIVE()));
+    top_gainer_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::POSITIVE()));
     layout->addWidget(top_gainer_);
 
     top_loser_ = new QLabel;
-    top_loser_->setStyleSheet(QString("color:%1; font-size:10px; font-weight:600;").arg(ui::colors::NEGATIVE()));
+    top_loser_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::NEGATIVE()));
     layout->addWidget(top_loser_);
 
     // Quick stats
     auto add_stat = [&](QLabel*& lbl, const QString& prefix) {
         auto* row = new QHBoxLayout;
         auto* lab = new QLabel(prefix);
-        lab->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600;").arg(ui::colors::TEXT_TERTIARY()));
+        lab->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
         row->addWidget(lab);
         lbl = new QLabel("--");
         lbl->setAlignment(Qt::AlignRight);
-        lbl->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         row->addWidget(lbl);
         layout->addLayout(row);
     };
@@ -274,7 +274,7 @@ void PortfolioHeatmap::rebuild_blocks() {
 
         block->setStyleSheet(QString("QPushButton { background:rgb(%1,%2,%3); %4"
                                      "  text-align:left; padding:4px 6px; border-radius:2px;"
-                                     "  color:%6; font-size:10px; font-weight:700; }"
+                                     "  color:%6; font-size:12px; font-weight:700; }"
                                      "QPushButton:hover { border-color:%5; }")
                                  .arg(bg.red())
                                  .arg(bg.green())
@@ -319,7 +319,7 @@ void PortfolioHeatmap::rebuild_blocks() {
             // context-menu sources look identical.
             menu.setStyleSheet(QString(
                 "QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
-                "QMenu::item { padding:6px 20px 6px 12px; font-size:11px; }"
+                "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
                 "QMenu::item:selected { background:%4; color:%5; }"
                 "QMenu::item:disabled { color:%6; }"
                 "QMenu::item[data='danger'] { color:%7; }"
@@ -392,17 +392,17 @@ void PortfolioHeatmap::update_detail() {
     detail_price_->setText(fmt(h.current_price));
     detail_change_->setText(QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "").arg(fmt(h.day_change_percent)));
     detail_change_->setStyleSheet(
-        QString("color:%1; font-size:9px; font-weight:600;").arg(color(h.day_change_percent)));
+        QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.day_change_percent)));
     detail_qty_->setText(fmt(h.quantity, h.quantity == std::floor(h.quantity) ? 0 : 2));
     detail_cost_->setText(fmt(h.avg_buy_price));
     detail_mv_->setText(fmt(h.market_value));
-    detail_mv_->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600;").arg(ui::colors::WARNING()));
+    detail_mv_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::WARNING()));
     detail_pnl_->setText(QString("%1%2").arg(h.unrealized_pnl >= 0 ? "+" : "").arg(fmt(h.unrealized_pnl)));
-    detail_pnl_->setStyleSheet(QString("color:%1; font-size:9px; font-weight:600;").arg(color(h.unrealized_pnl)));
+    detail_pnl_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.unrealized_pnl)));
     detail_pnl_pct_->setText(
         QString("%1%2%").arg(h.unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(h.unrealized_pnl_percent)));
     detail_pnl_pct_->setStyleSheet(
-        QString("color:%1; font-size:9px; font-weight:600;").arg(color(h.unrealized_pnl_percent)));
+        QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.unrealized_pnl_percent)));
     detail_weight_->setText(QString("%1%").arg(fmt(h.weight, 1)));
 }
 
@@ -419,7 +419,7 @@ void PortfolioHeatmap::update_risk_gauge() {
             .arg(std::min(pct + 0.01, 1.0)));
 
     risk_value_->setText(QString::number(rs, 'f', 0));
-    risk_value_->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700;").arg(rs_color));
+    risk_value_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(rs_color));
 }
 
 void PortfolioHeatmap::update_top_movers() {

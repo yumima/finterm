@@ -16,14 +16,14 @@ QString card_title() {
 QString card_close_button() {
     return QString("QPushButton { color: %1; background: transparent; border: none; font-size: 12px; }"
                    "QPushButton:hover { color: %2; }")
-        .arg(colors::MUTED(), colors::GRAY());
+        .arg(colors::TEXT_SECONDARY(), colors::GRAY());
 }
 
 QString section_header() {
     return QString("color: %1; font-size: 12px; font-weight: bold; "
                    "background: transparent; padding: 2px 0; "
                    "border-bottom: 1px solid %2;")
-        .arg(colors::MUTED(), colors::BORDER());
+        .arg(colors::TEXT_SECONDARY(), colors::BORDER());
 }
 
 QString data_label() {
@@ -45,7 +45,7 @@ QString muted_button() {
     return QString("QPushButton { background: %1; color: %2; border: 1px solid %3; "
                    "padding: 4px 12px; font-size: 12px; }"
                    "QPushButton:hover { background: %4; color: %5; }")
-        .arg(colors::PANEL(), colors::MUTED(), colors::BORDER(), colors::BG_RAISED(), colors::GRAY());
+        .arg(colors::PANEL(), colors::TEXT_SECONDARY(), colors::BORDER(), colors::BG_RAISED(), colors::GRAY());
 }
 
 QString news_screen_styles() {
@@ -221,7 +221,7 @@ QString news_screen_styles() {
         .arg(colors::BORDER_DIM())     // %3
         .arg(colors::TEXT_PRIMARY())   // %4
         .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_TERTIARY())  // %6
+        .arg(colors::TEXT_SECONDARY())  // %6
         .arg(colors::TEXT_SECONDARY()) // %7
         .arg(colors::BG_RAISED())      // %8
         .arg(colors::ORANGE())         // %9
@@ -422,10 +422,10 @@ QString crypto_trading_styles() {
         .arg(colors::BORDER_DIM())     // %3
         .arg(colors::TEXT_PRIMARY())   // %4
         .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_TERTIARY())  // %6
+        .arg(colors::TEXT_SECONDARY())  // %6
         .arg(colors::TEXT_SECONDARY()) // %7
         .arg(colors::BG_RAISED())      // %8
-        .arg(colors::TEXT_DIM())       // %9
+        .arg(colors::TEXT_SECONDARY())       // %9
         .arg(colors::AMBER_DIM())      // %10
         .arg(colors::NEGATIVE())       // %11
         .arg(colors::AMBER())          // %12
@@ -596,10 +596,10 @@ QString equity_trading_styles() {
         .arg(colors::BORDER_DIM())     // %3
         .arg(colors::TEXT_PRIMARY())   // %4
         .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_TERTIARY())  // %6
+        .arg(colors::TEXT_SECONDARY())  // %6
         .arg(colors::TEXT_SECONDARY()) // %7
         .arg(colors::BG_RAISED())      // %8
-        .arg(colors::TEXT_DIM())       // %9
+        .arg(colors::TEXT_SECONDARY())       // %9
         .arg(colors::AMBER_DIM())      // %10
         .arg(colors::NEGATIVE())       // %11
         .arg(colors::AMBER())          // %12

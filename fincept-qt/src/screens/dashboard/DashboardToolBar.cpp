@@ -154,7 +154,7 @@ void DashboardToolBar::refresh_theme() {
             .arg(ui::colors::BORDER_DIM())     // %2
             .arg(ui::colors::BORDER_MED())     // %3
             .arg(ui::colors::AMBER())          // %4
-            .arg(ui::colors::TEXT_TERTIARY())  // %5
+            .arg(ui::colors::TEXT_SECONDARY())  // %5
             .arg(ui::colors::POSITIVE())       // %6
             .arg(ui::colors::TEXT_SECONDARY()) // %7
             .arg(ui::colors::CYAN())           // %8

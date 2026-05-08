@@ -108,7 +108,7 @@ static const QString kStyle =
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_DIM())       // %11
+        .arg(colors::TEXT_SECONDARY())       // %11
         .arg(colors::BG_HOVER())       // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
@@ -650,9 +650,9 @@ QWidget* AltInvestmentsScreen::create_right_panel() {
     verdict_badge_ = new QLabel("AWAITING ANALYSIS");
     verdict_badge_->setObjectName("altVerdictBadge");
     verdict_badge_->setAlignment(Qt::AlignCenter);
-    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; font-size:11px; font-weight:700;"
+    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; font-size:12px; font-weight:700;"
                                           " padding:4px 14px; letter-spacing:0.5px;")
-                                      .arg(colors::TEXT_DIM(), colors::BG_RAISED()));
+                                      .arg(colors::TEXT_SECONDARY(), colors::BG_RAISED()));
     val->addWidget(verdict_badge_);
 
     verdict_rating_ = new QLabel;
@@ -900,7 +900,7 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
     set_loading(true);
     verdict_badge_->setText("ANALYZING...");
     verdict_badge_->setStyleSheet(QString("color:%1; background:rgba(217,119,6,0.15);"
-                                          " font-size:11px; font-weight:700; padding:4px 14px;")
+                                          " font-size:12px; font-weight:700; padding:4px 14px;")
                                       .arg(colors::AMBER()));
     verdict_rating_->clear();
     verdict_rec_->clear();
@@ -978,7 +978,7 @@ void AltInvestmentsScreen::display_verdict(const QJsonObject& result, const QStr
     }
 
     verdict_badge_->setText(category.toUpper());
-    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; font-size:11px; font-weight:700;"
+    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; font-size:12px; font-weight:700;"
                                           " padding:4px 14px; letter-spacing:0.5px;")
                                       .arg(badge_color, badge_bg));
 
@@ -1143,7 +1143,7 @@ QString AltInvestmentsScreen::format_value(const QJsonValue& v) const {
 void AltInvestmentsScreen::display_error(const QString& error) {
     verdict_badge_->setText("ERROR");
     verdict_badge_->setStyleSheet(QString("color:%1; background:rgba(220,38,38,0.15);"
-                                          " font-size:11px; font-weight:700; padding:4px 14px;")
+                                          " font-size:12px; font-weight:700; padding:4px 14px;")
                                       .arg(colors::NEGATIVE()));
     verdict_rating_->clear();
     verdict_rec_->setText(error);

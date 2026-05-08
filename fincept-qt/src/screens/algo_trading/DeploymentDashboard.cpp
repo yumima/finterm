@@ -71,7 +71,7 @@ static QWidget* build_stat_card(const QString& label, const QString& value, cons
     auto* lbl = new QLabel(label, card);
     lbl->setStyleSheet(QString("color: %1; font-size: %2px; font-weight: 700; letter-spacing: 0.5px; %3"
                                " background: transparent; border: none;")
-                           .arg(fincept::ui::colors::TEXT_TERTIARY())
+                           .arg(fincept::ui::colors::TEXT_SECONDARY())
                            .arg(fincept::ui::fonts::TINY)
                            .arg(kMonoFont()));
     vl->addWidget(lbl);
@@ -173,7 +173,7 @@ QWidget* DeploymentDashboard::build_deployment_card(const AlgoDeployment& d, QWi
         ml->setSpacing(0);
         auto* lbl = new QLabel(label, w);
         lbl->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                               .arg(fincept::ui::colors::TEXT_TERTIARY())
+                               .arg(fincept::ui::colors::TEXT_SECONDARY())
                                .arg(fincept::ui::fonts::TINY)
                                .arg(kMonoFont()));
         auto* val = new QLabel(value, w);
@@ -372,7 +372,7 @@ void DeploymentDashboard::build_ui() {
         eq_hint->setAlignment(Qt::AlignCenter);
         eq_hint->setStyleSheet(
             QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                .arg(fincept::ui::colors::TEXT_TERTIARY())
+                .arg(fincept::ui::colors::TEXT_SECONDARY())
                 .arg(fincept::ui::fonts::SMALL)
                 .arg(kMonoFont()));
         eq_vl->addWidget(eq_hint);
@@ -427,7 +427,7 @@ void DeploymentDashboard::build_ui() {
     // Status label
     status_label_ = new QLabel("No deployments loaded.", content);
     status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                     .arg(fincept::ui::colors::TEXT_TERTIARY())
+                                     .arg(fincept::ui::colors::TEXT_SECONDARY())
                                      .arg(fincept::ui::fonts::SMALL)
                                      .arg(kMonoFont()));
     vl->addWidget(status_label_);

@@ -76,7 +76,7 @@ CalculatorPanel::CalculatorPanel(const Calculator& calc, QWidget* parent) : QWid
     rl->setFixedWidth(120);
     rl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; font-weight: bold;"
                               " letter-spacing: 0.5px; %2")
-                          .arg(ui::colors::TEXT_TERTIARY(), MONO));
+                          .arg(ui::colors::TEXT_SECONDARY(), MONO));
     result_row->addWidget(rl);
     result_label_ = new QLabel("—", this);
     result_label_->setStyleSheet(QString("color: %1; background: transparent; font-size: 14px; font-weight: bold; %2")

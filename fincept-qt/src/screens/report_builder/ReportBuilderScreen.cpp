@@ -693,7 +693,7 @@ void ReportBuilderScreen::show_recent_dialog() {
 
     auto* vl = new QVBoxLayout(dlg);
     auto* lbl = new QLabel("Select a report to open:");
-    lbl->setStyleSheet(QString("color: %1;").arg(ui::colors::MUTED()));
+    lbl->setStyleSheet(QString("color: %1;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
 
     auto* list = new QListWidget;
@@ -801,7 +801,7 @@ void ReportBuilderScreen::show_template_dialog() {
     lvl->setSpacing(6);
 
     auto* pick_lbl = new QLabel("Choose a template:");
-    pick_lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold;").arg(ui::colors::MUTED()));
+    pick_lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold;").arg(ui::colors::TEXT_SECONDARY()));
     lvl->addWidget(pick_lbl);
 
     auto* list = new QListWidget;
@@ -967,7 +967,7 @@ void ReportBuilderScreen::show_metadata_dialog() {
 
     auto* hf_lbl = new QLabel("HEADER / FOOTER");
     hf_lbl->setStyleSheet(
-        QString("color: %1; font-size: 11px; font-weight: bold; padding-top: 10px;").arg(ui::colors::MUTED()));
+        QString("color: %1; font-size: 11px; font-weight: bold; padding-top: 10px;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(hf_lbl);
 
     auto* hf_form = new QFormLayout;

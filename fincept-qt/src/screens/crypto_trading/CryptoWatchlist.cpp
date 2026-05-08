@@ -20,7 +20,7 @@ inline QColor kColorPrimary() {
     return QColor(colors::TEXT_PRIMARY());
 }
 inline QColor kColorDim() {
-    return QColor(colors::TEXT_DIM());
+    return QColor(colors::TEXT_SECONDARY());
 }
 inline QColor kColorSecondary() {
     return QColor(colors::TEXT_SECONDARY());

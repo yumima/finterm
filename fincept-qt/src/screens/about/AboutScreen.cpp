@@ -34,7 +34,7 @@ static QString BODY() {
 static QString MUTED() {
     return QString("color: %1; font-size: 12px; background: transparent; "
                    "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_TERTIARY());
+        .arg(ui::colors::TEXT_SECONDARY());
 }
 
 static QString LINK_STYLE() {
@@ -169,7 +169,7 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         foot->setStyleSheet(QString("color: %1; font-size: 11px; background: %2; "
                                     "padding: 6px 14px; border-top: 1px solid %3; "
                                     "font-family: 'Consolas','Courier New',monospace;")
-                                .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
         pvl->addWidget(foot);
 
         vl->addWidget(panel);

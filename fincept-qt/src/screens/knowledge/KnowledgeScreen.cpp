@@ -43,7 +43,7 @@ QString search_ss() {
 
 QString small_label_ss() {
     return QString("color: %1; background: transparent; font-size: 11px; %2")
-        .arg(ui::colors::TEXT_TERTIARY(), MONO);
+        .arg(ui::colors::TEXT_SECONDARY(), MONO);
 }
 
 QString resolve_root() {
@@ -126,9 +126,9 @@ void KnowledgeScreen::build_layout() {
     recent_hl_->setContentsMargins(14, 4, 14, 4);
     recent_hl_->setSpacing(6);
     auto* recent_lbl = new QLabel("RECENT:", recent_bar_);
-    recent_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;"
+    recent_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                       "letter-spacing:1px;background:transparent;")
-                                  .arg(ui::colors::TEXT_TERTIARY()));
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     recent_hl_->addWidget(recent_lbl);
     recent_hl_->addStretch();
     recent_bar_->setVisible(false); // hidden until there's something to show
@@ -314,7 +314,7 @@ void KnowledgeScreen::update_recent_bar() {
         chip->setFlat(true);
         chip->setCursor(Qt::PointingHandCursor);
         chip->setStyleSheet(
-            QString("QPushButton{color:%1;font-size:10px;background:%2;border:1px solid %3;"
+            QString("QPushButton{color:%1;font-size:12px;background:%2;border:1px solid %3;"
                     "border-radius:10px;padding:1px 8px;}"
                     "QPushButton:hover{border-color:%4;color:%4;}")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),

@@ -99,7 +99,7 @@ void EiaPanel::build_controls(QHBoxLayout* thl) {
 
     apikey_notice_ = new QLabel("No API key needed");
     apikey_notice_->setStyleSheet(
-        QString("color:%1; font-size:9px; background:transparent;").arg(ui::colors::POSITIVE()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::POSITIVE()));
 
     thl->addWidget(make_lbl("SOURCE"));
     thl->addWidget(source_combo_);
@@ -116,7 +116,7 @@ void EiaPanel::on_source_changed(int index) {
             category_combo_->addItem(c.first, c.second);
         apikey_notice_->setText("No API key needed");
         apikey_notice_->setStyleSheet(
-            QString("color:%1; font-size:9px; background:transparent;").arg(ui::colors::POSITIVE()));
+            QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::POSITIVE()));
     } else {
         // STEO
         for (const auto& t : kSteoTables)

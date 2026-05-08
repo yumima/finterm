@@ -90,7 +90,7 @@ ExposurePanel::ExposurePanel(const KnowledgeEntry& entry, QWidget* parent) : QWi
 
     status_ = new QLabel(QString("Checking your portfolio…"), this);
     status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
     status_->setWordWrap(true);
     root_->addWidget(status_);
 

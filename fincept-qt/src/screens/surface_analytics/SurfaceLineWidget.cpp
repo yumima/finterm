@@ -102,7 +102,7 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
     p.fillRect(rect(), QColor(colors::BG_BASE()));
 
     if (series_.empty()) {
-        p.setPen(QColor(colors::TEXT_DIM()));
+        p.setPen(QColor(colors::TEXT_SECONDARY()));
         p.drawText(rect(), Qt::AlignCenter, "No data");
         return;
     }
@@ -114,7 +114,7 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
     p.drawRect(plot);
 
     // ── Y gridlines + tick labels (5 ticks) ─────────────────────────────────
-    p.setPen(QColor(colors::TEXT_DIM()));
+    p.setPen(QColor(colors::TEXT_SECONDARY()));
     for (int i = 0; i <= 4; ++i) {
         float frac = i / 4.0f;
         float v = y_min_ + frac * (y_max_ - y_min_);
@@ -122,7 +122,7 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
         QPen grid(QColor(colors::BORDER_DIM()), 1, Qt::DotLine);
         p.setPen(grid);
         p.drawLine(QPointF(plot.left(), py), QPointF(plot.right(), py));
-        p.setPen(QColor(colors::TEXT_DIM()));
+        p.setPen(QColor(colors::TEXT_SECONDARY()));
         p.drawText(QRectF(0, py - 8, 55, 16), Qt::AlignRight | Qt::AlignVCenter,
                    QString::number(v, 'f', 2));
     }
@@ -141,7 +141,7 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
             float v = x_min_ + frac * (x_max_ - x_min_);
             label = QString::number(v, 'f', 1);
         }
-        p.setPen(QColor(colors::TEXT_DIM()));
+        p.setPen(QColor(colors::TEXT_SECONDARY()));
         p.drawText(QRectF(px - 40, plot.bottom() + 4, 80, 16), Qt::AlignCenter, label);
     }
 

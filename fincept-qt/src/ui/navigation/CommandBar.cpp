@@ -730,7 +730,7 @@ void CommandBar::on_text_changed(const QString& text) {
             rl->setContentsMargins(10, 6, 10, 6);
             auto* hint = new QLabel(QString("Type a symbol or name to search %1s...").arg(active_asset_type_));
             hint->setStyleSheet(
-                QString("color:%1;font-size:11px;font-family:'Consolas',monospace;background:transparent;")
+                QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                     .arg(colors::TEXT_TERTIARY.get()));
             rl->addWidget(hint);
             item->setSizeHint(QSize(0, 30));
@@ -822,7 +822,7 @@ void CommandBar::on_text_changed(const QString& text) {
                     hl2->setContentsMargins(10, 6, 10, 6);
                     auto* lbl = new QLabel(QString("Press Enter to close all except %1")
                                                .arg(resolve_screen_id(first_token).toUpper().replace("_", " ")));
-                    lbl->setStyleSheet(QString("color:%1;font-size:11px;"
+                    lbl->setStyleSheet(QString("color:%1;font-size:12px;"
                                                "font-family:'Consolas',monospace;background:transparent;")
                                            .arg(colors::AMBER.get()));
                     hl2->addWidget(lbl);
@@ -886,7 +886,7 @@ void CommandBar::on_text_changed(const QString& text) {
         hl->setSpacing(6);
 
         auto* alias_lbl = new QLabel(cmd.aliases.first().toUpper());
-        alias_lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;"
+        alias_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                          "font-family:'Consolas',monospace;background:transparent;")
                                      .arg(colors::TEXT_PRIMARY.get()));
         alias_lbl->setFixedWidth(72);
@@ -896,7 +896,7 @@ void CommandBar::on_text_changed(const QString& text) {
             QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_TERTIARY.get()));
 
         auto* name_lbl = new QLabel(cmd.name);
-        name_lbl->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;"
+        name_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;"
                                         "font-family:'Consolas',monospace;")
                                     .arg(colors::TEXT_SECONDARY.get()));
 
@@ -906,7 +906,7 @@ void CommandBar::on_text_changed(const QString& text) {
 
         if (!cmd.shortcut.isEmpty()) {
             auto* sc_lbl = new QLabel(cmd.shortcut);
-            sc_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-family:'Consolas',monospace;"
+            sc_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas',monospace;"
                                           "background:transparent;")
                                       .arg(colors::TEXT_DIM.get()));
             hl->addWidget(sc_lbl);
@@ -1142,7 +1142,7 @@ void CommandBar::show_slash_suggestions(const QString& partial) {
             QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_TERTIARY.get()));
 
         auto* desc_lbl = new QLabel(at.description);
-        desc_lbl->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;"
+        desc_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;"
                                         "font-family:'Consolas',monospace;")
                                     .arg(colors::TEXT_SECONDARY.get()));
 
@@ -1213,7 +1213,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(10, 6, 10, 6);
         auto* lbl = new QLabel("No results found");
-        lbl->setStyleSheet(QString("color:%1;font-size:11px;font-family:'Consolas',monospace;background:transparent;")
+        lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                                .arg(colors::TEXT_TERTIARY.get()));
         rl->addWidget(lbl);
         item->setSizeHint(QSize(0, 30));
@@ -1254,7 +1254,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
         sym_lbl->setFixedWidth(110);
 
         auto* name_lbl = new QLabel(name);
-        name_lbl->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;"
+        name_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;"
                                         "font-family:'Consolas',monospace;")
                                     .arg(colors::TEXT_SECONDARY.get()));
         name_lbl->setMaximumWidth(200);
@@ -1264,7 +1264,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
 
         if (!exchange.isEmpty()) {
             auto* exch_lbl = new QLabel(exchange);
-            exch_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-family:'Consolas',monospace;"
+            exch_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas',monospace;"
                                             "background:transparent;")
                                         .arg(colors::TEXT_TERTIARY.get()));
             hl->addWidget(exch_lbl);
@@ -1272,7 +1272,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
 
         // Type badge
         auto* type_lbl = new QLabel(type.toUpper());
-        type_lbl->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;"
+        type_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                         "font-family:'Consolas',monospace;background:%2;"
                                         "padding:1px 4px;border-radius:2px;")
                                     .arg(colors::AMBER.get())
@@ -1334,7 +1334,7 @@ void CommandBar::show_dock_verb_suggestions(const QString& primary_id) {
         hl->setSpacing(8);
 
         auto* verb_lbl = new QLabel(v.verb.toUpper());
-        verb_lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;"
+        verb_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                         "font-family:'Consolas',monospace;background:transparent;")
                                     .arg(colors::AMBER.get()));
         verb_lbl->setFixedWidth(64);
@@ -1344,7 +1344,7 @@ void CommandBar::show_dock_verb_suggestions(const QString& primary_id) {
 
         auto* hint_lbl = new QLabel(v.hint);
         hint_lbl->setStyleSheet(
-            QString("color:%1;font-size:11px;font-family:'Consolas',monospace;background:transparent;")
+            QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                 .arg(colors::TEXT_SECONDARY.get()));
 
         hl->addWidget(verb_lbl);
@@ -1372,7 +1372,7 @@ void CommandBar::show_dock_secondary_suggestions(const QString& verb, const QStr
         auto* hl = new QHBoxLayout(row);
         hl->setContentsMargins(10, 4, 10, 4);
         auto* lbl = new QLabel(QString("%1 — pick a screen:").arg(verb.toUpper()));
-        lbl->setStyleSheet(QString("color:%1;font-size:10px;font-family:'Consolas',monospace;background:transparent;")
+        lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                                .arg(colors::AMBER.get()));
         hl->addWidget(lbl);
         item->setSizeHint(QSize(0, 24));
@@ -1392,7 +1392,7 @@ void CommandBar::show_dock_secondary_suggestions(const QString& verb, const QStr
         hl->setSpacing(6);
 
         auto* alias_lbl = new QLabel(cmd.aliases.first().toUpper());
-        alias_lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;"
+        alias_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                          "font-family:'Consolas',monospace;background:transparent;")
                                      .arg(colors::TEXT_PRIMARY.get()));
         alias_lbl->setFixedWidth(72);
@@ -1402,7 +1402,7 @@ void CommandBar::show_dock_secondary_suggestions(const QString& verb, const QStr
 
         auto* name_lbl = new QLabel(cmd.name);
         name_lbl->setStyleSheet(
-            QString("color:%1;font-size:11px;font-family:'Consolas',monospace;background:transparent;")
+            QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                 .arg(colors::TEXT_SECONDARY.get()));
 
         hl->addWidget(alias_lbl);

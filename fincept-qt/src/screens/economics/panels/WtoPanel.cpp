@@ -124,7 +124,7 @@ void WtoPanel::on_section_changed(int index) {
     } else {
         apikey_notice_->setText("Free — no API key");
         apikey_notice_->setStyleSheet(
-            QString("color:%1; font-size:9px; background:transparent;").arg(ui::colors::POSITIVE()));
+            QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::POSITIVE()));
         reporter_input_->setPlaceholderText("Member code (e.g. US, CN)");
     }
 }

@@ -27,7 +27,7 @@ QString chip_ss() {
                    "QPushButton:hover { color: %5; border-color: %5; background: %6; }"
                    "QPushButton:disabled { color: %7; border-color: %3; }")
         .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::ACCENT_BG(), ui::colors::TEXT_DIM());
+             ui::colors::AMBER(), ui::colors::ACCENT_BG(), ui::colors::TEXT_SECONDARY());
 }
 
 QString thread_view_ss() {
@@ -47,7 +47,7 @@ QString input_ss() {
                    "QLineEdit:focus { border-color: %5; }"
                    "QLineEdit:disabled { color: %6; }")
         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::TEXT_DIM());
+             ui::colors::AMBER(), ui::colors::TEXT_SECONDARY());
 }
 
 } // namespace
@@ -68,7 +68,7 @@ AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent) : QWidg
     // Status header with model + entry context. Always visible at top.
     status_ = new QLabel("", this);
     status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO));
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
     status_->setWordWrap(true);
     vl->addWidget(status_);
 
@@ -90,7 +90,7 @@ AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent) : QWidg
                                      "QPushButton:disabled { color: %7; }")
                                  .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(),
                                       ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
-                                      ui::colors::ACCENT_BG(), ui::colors::TEXT_DIM()));
+                                      ui::colors::ACCENT_BG(), ui::colors::TEXT_SECONDARY()));
     row->addWidget(send_btn_);
     vl->addLayout(row);
 
@@ -246,7 +246,7 @@ void AITutorPanel::redraw_thread() {
     html.reserve(thread_.size() * 200);
     const QString user_color = ui::colors::CYAN();
     const QString asst_color = ui::colors::TEXT_PRIMARY();
-    const QString role_color = ui::colors::TEXT_TERTIARY();
+    const QString role_color = ui::colors::TEXT_SECONDARY();
 
     for (const auto& m : thread_) {
         const bool is_user = (m.role == "user");
@@ -254,16 +254,16 @@ void AITutorPanel::redraw_thread() {
         const QString body_color = is_user ? user_color : asst_color;
         QString safe = m.content.toHtmlEscaped().replace('\n', "<br>");
         html += QString("<div style='margin-bottom:10px;'>"
-                        "<span style='color:%1; font-size:9px; font-weight:bold; letter-spacing:1px;'>%2</span><br>"
+                        "<span style='color:%1; font-size:12px; font-weight:bold; letter-spacing:1px;'>%2</span><br>"
                         "<span style='color:%3;'>%4</span>"
                         "</div>")
                     .arg(role_color, role_label, body_color, safe);
     }
     if (thread_.isEmpty()) {
-        html = QString("<div style='color:%1; font-size:11px;'>"
+        html = QString("<div style='color:%1; font-size:12px;'>"
                        "Type a question above, or click <b>Example</b> / <b>Quiz me</b> / "
                        "<b>Apply to portfolio</b> to start.</div>")
-                   .arg(ui::colors::TEXT_DIM());
+                   .arg(ui::colors::TEXT_SECONDARY());
     }
     thread_view_->setHtml(html);
     auto* sb = thread_view_->verticalScrollBar();

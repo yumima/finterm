@@ -76,7 +76,7 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
 
     // Node ID (truncated)
     auto* id_lbl = new QLabel(result.node_id.left(8) + "…");
-    id_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_TERTIARY()));
+    id_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
     id_lbl->setToolTip(result.node_id);
     hl->addWidget(id_lbl);
 
@@ -84,7 +84,7 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
 
     // Duration
     auto* dur_lbl = new QLabel(format_duration(result.duration_ms));
-    dur_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_TERTIARY()));
+    dur_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(dur_lbl);
 
     vl->addWidget(header_row);
@@ -121,7 +121,7 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
             if (obj.contains("exec_ms")) {
                 auto* meta = new QLabel(QString("Agent ran in %1ms").arg(obj.value("exec_ms").toInt()));
                 meta->setStyleSheet(
-                    QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_TERTIARY()));
+                    QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
                 vl->addWidget(meta);
             }
         }
@@ -225,7 +225,7 @@ void ExecutionResultsPanel::build_ui() {
     // Node counter badge
     node_counter_ = new QLabel("");
     node_counter_->setStyleSheet(
-        QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(node_counter_);
 
     hl->addStretch();
@@ -234,7 +234,7 @@ void ExecutionResultsPanel::build_ui() {
     status_label_ = new QLabel("IDLE");
     status_label_->setStyleSheet(QString("color: %1; font-family: Consolas;"
                                          " font-size: 10px; font-weight: bold;")
-                                     .arg(ui::colors::TEXT_TERTIARY()));
+                                     .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(status_label_);
 
     // Separator
@@ -249,7 +249,7 @@ void ExecutionResultsPanel::build_ui() {
     clear_btn_->setStyleSheet(QString("QPushButton { background: transparent; color: %1;"
                                       "  border: none; font-family: Consolas; font-size: 10px; }"
                                       "QPushButton:hover { color: %2; }")
-                                  .arg(ui::colors::TEXT_TERTIARY(), ui::colors::TEXT_PRIMARY()));
+                                  .arg(ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_PRIMARY()));
     connect(clear_btn_, &QPushButton::clicked, this, &ExecutionResultsPanel::clear);
     hl->addWidget(clear_btn_);
 
@@ -259,7 +259,7 @@ void ExecutionResultsPanel::build_ui() {
     copy_btn_->setStyleSheet(QString("QPushButton { background: transparent; color: %1;"
                                      "  border: none; font-family: Consolas; font-size: 10px; }"
                                      "QPushButton:hover { color: %2; }")
-                                 .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER()));
+                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     copy_btn_->setToolTip("Copy all results to clipboard");
     connect(copy_btn_, &QPushButton::clicked, this, [this]() {
         QGuiApplication::clipboard()->setText(copy_buffer_);
@@ -272,7 +272,7 @@ void ExecutionResultsPanel::build_ui() {
             copy_btn_->setStyleSheet(QString("QPushButton { background: transparent; color: %1;"
                                              "  border: none; font-family: Consolas; font-size: 10px; }"
                                              "QPushButton:hover { color: %2; }")
-                                         .arg(ui::colors::TEXT_TERTIARY(), ui::colors::AMBER()));
+                                         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
         });
     });
     hl->addWidget(copy_btn_);
@@ -324,7 +324,7 @@ void ExecutionResultsPanel::clear() {
     status_label_->setText("IDLE");
     status_label_->setStyleSheet(QString("color: %1; font-family: Consolas;"
                                          " font-size: 10px; font-weight: bold;")
-                                     .arg(ui::colors::TEXT_TERTIARY()));
+                                     .arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void ExecutionResultsPanel::set_started(const QString& workflow_id) {

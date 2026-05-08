@@ -102,7 +102,7 @@ void StockQuoteWidget::apply_styles() {
         cell->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : stat_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : stat_values_)
         val->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;")
                                .arg(ui::colors::TEXT_PRIMARY()));

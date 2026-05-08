@@ -123,11 +123,11 @@ MarketSentimentWidget::MarketSentimentWidget(QWidget* parent) : BaseWidget("MARK
 void MarketSentimentWidget::apply_styles() {
     banner_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     arrow_label_->setStyleSheet(
-        QString("font-size: 18px; background: transparent; color: %1;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("font-size: 18px; background: transparent; color: %1;").arg(ui::colors::TEXT_SECONDARY()));
     score_label_->setStyleSheet(QString("color: %1; font-size: 24px; font-weight: bold; background: transparent;")
-                                    .arg(ui::colors::TEXT_TERTIARY()));
+                                    .arg(ui::colors::TEXT_SECONDARY()));
     verdict_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                      .arg(ui::colors::TEXT_TERTIARY()));
+                                      .arg(ui::colors::TEXT_SECONDARY()));
 
     bull_bar_->setStyleSheet(QString("background: %1; border-radius: 0;").arg(ui::colors::POSITIVE()));
     neutral_bar_->setStyleSheet(QString("background: %1; border-radius: 0;").arg(ui::colors::TEXT_TERTIARY()));
@@ -136,17 +136,17 @@ void MarketSentimentWidget::apply_styles() {
     bull_label_->setStyleSheet(
         QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::POSITIVE()));
     neutral_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     bear_label_->setStyleSheet(
         QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::NEGATIVE()));
 
     separator_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
     vix_title_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                        .arg(ui::colors::TEXT_TERTIARY()));
+                                        .arg(ui::colors::TEXT_SECONDARY()));
     breadth_title_label_->setStyleSheet(
         QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+            .arg(ui::colors::TEXT_SECONDARY()));
     vix_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
                                   .arg(ui::colors::TEXT_PRIMARY()));
     breadth_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")

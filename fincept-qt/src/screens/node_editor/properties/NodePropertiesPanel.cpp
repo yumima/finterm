@@ -32,7 +32,7 @@ void NodePropertiesPanel::build_ui() {
     auto* empty_label = new QLabel("Select a node\nto edit properties");
     empty_label->setAlignment(Qt::AlignCenter);
     empty_label->setStyleSheet(
-        QString("color: %1; font-family: Consolas; font-size: 12px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-family: Consolas; font-size: 12px;").arg(ui::colors::TEXT_SECONDARY()));
     el->addWidget(empty_label);
 
     // ── Editor page (populated dynamically) ────────────────────────
@@ -54,7 +54,7 @@ void NodePropertiesPanel::build_ui() {
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
                                   "  height: 0; background: none;"
                                   "}")
-                              .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_DIM()));
+                              .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY()));
 
     auto* scroll_content = new QWidget(editor_page_);
     editor_layout_ = new QVBoxLayout(scroll_content);
@@ -165,7 +165,7 @@ void NodePropertiesPanel::build_editor(const NodeDef& node, const NodeTypeDef& t
     // ── Type info ──────────────────────────────────────────────────
     auto* type_label = new QLabel(QString("%1  |  %2").arg(type_def.category, type_def.type_id));
     type_label->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 10px; padding: 0 0 6px 0;")
-                                  .arg(ui::colors::TEXT_TERTIARY()));
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     editor_layout_->insertWidget(pos++, type_label);
 
     // ── Separator ──────────────────────────────────────────────────

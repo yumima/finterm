@@ -168,15 +168,15 @@ void FeeDiscountPanel::apply_theme() {
     const QString ss = QStringLiteral(
         "QWidget#feeDiscountPanel { background:%1; }"
         "QWidget#feeDiscountHead { background:%2; border-bottom:1px solid %3; }"
-        "QLabel#feeDiscountTitle { color:%4; font-family:%5; font-size:11px;"
+        "QLabel#feeDiscountTitle { color:%4; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
-        "QLabel#feeDiscountHeadStatus { color:%6; font-family:%5; font-size:10px;"
+        "QLabel#feeDiscountHeadStatus { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
-        "QLabel#feeDiscountHeadStatusOk { color:%7; font-family:%5; font-size:10px;"
+        "QLabel#feeDiscountHeadStatusOk { color:%7; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
         "QWidget#feeDiscountBody { background:%1; }"
 
-        "QLabel#feeDiscountCaption { color:%6; font-family:%5; font-size:9px;"
+        "QLabel#feeDiscountCaption { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
         "QLabel#feeDiscountValue { color:%8; font-family:%5; font-size:14px;"
         "  font-weight:600; background:transparent; }"
@@ -186,7 +186,7 @@ void FeeDiscountPanel::apply_theme() {
         "  background:transparent; }"
         "QLabel#feeDiscountSavings { color:%4; font-family:%5; font-size:14px;"
         "  font-weight:700; background:transparent; }"
-        "QLabel#feeDiscountHint { color:%6; font-family:%5; font-size:11px;"
+        "QLabel#feeDiscountHint { color:%6; font-family:%5; font-size:12px;"
         "  background:transparent; }"
 
         "QProgressBar#feeDiscountProgress { background:%2; border:1px solid %3;"

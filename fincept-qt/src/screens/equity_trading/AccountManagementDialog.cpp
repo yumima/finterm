@@ -134,7 +134,7 @@ void AccountManagementDialog::setup_ui() {
     auto* empty_layout = new QVBoxLayout(empty_page_);
     auto* empty_label = new QLabel("Select an account to configure credentials");
     empty_label->setAlignment(Qt::AlignCenter);
-    empty_label->setStyleSheet(QString("color: %1; font-size: 12px;").arg(colors::TEXT_TERTIARY()));
+    empty_label->setStyleSheet(QString("color: %1; font-size: 12px;").arg(colors::TEXT_SECONDARY()));
     empty_layout->addWidget(empty_label);
     right_stack_->addWidget(empty_page_);
 
@@ -576,7 +576,7 @@ void AccountManagementDialog::build_zerodha_form() {
         l->setWordWrap(true);
         l->setTextFormat(Qt::RichText);
         l->setOpenExternalLinks(true);
-        l->setStyleSheet(QString("color:%1;font-size:11px;").arg(colors::TEXT_SECONDARY()));
+        l->setStyleSheet(QString("color:%1;font-size:12px;").arg(colors::TEXT_SECONDARY()));
         setup->addWidget(l);
     };
     add_step("1. Create a Kite Connect app at <a href='https://developers.kite.trade/apps'>developers.kite.trade/apps</a>.");
@@ -614,7 +614,7 @@ void AccountManagementDialog::build_zerodha_form() {
         lay->addWidget(out);
         if (!hint.isEmpty()) {
             auto* h = new QLabel(hint);
-            h->setStyleSheet(QString("color:%1;font-size:10px;margin-bottom:4px;")
+            h->setStyleSheet(QString("color:%1;font-size:12px;margin-bottom:4px;")
                                  .arg(colors::TEXT_SECONDARY()));
             lay->addWidget(h);
         }
@@ -648,7 +648,7 @@ void AccountManagementDialog::build_zerodha_form() {
     bv->addWidget(z_browser_btn_);
     z_manual_toggle_ = new QPushButton("Redirect didn't work? Paste request_token manually");
     z_manual_toggle_->setStyleSheet(QString("text-align:left;background:transparent;color:%1;"
-                                            "border:none;padding:4px 0;font-size:11px;")
+                                            "border:none;padding:4px 0;font-size:12px;")
                                         .arg(colors::TEXT_SECONDARY()));
     bv->addWidget(z_manual_toggle_);
     z_manual_panel_ = new QWidget;

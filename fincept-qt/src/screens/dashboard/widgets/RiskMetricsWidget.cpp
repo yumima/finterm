@@ -128,13 +128,13 @@ RiskMetricsWidget::RiskMetricsWidget(QWidget* parent) : BaseWidget("RISK METRICS
 void RiskMetricsWidget::apply_styles() {
     vix_card_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     vix_header_lbl_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                       .arg(ui::colors::TEXT_TERTIARY()));
+                                       .arg(ui::colors::TEXT_SECONDARY()));
     vix_regime_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY()));
+                                   .arg(ui::colors::TEXT_SECONDARY()));
     vix_value_->setStyleSheet(QString("color: %1; font-size: 22px; font-weight: bold; background: transparent;")
-                                  .arg(ui::colors::TEXT_TERTIARY()));
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     vix_bar_fill_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     // VIX gradient bar: green → yellow-green → amber → orange → red (theme-aware)
     if (vix_bar_segments_.size() == 5) {
@@ -154,17 +154,17 @@ void RiskMetricsWidget::apply_styles() {
     sep2_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
     stocks_hdr_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY()));
+                                   .arg(ui::colors::TEXT_SECONDARY()));
     corr_hdr_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                 .arg(ui::colors::TEXT_TERTIARY()));
+                                 .arg(ui::colors::TEXT_SECONDARY()));
 
     for (const auto& sr : stock_rows_) {
         sr.symbol->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
                                      .arg(ui::colors::TEXT_PRIMARY()));
         sr.chg_pct->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
-                                      .arg(ui::colors::TEXT_TERTIARY()));
+                                      .arg(ui::colors::TEXT_SECONDARY()));
         sr.hi_lo->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     }
 
     for (auto* lbl : spread_labels_)

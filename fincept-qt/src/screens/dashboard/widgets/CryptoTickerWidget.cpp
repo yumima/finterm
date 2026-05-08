@@ -83,8 +83,8 @@ void CryptoTickerWidget::build_rows() {
 
     auto* hdr = new QLabel(exchange_.toUpper());
     hdr->setStyleSheet(
-        QString("color:%1;font-size:9px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(hdr);
 
     auto* grid = new QGridLayout();
@@ -152,7 +152,7 @@ void CryptoTickerWidget::on_ticker(const QString& pair, const fincept::trading::
     r.change->setText(QString("%1%2%").arg(sign).arg(t.percentage, 0, 'f', 2));
     const QColor col = t.percentage >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
     r.change->setStyleSheet(
-        QString("color:%1;font-size:11px;font-weight:600;background:transparent;").arg(col.name()));
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
     set_loading(false);
 }
 
@@ -199,14 +199,14 @@ void CryptoTickerWidget::on_theme_changed() {
 
 void CryptoTickerWidget::apply_styles() {
     const QString sym_css =
-        QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
     const QString price_css =
-        QString("color:%1;font-size:11px;font-weight:600;background:transparent;")
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
     const QString chg_css =
-        QString("color:%1;font-size:11px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_TERTIARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY());
     for (auto it = rows_.begin(); it != rows_.end(); ++it) {
         if (it->symbol)
             it->symbol->setStyleSheet(sym_css);

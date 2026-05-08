@@ -157,7 +157,7 @@ void ActivityTab::apply_theme() {
         "QWidget#activityTab { background:%1; }"
 
         "QPushButton#activityTabChip { background:transparent; color:%2; border:1px solid %3;"
-        "  font-family:%4; font-size:10px; font-weight:700; letter-spacing:1.2px;"
+        "  font-family:%4; font-size:12px; font-weight:700; letter-spacing:1.2px;"
         "  padding:0 12px; }"
         "QPushButton#activityTabChip:hover { color:%5; border-color:%6; }"
         "QPushButton#activityTabChip:checked { background:rgba(217,119,6,0.12); color:%7;"
@@ -165,13 +165,13 @@ void ActivityTab::apply_theme() {
 
         "QTableWidget#activityTabTable { background:%1; color:%5; gridline-color:%3;"
         "  border:1px solid %3; selection-background-color:%8; selection-color:%5;"
-        "  font-family:%4; font-size:11px; }"
+        "  font-family:%4; font-size:12px; }"
         "QTableWidget#activityTabTable::item { padding:6px 10px; border-bottom:1px solid %3; }"
         "QHeaderView::section { background:%9; color:%2; padding:6px 10px;"
         "  border:none; border-bottom:1px solid %3; font-family:%4;"
-        "  font-size:9px; font-weight:700; letter-spacing:1.4px; }"
+        "  font-size:12px; font-weight:700; letter-spacing:1.4px; }"
 
-        "QLabel#activityTabFooter { color:%2; font-family:%4; font-size:10px;"
+        "QLabel#activityTabFooter { color:%2; font-family:%4; font-size:12px;"
         "  background:transparent; }"
     )
         .arg(BG_BASE(),         // %1

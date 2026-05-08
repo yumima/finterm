@@ -310,7 +310,7 @@ void WatchlistScreen::refresh_theme() {
         wl_count_->setStyleSheet(
             QString("background:%1; color:%2; font-size:%3px; border-top:1px solid %4; font-family:%5;")
                 .arg(colors::BG_SURFACE())
-                .arg(colors::TEXT_TERTIARY())
+                .arg(colors::TEXT_SECONDARY())
                 .arg(fonts::TINY)
                 .arg(colors::BORDER_DIM())
                 .arg(fonts::DATA_FAMILY()));
@@ -332,7 +332,7 @@ void WatchlistScreen::refresh_theme() {
 
     if (stock_count_)
         stock_count_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; background:transparent;")
-                                        .arg(colors::TEXT_TERTIARY())
+                                        .arg(colors::TEXT_SECONDARY())
                                         .arg(fonts::TINY)
                                         .arg(fonts::DATA_FAMILY()));
 

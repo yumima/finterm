@@ -61,7 +61,7 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
 
 void WatchlistWidget::apply_styles() {
     symbols_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                                      .arg(ui::colors::TEXT_TERTIARY()));
+                                      .arg(ui::colors::TEXT_SECONDARY()));
     symbols_input_->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
                 "font-size: 10px; padding: 2px 6px; font-family: Consolas; }"

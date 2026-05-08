@@ -74,7 +74,7 @@ void ForumThreadPanel::build_ui() {
         auto* loading_text = new QLabel("Loading thread...");
         loading_text->setAlignment(Qt::AlignCenter);
         loading_text->setStyleSheet(
-            QString("color:%1;font-size:11px;background:transparent;%2").arg(ui::colors::TEXT_TERTIARY(), M(11)));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
 
         vl->addStretch();
         vl->addWidget(spin_lbl_);
@@ -111,7 +111,7 @@ void ForumThreadPanel::build_ui() {
     back_btn->setFixedHeight(28);
     back_btn->setStyleSheet(QString("QPushButton{background:rgba(255,255,255,0.03);"
                                     "color:%1;border:1px solid %2;"
-                                    "font-size:11px;font-weight:600;padding:0 14px;"
+                                    "font-size:12px;font-weight:600;padding:0 14px;"
                                     "border-radius:4px;%3}"
                                     "QPushButton:hover{color:%4;border-color:%5;"
                                     "background:rgba(255,255,255,0.06);}")
@@ -165,14 +165,14 @@ void ForumThreadPanel::build_ui() {
 
     t_cat_chip_ = new QLabel;
     t_cat_chip_->setFixedHeight(20);
-    t_cat_chip_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;letter-spacing:1px;"
+    t_cat_chip_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;"
                                        "background:transparent;border:1px solid %1;"
                                        "padding:2px 10px;border-radius:10px;%2")
                                    .arg(ui::colors::AMBER(), M(9)));
 
     t_meta_lbl_ = new QLabel;
     t_meta_lbl_->setStyleSheet(
-        QString("color:%1;font-size:10px;background:transparent;%2").arg(ui::colors::TEXT_TERTIARY(), M(10)));
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
 
     chip_hl->addWidget(t_cat_chip_);
     chip_hl->addStretch();
@@ -193,7 +193,7 @@ void ForumThreadPanel::build_ui() {
     t_author_lbl_->setTextInteractionFlags(Qt::TextBrowserInteraction);
     t_author_lbl_->setOpenExternalLinks(false);
     t_author_lbl_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_TERTIARY(), M(12)));
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(12)));
     connect(t_author_lbl_, &QLabel::linkActivated, this, [this](const QString& link) {
         if (link.startsWith("author:"))
             emit author_clicked(link.mid(7));
@@ -254,7 +254,7 @@ void ForumThreadPanel::build_ui() {
     up_btn->setCursor(Qt::PointingHandCursor);
     up_btn->setStyleSheet(QString("QPushButton{background:rgba(217,119,6,0.06);"
                                   "color:%1;border:1px solid rgba(217,119,6,0.2);"
-                                  "font-size:11px;font-weight:700;padding:0 16px;"
+                                  "font-size:12px;font-weight:700;padding:0 16px;"
                                   "border-radius:15px;%2}"
                                   "QPushButton:hover{color:%3;"
                                   "border-color:rgba(217,119,6,0.5);"
@@ -272,16 +272,16 @@ void ForumThreadPanel::build_ui() {
     t_likes_lbl_ = new QLabel("▲ 0");
     t_likes_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
                                         "background:transparent;padding:0 8px;%2")
-                                    .arg(ui::colors::TEXT_TERTIARY(), M(12)));
+                                    .arg(ui::colors::TEXT_SECONDARY(), M(12)));
 
     t_replies_lbl_ = new QLabel("◆ 0 replies");
     t_replies_lbl_->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;"
                                           "padding:0 8px;%2")
-                                      .arg(ui::colors::TEXT_TERTIARY(), M(12)));
+                                      .arg(ui::colors::TEXT_SECONDARY(), M(12)));
 
     t_views_lbl_ = new QLabel("◉ 0 views");
     t_views_lbl_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_DIM(), M(12)));
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(12)));
 
     eng_hl->addWidget(up_btn);
     eng_hl->addWidget(t_likes_lbl_);
@@ -310,11 +310,11 @@ void ForumThreadPanel::build_ui() {
     chi->setSpacing(8);
 
     auto* com_dot = new QLabel("◆");
-    com_dot->setStyleSheet(QString("color:%1;font-size:8px;background:transparent;").arg(ui::colors::CYAN()));
+    com_dot->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::CYAN()));
     auto* ch_lbl = new QLabel("REPLIES");
-    ch_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1.5px;"
+    ch_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1.5px;"
                                   "background:transparent;%2")
-                              .arg(ui::colors::TEXT_TERTIARY(), M(10)));
+                              .arg(ui::colors::TEXT_SECONDARY(), M(10)));
     chi->addWidget(com_dot);
     chi->addWidget(ch_lbl);
     chi->addStretch();
@@ -384,7 +384,7 @@ void ForumThreadPanel::build_ui() {
                                           "QLineEdit::placeholder{color:%6;}")
                                       .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), M(12),
                                            ui::colors::BORDER_BRIGHT(), ui::colors::TEXT_PRIMARY(),
-                                           ui::colors::TEXT_DIM()));
+                                           ui::colors::TEXT_SECONDARY()));
 
     auto* send_btn = new QPushButton("Reply");
     send_btn->setFixedSize(80, 34);
@@ -443,7 +443,7 @@ void ForumThreadPanel::show_post(const services::ForumPostDetail& detail) {
         detail.post.category_color.isEmpty() ? det_color(detail.post.category_name) : detail.post.category_color;
 
     t_cat_chip_->setText(detail.post.category_name.toUpper());
-    t_cat_chip_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;letter-spacing:1px;"
+    t_cat_chip_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;"
                                        "background:transparent;border:1px solid %1;"
                                        "padding:2px 10px;border-radius:10px;%2")
                                    .arg(cc, M(9)));
@@ -454,7 +454,7 @@ void ForumThreadPanel::show_post(const services::ForumPostDetail& detail) {
     // Author with circular avatar
     QString avc = det_color(detail.post.author_display_name);
     QString ini = detail.post.author_display_name.isEmpty() ? "?" : detail.post.author_display_name.left(2).toUpper();
-    t_author_lbl_->setText(QString("<span style='background:%1;color:%2;font-size:10px;"
+    t_author_lbl_->setText(QString("<span style='background:%1;color:%2;font-size:12px;"
                                    "font-family:Consolas;padding:3px 6px;font-weight:700;"
                                    "border-radius:12px;'>%3</span>"
                                    "&nbsp;&nbsp;"
@@ -467,7 +467,7 @@ void ForumThreadPanel::show_post(const services::ForumPostDetail& detail) {
 
     // Engagement
     bool voted = (detail.post.user_vote == "up");
-    QString lc = voted || detail.post.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_DIM();
+    QString lc = voted || detail.post.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY();
     t_likes_lbl_->setText(QString("▲ %1").arg(detail.post.likes));
     t_likes_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
                                         "background:transparent;padding:0 8px;%2")
@@ -503,14 +503,14 @@ void ForumThreadPanel::rebuild_comments() {
 
         auto* nl = new QLabel("NO REPLIES YET");
         nl->setAlignment(Qt::AlignCenter);
-        nl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1.5px;"
+        nl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1.5px;"
                                   "background:transparent;%2")
-                              .arg(ui::colors::TEXT_TERTIARY(), M(11)));
+                              .arg(ui::colors::TEXT_SECONDARY(), M(11)));
 
         auto* sub = new QLabel("Be the first to share your thoughts");
         sub->setAlignment(Qt::AlignCenter);
         sub->setStyleSheet(
-            QString("color:%1;font-size:10px;background:transparent;%2").arg(ui::colors::TEXT_DIM(), M(10)));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
 
         nvl->addWidget(icon);
         nvl->addWidget(nl);
@@ -547,7 +547,7 @@ void ForumThreadPanel::rebuild_comments() {
         auto* cav = new QLabel(c.author_display_name.left(2).toUpper());
         cav->setFixedSize(24, 24);
         cav->setAlignment(Qt::AlignCenter);
-        cav->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;background:%2;"
+        cav->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:%2;"
                                    "border-radius:12px;%3")
                                .arg(ui::colors::BG_BASE(), avc, M(9)));
 
@@ -560,14 +560,14 @@ void ForumThreadPanel::rebuild_comments() {
         // Time
         auto* ctime = new QLabel(rel_time(c.created_at));
         ctime->setStyleSheet(
-            QString("color:%1;font-size:10px;background:transparent;%2").arg(ui::colors::TEXT_DIM(), M(10)));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
 
         // Likes
         bool voted = (c.user_vote == "up");
         auto* clikes = new QLabel(QString("▲ %1").arg(c.likes));
-        clikes->setStyleSheet(QString("color:%1;font-size:10px;font-weight:600;"
+        clikes->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
                                       "background:transparent;%2")
-                                  .arg(voted || c.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_DIM(), M(10)));
+                                  .arg(voted || c.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(), M(10)));
 
         hrh->addWidget(tline);
         hrh->addWidget(cav);
@@ -601,19 +601,19 @@ void ForumThreadPanel::rebuild_comments() {
             b->setCursor(Qt::PointingHandCursor);
             bool a = (c.user_vote == vt);
             b->setStyleSheet(a ? QString("QPushButton{background:transparent;color:%1;"
-                                         "border:none;font-size:10px;font-weight:700;"
+                                         "border:none;font-size:12px;font-weight:700;"
                                          "padding:0;%2}")
                                      .arg(col, M(10))
                                : QString("QPushButton{background:transparent;color:%1;"
-                                         "border:none;font-size:10px;padding:0;%2}"
+                                         "border:none;font-size:12px;padding:0;%2}"
                                          "QPushButton:hover{color:%3;}")
-                                     .arg(ui::colors::TEXT_DIM(), M(10), col));
+                                     .arg(ui::colors::TEXT_SECONDARY(), M(10), col));
             auto uuid = c.comment_uuid;
             connect(b, &QPushButton::clicked, this, [this, uuid, vt]() { emit vote_comment(uuid, vt); });
             return b;
         };
         arh->addWidget(mk_act("▲ upvote", ui::colors::AMBER(), "up"));
-        arh->addWidget(mk_act("▼ downvote", ui::colors::TEXT_TERTIARY(), "down"));
+        arh->addWidget(mk_act("▼ downvote", ui::colors::TEXT_SECONDARY(), "down"));
         arh->addStretch();
         cvl->addWidget(ar);
 

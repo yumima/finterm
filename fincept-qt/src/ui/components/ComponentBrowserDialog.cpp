@@ -75,7 +75,7 @@ void ComponentBrowserDialog::build_ui() {
     hl->addStretch(1);
 
     count_label_ = new QLabel(header);
-    count_label_->setStyleSheet("color:#9ca3af;font-size:11px;");
+    count_label_->setStyleSheet("color:#9ca3af;font-size:12px;");
     hl->addWidget(count_label_);
 
     root->addWidget(header);

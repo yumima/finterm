@@ -452,14 +452,14 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
         case IpoStatus::Filed:
             badge_bg = "rgba(217,119,6,0.2)"; badge_fg = colors::AMBER(); break;
         case IpoStatus::Rumored:
-            badge_bg = "rgba(107,114,128,0.2)"; badge_fg = colors::TEXT_TERTIARY(); break;
+            badge_bg = "rgba(107,114,128,0.2)"; badge_fg = colors::TEXT_SECONDARY(); break;
         case IpoStatus::Priced:
         case IpoStatus::Listed:
             badge_bg = "rgba(22,163,74,0.2)"; badge_fg = colors::POSITIVE(); break;
         case IpoStatus::Acquired:
             badge_bg = "rgba(139,92,246,0.2)"; badge_fg = "#a78bfa"; break;
         default:
-            badge_bg = "rgba(107,114,128,0.1)"; badge_fg = colors::TEXT_TERTIARY(); break;
+            badge_bg = "rgba(107,114,128,0.1)"; badge_fg = colors::TEXT_SECONDARY(); break;
     }
     status_badge_->setText(sl);
     status_badge_->setStyleSheet(

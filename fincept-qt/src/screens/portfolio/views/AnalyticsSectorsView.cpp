@@ -152,7 +152,7 @@ QWidget* AnalyticsSectorsView::build_overview_tab() {
 
     const QString text1 = ui::colors::TEXT_PRIMARY();
     const QString text2 = ui::colors::TEXT_SECONDARY();
-    const QString text3 = ui::colors::TEXT_TERTIARY();
+    const QString text3 = ui::colors::TEXT_SECONDARY();
     const QString border = ui::colors::BORDER_DIM();
     const QString surface = ui::colors::BG_SURFACE();
     const QString amber = ui::colors::AMBER();
@@ -320,7 +320,7 @@ QWidget* AnalyticsSectorsView::build_correlation_tab() {
 
     auto* title = new QLabel("HOLDINGS CORRELATION MATRIX");
     title->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; letter-spacing:1.5px;")
-                             .arg(ui::colors::TEXT_TERTIARY())
+                             .arg(ui::colors::TEXT_SECONDARY())
                              .arg(ui::fonts::font_px(-4)));
     lay->addWidget(title);
 
@@ -329,7 +329,7 @@ QWidget* AnalyticsSectorsView::build_correlation_tab() {
         "OHLC history is wired in — treat the magnitudes as directional, not precise.");
     corr_note_->setWordWrap(true);
     corr_note_->setStyleSheet(QString("color:%1; font-size:%2px;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(ui::fonts::font_px(-3)));
     lay->addWidget(corr_note_);
 
@@ -474,7 +474,7 @@ void AnalyticsSectorsView::update_donut(const QVector<SectorInfo>& sectors) {
     if (sectors.size() > shown) {
         auto* more = new QLabel(QString("+%1 more").arg(sectors.size() - shown), legend_container_);
         more->setStyleSheet(QString("color:%1; font-size:%2px; background:transparent;")
-                                 .arg(ui::colors::TEXT_TERTIARY())
+                                 .arg(ui::colors::TEXT_SECONDARY())
                                  .arg(ui::fonts::font_px(-3)));
         legend_lay->addWidget(more);
     }
@@ -590,7 +590,7 @@ void AnalyticsSectorsView::update_performers(const QVector<SectorInfo>& sectors)
 
         auto* sub = new QLabel(QString("%1 positions").arg(c.s->count), card);
         sub->setStyleSheet(QString("color:%1; font-size:%2px; background:transparent;")
-                                .arg(ui::colors::TEXT_TERTIARY())
+                                .arg(ui::colors::TEXT_SECONDARY())
                                 .arg(ui::fonts::font_px(-3)));
         cl->addWidget(sub);
 
@@ -661,7 +661,7 @@ void AnalyticsSectorsView::update_concentration(const QVector<SectorInfo>& secto
         auto* title = new QLabel(b.title, card);
         title->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700;"
                                      "letter-spacing:1.5px; background:transparent;")
-                                 .arg(ui::colors::TEXT_TERTIARY())
+                                 .arg(ui::colors::TEXT_SECONDARY())
                                  .arg(ui::fonts::font_px(-4)));
         cl->addWidget(title);
 
@@ -691,7 +691,7 @@ void AnalyticsSectorsView::update_concentration(const QVector<SectorInfo>& secto
         auto* sub = new QLabel(b.sub, card);
         sub->setWordWrap(true);
         sub->setStyleSheet(QString("color:%1; font-size:%2px; background:transparent;")
-                                .arg(ui::colors::TEXT_TERTIARY())
+                                .arg(ui::colors::TEXT_SECONDARY())
                                 .arg(ui::fonts::font_px(-3)));
         cl->addWidget(sub);
 
@@ -714,7 +714,7 @@ void AnalyticsSectorsView::update_correlation() {
         auto* msg = new QLabel("Need 2+ holdings for correlation analysis", corr_panel_);
         msg->setAlignment(Qt::AlignCenter);
         msg->setStyleSheet(QString("color:%1; font-size:%2px; padding:40px; background:transparent;")
-                                .arg(ui::colors::TEXT_TERTIARY())
+                                .arg(ui::colors::TEXT_SECONDARY())
                                 .arg(ui::fonts::font_px()));
         corr_grid_->addWidget(msg, 0, 0);
         return;

@@ -146,11 +146,11 @@ void NewsCategoryWidget::on_theme_changed() {
 
 void NewsCategoryWidget::apply_styles() {
     badge_->setStyleSheet(QString("color:%1;background:%2;border:1px solid %3;"
-                                  "border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;")
+                                  "border-radius:3px;padding:1px 6px;font-size:12px;font-weight:700;")
                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
                                    ui::colors::BORDER_DIM()));
     list_->setStyleSheet(
-        QString("QListWidget{background:transparent;color:%1;font-size:10px;border:none;}"
+        QString("QListWidget{background:transparent;color:%1;font-size:12px;border:none;}"
                 "QListWidget::item{padding:3px 4px;border-bottom:1px solid %2;}")
             .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
 }

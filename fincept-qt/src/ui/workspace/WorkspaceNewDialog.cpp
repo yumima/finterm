@@ -47,7 +47,7 @@ void WorkspaceNewDialog::setup_ui() {
     // ── Left: template list ───────────────────────────────────────────────────
     auto* left = new QVBoxLayout;
     auto* tpl_label = new QLabel("Template");
-    tpl_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    tpl_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     left->addWidget(tpl_label);
 
     template_list_ = new QListWidget;
@@ -67,7 +67,7 @@ void WorkspaceNewDialog::setup_ui() {
     right->setSpacing(10);
 
     auto* name_label = new QLabel("Workspace Name");
-    name_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    name_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     right->addWidget(name_label);
 
     name_edit_ = new QLineEdit;
@@ -75,7 +75,7 @@ void WorkspaceNewDialog::setup_ui() {
     right->addWidget(name_edit_);
 
     auto* desc_label = new QLabel("Description (optional)");
-    desc_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    desc_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     right->addWidget(desc_label);
 
     description_edit_ = new QPlainTextEdit;
@@ -84,7 +84,7 @@ void WorkspaceNewDialog::setup_ui() {
     right->addWidget(description_edit_);
 
     auto* prev_label = new QLabel("Preview");
-    prev_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    prev_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     right->addWidget(prev_label);
 
     preview_label_ = new QLabel;

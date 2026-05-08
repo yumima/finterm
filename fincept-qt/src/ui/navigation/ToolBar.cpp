@@ -39,7 +39,7 @@ static QString popup_ss() {
         .arg(colors::TEXT_PRIMARY())
         .arg(colors::BORDER_DIM())
         .arg(colors::BG_RAISED())
-        .arg(colors::TEXT_DIM());
+        .arg(colors::TEXT_SECONDARY());
 }
 
 ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
@@ -221,7 +221,7 @@ void ToolBar::refresh_theme() {
     }
     // Separators
     for (auto* s : separators_)
-        s->setStyleSheet(QString("color:%1;background:transparent;padding:0 3px;").arg(colors::TEXT_DIM()));
+        s->setStyleSheet(QString("color:%1;background:transparent;padding:0 3px;").arg(colors::TEXT_SECONDARY()));
     // Branding labels
     auto lbl = [](QLabel* l, const QString& c, bool b = false) {
         if (l)

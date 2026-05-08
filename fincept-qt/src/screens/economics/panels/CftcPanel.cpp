@@ -144,7 +144,7 @@ void CftcPanel::build_sentiment_widget() {
     using namespace ui::colors;
 
     const auto card_bg = QString("background:%1; border:1px solid %2;").arg(BG_RAISED(), BORDER_DIM());
-    const auto lbl_ss = QString("color:%1; font-size:9px; font-weight:700;"
+    const auto lbl_ss = QString("color:%1; font-size:12px; font-weight:700;"
                                 " letter-spacing:1px; background:transparent;")
                             .arg(TEXT_SECONDARY());
 
@@ -166,9 +166,9 @@ void CftcPanel::build_sentiment_widget() {
 
     sent_market_lbl_ = new QLabel("—");
     sent_market_lbl_->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:700; background:transparent;").arg(color_));
+        QString("color:%1; font-size:12px; font-weight:700; background:transparent;").arg(color_));
     sent_date_lbl_ = new QLabel("—");
-    sent_date_lbl_->setStyleSheet(QString("color:%1; font-size:10px; background:transparent;").arg(TEXT_TERTIARY()));
+    sent_date_lbl_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(TEXT_TERTIARY()));
 
     hdr_hl->addWidget(title_lbl);
     hdr_hl->addStretch(1);
@@ -197,10 +197,10 @@ void CftcPanel::build_sentiment_widget() {
         bias_out->setObjectName("econStatVal");
 
         net_out = new QLabel("Net: —");
-        net_out->setStyleSheet(QString("color:%1; font-size:10px; background:transparent;").arg(TEXT_TERTIARY()));
+        net_out->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(TEXT_TERTIARY()));
 
         auto* d = new QLabel(desc);
-        d->setStyleSheet(QString("color:%1; font-size:9px; background:transparent;").arg(TEXT_DIM()));
+        d->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(TEXT_DIM()));
         d->setWordWrap(true);
 
         cvl->addWidget(ttl);

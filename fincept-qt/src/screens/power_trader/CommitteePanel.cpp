@@ -130,7 +130,7 @@ void CommitteePanel::build_ui() {
         ir->addStretch();
         detail_members_ = new QLabel;
         detail_members_->setStyleSheet(
-            QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         ir->addWidget(detail_members_);
         rl->addWidget(info_row);
 
@@ -198,7 +198,7 @@ void CommitteePanel::populate_committee_list() {
 
         auto* cnt_item = new QTableWidgetItem(QString::number(g.trade_count));
         cnt_item->setTextAlignment(Qt::AlignCenter);
-        cnt_item->setForeground(QColor(g.trade_count > 0 ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY()));
+        cnt_item->setForeground(QColor(g.trade_count > 0 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
         cnt_item->setFlags(cnt_item->flags() & ~Qt::ItemIsEditable);
         committee_list_->setItem(r, 1, cnt_item);
 
@@ -287,14 +287,14 @@ void CommitteePanel::show_committee(const power_trader::CommitteeGroup& g) {
         auto* lag_i = new QTableWidgetItem(QString::number(t.disclosure_lag_days));
         lag_i->setTextAlignment(Qt::AlignCenter);
         lag_i->setForeground(QColor(t.disclosure_lag_days > 30
-                                    ? ui::colors::WARNING : ui::colors::TEXT_TERTIARY()));
+                                    ? ui::colors::WARNING : ui::colors::TEXT_SECONDARY()));
         lag_i->setFlags(lag_i->flags() & ~Qt::ItemIsEditable);
         trade_table_->setItem(r, 6, lag_i);
 
         auto* sig_i = new QTableWidgetItem(QString::number(t.signal_score,'f',0));
         sig_i->setTextAlignment(Qt::AlignCenter);
         sig_i->setForeground(QColor(t.signal_score >= 60
-                                    ? ui::colors::AMBER : ui::colors::TEXT_TERTIARY()));
+                                    ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
         sig_i->setFlags(sig_i->flags() & ~Qt::ItemIsEditable);
         trade_table_->setItem(r, 7, sig_i);
     }

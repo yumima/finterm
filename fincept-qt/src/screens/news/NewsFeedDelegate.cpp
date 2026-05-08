@@ -104,7 +104,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
 
     // Time
     painter->setFont(tiny_font_);
-    painter->setPen(QColor(ui::colors::TEXT_DIM()));
+    painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
     QString time_str = services::relative_time(article.sort_ts);
     painter->drawText(QRect(x, rect.top(), 36, rect.height()), Qt::AlignVCenter | Qt::AlignRight, time_str);
     x += 40;
@@ -127,7 +127,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
         painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xe2\x97\x8f")); // ●
     } else if (tier == 3) {
-        painter->setPen(QColor(ui::colors::TEXT_TERTIARY()));
+        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xc2\xb7")); // ·
     }
     x += 12;
@@ -148,7 +148,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     // Language badge (if not English)
     if (!lang_badge.isEmpty()) {
         painter->setFont(tiny_font_);
-        painter->setPen(QColor(ui::colors::TEXT_DIM()));
+        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
         painter->drawText(QRect(x, rect.top(), 20, rect.height()), Qt::AlignVCenter | Qt::AlignCenter, lang_badge);
         x += 22;
     }
@@ -209,7 +209,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
         painter->setPen(QColor(ui::colors::NEGATIVE()));
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xe2\x96\xbc")); // ▼
     } else {
-        painter->setPen(QColor(ui::colors::TEXT_DIM()));
+        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
         painter->drawText(QPoint(x, text_y), "-");
     }
     x += 16;
@@ -292,7 +292,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
         int vx = rect.right() - 70;
         painter->setFont(tiny_font_);
         painter->setPen(cluster.velocity == "rising" ? QColor(ui::colors::POSITIVE())
-                                                     : QColor(ui::colors::TEXT_TERTIARY()));
+                                                     : QColor(ui::colors::TEXT_SECONDARY()));
         painter->drawText(QPoint(vx, y + 12), velocity_text);
     }
 
@@ -308,7 +308,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     x += data_fm_.horizontalAdvance(source) + 10;
 
     // Time
-    painter->setPen(QColor(ui::colors::TEXT_DIM()));
+    painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
     QString time_str = services::relative_time(cluster.latest_sort_ts);
     painter->drawText(QPoint(x, y + 12), time_str);
     x += data_fm_.horizontalAdvance(time_str) + 10;
@@ -335,7 +335,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     x = rect.left() + 8;
     if (cluster.articles.size() > 1) {
         painter->setFont(tiny_font_);
-        painter->setPen(QColor(ui::colors::TEXT_TERTIARY()));
+        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
 
         QStringList also_sources;
         QSet<QString> seen;

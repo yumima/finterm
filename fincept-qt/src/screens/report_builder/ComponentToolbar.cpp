@@ -33,7 +33,7 @@ ComponentToolbar::ComponentToolbar(QWidget* parent) : QWidget(parent) {
         auto* lbl = new QLabel(text);
         lbl->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent; "
                                    "padding-top: 6px;")
-                               .arg(ui::colors::MUTED()));
+                               .arg(ui::colors::TEXT_SECONDARY()));
         vl->addWidget(lbl);
     };
 

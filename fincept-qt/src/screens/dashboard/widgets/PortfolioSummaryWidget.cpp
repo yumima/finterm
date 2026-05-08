@@ -103,14 +103,14 @@ void PortfolioSummaryWidget::apply_styles() {
     summary_card_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : metric_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : metric_values_)
         val->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: bold; background: transparent;")
                                .arg(ui::colors::TEXT_PRIMARY()));
     header_row_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
         lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_TERTIARY()));
+                               .arg(ui::colors::TEXT_SECONDARY()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
                 "QScrollBar:vertical { width: 4px; background: transparent; }"

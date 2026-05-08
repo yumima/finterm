@@ -67,7 +67,7 @@ void EconomicCalendarWidget::apply_styles() {
     header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
         lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_TERTIARY()));
+                               .arg(ui::colors::TEXT_SECONDARY()));
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
@@ -76,7 +76,7 @@ void EconomicCalendarWidget::apply_styles() {
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
             .arg(ui::colors::BORDER_MED()));
     status_label_->setStyleSheet(QString("color: %1; font-size: 10px; padding: 16px; background: transparent;")
-                                     .arg(ui::colors::TEXT_TERTIARY()));
+                                     .arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void EconomicCalendarWidget::on_theme_changed() {
@@ -142,7 +142,7 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
         // Importance color: 0=dim, 1=low/dim, 2=medium/amber, 3=high/red
         QString imp_color = imp_int >= 3   ? ui::colors::NEGATIVE()
                             : imp_int == 2 ? ui::colors::WARNING()
-                                           : ui::colors::TEXT_TERTIARY();
+                                           : ui::colors::TEXT_SECONDARY();
         QString imp_text = imp_int >= 3 ? "HIGH" : imp_int == 2 ? "MED" : imp_int == 1 ? "LOW" : "--";
 
         auto* row = new QWidget(this);
@@ -172,7 +172,7 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
         auto* act_lbl = new QLabel(actual.isEmpty() ? "--" : actual);
         act_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         act_lbl->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
-                                   .arg(actual.isEmpty() ? ui::colors::TEXT_TERTIARY() : ui::colors::TEXT_PRIMARY()));
+                                   .arg(actual.isEmpty() ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_PRIMARY()));
         rl->addWidget(act_lbl, 1);
 
         auto* fcst_lbl = new QLabel(forecast.isEmpty() ? "--" : forecast);

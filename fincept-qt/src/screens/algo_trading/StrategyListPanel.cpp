@@ -85,7 +85,7 @@ void StrategyListPanel::build_ui() {
     auto* sort_lbl = new QLabel("SORT:", top_bar);
     sort_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;"
                                     " background:transparent; border:none;")
-                                .arg(colors::TEXT_TERTIARY())
+                                .arg(colors::TEXT_SECONDARY())
                                 .arg(fonts::TINY)
                                 .arg(fonts::DATA_FAMILY()));
     top_hl->addWidget(sort_lbl);
@@ -138,7 +138,7 @@ void StrategyListPanel::build_ui() {
             .arg(colors::BG_BASE(), colors::BG_SURFACE(), colors::TEXT_PRIMARY())
             .arg(fonts::SMALL)
             .arg(fonts::DATA_FAMILY(), colors::BORDER_DIM(), colors::BG_HOVER(),
-                 colors::BG_RAISED(), colors::TEXT_TERTIARY()));
+                 colors::BG_RAISED(), colors::TEXT_SECONDARY()));
     root->addWidget(table_, 1);
 
     // ── Pagination bar ───────────────────────────────────────────────────────
@@ -215,7 +215,7 @@ void StrategyListPanel::render_page() {
         // Col 0: row number
         auto* num_item = new QTableWidgetItem(QString::number(i + 1));
         num_item->setTextAlignment(Qt::AlignCenter);
-        num_item->setForeground(QColor(colors::TEXT_TERTIARY()));
+        num_item->setForeground(QColor(colors::TEXT_SECONDARY()));
         table_->setItem(row, 0, num_item);
 
         // Col 1: name
@@ -231,7 +231,7 @@ void StrategyListPanel::render_page() {
 
         // Col 3: ID
         auto* id_item = new QTableWidgetItem(s.id);
-        id_item->setForeground(QColor(colors::TEXT_TERTIARY()));
+        id_item->setForeground(QColor(colors::TEXT_SECONDARY()));
         table_->setItem(row, 3, id_item);
     }
 

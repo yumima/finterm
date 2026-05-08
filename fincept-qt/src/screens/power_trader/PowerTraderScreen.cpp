@@ -181,7 +181,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
 
     timestamp_lbl_ = new QLabel;
     timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:12px;")
-                                       .arg(ui::colors::TEXT_TERTIARY()));
+                                       .arg(ui::colors::TEXT_SECONDARY()));
 
     refresh_btn_ = new QPushButton("\xe2\x9f\xb3 Refresh");
     refresh_btn_->setFixedHeight(22);
@@ -207,7 +207,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
 
     auto* src_lbl = new QLabel("Data:");
     src_lbl->setStyleSheet(QString("color:%1; font-size:12px;")
-                               .arg(ui::colors::TEXT_TERTIARY()));
+                               .arg(ui::colors::TEXT_SECONDARY()));
     row2->addWidget(src_lbl);
 
     struct Source { const char* label; const char* url; };
@@ -261,7 +261,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
     auto* lbl = new QLabel("BODY:");
     lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+                           .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(lbl);
 
     struct Btn { const char* label; BodyFilter filter; };
@@ -303,7 +303,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
     auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
     info->setStyleSheet(QString("color:%1; font-size:12px; font-style:italic;")
-                            .arg(ui::colors::TEXT_TERTIARY()));
+                            .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(info);
 
     return strip;
@@ -324,7 +324,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     hdr->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;"
                 "padding-left:10px; border-bottom:1px solid %2;")
-            .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     vl->addWidget(hdr);
 
     member_search_ = new QLineEdit;

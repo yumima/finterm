@@ -121,7 +121,7 @@ static const QString kStyle =
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_DIM())       // %11
+        .arg(colors::TEXT_SECONDARY())       // %11
         .arg(colors::BG_HOVER())       // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
@@ -1037,7 +1037,7 @@ void AlphaArenaScreen::populate_model_list() {
     if (model_entries_.isEmpty()) {
         auto* placeholder = new QListWidgetItem("No LLM providers configured — go to Settings → LLM Config");
         placeholder->setFlags(Qt::NoItemFlags); // not selectable
-        placeholder->setForeground(QColor(colors::TEXT_DIM()));
+        placeholder->setForeground(QColor(colors::TEXT_SECONDARY()));
         model_list_->addItem(placeholder);
         LOG_WARN("AlphaArena", "No LLM providers or profiles configured");
         return;

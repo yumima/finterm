@@ -324,7 +324,7 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     const int cx = static_cast<int>((visible_i + 0.5) * last_slot_w_);
 
     // 1. Dashed vertical crosshair line through the candle.
-    p.setPen(QPen(QColor(ui::colors::TEXT_TERTIARY()), 1, Qt::DashLine));
+    p.setPen(QPen(QColor(ui::colors::TEXT_SECONDARY()), 1, Qt::DashLine));
     p.drawLine(cx, 0, cx, last_plot_h_);
 
     // 2. Build the readout text segments.

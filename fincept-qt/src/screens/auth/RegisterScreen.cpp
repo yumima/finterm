@@ -29,7 +29,7 @@ static QString input_style() {
                    "QLineEdit:focus { border: 1px solid %6; }"
                    "QLineEdit::placeholder { color: %7; }")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
-             ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT(), ui::colors::TEXT_DIM());
+             ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString btn_primary() {
@@ -41,7 +41,7 @@ static QString btn_primary() {
                    "}"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { color: %4; background: %5; border-color: %6; }")
-        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_DIM(), ui::colors::BG_RAISED(),
+        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
              ui::colors::BORDER_DIM());
 }
 
@@ -65,13 +65,13 @@ static QString label_style() {
 static QString muted_style() {
     return QString("color: %1; font-size: 12px; background: transparent;"
                    "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_TERTIARY());
+        .arg(ui::colors::TEXT_SECONDARY());
 }
 
 static QString check_off() {
     return QString("color: %1; font-size: 11px; background: transparent;"
                    "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_DIM());
+        .arg(ui::colors::TEXT_SECONDARY());
 }
 
 static QString check_on() {

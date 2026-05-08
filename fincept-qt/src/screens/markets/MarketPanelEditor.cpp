@@ -43,8 +43,8 @@ static QString list_ss() {
 }
 
 static QString section_lbl_ss() {
-    return QString("color:%1;font-weight:700;letter-spacing:1px;background:transparent;font-size:11px;")
-        .arg(ui::colors::TEXT_TERTIARY());
+    return QString("color:%1;font-weight:700;letter-spacing:1px;background:transparent;font-size:12px;")
+        .arg(ui::colors::TEXT_SECONDARY());
 }
 
 MarketPanelEditor::MarketPanelEditor(const MarketPanelConfig& config, QWidget* parent)
@@ -93,7 +93,7 @@ void MarketPanelEditor::build_ui() {
     remove_btn->setCursor(Qt::PointingHandCursor);
     remove_btn->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                "padding:0 8px;font-size:11px;font-weight:bold;}"
+                "padding:0 8px;font-size:12px;font-weight:bold;}"
                 "QPushButton:hover{color:%2;border-color:%2;}")
             .arg(ui::colors::BORDER_MED(), ui::colors::NEGATIVE()));
     connect(remove_btn, &QPushButton::clicked, this, &MarketPanelEditor::on_remove_selected);

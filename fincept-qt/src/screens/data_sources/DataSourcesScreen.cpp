@@ -1249,7 +1249,7 @@ void DataSourcesScreen::show_config_dialog(const ConnectorConfig& config, const 
 
     auto* dlg_sub = new QLabel(config.description);
     dlg_sub->setWordWrap(true);
-    dlg_sub->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;").arg(col::TEXT_SECONDARY()));
+    dlg_sub->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(col::TEXT_SECONDARY()));
     title_vl->addWidget(dlg_sub);
 
     dlg_hdr_hl->addLayout(title_vl, 1);
@@ -1363,7 +1363,7 @@ void DataSourcesScreen::show_config_dialog(const ConnectorConfig& config, const 
     auto* note = new QLabel("Fields marked with * are required.");
     note->setWordWrap(true);
     note->setStyleSheet(
-        QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::TEXT_TERTIARY()));
     body_vl->addWidget(note);
     body_vl->addStretch();
 
@@ -1642,7 +1642,7 @@ void DataSourcesScreen::build_connections_table() {
         auto* status_lbl = new QLabel(has_status ? (ok ? "OK" : "ERR") : "--");
         status_lbl->setAlignment(Qt::AlignCenter);
         status_lbl->setObjectName("dsStatusDot");
-        status_lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+        status_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                                       .arg(!has_status ? col::TEXT_TERTIARY()
                                            : ok        ? col::POSITIVE()
                                                        : col::NEGATIVE()));
@@ -1799,7 +1799,7 @@ void DataSourcesScreen::update_detail_panel() {
     detail_category_value_->setText(category_label(cfg->category));
     detail_transport_value_->setText(connector_transport(*cfg));
     detail_auth_value_->setText(cfg->requires_auth ? "Required" : "None");
-    detail_auth_value_->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+    detail_auth_value_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                                           .arg(cfg->requires_auth ? col::WARNING() : col::POSITIVE()));
     detail_test_value_->setText(cfg->testable ? "Yes" : "No");
 
@@ -1808,7 +1808,7 @@ void DataSourcesScreen::update_detail_panel() {
     detail_fields_value_->setText(QString::number(cfg->fields.size()));
     detail_configured_value_->setText(QString::number(total));
     detail_enabled_value_->setText(QString::number(active));
-    detail_enabled_value_->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+    detail_enabled_value_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                                              .arg(active > 0 ? col::POSITIVE() : col::TEXT_TERTIARY()));
 
     // Last test status
@@ -1817,12 +1817,12 @@ void DataSourcesScreen::update_detail_panel() {
         const bool ok = live_status_cache_[conn_id].first;
         detail_last_status_value_->setText(ok ? "OK" : "ERR");
         detail_last_status_value_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                 .arg(ok ? col::POSITIVE() : col::NEGATIVE()));
     } else {
         detail_last_status_value_->setText("--");
         detail_last_status_value_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-weight:700;background:transparent;").arg(col::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(col::TEXT_TERTIARY()));
     }
 
     // Fields table
@@ -2598,7 +2598,7 @@ void DataSourcesScreen::on_connection_test(const QString& conn_id) {
                         auto* note =
                             new QLabel("Note: TCP reachability confirmed. API key validity is not verified here.");
                         note->setWordWrap(true);
-                        note->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;background:transparent;")
+                        note->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;background:transparent;")
                                                 .arg(col::TEXT_TERTIARY()));
                         vl->addWidget(note);
                     }
@@ -2707,7 +2707,7 @@ void DataSourcesScreen::update_connection_status_cell(const QString& conn_id, bo
         auto* lbl = qobject_cast<QLabel*>(connections_table_->cellWidget(row, 5));
         if (lbl) {
             lbl->setText(ok ? "OK" : "ERR");
-            lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;background:transparent;")
+            lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                                    .arg(ok ? col::POSITIVE() : col::NEGATIVE()));
             lbl->setToolTip(msg);
         }

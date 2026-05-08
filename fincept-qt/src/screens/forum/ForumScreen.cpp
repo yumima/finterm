@@ -202,7 +202,7 @@ void ForumScreen::build_ui() {
             auto* nm = new QLabel(profile.display_name.toUpper());
             nm->setStyleSheet(QString("color:%1;font-size:16px;font-weight:700;%2").arg(avc, M(16)));
             auto* un = new QLabel("@" + profile.username);
-            un->setStyleSheet(QString("color:%1;font-size:11px;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
+            un->setStyleSheet(QString("color:%1;font-size:12px;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
             info->addWidget(nm);
             info->addWidget(un);
             th->addWidget(av);
@@ -213,7 +213,7 @@ void ForumScreen::build_ui() {
                 auto* bio = new QLabel(profile.bio);
                 bio->setWordWrap(true);
                 bio->setStyleSheet(
-                    QString("color:%1;font-size:12px;font-style:italic;%2").arg(ui::colors::TEXT_TERTIARY(), M(12)));
+                    QString("color:%1;font-size:12px;font-style:italic;%2").arg(ui::colors::TEXT_SECONDARY(), M(12)));
                 vl->addWidget(bio);
             }
 
@@ -242,7 +242,7 @@ void ForumScreen::build_ui() {
                 auto* l = new QLabel(lbl);
                 l->setAlignment(Qt::AlignCenter);
                 l->setStyleSheet(
-                    QString("color:%1;font-size:9px;letter-spacing:1px;%2").arg(ui::colors::TEXT_TERTIARY(), M(9)));
+                    QString("color:%1;font-size:12px;letter-spacing:1px;%2").arg(ui::colors::TEXT_SECONDARY(), M(9)));
                 cv->addWidget(v);
                 cv->addWidget(l);
                 return cell;
@@ -261,11 +261,11 @@ void ForumScreen::build_ui() {
                 edit_btn->setStyleSheet(
                     QString("QPushButton{background:rgba(217,119,6,0.08);"
                             "color:%1;border:1px solid %2;"
-                            "font-size:11px;font-weight:700;%3}"
+                            "font-size:12px;font-weight:700;%3}"
                             "QPushButton:hover{color:%4;"
                             "border-color:rgba(217,119,6,0.5);"
                             "background:rgba(217,119,6,0.15);}")
-                        .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM(), M(11), ui::colors::AMBER()));
+                        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), M(11), ui::colors::AMBER()));
                 connect(edit_btn, &QPushButton::clicked, this, [this, dlg, profile]() {
                     dlg->accept();
                     show_edit_profile_dialog(profile);
@@ -436,7 +436,7 @@ void ForumScreen::show_new_post_dialog(int category_id) {
     dlg->setWindowTitle("NEW POST");
     dlg->setMinimumSize(560, 400);
     dlg->setStyleSheet(QString("QDialog{background:%1;border:1px solid %2;}"
-                               "QLabel{color:%3;font-size:11px;background:transparent;"
+                               "QLabel{color:%3;font-size:12px;background:transparent;"
                                "font-family:'Consolas','Courier New',monospace;}"
                                "QLineEdit,QTextEdit{background:%4;color:%5;"
                                "border:1px solid %2;font-size:13px;"
@@ -462,21 +462,21 @@ void ForumScreen::show_new_post_dialog(int category_id) {
     vl->addWidget(hdr);
 
     auto* sub = new QLabel("Share your insights with the community");
-    sub->setStyleSheet(QString("color:%1;font-size:11px;%2").arg(ui::colors::TEXT_TERTIARY(), M(11)));
+    sub->setStyleSheet(QString("color:%1;font-size:12px;%2").arg(ui::colors::TEXT_SECONDARY(), M(11)));
     vl->addWidget(sub);
 
     vl->addSpacing(4);
 
     auto* title_lbl = new QLabel("TITLE");
-    title_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;%2")
-                                 .arg(ui::colors::TEXT_TERTIARY(), M(10)));
+    title_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;%2")
+                                 .arg(ui::colors::TEXT_SECONDARY(), M(10)));
     auto* title_edit = new QLineEdit;
     title_edit->setPlaceholderText("Give your post a descriptive title...");
     title_edit->setFixedHeight(36);
 
     auto* content_lbl = new QLabel("CONTENT");
-    content_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;%2")
-                                   .arg(ui::colors::TEXT_TERTIARY(), M(10)));
+    content_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;%2")
+                                   .arg(ui::colors::TEXT_SECONDARY(), M(10)));
     auto* body_edit = new QTextEdit;
     body_edit->setPlaceholderText("Write your thoughts...");
 
@@ -495,10 +495,10 @@ void ForumScreen::show_new_post_dialog(int category_id) {
     cancel->setFixedHeight(32);
     cancel->setCursor(Qt::PointingHandCursor);
     cancel->setStyleSheet(QString("QPushButton{background:transparent;color:%1;"
-                                  "border:1px solid %2;font-size:11px;font-weight:700;"
+                                  "border:1px solid %2;font-size:12px;font-weight:700;"
                                   "padding:0 20px;%3}"
                                   "QPushButton:hover{color:%4;border-color:%5;}")
-                              .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM(), M(11),
+                              .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), M(11),
                                    ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     connect(cancel, &QPushButton::clicked, dlg, &QDialog::reject);
 
@@ -506,7 +506,7 @@ void ForumScreen::show_new_post_dialog(int category_id) {
     submit->setFixedHeight(32);
     submit->setCursor(Qt::PointingHandCursor);
     submit->setStyleSheet(QString("QPushButton{background:rgba(217,119,6,0.12);color:%1;"
-                                  "border:1px solid rgba(217,119,6,0.3);font-size:11px;"
+                                  "border:1px solid rgba(217,119,6,0.3);font-size:12px;"
                                   "font-weight:700;padding:0 20px;%2}"
                                   "QPushButton:hover{color:%3;"
                                   "border-color:rgba(217,119,6,0.6);"
@@ -539,7 +539,7 @@ void ForumScreen::show_edit_profile_dialog(const services::ForumProfile& profile
     dlg->setWindowTitle("EDIT PROFILE");
     dlg->setMinimumSize(440, 320);
     dlg->setStyleSheet(QString("QDialog{background:%1;border:1px solid %2;}"
-                               "QLabel{color:%3;font-size:11px;background:transparent;"
+                               "QLabel{color:%3;font-size:12px;background:transparent;"
                                "font-family:'Consolas','Courier New',monospace;}"
                                "QLineEdit{background:%4;color:%5;border:1px solid %2;"
                                "font-size:12px;font-family:'Consolas','Courier New',monospace;"
@@ -567,8 +567,8 @@ void ForumScreen::show_edit_profile_dialog(const services::ForumProfile& profile
 
     auto mk = [&](const QString& lbl, const QString& val) -> QLineEdit* {
         auto* l = new QLabel(lbl);
-        l->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;%2")
-                             .arg(ui::colors::TEXT_TERTIARY(), M(10)));
+        l->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;%2")
+                             .arg(ui::colors::TEXT_SECONDARY(), M(10)));
         vl->addWidget(l);
         auto* e = new QLineEdit(val);
         e->setFixedHeight(30);
@@ -590,17 +590,17 @@ void ForumScreen::show_edit_profile_dialog(const services::ForumProfile& profile
     cc->setFixedHeight(32);
     cc->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;"
-                "border:1px solid %2;font-size:11px;font-weight:700;"
+                "border:1px solid %2;font-size:12px;font-weight:700;"
                 "padding:0 20px;%3}"
                 "QPushButton:hover{color:%4;}")
-            .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM(), M(11), ui::colors::TEXT_SECONDARY()));
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), M(11), ui::colors::TEXT_SECONDARY()));
     connect(cc, &QPushButton::clicked, dlg, &QDialog::reject);
 
     auto* sc = new QPushButton("SAVE CHANGES");
     sc->setFixedHeight(32);
     sc->setCursor(Qt::PointingHandCursor);
     sc->setStyleSheet(QString("QPushButton{background:rgba(217,119,6,0.12);color:%1;"
-                              "border:1px solid rgba(217,119,6,0.3);font-size:11px;"
+                              "border:1px solid rgba(217,119,6,0.3);font-size:12px;"
                               "font-weight:700;padding:0 20px;%2}"
                               "QPushButton:hover{color:%3;"
                               "border-color:rgba(217,119,6,0.6);"

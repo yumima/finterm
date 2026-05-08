@@ -276,14 +276,14 @@ void SwapPanel::apply_theme() {
     const QString ss = QStringLiteral(
         "QWidget#swapPanel { background:%1; }"
         "QWidget#swapPanelHead { background:%2; border-bottom:1px solid %3; }"
-        "QLabel#swapPanelTitle { color:%4; font-family:%5; font-size:11px;"
+        "QLabel#swapPanelTitle { color:%4; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
-        "QLabel#swapPanelHeadStatus { color:%6; font-family:%5; font-size:10px;"
+        "QLabel#swapPanelHeadStatus { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
         "QWidget#swapPanelBody { background:%1; }"
-        "QLabel#swapPanelCaption { color:%6; font-family:%5; font-size:9px;"
+        "QLabel#swapPanelCaption { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
-        "QLabel#swapPanelMeta { color:%6; font-family:%5; font-size:10px;"
+        "QLabel#swapPanelMeta { color:%6; font-family:%5; font-size:12px;"
         "  background:transparent; }"
 
         // Inputs
@@ -291,7 +291,7 @@ void SwapPanel::apply_theme() {
         "  font-family:%5; font-size:16px; padding:0 8px; }"
         "QLineEdit#swapPanelInput:focus { border-color:%4; }"
         "QComboBox#swapPanelCombo { background:%2; color:%7; border:1px solid %3;"
-        "  font-family:%5; font-size:11px; padding:0 8px; }"
+        "  font-family:%5; font-size:12px; padding:0 8px; }"
         "QComboBox#swapPanelCombo::drop-down { border:none; width:18px; }"
 
         // Token chip (read-only, looks like an inert pill)
@@ -304,7 +304,7 @@ void SwapPanel::apply_theme() {
 
         // Details block
         "QFrame#swapPanelDetailsBlock { background:%8; border:1px solid %3; }"
-        "QLabel#swapPanelDetailValue { color:%7; font-family:%5; font-size:11px;"
+        "QLabel#swapPanelDetailValue { color:%7; font-family:%5; font-size:12px;"
         "  background:transparent; }"
 
         // Error strip
@@ -312,12 +312,12 @@ void SwapPanel::apply_theme() {
         "  border:1px solid %9; }"
         "QLabel#swapPanelErrorIcon { color:%9; font-family:%5; font-size:13px;"
         "  font-weight:700; background:transparent; }"
-        "QLabel#swapPanelErrorText { color:%9; font-family:%5; font-size:11px;"
+        "QLabel#swapPanelErrorText { color:%9; font-family:%5; font-size:12px;"
         "  background:transparent; }"
 
         // Buttons
         "QPushButton#swapPanelButton { background:%8; color:%6; border:1px solid %3;"
-        "  font-family:%5; font-size:11px; font-weight:700; letter-spacing:1px;"
+        "  font-family:%5; font-size:12px; font-weight:700; letter-spacing:1px;"
         "  padding:0 14px; }"
         "QPushButton#swapPanelButton:hover { background:%10; color:%7; border-color:%11; }"
         "QPushButton#swapPanelPrimaryButton { background:rgba(217,119,6,0.10); color:%4;"

@@ -24,7 +24,7 @@ void StatusBadge::set_status(Status s) {
             break;
         case Status::Idle:
             setText("READY");
-            setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(colors::MUTED()));
+            setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(colors::TEXT_SECONDARY()));
             break;
     }
 }

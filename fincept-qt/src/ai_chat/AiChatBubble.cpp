@@ -195,7 +195,7 @@ void AiChatBubble::build_bubble_button() {
     unread_badge_->setAlignment(Qt::AlignCenter);
     unread_badge_->move(BTN_SIZE - 16, -2);
     unread_badge_->setStyleSheet(QString("background:%1;color:white;border-radius:0px;"
-                                         "font-size:9px;font-weight:bold;")
+                                         "font-size:12px;font-weight:bold;")
                                      .arg(col::NEGATIVE()));
     unread_badge_->hide();
 
@@ -248,7 +248,7 @@ void AiChatBubble::build_chat_panel() {
     // We use voice_status_lbl_ to also show typing state (reuse slot)
     voice_status_lbl_ = new QLabel;
     voice_status_lbl_->setStyleSheet(
-        QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::TEXT_TERTIARY()));
     typing_hl->addWidget(voice_status_lbl_);
     typing_hl->addStretch();
     vl->addWidget(typing_row);
@@ -290,7 +290,7 @@ QWidget* AiChatBubble::build_panel_header() {
     voice_mode_btn_->setCursor(Qt::PointingHandCursor);
     voice_mode_btn_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "font-size:11px;font-weight:600;border-radius:0px;padding:0 8px;}"
+                "font-size:12px;font-weight:600;border-radius:0px;padding:0 8px;}"
                 "QPushButton:checked{background:%3;color:%4;border-color:%3;}"
                 "QPushButton:hover:!checked{color:%4;border-color:%5;}")
             .arg(col::TEXT_SECONDARY(), col::BORDER_MED(), col::AMBER(), col::BG_BASE(), col::AMBER()));
@@ -383,14 +383,14 @@ QWidget* AiChatBubble::build_voice_status_bar() {
     // Note: voice_status_lbl_ is used for typing indicator above.
     // This bar holds stop button only.
     auto* status_lbl = new QLabel("Voice mode active");
-    status_lbl->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;").arg(col::TEXT_TERTIARY()));
+    status_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(col::TEXT_TERTIARY()));
     hl->addWidget(status_lbl, 1);
 
     stop_speech_btn_ = new QPushButton("■ Stop");
     stop_speech_btn_->setFixedHeight(20);
     stop_speech_btn_->setCursor(Qt::PointingHandCursor);
     stop_speech_btn_->setStyleSheet(QString("QPushButton{background:%1;color:white;border:none;"
-                                            "font-size:10px;font-weight:700;border-radius:0px;padding:0 8px;}"
+                                            "font-size:12px;font-weight:700;border-radius:0px;padding:0 8px;}"
                                             "QPushButton:hover{background:%2;}")
                                         .arg(col::NEGATIVE(), col::WARNING()));
     stop_speech_btn_->hide();
@@ -642,7 +642,7 @@ void AiChatBubble::add_bubble(const QString& role, const QString& text) {
     // Role micro-label
     auto* role_lbl = new QLabel(is_user ? "You" : "AI");
     role_lbl->setAlignment(is_user ? Qt::AlignRight : Qt::AlignLeft);
-    role_lbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;background:transparent;")
+    role_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                                 .arg(is_user ? col::AMBER() : col::AMBER()));
     cvl->addWidget(role_lbl);
 
@@ -701,7 +701,7 @@ QTextEdit* AiChatBubble::add_streaming_bubble() {
     auto* role_lbl = new QLabel("AI");
     role_lbl->setAlignment(Qt::AlignLeft);
     role_lbl->setStyleSheet(
-        QString("color:%1;font-size:10px;font-weight:700;background:transparent;").arg(col::AMBER()));
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(col::AMBER()));
     cvl->addWidget(role_lbl);
 
     auto* body = new QTextEdit;
@@ -934,15 +934,15 @@ void AiChatBubble::update_voice_status() {
     if (is_speaking_) {
         voice_status_lbl_->setText("▶ AI speaking…");
         voice_status_lbl_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::WARNING()));
+            QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::WARNING()));
     } else if (is_listening_) {
         voice_status_lbl_->setText("● Listening — speak now…");
         voice_status_lbl_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::POSITIVE()));
+            QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::POSITIVE()));
     } else if (streaming_) {
         voice_status_lbl_->setText("AI is thinking…");
         voice_status_lbl_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::TEXT_DIM()));
+            QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::TEXT_DIM()));
     } else {
         voice_status_lbl_->clear();
     }

@@ -202,7 +202,7 @@ void NodeEditorScreen::build_ui() {
     splitter->setHandleWidth(1);
     splitter->setStyleSheet(QString("QSplitter::handle { background: %1; }"
                                     "QSplitter::handle:hover { background: %2; }")
-                                .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_DIM()));
+                                .arg(ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY()));
 
     // Left: Node palette
     palette_ = new NodePalette(this);

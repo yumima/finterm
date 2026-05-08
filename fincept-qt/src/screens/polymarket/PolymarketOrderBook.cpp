@@ -204,7 +204,7 @@ void PolymarketOrderBook::rebuild_cache() {
     }
 
     if (bids_.isEmpty() && asks_.isEmpty()) {
-        p.setPen(QColor(colors::TEXT_DIM()));
+        p.setPen(QColor(colors::TEXT_SECONDARY()));
         p.drawText(rect(), Qt::AlignCenter, "No order book data");
     }
 }

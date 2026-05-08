@@ -104,15 +104,15 @@ void CellWidget::build_ui() {
     gutter_number_->setAlignment(Qt::AlignRight | Qt::AlignTop);
     gutter_number_->setStyleSheet(
         QString("color:%1; font-family:%2; font-size:%3px; font-weight:700; background:transparent;")
-            .arg(colors::TEXT_TERTIARY(), fonts::DATA_FAMILY)
+            .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
             .arg(fonts::TINY));
     gutter_layout->addWidget(gutter_number_);
 
     gutter_type_ = new QLabel("PY", gutter_);
     gutter_type_->setAlignment(Qt::AlignRight);
-    gutter_type_->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; font-weight:600;"
+    gutter_type_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
                                         " letter-spacing:0.5px; background:transparent;")
-                                    .arg(colors::TEXT_DIM(), fonts::DATA_FAMILY));
+                                    .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     gutter_layout->addWidget(gutter_type_);
     gutter_layout->addStretch();
 
@@ -245,7 +245,7 @@ void CellWidget::build_ui() {
     output_toggle_->setCursor(Qt::PointingHandCursor);
     output_toggle_->setStyleSheet(
         QString("QPushButton { background:%1; color:%2; border:none; border-left:3px solid %3;"
-                " font-family:%4; font-size:10px; font-weight:700; letter-spacing:0.5px;"
+                " font-family:%4; font-size:12px; font-weight:700; letter-spacing:0.5px;"
                 " padding:0 10px; text-align:left; }"
                 "QPushButton:hover { background:%5; }")
             .arg(colors::BG_RAISED(), colors::POSITIVE(), colors::BORDER_DIM(), fonts::DATA_FAMILY, colors::BG_HOVER()));
@@ -290,7 +290,7 @@ void CellWidget::build_ui() {
     insert_btn->setStyleSheet(QString("QPushButton { color:%1; font-family:%2; font-size:12px; font-weight:700;"
                                       " background:%3; border:1px solid %4; }"
                                       "QPushButton:hover { background:%5; color:%6; border-color:%5; }")
-                                  .arg(colors::TEXT_DIM(), fonts::DATA_FAMILY, colors::BG_SURFACE(), colors::BORDER_DIM(),
+                                  .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY, colors::BG_SURFACE(), colors::BORDER_DIM(),
                                        colors::AMBER_DIM(), colors::AMBER()));
     connect(insert_btn, &QPushButton::clicked, this, [this]() { emit insert_below_requested(cell_id_); });
     insert_layout->addWidget(insert_btn);
@@ -514,20 +514,20 @@ void CellWidget::update_gutter() {
     } else {
         gutter_number_->setText(QString("[%1]").arg(index_ + 1));
         gutter_number_->setStyleSheet(QString("color:%1; font-family:%2; font-size:%3px; font-weight:700;")
-                                          .arg(selected_ ? colors::AMBER() : colors::TEXT_TERTIARY(), fonts::DATA_FAMILY)
+                                          .arg(selected_ ? colors::AMBER() : colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
                                           .arg(fonts::TINY));
     }
 
     if (cell_type_ == "markdown") {
         gutter_type_->setText("MD");
         gutter_type_->setStyleSheet(
-            QString("color:%1; font-family:%2; font-size:10px; font-weight:600; letter-spacing:0.5px;")
+            QString("color:%1; font-family:%2; font-size:12px; font-weight:600; letter-spacing:0.5px;")
                 .arg(colors::INFO(), fonts::DATA_FAMILY));
     } else {
         gutter_type_->setText("PY");
         gutter_type_->setStyleSheet(
-            QString("color:%1; font-family:%2; font-size:10px; font-weight:600; letter-spacing:0.5px;")
-                .arg(colors::TEXT_DIM(), fonts::DATA_FAMILY));
+            QString("color:%1; font-family:%2; font-size:12px; font-weight:600; letter-spacing:0.5px;")
+                .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     }
 }
 
@@ -535,7 +535,7 @@ void CellWidget::render_markdown() {
     QString src = editor_->toPlainText();
     if (src.trimmed().isEmpty()) {
         md_preview_->setHtml(QString("<p style='color:%1; font-style:italic;'>Empty markdown cell — click to edit</p>")
-                                 .arg(colors::TEXT_TERTIARY()));
+                                 .arg(colors::TEXT_SECONDARY()));
         md_preview_->setMinimumHeight(48);
         md_preview_->setMaximumHeight(48);
         return;
@@ -947,14 +947,14 @@ QWidget* CodeEditorScreen::build_toolbar() {
     add_sep();
 
     kernel_label_ = new QLabel("KERNEL: IDLE", bar);
-    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; font-weight:600;"
+    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
                                          " letter-spacing:0.5px; padding:0 8px;")
                                      .arg(colors::POSITIVE(), fonts::DATA_FAMILY));
     hl->addWidget(kernel_label_);
 
     auto* py_label = new QLabel("Python 3.12", bar);
-    py_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; padding-left:8px;")
-                                .arg(colors::TEXT_TERTIARY(), fonts::DATA_FAMILY));
+    py_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; padding-left:8px;")
+                                .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     hl->addWidget(py_label);
 
     return bar;
@@ -970,14 +970,14 @@ QWidget* CodeEditorScreen::build_status_bar() {
 
     status_label_ = new QLabel("READY", bar);
     status_label_->setStyleSheet(
-        QString("color:%1; font-family:%2; font-size:10px; font-weight:600; letter-spacing:0.5px;")
+        QString("color:%1; font-family:%2; font-size:12px; font-weight:600; letter-spacing:0.5px;")
             .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     hl->addWidget(status_label_);
     hl->addStretch();
 
     auto* shortcuts = new QLabel("Ctrl+Enter: RUN  |  Shift+Enter: RUN & NEXT  |  Tab: 4 SPACES  |  Ctrl+S: SAVE", bar);
-    shortcuts->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; letter-spacing:0.3px;")
-                                 .arg(colors::TEXT_DIM(), fonts::DATA_FAMILY));
+    shortcuts->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; letter-spacing:0.3px;")
+                                 .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     hl->addWidget(shortcuts);
 
     return bar;
@@ -1194,7 +1194,7 @@ void CodeEditorScreen::on_run_cell(const QString& cell_id) {
     int exec_num = execution_counter_;
 
     kernel_label_->setText("KERNEL: BUSY");
-    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; font-weight:600;"
+    kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
                                          " letter-spacing:0.5px; padding:0 8px;")
                                      .arg(colors::WARNING(), fonts::DATA_FAMILY));
 
@@ -1249,7 +1249,7 @@ void CodeEditorScreen::on_run_cell(const QString& cell_id) {
         }
 
         self->kernel_label_->setText("KERNEL: IDLE");
-        self->kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px; font-weight:600;"
+        self->kernel_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;"
                                                    " letter-spacing:0.5px; padding:0 8px;")
                                                .arg(colors::POSITIVE(), fonts::DATA_FAMILY));
 

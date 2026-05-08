@@ -166,7 +166,7 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
     painter->setFont(title_font);
 
     QColor title_color = selected ? accent : QColor(colors::TEXT_PRIMARY());
-    if (is_closed) title_color = QColor(colors::TEXT_DIM());
+    if (is_closed) title_color = QColor(colors::TEXT_SECONDARY());
     painter->setPen(title_color);
 
     const QRect title_rect(x, y, w, 28);
@@ -200,7 +200,7 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
 
             // Price label (right-aligned to bar gutter)
             painter->setFont(price_font);
-            painter->setPen(is_closed ? QColor(colors::TEXT_DIM()) : bar_color);
+            painter->setPen(is_closed ? QColor(colors::TEXT_SECONDARY()) : bar_color);
             const QString price_str = pres.format_price(pct);
             painter->drawText(x + bar_w + 4, y - 1, 56, bar_h + 2,
                               Qt::AlignLeft | Qt::AlignVCenter, price_str);
@@ -225,7 +225,7 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
     const int dot_y = r.top() + 10;
     if (is_closed) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(colors::TEXT_DIM()));
+        painter->setBrush(QColor(colors::TEXT_SECONDARY()));
         painter->drawEllipse(dot_x, dot_y, 5, 5);
     } else if (is_active) {
         painter->setPen(Qt::NoPen);

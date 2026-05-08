@@ -48,7 +48,7 @@ static QString kDialogStyle() {
              colors::BORDER_BRIGHT(),     // %5
              colors::AMBER(),             // %6
              colors::TEXT_SECONDARY(),    // %7
-             colors::TEXT_TERTIARY(),     // %8
+             colors::TEXT_SECONDARY(),     // %8
              colors::NEGATIVE(),          // %9
              colors::POSITIVE(),          // %10
              colors::WARNING(),           // %11

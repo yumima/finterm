@@ -179,7 +179,7 @@ QWidget* StrategyBuilderPanel::build_condition_row(QWidget* parent) {
         QString("QPushButton { background: transparent; color: %1; border: 1px solid %2;"
                 " font-size: %3px; font-weight: 700; %4 }"
                 "QPushButton:hover { color: %5; border-color: %5; }")
-            .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::BORDER_DIM())
+            .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
             .arg(fincept::ui::fonts::TINY)
             .arg(kMonoFont())
             .arg(fincept::ui::colors::NEGATIVE()));
@@ -295,7 +295,7 @@ QWidget* StrategyBuilderPanel::build_left_pane() {
         QString("QPushButton { background: transparent; color: %1; border: 1px dashed %2;"
                 " font-size: %3px; font-weight: 700; %4 }"
                 "QPushButton:hover { color: %5; border-color: %5; }")
-            .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::BORDER_DIM())
+            .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
             .arg(fincept::ui::fonts::TINY)
             .arg(kMonoFont())
             .arg(fincept::ui::colors::AMBER()));
@@ -498,7 +498,7 @@ QWidget* StrategyBuilderPanel::build_right_pane() {
     status_label_->setWordWrap(true);
     status_label_->setStyleSheet(
         QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-            .arg(fincept::ui::colors::TEXT_TERTIARY())
+            .arg(fincept::ui::colors::TEXT_SECONDARY())
             .arg(fincept::ui::fonts::SMALL)
             .arg(kMonoFont()));
     vl->addWidget(status_label_);
@@ -514,7 +514,7 @@ QWidget* StrategyBuilderPanel::build_right_pane() {
     bt_empty_label_->setAlignment(Qt::AlignCenter);
     bt_empty_label_->setStyleSheet(
         QString("color: %1; font-size: %2px; %3 background: transparent; border: none; padding: 24px;")
-            .arg(fincept::ui::colors::TEXT_TERTIARY())
+            .arg(fincept::ui::colors::TEXT_SECONDARY())
             .arg(fincept::ui::fonts::SMALL)
             .arg(kMonoFont()));
     results_layout_->addWidget(bt_empty_label_);
@@ -560,7 +560,7 @@ QWidget* StrategyBuilderPanel::build_right_pane() {
         lbl->setStyleSheet(
             QString("color:%1; font-size:%2px; font-family:%3; font-weight:600; letter-spacing:1px;"
                     " background:transparent; border:none;")
-                .arg(fincept::ui::colors::TEXT_TERTIARY())
+                .arg(fincept::ui::colors::TEXT_SECONDARY())
                 .arg(fincept::ui::fonts::TINY)
                 .arg(fincept::ui::fonts::DATA_FAMILY));
         cl->addWidget(lbl);
@@ -579,7 +579,7 @@ QWidget* StrategyBuilderPanel::build_right_pane() {
         sub->setStyleSheet(
             QString("color:%1; font-size:%2px; font-family:%3;"
                     " background:transparent; border:none;")
-                .arg(fincept::ui::colors::TEXT_TERTIARY())
+                .arg(fincept::ui::colors::TEXT_SECONDARY())
                 .arg(fincept::ui::fonts::TINY)
                 .arg(fincept::ui::fonts::DATA_FAMILY));
         cl->addWidget(sub);

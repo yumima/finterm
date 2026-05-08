@@ -186,8 +186,8 @@ void DBnomicsScreen::build_ui() {
     toggle_hl->addStretch();
 
     auto* chart_type_label = new QLabel("CHART:", toggle_bar);
-    chart_type_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px; font-weight:600;")
-                                        .arg(ui::colors::TEXT_TERTIARY())
+    chart_type_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:600;")
+                                        .arg(ui::colors::TEXT_SECONDARY())
                                         .arg(ui::fonts::DATA_FAMILY));
 
     chart_type_combo_ = new QComboBox(toggle_bar);
@@ -195,7 +195,7 @@ void DBnomicsScreen::build_ui() {
     chart_type_combo_->setFixedHeight(26);
     chart_type_combo_->setStyleSheet(
         QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                " font-family:%4; font-size:11px; padding:0 6px; }"
+                " font-family:%4; font-size:12px; padding:0 6px; }"
                 "QComboBox::drop-down { border:none; }"
                 "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3; }")
             .arg(ui::colors::BG_HOVER())
@@ -272,7 +272,7 @@ void DBnomicsScreen::build_ui() {
     init_placeholder->setAlignment(Qt::AlignCenter);
     init_placeholder->setWordWrap(true);
     init_placeholder->setStyleSheet(QString("color:%1; font-family:%2; font-size:13px;")
-                                        .arg(ui::colors::TEXT_TERTIARY())
+                                        .arg(ui::colors::TEXT_SECONDARY())
                                         .arg(ui::fonts::DATA_FAMILY));
     comparison_layout_->addWidget(init_placeholder);
     comparison_layout_->addStretch();
@@ -298,13 +298,13 @@ void DBnomicsScreen::build_ui() {
     status_hl->setSpacing(0);
 
     status_label_ = new QLabel("Ready", status_bar);
-    status_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px;")
+    status_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px;")
                                      .arg(ui::colors::TEXT_SECONDARY())
                                      .arg(ui::fonts::DATA_FAMILY));
 
     stats_label_ = new QLabel("", status_bar);
-    stats_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px;")
-                                    .arg(ui::colors::TEXT_TERTIARY())
+    stats_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px;")
+                                    .arg(ui::colors::TEXT_SECONDARY())
                                     .arg(ui::fonts::DATA_FAMILY));
     stats_label_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
@@ -735,7 +735,7 @@ void DBnomicsScreen::rebuild_comparison_view() {
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setWordWrap(true);
         placeholder->setStyleSheet(QString("color:%1; font-family:%2; font-size:13px;")
-                                       .arg(ui::colors::TEXT_TERTIARY())
+                                       .arg(ui::colors::TEXT_SECONDARY())
                                        .arg(ui::fonts::DATA_FAMILY));
         comparison_layout_->addWidget(placeholder);
         comparison_layout_->addStretch();
@@ -790,9 +790,9 @@ void DBnomicsScreen::rebuild_comparison_view() {
         header_hl->addWidget(slot_label);
 
         auto* count_label = new QLabel(QString("(%1 series)").arg(slot.series.size()), header);
-        count_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:10px;"
+        count_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px;"
                                            " background:transparent; border:none;")
-                                       .arg(ui::colors::TEXT_TERTIARY())
+                                       .arg(ui::colors::TEXT_SECONDARY())
                                        .arg(ui::fonts::DATA_FAMILY));
         header_hl->addWidget(count_label);
         header_hl->addStretch();
@@ -803,7 +803,7 @@ void DBnomicsScreen::rebuild_comparison_view() {
         chart_combo->setFixedHeight(22);
         chart_combo->setStyleSheet(
             QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                    " font-family:%4; font-size:10px; padding:0 4px; }"
+                    " font-family:%4; font-size:12px; padding:0 4px; }"
                     "QComboBox::drop-down { border:none; }"
                     "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3; }")
                 .arg(ui::colors::BG_HOVER())

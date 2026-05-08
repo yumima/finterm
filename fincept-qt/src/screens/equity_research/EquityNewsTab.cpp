@@ -53,26 +53,26 @@ void EquityNewsTab::build_ui() {
     hl->setSpacing(12);
 
     auto* title = new QLabel("LATEST NEWS");
-    title->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; letter-spacing:2px; "
+    title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:2px; "
                                  "background:transparent; border:0;")
                              .arg(ui::colors::AMBER()));
     hl->addWidget(title);
 
     count_label_ = new QLabel("");
     count_label_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(count_label_);
 
     company_label_ = new QLabel("");
     company_label_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg("#22d3ee"));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg("#22d3ee"));
     hl->addWidget(company_label_);
 
     hl->addStretch();
 
     auto* refresh_btn = new QPushButton("REFRESH");
     refresh_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2; "
-                                       "border-radius:3px; padding:4px 12px; font-size:10px; font-weight:700; }"
+                                       "border-radius:3px; padding:4px 12px; font-size:12px; font-weight:700; }"
                                        "QPushButton:hover { border-color:%3; color:%3; }")
                                    .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     connect(refresh_btn, &QPushButton::clicked, this, [this]() {
@@ -160,10 +160,10 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
         meta_hl->setSpacing(10);
         auto* pub_lbl = new QLabel(art.publisher.isEmpty() ? "Unknown Source" : art.publisher);
         pub_lbl->setStyleSheet(
-            QString("color:%1; font-size:10px; font-weight:700; background:transparent; border:0;").arg("#22d3ee"));
+            QString("color:%1; font-size:12px; font-weight:700; background:transparent; border:0;").arg("#22d3ee"));
         auto* date_lbl = new QLabel(art.published_date.isEmpty() ? "" : art.published_date.left(10));
         date_lbl->setStyleSheet(
-            QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
         meta_hl->addWidget(pub_lbl);
         meta_hl->addWidget(date_lbl);
         meta_hl->addStretch();
@@ -176,7 +176,7 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
         if (!art.description.isEmpty() && art.description != "N/A") {
             auto* desc_lbl = new QLabel(art.description);
             desc_lbl->setWordWrap(true);
-            desc_lbl->setStyleSheet(QString("color:%1; font-size:10px; line-height:1.5; "
+            desc_lbl->setStyleSheet(QString("color:%1; font-size:12px; line-height:1.5; "
                                             "background:transparent; border:0;")
                                         .arg(ui::colors::TEXT_SECONDARY()));
             cl->addWidget(desc_lbl);
@@ -185,7 +185,7 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
         // ── Read full article ──────────────────────────────────────────────────
         if (!art.url.isEmpty()) {
             auto* read_lbl = new QLabel("READ FULL ARTICLE →");
-            read_lbl->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; letter-spacing:1px; "
+            read_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; "
                                             "background:transparent; border:0;")
                                         .arg(ui::colors::AMBER()));
             cl->addWidget(read_lbl);

@@ -55,7 +55,7 @@ void InsiderWatchPanel::build_ui() {
                         "Trade size vs peers (15%) · Coordinated cluster (15%) · Estimated alpha (10%)  "
                         "·  For educational and informational purposes only."));
     hdr_note->setStyleSheet(
-        QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     hdr_note->setWordWrap(true);
     hl->addWidget(hdr_note);
     root->addWidget(hdr);
@@ -331,7 +331,7 @@ void InsiderWatchPanel::show_entry(const power_trader::InsiderWatchEntry& e) {
 
         auto* w = new QTableWidgetItem(row_data.weight);
         w->setTextAlignment(Qt::AlignCenter);
-        w->setForeground(QColor(ui::colors::TEXT_TERTIARY()));
+        w->setForeground(QColor(ui::colors::TEXT_SECONDARY()));
         w->setFlags(w->flags() & ~Qt::ItemIsEditable);
         score_breakdown_->setItem(r, 2, w);
     }

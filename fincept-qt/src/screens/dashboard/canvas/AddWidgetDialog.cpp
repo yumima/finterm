@@ -75,7 +75,7 @@ AddWidgetDialog::AddWidgetDialog(QWidget* parent) : QDialog(parent) {
     title_row->addStretch();
 
     auto* subtitle = new QLabel(QString("%1 AVAILABLE").arg(WidgetRegistry::instance().all().size()));
-    subtitle->setStyleSheet(QString("color: %1; font-size: 10px;").arg(ui::colors::TEXT_TERTIARY()));
+    subtitle->setStyleSheet(QString("color: %1; font-size: 10px;").arg(ui::colors::TEXT_SECONDARY()));
     title_row->addWidget(subtitle);
     root->addLayout(title_row);
 
@@ -137,7 +137,7 @@ AddWidgetDialog::AddWidgetDialog(QWidget* parent) : QDialog(parent) {
                                     "font-size: 10px; font-weight: bold; border-radius: 2px; letter-spacing: 0.5px; }"
                                     "QPushButton:hover { background: %5; }"
                                     "QPushButton:disabled { background: %2; color: %3; }")
-                                .arg(ui::colors::AMBER(), ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY(),
+                                .arg(ui::colors::AMBER(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(),
                                      ui::colors::BG_BASE(), ui::colors::WARNING()));
     connect(add_btn_, &QPushButton::clicked, this, &AddWidgetDialog::confirm);
     bot->addWidget(add_btn_);

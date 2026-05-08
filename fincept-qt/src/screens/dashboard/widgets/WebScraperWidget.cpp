@@ -239,14 +239,14 @@ void WebScraperWidget::build_ui() {
 
 void WebScraperWidget::apply_styles() {
     const QString badge_css = QString("color:%1;background:%2;border-radius:3px;"
-                                       "padding:2px 6px;font-size:10px;font-weight:700;")
+                                       "padding:2px 6px;font-size:12px;font-weight:700;")
                                   .arg(ui::colors::TEXT_ON_ACCENT())
                                   .arg(ui::colors::AMBER());
     if (format_badge_)
         format_badge_->setStyleSheet(badge_css);
 
     const QString status_css =
-        QString("color:%1;font-size:11px;background:transparent;").arg(ui::colors::TEXT_TERTIARY());
+        QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
     if (status_label_)
         status_label_->setStyleSheet(status_css);
 }
@@ -524,9 +524,9 @@ void WebScraperWidget::set_status(const QString& msg, bool error) {
     if (!status_label_)
         return;
     status_label_->setText(msg);
-    const QColor c = error ? ui::colors::NEGATIVE() : ui::colors::TEXT_TERTIARY();
+    const QColor c = error ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY();
     status_label_->setStyleSheet(
-        QString("color:%1;font-size:11px;background:transparent;").arg(c.name()));
+        QString("color:%1;font-size:12px;background:transparent;").arg(c.name()));
 }
 
 // ─── HTML parser ──────────────────────────────────────────────────────────
@@ -953,7 +953,7 @@ QDialog* WebScraperWidget::make_config_dialog(QWidget* parent) {
         "Auto-detects HTML tables, JSON arrays/objects, CSV/TSV, XML/RSS/Atom. "
         "If the page renders tables via JavaScript, use its underlying API URL instead.");
     help->setWordWrap(true);
-    help->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_TERTIARY()));
+    help->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     form->addRow(help);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);

@@ -58,15 +58,15 @@ TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
     hl->setSpacing(4);
 
     auto* lbl = new QLabel("SYMBOLS:", edit_bar_);
-    lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:bold; background:transparent;")
-                           .arg(ui::colors::TEXT_TERTIARY()));
+    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:bold; background:transparent;")
+                           .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(lbl);
 
     edit_input_ = new QLineEdit(edit_bar_);
     edit_input_->setPlaceholderText("AAPL, MSFT, ^GSPC, BTC-USD ...");
     edit_input_->setStyleSheet(
         QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
-                " font-size:10px; padding:1px 6px; font-family:Consolas; }"
+                " font-size:12px; padding:1px 6px; font-family:Consolas; }"
                 "QLineEdit:focus { border-color:%4; }")
             .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::BORDER_DIM(), ui::colors::AMBER()));
@@ -77,7 +77,7 @@ TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
     edit_ok_->setFixedWidth(32);
     edit_ok_->setStyleSheet(
         QString("QPushButton { background:%1; color:%2; border:none;"
-                " font-size:9px; font-weight:bold; padding:2px; }"
+                " font-size:12px; font-weight:bold; padding:2px; }"
                 "QPushButton:hover { background:%3; }")
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER()));
     connect(edit_ok_, &QPushButton::clicked, this, &TickerBar::commit_edit);
@@ -87,9 +87,9 @@ TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
     edit_cancel_->setFixedWidth(24);
     edit_cancel_->setStyleSheet(
         QString("QPushButton { background:transparent; color:%1; border:none;"
-                " font-size:11px; padding:2px; }"
+                " font-size:12px; padding:2px; }"
                 "QPushButton:hover { color:%2; }")
-            .arg(ui::colors::TEXT_TERTIARY(), ui::colors::RED()));
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::RED()));
     connect(edit_cancel_, &QPushButton::clicked, this, &TickerBar::hide_edit_bar);
     hl->addWidget(edit_cancel_);
 
@@ -192,7 +192,7 @@ void TickerBar::resizeEvent(QResizeEvent* event) {
 void TickerBar::contextMenuEvent(QContextMenuEvent* event) {
     QMenu menu(this);
     menu.setStyleSheet(
-        QString("QMenu { background:%1; color:%2; border:1px solid %3; font-size:11px; }"
+        QString("QMenu { background:%1; color:%2; border:1px solid %3; font-size:12px; }"
                 "QMenu::item:selected { background:%4; color:%5; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_BASE()));

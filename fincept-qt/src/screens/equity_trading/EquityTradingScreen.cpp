@@ -251,7 +251,7 @@ void EquityTradingScreen::setup_ui() {
     // Connection status indicator (aggregate)
     conn_label_ = new QLabel("○ NO ACCOUNTS");
     conn_label_->setObjectName("eqConnLabel");
-    conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_TERTIARY()));
+    conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     cmd_layout->addWidget(conn_label_);
 
     // Accounts management button (replaces api_btn_)
@@ -544,7 +544,7 @@ void EquityTradingScreen::update_connection_status() {
     }
     if (accounts.isEmpty()) {
         conn_label_->setText("○ NO ACCOUNTS");
-        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_TERTIARY()));
+        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     } else if (connected == accounts.size()) {
         conn_label_->setText(QString("● %1/%2 CONNECTED").arg(connected).arg(accounts.size()));
         conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::POSITIVE()));
@@ -553,7 +553,7 @@ void EquityTradingScreen::update_connection_status() {
         conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::WARNING()));
     } else {
         conn_label_->setText(QString("○ 0/%1 CONNECTED").arg(accounts.size()));
-        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_TERTIARY()));
+        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     }
 }
 

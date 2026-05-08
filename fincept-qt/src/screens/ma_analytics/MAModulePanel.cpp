@@ -99,7 +99,7 @@ QWidget* MAModulePanel::build_metric_card(const QString& label, const QString& v
     vl->setSpacing(4);
     auto* lbl = new QLabel(label, card);
     lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; letter-spacing:1px;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY));
     auto* val = new QLabel(value, card);
@@ -569,7 +569,7 @@ QWidget* MAModulePanel::build_merger_panel() {
     ad_vl->setSpacing(8);
 
     auto* sec_acq = new QLabel("ACQUIRER", ad);
-    sec_acq->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+    sec_acq->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                    "letter-spacing:1px;")
                                .arg(module_.color.name())
                                .arg(ui::fonts::DATA_FAMILY));
@@ -1166,7 +1166,7 @@ QWidget* MAModulePanel::build_startup_panel() {
     double defaults_val[] = {100e6, 40e6, 10e6};
     for (int i = 0; i < 3; ++i) {
         auto* lbl = new QLabel(scenarios[i].toUpper() + " CASE", fc);
-        lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                    "letter-spacing:1px;")
                                .arg(module_.color.name())
                                .arg(ui::fonts::DATA_FAMILY));
@@ -2052,7 +2052,7 @@ void MAModulePanel::display_result(const QJsonObject& payload) {
 
     // Section header
     auto* header = new QLabel("RESULTS");
-    header->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2; letter-spacing:1px;"
+    header->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;"
                                   "padding:4px 0;")
                               .arg(module_.color.name())
                               .arg(ui::fonts::DATA_FAMILY));
@@ -2095,7 +2095,7 @@ void MAModulePanel::display_result(const QJsonObject& payload) {
             QString sec_label = it.key();
             sec_label.replace('_', ' ');
             auto* sec = new QLabel(sec_label.toUpper());
-            sec->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+            sec->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                        "letter-spacing:1px; padding:8px 0 4px 0;")
                                    .arg(module_.color.name())
                                    .arg(ui::fonts::DATA_FAMILY));
@@ -2129,7 +2129,7 @@ void MAModulePanel::display_result(const QJsonObject& payload) {
             QString sec_label = it.key();
             sec_label.replace('_', ' ');
             auto* sec = new QLabel(sec_label.toUpper());
-            sec->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+            sec->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                        "letter-spacing:1px; padding:8px 0 4px 0;")
                                    .arg(module_.color.name())
                                    .arg(ui::fonts::DATA_FAMILY));
@@ -2254,14 +2254,14 @@ void MAModulePanel::refresh_theme() {
     // Header category
     if (header_category_)
         header_category_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                            .arg(ui::colors::TEXT_TERTIARY())
+                                            .arg(ui::colors::TEXT_SECONDARY())
                                             .arg(ui::fonts::TINY)
                                             .arg(ui::fonts::DATA_FAMILY()));
 
     // Status label
     if (status_label_)
         status_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                         .arg(ui::colors::TEXT_TERTIARY())
+                                         .arg(ui::colors::TEXT_SECONDARY())
                                          .arg(ui::fonts::TINY)
                                          .arg(ui::fonts::DATA_FAMILY()));
 

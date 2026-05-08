@@ -40,7 +40,7 @@ QString make_gov_panel_style(const QString& color, const QString& extra_qss) {
 
     // Tab buttons
     s += QString("#govTabBtn { background:transparent; color:%1; border:1px solid %2;"
-                 "  font-size:10px; font-weight:700; padding:4px 12px; letter-spacing:0.5px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 12px; letter-spacing:0.5px; }")
              .arg(t.text_secondary, t.border_dim);
     s += QString("#govTabBtn:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
     s += QString("#govTabBtn:checked { background:rgba(%1,%2,%3,0.12); color:%4;"
@@ -49,36 +49,36 @@ QString make_gov_panel_style(const QString& color, const QString& extra_qss) {
 
     // Back button
     s += QString("#govBackBtn { background:transparent; color:%1; border:1px solid %2;"
-                 "  font-size:10px; font-weight:700; padding:4px 10px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 10px; }")
              .arg(t.text_secondary, t.border_dim);
     s += QString("#govBackBtn:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
 
     // Fetch / action buttons
     s += QString("#govFetchBtn { background:%1; color:%2; border:none;"
-                 "  font-size:10px; font-weight:700; padding:4px 14px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 14px; }")
              .arg(color, t.bg_base);
     s += QString("#govFetchBtn:hover { background:%1; }").arg(cc.lighter(120).name());
     s += QString("#govFetchBtn:disabled { background:%1; color:%2; }").arg(t.border_dim, t.text_dim);
     s += QString("#govCsvBtn { background:transparent; color:%1; border:1px solid %2;"
-                 "  font-size:10px; font-weight:700; padding:4px 10px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 10px; }")
              .arg(t.text_secondary, t.border_dim);
     s += QString("#govCsvBtn:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
 
     // Search
     s += QString("#govSearch { background:%1; color:%2; border:none;"
-                 "  border-bottom:1px solid %3; padding:4px 10px; font-size:11px; }")
+                 "  border-bottom:1px solid %3; padding:4px 10px; font-size:12px; }")
              .arg(t.bg_base, t.text_primary, t.border_dim);
     s += QString("#govSearch:focus { border-bottom:1px solid %1; }").arg(color);
 
     // Tables
     s += QString("QTableWidget { background:%1; color:%2; border:none;"
-                 "  gridline-color:%3; font-size:11px; alternate-background-color:%4; }")
+                 "  gridline-color:%3; font-size:12px; alternate-background-color:%4; }")
              .arg(t.bg_base, t.text_primary, t.border_dim, t.bg_surface);
     s += QString("QTableWidget::item { padding:5px 8px; border-bottom:1px solid %1; }").arg(t.border_dim);
     s += QString("QTableWidget::item:selected { background:rgba(%1,%2,%3,0.1); color:%4; }").arg(cr, cg, cb, color);
     s += QString("QHeaderView::section { background:%1; color:%2; border:none;"
                  "  border-bottom:2px solid %3; border-right:1px solid %3;"
-                 "  padding:5px 8px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
+                 "  padding:5px 8px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
              .arg(t.bg_raised, t.text_secondary, t.border_dim);
 
     // Status / empty state
@@ -88,8 +88,8 @@ QString make_gov_panel_style(const QString& color, const QString& extra_qss) {
 
     // Breadcrumb
     s += QString("#govBreadcrumb { background:%1; border-bottom:1px solid %2; }").arg(t.bg_surface, t.border_dim);
-    s += QString("#govBreadcrumbText { color:%1; font-size:9px; background:transparent; }").arg(t.text_secondary);
-    s += QString("#govBreadcrumbActive { color:%1; font-size:9px; font-weight:700; background:transparent; }")
+    s += QString("#govBreadcrumbText { color:%1; font-size:12px; background:transparent; }").arg(t.text_secondary);
+    s += QString("#govBreadcrumbActive { color:%1; font-size:12px; font-weight:700; background:transparent; }")
              .arg(color);
 
     // Scrollbar
@@ -151,7 +151,7 @@ void GovDataProviderPanel::build_ui() {
         phl->setContentsMargins(14, 0, 14, 0);
         phl->setSpacing(8);
         auto* plbl = new QLabel("CKAN PORTAL:");
-        plbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700;"
+        plbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;"
                                     " letter-spacing:0.5px; background:transparent;").arg(text_sec));
         phl->addWidget(plbl);
         auto* combo = new QComboBox;
@@ -161,7 +161,7 @@ void GovDataProviderPanel::build_ui() {
             combo->setToolTip(options_.portal_combo_tooltip);
         combo->setStyleSheet(
             QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                    " font-size:10px; font-weight:700; padding:2px 8px; min-width:160px; }"
+                    " font-size:12px; font-weight:700; padding:2px 8px; min-width:160px; }"
                     "QComboBox::drop-down { border:none; width:18px; }"
                     "QComboBox QAbstractItemView { background:%1; color:%4;"
                     " selection-background-color:rgba(%5,%6,%7,0.12); border:1px solid %3; }")
@@ -267,7 +267,7 @@ void GovDataProviderPanel::build_ui() {
         auto* wm_lbl = new QLabel(options_.watermark_text);
         wm_lbl->setObjectName("govWatermark");
         wm_lbl->setStyleSheet(
-            QString("color:%1; font-size:9px; background:transparent;").arg(text_dim));
+            QString("color:%1; font-size:12px; background:transparent;").arg(text_dim));
         whl->addWidget(wm_lbl);
         root->addWidget(wm_bar);
     }
@@ -535,7 +535,7 @@ void GovDataProviderPanel::populate_resources(const QJsonArray& json) {
             open_btn->setCursor(Qt::PointingHandCursor);
             open_btn->setFlat(true);
             open_btn->setStyleSheet(
-                QString("QPushButton { color:%1; font-size:10px; font-weight:700;"
+                QString("QPushButton { color:%1; font-size:12px; font-weight:700;"
                         "  background:transparent; border:none; padding:2px 6px; }"
                         "QPushButton:hover { color:%1; text-decoration:underline; }")
                     .arg(color_));
@@ -628,9 +628,9 @@ void GovDataProviderPanel::update_breadcrumb() {
         btn->setFlat(true);
         btn->setCursor(active ? Qt::ArrowCursor : Qt::PointingHandCursor);
         btn->setStyleSheet(active
-            ? QString("QPushButton { color:%1; font-size:9px; font-weight:700;"
+            ? QString("QPushButton { color:%1; font-size:12px; font-weight:700;"
                       "  background:transparent; border:none; padding:0 2px; }").arg(color_)
-            : QString("QPushButton { color:%1; font-size:9px; background:transparent;"
+            : QString("QPushButton { color:%1; font-size:12px; background:transparent;"
                       "  border:none; padding:0 2px; }"
                       "QPushButton:hover { color:%2; text-decoration:underline; }").arg(dim, sec));
         if (!active)
@@ -640,7 +640,7 @@ void GovDataProviderPanel::update_breadcrumb() {
 
     auto make_sep = [&]() -> QLabel* {
         auto* l = new QLabel("›");
-        l->setStyleSheet(QString("color:%1; font-size:9px; background:transparent;"
+        l->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;"
                                  " padding:0 3px;").arg(dim));
         return l;
     };

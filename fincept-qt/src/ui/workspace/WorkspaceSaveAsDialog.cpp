@@ -40,7 +40,7 @@ void WorkspaceSaveAsDialog::setup_ui() {
     vl->setSpacing(12);
 
     auto* name_label = new QLabel("Workspace Name");
-    name_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    name_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     vl->addWidget(name_label);
 
     name_edit_ = new QLineEdit;
@@ -53,7 +53,7 @@ void WorkspaceSaveAsDialog::setup_ui() {
     // Path row
     auto* path_row = new QHBoxLayout;
     auto* path_label = new QLabel(QString("Save to: %1").arg(chosen_path_));
-    path_label->setStyleSheet("color:#555;font-size:11px;");
+    path_label->setStyleSheet("color:#555;font-size:12px;");
     path_label->setWordWrap(true);
     auto* change_btn = new QPushButton("Change...");
     change_btn->setFixedWidth(80);

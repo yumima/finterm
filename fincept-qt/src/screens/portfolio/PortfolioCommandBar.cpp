@@ -152,7 +152,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
     search_edit_->setPlaceholderText("Search portfolios...");
     search_edit_->setFixedHeight(26);
     search_edit_->setStyleSheet(QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
-                                        "  padding:0 8px; font-size:11px; }"
+                                        "  padding:0 8px; font-size:12px; }"
                                         "QLineEdit:focus { border-color:%4; }")
                                     .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
                                          ui::colors::AMBER()));
@@ -160,7 +160,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
 
     portfolio_list_ = new QListWidget;
     portfolio_list_->setFixedHeight(180);
-    portfolio_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:none; font-size:11px; }"
+    portfolio_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:none; font-size:12px; }"
                                            "QListWidget::item { padding:5px 8px; }"
                                            "QListWidget::item:selected { background:%3; color:%4; }"
                                            "QListWidget::item:hover { background:%5; }")
@@ -194,7 +194,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
     create_btn->setFixedHeight(24);
     create_btn->setCursor(Qt::PointingHandCursor);
     create_btn->setStyleSheet(QString("QPushButton { background:%1; color:%3; border:none;"
-                                      "  font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                                      "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                       "QPushButton:hover { background:%2; }")
                                   .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_BASE()));
     connect(create_btn, &QPushButton::clicked, this, [this]() {
@@ -208,7 +208,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
     delete_btn->setFixedHeight(24);
     delete_btn->setCursor(Qt::PointingHandCursor);
     delete_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                                      "  font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                                      "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                       "QPushButton:hover { background:%1; color:%2; }")
                                   .arg(ui::colors::NEGATIVE(), ui::colors::BG_BASE()));
     connect(delete_btn, &QPushButton::clicked, this, [this]() {
@@ -227,7 +227,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
 void PortfolioCommandBar::build_stats_cluster(QHBoxLayout* layout) {
     auto make_stat = [](QLabel*& lbl) {
         lbl = new QLabel("--");
-        lbl->setStyleSheet("color:inherit; font-size:11px; font-weight:700; letter-spacing:0.3px;");
+        lbl->setStyleSheet("color:inherit; font-size:12px; font-weight:700; letter-spacing:0.3px;");
     };
     make_stat(nav_label_);
     make_stat(pnl_label_);
@@ -250,7 +250,7 @@ void PortfolioCommandBar::build_overflow_menu() {
 
     overflow_menu_ = new QMenu(this);
     overflow_menu_->setStyleSheet(QString("QMenu { background:%1; color:%2; border:1px solid %3;"
-                                          "  padding:4px; font-size:11px; }"
+                                          "  padding:4px; font-size:12px; }"
                                           "QMenu::item { padding:6px 16px; }"
                                           "QMenu::item:selected { background:%4; color:%5; }"
                                           "QMenu::separator { height:1px; background:%3; margin:4px 8px; }")
@@ -363,7 +363,7 @@ void PortfolioCommandBar::build_tools_cluster(QHBoxLayout* layout) {
 void PortfolioCommandBar::apply_row1_styles() {
     selector_btn_->setStyleSheet(
         QString("QPushButton { background:%1; color:%2; border:1px solid %3; border-radius:2px;"
-                "  padding:0 12px; font-size:11px; font-weight:700; letter-spacing:0.5px; text-align:left; }"
+                "  padding:0 12px; font-size:12px; font-weight:700; letter-spacing:0.5px; text-align:left; }"
                 "QPushButton:hover { border-color:%4; color:%4; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
 
@@ -371,11 +371,11 @@ void PortfolioCommandBar::apply_row1_styles() {
                                         "  border:1px solid %2; border-radius:2px; font-size:13px; }"
                                         "QPushButton#pfIconBtn:hover { border-color:%1; color:%1; }"
                                         "QPushButton#pfIconBtn:disabled { color:%3; }")
-                                    .arg(ui::colors::AMBER(), ui::colors::BORDER_MED(), ui::colors::TEXT_TERTIARY()));
+                                    .arg(ui::colors::AMBER(), ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY()));
 
     interval_cb_->setStyleSheet(
         QString("QComboBox { background:%1; color:%2; border:1px solid %3; border-radius:2px;"
-                "  padding:0 6px; font-size:10px; font-weight:600; min-width:42px; }"
+                "  padding:0 6px; font-size:12px; font-weight:600; min-width:42px; }"
                 "QComboBox::drop-down { border:none; width:14px; }"
                 "QComboBox QAbstractItemView { background:%1; color:%2; selection-background-color:%4; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM()));
@@ -391,7 +391,7 @@ void PortfolioCommandBar::apply_row1_styles() {
 void PortfolioCommandBar::apply_row2_styles() {
     auto trade_style = [](QPushButton* btn, const char* accent, const char* fg) {
         btn->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none; border-radius:2px;"
-                                   "  padding:0 10px; font-size:10px; font-weight:700; letter-spacing:0.5px; }"
+                                   "  padding:0 10px; font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                    "QPushButton:hover { background:%1; opacity:0.85; }")
                                .arg(accent, fg));
     };
@@ -402,7 +402,7 @@ void PortfolioCommandBar::apply_row2_styles() {
     // Neutral pill tabs — single style, color reserved for data, not navigation.
     const QString tab_qss =
         QString("QPushButton#pfTab { background:transparent; color:%1; border:1px solid transparent;"
-                "  border-radius:11px; padding:0 10px; font-size:10px; font-weight:600; letter-spacing:0.4px; }"
+                "  border-radius:11px; padding:0 10px; font-size:12px; font-weight:600; letter-spacing:0.4px; }"
                 "QPushButton#pfTab:hover { color:%2; background:%3; }"
                 "QPushButton#pfTab[active=\"true\"] { color:%4; background:%5; border-color:%4; }")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::AMBER(),
@@ -413,7 +413,7 @@ void PortfolioCommandBar::apply_row2_styles() {
 
     auto tool_style = [](QPushButton* btn, const char* accent) {
         btn->setStyleSheet(QString("QPushButton#pfToolBtn { background:transparent; color:%1; border:1px solid %1;"
-                                   "  border-radius:2px; padding:0 10px; font-size:10px; font-weight:700;"
+                                   "  border-radius:2px; padding:0 10px; font-size:12px; font-weight:700;"
                                    "  letter-spacing:0.5px; }"
                                    "QPushButton#pfToolBtn:hover { background:%1; color:#000; }")
                                .arg(accent));
@@ -468,7 +468,7 @@ void PortfolioCommandBar::set_selected_portfolio(const portfolio::Portfolio& p) 
 void PortfolioCommandBar::set_summary(const portfolio::PortfolioSummary& s) {
     auto fmt = [](double v) { return QString::number(v, 'f', 2); };
     auto color = [](double v) { return v >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(); };
-    const QString base_css = "font-size:11px; font-weight:700; letter-spacing:0.3px;";
+    const QString base_css = "font-size:12px; font-weight:700; letter-spacing:0.3px;";
 
     nav_label_->setText(QString("NAV  %1").arg(fmt(s.total_market_value)));
     nav_label_->setStyleSheet(QString("color:%1; %2").arg(ui::colors::WARNING(), base_css));

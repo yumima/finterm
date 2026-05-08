@@ -43,7 +43,7 @@ void WorkspaceOpenDialog::setup_ui() {
     // ── Left: workspace list ──────────────────────────────────────────────────
     auto* left = new QVBoxLayout;
     auto* list_label = new QLabel("Saved Workspaces");
-    list_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    list_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     left->addWidget(list_label);
 
     workspace_list_ = new QListWidget;
@@ -59,7 +59,7 @@ void WorkspaceOpenDialog::setup_ui() {
     right->setSpacing(10);
 
     auto* prev_label = new QLabel("Preview");
-    prev_label->setStyleSheet("color:#888;font-size:11px;font-weight:600;");
+    prev_label->setStyleSheet("color:#888;font-size:12px;font-weight:600;");
     right->addWidget(prev_label);
 
     preview_label_ = new QLabel("Select a workspace to preview");

@@ -35,7 +35,7 @@ static QString build_treasury_style() {
     s += QString("#govTreasuryToolbar { background:%1; border-bottom:1px solid %2; }").arg(t.bg_raised, t.border_dim);
 
     s += QString("#govTreasTab { background:transparent; color:%1; border:1px solid %2;"
-                 "  font-size:10px; font-weight:700; padding:4px 12px; letter-spacing:0.5px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 12px; letter-spacing:0.5px; }")
              .arg(t.text_secondary, t.border_dim);
     s += QString("#govTreasTab:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
     s += QString("#govTreasTab:checked { background:rgba(%1,%2,%3,0.12); color:%4;"
@@ -43,27 +43,27 @@ static QString build_treasury_style() {
              .arg(cr, cg, cb, c);
 
     s += QString("#govFetchBtn { background:%1; color:%2; border:none;"
-                 "  font-size:10px; font-weight:700; padding:4px 14px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 14px; }")
              .arg(c, t.bg_base);
     s += QString("#govFetchBtn:hover { background:%1; }").arg(cc.lighter(120).name());
     s += QString("#govFetchBtn:disabled { background:%1; color:%2; }").arg(t.border_dim, t.text_dim);
     s += QString("#govCsvBtn { background:transparent; color:%1; border:1px solid %2;"
-                 "  font-size:10px; font-weight:700; padding:4px 10px; }")
+                 "  font-size:12px; font-weight:700; padding:4px 10px; }")
              .arg(t.text_secondary, t.border_dim);
     s += QString("#govCsvBtn:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
 
     // Filter bar
     s += QString("#govTreasuryFilterBar { background:%1; border-bottom:1px solid %2; }").arg(t.bg_surface, t.border_dim);
-    s += QString("#govTreasuryFilterLabel { color:%1; font-size:9px; font-weight:700;"
+    s += QString("#govTreasuryFilterLabel { color:%1; font-size:12px; font-weight:700;"
                  "  letter-spacing:0.5px; background:transparent; }")
              .arg(t.text_secondary);
 
     s += QString("QDateEdit { background:%1; color:%2; border:1px solid %3;"
-                 "  font-size:11px; padding:2px 6px; }")
+                 "  font-size:12px; padding:2px 6px; }")
              .arg(t.bg_base, t.text_primary, t.border_dim);
     s += "QDateEdit::drop-down { border:none; }";
     s += QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                 "  font-size:11px; padding:2px 6px; }")
+                 "  font-size:12px; padding:2px 6px; }")
              .arg(t.bg_base, t.text_primary, t.border_dim);
     s += "QComboBox::drop-down { border:none; }";
     s += QString("QComboBox QAbstractItemView { background:%1; color:%2;"
@@ -71,24 +71,24 @@ static QString build_treasury_style() {
              .arg(t.bg_raised, t.text_primary, t.border_dim);
 
     s += QString("QTableWidget { background:%1; color:%2; border:none;"
-                 "  gridline-color:%3; font-size:11px; alternate-background-color:%4; }")
+                 "  gridline-color:%3; font-size:12px; alternate-background-color:%4; }")
              .arg(t.bg_base, t.text_primary, t.border_dim, t.bg_surface);
     s += QString("QTableWidget::item { padding:5px 8px; border-bottom:1px solid %1; }").arg(t.border_dim);
     s += QString("QTableWidget::item:selected { background:rgba(%1,%2,%3,0.1); color:%4; }").arg(cr, cg, cb, c);
     s += QString("QHeaderView::section { background:%1; color:%2; border:none;"
                  "  border-bottom:2px solid %3; border-right:1px solid %3;"
-                 "  padding:5px 8px; font-size:10px; font-weight:700; letter-spacing:0.5px; }")
+                 "  padding:5px 8px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
              .arg(t.bg_raised, t.text_secondary, t.border_dim);
 
     // Summary cards
     s += QString("#govSummaryPage { background:%1; }").arg(t.bg_base);
     s += QString("#govSumCard { background:%1; border:1px solid %2; }").arg(t.bg_surface, t.border_dim);
     s += QString("#govSumCard:hover { border-color:%1; }").arg(t.border_bright);
-    s += QString("#govSumLabel { color:%1; font-size:8px; font-weight:700;"
+    s += QString("#govSumLabel { color:%1; font-size:12px; font-weight:700;"
                  "  letter-spacing:1px; background:transparent; }")
              .arg(t.text_secondary);
     s += QString("#govSumValue { color:%1; font-size:16px; font-weight:700; background:transparent; }").arg(c);
-    s += QString("#govSumSub   { color:%1; font-size:9px; background:transparent; }").arg(t.text_secondary);
+    s += QString("#govSumSub   { color:%1; font-size:12px; background:transparent; }").arg(t.text_secondary);
 
     // Status page
     s += QString("#govStatusPage { background:%1; }").arg(t.bg_base);
@@ -187,7 +187,7 @@ void GovDataTreasuryPanel::build_ui() {
 
     // Breakdown table
     auto* breakdown_hdr = new QLabel("SECURITY TYPE BREAKDOWN");
-    breakdown_hdr->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1px;"
+    breakdown_hdr->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;"
                                          " background:transparent; margin-top:8px;")
                                      .arg(kGovDataTreasuryColor));
     svl->addWidget(breakdown_hdr);

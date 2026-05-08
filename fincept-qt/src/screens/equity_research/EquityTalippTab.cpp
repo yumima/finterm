@@ -214,9 +214,9 @@ void EquityTalippTab::build_ui() {
     for (const auto& cat : categories()) {
         auto* btn = new QPushButton(cat.label);
         btn->setStyleSheet(QString("QPushButton { background:transparent; color:%3; "
-                                   "border:1px solid %1; padding:5px 14px; font-size:10px; font-weight:700; }"
+                                   "border:1px solid %1; padding:5px 14px; font-size:12px; font-weight:700; }"
                                    "QPushButton:hover { border-color:%2; color:%2; }")
-                               .arg(ui::colors::BORDER_DIM(), cat.color, ui::colors::TEXT_TERTIARY()));
+                               .arg(ui::colors::BORDER_DIM(), cat.color, ui::colors::TEXT_SECONDARY()));
         btn->setProperty("cat_id", cat.id);
         connect(btn, &QPushButton::clicked, this, [this, id = cat.id]() { on_category_clicked(id); });
         cat_buttons_[cat.id] = btn;
@@ -261,16 +261,16 @@ void EquityTalippTab::build_ui() {
 
     data_points_lbl_ = new QLabel("—  data points  |  TALIpp Engine");
     data_points_lbl_->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     cl->addWidget(data_points_lbl_);
 
     compute_btn_ = new QPushButton("▶  CALCULATE");
     compute_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:0; padding:6px 18px; "
-                                        "font-size:10px; font-weight:700; }"
+                                        "font-size:12px; font-weight:700; }"
                                         "QPushButton:hover { background:%3; }"
                                         "QPushButton:disabled { background:%4; color:%5; }")
                                     .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER_DIM(),
-                                         ui::colors::TEXT_DIM(), ui::colors::TEXT_TERTIARY()));
+                                         ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_SECONDARY()));
     connect(compute_btn_, &QPushButton::clicked, this, &EquityTalippTab::on_compute_clicked);
     cl->addWidget(compute_btn_);
     vl->addWidget(ctrl_frame);
@@ -286,15 +286,15 @@ void EquityTalippTab::build_ui() {
     auto* ew_icon = new QLabel("◈");
     ew_icon->setAlignment(Qt::AlignCenter);
     ew_icon->setStyleSheet(
-        QString("color:%1; font-size:32px; background:transparent; border:0;").arg(ui::colors::TEXT_DIM()));
+        QString("color:%1; font-size:32px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     status_label_ = new QLabel("Select an indicator and click CALCULATE");
     status_label_->setAlignment(Qt::AlignCenter);
     status_label_->setStyleSheet(
-        QString("color:%1; font-size:13px; background:transparent; border:0;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:13px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     auto* ew_sub = new QLabel("50+ indicators across 6 categories — powered by TALIpp incremental engine");
     ew_sub->setAlignment(Qt::AlignCenter);
     ew_sub->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_DIM()));
+        QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
     ew_vl->addWidget(ew_icon);
     ew_vl->addWidget(status_label_);
     ew_vl->addWidget(ew_sub);
@@ -337,10 +337,10 @@ void EquityTalippTab::on_category_clicked(const QString& cat_id) {
         bool active = (it.key() == cat_id);
         QString color = cat_color(it.key());
         it.value()->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:1px solid %3; "
-                                          "padding:5px 14px; font-size:10px; font-weight:700; }"
+                                          "padding:5px 14px; font-size:12px; font-weight:700; }"
                                           "QPushButton:hover { border-color:%3; }")
                                       .arg(active ? color : "transparent",
-                                           active ? ui::colors::BG_BASE() : ui::colors::TEXT_TERTIARY(),
+                                           active ? ui::colors::BG_BASE() : ui::colors::TEXT_SECONDARY(),
                                            active ? color : ui::colors::BORDER_DIM()));
     }
 
@@ -385,11 +385,11 @@ void EquityTalippTab::rebuild_param_form(const QString& indicator_id) {
         spin->setDecimals(name.contains("period") || name == "fast" || name == "slow" || name == "signal" ? 0 : 3);
         spin->setFixedWidth(72);
         spin->setStyleSheet(QString("QDoubleSpinBox { background:%1; color:%2; border:1px solid %3; "
-                                    "padding:3px 6px; font-size:11px; }")
+                                    "padding:3px 6px; font-size:12px; }")
                                 .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         auto* lbl = new QLabel(name + ":");
         lbl->setStyleSheet(
-            QString("color:%1; font-size:10px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
         param_form_->addRow(lbl, spin);
     }
 }
@@ -442,9 +442,9 @@ void EquityTalippTab::rebuild_last_values(const QString& /*indicator_id*/, const
         wl->setContentsMargins(12, 8, 12, 8);
         wl->setSpacing(2);
         auto* l = new QLabel(lbl);
-        l->setStyleSheet(QString("color:%1; font-size:9px; letter-spacing:0.5px; "
+        l->setStyleSheet(QString("color:%1; font-size:12px; letter-spacing:0.5px; "
                                  "background:transparent; border:0;")
-                             .arg(ui::colors::TEXT_TERTIARY()));
+                             .arg(ui::colors::TEXT_SECONDARY()));
         auto* v = new QLabel(val);
         v->setStyleSheet(QString("color:%1; font-size:15px; font-weight:700; font-family:monospace; "
                                  "background:transparent; border:0;")
@@ -460,7 +460,7 @@ void EquityTalippTab::rebuild_last_values(const QString& /*indicator_id*/, const
     }
 
     for (auto* spin : param_widget_->findChildren<QDoubleSpinBox*>())
-        make_lv(spin->objectName().toUpper(), QString::number(spin->value(), 'f', 0), ui::colors::TEXT_TERTIARY());
+        make_lv(spin->objectName().toUpper(), QString::number(spin->value(), 'f', 0), ui::colors::TEXT_SECONDARY());
 
     hl->addStretch();
 }
@@ -497,14 +497,14 @@ void EquityTalippTab::rebuild_chart(const QString& /*indicator_id*/, const QVect
 
     auto* axisX = new QDateTimeAxis;
     axisX->setFormat("MMM yy");
-    axisX->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    axisX->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     axisX->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     axisX->setLabelsFont(QFont("", 8));
     chart->addAxis(axisX, Qt::AlignBottom);
     series->attachAxis(axisX);
 
     auto* axisY = new QValueAxis;
-    axisY->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    axisY->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     axisY->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     axisY->setLabelsFont(QFont("", 8));
     chart->addAxis(axisY, Qt::AlignLeft);

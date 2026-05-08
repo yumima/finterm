@@ -44,14 +44,14 @@ void StatusBar::refresh_theme() {
                           "#sbReady { color:%4; font-weight:700; background:transparent; }")
                       .arg(colors::BG_BASE())
                       .arg(colors::BORDER_DIM())
-                      .arg(colors::TEXT_DIM())
+                      .arg(colors::TEXT_SECONDARY())
                       .arg(colors::POSITIVE()));
 }
 
 void StatusBar::set_ready(bool ready) {
     ready_label_->setText(ready ? "READY" : "BUSY");
     ready_label_->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;")
-                                    .arg(ready ? colors::POSITIVE() : colors::TEXT_TERTIARY()));
+                                    .arg(ready ? colors::POSITIVE() : colors::TEXT_SECONDARY()));
 }
 
 } // namespace fincept::ui

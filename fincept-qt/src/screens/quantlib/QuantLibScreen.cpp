@@ -85,7 +85,7 @@ inline QString kStyle() {
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_DIM())       // %11
+        .arg(colors::TEXT_SECONDARY())       // %11
         .arg(colors::BG_HOVER())       // %12
         .arg(colors::CYAN())           // %13
         ;

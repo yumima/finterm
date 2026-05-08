@@ -103,7 +103,7 @@ QWidget* ChatMessagePanel::build_header() {
 
     hdr_tools_lbl_ = new QLabel;
     hdr_tools_lbl_->setStyleSheet(
-        QString("color:%1;font-size:12px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_TERTIARY(), FONT));
+        QString("color:%1;font-size:12px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_SECONDARY(), FONT));
     hl->addWidget(hdr_tools_lbl_);
 
     mode_btn_ = new QPushButton("LITE");
@@ -111,7 +111,7 @@ QWidget* ChatMessagePanel::build_header() {
     mode_btn_->setToolTip("Toggle Lite / Deep mode");
     mode_btn_->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
-                "border-radius:0px;font-size:11px;font-weight:600;padding:0 10px;"
+                "border-radius:0px;font-size:12px;font-weight:600;padding:0 10px;"
                 "font-family:%4;letter-spacing:0.5px;}"
                 "QPushButton:hover{background:%5;border-color:%2;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::AMBER(), ui::colors::BORDER_MED(), FONT, ui::colors::BG_HOVER()));
@@ -124,7 +124,7 @@ QWidget* ChatMessagePanel::build_header() {
 
     hdr_tokens_lbl_ = new QLabel("0 tokens");
     hdr_tokens_lbl_->setStyleSheet(
-        QString("color:%1;font-size:12px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_DIM(), FONT));
+        QString("color:%1;font-size:12px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_SECONDARY(), FONT));
     hl->addWidget(hdr_tokens_lbl_);
 
     return hdr;
@@ -180,7 +180,7 @@ QWidget* ChatMessagePanel::build_welcome() {
     sub->setAlignment(Qt::AlignCenter);
     sub->setWordWrap(true);
     sub->setStyleSheet(
-        QString("color:%1;font-size:13px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_TERTIARY(), FONT));
+        QString("color:%1;font-size:13px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_SECONDARY(), FONT));
     vl->addWidget(sub);
 
     const QStringList chips = {"Outlook for AAPL?", "Today's market news", "Portfolio risk analysis",
@@ -231,7 +231,7 @@ QWidget* ChatMessagePanel::build_typing_indicator() {
 
     typing_status_lbl_ = new QLabel;
     typing_status_lbl_->setStyleSheet(
-        QString("color:%1;font-size:11px;background:transparent;font-family:%2;").arg(ui::colors::TEXT_DIM(), FONT));
+        QString("color:%1;font-size:12px;background:transparent;font-family:%2;").arg(ui::colors::TEXT_SECONDARY(), FONT));
     hl->addWidget(typing_status_lbl_);
     hl->addStretch();
 
@@ -269,7 +269,7 @@ QWidget* ChatMessagePanel::build_input_area() {
 
     char_lbl_ = new QLabel("0 / 4000");
     char_lbl_->setStyleSheet(
-        QString("color:%1;font-size:11px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_DIM(), FONT));
+        QString("color:%1;font-size:12px;font-family:%2;background:transparent;").arg(ui::colors::TEXT_SECONDARY(), FONT));
     bottom->addWidget(char_lbl_);
     bottom->addStretch();
 
@@ -321,7 +321,7 @@ QWidget* ChatMessagePanel::build_input_area() {
                 "font-family:%3;}"
                 "QPushButton:hover{background:#b45309;}"
                 "QPushButton:disabled{background:%4;color:%5;}")
-            .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), FONT, ui::colors::BG_RAISED(), ui::colors::TEXT_DIM()));
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), FONT, ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
     connect(send_btn_, &QPushButton::clicked, this, &ChatMessagePanel::on_send_clicked);
     bottom->addWidget(send_btn_);
 
@@ -406,15 +406,15 @@ void ChatMessagePanel::add_message_bubble(const QString& role, const QString& co
     meta->setSpacing(6);
     auto* role_lbl = new QLabel(role == "user" ? "You" : "Agent");
     role_lbl->setStyleSheet(
-        QString("color:%1;font-size:11px;font-weight:600;font-family:%2;"
+        QString("color:%1;font-size:12px;font-weight:600;font-family:%2;"
                 "background:transparent;letter-spacing:0.5px;")
             .arg(role == "user" ? QString(ui::colors::TEXT_SECONDARY()) : QString(ui::colors::AMBER()), FONT));
     meta->addWidget(role_lbl);
     if (!timestamp.isEmpty()) {
         auto* ts = new QLabel(timestamp.left(16));
-        ts->setStyleSheet(QString("color:%1;font-size:11px;font-family:%2;"
+        ts->setStyleSheet(QString("color:%1;font-size:12px;font-family:%2;"
                                   "background:transparent;")
-                              .arg(ui::colors::TEXT_DIM(), FONT));
+                              .arg(ui::colors::TEXT_SECONDARY(), FONT));
         meta->addWidget(ts);
     }
     meta->addStretch();
@@ -444,7 +444,7 @@ QTextEdit* ChatMessagePanel::add_streaming_bubble() {
     row_vl->setContentsMargins(0, 0, 0, 0);
     row_vl->setSpacing(2);
     auto* lbl = new QLabel("Agent");
-    lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:600;font-family:%2;"
+    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;font-family:%2;"
                                "background:transparent;letter-spacing:0.5px;")
                            .arg(ui::colors::AMBER(), FONT));
     row_vl->addWidget(lbl);
@@ -479,9 +479,9 @@ void ChatMessagePanel::insert_collapsed_thinking_card(int before_index) {
     auto* header = new QPushButton(summary);
     header->setCursor(Qt::PointingHandCursor);
     header->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:none;"
-                                  "font-size:11px;font-family:%2;text-align:left;padding:2px 0;}"
+                                  "font-size:12px;font-family:%2;text-align:left;padding:2px 0;}"
                                   "QPushButton:hover{color:%3;}")
-                              .arg(ui::colors::TEXT_TERTIARY(), FONT, ui::colors::TEXT_SECONDARY()));
+                              .arg(ui::colors::TEXT_SECONDARY(), FONT, ui::colors::TEXT_SECONDARY()));
     vl->addWidget(header);
 
     auto* detail = new QWidget(this);
@@ -494,14 +494,14 @@ void ChatMessagePanel::insert_collapsed_thinking_card(int before_index) {
     const QString merged = pending_thinking_.join(" ").left(1000);
     auto* thought = new QLabel(merged);
     thought->setWordWrap(true);
-    thought->setStyleSheet(QString("color:%1;font-size:11px;font-style:italic;"
+    thought->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;"
                                    "font-family:%2;background:transparent;")
-                               .arg(ui::colors::TEXT_DIM(), FONT));
+                               .arg(ui::colors::TEXT_SECONDARY(), FONT));
     dvl->addWidget(thought);
 
     for (const auto& [name, ms] : pending_tools_) {
         auto* line = new QLabel(QString(":: %1 %2ms").arg(name).arg(ms));
-        line->setStyleSheet(QString("color:%1;font-size:11px;font-family:%2;"
+        line->setStyleSheet(QString("color:%1;font-size:12px;font-family:%2;"
                                     "background:transparent;")
                                 .arg(ui::colors::AMBER(), FONT));
         dvl->addWidget(line);

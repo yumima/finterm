@@ -97,7 +97,7 @@ QWidget* AlgoTradingScreen::build_top_bar() {
 
     auto* subtitle = new QLabel("strategy builder · backtesting · live deployment", bar);
     subtitle->setStyleSheet(
-        QString("color:%1; font-size:10px; background:transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(subtitle);
 
     auto* div = new QWidget(bar);
@@ -112,11 +112,11 @@ QWidget* AlgoTradingScreen::build_top_bar() {
     for (int i = 0; i < tabs.size(); ++i) {
         auto* btn = new QPushButton(tabs[i], bar);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(QString("QPushButton { color:%1; font-size:10px; font-family:%2;"
+        btn->setStyleSheet(QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
                                    "padding:4px 12px; border:none;"
                                    "background:transparent; font-weight:400; }"
                                    "QPushButton:hover { color:%3; }")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::DATA_FAMILY())
                                .arg(colors[i]));
         connect(btn, &QPushButton::clicked, this, [this, i]() { on_tab_changed(i); });
@@ -128,7 +128,7 @@ QWidget* AlgoTradingScreen::build_top_bar() {
 
     // Deployment count badge
     deploy_count_label_ = new QLabel("0 LIVE", bar);
-    deploy_count_label_->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+    deploy_count_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                                "padding:3px 8px; background:rgba(22,163,74,0.08);"
                                                "border:1px solid rgba(22,163,74,0.25); border-radius:2px;")
                                            .arg(ui::colors::POSITIVE())
@@ -147,18 +147,18 @@ QWidget* AlgoTradingScreen::build_status_bar() {
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(16);
     auto s =
-        QString("color:%1; font-size:8px; font-family:%2;").arg(ui::colors::TEXT_TERTIARY()).arg(ui::fonts::DATA_FAMILY);
+        QString("color:%1; font-size:12px; font-family:%2;").arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::DATA_FAMILY);
     auto* l1 = new QLabel("ENGINE:", bar);
     l1->setStyleSheet(s);
     auto* v1 = new QLabel("ALGO v1.0", bar);
-    v1->setStyleSheet(QString("color:%1; font-size:8px; font-weight:700; font-family:%2;")
+    v1->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                           .arg(ui::colors::TEXT_PRIMARY())
                           .arg(ui::fonts::DATA_FAMILY));
     hl->addWidget(l1);
     hl->addWidget(v1);
     hl->addStretch();
     status_label_ = new QLabel("IDLE", bar);
-    status_label_->setStyleSheet(QString("color:%1; font-size:8px; font-weight:700; font-family:%2;")
+    status_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                                      .arg(ui::colors::POSITIVE())
                                      .arg(ui::fonts::DATA_FAMILY));
     hl->addWidget(status_label_);
@@ -186,16 +186,16 @@ void AlgoTradingScreen::update_tab_buttons() {
         bool active = (i == active_tab_);
         tab_buttons_[i]->setStyleSheet(
             active
-                ? QString("QPushButton { color:%1; font-size:10px; font-family:%2;"
+                ? QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
                           " padding:4px 12px; border:none; border-bottom:2px solid %1;"
                           " background:transparent; font-weight:700; }")
                       .arg(colors[i])
                       .arg(ui::fonts::DATA_FAMILY())
-                : QString("QPushButton { color:%1; font-size:10px; font-family:%2;"
+                : QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
                           " padding:4px 12px; border:none;"
                           " background:transparent; font-weight:400; }"
                           "QPushButton:hover { color:%3; }")
-                      .arg(ui::colors::TEXT_TERTIARY())
+                      .arg(ui::colors::TEXT_SECONDARY())
                       .arg(ui::fonts::DATA_FAMILY())
                       .arg(colors[i]));
     }

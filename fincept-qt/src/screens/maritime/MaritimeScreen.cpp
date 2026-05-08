@@ -71,18 +71,18 @@ static QString btn_outline_ss() {
 }
 
 static QString section_label_ss() {
-    return QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+    return QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                    "letter-spacing:1px; padding-bottom:4px; border-bottom:1px solid %3;")
         .arg(C(ui::colors::AMBER), F(ui::fonts::DATA_FAMILY), C(ui::colors::BORDER_DIM));
 }
 
 static QString tiny_label_ss() {
-    return QString("color:%1; font-size:8px; font-weight:700; font-family:%2; letter-spacing:1px;")
+    return QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
         .arg(C(ui::colors::TEXT_TERTIARY), F(ui::fonts::DATA_FAMILY));
 }
 
 static QString detail_text_ss() {
-    return QString("color:%1; font-size:9px; font-family:%2;")
+    return QString("color:%1; font-size:12px; font-family:%2;")
         .arg(C(ui::colors::TEXT_SECONDARY), F(ui::fonts::DATA_FAMILY));
 }
 
@@ -142,12 +142,12 @@ void MaritimeScreen::apply_theme() {
                 .arg(ui::fonts::DATA_FAMILY));
 
     if (classified_label_)
-        classified_label_->setStyleSheet(QString("color:%1; font-size:9px; font-family:%2; letter-spacing:1px;")
-                                             .arg(ui::colors::TEXT_TERTIARY())
+        classified_label_->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2; letter-spacing:1px;")
+                                             .arg(ui::colors::TEXT_SECONDARY())
                                              .arg(ui::fonts::DATA_FAMILY));
 
     if (threat_badge_)
-        threat_badge_->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+        threat_badge_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                              "padding:3px 10px; background:%3; border:1px solid %4; border-radius:2px;")
                                          .arg(ui::colors::POSITIVE())
                                          .arg(ui::fonts::DATA_FAMILY)
@@ -156,7 +156,7 @@ void MaritimeScreen::apply_theme() {
 
     if (vessel_count_label_)
         vessel_count_label_->setStyleSheet(
-            QString("color:%1; font-size:9px; font-weight:700; font-family:%2;"
+            QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                     "padding:3px 10px; background:%3; border:1px solid %4; border-radius:2px;")
                 .arg(ui::colors::INFO())
                 .arg(ui::fonts::DATA_FAMILY)
@@ -201,7 +201,7 @@ void MaritimeScreen::set_status(const QString& text, const ui::ColorToken& color
         return;
     status_label_->setText(text);
     status_label_->setStyleSheet(
-        QString("color:%1; font-size:8px; font-weight:700; font-family:%2;").arg(C(color) ).arg(ui::fonts::DATA_FAMILY));
+        QString("color:%1; font-size:12px; font-weight:700; font-family:%2;").arg(C(color) ).arg(ui::fonts::DATA_FAMILY));
 }
 
 // ── Build UI ─────────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ QWidget* MaritimeScreen::build_left_panel() {
     vl->addWidget(load_btn);
 
     auto* intel_title = new QLabel("INTELLIGENCE", panel);
-    intel_title->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2; letter-spacing:1px;")
+    intel_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
                                    .arg(ui::colors::AMBER())
                                    .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(intel_title);
@@ -291,8 +291,8 @@ QWidget* MaritimeScreen::build_left_panel() {
         bvl->setContentsMargins(8, 6, 8, 6);
         bvl->setSpacing(2);
         auto* lbl = new QLabel(label, box);
-        lbl->setStyleSheet(QString("color:%1; font-size:7px; font-family:%2;")
-                               .arg(ui::colors::TEXT_TERTIARY())
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2;")
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::DATA_FAMILY));
         auto* val = new QLabel(value, box);
         val->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
@@ -329,7 +329,7 @@ QWidget* MaritimeScreen::build_left_panel() {
 
     vl->addSpacing(8);
     auto* routes_title = new QLabel("TRADE CORRIDORS", panel);
-    routes_title->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2; letter-spacing:1px;")
+    routes_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
                                     .arg(ui::colors::AMBER())
                                     .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(routes_title);
@@ -370,7 +370,7 @@ QWidget* MaritimeScreen::build_center_panel() {
     hhl->addWidget(title);
     hhl->addStretch();
     auto* ais_badge = new QLabel("AIS: STREAMING", header);
-    ais_badge->setStyleSheet(QString("color:%1; font-size:9px; font-family:%2; font-weight:700;")
+    ais_badge->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2; font-weight:700;")
                                  .arg(ui::colors::POSITIVE())
                                  .arg(ui::fonts::DATA_FAMILY));
     hhl->addWidget(ais_badge);
@@ -467,7 +467,7 @@ QWidget* MaritimeScreen::build_right_panel() {
     srvl->setSpacing(4);
 
     sr_name_ = new QLabel(search_result_card_);
-    sr_name_->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; font-family:%2;")
+    sr_name_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                                 .arg(ui::colors::INFO())
                                 .arg(ui::fonts::DATA_FAMILY));
     srvl->addWidget(sr_name_);
@@ -490,7 +490,7 @@ QWidget* MaritimeScreen::build_right_panel() {
 
     search_result_label_ = new QLabel(content);
     search_result_label_->setStyleSheet(
-        QString("color:%1; font-size:9px; font-family:%2;").arg(ui::colors::NEGATIVE()).arg(ui::fonts::DATA_FAMILY));
+        QString("color:%1; font-size:12px; font-family:%2;").arg(ui::colors::NEGATIVE()).arg(ui::fonts::DATA_FAMILY));
     search_result_label_->setVisible(false);
     vl->addWidget(search_result_label_);
 
@@ -541,13 +541,13 @@ QWidget* MaritimeScreen::build_right_panel() {
     rdvl->setSpacing(4);
 
     auto* rd_title = new QLabel("SELECTED ROUTE", route_detail_);
-    rd_title->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; font-family:%2; letter-spacing:1px;")
+    rd_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
                                 .arg(ui::colors::AMBER())
                                 .arg(ui::fonts::DATA_FAMILY));
     rdvl->addWidget(rd_title);
 
     rd_name_ = new QLabel(route_detail_);
-    rd_name_->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; font-family:%2;")
+    rd_name_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                                 .arg(ui::colors::INFO())
                                 .arg(ui::fonts::DATA_FAMILY));
     rdvl->addWidget(rd_name_);
@@ -582,14 +582,14 @@ QWidget* MaritimeScreen::build_right_panel() {
     };
     for (const auto& [text, color] : statuses) {
         auto* lbl = new QLabel(QString::fromUtf8("\u25CF ") + text, content);
-        lbl->setStyleSheet(QString("color:%1; font-size:8px; font-family:%2;").arg(color).arg(ui::fonts::DATA_FAMILY));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2;").arg(color).arg(ui::fonts::DATA_FAMILY));
         vl->addWidget(lbl);
     }
 
     auto* cls = new QLabel("CLASSIFIED — AUTHORIZED PERSONNEL ONLY", content);
     cls->setWordWrap(true);
     cls->setAlignment(Qt::AlignCenter);
-    cls->setStyleSheet(QString("color:%1; font-size:8px; font-family:%2; font-weight:700;"
+    cls->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2; font-weight:700;"
                                "padding:8px; border:1px solid %3; background:%4; border-radius:2px;")
                            .arg(ui::colors::WARNING())
                            .arg(ui::fonts::DATA_FAMILY)
@@ -616,8 +616,8 @@ QWidget* MaritimeScreen::build_status_bar() {
     hl->setSpacing(16);
 
     auto s =
-        QString("color:%1; font-size:8px; font-family:%2;").arg(ui::colors::TEXT_TERTIARY()).arg(ui::fonts::DATA_FAMILY);
-    auto sv = QString("color:%1; font-size:8px; font-weight:700; font-family:%2;")
+        QString("color:%1; font-size:12px; font-family:%2;").arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::DATA_FAMILY);
+    auto sv = QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                   .arg(ui::colors::TEXT_PRIMARY())
                   .arg(ui::fonts::DATA_FAMILY);
 
@@ -751,7 +751,7 @@ void MaritimeScreen::on_route_selected(int row) {
     rd_name_->setText(r.name);
     rd_value_->setText("Trade Value: " + r.value);
     rd_status_->setText("Status: " + r.status.toUpper());
-    rd_status_->setStyleSheet(QString("color:%1; font-size:9px; font-family:%2;")
+    rd_status_->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2;")
                                   .arg(route_status_color(r.status).name())
                                   .arg(ui::fonts::DATA_FAMILY));
     rd_vessels_->setText(QString("Active Vessels: %1").arg(r.vessels));

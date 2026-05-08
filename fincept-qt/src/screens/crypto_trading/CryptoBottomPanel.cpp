@@ -35,7 +35,7 @@ inline QColor kColorSec() {
     return QColor(colors::TEXT_SECONDARY());
 }
 inline QColor kColorTert() {
-    return QColor(colors::TEXT_TERTIARY());
+    return QColor(colors::TEXT_SECONDARY());
 }
 } // namespace
 

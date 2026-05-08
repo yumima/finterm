@@ -154,7 +154,7 @@ void PortfolioFuturesView::build_ui() {
         hdr->addWidget(title);
         hdr->addStretch();
         futures_status_ = new QLabel;
-        futures_status_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-3)));
+        futures_status_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
         hdr->addWidget(futures_status_);
         root->addLayout(hdr);
 
@@ -179,7 +179,7 @@ void PortfolioFuturesView::build_ui() {
         hdr->addWidget(title);
         hdr->addStretch();
         extended_status_ = new QLabel;
-        extended_status_->setStyleSheet(lbl_ss(colors::TEXT_DIM(), false, fonts::font_px(-3)));
+        extended_status_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
         hdr->addWidget(extended_status_);
         root->addLayout(hdr);
 

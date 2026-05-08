@@ -129,7 +129,7 @@ void AgentChatPanel::build_ui() {
     // Agent selector
     auto* agent_lbl = new QLabel("AGENT:");
     agent_lbl->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;letter-spacing:0.5px;").arg(col::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:0.5px;").arg(col::TEXT_TERTIARY()));
     hl->addWidget(agent_lbl);
 
     agent_selector_ = new QComboBox;
@@ -156,7 +156,7 @@ void AgentChatPanel::build_ui() {
         completer->popup()->setStyleSheet(QString("QAbstractItemView{"
                                                   "background:%1;color:%2;border:1px solid %3;"
                                                   "selection-background-color:%4;"
-                                                  "font-size:11px;padding:2px;outline:none;}"
+                                                  "font-size:12px;padding:2px;outline:none;}"
                                                   "QAbstractItemView::item{padding:4px 10px;min-height:22px;}")
                                               .arg(col::BG_RAISED(), col::TEXT_PRIMARY(), col::AMBER(), col::AMBER_DIM()));
         agent_selector_->setCompleter(completer);
@@ -164,15 +164,15 @@ void AgentChatPanel::build_ui() {
 
     agent_selector_->setStyleSheet(
         QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:3px 10px;"
-                "font-size:10px;border-radius:3px;}"
+                "font-size:12px;border-radius:3px;}"
                 "QComboBox::drop-down{border:none;width:18px;}"
                 "QComboBox:hover{border-color:%4;}"
                 "QComboBox QAbstractItemView{background:%1;color:%2;"
                 "selection-background-color:%5;border:1px solid %3;"
-                "font-size:11px;padding:2px;outline:none;}"
+                "font-size:12px;padding:2px;outline:none;}"
                 "QComboBox QAbstractItemView::item{padding:4px 10px;min-height:22px;}"
                 "QComboBox QLineEdit{background:%1;color:%2;border:none;"
-                "selection-background-color:%5;font-size:10px;padding:0 4px;}")
+                "selection-background-color:%5;font-size:12px;padding:0 4px;}")
             .arg(col::BG_BASE(), col::TEXT_PRIMARY(), col::BORDER_MED(), col::AMBER(), col::AMBER_DIM()));
 
     // When user picks an item from popup, clear search text and show the selected name
@@ -188,7 +188,7 @@ void AgentChatPanel::build_ui() {
 
     // Active model pill
     hdr_model_lbl_ = new QLabel("No model");
-    hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:9px;background:%2;border:1px solid %3;"
+    hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;border:1px solid %3;"
                                           "border-radius:3px;padding:2px 8px;")
                                       .arg(col::TEXT_SECONDARY(), col::BG_BASE(), col::BORDER_MED()));
     hdr_model_lbl_->setToolTip("Active LLM — configure in Settings > LLM Configuration");
@@ -198,7 +198,7 @@ void AgentChatPanel::build_ui() {
     hdr_status_lbl_ = new QLabel("Ready");
     hdr_status_lbl_->setFixedWidth(72);
     hdr_status_lbl_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::POSITIVE()));
+    hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::POSITIVE()));
     hl->addWidget(hdr_status_lbl_);
 
     auto* div2 = new QFrame;
@@ -215,7 +215,7 @@ void AgentChatPanel::build_ui() {
     route_toggle_->setToolTip("When ON, the system picks the best agent for each query.");
     route_toggle_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "padding:3px 10px;font-size:9px;font-weight:600;border-radius:3px;}"
+                "padding:3px 10px;font-size:12px;font-weight:600;border-radius:3px;}"
                 "QPushButton:checked{color:%3;border-color:%3;background:rgba(34,197,94,0.08);}"
                 "QPushButton:hover{background:%4;}")
             .arg(col::TEXT_SECONDARY(), col::BORDER_MED(), col::POSITIVE(), col::BG_HOVER()));
@@ -226,7 +226,7 @@ void AgentChatPanel::build_ui() {
     clear_btn_->setCursor(Qt::PointingHandCursor);
     clear_btn_->setFixedHeight(28);
     clear_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                                      "padding:3px 10px;font-size:9px;font-weight:600;border-radius:3px;}"
+                                      "padding:3px 10px;font-size:12px;font-weight:600;border-radius:3px;}"
                                       "QPushButton:hover{background:%3;color:%4;border-color:%4;}")
                                   .arg(col::TEXT_TERTIARY(), col::BORDER_DIM(), col::BG_HOVER(), col::TEXT_SECONDARY()));
     hl->addWidget(clear_btn_);
@@ -242,14 +242,14 @@ void AgentChatPanel::build_ui() {
 
     auto* plbl = new QLabel("PORTFOLIO:");
     plbl->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;letter-spacing:0.5px;").arg(col::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:0.5px;").arg(col::TEXT_TERTIARY()));
     pl->addWidget(plbl);
 
     portfolio_combo_ = new QComboBox;
     portfolio_combo_->addItem("None");
     portfolio_combo_->setFixedWidth(160);
     portfolio_combo_->setStyleSheet(QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 8px;"
-                                            "font-size:10px;border-radius:3px;}"
+                                            "font-size:12px;border-radius:3px;}"
                                             "QComboBox::drop-down{border:none;}"
                                             "QComboBox QAbstractItemView{background:%1;color:%2;"
                                             "selection-background-color:%4;border:1px solid %3;}")
@@ -261,7 +261,7 @@ void AgentChatPanel::build_ui() {
         b->setCursor(Qt::PointingHandCursor);
         b->setFixedHeight(24);
         b->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                                 "font-size:9px;font-weight:600;padding:2px 8px;border-radius:3px;}"
+                                 "font-size:12px;font-weight:600;padding:2px 8px;border-radius:3px;}"
                                  "QPushButton:hover{background:rgba(255,255,255,0.05);border-color:%1;}")
                              .arg(clr, col::BORDER_DIM()));
         return b;
@@ -333,7 +333,7 @@ void AgentChatPanel::build_ui() {
         auto* btn = new QPushButton(c.label);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
-                                   "padding:6px 14px;font-size:10px;font-weight:600;border-radius:4px;}"
+                                   "padding:6px 14px;font-size:12px;font-weight:600;border-radius:4px;}"
                                    "QPushButton:hover{background:%4;}")
                                .arg(col::BG_RAISED(), c.color, col::BORDER_MED(), col::BG_HOVER()));
         const QString q = c.query;
@@ -357,7 +357,7 @@ void AgentChatPanel::build_ui() {
     til->setContentsMargins(4, 0, 0, 0);
     typing_dots_lbl_ = new QLabel("Agent is thinking");
     typing_dots_lbl_->setStyleSheet(
-        QString("color:%1;font-size:11px;font-style:italic;background:transparent;").arg(col::TEXT_DIM()));
+        QString("color:%1;font-size:12px;font-style:italic;background:transparent;").arg(col::TEXT_DIM()));
     til->addWidget(typing_dots_lbl_);
     til->addStretch();
     typing_indicator_->hide();
@@ -407,7 +407,7 @@ void AgentChatPanel::build_ui() {
     status_label_ = new QLabel;
     status_label_->setFixedHeight(18);
     status_label_->setStyleSheet(
-        QString("background:%1;color:%2;font-size:9px;padding:0 14px;").arg(col::BG_SURFACE(), col::TEXT_TERTIARY()));
+        QString("background:%1;color:%2;font-size:12px;padding:0 14px;").arg(col::BG_SURFACE(), col::TEXT_TERTIARY()));
     root->addWidget(status_label_);
 }
 
@@ -528,11 +528,11 @@ void AgentChatPanel::setup_connections() {
         if (r.success) {
             status_label_->setText(QString("Response received (%1ms)").arg(r.execution_time_ms));
             hdr_status_lbl_->setText("Ready");
-            hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::POSITIVE()));
+            hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::POSITIVE()));
         } else {
             status_label_->setText("Agent execution failed");
             hdr_status_lbl_->setText("Error");
-            hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::NEGATIVE()));
+            hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::NEGATIVE()));
         }
         scroll_to_bottom();
     });
@@ -593,18 +593,18 @@ void AgentChatPanel::update_llm_status() {
     if (llm.is_configured()) {
         const QString label = QString("%1 / %2").arg(llm.active_provider(), llm.active_model());
         hdr_model_lbl_->setText(label);
-        hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:9px;background:%2;border:1px solid %3;"
+        hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;border:1px solid %3;"
                                               "border-radius:3px;padding:2px 8px;")
                                           .arg(col::TEXT_SECONDARY(), col::BG_BASE(), col::BORDER_MED()));
         hdr_status_lbl_->setText("Ready");
-        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::POSITIVE()));
+        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::POSITIVE()));
     } else {
         hdr_model_lbl_->setText("No LLM configured");
-        hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:9px;background:%2;border:1px solid %3;"
+        hdr_model_lbl_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;border:1px solid %3;"
                                               "border-radius:3px;padding:2px 8px;")
                                           .arg(col::NEGATIVE(), col::BG_BASE(), col::NEGATIVE()));
         hdr_status_lbl_->setText("Unconfigured");
-        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::NEGATIVE()));
+        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::NEGATIVE()));
         status_label_->setText("No LLM provider configured — go to Settings > LLM Configuration");
     }
 }
@@ -755,7 +755,7 @@ void AgentChatPanel::add_user_bubble(const QString& text) {
     auto* role_lbl = new QLabel(role_label(role));
     role_lbl->setAlignment(Qt::AlignRight);
     role_lbl->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;background:transparent;").arg(role_color(role)));
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(role_color(role)));
     cvl->addWidget(role_lbl);
 
     auto* bubble = new QFrame;
@@ -772,7 +772,7 @@ void AgentChatPanel::add_user_bubble(const QString& text) {
 
     auto* ts_lbl = new QLabel(ts);
     ts_lbl->setAlignment(Qt::AlignRight);
-    ts_lbl->setStyleSheet(QString("color:%1;font-size:9px;background:transparent;").arg(col::TEXT_DIM()));
+    ts_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(col::TEXT_DIM()));
     cvl->addWidget(ts_lbl);
 
     rl->addWidget(col_w);
@@ -801,7 +801,7 @@ void AgentChatPanel::add_assistant_bubble(const QString& text, const QString& ag
     auto* hdr_row = new QHBoxLayout;
     auto* role_lbl = new QLabel(agent_name.isEmpty() ? "Agent" : agent_name);
     role_lbl->setStyleSheet(
-        QString("color:%1;font-size:9px;font-weight:600;background:transparent;").arg(role_color(role)));
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(role_color(role)));
     hdr_row->addWidget(role_lbl);
     hdr_row->addStretch();
     cvl->addLayout(hdr_row);
@@ -835,7 +835,7 @@ void AgentChatPanel::add_assistant_bubble(const QString& text, const QString& ag
 
     auto* ts_lbl = new QLabel(ts);
     ts_lbl->setAlignment(Qt::AlignLeft);
-    ts_lbl->setStyleSheet(QString("color:%1;font-size:9px;background:transparent;").arg(col::TEXT_DIM()));
+    ts_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(col::TEXT_DIM()));
     cvl->addWidget(ts_lbl);
 
     rl->addWidget(col_w);
@@ -861,7 +861,7 @@ void AgentChatPanel::add_system_bubble(const QString& text) {
     auto* body = new QLabel(text);
     body->setWordWrap(true);
     body->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    body->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;").arg(body_color(role)));
+    body->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(body_color(role)));
     bvl->addWidget(body);
 
     rl->addWidget(bubble);
@@ -886,7 +886,7 @@ QTextEdit* AgentChatPanel::add_streaming_bubble(const QString& agent_name) {
     cvl->setSpacing(4);
 
     auto* role_lbl = new QLabel(agent_name.isEmpty() ? "Agent" : agent_name);
-    role_lbl->setStyleSheet(QString("color:%1;font-size:9px;font-weight:600;background:transparent;").arg(col::CYAN()));
+    role_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col::CYAN()));
     cvl->addWidget(role_lbl);
 
     auto* bubble = new QFrame;
@@ -937,7 +937,7 @@ void AgentChatPanel::set_executing(bool on) {
     send_btn_->setText(on ? "..." : "Send");
     if (on) {
         hdr_status_lbl_->setText("Streaming");
-        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::AMBER()));
+        hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::AMBER()));
         status_label_->setText("Processing...");
     }
     if (!on) {
@@ -987,7 +987,7 @@ void AgentChatPanel::clear_chat() {
 
     show_welcome(true);
     hdr_status_lbl_->setText("Ready");
-    hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:9px;font-weight:700;").arg(col::POSITIVE()));
+    hdr_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;").arg(col::POSITIVE()));
     status_label_->clear();
     update_llm_status();
 }

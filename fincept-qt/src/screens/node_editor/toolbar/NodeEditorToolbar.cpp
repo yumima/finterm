@@ -18,7 +18,7 @@ static QString btn_style() {
                    "QPushButton:hover { color: %4; background: %5; }"
                    "QPushButton:disabled { color: %6; }")
         .arg(ui::colors::BG_HOVER(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::BG_HOVER(), ui::colors::TEXT_DIM());
+             ui::colors::BG_HOVER(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString accent_btn_style() {
@@ -96,7 +96,7 @@ void NodeEditorToolbar::build_ui() {
                                       "  font-size: 13px; font-weight: bold; padding: 2px 4px;"
                                       "}"
                                       "QLineEdit:focus { border-bottom: 1px solid %3; }")
-                                  .arg(ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_DIM(), ui::colors::AMBER()));
+                                  .arg(ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     layout->addWidget(name_edit_);
 
     connect(name_edit_, &QLineEdit::textChanged, this, &NodeEditorToolbar::name_changed);
@@ -105,7 +105,7 @@ void NodeEditorToolbar::build_ui() {
     auto* status = new QLabel("DRAFT");
     status->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 10px;"
                                   "font-weight: bold; letter-spacing: 0.5px; padding: 0 6px;")
-                              .arg(ui::colors::TEXT_TERTIARY()));
+                              .arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(status);
 
     layout->addStretch();

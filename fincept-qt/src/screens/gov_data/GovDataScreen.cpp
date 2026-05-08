@@ -50,17 +50,17 @@ static QString build_screen_style() {
     s += QString("#govToolbarTitle { color:%1; font-size:12px; font-weight:700;"
                  "  letter-spacing:1px; background:transparent; }")
              .arg(text);
-    s += QString("#govToolbarSub { color:%1; font-size:10px; background:transparent; }").arg(sec);
+    s += QString("#govToolbarSub { color:%1; font-size:12px; background:transparent; }").arg(sec);
 
     // Sidebar
     s += QString("#govSidebar { background:%1; border-right:1px solid %2; }").arg(surface, bdim);
     s += QString("#govSidebarHeader { background:%1; border-bottom:1px solid %2; }").arg(raised, bdim);
-    s += QString("#govSidebarTitle { color:%1; font-size:9px; font-weight:700;"
+    s += QString("#govSidebarTitle { color:%1; font-size:12px; font-weight:700;"
                  "  letter-spacing:1px; background:transparent; }")
              .arg(sec);
     s += "#govProviderList { background:transparent; border:none; outline:none; }";
     s += QString("#govProviderList::item { color:%1; padding:7px 14px;"
-                 "  border-bottom:1px solid %2; font-size:11px; }")
+                 "  border-bottom:1px solid %2; font-size:12px; }")
              .arg(sec, bdim);
     s += QString("#govProviderList::item:hover { color:%1; background:%2; }").arg(text, hover);
     s += QString("#govProviderList::item:selected { color:%1; background:rgba(%2,0.08);"
@@ -69,10 +69,10 @@ static QString build_screen_style() {
 
     // Status bar
     s += QString("#govStatusBar { background:%1; border-top:1px solid %2; }").arg(raised, bdim);
-    s += QString("#govStatusText { color:%1; font-size:9px; background:transparent; }").arg(dim);
-    s += QString("#govStatusSep  { color:%1; font-size:9px; background:transparent; }").arg(bdim);
-    s += QString("#govStatusVal  { color:%1; font-size:9px; background:transparent; }").arg(sec);
-    s += QString("#govStatusHigh { color:%1; font-size:9px; font-weight:700; background:transparent; }").arg(accent);
+    s += QString("#govStatusText { color:%1; font-size:12px; background:transparent; }").arg(dim);
+    s += QString("#govStatusSep  { color:%1; font-size:12px; background:transparent; }").arg(bdim);
+    s += QString("#govStatusVal  { color:%1; font-size:12px; background:transparent; }").arg(sec);
+    s += QString("#govStatusHigh { color:%1; font-size:12px; font-weight:700; background:transparent; }").arg(accent);
 
     // Scrollbar
     s += QString("QScrollBar:vertical { background:%1; width:5px; }").arg(bg);
@@ -303,7 +303,7 @@ QWidget* GovDataScreen::build_status_bar() {
     hl->addWidget(dot);
     auto* ready = new QLabel("READY");
     ready->setObjectName("govStatusText");
-    ready->setStyleSheet(QString("color:%1; font-size:9px; background:transparent;").arg(colors::POSITIVE()));
+    ready->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(colors::POSITIVE()));
     hl->addWidget(ready);
 
     return bar;
@@ -325,7 +325,7 @@ void GovDataScreen::refresh_theme() {
     if (provider_badge_) {
         provider_badge_->setStyleSheet(
             QString("color:%1; background:rgba(%2,0.1); border:1px solid rgba(%2,0.3);"
-                    " font-size:9px; font-weight:700; padding:2px 8px; letter-spacing:0.5px;")
+                    " font-size:12px; font-weight:700; padding:2px 8px; letter-spacing:0.5px;")
                 .arg(accent_color, ar));
     }
 
@@ -335,7 +335,7 @@ void GovDataScreen::refresh_theme() {
         const auto ac2 = QColor(tk.accent);
         const QString ar2 = QString("%1,%2,%3").arg(ac2.red()).arg(ac2.green()).arg(ac2.blue());
         sidebar_count_->setStyleSheet(
-            QString("color:%1; background:rgba(%2,0.12); font-size:9px;"
+            QString("color:%1; background:rgba(%2,0.12); font-size:12px;"
                     " font-weight:700; padding:1px 5px;")
                 .arg(tk.accent, ar2));
     }
@@ -346,7 +346,7 @@ void GovDataScreen::refresh_theme() {
             QString("#govToolbar { background:%1; border-bottom:2px solid %2; }")
                 .arg(t.bg_raised, active_provider_color_));
         header_subtitle_->setStyleSheet(
-            QString("color:%1; font-size:10px; background:transparent;").arg(active_provider_color_));
+            QString("color:%1; font-size:12px; background:transparent;").arg(active_provider_color_));
     }
 }
 

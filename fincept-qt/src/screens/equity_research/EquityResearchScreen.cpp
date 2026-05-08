@@ -336,7 +336,7 @@ QWidget* EquityResearchScreen::build_title_bar() {
     hl->addStretch();
 
     auto* hint = new QLabel("Use /stock, /fund, /index... in command bar to search");
-    hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
+    hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(hint);
 
     return container;
@@ -377,7 +377,7 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     // last arrived. Empty until the first signal lands.
     freshness_label_ = new QLabel("");
     freshness_label_->setStyleSheet(
-        QString("font-size:11px; font-weight:500; color:%1;").arg(ui::colors::TEXT_DIM()));
+        QString("font-size:12px; font-weight:500; color:%1;").arg(ui::colors::TEXT_SECONDARY()));
     freshness_label_->setToolTip("When this tab's data was last refreshed");
     hl->addWidget(freshness_label_);
 

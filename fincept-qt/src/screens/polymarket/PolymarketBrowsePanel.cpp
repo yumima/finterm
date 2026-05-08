@@ -92,7 +92,7 @@ PolymarketBrowsePanel::PolymarketBrowsePanel(QWidget* parent) : QWidget(parent) 
                 "QPushButton:disabled { color: %5; border-color: %2; }")
             .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(),
                  colors::TEXT_PRIMARY(), colors::BORDER_BRIGHT(),
-                 colors::TEXT_DIM());
+                 colors::TEXT_SECONDARY());
 
     prev_btn_ = new QPushButton("◀");
     prev_btn_->setStyleSheet(nav_btn_css);

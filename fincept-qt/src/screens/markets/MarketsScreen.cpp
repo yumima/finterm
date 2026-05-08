@@ -293,7 +293,7 @@ QWidget* MarketsScreen::build_header_bar() {
 
     // Session status
     session_label_ = new QLabel;
-    session_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_DIM(), true, 11));
+    session_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), true, 11));
     h->addWidget(session_label_);
     update_session_status();
 
@@ -332,7 +332,7 @@ QWidget* MarketsScreen::build_header_bar() {
             QString("QPushButton{background:transparent;color:%1;border:none;"
                     "font-size:%2px;font-family:'%3';padding:0 6px;}"
                     "QPushButton:hover{color:%4;}")
-                .arg(ui::colors::TEXT_DIM()).arg(ui::fonts::font_px(-3))
+                .arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::font_px(-3))
                 .arg(ui::fonts::DATA_FAMILY()).arg(ui::colors::TEXT_PRIMARY()));
         return b;
     };
@@ -349,7 +349,7 @@ QWidget* MarketsScreen::build_header_bar() {
             QString("QPushButton{background:transparent;color:%1;border:none;"
                     "font-size:%3px;font-family:'%4';padding:0 6px;}"
                     "QPushButton:hover{color:%2;}")
-                .arg(auto_update_ ? ui::colors::AMBER() : ui::colors::TEXT_DIM(),
+                .arg(auto_update_ ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(),
                      ui::colors::TEXT_PRIMARY())
                 .arg(ui::fonts::font_px(-3))
                 .arg(ui::fonts::DATA_FAMILY()));
@@ -382,7 +382,7 @@ QWidget* MarketsScreen::build_header_bar() {
                 "QComboBox::drop-down{border:none;width:12px;}"
                 "QComboBox QAbstractItemView{background:%2;color:%3;border:1px solid %4;"
                 "selection-background-color:%5;font-size:%6px;font-family:'%7';}")
-            .arg(ui::colors::TEXT_DIM(), ui::colors::BG_RAISED(),
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
                  ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER())
             .arg(ui::fonts::font_px(-3))
             .arg(ui::fonts::DATA_FAMILY()));
@@ -436,7 +436,7 @@ QWidget* MarketsScreen::build_header_bar() {
     h->addStretch();
 
     last_upd_label_ = new QLabel("LAST UPDATE  --:--:--");
-    last_upd_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_DIM(), false, 11));
+    last_upd_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), false, 11));
     h->addWidget(last_upd_label_);
 
     h->addWidget(new QLabel("   "));
@@ -462,7 +462,7 @@ void MarketsScreen::update_session_status() {
 
     QString label, color;
     if (!weekday || hhmm < 400 || hhmm >= 2000) {
-        label = "NYSE: CLOSED";    color = ui::colors::TEXT_DIM();
+        label = "NYSE: CLOSED";    color = ui::colors::TEXT_SECONDARY();
     } else if (hhmm < 930) {
         label = "NYSE: PRE-MKT";   color = ui::colors::AMBER();
     } else if (hhmm < 1600) {

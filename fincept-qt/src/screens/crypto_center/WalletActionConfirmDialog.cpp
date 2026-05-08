@@ -192,7 +192,7 @@ void WalletActionConfirmDialog::apply_theme() {
         "QWidget#walletActionDialogHeader { background:%2; border-bottom:1px solid %3; }"
         "QLabel#walletActionDialogTitle { color:%4; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
-        "QLabel#walletActionDialogHeadStatus { color:%6; font-family:%5; font-size:10px;"
+        "QLabel#walletActionDialogHeadStatus { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
 
         // Body
@@ -205,7 +205,7 @@ void WalletActionConfirmDialog::apply_theme() {
         "QWidget#walletActionDialogRow { background:transparent;"
         "  border-bottom:1px solid %3; }"
         "QWidget#walletActionDialogRow[isLast=\"true\"] { border-bottom:none; }"
-        "QLabel#walletActionDialogRowLabel { color:%6; font-family:%5; font-size:10px;"
+        "QLabel#walletActionDialogRowLabel { color:%6; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
         "QLabel#walletActionDialogRowValue { color:%9; font-family:%5; font-size:12px;"
         "  background:transparent; }"
@@ -215,7 +215,7 @@ void WalletActionConfirmDialog::apply_theme() {
         // Warnings
         "QFrame#walletActionDialogWarnBlock { background:rgba(220,38,38,0.10);"
         "  border:1px solid %10; }"
-        "QLabel#walletActionDialogWarnText { color:%10; font-family:%5; font-size:11px;"
+        "QLabel#walletActionDialogWarnText { color:%10; font-family:%5; font-size:12px;"
         "  background:transparent; }"
 
         // Footer
@@ -223,13 +223,13 @@ void WalletActionConfirmDialog::apply_theme() {
 
         // Cancel button
         "QPushButton#walletActionDialogCancel { background:%8; color:%7; border:1px solid %3;"
-        "  font-family:%5; font-size:11px; font-weight:700; letter-spacing:1px; padding:0 14px; }"
+        "  font-family:%5; font-size:12px; font-weight:700; letter-spacing:1px; padding:0 14px; }"
         "QPushButton#walletActionDialogCancel:hover { background:%11; color:%9;"
         "  border-color:%12; }"
 
         // Primary (safe — amber)
         "QPushButton#walletActionDialogPrimary { background:rgba(217,119,6,0.10); color:%4;"
-        "  border:1px solid %13; font-family:%5; font-size:11px; font-weight:700;"
+        "  border:1px solid %13; font-family:%5; font-size:12px; font-weight:700;"
         "  letter-spacing:1.2px; padding:0 16px; }"
         "QPushButton#walletActionDialogPrimary:hover { background:%4; color:%1; }"
         "QPushButton#walletActionDialogPrimary:disabled { background:%8; color:%6;"
@@ -237,7 +237,7 @@ void WalletActionConfirmDialog::apply_theme() {
 
         // Primary (danger — red)
         "QPushButton#walletActionDialogPrimaryDanger { background:rgba(220,38,38,0.10); color:%10;"
-        "  border:1px solid %14; font-family:%5; font-size:11px; font-weight:700;"
+        "  border:1px solid %14; font-family:%5; font-size:12px; font-weight:700;"
         "  letter-spacing:1.2px; padding:0 16px; }"
         "QPushButton#walletActionDialogPrimaryDanger:hover { background:%10; color:%9; }"
         "QPushButton#walletActionDialogPrimaryDanger:disabled { background:%8; color:%6;"

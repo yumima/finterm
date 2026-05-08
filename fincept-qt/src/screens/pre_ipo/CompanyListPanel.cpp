@@ -133,7 +133,7 @@ void CompanyListPanel::build_ui() {
                     "  border-radius:11px; padding:0 8px; font-size:12px; font-weight:600; }"
                     "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
                     "QPushButton:hover:!checked { color:%5; border-color:%5; }")
-                .arg(colors::TEXT_TERTIARY(), colors::BORDER_DIM(),
+                .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(),
                      colors::AMBER(), colors::BG_BASE(), colors::TEXT_PRIMARY()));
 
         const QString t = tag;
@@ -231,7 +231,7 @@ void CompanyListPanel::apply_filter() {
     if (inserted == 0) {
         auto* empty = new QLabel("No companies match");
         empty->setStyleSheet(
-            QString("color:%1; font-size:12px; padding:20px;").arg(colors::TEXT_TERTIARY()));
+            QString("color:%1; font-size:12px; padding:20px;").arg(colors::TEXT_SECONDARY()));
         empty->setAlignment(Qt::AlignCenter);
         list_layout_->insertWidget(0, empty);
     }
@@ -351,7 +351,7 @@ QWidget* CompanyListPanel::make_status_badge(IpoStatus status, QWidget* parent) 
             label = "Filed"; bg = "rgba(217,119,6,0.2)"; fg = colors::AMBER();
             break;
         case IpoStatus::Rumored:
-            label = "Rumored"; bg = "rgba(107,114,128,0.2)"; fg = colors::TEXT_TERTIARY();
+            label = "Rumored"; bg = "rgba(107,114,128,0.2)"; fg = colors::TEXT_SECONDARY();
             break;
         case IpoStatus::Priced:
             label = "Priced"; bg = "rgba(22,163,74,0.2)"; fg = colors::POSITIVE();

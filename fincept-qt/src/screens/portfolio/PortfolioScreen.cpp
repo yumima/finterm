@@ -362,8 +362,8 @@ static QPushButton* make_cta_card(const QString& glyph, const QString& title, co
 
     auto* p = new QLabel(subtitle);
     p->setWordWrap(true);
-    p->setStyleSheet(QString("color:%1; font-size:11px; line-height:1.4; background:transparent; border:none;")
-                         .arg(ui::colors::TEXT_TERTIARY()));
+    p->setStyleSheet(QString("color:%1; font-size:12px; line-height:1.4; background:transparent; border:none;")
+                         .arg(ui::colors::TEXT_SECONDARY()));
     v->addWidget(p);
 
     v->addStretch(1);
@@ -492,7 +492,7 @@ QWidget* PortfolioScreen::build_loading_state() {
     auto* text = new QLabel("Loading portfolio data…");
     text->setAlignment(Qt::AlignCenter);
     text->setStyleSheet(
-        QString("color:%1; font-size:11px; font-weight:600; letter-spacing:0.8px;").arg(ui::colors::AMBER()));
+        QString("color:%1; font-size:12px; font-weight:600; letter-spacing:0.8px;").arg(ui::colors::AMBER()));
     outer->addWidget(text);
 
     // Pulsing opacity animation for the skeleton group (subtle, ≤20 fps per P9)
@@ -893,7 +893,7 @@ QWidget* PortfolioScreen::build_main_view() {
     header_hl->addWidget(title_tick);
 
     auto* title = new QLabel("POSITIONS");
-    title->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700; letter-spacing:1.2px; background:transparent;")
+    title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.2px; background:transparent;")
                              .arg(ui::colors::TEXT_PRIMARY()));
     header_hl->addWidget(title);
 
@@ -904,7 +904,7 @@ QWidget* PortfolioScreen::build_main_view() {
     positions_count_label_->setFixedHeight(16);
     positions_count_label_->setStyleSheet(
         QString("color:%1; background:%2; border:1px solid %3; border-radius:8px;"
-                "  font-size:10px; font-weight:700; padding:0 6px;")
+                "  font-size:12px; font-weight:700; padding:0 6px;")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     header_hl->addWidget(positions_count_label_);
 
@@ -925,13 +925,13 @@ QWidget* PortfolioScreen::build_main_view() {
 
     auto* filter_icon = new QLabel("\u2315"); // ⌕ search glyph
     filter_icon->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent; border:none;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent; border:none;").arg(ui::colors::TEXT_SECONDARY()));
     filter_hl->addWidget(filter_icon);
 
     auto* filter_edit = new QLineEdit;
     filter_edit->setPlaceholderText("Filter positions…");
     filter_edit->setStyleSheet(QString("QLineEdit { background:transparent; color:%1; border:none;"
-                                       "  font-size:11px; font-family:%2; }"
+                                       "  font-size:12px; font-family:%2; }"
                                        "QLineEdit:focus { color:%3; }")
                                    .arg(ui::colors::TEXT_SECONDARY(), ui::fonts::DATA_FAMILY, ui::colors::TEXT_PRIMARY()));
     filter_hl->addWidget(filter_edit, 1);

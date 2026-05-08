@@ -120,7 +120,7 @@ QWidget* ProfileScreen::make_stat_box(const QString& label, QLabel*& value_out, 
     vl->addWidget(value_out);
     auto* l = new QLabel(label);
     l->setAlignment(Qt::AlignCenter);
-    l->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;background:transparent;letter-spacing:0.5px;%2")
+    l->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;letter-spacing:0.5px;%2")
                          .arg(ui::colors::TEXT_SECONDARY(), MF));
     vl->addWidget(l);
     return w;
@@ -176,7 +176,7 @@ void ProfileScreen::build_header(QVBoxLayout* root) {
     rb->setCursor(Qt::PointingHandCursor);
     rb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     connect(rb, &QPushButton::clicked, this, []() { auth::AuthManager::instance().refresh_user_data(); });
     hl->addWidget(rb);
@@ -215,7 +215,7 @@ void ProfileScreen::on_section_changed(int index) {
                 : QString("QPushButton{background:transparent;color:%1;border:none;padding:0 14px;"
                           "font-size:12px;font-weight:700;letter-spacing:0.5px;font-family:'Consolas',monospace;}"
                           "QPushButton:hover{color:%2;}")
-                      .arg(ui::colors::TEXT_TERTIARY(), ui::colors::TEXT_SECONDARY()));
+                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_SECONDARY()));
     }
     if (index == 1)
         fetch_usage_data();
@@ -252,7 +252,7 @@ QWidget* ProfileScreen::build_overview() {
     eb->setCursor(Qt::PointingHandCursor);
     eb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;margin:8px 12px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     connect(eb, &QPushButton::clicked, this, &ProfileScreen::show_edit_profile_dialog);
     avl->addWidget(eb);
@@ -268,7 +268,7 @@ QWidget* ProfileScreen::build_overview() {
     cvl2->addWidget(ov_credits_big_);
     auto* cl = new QLabel("AVAILABLE CREDITS");
     cl->setAlignment(Qt::AlignCenter);
-    cl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;background:transparent;letter-spacing:0."
+    cl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;letter-spacing:0."
                               "5px;padding-bottom:12px;%2")
                           .arg(ui::colors::TEXT_SECONDARY(), MF));
     cvl2->addWidget(cl);
@@ -290,7 +290,7 @@ QWidget* ProfileScreen::build_overview() {
     eb2->setFixedHeight(26);
     eb2->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     connect(eb2, &QPushButton::clicked, this, &ProfileScreen::show_edit_profile_dialog);
     arl->addWidget(eb2);
@@ -298,7 +298,7 @@ QWidget* ProfileScreen::build_overview() {
     lb->setFixedHeight(26);
     lb->setStyleSheet(
         QString("QPushButton{background:rgba(220,38,38,0.1);color:%1;border:1px solid #7f1d1d;padding:0 12px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:%1;"
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:%1;"
                 "color:%2;}")
             .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
     connect(lb, &QPushButton::clicked, this, &ProfileScreen::show_logout_confirm);
@@ -307,7 +307,7 @@ QWidget* ProfileScreen::build_overview() {
     dab->setFixedHeight(26);
     dab->setStyleSheet(
         QString("QPushButton{background:rgba(220,38,38,0.15);color:%1;border:1px solid #7f1d1d;padding:0 12px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:%1;"
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:%1;"
                 "color:%2;}")
             .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
     connect(dab, &QPushButton::clicked, this, &ProfileScreen::show_delete_account_dialog);
@@ -403,7 +403,7 @@ QWidget* ProfileScreen::build_security() {
     sb->setFixedHeight(22);
     sb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
-                "font-size:10px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     connect(sb, &QPushButton::clicked, this, [this, sb]() {
         api_key_visible_ = !api_key_visible_;
@@ -416,7 +416,7 @@ QWidget* ProfileScreen::build_security() {
     cb->setFixedHeight(22);
     cb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
-                "font-size:10px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
     connect(cb, &QPushButton::clicked, this, [cb]() {
         auto key = auth::AuthManager::instance().session().api_key;
@@ -430,7 +430,7 @@ QWidget* ProfileScreen::build_security() {
     auto* rg = new QPushButton("REGENERATE");
     rg->setFixedHeight(22);
     rg->setStyleSheet(QString("QPushButton{background:rgba(217,119,6,0.1);color:%1;border:1px solid %2;padding:0 10px;"
-                              "font-size:10px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{"
+                              "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{"
                               "background:%1;color:%3;}")
                           .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE()));
     connect(rg, &QPushButton::clicked, this, &ProfileScreen::show_regen_confirm);
@@ -511,8 +511,8 @@ QWidget* ProfileScreen::build_support() {
         wl->setSpacing(2);
         auto* lb = new QLabel(l);
         lb->setStyleSheet(
-            QString("color:%1;font-size:10px;font-weight:700;background:transparent;letter-spacing:0.5px;%2")
-                .arg(ui::colors::TEXT_TERTIARY(), MF));
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;letter-spacing:0.5px;%2")
+                .arg(ui::colors::TEXT_SECONDARY(), MF));
         wl->addWidget(lb);
         auto* em = new QLabel(e);
         em->setStyleSheet(QString("color:%1;font-size:13px;background:transparent;%2").arg(ui::colors::CYAN(), MF));
@@ -538,7 +538,7 @@ QWidget* ProfileScreen::build_support() {
         b->setCursor(Qt::PointingHandCursor);
         b->setStyleSheet(
             QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;"
-                    "font-size:11px;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;background:%5;}")
+                    "font-size:12px;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;background:%5;}")
                 .arg(ui::colors::BG_RAISED(), ui::colors::CYAN(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
                      ui::colors::BG_HOVER()));
         connect(b, &QPushButton::clicked, this, [url]() { QDesktopServices::openUrl(QUrl(url)); });
@@ -751,7 +751,7 @@ void ProfileScreen::show_edit_profile_dialog() {
     auto add_f = [&](const QString& l, const QString& v) -> QLineEdit* {
         auto* lb = new QLabel(l);
         lb->setStyleSheet(
-            QString("color:%1;font-size:11px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         vl->addWidget(lb);
         auto* i = new QLineEdit(v);
         i->setFixedHeight(28);
@@ -776,7 +776,7 @@ void ProfileScreen::show_edit_profile_dialog() {
     sv->setStyleSheet(
         QString(
             "QPushButton{background:%1;color:%2;border:none;padding:0 16px;"
-            "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:#b45309;}")
+            "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{background:#b45309;}")
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE()));
     QPointer<ProfileScreen> self = this;
     QPointer<QDialog> dlg_ptr = dlg;
@@ -847,11 +847,11 @@ void ProfileScreen::show_delete_account_dialog() {
     vl->setSpacing(10);
 
     auto* warn = new QLabel("TYPE YOUR EMAIL ADDRESS TO CONFIRM:");
-    warn->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;background:transparent;").arg(ui::colors::NEGATIVE()));
+    warn->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::NEGATIVE()));
     vl->addWidget(warn);
 
     auto* hint = new QLabel(email);
-    hint->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    hint->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(hint);
 
     auto* input = new QLineEdit;
@@ -871,7 +871,7 @@ void ProfileScreen::show_delete_account_dialog() {
     confirm->setEnabled(false);
     confirm->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:none;padding:0 14px;"
-                "font-size:11px;font-weight:700;font-family:'Consolas',monospace;}"
+                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
                 "QPushButton:disabled{background:#3f1515;color:#7f3333;}")
             .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
     connect(input, &QLineEdit::textChanged, this, [confirm, email](const QString& text) {

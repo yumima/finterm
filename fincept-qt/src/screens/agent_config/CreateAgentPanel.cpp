@@ -39,7 +39,7 @@ static QString combo_style() {
 }
 
 static QString list_style() {
-    return QString("QListWidget{background:%1;border:1px solid %2;color:%3;font-size:11px;}"
+    return QString("QListWidget{background:%1;border:1px solid %2;color:%3;font-size:12px;}"
                    "QListWidget::item{padding:3px 6px;border-bottom:1px solid %2;}"
                    "QListWidget::item:selected{background:%4;color:%3;}"
                    "QListWidget::item:hover{background:%5;}")
@@ -48,7 +48,7 @@ static QString list_style() {
 
 static QLabel* section_label(const QString& text) {
     auto* l = new QLabel(text);
-    l->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;"
+    l->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;"
                              "padding:8px 0 3px 0;border-bottom:1px solid %2;margin-bottom:2px;")
                          .arg(AMBER(), BORDER_DIM()));
     return l;
@@ -56,7 +56,7 @@ static QLabel* section_label(const QString& text) {
 
 static QLabel* field_lbl(const QString& text) {
     auto* l = new QLabel(text);
-    l->setStyleSheet(QString("color:%1;font-size:10px;min-width:80px;").arg(TEXT_SECONDARY()));
+    l->setStyleSheet(QString("color:%1;font-size:12px;min-width:80px;").arg(TEXT_SECONDARY()));
     return l;
 }
 
@@ -112,12 +112,12 @@ QWidget* CreateAgentPanel::build_saved_panel() {
     auto* hl = new QHBoxLayout(hdr);
     hl->setContentsMargins(10, 0, 10, 0);
     auto* t = new QLabel("SAVED AGENTS");
-    t->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER()));
+    t->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::AMBER()));
     hl->addWidget(t);
     hl->addStretch();
     saved_count_ = new QLabel("0");
     saved_count_->setStyleSheet(
-        QString("color:%1;font-size:10px;background:%2;padding:1px 6px;").arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
+        QString("color:%1;font-size:12px;background:%2;padding:1px 6px;").arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
     hl->addWidget(saved_count_);
     vl->addWidget(hdr);
 
@@ -138,7 +138,7 @@ QWidget* CreateAgentPanel::build_saved_panel() {
         auto* b = new QPushButton(text);
         b->setCursor(Qt::PointingHandCursor);
         b->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                                 "padding:2px 8px;font-size:9px;font-weight:700;}"
+                                 "padding:2px 8px;font-size:12px;font-weight:700;}"
                                  "QPushButton:hover{background:%1;color:%2;}")
                              .arg(col, ui::colors::BG_BASE()));
         return b;
@@ -222,7 +222,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
 
     llm_resolved_lbl_ = new QLabel;
     llm_resolved_lbl_->setStyleSheet(
-        QString("color:%1;font-size:10px;padding:1px 0 4px 0;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;padding:1px 0 4px 0;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(llm_resolved_lbl_);
 
     // ── INSTRUCTIONS ─────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     // Tag-style checkboxes in a flow grid (2 columns)
     auto make_tag = [](const QString& label) -> QCheckBox* {
         auto* cb = new QCheckBox(label);
-        cb->setStyleSheet(QString("QCheckBox{color:%1;font-size:10px;spacing:5px;padding:3px 6px;"
+        cb->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;spacing:5px;padding:3px 6px;"
                                   "border:1px solid %2;background:%3;}"
                                   "QCheckBox:checked{color:%4;border-color:%5;background:%6;}"
                                   "QCheckBox::indicator{width:8px;height:8px;}"
@@ -336,7 +336,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
         sl->setSpacing(12);
         auto make_sub_chk = [](const QString& lbl) -> QCheckBox* {
             auto* c = new QCheckBox(lbl);
-            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:10px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
+            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
             return c;
         };
         guardrails_pii_check_ = make_sub_chk("PII Detection");
@@ -371,7 +371,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
         auto* mr2 = new QHBoxLayout;
         auto make_sub_chk = [](const QString& lbl) -> QCheckBox* {
             auto* c = new QCheckBox(lbl);
-            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:10px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
+            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
             return c;
         };
         memory_user_memories_check_ = make_sub_chk("User Memories");
@@ -437,7 +437,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     save_btn_ = new QPushButton("SAVE AGENT");
     save_btn_->setCursor(Qt::PointingHandCursor);
     save_btn_->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:8px 20px;"
-                                     "font-size:11px;font-weight:700;letter-spacing:1px;}"
+                                     "font-size:12px;font-weight:700;letter-spacing:1px;}"
                                      "QPushButton:hover{background:%3;}")
                                  .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE()));
     act->addWidget(save_btn_);
@@ -445,7 +445,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     auto* clr_btn = new QPushButton("CLEAR");
     clr_btn->setCursor(Qt::PointingHandCursor);
     clr_btn->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                                   "padding:8px 14px;font-size:10px;font-weight:600;}"
+                                   "padding:8px 14px;font-size:12px;font-weight:600;}"
                                    "QPushButton:hover{background:%3;}")
                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER()));
     connect(clr_btn, &QPushButton::clicked, this, &CreateAgentPanel::clear_form);
@@ -455,7 +455,7 @@ QWidget* CreateAgentPanel::build_form_panel() {
     vl->addLayout(act);
 
     status_lbl_ = new QLabel;
-    status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(status_lbl_);
     vl->addStretch();
 
@@ -483,7 +483,7 @@ QWidget* CreateAgentPanel::build_test_panel() {
     auto* hl = new QHBoxLayout(hdr);
     hl->setContentsMargins(10, 0, 10, 0);
     auto* t = new QLabel("LIVE TEST");
-    t->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;").arg(ui::colors::CYAN()));
+    t->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::CYAN()));
     hl->addWidget(t);
     vl->addWidget(hdr);
 
@@ -495,7 +495,7 @@ QWidget* CreateAgentPanel::build_test_panel() {
 
     auto* qlbl = new QLabel("QUERY");
     qlbl->setStyleSheet(
-        QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;").arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(qlbl);
 
     test_query_edit_ = new QPlainTextEdit;
@@ -509,19 +509,19 @@ QWidget* CreateAgentPanel::build_test_panel() {
     test_btn_ = new QPushButton("RUN TEST");
     test_btn_->setCursor(Qt::PointingHandCursor);
     test_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                                     "padding:7px;font-size:10px;font-weight:700;letter-spacing:1px;}"
+                                     "padding:7px;font-size:12px;font-weight:700;letter-spacing:1px;}"
                                      "QPushButton:hover{background:%1;color:%2;}"
                                      "QPushButton:disabled{color:%3;border-color:%3;}")
-                                 .arg(ui::colors::CYAN(), ui::colors::BG_BASE(), ui::colors::TEXT_TERTIARY()));
+                                 .arg(ui::colors::CYAN(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY()));
     connect(test_btn_, &QPushButton::clicked, this, &CreateAgentPanel::test_agent);
     bl->addWidget(test_btn_);
 
     test_status_lbl_ = new QLabel;
-    test_status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    test_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(test_status_lbl_);
 
     auto* rlbl = new QLabel("OUTPUT");
-    rlbl->setStyleSheet(QString("color:%1;font-size:10px;font-weight:700;letter-spacing:1px;padding-top:4px;")
+    rlbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;padding-top:4px;")
                             .arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(rlbl);
 
@@ -560,12 +560,12 @@ void CreateAgentPanel::setup_connections() {
     auto& svc = services::AgentService::instance();
     connect(&svc, &services::AgentService::config_saved, this, [this]() {
         status_lbl_->setText("Saved successfully");
-        status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::POSITIVE()));
+        status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::POSITIVE()));
         load_saved_agents();
     });
     connect(&svc, &services::AgentService::config_deleted, this, [this]() {
         status_lbl_->setText("Agent deleted");
-        status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::WARNING()));
+        status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::WARNING()));
         editing_id_.clear();
         load_saved_agents();
     });
@@ -594,12 +594,12 @@ void CreateAgentPanel::setup_connections() {
             test_result_->setPlainText(r.response);
             test_status_lbl_->setText(QString("Done in %1ms").arg(r.execution_time_ms));
             test_status_lbl_->setStyleSheet(
-                QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::POSITIVE()));
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::POSITIVE()));
         } else {
             test_result_->setPlainText("Error: " + r.error);
             test_status_lbl_->setText("Failed");
             test_status_lbl_->setStyleSheet(
-                QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
         }
     });
     connect(&svc, &services::AgentService::agent_result, this, [this](services::AgentExecutionResult r) {
@@ -612,12 +612,12 @@ void CreateAgentPanel::setup_connections() {
             test_result_->setPlainText(r.response);
             test_status_lbl_->setText(QString("Done in %1ms").arg(r.execution_time_ms));
             test_status_lbl_->setStyleSheet(
-                QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::POSITIVE()));
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::POSITIVE()));
         } else {
             test_result_->setPlainText("Error: " + r.error);
             test_status_lbl_->setText("Failed");
             test_status_lbl_->setStyleSheet(
-                QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
         }
     });
     connect(&svc, &services::AgentService::tools_loaded, this, [this](services::AgentToolsInfo info) {
@@ -711,11 +711,11 @@ void CreateAgentPanel::refresh_llm_pill() {
             text += " (inherited)";
         llm_resolved_lbl_->setText(text);
         llm_resolved_lbl_->setStyleSheet(
-            QString("color:%1;font-size:10px;padding:1px 0 4px 0;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:12px;padding:1px 0 4px 0;").arg(ui::colors::TEXT_SECONDARY()));
     } else {
         llm_resolved_lbl_->setText("No provider — Settings > LLM Config");
         llm_resolved_lbl_->setStyleSheet(
-            QString("color:%1;font-size:10px;padding:1px 0 4px 0;").arg(ui::colors::NEGATIVE()));
+            QString("color:%1;font-size:12px;padding:1px 0 4px 0;").arg(ui::colors::NEGATIVE()));
     }
 }
 
@@ -812,7 +812,7 @@ void CreateAgentPanel::load_agent_into_form(const AgentConfig& cfg) {
     agentic_memory_user_id_edit_->setText(c["agentic_memory_user_id"].toString());
 
     status_lbl_->setText(QString("Loaded: %1").arg(cfg.name));
-    status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::CYAN()));
+    status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::CYAN()));
 }
 
 void CreateAgentPanel::clear_form() {
@@ -840,7 +840,7 @@ void CreateAgentPanel::clear_form() {
     test_result_->clear();
     test_status_lbl_->clear();
     status_lbl_->setText("Form cleared");
-    status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::TEXT_TERTIARY()));
+    status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 QJsonObject CreateAgentPanel::build_config_json() const {
@@ -932,7 +932,7 @@ void CreateAgentPanel::save_agent() {
     const QString name = name_edit_->text().trimmed();
     if (name.isEmpty()) {
         status_lbl_->setText("Agent name is required");
-        status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::NEGATIVE()));
+        status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::NEGATIVE()));
         return;
     }
     AgentConfig db;
@@ -966,7 +966,7 @@ void CreateAgentPanel::test_agent() {
     test_btn_->setText("RUNNING...");
     test_result_->clear();
     test_status_lbl_->setText("Running...");
-    test_status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:2px 0;").arg(ui::colors::AMBER()));
+    test_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::AMBER()));
     pending_request_id_ = services::AgentService::instance().run_agent_streaming(query, build_config_json());
 }
 
@@ -984,7 +984,7 @@ void CreateAgentPanel::export_json() {
     if (file.open(QIODevice::WriteOnly))
         file.write(QJsonDocument(out).toJson(QJsonDocument::Indented));
     status_lbl_->setText("Exported: " + path);
-    status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::POSITIVE()));
+    status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::POSITIVE()));
 }
 
 void CreateAgentPanel::import_json() {
@@ -1003,7 +1003,7 @@ void CreateAgentPanel::import_json() {
     cfg.config_json = QString::fromUtf8(QJsonDocument(obj["config"].toObject()).toJson(QJsonDocument::Compact));
     load_agent_into_form(cfg);
     status_lbl_->setText("Imported from file");
-    status_lbl_->setStyleSheet(QString("color:%1;font-size:10px;padding:3px 0;").arg(ui::colors::CYAN()));
+    status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:3px 0;").arg(ui::colors::CYAN()));
 }
 
 void CreateAgentPanel::apply_tools_selection(const QStringList& tools) {

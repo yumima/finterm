@@ -94,7 +94,7 @@ static const QString kScreenStyle =
         .arg(colors::BORDER_DIM())     // %9
         .arg(colors::BORDER_BRIGHT())  // %10
         .arg(colors::AMBER_DIM())      // %11
-        .arg(colors::TEXT_DIM())       // %12
+        .arg(colors::TEXT_SECONDARY())       // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
     ;

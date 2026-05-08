@@ -133,7 +133,7 @@ void CabinetPanel::build_content_page() {
         // Source note
         source_note_ = new QLabel;
         source_note_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-style:italic;padding:6px 12px;"
+            QString("color:%1;font-size:12px;font-style:italic;padding:6px 12px;"
                     "border-bottom:1px solid %2;background:%3;")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::BG_SURFACE()));
         source_note_->setWordWrap(true);
@@ -668,7 +668,7 @@ void CabinetPanel::populate_holdings_tab(const power_trader::CabinetMember& m) {
 
         auto* cf_i = new QTableWidgetItem(h.is_conflict ? "⚠" : "—");
         cf_i->setTextAlignment(Qt::AlignCenter);
-        cf_i->setForeground(QColor(h.is_conflict ? "#ef4444" : ui::colors::TEXT_TERTIARY()));
+        cf_i->setForeground(QColor(h.is_conflict ? "#ef4444" : ui::colors::TEXT_SECONDARY()));
         cf_i->setToolTip(h.conflict_note);
         cf_i->setFlags(cf_i->flags() & ~Qt::ItemIsEditable);
         h_table_->setItem(r, 5, cf_i);
@@ -723,7 +723,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
         auto* ch_hdr = new QLabel("CONFLICTED HOLDINGS DETAIL");
         ch_hdr->setStyleSheet(
             QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;"
-                    "margin-top:12px;").arg(ui::colors::TEXT_TERTIARY()));
+                    "margin-top:12px;").arg(ui::colors::TEXT_SECONDARY()));
         c_flags_layout_->addWidget(ch_hdr);
 
         for (const auto& h : m.holdings) {
@@ -794,7 +794,7 @@ void CabinetPanel::populate_sector_tab(const power_trader::CabinetMember& m) {
 
         auto* cf_i = new QTableWidgetItem(regulated ? "⚠ Regulated" : "—");
         cf_i->setTextAlignment(Qt::AlignCenter);
-        cf_i->setForeground(QColor(regulated ? "#ef4444" : ui::colors::TEXT_TERTIARY()));
+        cf_i->setForeground(QColor(regulated ? "#ef4444" : ui::colors::TEXT_SECONDARY()));
         cf_i->setFlags(cf_i->flags() & ~Qt::ItemIsEditable);
         s_table_->setItem(r, 3, cf_i);
     }

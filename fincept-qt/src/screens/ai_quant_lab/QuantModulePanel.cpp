@@ -242,10 +242,10 @@ void QuantModulePanel::refresh_theme() {
                                          .arg(module_.color.name()));
 
     if (header_cat_)
-        header_cat_->setStyleSheet(QString("color:%1; background:transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        header_cat_->setStyleSheet(QString("color:%1; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     if (status_label_)
-        status_label_->setStyleSheet(QString("color:%1; background:transparent;").arg(ui::colors::TEXT_TERTIARY()));
+        status_label_->setStyleSheet(QString("color:%1; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void QuantModulePanel::connect_service() {
@@ -510,7 +510,7 @@ QWidget* QuantModulePanel::build_gs_quant_panel() {
     svl->addWidget(build_input_row("Position Value ($)", st_pos, stress));
     auto* st_hint = new QLabel("Tests 9 historical crisis scenarios: 2008, COVID-19, etc.", stress);
     st_hint->setStyleSheet(
-        QString("color:%1; font-family:%2;").arg(ui::colors::TEXT_TERTIARY()).arg(ui::fonts::DATA_FAMILY));
+        QString("color:%1; font-family:%2;").arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::DATA_FAMILY));
     svl->addWidget(st_hint);
     auto* stress_run = make_run_button("RUN STRESS TEST", stress);
     connect(stress_run, &QPushButton::clicked, this, [this]() {
@@ -1393,12 +1393,12 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     sbl->setContentsMargins(12, 0, 12, 0);
     sbl->setSpacing(8);
     auto* status_dot = new QLabel("●", status_bar);
-    status_dot->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_TERTIARY()));
+    status_dot->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
     sbl->addWidget(status_dot);
     auto* status_txt = new QLabel("RD-Agent ready", status_bar);
     status_txt->setObjectName("rdStatusTxt");
     status_txt->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                  .arg(ui::colors::TEXT_TERTIARY())
+                                  .arg(ui::colors::TEXT_SECONDARY())
                                   .arg(ui::fonts::TINY)
                                   .arg(ui::fonts::DATA_FAMILY));
     sbl->addWidget(status_txt, 1);
@@ -1422,7 +1422,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     ui_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                                   "font-family:%2; font-size:%3px; padding:2px 8px; border-radius:2px; }"
                                   "QPushButton:hover { background:%1; color:%4; }")
-                              .arg(ui::colors::TEXT_TERTIARY())
+                              .arg(ui::colors::TEXT_SECONDARY())
                               .arg(ui::fonts::DATA_FAMILY)
                               .arg(ui::fonts::TINY)
                               .arg(ui::colors::BG_BASE()));
@@ -1442,7 +1442,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
                                    "font-family:%2; font-size:%3px; padding:2px 8px; border-radius:2px; }"
                                    "QPushButton:checked { background:%4; color:%5; border-color:%4; }"
                                    "QPushButton:hover { background:%1; color:%5; }")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::DATA_FAMILY)
                                .arg(ui::fonts::TINY)
                                .arg(module_.color.name())
@@ -1800,7 +1800,7 @@ QWidget* QuantModulePanel::build_generic_panel() {
     auto* script_lbl = new QLabel(QString("Python script: %1").arg(module_.script), w);
     script_lbl->setStyleSheet(QString("color:%1; font-family:%2;"
                                       "padding:6px; background:%3; border:1px solid %4; border-radius:2px;")
-                                  .arg(ui::colors::TEXT_TERTIARY())
+                                  .arg(ui::colors::TEXT_SECONDARY())
                                   .arg(ui::fonts::DATA_FAMILY)
                                   .arg(ui::colors::BG_RAISED())
                                   .arg(ui::colors::BORDER_DIM()));
@@ -1932,7 +1932,7 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     const QString red_hex     = ui::colors::NEGATIVE();
     const QString text_p      = ui::colors::TEXT_PRIMARY();
     const QString text_s      = ui::colors::TEXT_SECONDARY();
-    const QString text_t      = ui::colors::TEXT_TERTIARY();
+    const QString text_t      = ui::colors::TEXT_SECONDARY();
     const QString bg_surface  = ui::colors::BG_SURFACE();
     const QString bg_raised   = ui::colors::BG_RAISED();
     const QString border_dim  = ui::colors::BORDER_DIM();
@@ -3137,7 +3137,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 auto* si = new QTableWidgetItem(QString::number(size, 'g', 5));
                 si->setForeground(QColor(QString(ui::colors::TEXT_PRIMARY())));
                 auto* ci = new QTableWidgetItem(QString::number(cumulative, 'g', 6));
-                ci->setForeground(QColor(QString(ui::colors::TEXT_TERTIARY())));
+                ci->setForeground(QColor(QString(ui::colors::TEXT_SECONDARY())));
                 tbl->setItem(i, 0, pi);
                 tbl->setItem(i, 1, si);
                 tbl->setItem(i, 2, ci);
@@ -3458,7 +3458,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                                                                             : "#f59e0b";
                         auto* badge = new QLabel(status.toUpper(), top);
                         badge->setStyleSheet(QString("color:%1;background:transparent;border:none;"
-                                                      "font-size:10px;font-weight:700;")
+                                                      "font-size:12px;font-weight:700;")
                                                  .arg(badge_color));
                         thl->addWidget(badge);
                         cvl->addWidget(top);
@@ -3473,7 +3473,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                         auto* detail = new QLabel(
                             QString("Freq: %1  |  Window: %2 days  |  Next: %3  |  Last: %4")
                                 .arg(freq, window, next, last), card);
-                        detail->setStyleSheet(QString("color:%1;font-size:11px;"
+                        detail->setStyleSheet(QString("color:%1;font-size:12px;"
                                                        "background:transparent;border:none;")
                                                   .arg(ui::colors::TEXT_SECONDARY()));
                         cvl->addWidget(detail);
@@ -3488,7 +3488,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                         auto* run_btn = new QPushButton("Run Now", acts);
                         run_btn->setStyleSheet(QString(
                             "QPushButton{background:%1;color:%2;border:1px solid %1;"
-                            "border-radius:3px;font-size:10px;font-weight:700;padding:3px 10px;}"
+                            "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
                             "QPushButton:hover{background:%3;}")
                             .arg(module_.color.name(), "#000000", module_.color.lighter(115).name()));
                         connect(run_btn, &QPushButton::clicked, this, [this, mid]() {
@@ -3504,7 +3504,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                         auto* del_btn = new QPushButton("Delete", acts);
                         del_btn->setStyleSheet(QString(
                             "QPushButton{background:transparent;color:#ef4444;border:1px solid #ef4444;"
-                            "border-radius:3px;font-size:10px;font-weight:700;padding:3px 10px;}"
+                            "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
                             "QPushButton:hover{background:#7f1d1d;}"));
                         connect(del_btn, &QPushButton::clicked, this, [this, mid]() {
                             status_label_->setText(QString("Deleting %1...").arg(mid));
@@ -5057,8 +5057,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
     top_hl->setSpacing(8);
 
     auto* exch_lbl = new QLabel("EXCHANGE", top_bar);
-    exch_lbl->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:0.5px;")
-                                .arg(ui::colors::TEXT_TERTIARY()));
+    exch_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                                .arg(ui::colors::TEXT_SECONDARY()));
     auto* hft_exchange = new QComboBox(top_bar);
     hft_exchange->addItems({"binance", "kraken", "coinbase", "bybit", "okx", "hyperliquid"});
     hft_exchange->setStyleSheet(combo_ss());
@@ -5094,8 +5094,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
     // Live latency badge
     auto* latency_lbl = new QLabel("LATENCY —", top_bar);
     latency_lbl->setObjectName("hftLatency");
-    latency_lbl->setStyleSheet(QString("color:%1; font-size:9px; font-family:'Courier New'; background:transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY()));
+    latency_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-family:'Courier New'; background:transparent;")
+                                   .arg(ui::colors::TEXT_SECONDARY()));
     top_hl->addWidget(latency_lbl);
     vl->addWidget(top_bar);
 
@@ -5139,8 +5139,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
         cvl->setContentsMargins(10, 6, 10, 6);
         cvl->setSpacing(2);
         auto* l = new QLabel(label, card);
-        l->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-                             .arg(ui::colors::TEXT_TERTIARY()));
+        l->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+                             .arg(ui::colors::TEXT_SECONDARY()));
         auto* v = new QLabel("—", card);
         v->setObjectName("hftCardVal");
         v->setStyleSheet(QString("color:%1; font-size:13px; font-weight:700; font-family:'Courier New'; background:transparent;")
@@ -5183,7 +5183,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     bids_vl->setSpacing(0);
     auto* bids_hdr = new QLabel("  BIDS", bids_frame);
     bids_hdr->setFixedHeight(24);
-    bids_hdr->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1px;"
+    bids_hdr->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;"
                                     "background:%2; border-bottom:1px solid %3;")
                                 .arg(ui::colors::POSITIVE(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* bid_table = new QTableWidget(10, 3, bids_frame);
@@ -5196,11 +5196,11 @@ QWidget* QuantModulePanel::build_hft_panel() {
     bid_table->setShowGrid(false);
     bid_table->setStyleSheet(
         QString("QTableWidget { background:%1; border:none; }"
-                "QHeaderView::section { background:%2; color:%3; font-size:9px; font-weight:700;"
+                "QHeaderView::section { background:%2; color:%3; font-size:12px; font-weight:700;"
                 "  padding:3px 6px; border:none; border-bottom:1px solid %4; }"
-                "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:10px; border:none; }")
+                "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:12px; border:none; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::BG_SURFACE(),
-                 ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+                 ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     bids_vl->addWidget(bids_hdr);
     bids_vl->addWidget(bid_table, 1);
 
@@ -5212,7 +5212,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     asks_vl->setSpacing(0);
     auto* asks_hdr = new QLabel("  ASKS", asks_frame);
     asks_hdr->setFixedHeight(24);
-    asks_hdr->setStyleSheet(QString("color:%1; font-size:9px; font-weight:700; letter-spacing:1px;"
+    asks_hdr->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;"
                                     "background:%2; border-bottom:1px solid %3;")
                                 .arg(ui::colors::NEGATIVE(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* ask_table = new QTableWidget(10, 3, asks_frame);
@@ -5249,7 +5249,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     mm_vl->setSpacing(8);
 
     auto* mm_title = new QLabel("MARKET MAKING  —  Avellaneda-Stoikov Model", mm_section);
-    mm_title->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+    mm_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
                                 .arg(accent));
     mm_vl->addWidget(mm_title);
 
@@ -5309,7 +5309,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     tox_vl->setSpacing(8);
 
     auto* tox_title = new QLabel("TOXIC FLOW DETECTION  —  PIN Score Model", tox_section);
-    tox_title->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+    tox_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
                                  .arg(accent));
     tox_vl->addWidget(tox_title);
 
@@ -5373,14 +5373,14 @@ QWidget* QuantModulePanel::build_hft_panel() {
     slip_vl->setSpacing(8);
 
     auto* slip_title = new QLabel("SLIPPAGE ESTIMATOR  —  Real Order Book Walk", slip_section);
-    slip_title->setStyleSheet(QString("color:%1; font-size:10px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+    slip_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
                                   .arg(accent));
     slip_vl->addWidget(slip_title);
 
     auto* slip_desc = new QLabel(
         "Walks the live order book level-by-level to compute actual fill price and slippage for a given order size.", slip_section);
     slip_desc->setWordWrap(true);
-    slip_desc->setStyleSheet(QString("color:%1; font-size:10px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    slip_desc->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     slip_vl->addWidget(slip_desc);
 
     auto* slip_params = new QHBoxLayout;
@@ -5439,11 +5439,11 @@ QWidget* QuantModulePanel::build_hft_panel() {
     fills_table->setMaximumHeight(160);
     fills_table->setStyleSheet(
         QString("QTableWidget { background:%1; border:1px solid %2; }"
-                "QHeaderView::section { background:%3; color:%4; font-size:9px; font-weight:700;"
+                "QHeaderView::section { background:%3; color:%4; font-size:12px; font-weight:700;"
                 "  padding:3px 6px; border:none; border-bottom:1px solid %2; }"
-                "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:10px; }")
+                "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:12px; }")
             .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM(),
-                 ui::colors::BG_SURFACE(), ui::colors::TEXT_TERTIARY()));
+                 ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY()));
     slip_vl->addWidget(fills_table);
 
     slip_root->addWidget(slip_section);
@@ -5503,7 +5503,7 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
         "Schedules are persisted in ~/.fincept/rolling_schedules.json. "
         "Click Refresh to load the latest state.", list_tab);
     lt_info->setWordWrap(true);
-    lt_info->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
+    lt_info->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     ltvl->addWidget(lt_info);
 
     // Schedule cards container (scrollable)
@@ -5587,7 +5587,7 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     auto* rr_preview = make_run_button("PREVIEW WINDOWS", btn_row);
     rr_preview->setStyleSheet(QString(
         "QPushButton{background:%1;color:%2;border:1px solid %1;border-radius:4px;"
-        "font-size:11px;font-weight:700;padding:6px 14px;}"
+        "font-size:12px;font-weight:700;padding:6px 14px;}"
         "QPushButton:hover{background:%3;}")
         .arg(ui::colors::BG_RAISED(), accent, ui::colors::BG_HOVER()));
     connect(rr_preview, &QPushButton::clicked, this, [this]() {
@@ -5642,7 +5642,7 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
         "Executes a full rolling retrain for a scheduled model. Each window trains "
         "independently and progress is streamed live below.", retrain_tab);
     rt_info->setWordWrap(true);
-    rt_info->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
+    rt_info->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     retrainvl->addWidget(rt_info);
 
     auto* rr_exec_id = new QLineEdit(retrain_tab);
@@ -5660,7 +5660,7 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     rr_progress->setFormat("Idle");
     rr_progress->setStyleSheet(QString(
         "QProgressBar{background:%1;border:1px solid %2;border-radius:4px;"
-        "color:%3;font-size:11px;font-weight:600;text-align:center;height:20px;}"
+        "color:%3;font-size:12px;font-weight:600;text-align:center;height:20px;}"
         "QProgressBar::chunk{background:%4;border-radius:3px;}")
         .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
              ui::colors::TEXT_PRIMARY(), accent));

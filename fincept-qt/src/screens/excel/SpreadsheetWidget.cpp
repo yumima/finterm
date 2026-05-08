@@ -291,20 +291,20 @@ void SpreadsheetWidget::build_ui(int rows, int cols) {
     cell_ref_label_ = new QLabel("A1", formula_row);
     cell_ref_label_->setFixedWidth(50);
     cell_ref_label_->setAlignment(Qt::AlignCenter);
-    cell_ref_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px; font-weight:700;"
+    cell_ref_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:700;"
                                            " border-right:1px solid %3; padding-right:6px;")
                                        .arg(colors::AMBER(), fonts::DATA_FAMILY, colors::BORDER_MED()));
     fhl->addWidget(cell_ref_label_);
 
     auto* fx_label = new QLabel("fx", formula_row);
-    fx_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px; font-weight:700;")
-                                .arg(colors::TEXT_TERTIARY(), fonts::DATA_FAMILY));
+    fx_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:700;")
+                                .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     fhl->addWidget(fx_label);
 
     formula_bar_ = new QLineEdit(formula_row);
     formula_bar_->setStyleSheet(
         QString("QLineEdit { background:%1; color:%2; border:none;"
-                " font-family:%3; font-size:11px; padding:2px 4px; }"
+                " font-family:%3; font-size:12px; padding:2px 4px; }"
                 "QLineEdit:focus { background:%4; }")
             .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), fonts::DATA_FAMILY, colors::BG_HOVER()));
     connect(formula_bar_, &QLineEdit::returnPressed, this, &SpreadsheetWidget::on_formula_bar_return);
@@ -339,16 +339,16 @@ void SpreadsheetWidget::build_ui(int rows, int cols) {
 
     // Dark theme styling
     table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
-                                  "  font-family:%4; font-size:11px; border:none; }"
+                                  "  font-family:%4; font-size:12px; border:none; }"
                                   "QTableWidget::item { padding:2px 4px; }"
                                   "QTableWidget::item:selected { background:%5; }"
                                   "QHeaderView::section { background:%6; color:%7; border:none;"
                                   "  border-right:1px solid %3; border-bottom:1px solid %3;"
-                                  "  font-family:%4; font-size:10px; font-weight:600; padding:3px 4px; }"
+                                  "  font-family:%4; font-size:12px; font-weight:600; padding:3px 4px; }"
                                   "QTableCornerButton::section { background:%6; border:none; }")
                               .arg(colors::BG_HOVER(),         // %1 cell bg
                                    colors::TEXT_PRIMARY(),     // %2 cell text
-                                   colors::TEXT_DIM(),         // %3 gridlines
+                                   colors::TEXT_SECONDARY(),         // %3 gridlines
                                    fonts::DATA_FAMILY,       // %4
                                    colors::BORDER_BRIGHT(),    // %5 selection bg
                                    colors::BORDER_MED(),       // %6 header bg
@@ -495,11 +495,11 @@ void SpreadsheetWidget::on_context_menu(const QPoint& pos) {
     QMenu menu(this);
     menu.setStyleSheet(
         QString("QMenu { background:%1; color:%2; border:1px solid %3;"
-                " font-family:%4; font-size:11px; }"
+                " font-family:%4; font-size:12px; }"
                 "QMenu::item { padding:6px 20px; }"
                 "QMenu::item:selected { background:%5; }"
                 "QMenu::separator { height:1px; background:%3; margin:4px 8px; }")
-            .arg(colors::BORDER_MED(), colors::TEXT_PRIMARY(), colors::TEXT_DIM(), fonts::DATA_FAMILY, colors::TEXT_DIM()));
+            .arg(colors::BORDER_MED(), colors::TEXT_PRIMARY(), colors::TEXT_SECONDARY(), fonts::DATA_FAMILY, colors::TEXT_SECONDARY()));
 
     menu.addAction("Cut", this, [this]() {
         auto* item = table_->currentItem();

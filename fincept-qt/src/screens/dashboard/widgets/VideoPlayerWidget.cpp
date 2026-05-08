@@ -385,7 +385,7 @@ void VideoPlayerWidget::apply_styles() {
 
     channel_header_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; "
                                            "background: transparent; padding: 2px 0;")
-                                       .arg(ui::colors::TEXT_TERTIARY()));
+                                       .arg(ui::colors::TEXT_SECONDARY()));
 
     for (int i = 0; i < channel_rows_.size() && i < kPresetCount; ++i) {
         const auto& ch = kPresets[i];
@@ -401,14 +401,14 @@ void VideoPlayerWidget::apply_styles() {
     }
     for (auto* lbl : channel_desc_labels_) {
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     }
 
     channel_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
     custom_header_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; "
                                           "background: transparent;")
-                                      .arg(ui::colors::TEXT_TERTIARY()));
+                                      .arg(ui::colors::TEXT_SECONDARY()));
 
     url_input_->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
@@ -422,7 +422,7 @@ void VideoPlayerWidget::apply_styles() {
                                  .arg(ui::colors::AMBER(), ui::colors::TEXT_ON_ACCENT(), ui::colors::AMBER_DIM()));
 
     helper_label_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_DIM()));
+        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     // Player page
 #ifdef HAS_QT_MULTIMEDIA

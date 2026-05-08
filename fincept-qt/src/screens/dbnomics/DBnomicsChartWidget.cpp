@@ -32,7 +32,7 @@ static QValueAxis* make_y_axis(double y_min, double y_max, int tick_count) {
     auto* ax = new QValueAxis();
     ax->setRange(y_min, y_max);
     ax->setTickCount(tick_count);
-    ax->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    ax->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     ax->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     ax->setLinePen(QPen(QColor(ui::colors::BORDER_MED())));
     ax->setLabelFormat("%.4g"); // compact notation — avoids long decimals in small charts
@@ -44,7 +44,7 @@ static QValueAxis* make_x_axis(int count) {
     auto* ax = new QValueAxis();
     ax->setRange(0, std::max(1, count - 1));
     ax->setTickCount(std::min(8, std::max(2, count)));
-    ax->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    ax->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     ax->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     ax->setLinePen(QPen(QColor(ui::colors::BORDER_MED())));
     ax->setLabelFormat("%d");
@@ -322,7 +322,7 @@ void DBnomicsChartWidget::render_bar(const QVector<services::DbnDataPoint>& seri
 
     auto* x_axis = new QBarCategoryAxis();
     x_axis->append(QList<QString>(periods.begin(), periods.end()));
-    x_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    x_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     // Rotate labels if many periods to avoid overlap
     if (periods.size() > 10)
@@ -331,7 +331,7 @@ void DBnomicsChartWidget::render_bar(const QVector<services::DbnDataPoint>& seri
     bar_series->attachAxis(x_axis);
 
     auto* y_axis = new QValueAxis();
-    y_axis->setLabelsColor(QColor(ui::colors::TEXT_TERTIARY()));
+    y_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y_axis->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y_axis->setLabelFormat("%.4g");
     y_axis->setTickCount(y_tick_count());

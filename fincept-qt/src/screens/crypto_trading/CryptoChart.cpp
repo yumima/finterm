@@ -75,7 +75,7 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
 
     time_axis_ = new QDateTimeAxis;
     time_axis_->setFormat("HH:mm");
-    time_axis_->setLabelsColor(QColor(colors::TEXT_DIM()));
+    time_axis_->setLabelsColor(QColor(colors::TEXT_SECONDARY()));
     time_axis_->setGridLineColor(QColor(colors::BG_RAISED()));
     time_axis_->setMinorGridLineColor(QColor(colors::BG_SURFACE()));
     time_axis_->setLinePenColor(QColor(colors::BORDER_DIM()));
@@ -83,7 +83,7 @@ CryptoChart::CryptoChart(QWidget* parent) : QWidget(parent) {
     series_->attachAxis(time_axis_);
 
     price_axis_ = new QValueAxis;
-    price_axis_->setLabelsColor(QColor(colors::TEXT_DIM()));
+    price_axis_->setLabelsColor(QColor(colors::TEXT_SECONDARY()));
     price_axis_->setGridLineColor(QColor(colors::BG_RAISED()));
     price_axis_->setMinorGridLineColor(QColor(colors::BG_SURFACE()));
     price_axis_->setLinePenColor(QColor(colors::BORDER_DIM()));

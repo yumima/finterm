@@ -231,7 +231,7 @@ void RelationshipMapScreen::build_ui() {
     phl->setContentsMargins(12, 2, 12, 2);
 
     progress_label_ = new QLabel("Ready");
-    progress_label_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_DIM(), MF()));
+    progress_label_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_SECONDARY(), MF()));
     phl->addWidget(progress_label_);
 
     progress_bar_ = new QProgressBar;
@@ -285,13 +285,13 @@ void RelationshipMapScreen::build_ui() {
     shl->setContentsMargins(12, 0, 12, 0);
 
     status_nodes_ = new QLabel("READY");
-    status_nodes_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_DIM(), MF()));
+    status_nodes_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_SECONDARY(), MF()));
     shl->addWidget(status_nodes_);
 
     shl->addStretch();
 
     status_quality_ = new QLabel("");
-    status_quality_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_DIM(), MF()));
+    status_quality_->setStyleSheet(QString("color: %1; font-size: 9px; %2").arg(colors::TEXT_SECONDARY(), MF()));
     shl->addWidget(status_quality_);
 
     shl->addStretch();
@@ -381,7 +381,7 @@ QWidget* RelationshipMapScreen::build_detail_panel() {
     close_btn->setCursor(Qt::PointingHandCursor);
     close_btn->setStyleSheet(QString("QPushButton { color: %1; background: transparent; border: none; "
                                      "font-size: 11px; %2 } QPushButton:hover { color: %3; }")
-                                 .arg(colors::TEXT_DIM(), MF(), colors::TEXT_PRIMARY()));
+                                 .arg(colors::TEXT_SECONDARY(), MF(), colors::TEXT_PRIMARY()));
     connect(close_btn, &QPushButton::clicked, this, [this]() {
         detail_panel_->hide();
         scene_->clearSelection();
@@ -392,7 +392,7 @@ QWidget* RelationshipMapScreen::build_detail_panel() {
     detail_category_ = new QLabel("");
     detail_category_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: 700; "
                                             "letter-spacing: 0.5px; %2")
-                                        .arg(colors::TEXT_TERTIARY(), MF()));
+                                        .arg(colors::TEXT_SECONDARY(), MF()));
     vl->addWidget(detail_category_);
 
     // Scrollable properties
@@ -425,7 +425,7 @@ QWidget* RelationshipMapScreen::build_legend() {
     auto* title = new QLabel("LEGEND");
     title->setStyleSheet(QString("color: %1; font-size: 8px; font-weight: 700; "
                                  "letter-spacing: 0.5px; %2")
-                             .arg(colors::TEXT_DIM(), MF()));
+                             .arg(colors::TEXT_SECONDARY(), MF()));
     vl->addWidget(title);
 
     auto add_entry = [&](NodeCategory cat) {
@@ -441,7 +441,7 @@ QWidget* RelationshipMapScreen::build_legend() {
         hl->addWidget(dot);
 
         auto* lbl = new QLabel(category_label(cat));
-        lbl->setStyleSheet(QString("color: %1; font-size: 8px; %2").arg(colors::TEXT_TERTIARY(), MF()));
+        lbl->setStyleSheet(QString("color: %1; font-size: 8px; %2").arg(colors::TEXT_SECONDARY(), MF()));
         hl->addWidget(lbl);
         hl->addStretch();
         vl->addWidget(row);
@@ -557,7 +557,7 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results) {
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(8, 4, 8, 4);
         auto* lbl = new QLabel("No results found");
-        lbl->setStyleSheet(QString("color:%1;font-size:11px;%2;background:transparent;")
+        lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
                                .arg(ui::colors::TEXT_TERTIARY.get(), MF()));
         rl->addWidget(lbl);
         item->setSizeHint(QSize(0, 28));
@@ -594,20 +594,20 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results) {
         hl->addWidget(sym_lbl);
 
         auto* name_lbl = new QLabel(name);
-        name_lbl->setStyleSheet(QString("color:%1;font-size:11px;%2;background:transparent;")
+        name_lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
                                     .arg(ui::colors::TEXT_SECONDARY.get(), MF()));
         name_lbl->setMaximumWidth(180);
         hl->addWidget(name_lbl, 1);
 
         if (!exchange.isEmpty()) {
             auto* exch_lbl = new QLabel(exchange);
-            exch_lbl->setStyleSheet(QString("color:%1;font-size:9px;%2;background:transparent;")
+            exch_lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
                                         .arg(ui::colors::TEXT_TERTIARY.get(), MF()));
             hl->addWidget(exch_lbl);
         }
 
         auto* type_lbl = new QLabel(type.toUpper());
-        type_lbl->setStyleSheet(QString("color:%1;font-size:8px;font-weight:700;%2;"
+        type_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;%2;"
                                         "background:%3;padding:1px 4px;border-radius:2px;")
                                     .arg(ui::colors::AMBER.get(), MF(), ui::colors::BG_RAISED.get()));
         hl->addWidget(type_lbl);

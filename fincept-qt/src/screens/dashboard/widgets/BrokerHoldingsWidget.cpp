@@ -179,15 +179,15 @@ void BrokerHoldingsWidget::on_theme_changed() {
 
 void BrokerHoldingsWidget::apply_styles() {
     header_hint_->setStyleSheet(
-        QString("color:%1;font-size:9px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     table_->setStyleSheet(QString(
-        "QTableWidget{background:transparent;color:%1;gridline-color:%2;font-size:10px;border:none;}"
+        "QTableWidget{background:transparent;color:%1;gridline-color:%2;font-size:12px;border:none;}"
         "QHeaderView::section{background:%3;color:%4;border:none;border-bottom:1px solid %2;"
-        "padding:2px 4px;font-size:9px;font-weight:bold;}"
+        "padding:2px 4px;font-size:12px;font-weight:bold;}"
         "QTableWidget::item{padding:2px 4px;}")
         .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
-             ui::colors::TEXT_TERTIARY()));
+             ui::colors::TEXT_SECONDARY()));
 }
 
 } // namespace fincept::screens::widgets

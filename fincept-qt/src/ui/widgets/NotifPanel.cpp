@@ -90,7 +90,7 @@ void NotifPanel::refresh() {
         auto* empty = new QLabel("No notifications");
         empty->setAlignment(Qt::AlignCenter);
         empty->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent; padding: 24px;")
-                                 .arg(ui::colors::TEXT_TERTIARY()));
+                                 .arg(ui::colors::TEXT_SECONDARY()));
         list_layout_->insertWidget(0, empty);
         return;
     }
@@ -148,7 +148,7 @@ void NotifPanel::refresh() {
 
         auto* time_lbl = new QLabel(rec.received_at.toString("hh:mm:ss"));
         time_lbl->setStyleSheet(
-            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_TERTIARY()));
+            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         time_lbl->setAlignment(Qt::AlignTop | Qt::AlignRight);
         rl->addWidget(time_lbl);
 

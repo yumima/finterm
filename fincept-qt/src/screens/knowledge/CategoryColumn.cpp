@@ -54,7 +54,7 @@ CategoryColumn::CategoryColumn(const KnowledgeCategory& category, QWidget* paren
     header_label_ = new QLabel(category.label, header);
     header_label_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; font-weight: bold;"
                                          " letter-spacing: 1.5px; %2")
-                                     .arg(ui::colors::TEXT_TERTIARY(), MONO));
+                                     .arg(ui::colors::TEXT_SECONDARY(), MONO));
     hl->addWidget(header_label_);
 
     picker_ = new QComboBox(header);
@@ -124,7 +124,7 @@ void CategoryColumn::set_active_entry_internal(const QString& entry_id) {
 void CategoryColumn::set_active(bool active) {
     header_label_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; font-weight: bold;"
                                          " letter-spacing: 1.5px; %2")
-                                     .arg(active ? ui::colors::AMBER() : ui::colors::TEXT_TERTIARY(), MONO));
+                                     .arg(active ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(), MONO));
 }
 
 bool CategoryColumn::eventFilter(QObject* watched, QEvent* event) {

@@ -96,7 +96,7 @@ void AgentConfigScreen::build_nav_bar(QVBoxLayout* root) {
 
     agent_count_label_ = new QLabel;
     agent_count_label_->setStyleSheet(
-        QString("color:%1;font-size:11px;padding:2px 8px;background:%2;border-radius:2px;")
+        QString("color:%1;font-size:12px;padding:2px 8px;background:%2;border-radius:2px;")
             .arg(ui::colors::AMBER(), ui::colors::BG_SURFACE()));
     hl->addWidget(agent_count_label_);
 
@@ -113,13 +113,13 @@ void AgentConfigScreen::build_status_bar(QVBoxLayout* root) {
     hl->setContentsMargins(12, 0, 12, 0);
 
     status_label_ = new QLabel("READY");
-    status_label_->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::TEXT_TERTIARY()));
+    status_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(status_label_);
     hl->addStretch();
 
     auto* view_label = new QLabel;
     view_label->setObjectName("AgentStatusView");
-    view_label->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::AMBER()));
+    view_label->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::AMBER()));
     hl->addWidget(view_label);
 
     root->addWidget(bar);
@@ -307,16 +307,16 @@ void AgentConfigScreen::setup_service_connections() {
 
     connect(&svc, &services::AgentService::error_occurred, this, [this](const QString& ctx, const QString& msg) {
         status_label_->setText(QString("ERROR [%1]: %2").arg(ctx, msg.left(60)));
-        status_label_->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::NEGATIVE()));
+        status_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::NEGATIVE()));
     });
 
     connect(&svc, &services::AgentService::agent_result, this, [this](services::AgentExecutionResult r) {
         if (r.success) {
             status_label_->setText(QString("DONE (%1ms)").arg(r.execution_time_ms));
-            status_label_->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::POSITIVE()));
+            status_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::POSITIVE()));
         } else {
             status_label_->setText(QString("FAILED: %1").arg(r.error.left(60)));
-            status_label_->setStyleSheet(QString("color:%1;font-size:10px;").arg(ui::colors::NEGATIVE()));
+            status_label_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::NEGATIVE()));
         }
     });
 

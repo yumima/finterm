@@ -81,7 +81,7 @@ ExchangePresentation::StatusBadge ExchangePresentation::status_badge(
             QString tip = QStringLiteral("Market has not yet opened for trading.");
             if (!market.end_date_iso.isEmpty())
                 tip += QStringLiteral(" Close time: ") + market.end_date_iso + QStringLiteral(".");
-            return {QStringLiteral("PENDING"), QColor(colors::TEXT_DIM()),
+            return {QStringLiteral("PENDING"), QColor(colors::TEXT_SECONDARY()),
                     QColor(0, 0, 0, 0), tip};
         }
     }
@@ -95,7 +95,7 @@ ExchangePresentation::StatusBadge ExchangePresentation::status_badge(
         return {QStringLiteral("ACTIVE"), accent, accent_bg,
                 QStringLiteral("Market is accepting orders.")};
     }
-    return {QStringLiteral("INACTIVE"), QColor(colors::TEXT_DIM()),
+    return {QStringLiteral("INACTIVE"), QColor(colors::TEXT_SECONDARY()),
             QColor(0, 0, 0, 0),
             QStringLiteral("Market not currently trading.")};
 }

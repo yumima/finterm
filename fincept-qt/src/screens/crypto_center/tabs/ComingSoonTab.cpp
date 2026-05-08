@@ -76,13 +76,13 @@ void ComingSoonTab::apply_theme() {
     const QString ss = QStringLiteral(
         "QWidget#comingSoonTab { background:%1; }"
         "QFrame#comingSoonCard { background:%2; border:1px solid %3; }"
-        "QLabel#comingSoonPhase { color:%4; font-family:%5; font-size:10px;"
+        "QLabel#comingSoonPhase { color:%4; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.5px; background:transparent; }"
         "QLabel#comingSoonTitle { color:%6; font-family:%5; font-size:18px;"
         "  font-weight:700; letter-spacing:1.4px; background:transparent; }"
         "QLabel#comingSoonDescription { color:%7; font-family:%5; font-size:12px;"
         "  background:transparent; }"
-        "QLabel#comingSoonStatus { color:%8; font-family:%5; font-size:10px;"
+        "QLabel#comingSoonStatus { color:%8; font-family:%5; font-size:12px;"
         "  font-weight:700; letter-spacing:1.2px; background:transparent; }"
     )
         .arg(BG_BASE(),         // %1

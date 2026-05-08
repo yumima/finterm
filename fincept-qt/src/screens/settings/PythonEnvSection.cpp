@@ -52,7 +52,7 @@ static QString btn_primary_ss() {
                    "QPushButton:hover{background:%3;}"
                    "QPushButton:disabled{background:%4;color:%5;}")
         .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER_DIM(),
-             ui::colors::BG_RAISED(), ui::colors::TEXT_TERTIARY());
+             ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY());
 }
 static QString btn_secondary_ss() {
     return QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
@@ -60,7 +60,7 @@ static QString btn_secondary_ss() {
                    "QPushButton:hover{background:%4;}"
                    "QPushButton:disabled{color:%5;border-color:%6;}")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_BRIGHT(),
-             ui::colors::BG_HOVER(), ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM());
+             ui::colors::BG_HOVER(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM());
 }
 static QString table_ss() {
     return QString(
@@ -156,7 +156,7 @@ void PythonEnvSection::build_ui() {
         this);
     warn_text->setWordWrap(true);
     warn_text->setStyleSheet(
-        QString("color:%1;background:transparent;font-size:11px;")
+        QString("color:%1;background:transparent;font-size:12px;")
             .arg(ui::colors::AMBER()));
     warn_layout->addWidget(warn_text, 1);
 
@@ -256,8 +256,8 @@ void PythonEnvSection::build_ui() {
 
     install_log_ = new QLabel(this);
     install_log_->setStyleSheet(
-        QString("color:%1;background:transparent;font-size:10px;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;background:transparent;font-size:12px;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     install_log_->setVisible(false);
     root->addWidget(install_log_);
 
@@ -571,7 +571,7 @@ void PythonEnvSection::merge_and_populate_table() {
 
         // Col 4: installed version
         auto* inst_item = new QTableWidgetItem(row.missing ? QString("—") : row.installed_ver);
-        inst_item->setForeground(QColor(row.missing ? ui::colors::TEXT_TERTIARY() : ui::colors::TEXT_PRIMARY()));
+        inst_item->setForeground(QColor(row.missing ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_PRIMARY()));
         inst_item->setTextAlignment(Qt::AlignCenter);
         pkg_table_->setItem(i, 4, inst_item);
 
@@ -586,12 +586,12 @@ void PythonEnvSection::merge_and_populate_table() {
         btn->setFixedHeight(22);
         btn->setStyleSheet(
             row.missing
-                ? QString("QPushButton{background:%1;color:%2;border:none;font-size:10px;"
+                ? QString("QPushButton{background:%1;color:%2;border:none;font-size:12px;"
                           "font-weight:700;}"
                           "QPushButton:hover{background:%3;}")
                       .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER_DIM())
                 : QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                          "font-size:10px;}"
+                          "font-size:12px;}"
                           "QPushButton:hover{background:%3;}")
                       .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
         btn->setCursor(Qt::PointingHandCursor);

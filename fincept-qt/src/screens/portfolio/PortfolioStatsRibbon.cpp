@@ -161,7 +161,7 @@ void PortfolioStatsRibbon::apply_hero_styles(HeroCell& c, const char* value_colo
     if (c.label) {
         c.label->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; letter-spacing:1.2px;"
                                        "  background:transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(label_px));
     }
     if (c.value) {
@@ -173,7 +173,7 @@ void PortfolioStatsRibbon::apply_hero_styles(HeroCell& c, const char* value_colo
     if (c.sub) {
         c.sub->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:500;"
                                      "  background:transparent;")
-                                 .arg(ui::colors::TEXT_TERTIARY())
+                                 .arg(ui::colors::TEXT_SECONDARY())
                                  .arg(sub_px));
     }
     if (c.container) {
@@ -215,7 +215,7 @@ void PortfolioStatsRibbon::apply_chip_styles(ChipCell& c, const char* value_colo
     if (c.label) {
         c.label->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; letter-spacing:0.8px;"
                                        "  background:transparent;")
-                                   .arg(ui::colors::TEXT_TERTIARY())
+                                   .arg(ui::colors::TEXT_SECONDARY())
                                    .arg(label_px));
     }
     if (c.value) {

@@ -33,7 +33,7 @@ void ChatSessionPanel::build_ui() {
     auto* header_row = new QHBoxLayout;
     header_row->setSpacing(4);
     auto* title_lbl = new QLabel("CONVERSATIONS");
-    title_lbl->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;"
+    title_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                      "font-family:'Consolas','Courier New',monospace;"
                                      "background:transparent;letter-spacing:1px;")
                                  .arg(ui::colors::AMBER()));
@@ -46,7 +46,7 @@ void ChatSessionPanel::build_ui() {
     exit_btn_->setToolTip("Switch to Terminal Mode (F9)");
     exit_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     exit_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                                     "padding:0 8px;font-weight:700;font-size:10px;"
+                                     "padding:0 8px;font-weight:700;font-size:12px;"
                                      "font-family:'Consolas','Courier New',monospace;}"
                                      "QPushButton:hover{background:%2;color:%3;border-color:%1;}")
                                  .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::TEXT_PRIMARY()));
@@ -92,9 +92,9 @@ void ChatSessionPanel::build_ui() {
 
     // Stats label
     stats_lbl_ = new QLabel;
-    stats_lbl_->setStyleSheet(QString("color:%1;font-size:11px;font-family:'Consolas','Courier New',monospace;"
+    stats_lbl_->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas','Courier New',monospace;"
                                       "background:transparent;")
-                                  .arg(ui::colors::TEXT_DIM()));
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     stats_lbl_->setAlignment(Qt::AlignCenter);
     vl->addWidget(stats_lbl_);
 
@@ -104,7 +104,7 @@ void ChatSessionPanel::build_ui() {
         btn->setToolTip(tip);
         btn->setFixedHeight(24);
         btn->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
-                                   "border-radius:0px;font-size:11px;"
+                                   "border-radius:0px;font-size:12px;"
                                    "font-family:'Consolas','Courier New',monospace;}"
                                    "QPushButton:hover{background:%4;color:%5;border-color:%6;}"
                                    "QPushButton:disabled{color:%7;border-color:%1;}")

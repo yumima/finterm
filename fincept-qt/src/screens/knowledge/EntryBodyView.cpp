@@ -172,7 +172,7 @@ void EntryBodyView::rebuild() {
     if (!current_) {
         auto* lbl = new QLabel("(No entry selected.)", page);
         lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: %3px; %2")
-                               .arg(ui::colors::TEXT_DIM(), MONO)
+                               .arg(ui::colors::TEXT_SECONDARY(), MONO)
                                .arg(11));
         vl->addWidget(lbl);
         vl->addStretch();
@@ -202,7 +202,7 @@ void EntryBodyView::rebuild() {
         if (!current_->abbreviation.isEmpty()) {
             auto* abbr = new QLabel(current_->abbreviation, page);
             abbr->setStyleSheet(QString("color: %1; background: transparent; padding: 2px 0; font-size: %3px; %2")
-                                    .arg(ui::colors::TEXT_TERTIARY(), MONO)
+                                    .arg(ui::colors::TEXT_SECONDARY(), MONO)
                                     .arg(10));
             top->addWidget(abbr);
         }
@@ -258,7 +258,7 @@ void EntryBodyView::rebuild() {
     if (body.isEmpty()) {
         auto* miss = new QLabel("(No content body.)", page);
         miss->setStyleSheet(QString("color: %1; background: transparent; font-size: %3px; %2")
-                                .arg(ui::colors::TEXT_DIM(), MONO)
+                                .arg(ui::colors::TEXT_SECONDARY(), MONO)
                                 .arg(11));
         vl->addWidget(miss);
     } else {

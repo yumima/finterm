@@ -83,7 +83,7 @@ void PricingScreen::build_ui() {
     auto* subtitle = new QLabel("finterm is open source under AGPL-3.0 — no paid tiers in this fork");
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setStyleSheet(
-        QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_TERTIARY()).arg(MF));
+        QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
     vl->addWidget(subtitle);
 
     user_info_label_ = new QLabel;
@@ -96,7 +96,7 @@ void PricingScreen::build_ui() {
     loading_label_ = new QLabel("Loading plans...");
     loading_label_->setAlignment(Qt::AlignCenter);
     loading_label_->setStyleSheet(
-        QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_DIM()).arg(MF));
+        QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
     loading_label_->hide();
     vl->addWidget(loading_label_);
 
@@ -270,7 +270,7 @@ void PricingScreen::render_plan_cards() {
         auto* empty = new QLabel("No plans available.");
         empty->setAlignment(Qt::AlignCenter);
         empty->setStyleSheet(
-            QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_DIM()).arg(MF));
+            QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
         cards_layout_->addWidget(empty);
     }
 
@@ -328,7 +328,7 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
         desc->setWordWrap(true);
         desc->setAlignment(Qt::AlignCenter);
         desc->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_TERTIARY()).arg(MF));
+            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
         vl->addWidget(desc);
     }
 
@@ -355,7 +355,7 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
         auto* period = new QLabel(QString("/ %1 days").arg(plan.validity_days));
         period->setAlignment(Qt::AlignCenter);
         period->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_DIM()).arg(MF));
+            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
         vl->addWidget(period);
     }
 
@@ -374,7 +374,7 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
     auto* support = new QLabel(QString("%1 support").arg(plan.support_type));
     support->setAlignment(Qt::AlignCenter);
     support->setStyleSheet(
-        QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_TERTIARY()).arg(MF));
+        QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
     vl->addWidget(support);
 
     // Separator
@@ -416,7 +416,7 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
             btn->setEnabled(false);
             btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; "
                                        "border: 1px solid %3; font-size: 11px; font-weight: 700; %4 }")
-                                   .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_DIM(), ui::colors::BORDER_DIM())
+                                   .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM())
                                    .arg(MF));
         } else {
             btn->setText("CONTINUE FREE");
@@ -437,7 +437,7 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
                     "QPushButton:disabled { background: %5; color: %6; border-color: %7; }")
                 .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM())
                 .arg(MF)
-                .arg(ui::colors::BG_BASE(), ui::colors::BG_RAISED(), ui::colors::TEXT_DIM(), ui::colors::BORDER_DIM()));
+                .arg(ui::colors::BG_BASE(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
         QString pid = plan.plan_id;
         connect(btn, &QPushButton::clicked, this, [this, pid]() { on_select_plan(pid); });
     }
@@ -600,7 +600,7 @@ void PricingScreen::update_footer() {
 
         auto* explore = new QLabel("Want to explore first?");
         explore->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_DIM()).arg(MF));
+            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
         hl->addWidget(explore);
 
         auto* free_btn = new QPushButton("Continue with Free Plan");

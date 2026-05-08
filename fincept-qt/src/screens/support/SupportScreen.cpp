@@ -47,7 +47,7 @@ static QString SS_BTN_PRIMARY() {
                    "QPushButton:pressed { background: %5; }"
                    "QPushButton:disabled { background: %6; color: %7; }")
         .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), MF, ui::colors::AMBER_DIM(), "#92400e",
-             ui::colors::BORDER_MED(), ui::colors::TEXT_DIM());
+             ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString SS_BTN_SUCCESS() {
@@ -56,7 +56,7 @@ static QString SS_BTN_SUCCESS() {
                    "QPushButton:hover { background: #15803d; }"
                    "QPushButton:pressed { background: #14532d; }"
                    "QPushButton:disabled { background: %4; color: %5; }")
-        .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE(), MF, ui::colors::BORDER_MED(), ui::colors::TEXT_DIM());
+        .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE(), MF, ui::colors::BORDER_MED(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString SS_BTN_DANGER() {
@@ -64,7 +64,7 @@ static QString SS_BTN_DANGER() {
                    "  padding: 6px 14px; font-size: 11px; font-weight: 600; %2 }"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { border-color: %4; color: %4; }")
-        .arg(ui::colors::NEGATIVE(), MF, ui::colors::BG_BASE(), ui::colors::TEXT_DIM());
+        .arg(ui::colors::NEGATIVE(), MF, ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString SS_BTN_OUTLINE() {
@@ -72,7 +72,7 @@ static QString SS_BTN_OUTLINE() {
                    "  padding: 6px 14px; font-size: 11px; font-weight: 600; %2 }"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { border-color: %4; color: %4; }")
-        .arg(ui::colors::POSITIVE(), MF, ui::colors::BG_BASE(), ui::colors::TEXT_DIM());
+        .arg(ui::colors::POSITIVE(), MF, ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY());
 }
 
 static QString SS_BTN_GHOST() {
@@ -109,7 +109,7 @@ static QLabel* status_badge(const QString& text, const QString& bg, const QStrin
     auto* b = new QLabel(text);
     b->setAlignment(Qt::AlignCenter);
     b->setFixedHeight(20);
-    b->setStyleSheet(QString("background:%1;color:%2;font-size:9px;font-weight:700;"
+    b->setStyleSheet(QString("background:%1;color:%2;font-size:12px;font-weight:700;"
                              "padding:0 8px;letter-spacing:0.5px;%3")
                          .arg(bg, fg, MF));
     return b;
@@ -181,7 +181,7 @@ SupportScreen::SupportScreen(QWidget* parent) : QWidget(parent) {
 
         // Breadcrumb separator
         bl->addWidget(lbl("/", ui::colors::BORDER_MED(), 13));
-        auto* sub = lbl("Tickets", ui::colors::TEXT_TERTIARY(), 12);
+        auto* sub = lbl("Tickets", ui::colors::TEXT_SECONDARY(), 12);
         bl->addWidget(sub);
 
         bl->addStretch();
@@ -350,7 +350,7 @@ QWidget* SupportScreen::build_sidebar() {
             auto* wl = new QHBoxLayout(w);
             wl->setContentsMargins(0, 0, 0, 0);
             wl->setSpacing(4);
-            wl->addWidget(lbl(label, ui::colors::TEXT_TERTIARY(), 10));
+            wl->addWidget(lbl(label, ui::colors::TEXT_SECONDARY(), 10));
             ref = lbl("0", color, 10, true);
             wl->addWidget(ref);
             return w;
@@ -396,7 +396,7 @@ QWidget* SupportScreen::build_empty_state() {
     vl->setAlignment(Qt::AlignCenter);
     vl->setSpacing(12);
 
-    auto* icon = lbl("🎟", ui::colors::TEXT_TERTIARY(), 40);
+    auto* icon = lbl("🎟", ui::colors::TEXT_SECONDARY(), 40);
     icon->setAlignment(Qt::AlignCenter);
     vl->addWidget(icon);
 
@@ -404,7 +404,7 @@ QWidget* SupportScreen::build_empty_state() {
     t->setAlignment(Qt::AlignCenter);
     vl->addWidget(t);
 
-    auto* s = lbl("or create a new support request", ui::colors::TEXT_TERTIARY(), 11, false, true);
+    auto* s = lbl("or create a new support request", ui::colors::TEXT_SECONDARY(), 11, false, true);
     s->setAlignment(Qt::AlignCenter);
     vl->addWidget(s);
 
@@ -440,9 +440,9 @@ QWidget* SupportScreen::build_create_page() {
         auto* cancel_btn = new QPushButton("← Back");
         cancel_btn->setFlat(true);
         cancel_btn->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:none;"
-                                          "font-size:11px;padding:0;%2}"
+                                          "font-size:12px;padding:0;%2}"
                                           "QPushButton:hover{color:%3;}")
-                                      .arg(ui::colors::TEXT_TERTIARY(), MF, ui::colors::AMBER()));
+                                      .arg(ui::colors::TEXT_SECONDARY(), MF, ui::colors::AMBER()));
         connect(cancel_btn, &QPushButton::clicked, this, [this]() { content_stack_->setCurrentIndex(0); });
         vl->addWidget(cancel_btn, 0, Qt::AlignLeft);
         vl->addSpacing(16);
@@ -450,7 +450,7 @@ QWidget* SupportScreen::build_create_page() {
         vl->addWidget(lbl("Create Support Ticket", ui::colors::TEXT_PRIMARY(), 18, true));
         vl->addSpacing(4);
         vl->addWidget(lbl("Describe your issue in detail. We typically respond within 24 hours.",
-                          ui::colors::TEXT_TERTIARY(), 12, false, true));
+                          ui::colors::TEXT_SECONDARY(), 12, false, true));
         vl->addSpacing(24);
     }
 
@@ -526,7 +526,7 @@ QWidget* SupportScreen::build_create_page() {
         auto* req = lbl("*", ui::colors::AMBER(), 11, true);
         hdr->addWidget(req);
         hdr->addStretch();
-        char_count_lbl_ = lbl("0 / 2000", ui::colors::TEXT_TERTIARY(), 10);
+        char_count_lbl_ = lbl("0 / 2000", ui::colors::TEXT_SECONDARY(), 10);
         hdr->addWidget(char_count_lbl_);
         cl->addLayout(hdr);
 
@@ -545,8 +545,8 @@ QWidget* SupportScreen::build_create_page() {
             int n = desc_input_->toPlainText().length();
             char_count_lbl_->setText(QString("%1 / 2000").arg(n));
             char_count_lbl_->setStyleSheet(
-                QString("color:%1;font-size:10px;background:transparent;%2")
-                    .arg(n > 2000 ? ui::colors::NEGATIVE() : ui::colors::TEXT_TERTIARY(), MF));
+                QString("color:%1;font-size:12px;background:transparent;%2")
+                    .arg(n > 2000 ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY(), MF));
         });
     }
 
@@ -624,7 +624,7 @@ QWidget* SupportScreen::build_detail_page() {
         hl->setContentsMargins(20, 0, 20, 0);
         hl->setSpacing(10);
 
-        detail_id_lbl_ = lbl("", ui::colors::TEXT_TERTIARY(), 11);
+        detail_id_lbl_ = lbl("", ui::colors::TEXT_SECONDARY(), 11);
         hl->addWidget(detail_id_lbl_);
 
         detail_subject_lbl_ = lbl("", ui::colors::TEXT_PRIMARY(), 14, true);
@@ -635,7 +635,7 @@ QWidget* SupportScreen::build_detail_page() {
         detail_status_lbl_ = new QLabel;
         detail_status_lbl_->setFixedHeight(22);
         detail_status_lbl_->setAlignment(Qt::AlignCenter);
-        detail_status_lbl_->setStyleSheet(QString("background:%1;color:%2;font-size:10px;font-weight:700;"
+        detail_status_lbl_->setStyleSheet(QString("background:%1;color:%2;font-size:12px;font-weight:700;"
                                                   "padding:0 10px;letter-spacing:0.5px;%3")
                                               .arg(ui::colors::CYAN(), ui::colors::BG_BASE(), MF));
         hl->addWidget(detail_status_lbl_);
@@ -666,7 +666,7 @@ QWidget* SupportScreen::build_detail_page() {
         il->setContentsMargins(20, 10, 20, 10);
         il->setSpacing(6);
 
-        detail_meta_lbl_ = lbl("", ui::colors::TEXT_TERTIARY(), 10);
+        detail_meta_lbl_ = lbl("", ui::colors::TEXT_SECONDARY(), 10);
         il->addWidget(detail_meta_lbl_);
 
         detail_body_lbl_ = new QLabel;
@@ -741,7 +741,7 @@ QWidget* SupportScreen::build_detail_page() {
         auto* reply_hdr = new QHBoxLayout;
         reply_hdr->addWidget(lbl("Reply", ui::colors::TEXT_PRIMARY(), 12, true));
         reply_hdr->addStretch();
-        reply_hdr->addWidget(lbl("Ctrl+Enter to send", ui::colors::TEXT_TERTIARY(), 10));
+        reply_hdr->addWidget(lbl("Ctrl+Enter to send", ui::colors::TEXT_SECONDARY(), 10));
         rbl->addLayout(reply_hdr);
 
         msg_input_ = new QTextEdit;
@@ -786,9 +786,9 @@ void SupportScreen::select_ticket_row(QPushButton* btn) {
 
 void SupportScreen::set_busy(bool busy) {
     QString col = busy ? ui::colors::AMBER() : ui::colors::POSITIVE();
-    status_dot_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;").arg(col));
+    status_dot_->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(col));
     status_lbl_->setStyleSheet(
-        QString("color:%1;font-size:11px;font-weight:600;background:transparent;%2").arg(col, MF));
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;%2").arg(col, MF));
     status_lbl_->setText(busy ? "Updating…" : "Ready");
     refresh_btn_->setEnabled(!busy);
     if (create_btn_)
@@ -867,7 +867,7 @@ void SupportScreen::load_tickets() {
         stat_resolved_->setText(QString::number(done_c));
 
         if (all.isEmpty()) {
-            auto* empty = lbl("No tickets yet", ui::colors::TEXT_TERTIARY(), 12);
+            auto* empty = lbl("No tickets yet", ui::colors::TEXT_SECONDARY(), 12);
             empty->setAlignment(Qt::AlignCenter);
             empty->setContentsMargins(0, 40, 0, 0);
             lay->insertWidget(0, empty);
@@ -919,13 +919,13 @@ void SupportScreen::load_tickets() {
             // Bottom: meta row
             auto* meta = new QHBoxLayout;
             meta->setSpacing(8);
-            meta->addWidget(lbl(category.toLower(), ui::colors::TEXT_TERTIARY(), 10));
+            meta->addWidget(lbl(category.toLower(), ui::colors::TEXT_SECONDARY(), 10));
             meta->addWidget(lbl("·", ui::colors::BORDER_MED(), 10));
             auto* pr = lbl(priority.toLower(), priority_color(priority), 10);
             meta->addWidget(pr);
             meta->addStretch();
             if (!date_str.isEmpty())
-                meta->addWidget(lbl(date_str, ui::colors::TEXT_TERTIARY(), 9));
+                meta->addWidget(lbl(date_str, ui::colors::TEXT_SECONDARY(), 9));
             rl->addLayout(meta);
 
             // Wrap in QPushButton for click
@@ -961,7 +961,7 @@ void SupportScreen::load_tickets() {
                 detail_subject_lbl_->setText(sub_c);
 
                 detail_status_lbl_->setText(" " + status_label(st_c) + " ");
-                detail_status_lbl_->setStyleSheet(QString("background:%1;color:%2;font-size:10px;font-weight:700;"
+                detail_status_lbl_->setStyleSheet(QString("background:%1;color:%2;font-size:12px;font-weight:700;"
                                                           "padding:0 10px;letter-spacing:0.5px;%3")
                                                       .arg(status_color(st_c), ui::colors::BG_BASE(), MF));
 
@@ -993,7 +993,7 @@ void SupportScreen::load_tickets() {
                     auto* mh = new QHBoxLayout;
                     mh->addWidget(lbl("Support Team", "#9333ea", 11, true));
                     mh->addStretch();
-                    mh->addWidget(lbl("1 Jan 2026", ui::colors::TEXT_TERTIARY(), 10));
+                    mh->addWidget(lbl("1 Jan 2026", ui::colors::TEXT_SECONDARY(), 10));
                     ml->addLayout(mh);
                     auto* mb = lbl("Welcome. This is a community open-source project — there is no commercial "
                                    "support team behind it.\n\n"
@@ -1056,7 +1056,7 @@ void SupportScreen::load_tickets() {
                             auto* mh = new QHBoxLayout;
                             mh->addWidget(lbl(sender, bubble_color, 11, true));
                             mh->addStretch();
-                            mh->addWidget(lbl(ts, ui::colors::TEXT_TERTIARY(), 10));
+                            mh->addWidget(lbl(ts, ui::colors::TEXT_SECONDARY(), 10));
                             ml->addLayout(mh);
                             auto* mb = lbl(mo["message"].toString(), ui::colors::TEXT_PRIMARY(), 12, false, true);
                             ml->addWidget(mb);
@@ -1065,7 +1065,7 @@ void SupportScreen::load_tickets() {
 
                         if (msgs.isEmpty()) {
                             mcl3->insertWidget(
-                                0, lbl("No messages yet — be the first to reply.", ui::colors::TEXT_TERTIARY(), 11));
+                                0, lbl("No messages yet — be the first to reply.", ui::colors::TEXT_SECONDARY(), 11));
                         }
 
                         // Scroll to bottom
@@ -1140,7 +1140,7 @@ void SupportScreen::on_send_message() {
         auto* mh = new QHBoxLayout;
         mh->addWidget(lbl("You", ui::colors::CYAN(), 11, true));
         mh->addStretch();
-        mh->addWidget(lbl(QDateTime::currentDateTime().toString("d MMM yyyy  hh:mm"), ui::colors::TEXT_TERTIARY(), 10));
+        mh->addWidget(lbl(QDateTime::currentDateTime().toString("d MMM yyyy  hh:mm"), ui::colors::TEXT_SECONDARY(), 10));
         ml->addLayout(mh);
         auto* mb = lbl(msg, ui::colors::TEXT_PRIMARY(), 12, false, true);
         ml->addWidget(mb);

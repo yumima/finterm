@@ -64,7 +64,7 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
 
     auto* subtitle = new QLabel("This is an open-source project. There is no commercial support.");
     subtitle->setStyleSheet(
-        QString("color: %1; font-size: 13px; background: transparent; %2").arg(colors::TEXT_TERTIARY(), MF));
+        QString("color: %1; font-size: 13px; background: transparent; %2").arg(colors::TEXT_SECONDARY(), MF));
     subtitle->setWordWrap(true);
     vl->addWidget(subtitle);
 
@@ -119,7 +119,7 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
 
             auto* desc = new QLabel(c.purpose);
             desc->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent; padding-left: 18px; %2")
-                                    .arg(colors::TEXT_TERTIARY(), MF));
+                                    .arg(colors::TEXT_SECONDARY(), MF));
             desc->setWordWrap(true);
             rl->addWidget(desc);
             bvl->addWidget(row);

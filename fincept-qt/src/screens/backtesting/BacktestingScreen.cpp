@@ -209,7 +209,7 @@ QWidget* BacktestingScreen::build_top_bar() {
             .arg(ui::colors::AMBER_DIM())
             .arg(ui::colors::BG_BASE())
             .arg(ui::colors::BG_RAISED())
-            .arg(ui::colors::TEXT_DIM())
+            .arg(ui::colors::TEXT_SECONDARY())
             .arg(ui::colors::BORDER_DIM()));
     connect(run_button_, &QPushButton::clicked, this, &BacktestingScreen::on_run);
     hl->addWidget(run_button_);
@@ -253,7 +253,7 @@ QWidget* BacktestingScreen::build_left_panel() {
 
     auto label_style = QString("color:%1; font-size:%2px; font-weight:700;"
                                "font-family:%3; letter-spacing:1px;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY);
 
@@ -399,7 +399,7 @@ QWidget* BacktestingScreen::build_center_panel() {
                 "QTabBar::tab:selected { color:%5; background:%6; }"
                 "QTabBar::tab:hover { color:%7; background:%8; }")
             .arg(ui::colors::BG_BASE())
-            .arg(ui::colors::TEXT_TERTIARY())
+            .arg(ui::colors::TEXT_SECONDARY())
             .arg(ui::fonts::DATA_FAMILY)
             .arg(ui::fonts::SMALL)
             .arg(ui::colors::TEXT_PRIMARY())
@@ -503,7 +503,7 @@ QWidget* BacktestingScreen::build_right_panel() {
 
     auto label_style = QString("color:%1; font-size:%2px; font-weight:700;"
                                "font-family:%3; letter-spacing:1px;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY);
 
@@ -974,7 +974,7 @@ QWidget* BacktestingScreen::build_status_bar() {
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(16);
     auto s = QString("color:%1; font-size:%2px; font-family:%3;")
-                 .arg(ui::colors::TEXT_TERTIARY())
+                 .arg(ui::colors::TEXT_SECONDARY())
                  .arg(ui::fonts::TINY)
                  .arg(ui::fonts::DATA_FAMILY);
     auto bold = QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
@@ -1038,7 +1038,7 @@ void BacktestingScreen::update_provider_buttons() {
                     "padding:0 10px; border:1px solid %4;"
                     "background:%5; font-weight:%6; }"
                     "QPushButton:hover { background:rgba(%7,0.15); }")
-                .arg(active ? p.color.name() : ui::colors::TEXT_TERTIARY())
+                .arg(active ? p.color.name() : ui::colors::TEXT_SECONDARY())
                 .arg(ui::fonts::TINY)
                 .arg(ui::fonts::DATA_FAMILY)
                 .arg(active ? QString("rgba(%1,%2,%3,0.3)").arg(p.color.red()).arg(p.color.green()).arg(p.color.blue())
@@ -1090,7 +1090,7 @@ void BacktestingScreen::update_command_buttons() {
                             : "transparent")
                 .arg(QString("%1,%2,%3").arg(cmd.color.red()).arg(cmd.color.green()).arg(cmd.color.blue()))
                 .arg(cmd.color.name())
-                .arg(ui::colors::TEXT_DIM()));
+                .arg(ui::colors::TEXT_SECONDARY()));
     }
 }
 
@@ -1145,7 +1145,7 @@ void BacktestingScreen::rebuild_strategy_params() {
                            .arg(ui::colors::BORDER_BRIGHT());
 
     auto label_style = QString("color:%1; font-size:%2px; font-family:%3;")
-                           .arg(ui::colors::TEXT_TERTIARY())
+                           .arg(ui::colors::TEXT_SECONDARY())
                            .arg(ui::fonts::TINY)
                            .arg(ui::fonts::DATA_FAMILY);
 
@@ -1388,7 +1388,7 @@ void BacktestingScreen::display_result(const QJsonObject& payload) {
 
         auto* lbl = new QLabel(display_label.toUpper(), card);
         lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                               .arg(ui::colors::TEXT_TERTIARY())
+                               .arg(ui::colors::TEXT_SECONDARY())
                                .arg(ui::fonts::TINY)
                                .arg(ui::fonts::DATA_FAMILY));
         auto* val = new QLabel(fmt_metric(key, perf[key]), card);

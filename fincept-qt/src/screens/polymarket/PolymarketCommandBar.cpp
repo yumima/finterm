@@ -137,7 +137,7 @@ void PolymarketCommandBar::apply_accent() {
         .arg(colors::TEXT_SECONDARY())   // %7
         .arg(accent)                     // %8
         .arg(colors::BORDER_BRIGHT())    // %9
-        .arg(colors::TEXT_DIM());        // %10
+        .arg(colors::TEXT_SECONDARY());        // %10
 
     setStyleSheet(css);
 }
@@ -414,7 +414,7 @@ void PolymarketCommandBar::set_ws_status(bool connected) {
         ws_indicator_->setStyleSheet(
             QString("color: %1; background: transparent; font-size: 9px; "
                     "font-weight: 700; padding: 2px 8px; border: 1px solid %2;")
-                .arg(colors::TEXT_DIM(), colors::BORDER_DIM()));
+                .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM()));
     }
 }
 
@@ -438,7 +438,7 @@ void PolymarketCommandBar::set_account_status(bool connected, const QString& lab
             QString("#polyAccountChip { background: transparent; color: %1; "
                     "border: 1px solid %2; font-size: 9px; font-weight: 700; padding: 3px 10px; }"
                     "#polyAccountChip:hover { color: %3; border-color: %4; }")
-                .arg(colors::TEXT_DIM(), colors::BORDER_DIM(),
+                .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(),
                      colors::TEXT_PRIMARY(), colors::BORDER_BRIGHT()));
     }
 }

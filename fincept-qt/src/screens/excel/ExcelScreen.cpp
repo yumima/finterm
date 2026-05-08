@@ -72,11 +72,11 @@ void ExcelScreen::build_ui() {
     sheet_tabs_->setStyleSheet(QString("QTabWidget::pane { border:none; background:%3; }"
                                        "QTabBar { background:%4; }"
                                        "QTabBar::tab { background:%5; color:%6; border:1px solid %7;"
-                                       "  padding:4px 14px; font-family:%1; font-size:10px; margin-right:2px; }"
+                                       "  padding:4px 14px; font-family:%1; font-size:12px; margin-right:2px; }"
                                        "QTabBar::tab:selected { background:%2; color:%8; border-color:%2; }"
                                        "QTabBar::tab:hover { background:%7; }")
                                    .arg(fonts::DATA_FAMILY, kAccent(), colors::BG_HOVER(), colors::BORDER_MED(),
-                                        colors::TEXT_DIM(), colors::TEXT_SECONDARY(), colors::TEXT_TERTIARY(),
+                                        colors::TEXT_SECONDARY(), colors::TEXT_SECONDARY(), colors::TEXT_SECONDARY(),
                                         colors::TEXT_PRIMARY()));
 
     // Add initial sheet
@@ -99,7 +99,7 @@ void ExcelScreen::build_ui() {
 
     status_label_ = new QLabel(this);
     status_label_->setStyleSheet(
-        QString("color:%1; font-family:%2; font-size:9px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+        QString("color:%1; font-family:%2; font-size:12px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     status_hl->addWidget(status_label_);
     status_hl->addStretch();
 
@@ -119,7 +119,7 @@ QWidget* ExcelScreen::build_toolbar() {
 
     // Title
     auto* title = new QLabel("EXCEL SPREADSHEET", bar);
-    title->setStyleSheet(QString("color:%1; font-family:%2; font-size:11px; font-weight:700; margin-right:12px;")
+    title->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; font-weight:700; margin-right:12px;")
                              .arg(kAccent(), fonts::DATA_FAMILY));
     hl->addWidget(title);
 
@@ -129,10 +129,10 @@ QWidget* ExcelScreen::build_toolbar() {
         btn->setToolTip(tooltip);
         btn->setStyleSheet(
             QString("QPushButton { background:%3; color:%4; border:none;"
-                    " font-family:%1; font-size:10px; font-weight:600; padding:6px 12px; }"
+                    " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
                     "QPushButton:hover { background:%5; }"
                     "QPushButton:pressed { background:%2; }")
-                .arg(fonts::DATA_FAMILY, kAccent(), colors::TEXT_DIM(), colors::TEXT_PRIMARY(), colors::TEXT_TERTIARY()));
+                .arg(fonts::DATA_FAMILY, kAccent(), colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(), colors::TEXT_SECONDARY()));
         return btn;
     };
 
@@ -164,9 +164,9 @@ QWidget* ExcelScreen::build_toolbar() {
 
     auto* del_btn = make_btn("DELETE", "Delete current sheet");
     del_btn->setStyleSheet(QString("QPushButton { background:%2; color:%3; border:none;"
-                                   " font-family:%1; font-size:10px; font-weight:600; padding:6px 12px; }"
+                                   " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
                                    "QPushButton:hover { background:%4; }")
-                               .arg(fonts::DATA_FAMILY, colors::TEXT_DIM(), colors::TEXT_PRIMARY(), colors::NEGATIVE()));
+                               .arg(fonts::DATA_FAMILY, colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(), colors::NEGATIVE()));
     connect(del_btn, &QPushButton::clicked, this, &ExcelScreen::on_delete_sheet);
     hl->addWidget(del_btn);
 
@@ -176,7 +176,7 @@ QWidget* ExcelScreen::build_toolbar() {
     auto* fname_label = new QLabel(file_name_, bar);
     fname_label->setObjectName("excelFileName");
     fname_label->setStyleSheet(
-        QString("color:%1; font-family:%2; font-size:10px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+        QString("color:%1; font-family:%2; font-size:12px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     hl->addWidget(fname_label);
 
     return bar;

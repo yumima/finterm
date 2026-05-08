@@ -148,7 +148,7 @@ QWidget* PreIpoScreen::build_top_bar() {
 
     status_lbl_ = new QLabel("Loading…");
     status_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_TERTIARY()));
+        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(status_lbl_);
 
     // Universe count badge

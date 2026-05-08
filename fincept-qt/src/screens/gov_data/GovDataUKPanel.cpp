@@ -35,7 +35,7 @@ GovDataUKPanel::GovDataUKPanel(QWidget* parent) : QWidget(parent) {
         const QString cb = QString::number(cc.blue());
         QString s;
         s += QString("#govPopularBtn { background:transparent; color:%1; border:1px solid %1;"
-                     "  font-size:10px; font-weight:700; padding:4px 10px; }")
+                     "  font-size:12px; font-weight:700; padding:4px 10px; }")
                  .arg(c);
         s += QString("#govPopularBtn:hover { background:rgba(%1,%2,%3,0.12); }").arg(cr, cg, cb);
         return s;

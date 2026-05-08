@@ -43,7 +43,7 @@ static QString btn_primary() {
                    "}"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { color: %4; background: %5; border-color: %6; }")
-        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_DIM(), ui::colors::BG_RAISED(),
+        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
              ui::colors::BORDER_DIM());
 }
 
@@ -56,7 +56,7 @@ static QString btn_danger() {
                    "}"
                    "QPushButton:hover { background: %1; color: %2; }"
                    "QPushButton:disabled { color: %3; background: %4; border-color: %5; }")
-        .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_DIM(), ui::colors::BG_RAISED(),
+        .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
              ui::colors::BORDER_DIM());
 }
 
@@ -70,7 +70,7 @@ static QString label_style() {
 static QString muted_style() {
     return QString("color: %1; font-size: 13px; background: transparent;"
                    "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_TERTIARY());
+        .arg(ui::colors::TEXT_SECONDARY());
 }
 
 static QString error_style() {
@@ -241,7 +241,7 @@ void LockScreen::build_setup_page() {
     info->setWordWrap(true);
     info->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;"
                                 "font-family: 'Consolas','Courier New',monospace;")
-                            .arg(ui::colors::TEXT_DIM()));
+                            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(info);
 
     vl->addWidget(make_separator());
@@ -298,7 +298,7 @@ void LockScreen::build_setup_page() {
     note->setWordWrap(true);
     note->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;"
                                 "font-family: 'Consolas','Courier New',monospace;")
-                            .arg(ui::colors::TEXT_DIM()));
+                            .arg(ui::colors::TEXT_SECONDARY()));
     note->setAlignment(Qt::AlignCenter);
     vl->addWidget(note);
 
@@ -386,7 +386,7 @@ void LockScreen::build_unlock_page() {
     unlock_attempts_ = new QLabel;
     unlock_attempts_->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;"
                                             "font-family: 'Consolas','Courier New',monospace;")
-                                        .arg(ui::colors::TEXT_DIM()));
+                                        .arg(ui::colors::TEXT_SECONDARY()));
     unlock_attempts_->setAlignment(Qt::AlignCenter);
     unlock_attempts_->hide();
     vl->addWidget(unlock_attempts_);

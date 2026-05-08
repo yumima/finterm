@@ -77,7 +77,7 @@ void RecentFilesWidget::refresh_data() {
         auto* empty = new QLabel("No files yet");
         empty->setAlignment(Qt::AlignCenter);
         empty->setStyleSheet(
-            QString("color:%1;font-size:11px;background:transparent;padding:16px;%2").arg(colors::TEXT_DIM(), MF));
+            QString("color:%1;font-size:12px;background:transparent;padding:16px;%2").arg(colors::TEXT_SECONDARY(), MF));
         list_layout_->addWidget(empty);
         list_layout_->addStretch();
         return;
@@ -98,13 +98,13 @@ void RecentFilesWidget::refresh_data() {
         badge->setFixedWidth(28);
         badge->setAlignment(Qt::AlignCenter);
         badge->setStyleSheet(
-            QString("color:%1;font-size:9px;font-weight:700;background:transparent;%2").arg(ui::colors::AMBER(), MF));
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;%2").arg(ui::colors::AMBER(), MF));
         rl->addWidget(badge);
 
         // Name
         auto* name_lbl = new QLabel(f["originalName"].toString());
         name_lbl->setStyleSheet(
-            QString("color:%1;font-size:11px;background:transparent;%2").arg(ui::colors::TEXT_PRIMARY(), MF));
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_PRIMARY(), MF));
         name_lbl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         rl->addWidget(name_lbl, 1);
 
@@ -112,7 +112,7 @@ void RecentFilesWidget::refresh_data() {
         QString date_str =
             QDateTime::fromString(f["uploadedAt"].toString(), Qt::ISODate).toLocalTime().toString("MM/dd HH:mm");
         auto* date_lbl = new QLabel(date_str);
-        date_lbl->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;%2").arg(colors::TEXT_DIM(), MF));
+        date_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;%2").arg(colors::TEXT_SECONDARY(), MF));
         rl->addWidget(date_lbl);
 
         list_layout_->addWidget(row);

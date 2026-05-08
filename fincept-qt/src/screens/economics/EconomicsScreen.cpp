@@ -243,7 +243,7 @@ void EconomicsScreen::refresh_theme() {
                                   "letter-spacing:1.5px; background:transparent;")
                               .arg(TEXT_PRIMARY()));
 
-    subtitle_->setStyleSheet(QString("color:%1; font-size:10px; background:transparent;").arg(TEXT_TERTIARY()));
+    subtitle_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(TEXT_TERTIARY()));
 
     scroll_->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;").arg(BG_BASE(), BORDER_DIM()));
 
@@ -257,7 +257,7 @@ void EconomicsScreen::refresh_theme() {
         QString rgba = QString("%1,%2,%3").arg(c.red()).arg(c.green()).arg(c.blue());
         static_cast<QPushButton*>(entry.badge)
             ->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                                    "  font-size:9px; font-weight:700; padding:0 10px; letter-spacing:0.3px; }"
+                                    "  font-size:12px; font-weight:700; padding:0 10px; letter-spacing:0.3px; }"
                                     "QPushButton:hover { color:%4; border-color:%5; }"
                                     "QPushButton:checked { background:rgba(%6,0.12); color:%7;"
                                     "  border-color:%7; }")

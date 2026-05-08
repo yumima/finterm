@@ -89,7 +89,7 @@ void RelationshipPanel::build_ui() {
         header);
     stats->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; padding:2px 8px;"
                                  "background:rgba(255,255,255,0.04); border:1px solid %4;")
-                             .arg(ui::colors::TEXT_TERTIARY())
+                             .arg(ui::colors::TEXT_SECONDARY())
                              .arg(ui::fonts::TINY)
                              .arg(ui::fonts::DATA_FAMILY)
                              .arg(ui::colors::BORDER_DIM()));
@@ -207,7 +207,7 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
     // Type label
     auto* type_lbl = new QLabel(node.type.toUpper(), card);
     type_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                                .arg(ui::colors::TEXT_TERTIARY())
+                                .arg(ui::colors::TEXT_SECONDARY())
                                 .arg(ui::fonts::TINY)
                                 .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(type_lbl);
@@ -227,7 +227,7 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
 
     auto* ds_lbl = new QLabel("datasets", ds_row);
     ds_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                              .arg(ui::colors::TEXT_TERTIARY())
+                              .arg(ui::colors::TEXT_SECONDARY())
                               .arg(ui::fonts::SMALL)
                               .arg(ui::fonts::DATA_FAMILY));
     ds_hl->addWidget(ds_lbl);
@@ -260,7 +260,7 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
             more->setStyleSheet(QString("color:%1; font-size:%2px; padding:1px 6px;"
                                         "background:rgba(255,255,255,0.05); border:1px solid %3;"
                                         "border-radius:8px; font-family:%4;")
-                                    .arg(ui::colors::TEXT_TERTIARY())
+                                    .arg(ui::colors::TEXT_SECONDARY())
                                     .arg(ui::fonts::TINY)
                                     .arg(ui::colors::BORDER_DIM())
                                     .arg(ui::fonts::DATA_FAMILY));
