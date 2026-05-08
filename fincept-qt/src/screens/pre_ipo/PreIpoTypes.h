@@ -29,8 +29,10 @@ inline QString ipo_status_label(IpoStatus s) {
 struct FundingRound {
     QString round_name;            // "Series A", "Series I"
     QDate   date;
-    double  amount_usd       = 0;  // millions
-    double  implied_valuation = 0; // billions
+    double  amount_usd        = 0;  // millions
+    double  implied_valuation  = 0;  // post-money, billions
+    double  price_per_share    = 0;  // USD per share at this round (0 if unknown)
+    int     shares_thousands   = 0;  // shares sold in thousands (0 if unknown)
     QStringList lead_investors;
 };
 
@@ -56,6 +58,14 @@ struct PrivateCompany {
     QStringList tags;              // "ai", "fintech", "defense"
     bool    watched = false;
     QString description;
+
+    // ── Share price data ──────────────────────────────────────────────────────
+    double  secondary_market_price   = 0;  // $/share on Forge/EquityZen/CartaX
+    QString secondary_market_source;        // "Forge Global", "EquityZen", etc.
+    QDate   secondary_market_date;          // date of secondary price observation
+    double  implied_share_price      = 0;  // last_valuation ÷ shares_outstanding
+    int     shares_outstanding_k     = 0;  // estimated shares outstanding, thousands
+    double  form_d_implied_price     = 0;  // Form D: amount_raised ÷ shares_sold
 };
 
 struct FormDFiling {

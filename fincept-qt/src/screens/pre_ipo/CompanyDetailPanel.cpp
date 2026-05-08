@@ -79,149 +79,252 @@ QWidget* CompanyDetailPanel::build_placeholder() {
 
 QWidget* CompanyDetailPanel::build_detail_view() {
     auto* view = new QWidget;
-    view->setStyleSheet(
-        QString("background:%1;").arg(colors::BG_BASE()));
+    view->setStyleSheet(QString("background:%1;").arg(colors::BG_BASE()));
     auto* vl = new QVBoxLayout(view);
-    vl->setContentsMargins(20, 16, 20, 20);
+    vl->setContentsMargins(16, 12, 16, 16);
     vl->setSpacing(0);
 
-    // ── Header ────────────────────────────────────────────────────────────────
-    auto* header = new QWidget;
-    header->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2; padding-bottom:12px;")
-            .arg(colors::BG_BASE(), colors::BORDER_DIM()));
-    auto* hdr_layout = new QVBoxLayout(header);
-    hdr_layout->setContentsMargins(0, 0, 0, 12);
-    hdr_layout->setSpacing(4);
+    // ── Header: name + status badge + sector ──────────────────────────────────
+    {
+        auto* h = new QWidget;
+        h->setStyleSheet(
+            QString("background:%1;border-bottom:1px solid %2;")
+                .arg(colors::BG_BASE(), colors::BORDER_DIM()));
+        auto* hl = new QVBoxLayout(h);
+        hl->setContentsMargins(0, 0, 0, 10);
+        hl->setSpacing(3);
 
-    name_lbl_ = new QLabel;
-    name_lbl_->setStyleSheet(
-        QString("color:%1; font-size:22px; font-weight:700; background:transparent;")
-            .arg(colors::AMBER()));
+        auto* row1 = new QHBoxLayout;
+        name_lbl_ = new QLabel;
+        name_lbl_->setStyleSheet(
+            QString("color:%1;font-size:20px;font-weight:700;background:transparent;")
+                .arg(colors::AMBER()));
+        row1->addWidget(name_lbl_);
+        row1->addSpacing(8);
+        status_badge_ = new QLabel;
+        status_badge_->setStyleSheet("font-size:12px;font-weight:700;border-radius:4px;padding:2px 8px;");
+        row1->addWidget(status_badge_);
+        row1->addStretch();
+        hl->addLayout(row1);
 
-    sector_lbl_ = new QLabel;
-    sector_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        sector_lbl_ = new QLabel;
+        sector_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+        hl->addWidget(sector_lbl_);
 
-    meta_lbl_ = new QLabel;
-    meta_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+        meta_lbl_ = new QLabel;  // founded · HQ · IPO window
+        meta_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+        hl->addWidget(meta_lbl_);
 
-    hdr_layout->addWidget(name_lbl_);
-    hdr_layout->addWidget(sector_lbl_);
-    hdr_layout->addWidget(meta_lbl_);
-    vl->addWidget(header);
-    vl->addSpacing(12);
+        vl->addWidget(h);
+        vl->addSpacing(8);
+    }
 
-    // ── Key metrics tiles row ─────────────────────────────────────────────────
-    auto* metrics_row = new QHBoxLayout;
-    metrics_row->setSpacing(8);
-    metrics_row->setContentsMargins(0, 0, 0, 0);
+    // ── Key metrics: compact 2-column label:value (no tile borders) ──────────
+    {
+        const QString sep =
+            QString("QWidget{background:transparent;border-bottom:1px solid %1;}")
+                .arg(colors::BORDER_DIM());
+        const QString lbl_ss =
+            QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                .arg(colors::TEXT_SECONDARY());
+        const QString val_amber =
+            QString("color:%1;font-size:13px;font-weight:700;"
+                    "font-family:Consolas,monospace;background:transparent;")
+                .arg(colors::AMBER());
+        const QString val_white =
+            QString("color:%1;font-size:13px;font-weight:700;"
+                    "font-family:Consolas,monospace;background:transparent;")
+                .arg(colors::TEXT_PRIMARY());
 
-    tile_val_   = make_metric_tile("LAST VALUATION", "—", colors::AMBER());
-    tile_round_ = make_metric_tile("LAST ROUND",     "—");
-    tile_rev_   = make_metric_tile("REVENUE EST.",   "—");
-    tile_emp_   = make_metric_tile("EMPLOYEES",      "—");
+        // 2 rows × 2 cols — no boxes, just spaced label:value
+        auto make_kv = [&](const QString& label, QLabel*& out,
+                           bool amber = false) -> QWidget* {
+            auto* row = new QWidget;
+            row->setStyleSheet(sep);
+            auto* rl = new QHBoxLayout(row);
+            rl->setContentsMargins(0, 6, 0, 6);
+            rl->setSpacing(8);
+            auto* ll = new QLabel(label, row);
+            ll->setStyleSheet(lbl_ss);
+            rl->addWidget(ll);
+            rl->addStretch();
+            out = new QLabel(QStringLiteral("—"), row);
+            out->setStyleSheet(amber ? val_amber : val_white);
+            out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            rl->addWidget(out);
+            return row;
+        };
 
-    metrics_row->addWidget(tile_val_,   1);
-    metrics_row->addWidget(tile_round_, 1);
-    metrics_row->addWidget(tile_rev_,   1);
-    metrics_row->addWidget(tile_emp_,   1);
-    vl->addLayout(metrics_row);
-    vl->addSpacing(14);
+        auto* g = new QGridLayout;
+        g->setContentsMargins(0, 0, 0, 0);
+        g->setSpacing(0);
+        g->setColumnStretch(0, 1);
+        g->setColumnStretch(1, 1);
+        g->setHorizontalSpacing(16);
 
-    // ── Divider ───────────────────────────────────────────────────────────────
+        g->addWidget(make_kv("Valuation",    val_lbl_,   true), 0, 0);
+        g->addWidget(make_kv("Last Round",   round_lbl_),       0, 1);
+        g->addWidget(make_kv("Revenue Est.", rev_lbl_),         1, 0);
+        g->addWidget(make_kv("Employees",    emp_lbl_),         1, 1);
+
+        auto* gw = new QWidget;
+        gw->setStyleSheet("background:transparent;");
+        gw->setLayout(g);
+        vl->addWidget(gw);
+        vl->addSpacing(8);
+    }
+
+    // ── IPO status + S-1 (inline, no box border) ─────────────────────────────
+    {
+        auto* row = new QWidget;
+        row->setStyleSheet(
+            QString("QWidget{background:%1;border-radius:4px;}")
+                .arg(colors::BG_SURFACE()));
+        auto* rl = new QHBoxLayout(row);
+        rl->setContentsMargins(10, 6, 10, 6);
+        rl->setSpacing(10);
+
+        auto* ipo_lbl = new QLabel("IPO STATUS", row);
+        ipo_lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                .arg(colors::TEXT_SECONDARY()));
+        rl->addWidget(ipo_lbl);
+
+        status_badge_ = new QLabel(row);
+        status_badge_->setStyleSheet("font-size:12px;font-weight:700;border-radius:3px;padding:2px 8px;");
+        rl->addWidget(status_badge_);
+
+        window_lbl_ = new QLabel(row);
+        window_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_PRIMARY()));
+        rl->addWidget(window_lbl_);
+
+        rl->addStretch();
+
+        s1_date_lbl_ = new QLabel(row);
+        s1_date_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+        rl->addWidget(s1_date_lbl_);
+
+        vl->addWidget(row);
+        vl->addSpacing(10);
+    }
+
+    // ── Share price section ───────────────────────────────────────────────────
+    {
+        price_section_ = new QWidget;
+        price_section_->setStyleSheet(
+            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
+                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        auto* ps = new QVBoxLayout(price_section_);
+        ps->setContentsMargins(10, 8, 10, 8);
+        ps->setSpacing(4);
+
+        auto* ph = new QLabel("SHARE PRICE  ·  Private Market Estimates", price_section_);
+        ph->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                .arg(colors::TEXT_SECONDARY()));
+        ps->addWidget(ph);
+
+        const QString price_val_ss =
+            QString("color:%1;font-size:13px;font-weight:700;"
+                    "font-family:Consolas,monospace;background:transparent;")
+                .arg(colors::POSITIVE());
+        const QString lbl2_ss =
+            QString("color:%1;font-size:12px;background:transparent;")
+                .arg(colors::TEXT_SECONDARY());
+
+        auto make_price_row = [&](const QString& label, QLabel*& out) {
+            auto* row = new QHBoxLayout;
+            auto* ll = new QLabel(label, price_section_);
+            ll->setStyleSheet(lbl2_ss);
+            row->addWidget(ll);
+            row->addStretch();
+            out = new QLabel("—", price_section_);
+            out->setStyleSheet(price_val_ss);
+            row->addWidget(out);
+            ps->addLayout(row);
+        };
+
+        make_price_row("Secondary Market:", sec_price_lbl_);
+        make_price_row("Implied (last round):", implied_price_lbl_);
+        make_price_row("Form D implied:", formd_price_lbl_);
+
+        auto* delta_row = new QHBoxLayout;
+        auto* dl = new QLabel("Δ vs last round:", price_section_);
+        dl->setStyleSheet(lbl2_ss);
+        delta_row->addWidget(dl);
+        delta_row->addStretch();
+        price_delta_lbl_ = new QLabel("—", price_section_);
+        price_delta_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                .arg(colors::TEXT_SECONDARY()));
+        delta_row->addWidget(price_delta_lbl_);
+        ps->addLayout(delta_row);
+
+        vl->addWidget(price_section_);
+        vl->addSpacing(10);
+    }
+
+    // ── Funding rounds table (no outer border, with $/share column) ───────────
+    {
+        auto* rh = new QLabel("FUNDING ROUNDS", view);
+        rh->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;"
+                    "padding:4px 0;")
+                .arg(colors::TEXT_SECONDARY()));
+        vl->addWidget(rh);
+        vl->addSpacing(4);
+
+        rounds_table_ = new QTableWidget;
+        rounds_table_->setColumnCount(5);
+        rounds_table_->setHorizontalHeaderLabels(
+            {"Date", "Round", "Amount", "$/Share", "Lead Investors"});
+        rounds_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+        rounds_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+        rounds_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        rounds_table_->setShowGrid(false);
+        rounds_table_->setAlternatingRowColors(false);
+        rounds_table_->verticalHeader()->setVisible(false);
+        rounds_table_->setFocusPolicy(Qt::NoFocus);
+        rounds_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        auto* hdr = rounds_table_->horizontalHeader();
+        hdr->setSectionResizeMode(QHeaderView::Stretch);  // equal distribution
+        hdr->setSectionResizeMode(0, QHeaderView::Fixed);  hdr->resizeSection(0, 80);  // Date
+        hdr->setSectionResizeMode(1, QHeaderView::Fixed);  hdr->resizeSection(1, 80);  // Round
+        hdr->setSectionResizeMode(2, QHeaderView::Fixed);  hdr->resizeSection(2, 72);  // Amount
+        hdr->setSectionResizeMode(3, QHeaderView::Fixed);  hdr->resizeSection(3, 72);  // $/Share
+
+        rounds_table_->setStyleSheet(
+            QString("QTableWidget{background:%1;color:%2;border:none;"
+                    "  font-size:12px;font-family:Consolas,monospace;"
+                    "  gridline-color:transparent;}"
+                    "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
+                    "QTableWidget::item:selected{background:rgba(217,119,6,0.15);color:%2;}"
+                    "QScrollBar:vertical{width:4px;background:%1;}"
+                    "QScrollBar::handle:vertical{background:%3;}")
+                .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+
+        hdr->setStyleSheet(
+            QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                    "  border-bottom:2px solid %3;padding:4px 8px;"
+                    "  font-size:12px;font-weight:700;}")
+                .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::AMBER()));
+
+        vl->addWidget(rounds_table_);
+        vl->addSpacing(12);
+    }
+
     auto make_divider = [&]() -> QWidget* {
         auto* d = new QWidget;
         d->setFixedHeight(1);
         d->setStyleSheet(QString("background:%1;").arg(colors::BORDER_DIM()));
         return d;
     };
-
-    // ── IPO Status section ────────────────────────────────────────────────────
-    auto* ipo_section = new QWidget;
-    ipo_section->setStyleSheet(
-        QString("background:%1; border:1px solid %2; border-radius:4px;")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-    auto* ipo_layout = new QVBoxLayout(ipo_section);
-    ipo_layout->setContentsMargins(12, 10, 12, 10);
-    ipo_layout->setSpacing(6);
-
-    auto* ipo_header = new QLabel("IPO STATUS");
-    ipo_header->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; background:transparent;")
-            .arg(colors::TEXT_SECONDARY()));
-    ipo_layout->addWidget(ipo_header);
-
-    auto* ipo_row = new QHBoxLayout;
-    ipo_row->setSpacing(10);
-
-    status_badge_ = new QLabel;
-    status_badge_->setStyleSheet("font-size:12px; font-weight:700; border-radius:4px; padding:3px 10px;");
-
-    window_lbl_ = new QLabel;
-    window_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_PRIMARY()));
-
-    s1_date_lbl_ = new QLabel;
-    s1_date_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
-
-    ipo_row->addWidget(status_badge_);
-    ipo_row->addWidget(window_lbl_);
-    ipo_row->addStretch();
-    ipo_row->addWidget(s1_date_lbl_);
-    ipo_layout->addLayout(ipo_row);
-
-    vl->addWidget(ipo_section);
-    vl->addSpacing(16);
-
-    // ── Funding rounds table ──────────────────────────────────────────────────
-    auto* rounds_header_lbl = new QLabel("FUNDING ROUNDS");
-    rounds_header_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
-            .arg(colors::TEXT_SECONDARY()));
-    vl->addWidget(rounds_header_lbl);
-    vl->addSpacing(6);
-
-    rounds_table_ = new QTableWidget;
-    rounds_table_->setColumnCount(4);
-    rounds_table_->setHorizontalHeaderLabels({"Date", "Round", "Amount", "Lead Investors"});
-    rounds_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    rounds_table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    rounds_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    rounds_table_->setShowGrid(false);
-    rounds_table_->setAlternatingRowColors(false);
-    rounds_table_->verticalHeader()->setVisible(false);
-    rounds_table_->setFocusPolicy(Qt::NoFocus);
-    rounds_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    rounds_table_->setMinimumHeight(120);
-
-    auto* hdr = rounds_table_->horizontalHeader();
-    hdr->setStretchLastSection(true);
-    hdr->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    hdr->setSectionResizeMode(3, QHeaderView::Interactive); hdr->resizeSection(3, 180);
-
-    rounds_table_->setStyleSheet(
-        QString("QTableWidget { background:%1; color:%2; border:1px solid %3;"
-                "  font-size:12px; gridline-color:transparent; }"
-                "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
-                "QTableWidget::item:selected { background:rgba(217,119,6,0.15); color:%2; }"
-                "QScrollBar:vertical { width:4px; background:%1; }"
-                "QScrollBar::handle:vertical { background:%3; }")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
-
-    hdr->setStyleSheet(
-        QString("QHeaderView::section { background:%1; color:%2; border:none;"
-                "  border-bottom:2px solid %3; padding:4px 8px; font-size:12px; font-weight:700; }")
-            .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), colors::AMBER()));
-
-    vl->addWidget(rounds_table_);
-    vl->addSpacing(16);
-    vl->addWidget(make_divider());
-    vl->addSpacing(12);
+    Q_UNUSED(make_divider);
 
     // ── Key Investors ─────────────────────────────────────────────────────────
     auto* inv_header = new QLabel("KEY INVESTORS");
@@ -306,39 +409,37 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
         meta += "Founded " + QString::number(c.founded.year());
     if (!c.hq_city.isEmpty()) {
         if (!meta.isEmpty()) meta += "  ·  ";
-        meta += c.hq_city + ", " + c.hq_country;
+        meta += c.hq_city;
+        if (!c.hq_country.isEmpty() && c.hq_country != c.hq_city)
+            meta += ", " + c.hq_country;
+    }
+    if (!c.ipo_expected_window.isEmpty()) {
+        if (!meta.isEmpty()) meta += "  ·  ";
+        meta += "IPO: " + c.ipo_expected_window;
     }
     meta_lbl_->setText(meta);
 
-    // ── Update metric tiles ───────────────────────────────────────────────────
-    auto update_tile = [](QWidget* tile, const QString& val) {
-        if (!tile) return;
-        // The value label is the second child (index 1) in the tile's VBoxLayout
-        auto* vl = qobject_cast<QVBoxLayout*>(tile->layout());
-        if (!vl || vl->count() < 2) return;
-        if (auto* lbl = qobject_cast<QLabel*>(vl->itemAt(1)->widget()))
-            lbl->setText(val);
-    };
+    // ── Key metrics (direct label updates) ───────────────────────────────────
+    if (val_lbl_)
+        val_lbl_->setText(c.last_valuation_usd > 0
+            ? QString("$%1B").arg(c.last_valuation_usd, 0, 'f',
+                                  c.last_valuation_usd >= 10 ? 0 : 1)
+            : QStringLiteral("—"));
 
-    const QString val_str = c.last_valuation_usd > 0
-        ? QString("$%1B").arg(c.last_valuation_usd, 0, 'f', c.last_valuation_usd >= 10 ? 0 : 1)
-        : "—";
-    update_tile(tile_val_, val_str);
+    if (round_lbl_)
+        round_lbl_->setText(c.last_round_name.isEmpty() ? "—"
+            : c.last_round_name + (c.last_round_date.isValid()
+                ? "  " + c.last_round_date.toString("MMM yyyy") : ""));
 
-    const QString round_str = c.last_round_name.isEmpty() ? "—"
-        : c.last_round_name + (c.last_round_date.isValid()
-            ? "\n" + c.last_round_date.toString("MMM yyyy") : "");
-    update_tile(tile_round_, round_str);
+    if (rev_lbl_)
+        rev_lbl_->setText(c.revenue_est_usd > 0
+            ? "$" + QString::number(qRound(c.revenue_est_usd)) + "M est."
+            : QStringLiteral("—"));
 
-    const QString rev_str = c.revenue_est_usd > 0
-        ? "$" + QString::number(qRound(c.revenue_est_usd)) + "M est."
-        : "—";
-    update_tile(tile_rev_, rev_str);
-
-    const QString emp_str = c.employee_count > 0
-        ? QString::number(c.employee_count) + "+"
-        : "—";
-    update_tile(tile_emp_, emp_str);
+    if (emp_lbl_)
+        emp_lbl_->setText(c.employee_count > 0
+            ? QString::number(c.employee_count) + "+"
+            : QStringLiteral("—"));
 
     // ── IPO status ────────────────────────────────────────────────────────────
     const QString sl = ipo_status_label(c.ipo_status);
@@ -372,6 +473,50 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
         s1_date_lbl_->setVisible(false);
     }
 
+    // ── Share price ───────────────────────────────────────────────────────────
+    if (price_section_) {
+        const bool has_price = c.secondary_market_price > 0
+                            || c.implied_share_price > 0
+                            || c.form_d_implied_price > 0;
+        price_section_->setVisible(has_price);
+
+        auto fmt_price = [](double p) -> QString {
+            return p > 0 ? QString("$%1").arg(p, 0, 'f', 2) : QStringLiteral("—");
+        };
+
+        if (sec_price_lbl_) {
+            const QString src = c.secondary_market_source.isEmpty()
+                ? "" : "  (" + c.secondary_market_source + ")";
+            const QString dt  = c.secondary_market_date.isValid()
+                ? "  " + c.secondary_market_date.toString("MMM yyyy") : "";
+            sec_price_lbl_->setText(fmt_price(c.secondary_market_price) + src + dt);
+        }
+        if (implied_price_lbl_)
+            implied_price_lbl_->setText(fmt_price(c.implied_share_price));
+        if (formd_price_lbl_)
+            formd_price_lbl_->setText(fmt_price(c.form_d_implied_price));
+
+        // Delta: secondary vs last round's price_per_share
+        if (price_delta_lbl_) {
+            double base_price = 0;
+            if (!c.rounds.isEmpty()) {
+                for (auto it = c.rounds.rbegin(); it != c.rounds.rend(); ++it)
+                    if (it->price_per_share > 0) { base_price = it->price_per_share; break; }
+            }
+            if (base_price > 0 && c.secondary_market_price > 0) {
+                const double delta = (c.secondary_market_price - base_price) / base_price * 100.0;
+                const QString sign = delta >= 0 ? "+" : "";
+                price_delta_lbl_->setText(sign + QString::number(delta, 'f', 1) + "% vs last round");
+                price_delta_lbl_->setStyleSheet(
+                    QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                        .arg(delta >= 0
+                             ? colors::POSITIVE() : colors::NEGATIVE()));
+            } else {
+                price_delta_lbl_->setText("—");
+            }
+        }
+    }
+
     // ── Funding rounds table ──────────────────────────────────────────────────
     rebuild_rounds_table(c.rounds);
 
@@ -397,20 +542,34 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<FundingRound>& round
     for (int i = 0; i < rounds.size(); ++i) {
         const auto& r = rounds[i];
 
-        auto make_item = [](const QString& text) {
+        auto make_item = [](const QString& text,
+                            Qt::Alignment align = Qt::AlignLeft | Qt::AlignVCenter,
+                            const char* color = nullptr) {
             auto* it = new QTableWidgetItem(text);
             it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            it->setTextAlignment(align);
+            if (color) it->setForeground(QColor(color));
             return it;
         };
 
-        rounds_table_->setItem(i, 0, make_item(r.date.isValid() ? r.date.toString("MMM yyyy") : "—"));
-        rounds_table_->setItem(i, 1, make_item(r.round_name));
+        rounds_table_->setItem(i, 0,
+            make_item(r.date.isValid() ? r.date.toString("MMM yyyy") : "—"));
+        rounds_table_->setItem(i, 1,
+            make_item(r.round_name, Qt::AlignLeft | Qt::AlignVCenter, colors::AMBER()));
 
         const QString amt = r.amount_usd > 0
-            ? "$" + QString::number(qRound(r.amount_usd)) + "M"
-            : "—";
-        rounds_table_->setItem(i, 2, make_item(amt));
-        rounds_table_->setItem(i, 3, make_item(r.lead_investors.join(", ")));
+            ? "$" + QString::number(qRound(r.amount_usd)) + "M" : "—";
+        rounds_table_->setItem(i, 2,
+            make_item(amt, Qt::AlignRight | Qt::AlignVCenter));
+
+        const QString pps = r.price_per_share > 0
+            ? "$" + QString::number(r.price_per_share, 'f', 2) : "—";
+        rounds_table_->setItem(i, 3,
+            make_item(pps, Qt::AlignRight | Qt::AlignVCenter,
+                      r.price_per_share > 0 ? colors::POSITIVE() : nullptr));
+
+        rounds_table_->setItem(i, 4,
+            make_item(r.lead_investors.join(", ")));
     }
 
     // Adjust height based on row count

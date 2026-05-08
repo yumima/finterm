@@ -70,7 +70,7 @@ void IpoPipelinePanel::build_ui() {
     pipeline_table_->setAlternatingRowColors(false);
     pipeline_table_->verticalHeader()->setVisible(false);
     pipeline_table_->setFocusPolicy(Qt::NoFocus);
-    pipeline_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    pipeline_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     auto* hdr = pipeline_table_->horizontalHeader();
     hdr->setStretchLastSection(true);
@@ -93,7 +93,7 @@ void IpoPipelinePanel::build_ui() {
                 "  border-bottom:2px solid %3; padding:3px 6px; font-size:12px; font-weight:700; }")
             .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
 
-    root->addWidget(pipeline_table_);
+    root->addWidget(pipeline_table_, 1);  // stretch=1: fills all available height
 
     // ── Divider ───────────────────────────────────────────────────────────────
     auto* divider = new QWidget;
@@ -144,7 +144,8 @@ void IpoPipelinePanel::build_ui() {
     feed_layout_->addStretch();
 
     feed_scroll_->setWidget(feed_container_);
-    root->addWidget(feed_scroll_, 1);
+    feed_scroll_->setMaximumHeight(180);   // pinned compact at bottom
+    root->addWidget(feed_scroll_);         // no stretch — pipeline above gets all space
 }
 
 // ── Rebuild pipeline table ─────────────────────────────────────────────────

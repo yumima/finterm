@@ -51,17 +51,23 @@ class CompanyDetailPanel : public QWidget {
     QLabel* sector_lbl_     = nullptr;
     QLabel* meta_lbl_       = nullptr;   // founded · HQ
 
-    // ── Metric tiles row ──────────────────────────────────────────────────────
-    QWidget* metrics_row_   = nullptr;
-    QWidget* tile_val_      = nullptr;
-    QWidget* tile_round_    = nullptr;
-    QWidget* tile_rev_      = nullptr;
-    QWidget* tile_emp_      = nullptr;
+    // ── Key metrics (compact label:value — no tile boxes) ────────────────────
+    QLabel* val_lbl_       = nullptr;   // last valuation
+    QLabel* round_lbl_     = nullptr;   // last round name + date
+    QLabel* rev_lbl_       = nullptr;   // revenue estimate
+    QLabel* emp_lbl_       = nullptr;   // employee count
 
-    // ── IPO status section ────────────────────────────────────────────────────
-    QLabel* status_badge_   = nullptr;
-    QLabel* window_lbl_     = nullptr;
-    QLabel* s1_date_lbl_    = nullptr;
+    // ── IPO status ────────────────────────────────────────────────────────────
+    QLabel* status_badge_  = nullptr;
+    QLabel* window_lbl_    = nullptr;
+    QLabel* s1_date_lbl_   = nullptr;
+
+    // ── Share price section ───────────────────────────────────────────────────
+    QWidget* price_section_     = nullptr;
+    QLabel*  sec_price_lbl_     = nullptr;  // secondary market $/share
+    QLabel*  implied_price_lbl_ = nullptr;  // from last round valuation
+    QLabel*  formd_price_lbl_   = nullptr;  // Form D implied
+    QLabel*  price_delta_lbl_   = nullptr;  // % change from last round
 
     // ── Rounds table ──────────────────────────────────────────────────────────
     QTableWidget* rounds_table_ = nullptr;

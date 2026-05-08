@@ -42,7 +42,7 @@ static const char* party_color(const QString& p) {
 static QString section_header_style() {
     return QString(
         "QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-        " letter-spacing:0.5px; padding:6px 12px; border-bottom:1px solid %3; }")
+        " letter-spacing:0.5px; padding:3px 10px; border-bottom:1px solid %3; }")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
 

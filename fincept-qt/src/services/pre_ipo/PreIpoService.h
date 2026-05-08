@@ -10,8 +10,13 @@ namespace fincept::services {
 
 /// Singleton service for pre-IPO / private company data.
 ///
-/// Phase 1: loads a static curated dataset of ~25 well-known private companies.
-/// Phase 2 will add live SEC EDGAR polling for Form D / S-1 filings.
+/// Data sources (free, no API key):
+///   SEC EDGAR Form D — amount raised, date, exemption (no valuation/price)
+///   SEC EDGAR S-1/F-1 — IPO pipeline, filing date, underwriters
+///
+/// Fields not available from free sources show "—" in the UI.
+/// Crunchbase/PitchBook integrations (valuation, rounds detail) are
+/// paid and not currently integrated.
 class PreIpoService : public QObject {
     Q_OBJECT
   public:
@@ -48,7 +53,10 @@ class PreIpoService : public QObject {
   private:
     explicit PreIpoService(QObject* parent = nullptr);
 
-    void build_mock_data();
+    void load_from_sec();
+    void build_fallback_data();  // offline: known company names, all numeric fields = 0/empty
+    void parse_sec_summary(const QJsonObject& root);
+    void emit_loaded();
 
     QVector<pre_ipo::PrivateCompany> companies_;
     QVector<pre_ipo::FormDFiling>    form_d_;

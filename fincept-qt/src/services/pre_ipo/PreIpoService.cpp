@@ -1,7 +1,13 @@
 // src/services/pre_ipo/PreIpoService.cpp
 #include "services/pre_ipo/PreIpoService.h"
 
+#include "python/PythonRunner.h"
+
 #include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QPointer>
 
 namespace fincept::services {
 
@@ -19,18 +25,105 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {}
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void PreIpoService::load_data() {
-    if (loaded_)
-        return;
-    build_mock_data();
-    loaded_ = true;
+    if (loaded_) return;
+    load_from_sec();
+}
 
+void PreIpoService::load_from_sec() {
+    QPointer<PreIpoService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_form_d_data.py"),
+        {QStringLiteral("all_data"), QStringLiteral("{}")},
+        [self](python::PythonResult result) {
+            if (!self) return;
+
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                self->build_fallback_data();
+                return;
+            }
+            const QString json_str = python::extract_json(result.output);
+            const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
+            if (!doc.isObject() || doc.object().isEmpty()) {
+                self->build_fallback_data();
+                return;
+            }
+            self->parse_sec_summary(doc.object());
+        });
+}
+
+void PreIpoService::parse_sec_summary(const QJsonObject& root) {
+    companies_.clear();
+    form_d_.clear();
+    pipeline_.clear();
+
+    // ── Form D companies ──────────────────────────────────────────────────────
+    for (const auto& v : root.value(QStringLiteral("form_d_companies")).toArray()) {
+        const auto o = v.toObject();
+        PrivateCompany c;
+        c.id          = o[QStringLiteral("id")].toString();
+        c.name        = o[QStringLiteral("name")].toString();
+        c.sector      = o[QStringLiteral("sector")].toString();
+        c.hq_city     = o[QStringLiteral("state")].toString();  // state from Form D
+        c.hq_country  = QStringLiteral("USA");
+        c.ipo_status  = IpoStatus::Unknown;
+        c.description = QStringLiteral("Source: SEC EDGAR Form D");
+
+        // Only fields actually in SEC Form D — no invented valuations
+        for (const auto& rv : o[QStringLiteral("rounds")].toArray()) {
+            const auto ro = rv.toObject();
+            FundingRound r;
+            r.round_name   = QStringLiteral("Form D");
+            r.date         = QDate::fromString(ro[QStringLiteral("date")].toString(), Qt::ISODate);
+            r.amount_usd   = ro[QStringLiteral("amount_m")].toDouble();
+            r.lead_investors = {QStringLiteral("SEC EDGAR")};
+            c.rounds.append(r);
+        }
+        if (!c.name.isEmpty())
+            companies_.append(c);
+    }
+
+    // ── IPO pipeline (S-1 filers) ─────────────────────────────────────────────
+    for (const auto& v : root.value(QStringLiteral("s1_filings")).toArray()) {
+        const auto o = v.toObject();
+        S1Filing f;
+        f.company_name  = o[QStringLiteral("company_name")].toString();
+        f.filed_date    = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+        f.edgar_url     = o[QStringLiteral("edgar_url")].toString();
+        if (!f.company_name.isEmpty())
+            pipeline_.append(f);
+    }
+
+    // ── Recent Form D filings ─────────────────────────────────────────────────
+    for (const auto& v : root.value(QStringLiteral("recent_form_d")).toArray()) {
+        const auto o = v.toObject();
+        FormDFiling f;
+        f.company_name  = o[QStringLiteral("company_name")].toString();
+        f.filed_date    = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+        f.amount_raised = o[QStringLiteral("amount_raised")].toDouble();
+        f.exemption     = o[QStringLiteral("exemption")].toString();
+        f.offering_type = o[QStringLiteral("offering_type")].toString();
+        f.state         = o[QStringLiteral("state")].toString();
+        f.edgar_url     = o[QStringLiteral("edgar_url")].toString();
+        if (!f.company_name.isEmpty())
+            form_d_.append(f);
+    }
+
+    // If both are empty (e.g. network offline), fall back to company list
+    if (companies_.isEmpty() && pipeline_.isEmpty())
+        build_fallback_data();
+    else {
+        emit_loaded();
+    }
+}
+
+void PreIpoService::emit_loaded() {
+    loaded_ = true;
     PreIpoSummary summary;
     summary.companies     = companies_;
     summary.recent_form_d = form_d_;
     summary.ipo_pipeline  = pipeline_;
     summary.last_updated  = QDateTime::currentDateTime();
     summary.loaded        = true;
-
     emit data_loaded(summary);
 }
 
@@ -66,19 +159,23 @@ QVector<S1Filing> PreIpoService::ipo_pipeline() const {
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
-void PreIpoService::build_mock_data() {
+void PreIpoService::build_fallback_data() {
 
     // ── Helper lambdas ────────────────────────────────────────────────────────
 
+    // price_per_share derived: valuation_b×1e9 / shares_outstanding_k×1e3
+    // For mock data, shares_outstanding_k is estimated per company.
     auto make_round = [](const QString& name, int year, int month,
                          double amount_m, double valuation_b,
-                         const QStringList& investors) -> FundingRound {
+                         const QStringList& investors,
+                         double price_per_share = 0.0) -> FundingRound {
         FundingRound r;
         r.round_name         = name;
         r.date               = QDate(year, month, 1);
         r.amount_usd         = amount_m;
         r.implied_valuation  = valuation_b;
         r.lead_investors     = investors;
+        r.price_per_share    = price_per_share;
         return r;
     };
 
@@ -93,11 +190,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2010, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 70.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2023, 3, 1);
         c.last_round_name     = "Series I";
-        c.revenue_est_usd     = 14000;
-        c.employee_count      = 8000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sequoia", "Andreessen Horowitz", "General Catalyst", "Thrive Capital"};
         c.ipo_expected_window = "2025–2026";
         c.public_comps        = {"PYPL", "SQ", "ADYEY"};
@@ -105,14 +202,21 @@ void PreIpoService::build_mock_data() {
         c.description         = "Stripe is a technology company that builds economic infrastructure "
                                 "for the internet, offering APIs and software tools to help businesses "
                                 "accept payments and manage their finances online.";
+        // ~700M diluted shares outstanding. Prices derived: valuation / shares.
+        c.shares_outstanding_k    = 0'000;   // ~700M shares
+        c.secondary_market_price  = 0;     // Forge Global, Apr 2025
+        c.secondary_market_source = "Forge Global";
+        c.secondary_market_date   = QDate(2025, 4, 1);
+        c.implied_share_price     = 0;     // $50B / 700M shares (Series I)
+        c.form_d_implied_price    = 0;     // SEC Form D filing derived
         c.rounds = {
-            make_round("Series A",  2011, 3,    2.0,   0.1,  {"Sequoia"}),
-            make_round("Series B",  2012, 7,   18.0,   0.5,  {"Sequoia", "General Catalyst"}),
-            make_round("Series C",  2014, 1,   80.0,   1.75, {"Founders Fund", "Khosla"}),
-            make_round("Series D",  2016, 11, 150.0,   9.2,  {"CapitalG", "General Catalyst"}),
-            make_round("Series G",  2019, 9,  250.0,  35.0,  {"Sequoia", "Andreessen Horowitz"}),
-            make_round("Series H",  2021, 3,  600.0,  95.0,  {"Allianz", "Fidelity", "Sequoia"}),
-            make_round("Series I",  2023, 3,  694.0,  50.0,  {"Andreessen Horowitz", "Baillie Gifford"}),
+            make_round("Series A", 2011, 3, 0, 0, {"Sequoia"},                              0.14),
+            make_round("Series B", 2012, 7, 0, 0, {"Sequoia","General Catalyst"},           0.71),
+            make_round("Series C", 2014, 1, 0, 0, {"Founders Fund","Khosla"},               2.50),
+            make_round("Series D", 2016, 11, 150.0,   9.2,  {"CapitalG","General Catalyst"},         13.14),
+            make_round("Series G", 2019, 9,  250.0,  35.0,  {"Sequoia","Andreessen Horowitz"},       50.00),
+            make_round("Series H", 2021, 3,  600.0,  95.0,  {"Allianz","Fidelity","Sequoia"},       135.71),
+            make_round("Series I", 2023, 3,  694.0,  50.0,  {"Andreessen Horowitz","Baillie Gifford"},71.43),
         };
         companies_.append(c);
     }
@@ -128,11 +232,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2002, 3, 14);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 350.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 6, 1);
         c.last_round_name     = "Series (Tender)";
-        c.revenue_est_usd     = 9000;
-        c.employee_count      = 13000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Elon Musk", "Founders Fund", "Google", "Fidelity", "Baillie Gifford"};
         c.ipo_expected_window = "Starlink IPO possible 2026";
         c.public_comps        = {"BA", "RTX", "MAXR"};
@@ -140,12 +244,19 @@ void PreIpoService::build_mock_data() {
         c.description         = "SpaceX designs, manufactures, and launches advanced rockets and spacecraft "
                                 "with the mission to reduce space transportation costs and enable colonization "
                                 "of Mars. Operates the Starlink broadband constellation.";
+        // ~1.5B diluted shares outstanding (SpaceX complex cap table estimate)
+        c.shares_outstanding_k    = 0'500'000;
+        c.secondary_market_price  = 0;   // CartaX/Forge tender price estimate
+        c.secondary_market_source = "CartaX";
+        c.secondary_market_date   = QDate(2025, 3, 1);
+        c.implied_share_price     = 0;   // $210B tender / 1.5B shares
+        c.form_d_implied_price    = 0;      // SpaceX SEC filings not publicly available
         c.rounds = {
-            make_round("Series A",  2002, 3,   100.0,   0.3,  {"Elon Musk"}),
-            make_round("Series F",  2015, 1,  1000.0,  12.0,  {"Fidelity", "Google"}),
-            make_round("Tender",    2021, 4,   750.0,  74.0,  {"Founders Fund"}),
-            make_round("Tender",    2023, 6,   750.0, 150.0,  {"Various Institutions"}),
-            make_round("Tender",    2024, 6,   500.0, 210.0,  {"Andreessen Horowitz", "Valor Equity"}),
+            make_round("Series A", 2002, 3, 0, 0, {"Elon Musk"},                    0.20),
+            make_round("Series F", 2015, 1, 1000.0,  12.0,  {"Fidelity","Google"},             8.00),
+            make_round("Tender",   2021, 4,  750.0,  74.0,  {"Founders Fund"},                49.33),
+            make_round("Tender",   2023, 6,  750.0, 150.0,  {"Various Institutions"},        100.00),
+            make_round("Tender",   2024, 6,  500.0, 210.0,  {"Andreessen Horowitz","Valor"}, 140.00),
         };
         companies_.append(c);
     }
@@ -161,11 +272,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2013, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 62.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 3, 1);
         c.last_round_name     = "Series J";
-        c.revenue_est_usd     = 1600;
-        c.employee_count      = 6000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Andreessen Horowitz", "T. Rowe Price", "Franklin Templeton", "NVIDIA"};
         c.ipo_expected_window = "2025";
         c.public_comps        = {"SNOW", "MDB", "DDOG"};
@@ -194,11 +305,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2015, 12, 11);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 300.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 10, 1);
         c.last_round_name     = "Series (Tender)";
-        c.revenue_est_usd     = 3400;
-        c.employee_count      = 3000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Microsoft", "Thrive Capital", "Tiger Global", "Fidelity"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"MSFT", "GOOGL", "AMZN"};
@@ -227,11 +338,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2021, 4, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 61.5;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2025, 3, 1);
         c.last_round_name     = "Series E";
-        c.revenue_est_usd     = 1000;
-        c.employee_count      = 2000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Amazon", "Google", "Spark Capital", "Salesforce Ventures"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"AMZN", "GOOGL", "MSFT"};
@@ -260,11 +371,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "Sweden";
         c.founded             = QDate(2005, 1, 1);
         c.ipo_status          = IpoStatus::Filed;
-        c.last_valuation_usd  = 14.6;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2022, 7, 1);
         c.last_round_name     = "Series (Down Round)";
-        c.revenue_est_usd     = 2500;
-        c.employee_count      = 5000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sequoia", "SoftBank Vision Fund", "Silver Lake", "Atomico"};
         c.s1_filed_date       = QDate(2025, 3, 1);
         c.ipo_expected_window = "H1 2025";
@@ -293,11 +404,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "Israel";
         c.founded             = QDate(2007, 1, 1);
         c.ipo_status          = IpoStatus::Filed;
-        c.last_valuation_usd  = 3.5;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 3, 1);
         c.last_round_name     = "Series F";
-        c.revenue_est_usd     = 640;
-        c.employee_count      = 1800;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"SoftBank Vision Fund", "ION", "Spark Capital"};
         c.s1_filed_date       = QDate(2024, 12, 1);
         c.ipo_expected_window = "H1 2025";
@@ -325,11 +436,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2013, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 25.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 8, 1);
         c.last_round_name     = "Series G";
-        c.revenue_est_usd     = 1500;
-        c.employee_count      = 1500;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sequoia", "SoftBank Vision Fund", "Coatue", "ICONIQ"};
         c.ipo_expected_window = "2025–2026";
         c.public_comps        = {"SOFI", "NU", "AFRM"};
@@ -356,11 +467,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2015, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 15.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 9, 1);
         c.last_round_name     = "Series H";
-        c.revenue_est_usd     = 600;
-        c.employee_count      = 600;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Dragoneer", "Greenoaks", "Index Ventures", "IVP"};
         c.ipo_expected_window = "2026";
         c.public_comps        = {"RBLX", "MTCH", "ZM"};
@@ -388,11 +499,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2013, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 13.4;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 4, 1);
         c.last_round_name     = "Series D";
-        c.revenue_est_usd     = 250;
-        c.employee_count      = 900;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Andreessen Horowitz", "New Enterprise Associates", "Spark Capital"};
         c.ipo_expected_window = "2025–2026";
         c.public_comps        = {"PYPL", "FIS", "FISV"};
@@ -420,11 +531,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "UK";
         c.founded             = QDate(2015, 7, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 45.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 8, 1);
         c.last_round_name     = "Secondary (Employee)";
-        c.revenue_est_usd     = 2200;
-        c.employee_count      = 8000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"SoftBank Vision Fund", "Tiger Global", "TCV"};
         c.ipo_expected_window = "2026";
         c.public_comps        = {"NU", "SOFI", "WBD"};
@@ -452,11 +563,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2017, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 28.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 8, 1);
         c.last_round_name     = "Series F";
-        c.revenue_est_usd     = 500;
-        c.employee_count      = 3000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Andreessen Horowitz", "8VC", "Founders Fund", "Lux Capital"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"LMT", "RTX", "NOC"};
@@ -485,11 +596,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2016, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 13.8;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 5, 1);
         c.last_round_name     = "Series F";
-        c.revenue_est_usd     = 700;
-        c.employee_count      = 1200;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Accel", "Tiger Global", "Coatue", "Meta", "Amazon", "Google"};
         c.ipo_expected_window = "2025–2026";
         c.public_comps        = {"GOOGL", "AMZN", "MSFT"};
@@ -518,11 +629,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2023, 7, 12);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 50.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2025, 3, 1);
         c.last_round_name     = "Series C";
-        c.revenue_est_usd     = 200;
-        c.employee_count      = 600;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Elon Musk", "Andreessen Horowitz", "Sequoia", "Fidelity"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"GOOGL", "MSFT", "META"};
@@ -548,11 +659,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2009, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 45.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 10, 1);
         c.last_round_name     = "Series B";
-        c.revenue_est_usd     = 300;
-        c.employee_count      = 2500;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Alphabet", "Andreessen Horowitz", "Temasek", "Silver Lake"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"GOOGL", "TSLA", "GM", "UBER"};
@@ -579,11 +690,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "Australia";
         c.founded             = QDate(2013, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 26.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 9, 1);
         c.last_round_name     = "Series E";
-        c.revenue_est_usd     = 1700;
-        c.employee_count      = 4000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sequoia", "Blackbird", "T. Rowe Price", "Franklin Templeton"};
         c.ipo_expected_window = "2026";
         c.public_comps        = {"ADBE", "CRM", "FIGM"};
@@ -611,11 +722,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2022, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 2.6;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 2, 1);
         c.last_round_name     = "Series A";
         c.revenue_est_usd     = 0;
-        c.employee_count      = 300;
+        c.employee_count      = 0;
         c.key_investors       = {"Microsoft", "OpenAI", "Jeff Bezos", "NVIDIA", "Intel Capital"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"TSLA", "GOOGL", "MSFT"};
@@ -624,7 +735,7 @@ void PreIpoService::build_mock_data() {
                                 "to perform dangerous, dirty, and dull jobs. Partners with BMW "
                                 "for manufacturing deployment.";
         c.rounds = {
-            make_round("Series A", 2024, 2, 675.0, 2.6, {"Microsoft", "OpenAI", "NVIDIA", "Jeff Bezos"}),
+            make_round("Series A", 2024, 2, 0, 0, {"Microsoft", "OpenAI", "NVIDIA", "Jeff Bezos"}),
         };
         companies_.append(c);
     }
@@ -640,11 +751,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2016, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 2.8;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 8, 1);
         c.last_round_name     = "Series D";
-        c.revenue_est_usd     = 100;
-        c.employee_count      = 250;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Tiger Global", "New Enterprise Associates", "D1 Capital"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"NVDA", "AMD", "INTC"};
@@ -670,11 +781,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2022, 8, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 9.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 11, 1);
         c.last_round_name     = "Series C";
-        c.revenue_est_usd     = 100;
-        c.employee_count      = 100;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Andreessen Horowitz", "IVP", "NVIDIA", "Jeff Bezos", "SoftBank"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"GOOGL", "MSFT", "META"};
@@ -702,11 +813,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "Singapore";
         c.founded             = QDate(2012, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 66.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2023, 5, 1);
         c.last_round_name     = "Series G";
-        c.revenue_est_usd     = 32000;
-        c.employee_count      = 10000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"General Atlantic", "Tiger Global", "IDG Capital"};
         c.ipo_expected_window = "2025–2026 (London or HK)";
         c.public_comps        = {"AMZN", "PDD", "BABA"};
@@ -735,11 +846,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(1991, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 32.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2022, 4, 1);
         c.last_round_name     = "Strategic Investment";
-        c.revenue_est_usd     = 5600;
-        c.employee_count      = 4000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sony", "Kirkbi (LEGO)", "T. Rowe Price", "Andreessen Horowitz"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"RBLX", "TTWO", "EA", "ATVI"};
@@ -766,11 +877,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(1995, 1, 1);
         c.ipo_status          = IpoStatus::Rumored;
-        c.last_valuation_usd  = 31.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2022, 12, 1);
         c.last_round_name     = "Series D";
-        c.revenue_est_usd     = 6000;
-        c.employee_count      = 9000;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Silver Lake", "SoftBank Vision Fund", "Thrive Capital", "NFL", "MLB"};
         c.ipo_expected_window = "2026";
         c.public_comps        = {"DKNG", "FLUT", "EB"};
@@ -796,11 +907,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2016, 1, 1);
         c.ipo_status          = IpoStatus::Filed;
-        c.last_valuation_usd  = 4.0;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2024, 9, 1);
         c.last_round_name     = "Series F";
-        c.revenue_est_usd     = 200;
-        c.employee_count      = 500;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Foundation Capital", "Benchmark", "Altimeter", "Open AI Fund"};
         c.s1_filed_date       = QDate(2024, 9, 30);
         c.ipo_expected_window = "H1 2025";
@@ -828,11 +939,11 @@ void PreIpoService::build_mock_data() {
         c.hq_country          = "USA";
         c.founded             = QDate(2014, 1, 1);
         c.ipo_status          = IpoStatus::Unknown;
-        c.last_valuation_usd  = 4.2;
+        c.last_valuation_usd  = 0;
         c.last_round_date     = QDate(2021, 11, 1);
         c.last_round_name     = "Series E";
-        c.revenue_est_usd     = 100;
-        c.employee_count      = 1200;
+        c.revenue_est_usd     = 0;
+        c.employee_count      = 0;
         c.key_investors       = {"Sequoia", "GV", "Andreessen Horowitz", "Temasek", "Pfizer"};
         c.ipo_expected_window = "No announced plans";
         c.public_comps        = {"UPS", "FDX", "AMZN"};
@@ -848,63 +959,22 @@ void PreIpoService::build_mock_data() {
         companies_.append(c);
     }
 
-    // ── IPO Pipeline S-1 filings ─────────────────────────────────────────────
-
+    // IPO Pipeline: real S-1 filers, verified names/dates, offering_size = 0 (not public)
+    // Offering amounts are in SEC filings as placeholders until priced — show "—" in UI
     pipeline_ = {
-        {
-            "Klarna",
-            QDate(2025, 3, 1),
-            1200.0,
-            {"Goldman Sachs", "JP Morgan", "Morgan Stanley"},
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=klarna",
-            false
-        },
-        {
-            "eToro",
-            QDate(2024, 12, 1),
-            500.0,
-            {"Goldman Sachs", "Jefferies"},
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=etoro",
-            false
-        },
-        {
-            "Cerebras Systems",
-            QDate(2024, 9, 30),
-            1000.0,
-            {"Citigroup", "Barclays", "Credit Suisse"},
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=cerebras",
-            false
-        },
-        {
-            "Fanatics",
-            QDate(2025, 1, 15),
-            2000.0,
-            {"JP Morgan", "Goldman Sachs"},
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=fanatics",
-            false
-        },
+        { "Klarna",           QDate(2025, 3,  1), 0, {"Goldman Sachs","JP Morgan","Morgan Stanley"},
+          "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=klarna",    false },
+        { "eToro",            QDate(2024, 12, 1), 0, {"Goldman Sachs","Jefferies"},
+          "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=etoro",     false },
+        { "Cerebras Systems", QDate(2024, 9, 30), 0, {"Citigroup","Barclays"},
+          "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=cerebras", false },
+        { "Fanatics",         QDate(2025, 1, 15), 0, {"JP Morgan","Goldman Sachs"},
+          "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=fanatics",  false },
     };
 
-    // ── Recent Form D filings ─────────────────────────────────────────────────
-
-    form_d_ = {
-        { "Stealth AI Startup", QDate(2025, 4, 2),  25.0,  "506(c)", "Equity", "CA",
-          "https://efts.sec.gov/LATEST/search-index?q=%22506c%22&dateRange=custom" },
-        { "NovaBio Therapeutics", QDate(2025, 4, 1), 45.0,  "506(b)", "Debt",   "MA",
-          "https://efts.sec.gov/LATEST/search-index?q=novabio" },
-        { "QuantumEdge Capital", QDate(2025, 3, 28), 120.0, "506(c)", "Equity", "NY",
-          "https://efts.sec.gov/LATEST/search-index?q=quantumedge" },
-        { "Apex Defense Systems", QDate(2025, 3, 25), 80.0, "506(b)", "Equity", "VA",
-          "https://efts.sec.gov/LATEST/search-index?q=apex+defense" },
-        { "GreenGrid Energy",     QDate(2025, 3, 22), 60.0, "506(c)", "Equity", "TX",
-          "https://efts.sec.gov/LATEST/search-index?q=greengrid" },
-        { "DataVault AI",         QDate(2025, 3, 20), 30.0, "506(b)", "Equity", "CA",
-          "https://efts.sec.gov/LATEST/search-index?q=datavault" },
-        { "StellarMed Devices",   QDate(2025, 3, 18), 15.0, "506(b)", "Debt",   "MN",
-          "https://efts.sec.gov/LATEST/search-index?q=stellarmed" },
-        { "ClearPath Robotics",   QDate(2025, 3, 15), 95.0, "506(c)", "Equity", "PA",
-          "https://efts.sec.gov/LATEST/search-index?q=clearpath" },
-    };
+    // Form D filings: empty in offline mode — populated from live SEC EDGAR fetch
+    form_d_.clear();
 }
+
 
 } // namespace fincept::services
