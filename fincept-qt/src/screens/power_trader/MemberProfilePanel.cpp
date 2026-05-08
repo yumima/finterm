@@ -530,14 +530,55 @@ void MemberProfilePanel::build_ui() {
     top_split->setStretchFactor(1, 1);  // chart pane: fills available width
     vl->addWidget(top_split);
 
-    // ── Full-width content below: tables, rankings, committees, sector ────────
-    build_holdings_table(content_, vl);
-    build_trades_section(content_, vl);
-    build_ranking_section(content_, vl);
-    build_committees_section(content_, vl);
-    build_sector_section(content_, vl);
-    build_insights_section(content_, vl);
-    vl->addStretch();
+    // ── Bottom section: horizontal split uses full width ──────────────────────
+    // LEFT (55%): Holdings table — wide data table benefits from width
+    // RIGHT (45%): Trades + Rankings + Committees + Sector stacked vertically
+    //              (each section is narrower so height > width = correct ratio)
+    auto* bottom_split = new QSplitter(Qt::Horizontal, content_);
+    bottom_split->setHandleWidth(1);
+    bottom_split->setChildrenCollapsible(false);
+    bottom_split->setStyleSheet(
+        QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM()));
+
+    // Left: holdings only — tall table, uses its width
+    auto* holdings_pane = new QWidget(bottom_split);
+    holdings_pane->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    {
+        auto* hl = new QVBoxLayout(holdings_pane);
+        hl->setContentsMargins(0, 0, 0, 0);
+        hl->setSpacing(0);
+        build_holdings_table(holdings_pane, hl);
+    }
+
+    // Right: everything else in a scroll area — narrower panels stack vertically
+    auto* right_scroll = new QScrollArea(bottom_split);
+    right_scroll->setWidgetResizable(true);
+    right_scroll->setFrameShape(QFrame::NoFrame);
+    right_scroll->setStyleSheet(
+        QString("QScrollArea{background:%1;border:none;}"
+                "QScrollBar:vertical{width:8px;background:%1;border-radius:4px;}"
+                "QScrollBar::handle:vertical{background:%2;min-height:30px;border-radius:4px;}")
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT()));
+    auto* right_body = new QWidget;
+    right_body->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    auto* rvl = new QVBoxLayout(right_body);
+    rvl->setContentsMargins(0, 0, 0, 16);
+    rvl->setSpacing(0);
+    build_trades_section(right_body, rvl);
+    build_ranking_section(right_body, rvl);
+    build_committees_section(right_body, rvl);
+    build_sector_section(right_body, rvl);
+    build_insights_section(right_body, rvl);
+    rvl->addStretch();
+    right_scroll->setWidget(right_body);
+
+    bottom_split->addWidget(holdings_pane);
+    bottom_split->addWidget(right_scroll);
+    bottom_split->setStretchFactor(0, 55);
+    bottom_split->setStretchFactor(1, 45);
+    vl->addWidget(bottom_split, 1);  // stretch=1 so it fills all remaining height
 
     scroll_area_->setVisible(false);
     root->addWidget(scroll_area_, 1);

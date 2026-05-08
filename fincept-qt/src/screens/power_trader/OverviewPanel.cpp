@@ -196,50 +196,51 @@ void OverviewPanel::build_ui() {
         c1l->setContentsMargins(0, 0, 0, 0);
         c1l->setSpacing(0);
 
-        // 2×2 stat tile grid
-        auto* grid_wrap = new QWidget(col1);
-        grid_wrap->setStyleSheet(
+        // Compact vertical stat list — no wide/short tiles; each row uses column height
+        auto* stat_list = new QWidget(col1);
+        stat_list->setStyleSheet(
             QString("QWidget { background:%1; border-bottom:1px solid %2; }")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-        auto* grid = new QGridLayout(grid_wrap);
-        grid->setContentsMargins(8, 8, 8, 8);
-        grid->setSpacing(6);
+        auto* sl = new QVBoxLayout(stat_list);
+        sl->setContentsMargins(12, 10, 12, 10);
+        sl->setSpacing(0);
 
-        const QString tile_ss =
-            QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
-                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
+        const QString row_ss =
+            QString("QWidget { background:transparent; border-bottom:1px solid %1; }")
+                .arg(ui::colors::BORDER_DIM());
         const QString cap_ss =
-            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
-                    " letter-spacing:0.5px; background:transparent; border:none; }")
+            QString("color:%1; font-size:12px; font-weight:600; background:transparent;")
                 .arg(ui::colors::TEXT_SECONDARY());
         const QString val_ss =
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
-                    " font-family:Consolas,monospace; background:transparent; border:none; }")
+            QString("color:%1; font-size:16px; font-weight:700;"
+                    " font-family:Consolas,monospace; background:transparent;")
                 .arg(ui::colors::AMBER());
 
-        struct TileSpec { QString label; QLabel** ptr; int row; int col; };
-        const QVector<TileSpec> specs = {
-            { QStringLiteral("MEMBERS TRACKED"),       &stat_members_,  0, 0 },
-            { QStringLiteral("TOTAL DISCLOSED (EST)"), &stat_disclosed_, 0, 1 },
-            { QStringLiteral("BEAT SPY"),               &stat_beat_spy_, 1, 0 },
-            { QStringLiteral("MOST ACTIVE CMTE"),       &stat_cmte_,     1, 1 },
+        struct StatSpec { QString label; QLabel** ptr; };
+        const QVector<StatSpec> specs = {
+            { QStringLiteral("MEMBERS TRACKED"),       &stat_members_   },
+            { QStringLiteral("TOTAL DISCLOSED (EST)"), &stat_disclosed_ },
+            { QStringLiteral("BEAT SPY"),               &stat_beat_spy_ },
+            { QStringLiteral("MOST ACTIVE CMTE"),       &stat_cmte_      },
         };
 
         for (const auto& spec : specs) {
-            auto* tile = new QWidget(grid_wrap);
-            tile->setStyleSheet(tile_ss);
-            auto* tvl = new QVBoxLayout(tile);
-            tvl->setContentsMargins(10, 6, 10, 6);
-            tvl->setSpacing(2);
-            auto* cap = new QLabel(spec.label, tile);
+            auto* row = new QWidget(stat_list);
+            row->setStyleSheet(row_ss);
+            auto* hl = new QHBoxLayout(row);
+            hl->setContentsMargins(0, 8, 0, 8);
+            hl->setSpacing(8);
+            auto* cap = new QLabel(spec.label, row);
             cap->setStyleSheet(cap_ss);
-            tvl->addWidget(cap);
-            *spec.ptr = new QLabel(QStringLiteral("—"), tile);
+            hl->addWidget(cap);
+            hl->addStretch();
+            *spec.ptr = new QLabel(QStringLiteral("—"), row);
             (*spec.ptr)->setStyleSheet(val_ss);
-            tvl->addWidget(*spec.ptr);
-            grid->addWidget(tile, spec.row, spec.col);
+            (*spec.ptr)->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            hl->addWidget(*spec.ptr);
+            sl->addWidget(row);
         }
-        c1l->addWidget(grid_wrap);
+        c1l->addWidget(stat_list);
 
         // Sector exposure bars below stat grid
         auto* sec_hdr = make_section_header(QStringLiteral("SECTOR EXPOSURE"), col1);

@@ -103,54 +103,88 @@ void CabinetPanel::build_loading_page() {
 
 void CabinetPanel::build_content_page() {
     auto* page = new QWidget;
-    auto* root = new QVBoxLayout(page);
+    // ── Horizontal layout: narrow LEFT stats column | wide RIGHT main area ─────
+    // Left column: title + source note + compact stats (height > width = correct)
+    // Right: member list | detail splitter (existing, unchanged)
+    auto* root = new QHBoxLayout(page);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ── Header ────────────────────────────────────────────────────────────────
+    // ── LEFT column: stats (200px fixed, full height) ─────────────────────────
+    auto* left_col = new QWidget(page);
+    left_col->setFixedWidth(200);
+    left_col->setStyleSheet(
+        QString("QWidget{background:%1;border-right:1px solid %2;}")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     {
-        auto* hdr = new QWidget;
-        hdr->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
-                               .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-        auto* hl  = new QVBoxLayout(hdr);
-        hl->setContentsMargins(14, 6, 14, 6);
-        hl->setSpacing(2);
+        auto* lcl = new QVBoxLayout(left_col);
+        lcl->setContentsMargins(0, 0, 0, 0);
+        lcl->setSpacing(0);
 
-        auto* title = new QLabel("EXECUTIVE BRANCH FINANCIAL DISCLOSURES  ·  OGE FORM 278");
-        title->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:1px;")
-                                 .arg(ui::colors::AMBER()));
-        hl->addWidget(title);
+        // Title
+        auto* title = new QLabel("EXECUTIVE BRANCH\nFINANCIAL DISCLOSURES");
+        title->setWordWrap(true);
+        title->setStyleSheet(
+            QString("color:%1;font-size:13px;font-weight:700;padding:10px 12px;"
+                    "border-bottom:1px solid %2;background:%3;")
+                .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
+        lcl->addWidget(title);
 
+        // Source note
         source_note_ = new QLabel;
         source_note_->setStyleSheet(
-            QString("color:%1;font-size:12px;font-style:italic;")
-                .arg(ui::colors::TEXT_TERTIARY()));
+            QString("color:%1;font-size:11px;font-style:italic;padding:6px 12px;"
+                    "border-bottom:1px solid %2;background:%3;")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::BG_SURFACE()));
         source_note_->setWordWrap(true);
-        hl->addWidget(source_note_);
+        lcl->addWidget(source_note_);
 
-        root->addWidget(hdr);
+        // Compact stat rows — label:value, full height of left column
+        const QString row_sep =
+            QString("QWidget{background:transparent;border-bottom:1px solid %1;}")
+                .arg(ui::colors::BORDER_DIM());
+        const QString cap_ss =
+            QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                .arg(ui::colors::TEXT_SECONDARY());
+        const QString val_ss =
+            QString("color:%1;font-size:14px;font-weight:700;"
+                    "font-family:Consolas,monospace;background:transparent;")
+                .arg(ui::colors::TEXT_PRIMARY());
+
+        auto add_stat = [&](const QString& label, QLabel*& out) {
+            auto* row = new QWidget(left_col);
+            row->setStyleSheet(row_sep);
+            auto* hl = new QHBoxLayout(row);
+            hl->setContentsMargins(12, 10, 12, 10);
+            hl->setSpacing(4);
+            auto* cap = new QLabel(label, row);
+            cap->setStyleSheet(cap_ss);
+            cap->setWordWrap(true);
+            hl->addWidget(cap, 1);
+            out = new QLabel(QStringLiteral("—"), row);
+            out->setStyleSheet(val_ss);
+            out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            hl->addWidget(out);
+            lcl->addWidget(row);
+        };
+
+        add_stat(QStringLiteral("Members"),           stat_members_);
+        add_stat(QStringLiteral("Holdings Min"),      stat_total_lo_);
+        add_stat(QStringLiteral("Holdings Max"),      stat_total_hi_);
+        add_stat(QStringLiteral("Avg Conflict"),      stat_avg_conf_);
+        add_stat(QStringLiteral("Highest Conflict"),  stat_top_conf_);
+        lcl->addStretch();
     }
+    root->addWidget(left_col);
 
-    // ── Stat tiles: 2-row × 3-column grid (Bloomberg-style) ─────────────────
-    {
-        auto* tiles = new QWidget;
-        tiles->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
-                                 .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
-        auto* tg = new QGridLayout(tiles);
-        tg->setContentsMargins(10, 8, 10, 8);
-        tg->setSpacing(6);
+    // ── RIGHT area: member list | detail — existing splitter ──────────────────
+    auto* right_area = new QWidget(page);
+    right_area->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    auto* ral = new QVBoxLayout(right_area);
+    ral->setContentsMargins(0, 0, 0, 0);
+    ral->setSpacing(0);
 
-        tg->addWidget(make_stat_tile("CABINET MEMBERS",      stat_members_),  0, 0);
-        tg->addWidget(make_stat_tile("TOTAL HOLDINGS (MIN)", stat_total_lo_), 0, 1);
-        tg->addWidget(make_stat_tile("TOTAL HOLDINGS (MAX)", stat_total_hi_), 0, 2);
-        tg->addWidget(make_stat_tile("AVG CONFLICT SCORE",   stat_avg_conf_), 1, 0);
-        tg->addWidget(make_stat_tile("HIGHEST CONFLICT",     stat_top_conf_), 1, 1);
-        // col (1,2) intentionally empty — leaves room for future stat
-
-        root->addWidget(tiles);
-    }
-
-    // ── Main splitter: member list | detail tabs ──────────────────────────────
     auto* splitter = new QSplitter(Qt::Horizontal);
     splitter->setHandleWidth(1);
     splitter->setStyleSheet(QString("QSplitter::handle{background:%1;}")
@@ -403,7 +437,8 @@ void CabinetPanel::build_content_page() {
     splitter->addWidget(left);
     splitter->addWidget(right);
     splitter->setSizes({320, 680});
-    root->addWidget(splitter, 1);
+    ral->addWidget(splitter, 1);
+    root->addWidget(right_area, 1);
 
     stack_->addWidget(page);  // index 1
 }

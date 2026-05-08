@@ -45,6 +45,20 @@ class RankingsPanel : public QWidget {
     QTableWidget*  table_        = nullptr;
     QLabel*        footer_label_ = nullptr;
 
+    // ── Member detail card (right pane) ───────────────────────────────────────
+    void build_detail_card(QWidget* parent, QVBoxLayout* vl);
+    void populate_detail_card(const QString& member_id);
+
+    QLabel*       card_name_     = nullptr;
+    QLabel*       card_meta_     = nullptr;
+    QLabel*       card_alpha_    = nullptr;
+    QLabel*       card_return_   = nullptr;
+    QLabel*       card_nw_       = nullptr;
+    QLabel*       card_signal_   = nullptr;
+    QLabel*       card_lag_      = nullptr;
+    QLabel*       card_trades_   = nullptr;
+    QLabel*       card_cmtes_    = nullptr;
+
     // Cached summary for re-ranking on dimension change
     power_trader::PowerTraderSummary summary_;
     bool has_data_ = false;

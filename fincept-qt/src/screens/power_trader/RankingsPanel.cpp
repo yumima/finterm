@@ -172,17 +172,25 @@ void RankingsPanel::build_ui() {
     setStyleSheet(QString("QWidget { background:%1; color:%2; }")
                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
 
-    auto* root = new QVBoxLayout(this);
+    auto* root = new QHBoxLayout(this);   // horizontal: table LEFT | card RIGHT
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
+    // ── LEFT: section header + pill bar + table + footer ─────────────────────
+    auto* left = new QWidget(this);
+    left->setStyleSheet(QString("QWidget{background:%1;border-right:1px solid %2;}")
+                            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+    auto* lvl = new QVBoxLayout(left);
+    lvl->setContentsMargins(0, 0, 0, 0);
+    lvl->setSpacing(0);
+
     // ── Section header ────────────────────────────────────────────────────────
-    auto* hdr = new QLabel(QStringLiteral("RANKINGS"), this);
+    auto* hdr = new QLabel(QStringLiteral("RANKINGS"), left);
     hdr->setStyleSheet(
         QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    root->addWidget(hdr);
+    lvl->addWidget(hdr);
 
     // ── Dimension pill bar (horizontally scrollable) ──────────────────────────
     auto* pill_scroll = new QScrollArea(this);
@@ -229,7 +237,7 @@ void RankingsPanel::build_ui() {
     pill_layout->addStretch();
     pill_container->adjustSize();
     pill_scroll->setWidget(pill_container);
-    root->addWidget(pill_scroll);
+    lvl->addWidget(pill_scroll);
 
     // Apply pill styles
     apply_pill_styles();
@@ -282,25 +290,149 @@ void RankingsPanel::build_ui() {
 
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
         if (row < 0 || row >= table_->rowCount()) return;
-        auto* item = table_->item(row, 1);  // NAME col holds member_id in UserRole
+        auto* item = table_->item(row, 1);
         if (!item) return;
         const QString id = item->data(Qt::UserRole).toString();
-        if (!id.isEmpty()) emit member_selected(id);
+        if (!id.isEmpty()) {
+            emit member_selected(id);
+            populate_detail_card(id);
+        }
     });
 
-    root->addWidget(table_, 1);
+    lvl->addWidget(table_, 1);
 
-    // ── Footer label ──────────────────────────────────────────────────────────
     footer_label_ = new QLabel(
-        QStringLiteral("Showing members ranked by Alpha vs SPY. "
-                        "Data: estimated from public STOCK Act disclosures."),
-        this);
+        QStringLiteral("Estimated from public STOCK Act disclosures."), left);
     footer_label_->setWordWrap(true);
     footer_label_->setStyleSheet(
         QString("QLabel { color:%1; font-size:12px; padding:5px 10px;"
                 " border-top:1px solid %2; background:%3; }")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_SURFACE()));
-    root->addWidget(footer_label_);
+    lvl->addWidget(footer_label_);
+
+    root->addWidget(left, 1);
+
+    // ── RIGHT: member detail card (narrow, taller than wide = correct) ────────
+    auto* card = new QWidget(this);
+    card->setFixedWidth(240);
+    card->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_SURFACE()));
+    build_detail_card(card, nullptr);
+    root->addWidget(card);
+}
+
+void RankingsPanel::build_detail_card(QWidget* card, QVBoxLayout*) {
+    auto* vl = new QVBoxLayout(card);
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
+
+    auto* title = new QLabel(QStringLiteral("MEMBER STATS"), card);
+    title->setStyleSheet(
+        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+                "letter-spacing:1px;padding:6px 12px;border-bottom:1px solid %3;")
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
+    vl->addWidget(title);
+
+    card_name_ = new QLabel(QStringLiteral("Select a member"), card);
+    card_name_->setWordWrap(true);
+    card_name_->setStyleSheet(
+        QString("color:%1;font-size:13px;font-weight:700;padding:10px 12px 4px 12px;"
+                "background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY()));
+    vl->addWidget(card_name_);
+
+    card_meta_ = new QLabel(card);
+    card_meta_->setWordWrap(true);
+    card_meta_->setStyleSheet(
+        QString("color:%1;font-size:12px;padding:0 12px 8px 12px;"
+                "border-bottom:1px solid %2;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
+    vl->addWidget(card_meta_);
+
+    // Stat rows — each narrow enough that height > width per row
+    const QString row_ss =
+        QString("QWidget{background:transparent;border-bottom:1px solid %1;}")
+            .arg(ui::colors::BORDER_DIM());
+    const QString lbl_ss =
+        QString("color:%1;font-size:12px;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY());
+    const QString val_ss =
+        QString("color:%1;font-size:13px;font-weight:700;"
+                "font-family:Consolas,monospace;background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY());
+
+    auto add_row = [&](const QString& label, QLabel*& out) {
+        auto* row = new QWidget(card);
+        row->setStyleSheet(row_ss);
+        auto* hl = new QHBoxLayout(row);
+        hl->setContentsMargins(12, 7, 12, 7);
+        hl->setSpacing(4);
+        auto* lbl = new QLabel(label, row);
+        lbl->setStyleSheet(lbl_ss);
+        hl->addWidget(lbl);
+        hl->addStretch();
+        out = new QLabel(QStringLiteral("—"), row);
+        out->setStyleSheet(val_ss);
+        out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        hl->addWidget(out);
+        vl->addWidget(row);
+    };
+
+    add_row(QStringLiteral("Alpha vs SPY"),  card_alpha_);
+    add_row(QStringLiteral("YTD Return"),    card_return_);
+    add_row(QStringLiteral("Avg Signal"),    card_signal_);
+    add_row(QStringLiteral("Avg Lag"),       card_lag_);
+    add_row(QStringLiteral("Trades YTD"),    card_trades_);
+    add_row(QStringLiteral("Net Worth"),     card_nw_);
+
+    auto* cmte_hdr = new QLabel(QStringLiteral("COMMITTEES"), card);
+    cmte_hdr->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:700;padding:8px 12px 4px 12px;"
+                "background:transparent;border-top:1px solid %2;")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
+    vl->addWidget(cmte_hdr);
+
+    card_cmtes_ = new QLabel(card);
+    card_cmtes_->setWordWrap(true);
+    card_cmtes_->setStyleSheet(
+        QString("color:%1;font-size:12px;padding:0 12px 10px 12px;background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY()));
+    vl->addWidget(card_cmtes_);
+    vl->addStretch();
+}
+
+void RankingsPanel::populate_detail_card(const QString& member_id) {
+    if (!has_data_) return;
+    const auto& svc = power_trader::PowerTraderService::instance();
+
+    power_trader::CongressMember member;
+    for (const auto& m : summary_.members)
+        if (m.id == member_id) { member = m; break; }
+    if (member.id.isEmpty()) return;
+
+    card_name_->setText(member.full_name);
+    card_meta_->setText(
+        QString("%1  ·  %2  ·  %3")
+            .arg(member.party == QStringLiteral("D") ? "Democrat" :
+                 member.party == QStringLiteral("R") ? "Republican" : "Independent")
+            .arg(member.chamber == power_trader::MemberChamber::Senate ? "Senate" : "House")
+            .arg(member.state));
+
+    auto fmt_pct = [](double v) {
+        return (v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%";
+    };
+    card_alpha_ ->setText(fmt_pct(member.alpha_ytd));
+    card_return_->setText(fmt_pct(member.portfolio_return_ytd));
+    card_signal_->setText(QString::number(svc.avg_signal_score(member_id), 'f', 0) + "/100");
+    card_lag_   ->setText(QString::number(svc.avg_disclosure_lag(member_id), 'f', 0) + "d");
+    card_trades_->setText(QString::number(member.trade_count_ytd));
+
+    const double nw = member.estimated_net_worth;
+    card_nw_->setText(nw >= 1e9 ? "$"+QString::number(nw/1e9,'f',1)+"B" :
+                      nw >= 1e6 ? "$"+QString::number(nw/1e6,'f',1)+"M" : "—");
+
+    const auto cmtes = member.committees;
+    card_cmtes_->setText(cmtes.isEmpty() ? "—" : cmtes.join("\n"));
 }
 
 // ── apply_pill_styles ─────────────────────────────────────────────────────────
@@ -335,6 +467,13 @@ void RankingsPanel::set_data(const power_trader::PowerTraderSummary& summary) {
     summary_ = summary;
     has_data_ = summary.loaded;
     on_dimension_changed(current_dim_);
+    // Auto-populate detail card with top-ranked member
+    if (has_data_ && !summary.members.isEmpty()) {
+        const auto ranked = power_trader::PowerTraderService::instance()
+                                .ranked_members(current_dim_);
+        if (!ranked.isEmpty())
+            populate_detail_card(ranked.first().member.id);
+    }
 }
 
 void RankingsPanel::refresh_theme() {
