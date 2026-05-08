@@ -47,14 +47,17 @@ static QString section_header_style() {
 }
 
 // Creates a correctly-sized section header label that works across DPI scales.
-// Height is derived from the label's actual font metrics rather than a hardcoded
-// pixel value, so it scales correctly on HiDPI (1.5x, 2x) displays.
+// Height uses the explicit stylesheet font (12px) via a constructed QFont so
+// it's not affected by the lazy stylesheet application order.
 static QLabel* make_section_hdr(const QString& title, QWidget* parent) {
     auto* lbl = new QLabel(title, parent);
     lbl->setStyleSheet(section_header_style());
-    // Compute height from font metrics + 4px vertical padding (2px each side)
-    const int h = QFontMetrics(lbl->font()).height() + 8;
-    lbl->setFixedHeight(qMax(h, 22));   // at least 22px on any DPI
+    // Use the same font parameters as section_header_style() to compute height.
+    // Cannot call lbl->font() here — stylesheet hasn't been applied yet.
+    QFont f(QStringLiteral("sans-serif"), -1);
+    f.setPixelSize(12);
+    const int h = QFontMetrics(f).height() + 8;  // content + 4px each side
+    lbl->setFixedHeight(qMax(h, 22));
     return lbl;
 }
 

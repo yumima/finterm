@@ -77,63 +77,7 @@ def fetch_form_d(days_back: int = 7) -> list:
         }
         result.append(filing)
 
-    return result if result else _fallback_form_d()
-
-
-def _fallback_form_d() -> list:
-    """Return sample Form D filings when EDGAR is unavailable."""
-    return [
-        {
-            "company_name": "Helion Energy, Inc.",
-            "filed_date": date.today().isoformat(),
-            "form_type": "D",
-            "amount_raised": 425.0,
-            "exemption": "506(b)",
-            "offering_type": "Equity",
-            "state": "WA",
-            "edgar_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=helion&type=D",
-        },
-        {
-            "company_name": "Orbital Therapeutics, Inc.",
-            "filed_date": (date.today() - timedelta(days=1)).isoformat(),
-            "form_type": "D",
-            "amount_raised": 95.0,
-            "exemption": "506(c)",
-            "offering_type": "Equity",
-            "state": "MA",
-            "edgar_url": "",
-        },
-        {
-            "company_name": "DataBridge Capital Partners LP",
-            "filed_date": (date.today() - timedelta(days=2)).isoformat(),
-            "form_type": "D",
-            "amount_raised": 200.0,
-            "exemption": "506(b)",
-            "offering_type": "Pooled Investment Fund",
-            "state": "NY",
-            "edgar_url": "",
-        },
-        {
-            "company_name": "NexGen Robotics Corp",
-            "filed_date": (date.today() - timedelta(days=3)).isoformat(),
-            "form_type": "D",
-            "amount_raised": 45.0,
-            "exemption": "506(c)",
-            "offering_type": "Equity",
-            "state": "CA",
-            "edgar_url": "",
-        },
-        {
-            "company_name": "ClimateVault Fund II LP",
-            "filed_date": (date.today() - timedelta(days=4)).isoformat(),
-            "form_type": "D",
-            "amount_raised": 150.0,
-            "exemption": "506(b)",
-            "offering_type": "Pooled Investment Fund",
-            "state": "CA",
-            "edgar_url": "",
-        },
-    ]
+    return result  # empty list when EDGAR is unreachable — caller shows error state
 
 
 # ── IPO Pipeline (S-1 / F-1 monitor) ─────────────────────────────────────────
@@ -168,40 +112,7 @@ def fetch_ipo_pipeline(days_back: int = 90) -> list:
             "is_amendment": is_amendment,
         })
 
-    return result if result else _fallback_ipo_pipeline()
-
-
-def _fallback_ipo_pipeline() -> list:
-    """Return curated known IPO pipeline when EDGAR is unavailable."""
-    return [
-        {
-            "company_name": "Klarna Bank AB",
-            "filed_date": "2025-03-12",
-            "form_type": "F-1",
-            "offering_size_usd": 1000.0,
-            "underwriters": ["Goldman Sachs", "Morgan Stanley", "JPMorgan"],
-            "edgar_url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=klarna&type=F-1",
-            "is_amendment": False,
-        },
-        {
-            "company_name": "eToro Group Ltd.",
-            "filed_date": "2025-04-01",
-            "form_type": "F-1",
-            "offering_size_usd": 500.0,
-            "underwriters": ["Goldman Sachs", "Jefferies"],
-            "edgar_url": "",
-            "is_amendment": False,
-        },
-        {
-            "company_name": "Klarna Bank AB",
-            "filed_date": "2025-04-15",
-            "form_type": "F-1/A",
-            "offering_size_usd": 0,
-            "underwriters": [],
-            "edgar_url": "",
-            "is_amendment": True,
-        },
-    ]
+    return result  # empty list when EDGAR is unreachable — caller shows error state
 
 
 # ── Daemon action handler ─────────────────────────────────────────────────────

@@ -405,11 +405,17 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
     QString meta;
     if (c.founded.isValid())
         meta += "Founded " + QString::number(c.founded.year());
+    // Show city if known; fall back to state (Form D only provides state)
     if (!c.hq_city.isEmpty()) {
         if (!meta.isEmpty()) meta += "  ·  ";
         meta += c.hq_city;
-        if (!c.hq_country.isEmpty() && c.hq_country != c.hq_city)
+        if (!c.hq_state.isEmpty())
+            meta += ", " + c.hq_state;
+        else if (!c.hq_country.isEmpty())
             meta += ", " + c.hq_country;
+    } else if (!c.hq_state.isEmpty()) {
+        if (!meta.isEmpty()) meta += "  ·  ";
+        meta += c.hq_state;
     }
     if (!c.ipo_expected_window.isEmpty()) {
         if (!meta.isEmpty()) meta += "  ·  ";

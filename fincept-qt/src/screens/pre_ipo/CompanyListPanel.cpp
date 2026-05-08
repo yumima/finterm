@@ -206,7 +206,8 @@ void CompanyListPanel::apply_filter() {
             const QString lo = search_text_.toLower();
             if (!c.name.toLower().contains(lo) &&
                 !c.sector.toLower().contains(lo) &&
-                !c.hq_city.toLower().contains(lo))
+                !c.hq_city.toLower().contains(lo) &&
+                !c.hq_state.toLower().contains(lo))
                 continue;
         }
 

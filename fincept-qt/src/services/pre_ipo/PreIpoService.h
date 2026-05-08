@@ -54,7 +54,6 @@ class PreIpoService : public QObject {
     explicit PreIpoService(QObject* parent = nullptr);
 
     void load_from_sec();
-    void build_fallback_data();  // offline: known company names, all numeric fields = 0/empty
     void parse_sec_summary(const QJsonObject& root);
     void emit_loaded();
 

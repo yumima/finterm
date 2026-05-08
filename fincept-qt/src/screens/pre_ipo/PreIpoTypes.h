@@ -43,6 +43,7 @@ struct PrivateCompany {
     QString sector;
     QString sub_sector;
     QString hq_city;
+    QString hq_state;    // US state abbreviation (e.g. "CA"); from Form D
     QString hq_country;
     QDate   founded;
     IpoStatus ipo_status         = IpoStatus::Unknown;
