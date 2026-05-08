@@ -512,75 +512,110 @@ void MemberProfilePanel::build_ui() {
     info_pane->setStyleSheet(
         QString("QWidget { background:%1; border-right:1px solid %2; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-    auto* info_vl = new QVBoxLayout(info_pane);
-    info_vl->setContentsMargins(0, 0, 0, 0);
-    info_vl->setSpacing(0);
-    build_header_bar(info_pane, info_vl);
-    build_stat_tiles_compact(info_pane, info_vl);
-    info_vl->addStretch();
-
-    auto* chart_pane = new QWidget(top_split);
-    chart_pane->setStyleSheet(
-        QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
-    auto* chart_vl = new QVBoxLayout(chart_pane);
-    chart_vl->setContentsMargins(0, 0, 0, 0);
-    chart_vl->setSpacing(0);
-    build_chart_section(chart_pane, chart_vl);
-
-    top_split->setStretchFactor(0, 0);  // info pane: fixed width
-    top_split->setStretchFactor(1, 1);  // chart pane: fills available width
-    vl->addWidget(top_split);
-
-    // ── Bottom section: horizontal split uses full width ──────────────────────
-    // LEFT (55%): Holdings table — wide data table benefits from width
-    // RIGHT (45%): Trades + Rankings + Committees + Sector stacked vertically
-    //              (each section is narrower so height > width = correct ratio)
-    auto* bottom_split = new QSplitter(Qt::Horizontal, content_);
-    bottom_split->setHandleWidth(1);
-    bottom_split->setChildrenCollapsible(false);
-    bottom_split->setStyleSheet(
-        QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM()));
-
-    // Left: holdings only — tall table, uses its width
-    auto* holdings_pane = new QWidget(bottom_split);
-    holdings_pane->setStyleSheet(
-        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    // ── ROW 1: info pane (narrow) | chart (wide, full width) ─────────────────
     {
-        auto* hl = new QVBoxLayout(holdings_pane);
-        hl->setContentsMargins(0, 0, 0, 0);
-        hl->setSpacing(0);
-        build_holdings_table(holdings_pane, hl);
+        auto* info_vl = new QVBoxLayout(info_pane);
+        info_vl->setContentsMargins(0, 0, 0, 0);
+        info_vl->setSpacing(0);
+        build_header_bar(info_pane, info_vl);
+        build_stat_tiles_compact(info_pane, info_vl);
+        info_vl->addStretch();
+
+        auto* chart_pane = new QWidget(top_split);
+        chart_pane->setStyleSheet(
+            QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+        auto* chart_vl = new QVBoxLayout(chart_pane);
+        chart_vl->setContentsMargins(0, 0, 0, 0);
+        chart_vl->setSpacing(0);
+        build_chart_section(chart_pane, chart_vl);  // chart fills full width — no committee panel
+
+        top_split->setStretchFactor(0, 0);
+        top_split->setStretchFactor(1, 1);
+        vl->addWidget(top_split);
     }
 
-    // Right: everything else in a scroll area — narrower panels stack vertically
-    auto* right_scroll = new QScrollArea(bottom_split);
-    right_scroll->setWidgetResizable(true);
-    right_scroll->setFrameShape(QFrame::NoFrame);
-    right_scroll->setStyleSheet(
-        QString("QScrollArea{background:%1;border:none;}"
-                "QScrollBar:vertical{width:8px;background:%1;border-radius:4px;}"
-                "QScrollBar::handle:vertical{background:%2;min-height:30px;border-radius:4px;}")
-            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT()));
-    auto* right_body = new QWidget;
-    right_body->setStyleSheet(
-        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
-    auto* rvl = new QVBoxLayout(right_body);
-    rvl->setContentsMargins(0, 0, 0, 16);
-    rvl->setSpacing(0);
-    build_trades_section(right_body, rvl);
-    build_signal_analysis_section(right_body, rvl);
-    build_ranking_section(right_body, rvl);
-    build_committees_section(right_body, rvl);
-    build_sector_section(right_body, rvl);
-    build_insights_section(right_body, rvl);
-    rvl->addStretch();
-    right_scroll->setWidget(right_body);
+    const QString splitter_ss =
+        QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM());
+    auto make_row = [&](int minH) -> QSplitter* {
+        auto* sp = new QSplitter(Qt::Horizontal, content_);
+        sp->setHandleWidth(1);
+        sp->setChildrenCollapsible(false);
+        sp->setStyleSheet(splitter_ss);
+        sp->setMinimumHeight(minH);
+        return sp;
+    };
 
-    bottom_split->addWidget(holdings_pane);
-    bottom_split->addWidget(right_scroll);
-    bottom_split->setStretchFactor(0, 55);
-    bottom_split->setStretchFactor(1, 45);
-    vl->addWidget(bottom_split, 1);  // stretch=1 so it fills all remaining height
+    // ── ROW 2: holdings (LEFT) | trades (RIGHT) — equal width ────────────────
+    {
+        auto* row2 = make_row(180);
+
+        auto* left2 = new QWidget(row2);
+        left2->setStyleSheet(
+            QString("QWidget{background:%1;border-right:1px solid %2;}")
+                .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+        auto* l2 = new QVBoxLayout(left2);
+        l2->setContentsMargins(0, 0, 0, 0); l2->setSpacing(0);
+        build_holdings_table(left2, l2);
+
+        auto* right2 = new QWidget(row2);
+        right2->setStyleSheet(
+            QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+        auto* r2 = new QVBoxLayout(right2);
+        r2->setContentsMargins(0, 0, 0, 0); r2->setSpacing(0);
+        build_trades_section(right2, r2);
+
+        row2->setStretchFactor(0, 1);
+        row2->setStretchFactor(1, 1);
+        vl->addWidget(row2);
+    }
+
+    // ── ROW 3: trader profile (LEFT) | how they compare (RIGHT) — equal width ─
+    {
+        auto* row3 = make_row(160);
+
+        auto* left3 = new QWidget(row3);
+        left3->setStyleSheet(
+            QString("QWidget{background:%1;border-right:1px solid %2;}")
+                .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+        auto* l3 = new QVBoxLayout(left3);
+        l3->setContentsMargins(0, 0, 0, 0); l3->setSpacing(0);
+        build_insights_section(left3, l3);   // "TRADER PROFILE"
+
+        auto* right3 = new QWidget(row3);
+        right3->setStyleSheet(
+            QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+        auto* r3 = new QVBoxLayout(right3);
+        r3->setContentsMargins(0, 0, 0, 0); r3->setSpacing(0);
+        build_ranking_section(right3, r3);   // "HOW THEY COMPARE"
+
+        row3->setStretchFactor(0, 1);
+        row3->setStretchFactor(1, 1);
+        vl->addWidget(row3);
+    }
+
+    // ── ROW 4: sector allocation (LEFT) | combined signal analysis (RIGHT) ────
+    {
+        auto* row4 = make_row(180);
+
+        auto* left4 = new QWidget(row4);
+        left4->setStyleSheet(
+            QString("QWidget{background:%1;border-right:1px solid %2;}")
+                .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+        auto* l4 = new QVBoxLayout(left4);
+        l4->setContentsMargins(0, 0, 0, 0); l4->setSpacing(0);
+        build_sector_section(left4, l4);     // sector pie + breakdown
+
+        auto* right4 = new QWidget(row4);
+        right4->setStyleSheet(
+            QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+        auto* r4 = new QVBoxLayout(right4);
+        r4->setContentsMargins(0, 0, 0, 0); r4->setSpacing(0);
+        build_combined_analysis_section(right4, r4);  // committee + signal + insider
+
+        row4->setStretchFactor(0, 1);
+        row4->setStretchFactor(1, 1);
+        vl->addWidget(row4);
+    }
 
     scroll_area_->setVisible(false);
     root->addWidget(scroll_area_, 1);
@@ -735,88 +770,65 @@ void MemberProfilePanel::build_stat_tiles_compact(QWidget* parent, QVBoxLayout* 
 }
 
 void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
-    // Section label
-    auto* hdr_label = new QLabel(QStringLiteral("ESTIMATED PORTFOLIO GROWTH (from disclosed trades)"), parent);
+    // Chart fills the full width of its pane — committee exposure moved to Row 4.
+    auto* hdr_label = new QLabel(QStringLiteral("PORTFOLIO GROWTH CURVE"), parent);
     hdr_label->setStyleSheet(section_header_style());
     vl->addWidget(hdr_label);
 
-    // Splitter: left = chart + controls, right = committee exposure
-    chart_splitter_ = new QSplitter(Qt::Horizontal, parent);
-    chart_splitter_->setHandleWidth(1);
-    chart_splitter_->setStyleSheet(
-        QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
-    chart_splitter_->setMinimumHeight(340);
+    auto* left_vl = vl;   // write directly into the parent layout
+    left_vl->setContentsMargins(0, 0, 0, 0);
+    left_vl->setSpacing(0);
 
-    // ── Left side: period buttons + nav chart ─────────────────────────────────
-    auto* left = new QWidget;
-    left->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
-    auto* left_vl = new QVBoxLayout(left);
-    left_vl->setContentsMargins(10, 8, 8, 8);
-    left_vl->setSpacing(6);
-
-    // Period selector bar
-    period_bar_ = new QWidget(left);
-    period_bar_->setStyleSheet("QWidget { background:transparent; }");
+    // ── Period bar ────────────────────────────────────────────────────────────
+    period_bar_ = new QWidget(parent);
+    period_bar_->setStyleSheet(
+        QString("QWidget{background:%1;border-bottom:1px solid %2;padding:4px 10px;}")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* pb_hl = new QHBoxLayout(period_bar_);
-    pb_hl->setContentsMargins(0, 0, 0, 0);
+    pb_hl->setContentsMargins(0, 4, 0, 4);
     pb_hl->setSpacing(4);
 
     const QString btn_base =
-        QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                " border-radius:3px; padding:2px 10px; font-size:12px; font-weight:600; }"
-                "QPushButton:hover { background:%4; }"
-                "QPushButton:checked { background:%5; color:%6; border-color:%5; }")
+        QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
+                "border-radius:3px;padding:2px 10px;font-size:12px;font-weight:600;}"
+                "QPushButton:hover{background:%4;}"
+                "QPushButton:checked{background:%5;color:%6;border-color:%5;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
                  ui::colors::BG_RAISED(), ui::colors::AMBER(), ui::colors::BG_BASE());
 
-    const QStringList periods = {"3M", "6M", "1Y", "ALL"};
-    for (const QString& lbl : periods) {
+    for (const QString& lbl : QStringList{"3M", "6M", "1Y", "ALL"}) {
         auto* btn = new QPushButton(lbl, period_bar_);
         btn->setCheckable(true);
         btn->setStyleSheet(btn_base);
         btn->setCursor(Qt::PointingHandCursor);
-        if (lbl == QLatin1String("1Y"))
-            btn->setChecked(true);
+        if (lbl == QLatin1String("1Y")) btn->setChecked(true);
         pb_hl->addWidget(btn);
         connect(btn, &QPushButton::clicked, this, [this, lbl, btn]() {
-            // Uncheck siblings
-            if (period_bar_) {
-                const auto btns = period_bar_->findChildren<QPushButton*>();
-                for (auto* b : btns)
+            if (period_bar_)
+                for (auto* b : period_bar_->findChildren<QPushButton*>())
                     b->setChecked(false);
-            }
             btn->setChecked(true);
-            if (nav_chart_)
-                nav_chart_->set_period(lbl);
+            if (nav_chart_) nav_chart_->set_period(lbl);
         });
     }
     pb_hl->addStretch();
-    left_vl->addWidget(period_bar_);
+    vl->addWidget(period_bar_);
 
-    // NavChart
-    nav_chart_ = new NavChart(left);
-    left_vl->addWidget(nav_chart_, 1);
+    // NavChart — fills full width (no committee panel to the right)
+    nav_chart_ = new NavChart(parent);
+    nav_chart_->setMinimumHeight(260);
+    vl->addWidget(nav_chart_, 1);
 
-    // Footnote
     auto* note = new QLabel(
-        QStringLiteral("★ All values are midpoint estimates of disclosed ranges"), left);
+        QStringLiteral("★ Midpoint estimates of disclosed STOCK Act ranges"), parent);
     note->setStyleSheet(
-        QString("QLabel { color:%1; font-size:12px; background:transparent; padding:2px 0; }")
+        QString("QLabel{color:%1;font-size:12px;background:transparent;padding:2px 10px;}")
             .arg(ui::colors::TEXT_TERTIARY()));
-    left_vl->addWidget(note);
+    vl->addWidget(note);
 
-    // ── Right side: committee exposure ────────────────────────────────────────
-    cmte_exposure_ = new QWidget;
-    cmte_exposure_->setStyleSheet(
-        QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
-    // Content filled by populate_chart()
-
-    chart_splitter_->addWidget(left);
-    chart_splitter_->addWidget(cmte_exposure_);
-    chart_splitter_->setStretchFactor(0, 55);
-    chart_splitter_->setStretchFactor(1, 45);
-
-    vl->addWidget(chart_splitter_);
+    // cmte_exposure_ kept as null — committee info now lives in Row 4 RIGHT
+    cmte_exposure_ = nullptr;
+    chart_splitter_ = nullptr;
 }
 
 void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) {
@@ -845,24 +857,14 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     holdings_table_->setFocusPolicy(Qt::NoFocus);
 
     auto* h = holdings_table_->horizontalHeader();
-    h->setMinimumSectionSize(20);
-    h->setSectionResizeMode(0, QHeaderView::Fixed);   // TICKER
-    h->resizeSection(0, 68);
-    h->setSectionResizeMode(1, QHeaderView::Interactive); h->resizeSection(1, 200); h->setStretchLastSection(true);
-    h->setSectionResizeMode(2, QHeaderView::Fixed);   // SECTOR
-    h->resizeSection(2, 96);
-    h->setSectionResizeMode(3, QHeaderView::Fixed);   // SIG
-    h->resizeSection(3, 52);
-    h->setSectionResizeMode(4, QHeaderView::Fixed);   // EST. COST
-    h->resizeSection(4, 90);
-    h->setSectionResizeMode(5, QHeaderView::Fixed);   // EST. VALUE
-    h->resizeSection(5, 90);
-    h->setSectionResizeMode(6, QHeaderView::Fixed);   // P&L
-    h->resizeSection(6, 88);
-    h->setSectionResizeMode(7, QHeaderView::Fixed);   // P&L%
-    h->resizeSection(7, 68);
-    h->setSectionResizeMode(8, QHeaderView::Fixed);   // WT%
-    h->resizeSection(8, 58);
+    h->setMinimumSectionSize(40);
+    // Equal distribution — all columns stretch to share available width
+    // Exception: TICKER and numeric columns fixed narrower; COMPANY gets extra
+    h->setSectionResizeMode(QHeaderView::Stretch);             // all equal by default
+    h->setSectionResizeMode(0, QHeaderView::Fixed);  h->resizeSection(0, 62);  // TICKER
+    h->setSectionResizeMode(3, QHeaderView::Fixed);  h->resizeSection(3, 48);  // SIG
+    h->setSectionResizeMode(7, QHeaderView::Fixed);  h->resizeSection(7, 60);  // P&L%
+    h->setSectionResizeMode(8, QHeaderView::Fixed);  h->resizeSection(8, 52);  // WT%
 
     holdings_table_->setMinimumHeight(200);
 
@@ -917,21 +919,15 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     trades_table_->setFocusPolicy(Qt::NoFocus);
 
     auto* h = trades_table_->horizontalHeader();
-    h->setMinimumSectionSize(20);
-    h->setStretchLastSection(false);
-    h->setSectionResizeMode(0, QHeaderView::Fixed);    // DATE
-    h->resizeSection(0, 92);
-    h->setSectionResizeMode(1, QHeaderView::Fixed);    // TICKER
-    h->resizeSection(1, 52);
-    h->setSectionResizeMode(2, QHeaderView::Fixed);    // B/S
-    h->resizeSection(2, 54);
-    h->setSectionResizeMode(3, QHeaderView::Interactive); h->resizeSection(3, 140);
-    h->setSectionResizeMode(4, QHeaderView::Fixed);    // LAG
-    h->resizeSection(4, 44);
-    h->setSectionResizeMode(5, QHeaderView::Fixed);    // SIGNAL
-    h->resizeSection(5, 64);
-    h->setSectionResizeMode(6, QHeaderView::Fixed);    // COMMITTEE
-    h->resizeSection(6, 130);
+    h->setMinimumSectionSize(40);
+    // Equal distribution — all stretch unless a column has a clear content reason
+    h->setSectionResizeMode(QHeaderView::Stretch);             // all equal by default
+    h->setSectionResizeMode(0, QHeaderView::Fixed);  h->resizeSection(0, 92);  // DATE (10 chars)
+    h->setSectionResizeMode(1, QHeaderView::Fixed);  h->resizeSection(1, 56);  // TICKER (4 chars)
+    h->setSectionResizeMode(2, QHeaderView::Fixed);  h->resizeSection(2, 54);  // B/S (4 chars)
+    h->setSectionResizeMode(4, QHeaderView::Fixed);  h->resizeSection(4, 44);  // LAG (2 chars)
+    h->setSectionResizeMode(5, QHeaderView::Fixed);  h->resizeSection(5, 56);  // SIGNAL (4 chars)
+    // AMOUNT (col 3) and COMMITTEE (col 6) stretch equally with remaining width
 
     trades_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
@@ -953,6 +949,44 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
     vl->addWidget(trades_table_);
+}
+
+void MemberProfilePanel::build_combined_analysis_section(QWidget* parent, QVBoxLayout* vl) {
+    // Row 4 RIGHT: unified panel combining:
+    //   • Committee membership + sector mapping
+    //   • Stock-committee matching (which holdings overlap which committees)
+    //   • Insider signal score + evidence
+    auto* hdr = new QLabel(QStringLiteral("SIGNAL & INSIDER ANALYSIS"), parent);
+    hdr->setStyleSheet(section_header_style());
+    vl->addWidget(hdr);
+
+    auto* scroll = new QScrollArea(parent);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setStyleSheet(
+        QString("QScrollArea{background:%1;border:none;}"
+                "QScrollBar:vertical{width:8px;background:%1;border-radius:4px;}"
+                "QScrollBar::handle:vertical{background:%2;min-height:24px;border-radius:4px;}")
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_BRIGHT()));
+
+    combined_analysis_ = new QWidget;
+    combined_analysis_->setStyleSheet(
+        QString("QWidget{background:%1;}").arg(ui::colors::BG_BASE()));
+    auto* cal = new QVBoxLayout(combined_analysis_);
+    cal->setContentsMargins(12, 8, 12, 10);
+    cal->setSpacing(6);
+
+    auto* placeholder = new QLabel(
+        QStringLiteral("Select a member to view signal and insider analysis."),
+        combined_analysis_);
+    placeholder->setStyleSheet(
+        QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    placeholder->setWordWrap(true);
+    cal->addWidget(placeholder);
+    cal->addStretch();
+
+    scroll->setWidget(combined_analysis_);
+    vl->addWidget(scroll, 1);
 }
 
 void MemberProfilePanel::build_signal_analysis_section(QWidget* parent, QVBoxLayout* vl) {
@@ -1135,11 +1169,10 @@ void MemberProfilePanel::populate(const power_trader::CongressMember& member,
     populate_chart(portfolio, insider_signals, member.committees);
     populate_holdings(portfolio);
     populate_trades(trades);
-    populate_signal_analysis(member, portfolio, trades);
     populate_rankings(member.id);
-    populate_committees(member, insider_signals, trades);
-    populate_sector(portfolio, insider_signals);
     populate_insights(member, portfolio, trades);
+    populate_sector(portfolio, insider_signals);
+    populate_combined_analysis(member, portfolio, trades, insider_signals);
 }
 
 void MemberProfilePanel::populate_header(const power_trader::CongressMember& m,
@@ -1267,8 +1300,8 @@ void MemberProfilePanel::populate_chart(
         }
     }
 
-    // ── Build committee exposure panel ────────────────────────────────────────
-    // Clear old layout
+    // Committee exposure panel removed — info lives in Row 4 combined analysis.
+    if (!cmte_exposure_) return;
     {
         auto* old_layout = cmte_exposure_->layout();
         if (old_layout) {
@@ -1722,6 +1755,199 @@ void MemberProfilePanel::populate_signal_analysis(
         QString("color:%1;font-size:12px;font-weight:600;padding-top:4px;background:transparent;")
             .arg(overlap_pct > 30 ? ui::colors::WARNING : ui::colors::TEXT_SECONDARY()));
     sal->addWidget(sum_lbl);
+}
+
+void MemberProfilePanel::populate_combined_analysis(
+    const power_trader::CongressMember& m,
+    const power_trader::MemberPortfolio& p,
+    const QVector<power_trader::PoliticalTrade>& trades,
+    const QVector<power_trader::CommitteeInsiderSignal>& insider_signals)
+{
+    if (!combined_analysis_) return;
+
+    // Clear existing content then rebuild
+    auto* cal = qobject_cast<QVBoxLayout*>(combined_analysis_->layout());
+    if (!cal) {
+        cal = new QVBoxLayout(combined_analysis_);
+        cal->setContentsMargins(12, 8, 12, 10);
+        cal->setSpacing(6);
+    } else {
+        while (cal->count() > 0) {
+            auto* item = cal->takeAt(0);
+            if (auto* w = item->widget()) w->deleteLater();
+            delete item;
+        }
+    }
+
+    const QString section_ss =
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;"
+                "margin-top:6px;border-bottom:1px solid %2;padding-bottom:3px;")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM());
+    const QString card_ss =
+        QString("QWidget{background:%1;border:1px solid %2;border-radius:3px;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
+    const QString lbl_ss =
+        QString("color:%1;font-size:12px;background:transparent;")
+            .arg(ui::colors::TEXT_SECONDARY());
+    const QString val_ss =
+        QString("color:%1;font-size:12px;font-weight:700;"
+                "font-family:Consolas,monospace;background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY());
+    const QString ticker_ss =
+        QString("color:%1;font-size:12px;font-weight:700;"
+                "font-family:Consolas,monospace;background:transparent;")
+            .arg(ui::colors::CYAN());
+
+    // ── SECTION 1: Committee membership + sector mapping + trade overlap ───────
+    {
+        auto* sec = new QLabel(QStringLiteral("COMMITTEE MEMBERSHIP & OVERLAP"), combined_analysis_);
+        sec->setStyleSheet(section_ss);
+        cal->addWidget(sec);
+
+        const int total_trades = trades.size();
+        QHash<QString, double> cmte_overlap_pct;
+        for (const auto& sig : insider_signals)
+            if (sig.overlap_pct > cmte_overlap_pct.value(sig.committee, -1.0))
+                cmte_overlap_pct[sig.committee] = sig.overlap_pct;
+
+        if (m.committees.isEmpty()) {
+            auto* n = new QLabel(QStringLiteral("No committee data."), combined_analysis_);
+            n->setStyleSheet(lbl_ss);
+            cal->addWidget(n);
+        } else {
+            for (const auto& cmte : m.committees) {
+                int tc = 0;
+                for (const auto& t : trades)
+                    if (t.committee_relevance == cmte) ++tc;
+                const double pct = total_trades > 0 ? 100.0 * tc / total_trades : 0;
+                const double ovl = cmte_overlap_pct.value(cmte, 0.0);
+
+                auto* card = new QWidget(combined_analysis_);
+                card->setStyleSheet(card_ss);
+                auto* cl = new QVBoxLayout(card);
+                cl->setContentsMargins(10, 5, 10, 5);
+                cl->setSpacing(2);
+
+                auto* row1 = new QHBoxLayout;
+                auto* cnl = new QLabel(cmte, card);
+                cnl->setStyleSheet(val_ss);
+                cnl->setWordWrap(true);
+                row1->addWidget(cnl, 1);
+                if (tc > 0) {
+                    auto* pl = new QLabel(
+                        QString("%1 trades · %2% overlap").arg(tc).arg(pct, 0, 'f', 0), card);
+                    pl->setStyleSheet(
+                        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                            .arg(pct > 30 ? ui::colors::WARNING : ui::colors::AMBER()));
+                    row1->addWidget(pl);
+                }
+                cl->addLayout(row1);
+
+                // Sectors regulated by this committee
+                const QStringList secs = committee_sectors(cmte);
+                if (!secs.isEmpty()) {
+                    auto* sl = new QLabel("Sectors: " + secs.join(", "), card);
+                    sl->setStyleSheet(lbl_ss);
+                    sl->setWordWrap(true);
+                    cl->addWidget(sl);
+                }
+                cal->addWidget(card);
+            }
+        }
+    }
+
+    // ── SECTION 2: Stock-committee matching ───────────────────────────────────
+    {
+        auto* sec = new QLabel(QStringLiteral("HOLDING → COMMITTEE CORRELATION"), combined_analysis_);
+        sec->setStyleSheet(section_ss);
+        cal->addWidget(sec);
+
+        QVector<power_trader::MemberHolding> overlap_holdings;
+        for (const auto& h2 : p.holdings)
+            if (h2.committee_overlap)
+                overlap_holdings.append(h2);
+
+        if (overlap_holdings.isEmpty()) {
+            auto* n = new QLabel(QStringLiteral("No holdings overlap committee sectors."), combined_analysis_);
+            n->setStyleSheet(lbl_ss);
+            cal->addWidget(n);
+        } else {
+            for (const auto& h : overlap_holdings) {
+                auto* card = new QWidget(combined_analysis_);
+                card->setStyleSheet(card_ss);
+                auto* cl = new QHBoxLayout(card);
+                cl->setContentsMargins(10, 5, 10, 5);
+                cl->setSpacing(8);
+
+                auto* tl = new QLabel(h.ticker, card);
+                tl->setStyleSheet(ticker_ss);
+                tl->setFixedWidth(56);
+                cl->addWidget(tl);
+
+                auto* nl = new QLabel(h.asset_name, card);
+                nl->setStyleSheet(lbl_ss);
+                cl->addWidget(nl, 1);
+
+                auto* cmte_lbl = new QLabel("● " + h.committee_name, card);
+                cmte_lbl->setStyleSheet(
+                    QString("color:%1;font-size:12px;background:transparent;")
+                        .arg(ui::colors::AMBER()));
+                cmte_lbl->setWordWrap(true);
+                cl->addWidget(cmte_lbl);
+
+                cal->addWidget(card);
+            }
+        }
+    }
+
+    // ── SECTION 3: Insider signal score ──────────────────────────────────────
+    {
+        auto* sec = new QLabel(QStringLiteral("INSIDER SIGNAL INDEX"), combined_analysis_);
+        sec->setStyleSheet(section_ss);
+        cal->addWidget(sec);
+
+        // Average signal across all trades
+        double avg_sig = 0; int n = 0;
+        for (const auto& t : trades) { avg_sig += t.signal_score; ++n; }
+        if (n > 0) avg_sig /= n;
+
+        int overlap_count = 0;
+        for (const auto& h : p.holdings)
+            if (h.committee_overlap) ++overlap_count;
+        const double cmte_pct = p.holdings.isEmpty() ? 0
+            : 100.0 * overlap_count / p.holdings.size();
+
+        auto* card = new QWidget(combined_analysis_);
+        card->setStyleSheet(card_ss);
+        auto* cl = new QVBoxLayout(card);
+        cl->setContentsMargins(10, 6, 10, 6);
+        cl->setSpacing(4);
+
+        auto add_kv = [&](const QString& label, const QString& val) {
+            auto* row = new QHBoxLayout;
+            auto* ll = new QLabel(label, card); ll->setStyleSheet(lbl_ss);
+            auto* vl = new QLabel(val, card);
+            vl->setStyleSheet(val_ss);
+            vl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            row->addWidget(ll); row->addStretch(); row->addWidget(vl);
+            cl->addLayout(row);
+        };
+        add_kv("Avg trade signal:",
+               QString::number(avg_sig, 'f', 0) + "/100");
+        add_kv("Holdings with committee overlap:",
+               QString("%1 / %2  (%3%)")
+                   .arg(overlap_count)
+                   .arg(p.holdings.size())
+                   .arg(cmte_pct, 0, 'f', 0));
+        add_kv("Avg disclosure lag:",
+               QString::number(
+                   power_trader::PowerTraderService::instance()
+                       .avg_disclosure_lag(m.id), 'f', 0) + "d");
+
+        cal->addWidget(card);
+    }
+
+    cal->addStretch();
 }
 
 void MemberProfilePanel::populate_committees(
