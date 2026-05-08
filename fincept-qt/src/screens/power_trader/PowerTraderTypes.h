@@ -265,6 +265,57 @@ struct PowerTraderSummary {
     bool is_demo = false;  // true when fallback/mock data is shown
 };
 
+// ── Signal Builder ────────────────────────────────────────────────────────────
+
+/// Per-trade decomposed factor scores (0–100 each).
+/// Committee/size/lag/herd computed from available data.
+/// Timing/bill/lobbying/history are reserved for future data integration.
+struct TradeFactorScores {
+    QString trade_id;
+    double  committee = 0;  // trade in committee-regulated sector
+    double  size      = 0;  // dollar amount of the trade
+    double  lag       = 0;  // disclosure timing (shorter or over-deadline = higher)
+    double  herd      = 0;  // coordinated cluster of members same ticker
+    double  timing    = 0;  // proximity to legislation (pending Congress.gov)
+    double  bill      = 0;  // member sponsored/voted related bill (pending)
+    double  lobbying  = 0;  // company lobbied member's committee (pending LDA)
+    double  history   = 0;  // member's historical committee-trade record
+};
+
+/// User-configurable signal scoring preset.
+/// Weights are multipliers: 0 = ignore factor, 1.0 = standard, 2.0 = double.
+struct SignalPreset {
+    QString id;               // slug (e.g. "default", "cmte_heavy") or uuid for user presets
+    QString name;
+    bool    builtin  = false; // built-in presets cannot be deleted
+
+    double  w_committee = 1.0;
+    double  w_size      = 1.0;
+    double  w_lag       = 1.0;
+    double  w_herd      = 1.0;
+    double  w_timing    = 0.0;   // 0 until Congress.gov integrated
+    double  w_bill      = 0.0;
+    double  w_lobbying  = 0.0;
+    double  w_history   = 0.5;
+
+    /// Compute a 0–100 score from base factors and this preset's weights.
+    double apply(const TradeFactorScores& f) const {
+        const double weighted =
+              w_committee * f.committee
+            + w_size      * f.size
+            + w_lag       * f.lag
+            + w_herd      * f.herd
+            + w_timing    * f.timing
+            + w_bill      * f.bill
+            + w_lobbying  * f.lobbying
+            + w_history   * f.history;
+        const double total_w =
+              w_committee + w_size + w_lag + w_herd
+            + w_timing    + w_bill + w_lobbying + w_history;
+        return total_w > 0.0 ? qMin(100.0, weighted / total_w) : 0.0;
+    }
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 inline QString direction_label(TradeDirection d) {

@@ -20,6 +20,7 @@ class TradesFeedPanel;
 class CommitteePanel;
 class PartyPanel;
 class InsiderWatchPanel;
+class SignalBuilderPanel;
 class CabinetPanel;
 }
 
@@ -84,6 +85,7 @@ class PowerTraderScreen : public QWidget {
     screens::PartyPanel*         party_panel_      = nullptr;
     screens::InsiderWatchPanel*  insider_panel_    = nullptr;
     screens::CabinetPanel*       cabinet_panel_    = nullptr;
+    screens::SignalBuilderPanel* signal_panel_     = nullptr;
 
     // ── Loading / error / content stack ──────────────────────────────────────
     QStackedWidget* stack_           = nullptr;

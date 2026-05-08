@@ -4,6 +4,7 @@
 #include "screens/power_trader/CabinetPanel.h"
 #include "screens/power_trader/CommitteePanel.h"
 #include "screens/power_trader/InsiderWatchPanel.h"
+#include "screens/power_trader/SignalBuilderPanel.h"
 #include "screens/power_trader/MemberProfilePanel.h"
 #include "screens/power_trader/OverviewPanel.h"
 #include "screens/power_trader/PartyPanel.h"
@@ -118,6 +119,7 @@ void PowerTraderScreen::build_ui() {
             committee_panel_ = new screens::CommitteePanel;
             party_panel_     = new screens::PartyPanel;
             insider_panel_   = new screens::InsiderWatchPanel;
+            signal_panel_    = new screens::SignalBuilderPanel;
 
             tab_widget_->addTab(overview_panel_,  "Overview");
             tab_widget_->addTab(rankings_panel_,  "Rankings");
@@ -126,6 +128,7 @@ void PowerTraderScreen::build_ui() {
             tab_widget_->addTab(committee_panel_, "By Committee");
             tab_widget_->addTab(party_panel_,     "Party Intel");
             tab_widget_->addTab(insider_panel_,   "⚠ Insider Watch");
+            tab_widget_->addTab(signal_panel_,    "Signal Builder");
 
             connect(overview_panel_,  &screens::OverviewPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
@@ -136,6 +139,8 @@ void PowerTraderScreen::build_ui() {
             connect(committee_panel_, &screens::CommitteePanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(signal_panel_,    &screens::SignalBuilderPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(member_panel_,    &screens::MemberProfilePanel::navigate_to_markets,
                     this, [this](const QString& ticker) {
@@ -422,6 +427,7 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
     committee_panel_->set_data(summary, committee_groups);
     party_panel_    ->set_data(summary);
     insider_panel_  ->set_data(watch_list);
+    signal_panel_   ->set_data(summary);
 
     // Pre-select highest-alpha member on first load
     if (selected_member_id_.isEmpty() && !summary.members.isEmpty()) {
@@ -491,6 +497,7 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     committee_panel_->set_data(filtered, cmte_grps);
     party_panel_    ->set_data(filtered);
     insider_panel_  ->set_data(watch);
+    signal_panel_   ->set_data(filtered);
 }
 
 } // namespace fincept::power_trader

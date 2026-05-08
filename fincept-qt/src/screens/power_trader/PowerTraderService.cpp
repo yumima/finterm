@@ -1016,6 +1016,100 @@ QVector<SectorExposure> PowerTraderService::cabinet_sector_exposure() const {
     return result;
 }
 
+// ── Signal Builder ────────────────────────────────────────────────────────────
+
+QVector<TradeFactorScores> PowerTraderService::compute_trade_base_scores() const {
+    // Build herd map: ticker → list of (member_id, date) for cluster detection
+    QHash<QString, QVector<QPair<QString, QDate>>> herd_map;
+    for (const auto& t : summary_.recent_trades)
+        if (!t.ticker.isEmpty())
+            herd_map[t.ticker].append({t.member_id, t.transaction_date});
+
+    // Member avg signal (0-100) for history factor
+    QHash<QString, double> member_avg_sig;
+    QHash<QString, int>    member_trade_cnt;
+    for (const auto& t : summary_.recent_trades) {
+        member_avg_sig[t.member_id] += t.signal_score;
+        member_trade_cnt[t.member_id]++;
+    }
+
+    QVector<TradeFactorScores> result;
+    result.reserve(summary_.recent_trades.size());
+
+    for (const auto& t : summary_.recent_trades) {
+        TradeFactorScores s;
+        s.trade_id = t.id;
+
+        // ── Committee (0–100) ─────────────────────────────────────────────────
+        s.committee = t.committee_relevance.isEmpty() ? 15.0 : 85.0;
+
+        // ── Size (0–100) ──────────────────────────────────────────────────────
+        const double mid = (t.amount_low + t.amount_high) / 2.0;
+        if      (mid >= 1'000'000) s.size = 100;
+        else if (mid >= 500'000)   s.size = 85;
+        else if (mid >= 250'000)   s.size = 70;
+        else if (mid >= 100'000)   s.size = 55;
+        else if (mid >= 50'000)    s.size = 40;
+        else if (mid >= 15'000)    s.size = 25;
+        else                       s.size = 10;
+
+        // ── Lag (0–100) ───────────────────────────────────────────────────────
+        // Short lag = actionable; over deadline = suspicious flag
+        const int lag = t.disclosure_lag_days;
+        if      (lag <= 5)  s.lag = 95;  // filed immediately — high conviction
+        else if (lag <= 14) s.lag = 75;
+        else if (lag <= 30) s.lag = 50;
+        else if (lag <= 44) s.lag = 25;
+        else                s.lag = 80;  // STOCK Act violation — flagged high
+
+        // ── Herd (0–100) ──────────────────────────────────────────────────────
+        // Count other members trading same ticker within 14 days
+        const auto& peers = herd_map.value(t.ticker);
+        int cluster = 0;
+        for (const auto& [pid, pdate] : peers)
+            if (pid != t.member_id && qAbs(pdate.daysTo(t.transaction_date)) <= 14)
+                ++cluster;
+        s.herd = qMin(100.0, cluster * 30.0);
+
+        // ── History (0–100) ───────────────────────────────────────────────────
+        // Member's track record: avg signal score across all their trades
+        const int cnt = member_trade_cnt.value(t.member_id, 0);
+        s.history = cnt > 0
+            ? qMin(100.0, member_avg_sig.value(t.member_id) / cnt)
+            : 0.0;
+
+        // timing / bill / lobbying stay 0 until external data integrated
+
+        result.append(s);
+    }
+    return result;
+}
+
+QVector<SignalPreset> PowerTraderService::builtin_presets() {
+    return {
+        {
+            "default", "Default", true,
+            1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.5
+        },
+        {
+            "committee_heavy", "Committee Heavy", true,
+            2.0, 0.8, 0.8, 1.0, 0.0, 0.0, 0.0, 0.5
+        },
+        {
+            "herd_focus", "Herd Focus", true,
+            1.5, 0.5, 0.5, 2.0, 0.0, 0.0, 0.0, 0.5
+        },
+        {
+            "size_first", "Large Trades", true,
+            0.8, 2.0, 0.8, 0.8, 0.0, 0.0, 0.0, 0.5
+        },
+        {
+            "timing_sensitive", "Fast Filers", true,
+            1.0, 1.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.5
+        },
+    };
+}
+
 // ── Committee groups ──────────────────────────────────────────────────────────
 
 QVector<CommitteeGroup> PowerTraderService::committee_groups() const {

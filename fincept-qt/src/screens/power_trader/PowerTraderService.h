@@ -58,6 +58,15 @@ class PowerTraderService : public QObject {
     /// Compute multi-factor insider watch list, sorted by insider_score desc.
     QVector<InsiderWatchEntry> insider_watch_list() const;
 
+    // ── Signal Builder ────────────────────────────────────────────────────────
+    /// Decompose every trade in the current summary into its 8 raw factor scores.
+    /// Results are indexed by trade_id and used by SignalBuilderPanel for
+    /// real-time score preview when the user adjusts factor weights.
+    QVector<TradeFactorScores> compute_trade_base_scores() const;
+
+    /// Built-in presets exposed for the Signal Builder preset selector.
+    static QVector<SignalPreset> builtin_presets();
+
     // ── Rankings ──────────────────────────────────────────────────────────────
     /// Return all members ranked by the given dimension (rank 1 = best/highest).
     QVector<RankedMember> ranked_members(RankingDimension dim) const;
