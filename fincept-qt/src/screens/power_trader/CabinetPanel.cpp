@@ -15,13 +15,13 @@ namespace fincept::screens {
 // ── Styling helpers ───────────────────────────────────────────────────────────
 
 static QString section_hdr() {
-    return QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+    return QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                    "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
 
 static QString table_ss() {
-    return QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
+    return QString("QTableWidget{background:%1;color:%2;border:none;font-size:13px;"
                    "font-family:Consolas,monospace;gridline-color:transparent;}"
                    "QTableWidget::item{padding:5px 10px;border-bottom:1px solid %3;}"
                    "QTableWidget::item:selected{background:rgba(217,119,6,0.18);color:%2;}"
@@ -35,7 +35,7 @@ static QString table_ss() {
 static QString hdr_ss() {
     return QString("QHeaderView::section{background:%1;color:%2;border:none;"
                    "border-bottom:2px solid %3;border-right:1px solid %4;"
-                   "padding:5px 10px;font-size:12px;font-weight:700;}")
+                   "padding:5px 10px;font-size:13px;font-weight:700;}")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::AMBER(), ui::colors::BORDER_MED());
 }
@@ -56,13 +56,13 @@ static QWidget* make_stat_tile(const QString& label, QLabel*& value_out, QWidget
     vl->setSpacing(2);
 
     auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;"
+    lbl->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:0.5px;"
                                "background:transparent;")
                            .arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
 
     value_out = new QLabel(QStringLiteral("—"));
-    value_out->setStyleSheet(QString("color:%1;font-size:18px;font-weight:700;"
+    value_out->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;"
                                      "font-family:Consolas,monospace;background:transparent;")
                                  .arg(ui::colors::TEXT_PRIMARY()));
     vl->addWidget(value_out);
@@ -95,7 +95,7 @@ void CabinetPanel::build_loading_page() {
     auto* ll   = new QVBoxLayout(page);
     auto* lbl  = new QLabel("Loading executive branch financial disclosures…");
     lbl->setAlignment(Qt::AlignCenter);
-    lbl->setStyleSheet(QString("color:%1;font-size:13px;")
+    lbl->setStyleSheet(QString("color:%1;font-size:14px;")
                            .arg(ui::colors::TEXT_SECONDARY()));
     ll->addStretch(); ll->addWidget(lbl); ll->addStretch();
     stack_->addWidget(page);  // index 0
@@ -117,13 +117,13 @@ void CabinetPanel::build_content_page() {
         hl->setSpacing(2);
 
         auto* title = new QLabel("EXECUTIVE BRANCH FINANCIAL DISCLOSURES  ·  OGE FORM 278");
-        title->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:1px;")
+        title->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;letter-spacing:1px;")
                                  .arg(ui::colors::AMBER()));
         hl->addWidget(title);
 
         source_note_ = new QLabel;
         source_note_->setStyleSheet(
-            QString("color:%1;font-size:12px;font-style:italic;")
+            QString("color:%1;font-size:13px;font-style:italic;")
                 .arg(ui::colors::TEXT_TERTIARY()));
         source_note_->setWordWrap(true);
         hl->addWidget(source_note_);
@@ -205,7 +205,7 @@ void CabinetPanel::build_content_page() {
             QTabBar::tab {
                 background:%2; color:%3; padding:6px 16px;
                 border:0; border-bottom:2px solid transparent;
-                font-size:12px; font-weight:700; letter-spacing:0.5px;
+                font-size:13px; font-weight:700; letter-spacing:0.5px;
             }
             QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
             QTabBar::tab:hover:!selected { color:%5; }
@@ -288,7 +288,7 @@ void CabinetPanel::build_content_page() {
 
         h_header_ = new QLabel;
         h_header_->setStyleSheet(
-            QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+            QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                     "padding:10px 14px;border-bottom:1px solid %3;")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         hp->addWidget(h_header_);
@@ -335,14 +335,14 @@ void CabinetPanel::build_content_page() {
 
         c_header_ = new QLabel;
         c_header_->setStyleSheet(
-            QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+            QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                     "padding:10px 14px;border-bottom:1px solid %3;")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         cfl->addWidget(c_header_);
 
         c_domain_ = new QLabel;
         c_domain_->setStyleSheet(
-            QString("color:%1;font-size:12px;padding:8px 14px;"
+            QString("color:%1;font-size:13px;padding:8px 14px;"
                     "background:%2;border-bottom:1px solid %3;")
                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
         c_domain_->setWordWrap(true);
@@ -371,7 +371,7 @@ void CabinetPanel::build_content_page() {
 
         s_header_ = new QLabel;
         s_header_->setStyleSheet(
-            QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+            QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                     "padding:10px 14px;border-bottom:1px solid %3;")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         sp->addWidget(s_header_);
@@ -476,7 +476,7 @@ void CabinetPanel::populate_stat_tiles() {
     if (!summary_.members.isEmpty()) avg /= summary_.members.size();
     stat_avg_conf_->setText(QString::number(avg,'f',0) + "/100");
     stat_avg_conf_->setStyleSheet(
-        QString("color:%1;font-size:16px;font-weight:700;font-family:Consolas,monospace;"
+        QString("color:%1;font-size:18px;font-weight:700;font-family:Consolas,monospace;"
                 "background:transparent;").arg(conflict_color(avg)));
 
     auto ranked = power_trader::PowerTraderService::instance().cabinet_conflict_ranking();
@@ -485,7 +485,7 @@ void CabinetPanel::populate_stat_tiles() {
             ranked.first().full_name.split(' ').last() + " " +
             QString::number(ranked.first().conflict_score,'f',0));
         stat_top_conf_->setStyleSheet(
-            QString("color:%1;font-size:14px;font-weight:700;"
+            QString("color:%1;font-size:15px;font-weight:700;"
                     "font-family:Consolas,monospace;background:transparent;")
                 .arg(conflict_color(ranked.first().conflict_score)));
     }
@@ -646,7 +646,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
             .arg(m.full_name)
             .arg(m.conflict_score, 0, 'f', 0));
     c_header_->setStyleSheet(
-        QString("background:%1;font-size:12px;font-weight:700;"
+        QString("background:%1;font-size:13px;font-weight:700;"
                 "padding:10px 14px;border-bottom:1px solid %2;color:%3;")
             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
                  conflict_color(m.conflict_score)));
@@ -670,7 +670,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
 
     if (m.conflict_flags.isEmpty()) {
         auto* none_lbl = new QLabel("No conflict flags detected — holdings do not overlap regulatory domain.");
-        none_lbl->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        none_lbl->setStyleSheet(QString("color:%1;font-size:13px;").arg(ui::colors::TEXT_SECONDARY()));
         none_lbl->setWordWrap(true);
         c_flags_layout_->addWidget(none_lbl);
     } else {
@@ -678,7 +678,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
             auto* lbl = new QLabel("⚠  " + flag);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(
-                QString("color:#ef4444;font-size:12px;"
+                QString("color:#ef4444;font-size:13px;"
                         "background:rgba(239,68,68,0.08);"
                         "border-left:3px solid #ef4444;"
                         "padding:6px 10px;border-radius:2px;"));
@@ -687,7 +687,7 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
         // Show conflict holdings table
         auto* ch_hdr = new QLabel("CONFLICTED HOLDINGS DETAIL");
         ch_hdr->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;"
+            QString("color:%1;font-size:13px;font-weight:700;letter-spacing:0.5px;"
                     "margin-top:12px;").arg(ui::colors::TEXT_TERTIARY()));
         c_flags_layout_->addWidget(ch_hdr);
 
@@ -702,17 +702,17 @@ void CabinetPanel::populate_conflicts_tab(const power_trader::CabinetMember& m) 
             hll->setSpacing(8);
 
             auto* an = new QLabel(h.asset_name);
-            an->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;")
+            an->setStyleSheet(QString("color:%1;font-size:13px;font-weight:600;")
                                   .arg(ui::colors::TEXT_PRIMARY()));
             hll->addWidget(an);
             hll->addStretch();
 
             auto* tk = new QLabel(h.ticker.isEmpty() ? h.asset_type : h.ticker);
-            tk->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::CYAN()));
+            tk->setStyleSheet(QString("color:%1;font-size:13px;").arg(ui::colors::CYAN()));
             hll->addWidget(tk);
 
             auto* vr = new QLabel(h.value_range_label);
-            vr->setStyleSheet(QString("color:%1;font-size:12px;font-family:Consolas,monospace;")
+            vr->setStyleSheet(QString("color:%1;font-size:13px;font-family:Consolas,monospace;")
                                   .arg(ui::colors::AMBER()));
             hll->addWidget(vr);
             c_flags_layout_->addWidget(hl);

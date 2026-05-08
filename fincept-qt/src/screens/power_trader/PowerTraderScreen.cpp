@@ -61,7 +61,7 @@ void PowerTraderScreen::build_ui() {
         loading_lbl_ = new QLabel("Loading congressional trade data…");
         loading_lbl_->setAlignment(Qt::AlignCenter);
         loading_lbl_->setStyleSheet(
-            QString("color:%1; font-size:14px;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color:%1; font-size:15px;").arg(ui::colors::TEXT_SECONDARY()));
         ll->addStretch(); ll->addWidget(loading_lbl_); ll->addStretch();
     }
     stack_->addWidget(loading_page);
@@ -74,70 +74,83 @@ void PowerTraderScreen::build_ui() {
         error_lbl_->setAlignment(Qt::AlignCenter);
         error_lbl_->setWordWrap(true);
         error_lbl_->setStyleSheet(
-            QString("color:%1; font-size:13px;").arg(ui::colors::NEGATIVE()));
+            QString("color:%1; font-size:14px;").arg(ui::colors::NEGATIVE()));
         el->addStretch(); el->addWidget(error_lbl_); el->addStretch();
     }
     stack_->addWidget(error_page);
 
-    // Page 2 — content
+    // Page 2 — content: view_stack_ switches between Congress and Cabinet views
     content_area_ = new QWidget;
     {
         auto* hl = new QHBoxLayout(content_area_);
         hl->setContentsMargins(0, 0, 0, 0);
         hl->setSpacing(0);
-        hl->addWidget(build_member_sidebar());
 
-        // ── Tab bar ───────────────────────────────────────────────────────────
-        tab_widget_ = new QTabWidget;
-        tab_widget_->setDocumentMode(true);
-        tab_widget_->setStyleSheet(QString(R"(
-            QTabWidget::pane { border:0; background:%1; }
-            QTabBar::tab {
-                background:%2; color:%3; padding:8px 16px;
-                border:0; border-bottom:2px solid transparent;
-                font-size:12px; font-weight:700; letter-spacing:1px;
-            }
-            QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
-            QTabBar::tab:hover:!selected { color:%5; }
-        )").arg(ui::colors::BG_BASE(), ui::colors::BG_SURFACE(),
-                ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(),
-                ui::colors::TEXT_PRIMARY()));
+        view_stack_ = new QStackedWidget(content_area_);
 
-        overview_panel_  = new screens::OverviewPanel;
-        rankings_panel_  = new screens::RankingsPanel;
-        member_panel_    = new screens::MemberProfilePanel;
-        feed_panel_      = new screens::TradesFeedPanel;
-        committee_panel_ = new screens::CommitteePanel;
-        party_panel_     = new screens::PartyPanel;
-        insider_panel_   = new screens::InsiderWatchPanel;
-        cabinet_panel_   = new screens::CabinetPanel;
+        // ── Page 0: Congress view (sidebar + tabs) ────────────────────────────
+        congress_view_ = new QWidget(view_stack_);
+        {
+            auto* cl = new QHBoxLayout(congress_view_);
+            cl->setContentsMargins(0, 0, 0, 0);
+            cl->setSpacing(0);
+            cl->addWidget(build_member_sidebar());
 
-        tab_widget_->addTab(overview_panel_,  "Overview");
-        tab_widget_->addTab(rankings_panel_,  "Rankings");
-        tab_widget_->addTab(member_panel_,    "Member");
-        tab_widget_->addTab(feed_panel_,      "Feed");
-        tab_widget_->addTab(committee_panel_, "By Committee");
-        tab_widget_->addTab(party_panel_,     "Party Intel");
-        tab_widget_->addTab(insider_panel_,   "⚠ Insider Watch");
-        tab_widget_->addTab(cabinet_panel_,   "Cabinet");
+            tab_widget_ = new QTabWidget;
+            tab_widget_->setDocumentMode(true);
+            tab_widget_->setStyleSheet(QString(R"(
+                QTabWidget::pane { border:0; background:%1; }
+                QTabBar::tab {
+                    background:%2; color:%3; padding:8px 16px;
+                    border:0; border-bottom:2px solid transparent;
+                    font-size:14px; font-weight:700; letter-spacing:1px;
+                }
+                QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
+                QTabBar::tab:hover:!selected { color:%5; }
+            )").arg(ui::colors::BG_BASE(), ui::colors::BG_SURFACE(),
+                    ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(),
+                    ui::colors::TEXT_PRIMARY()));
 
-        // Connections
-        connect(overview_panel_,  &screens::OverviewPanel::member_selected,
-                this, &PowerTraderScreen::on_member_selected);
-        connect(rankings_panel_,  &screens::RankingsPanel::member_selected,
-                this, &PowerTraderScreen::on_member_selected);
-        connect(feed_panel_,      &screens::TradesFeedPanel::member_selected,
-                this, &PowerTraderScreen::on_member_selected);
-        connect(committee_panel_, &screens::CommitteePanel::member_selected,
-                this, &PowerTraderScreen::on_member_selected);
-        connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
-                this, &PowerTraderScreen::on_member_selected);
-        connect(member_panel_,    &screens::MemberProfilePanel::navigate_to_markets,
-                this, [this](const QString& ticker) {
-                    emit navigate_to_screen(QStringLiteral("markets"), ticker);
-                });
+            overview_panel_  = new screens::OverviewPanel;
+            rankings_panel_  = new screens::RankingsPanel;
+            member_panel_    = new screens::MemberProfilePanel;
+            feed_panel_      = new screens::TradesFeedPanel;
+            committee_panel_ = new screens::CommitteePanel;
+            party_panel_     = new screens::PartyPanel;
+            insider_panel_   = new screens::InsiderWatchPanel;
 
-        hl->addWidget(tab_widget_, 1);
+            tab_widget_->addTab(overview_panel_,  "Overview");
+            tab_widget_->addTab(rankings_panel_,  "Rankings");
+            tab_widget_->addTab(member_panel_,    "Member");
+            tab_widget_->addTab(feed_panel_,      "Feed");
+            tab_widget_->addTab(committee_panel_, "By Committee");
+            tab_widget_->addTab(party_panel_,     "Party Intel");
+            tab_widget_->addTab(insider_panel_,   "⚠ Insider Watch");
+
+            connect(overview_panel_,  &screens::OverviewPanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(rankings_panel_,  &screens::RankingsPanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(feed_panel_,      &screens::TradesFeedPanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(committee_panel_, &screens::CommitteePanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+            connect(member_panel_,    &screens::MemberProfilePanel::navigate_to_markets,
+                    this, [this](const QString& ticker) {
+                        emit navigate_to_screen(QStringLiteral("markets"), ticker);
+                    });
+
+            cl->addWidget(tab_widget_, 1);
+        }
+        view_stack_->addWidget(congress_view_);  // index 0
+
+        // ── Page 1: Cabinet view (full-width, no congress sidebar) ────────────
+        cabinet_panel_ = new screens::CabinetPanel(view_stack_);
+        view_stack_->addWidget(cabinet_panel_);  // index 1
+
+        hl->addWidget(view_stack_, 1);
     }
     stack_->addWidget(content_area_);
 
@@ -159,15 +172,15 @@ QWidget* PowerTraderScreen::build_top_bar() {
     row1->setSpacing(10);
 
     auto* title = new QLabel("POWER TRADER");
-    title->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700; "
+    title->setStyleSheet(QString("color:%1; font-size:15px; font-weight:700; "
                                  "letter-spacing:2px;").arg(ui::colors::AMBER()));
 
     auto* sub = new QLabel("Congressional Stock Disclosures · STOCK Act");
-    sub->setStyleSheet(QString("color:%1; font-size:12px;")
+    sub->setStyleSheet(QString("color:%1; font-size:13px;")
                            .arg(ui::colors::TEXT_SECONDARY()));
 
     timestamp_lbl_ = new QLabel;
-    timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:12px;")
+    timestamp_lbl_->setStyleSheet(QString("color:%1; font-size:13px;")
                                        .arg(ui::colors::TEXT_TERTIARY()));
 
     refresh_btn_ = new QPushButton("\xe2\x9f\xb3 Refresh");
@@ -175,7 +188,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     refresh_btn_->setCursor(Qt::PointingHandCursor);
     refresh_btn_->setStyleSheet(
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "border-radius:2px;padding:1px 8px;font-size:12px;font-weight:600;}"
+                "border-radius:2px;padding:1px 8px;font-size:13px;font-weight:600;}"
                 "QPushButton:hover{border-color:%1;background:%3;}")
             .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED()));
     connect(refresh_btn_, &QPushButton::clicked, this, [this]() {
@@ -193,7 +206,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     row2->setSpacing(0);
 
     auto* src_lbl = new QLabel("Data:");
-    src_lbl->setStyleSheet(QString("color:%1; font-size:12px;")
+    src_lbl->setStyleSheet(QString("color:%1; font-size:13px;")
                                .arg(ui::colors::TEXT_TERTIARY()));
     row2->addWidget(src_lbl);
 
@@ -205,7 +218,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
         {"OGE Form 278",     "https://www.oge.gov/web/oge.nsf/Public+Financial+Disclosure+Reports"},
     };
     const QString btn_ss =
-        QString("QPushButton{color:%1;font-size:12px;text-decoration:underline;"
+        QString("QPushButton{color:%1;font-size:13px;text-decoration:underline;"
                 "background:transparent;border:none;padding:0;margin:0;}"
                 "QPushButton:hover{color:%2;}")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER());
@@ -214,7 +227,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     for (const auto& src : sources) {
         if (!first) {
             auto* sep = new QLabel("\xc2\xb7");
-            sep->setStyleSheet(QString("color:%1; font-size:12px; padding:0 5px;")
+            sep->setStyleSheet(QString("color:%1; font-size:13px; padding:0 5px;")
                                    .arg(ui::colors::BORDER_BRIGHT()));
             row2->addWidget(sep);
         }
@@ -243,7 +256,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
         QStringLiteral("⚠  DEMO DATA  ·  Live congressional disclosure source unavailable  ·  "
                         "Connect to the internet and refresh to load real data"),
         demo_banner_);
-    blbl->setStyleSheet(QStringLiteral("color:#fbbf24;font-size:12px;font-weight:600;"
+    blbl->setStyleSheet(QStringLiteral("color:#fbbf24;font-size:13px;font-weight:600;"
                                        "background:transparent;"));
     bl->addWidget(blbl);
     bl->addStretch();
@@ -267,7 +280,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
     hl->setSpacing(4);
 
     auto* lbl = new QLabel("BODY:");
-    lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+    lbl->setStyleSheet(QString("color:%1; font-size:13px; font-weight:700; letter-spacing:0.5px;")
                            .arg(ui::colors::TEXT_TERTIARY()));
     hl->addWidget(lbl);
 
@@ -284,7 +297,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
     const QString pill_base =
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;"
-                "border-radius:2px;padding:3px 12px;font-size:12px;font-weight:700;"
+                "border-radius:2px;padding:3px 12px;font-size:13px;font-weight:700;"
                 "letter-spacing:0.5px;}"
                 "QPushButton:checked{background:%4;color:%5;border-color:%4;}"
                 "QPushButton:hover:!checked{border-color:%2;}")
@@ -309,7 +322,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
     hl->addStretch();
 
     auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
-    info->setStyleSheet(QString("color:%1; font-size:12px; font-style:italic;")
+    info->setStyleSheet(QString("color:%1; font-size:13px; font-style:italic;")
                             .arg(ui::colors::TEXT_TERTIARY()));
     hl->addWidget(info);
 
@@ -329,7 +342,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     hdr->setFixedHeight(32);
     hdr->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     hdr->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;"
+        QString("color:%1; font-size:13px; font-weight:700; letter-spacing:0.5px;"
                 "padding-left:10px; border-bottom:1px solid %2;")
             .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
     vl->addWidget(hdr);
@@ -339,7 +352,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     member_search_->setFixedHeight(30);
     member_search_->setStyleSheet(
         QString("QLineEdit{background:%1;color:%2;border:none;border-bottom:1px solid %3;"
-                "padding:0 8px;font-size:12px;}"
+                "padding:0 8px;font-size:13px;}"
                 "QLineEdit:focus{border-bottom-color:%4;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::BORDER_DIM(), ui::colors::AMBER()));
@@ -358,7 +371,7 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     member_list_->setStyleSheet(
         QString("QListWidget{background:%1;border:none;outline:none;}"
                 "QListWidget::item{padding:5px 10px;border-bottom:1px solid %2;"
-                "font-size:12px;color:%3;}"
+                "font-size:13px;color:%3;}"
                 "QListWidget::item:selected{background:rgba(217,119,6,0.15);color:%4;}"
                 "QListWidget::item:hover:!selected{background:%5;}"
                 "QScrollBar:vertical{width:4px;background:%1;}"
@@ -483,10 +496,12 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     active_body_ = body;
 
     if (body == BodyFilter::Cabinet) {
-        tab_widget_->setCurrentWidget(cabinet_panel_);
+        view_stack_->setCurrentIndex(1);   // full-width cabinet page
         cabinet_panel_->activate();
         return;
     }
+
+    view_stack_->setCurrentIndex(0);   // congress view
 
     if (!PowerTraderService::instance().is_loaded()) return;
 

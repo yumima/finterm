@@ -40,7 +40,7 @@ static const char* party_color(const QString& p) {
 
 static QString section_header_style() {
     return QString(
-        "QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
+        "QLabel { background:%1; color:%2; font-size:13px; font-weight:700;"
         " letter-spacing:0.5px; padding:6px 12px; border-bottom:1px solid %3; }")
         .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
 }
@@ -168,7 +168,7 @@ void NavChart::paintEvent(QPaintEvent*) {
 
     if (visible_series_.isEmpty()) {
         p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-        p.setFont(QFont("Consolas", 11));
+        p.setFont(QFont("Consolas", 13));
         p.drawText(rect(), Qt::AlignCenter, QStringLiteral("No portfolio history available"));
         return;
     }
@@ -196,7 +196,7 @@ void NavChart::paintEvent(QPaintEvent*) {
     };
 
     // ── Y-axis grid lines + labels ────────────────────────────────────────────
-    p.setFont(QFont("Consolas", 10));
+    p.setFont(QFont("Consolas", 12));
     const int kGridLines = 4;
     for (int i = 0; i <= kGridLines; ++i) {
         const double frac = double(i) / kGridLines;
@@ -223,7 +223,7 @@ void NavChart::paintEvent(QPaintEvent*) {
     }
 
     // ── X-axis date labels (first + last + maybe mid) ─────────────────────────
-    p.setFont(QFont("Consolas", 10));
+    p.setFont(QFont("Consolas", 12));
     p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
     const QString fmt = (period_ == QLatin1String("3M") || period_ == QLatin1String("6M"))
                             ? QStringLiteral("MMM yy")
@@ -313,7 +313,7 @@ void NavChart::paintEvent(QPaintEvent*) {
                                 .arg(pt_data.date.toString(QStringLiteral("yyyy-MM-dd")))
                                 .arg(fmt_dollar_free(pt_data.est_nav));
 
-        p.setFont(QFont("Consolas", 10));
+        p.setFont(QFont("Consolas", 12));
         const QFontMetrics fm(p.font());
         const QRect tip_rect = fm.boundingRect(tip).adjusted(-6, -3, 6, 3);
         double tx = np.x() + 8;
@@ -377,7 +377,7 @@ void SectorPieChart::paintEvent(QPaintEvent*) {
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(center, outer_r, outer_r);
         p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-        p.setFont(QFont("Consolas", 10));
+        p.setFont(QFont("Consolas", 12));
         p.drawText(rect(), Qt::AlignCenter, QStringLiteral("NO DATA"));
         return;
     }
@@ -433,7 +433,7 @@ void SectorPieChart::paintEvent(QPaintEvent*) {
 
     // Center text: "SECTOR\nALLOCATION"
     p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-    QFont center_font("Consolas", 9);
+    QFont center_font("Consolas", 11);
     center_font.setBold(false);
     p.setFont(center_font);
     const QRectF text_rect(center.x() - inner_r * 0.85, center.y() - inner_r * 0.5,
@@ -469,7 +469,7 @@ void MemberProfilePanel::build_ui() {
         auto* msg = new QLabel(QStringLiteral("No member selected"), placeholder_);
         msg->setAlignment(Qt::AlignCenter);
         msg->setStyleSheet(
-            QString("QLabel { color:%1; font-size:14px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:15px; background:transparent; }")
                 .arg(ui::colors::TEXT_TERTIARY()));
         pl->addWidget(msg);
     }
@@ -557,7 +557,7 @@ void MemberProfilePanel::build_header_bar(QWidget* parent, QVBoxLayout* vl) {
     // Name
     name_label_ = new QLabel(QStringLiteral("—"), hdr);
     name_label_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:20px; font-weight:700; background:transparent; }")
+        QString("QLabel { color:%1; font-size:22px; font-weight:700; background:transparent; }")
             .arg(ui::colors::TEXT_PRIMARY()));
     hl->addWidget(name_label_);
 
@@ -566,14 +566,14 @@ void MemberProfilePanel::build_header_bar(QWidget* parent, QVBoxLayout* vl) {
     party_badge_->setFixedSize(28, 20);
     party_badge_->setAlignment(Qt::AlignCenter);
     party_badge_->setStyleSheet(
-        QString("QLabel { background:%1; color:white; font-size:12px; font-weight:700;"
+        QString("QLabel { background:%1; color:white; font-size:13px; font-weight:700;"
                 " border-radius:10px; }").arg(ui::colors::BG_SURFACE()));
     hl->addWidget(party_badge_);
 
     // Chamber · State
     meta_label_ = new QLabel(QStringLiteral("—"), hdr);
     meta_label_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+        QString("QLabel { color:%1; font-size:13px; background:transparent; }")
             .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(meta_label_);
 
@@ -582,7 +582,7 @@ void MemberProfilePanel::build_header_bar(QWidget* parent, QVBoxLayout* vl) {
     // Est. net worth
     net_worth_label_ = new QLabel(QStringLiteral("—"), hdr);
     net_worth_label_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:13px; font-weight:600; background:transparent; }")
+        QString("QLabel { color:%1; font-size:14px; font-weight:600; background:transparent; }")
             .arg(ui::colors::AMBER()));
     hl->addWidget(net_worth_label_);
 
@@ -608,11 +608,11 @@ void MemberProfilePanel::build_stat_tiles(QWidget* parent, QVBoxLayout* vl) {
         QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
     const QString cap_style =
-        QString("QLabel { color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;"
+        QString("QLabel { color:%1; font-size:13px; font-weight:700; letter-spacing:0.5px;"
                 " background:transparent; text-transform:uppercase; }")
             .arg(ui::colors::TEXT_SECONDARY());
     const QString val_style =
-        QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+        QString("QLabel { color:%1; font-size:20px; font-weight:700;"
                 " font-family:Consolas,monospace; background:transparent; }")
             .arg(ui::colors::TEXT_PRIMARY());
 
@@ -654,10 +654,10 @@ void MemberProfilePanel::build_stat_tiles_compact(QWidget* parent, QVBoxLayout* 
     bvl->setSpacing(4);
 
     const QString lbl_ss =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+        QString("color:%1;font-size:13px;font-weight:600;background:transparent;")
             .arg(ui::colors::TEXT_SECONDARY());
     const QString val_ss =
-        QString("color:%1;font-size:13px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+        QString("color:%1;font-size:14px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
 
     struct StatRow { const char* caption; QLabel** ptr; };
@@ -720,7 +720,7 @@ void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
 
     const QString btn_base =
         QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                " border-radius:3px; padding:2px 10px; font-size:12px; font-weight:600; }"
+                " border-radius:3px; padding:2px 10px; font-size:13px; font-weight:600; }"
                 "QPushButton:hover { background:%4; }"
                 "QPushButton:checked { background:%5; color:%6; border-color:%5; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
@@ -758,7 +758,7 @@ void MemberProfilePanel::build_chart_section(QWidget* parent, QVBoxLayout* vl) {
     auto* note = new QLabel(
         QStringLiteral("★ All values are midpoint estimates of disclosed ranges"), left);
     note->setStyleSheet(
-        QString("QLabel { color:%1; font-size:12px; background:transparent; padding:2px 0; }")
+        QString("QLabel { color:%1; font-size:13px; background:transparent; padding:2px 0; }")
             .arg(ui::colors::TEXT_TERTIARY()));
     left_vl->addWidget(note);
 
@@ -823,7 +823,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
 
     holdings_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:12px; font-family:Consolas,monospace;"
+                "  font-size:13px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
                 "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -836,7 +836,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:13px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -890,7 +890,7 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
 
     trades_table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:12px; font-family:Consolas,monospace;"
+                "  font-size:13px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
                 "QTableWidget::item { padding:3px 6px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -903,7 +903,7 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:13px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
@@ -982,7 +982,7 @@ void MemberProfilePanel::build_sector_section(QWidget* parent, QVBoxLayout* vl) 
     insider_score_ = new QLabel(QStringLiteral("Insider Index: — / 100"), outer);
     insider_score_->setAlignment(Qt::AlignCenter);
     insider_score_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:13px; font-weight:700;"
+        QString("QLabel { color:%1; font-size:14px; font-weight:700;"
                 " font-family:Consolas,monospace; background:transparent; padding:4px 0; }")
             .arg(ui::colors::AMBER()));
     outer_vl->addWidget(insider_score_);
@@ -1080,7 +1080,7 @@ void MemberProfilePanel::populate_header(const power_trader::CongressMember& m,
     // Party badge
     party_badge_->setText(m.party);
     party_badge_->setStyleSheet(
-        QString("QLabel { background:%1; color:white; font-size:12px; font-weight:700;"
+        QString("QLabel { background:%1; color:white; font-size:13px; font-weight:700;"
                 " border-radius:10px; }").arg(party_color(m.party)));
 
     // Meta: Chamber · State [· District]
@@ -1128,7 +1128,7 @@ void MemberProfilePanel::populate_header(const power_trader::CongressMember& m,
             QString("#%1 %2").arg(re.rank).arg(re.label), rank_chips_);
         chip->setStyleSheet(
             QString("QLabel { background:rgba(217,119,6,0.18); color:%1;"
-                    " font-size:12px; font-weight:700; border-radius:8px;"
+                    " font-size:13px; font-weight:700; border-radius:8px;"
                     " padding:2px 8px; border:1px solid %1; }")
                 .arg(ui::colors::AMBER()));
         if (hl) hl->addWidget(chip);
@@ -1140,7 +1140,7 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
     // Tile 1 — EST. PORTFOLIO VALUE
     tile_portfolio_val_->setText(fmt_dollar(p.est_total_value));
     tile_portfolio_val_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+        QString("QLabel { color:%1; font-size:20px; font-weight:700;"
                 " font-family:Consolas,monospace; background:transparent; }")
             .arg(ui::colors::AMBER()));
 
@@ -1149,7 +1149,7 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
         const bool pos = m.portfolio_return_ytd >= 0;
         tile_ytd_return_->setText(fmt_pct(m.portfolio_return_ytd));
         tile_ytd_return_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:20px; font-weight:700;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
     }
@@ -1159,7 +1159,7 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
         const bool pos = m.alpha_ytd >= 0;
         tile_alpha_->setText(fmt_pct(m.alpha_ytd));
         tile_alpha_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:20px; font-weight:700;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
     }
@@ -1175,7 +1175,7 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
         tile_cmte_trades_->setText(
             QString("%1/%2 (%3%)").arg(overlap).arg(total).arg(pct));
         tile_cmte_trades_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:20px; font-weight:700;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(overlap > 0 ? ui::colors::WARNING() : ui::colors::TEXT_PRIMARY()));
     }
@@ -1218,7 +1218,7 @@ void MemberProfilePanel::populate_chart(
 
     auto* cap = new QLabel(QStringLiteral("COMMITTEE EXPOSURE"), cmte_exposure_);
     cap->setStyleSheet(
-        QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+        QString("QLabel { color:%1; font-size:13px; font-weight:700;"
                 " letter-spacing:1.2px; background:transparent; }")
             .arg(ui::colors::TEXT_TERTIARY()));
     evl->addWidget(cap);
@@ -1226,7 +1226,7 @@ void MemberProfilePanel::populate_chart(
     if (committees.isEmpty()) {
         auto* none = new QLabel(QStringLiteral("No committee data available"), cmte_exposure_);
         none->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                 .arg(ui::colors::TEXT_TERTIARY()));
         evl->addWidget(none);
     } else {
@@ -1257,7 +1257,7 @@ void MemberProfilePanel::populate_chart(
 
             auto* name_lbl = new QLabel(cmte, label_row);
             name_lbl->setStyleSheet(
-                QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+                QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                     .arg(ui::colors::TEXT_PRIMARY()));
             lhl->addWidget(name_lbl, 1);
 
@@ -1267,7 +1267,7 @@ void MemberProfilePanel::populate_chart(
             auto* pct_lbl = new QLabel(
                 QString("%1%").arg(overlap_pct, 0, 'f', 0), label_row);
             pct_lbl->setStyleSheet(
-                QString("QLabel { color:%1; font-size:12px; font-weight:600;"
+                QString("QLabel { color:%1; font-size:13px; font-weight:600;"
                         " background:transparent; }").arg(pct_color));
             lhl->addWidget(pct_lbl);
 
@@ -1320,7 +1320,7 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
             item->setTextAlignment(align);
             item->setForeground(QColor(color ? color : ui::colors::TEXT_PRIMARY()));
             item->setFlags(item->flags() & ~Qt::ItemIsEditable);
-            item->setFont(QFont("Consolas", 11));
+            item->setFont(QFont("Consolas", 13));
             holdings_table_->setItem(r, col, item);
         };
 
@@ -1329,7 +1329,7 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
             auto* item = new QTableWidgetItem(h.ticker);
             item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
             item->setForeground(QColor(ui::colors::CYAN()));
-            QFont f("Consolas", 11);
+            QFont f("Consolas", 13);
             f.setBold(true);
             item->setFont(f);
             item->setFlags(item->flags() & ~Qt::ItemIsEditable);
@@ -1404,7 +1404,7 @@ void MemberProfilePanel::populate_trades(const QVector<power_trader::PoliticalTr
             item->setTextAlignment(align);
             item->setForeground(QColor(color ? color : ui::colors::TEXT_PRIMARY()));
             item->setFlags(item->flags() & ~Qt::ItemIsEditable);
-            item->setFont(QFont("Consolas", 11));
+            item->setFont(QFont("Consolas", 13));
             trades_table_->setItem(r, col, item);
         };
 
@@ -1503,7 +1503,7 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
         // Dimension name (top, small)
         auto* dim_lbl = new QLabel(label, card);
         dim_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:13px; font-weight:700;"
                     " letter-spacing:0.8px; background:transparent; }")
                 .arg(ui::colors::TEXT_TERTIARY()));
         cvl->addWidget(dim_lbl);
@@ -1511,7 +1511,7 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
         // Rank value
         auto* val_lbl = new QLabel(rank_val_label, card);
         val_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:16px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(ui::colors::TEXT_PRIMARY()));
         cvl->addWidget(val_lbl);
@@ -1521,7 +1521,7 @@ void MemberProfilePanel::populate_rankings(const QString& member_id) {
             rank > 0 ? QString("#%1 of %2").arg(rank).arg(total) : QStringLiteral("—"),
             card);
         badge_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; font-weight:600;"
+            QString("QLabel { color:%1; font-size:13px; font-weight:600;"
                     " background:transparent; }").arg(ui::colors::AMBER()));
         cvl->addWidget(badge_lbl);
 
@@ -1553,7 +1553,7 @@ void MemberProfilePanel::populate_committees(
         auto* none = new QLabel(QStringLiteral("No committee data available"),
                                 committees_container_);
         none->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                 .arg(ui::colors::TEXT_TERTIARY()));
         cvl->addWidget(none);
         return;
@@ -1606,7 +1606,7 @@ void MemberProfilePanel::populate_committees(
 
         auto* cmte_name_lbl = new QLabel(committee, name_row);
         cmte_name_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+            QString("QLabel { color:%1; font-size:13px; font-weight:700;"
                     " background:transparent; }").arg(ui::colors::AMBER()));
         name_hl->addWidget(cmte_name_lbl, 1);
 
@@ -1621,7 +1621,7 @@ void MemberProfilePanel::populate_committees(
                                 : trade_pct > 30.0 ? ui::colors::WARNING
                                 : ui::colors::TEXT_TERTIARY;
         count_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; font-weight:600;"
+            QString("QLabel { color:%1; font-size:13px; font-weight:600;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(count_color));
         name_hl->addWidget(count_lbl);
@@ -1630,7 +1630,7 @@ void MemberProfilePanel::populate_committees(
         // Oversight sectors label
         auto* sectors_lbl = new QLabel(sector_str, card);
         sectors_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                 .arg(ui::colors::TEXT_TERTIARY()));
         card_vl->addWidget(sectors_lbl);
 
@@ -1743,7 +1743,7 @@ void MemberProfilePanel::populate_sector(
         // Colored dot
         auto* dot = new QLabel(QStringLiteral("●"), row);
         dot->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                 .arg(sl.color.name()));
         dot->setFixedWidth(14);
         hl->addWidget(dot);
@@ -1751,7 +1751,7 @@ void MemberProfilePanel::populate_sector(
         // Sector name
         auto* name_lbl = new QLabel(sl.sector, row);
         name_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; background:transparent; }")
+            QString("QLabel { color:%1; font-size:13px; background:transparent; }")
                 .arg(ui::colors::TEXT_PRIMARY()));
         hl->addWidget(name_lbl, 1);
 
@@ -1759,7 +1759,7 @@ void MemberProfilePanel::populate_sector(
         auto* pct_lbl = new QLabel(
             QString("%1%").arg(sl.pct, 0, 'f', 1), row);
         pct_lbl->setStyleSheet(
-            QString("QLabel { color:%1; font-size:12px; font-weight:600;"
+            QString("QLabel { color:%1; font-size:13px; font-weight:600;"
                     " font-family:Consolas,monospace; background:transparent; }")
                 .arg(ui::colors::TEXT_SECONDARY()));
         pct_lbl->setFixedWidth(44);
@@ -1784,7 +1784,7 @@ void MemberProfilePanel::populate_sector(
         if (sl.corr_score > 0.0) {
             auto* cmte_badge = new QLabel(QStringLiteral("CMTE ●"), row);
             cmte_badge->setStyleSheet(
-                QString("QLabel { color:%1; font-size:12px; font-weight:700;"
+                QString("QLabel { color:%1; font-size:13px; font-weight:700;"
                         " background:rgba(217,119,6,0.15); border:1px solid %1;"
                         " border-radius:3px; padding:0px 4px; }")
                     .arg(ui::colors::AMBER()));
@@ -1812,7 +1812,7 @@ void MemberProfilePanel::populate_sector(
     insider_score_->setText(
         QString("Insider Index: %1 / 100").arg(idx_int));
     insider_score_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:13px; font-weight:700;"
+        QString("QLabel { color:%1; font-size:14px; font-weight:700;"
                 " font-family:Consolas,monospace; background:transparent; padding:4px 0; }")
             .arg(score_color));
 }
@@ -2022,7 +2022,7 @@ void MemberProfilePanel::populate_insights(
     // ── Add chip widgets to grid (4 per row) ─────────────────────────────────
     const QString chip_base_style =
         QString("QLabel { background:%1; color:%%fg%%; border:1px solid %2;"
-                " border-radius:12px; padding:4px 10px; font-size:12px; }")
+                " border-radius:12px; padding:4px 10px; font-size:13px; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
 
     int col = 0, row_idx = 0;
@@ -2036,7 +2036,7 @@ void MemberProfilePanel::populate_insights(
             ? QString(chip.bd_color) : QString(ui::colors::BORDER_DIM());
         lbl->setStyleSheet(
             QString("QLabel { background:%1; color:%2; border:1px solid %3;"
-                    " border-radius:12px; padding:4px 10px; font-size:12px; }")
+                    " border-radius:12px; padding:4px 10px; font-size:13px; }")
                 .arg(bg, QString(chip.fg_color), bd));
 
         grid->addWidget(lbl, row_idx, col);

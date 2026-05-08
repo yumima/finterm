@@ -28,7 +28,7 @@ static const char* party_color(const QString& p) {
 static QString combo_style() {
     return QString(
         "QComboBox { background:%1; color:%2; border:1px solid %3;"
-        "  border-radius:3px; padding:4px 8px; font-size:12px; }"
+        "  border-radius:3px; padding:4px 8px; font-size:13px; }"
         "QComboBox::drop-down { border:none; width:18px; }"
         "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3; "
         "  selection-background-color:%4; }")
@@ -39,7 +39,7 @@ static QString combo_style() {
 static QString lineedit_style() {
     return QString(
         "QLineEdit { background:%1; color:%2; border:1px solid %3;"
-        "  border-radius:3px; padding:4px 10px; font-size:12px; }"
+        "  border-radius:3px; padding:4px 10px; font-size:13px; }"
         "QLineEdit:focus { border:1px solid %4; }")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::BORDER_MED(), ui::colors::AMBER());
@@ -48,7 +48,7 @@ static QString lineedit_style() {
 static QString dateedit_style() {
     return QString(
         "QDateEdit { background:%1; color:%2; border:1px solid %3;"
-        "  border-radius:3px; padding:4px 8px; font-size:12px; }"
+        "  border-radius:3px; padding:4px 8px; font-size:13px; }"
         "QDateEdit::drop-down { border:none; width:18px; }")
         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
              ui::colors::BORDER_MED());
@@ -66,7 +66,7 @@ void TradesFeedPanel::build_ui() {
     // ── Section header ────────────────────────────────────────────────────────
     auto* hdr_label = new QLabel(QStringLiteral("TRADE DISCLOSURES"), this);
     hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:13px; font-weight:700;"
                 " letter-spacing:0.5px; padding:6px 12px; border-bottom:1px solid %3; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
     layout->addWidget(hdr_label);
@@ -109,7 +109,7 @@ void TradesFeedPanel::build_ui() {
     filter_layout->addWidget(committee_filter_);
 
     auto* from_label = new QLabel(QStringLiteral("From"), this);
-    from_label->setStyleSheet(QString("QLabel { color:%1; font-size:12px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    from_label->setStyleSheet(QString("QLabel { color:%1; font-size:13px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
     filter_layout->addWidget(from_label);
 
     date_from_ = new QDateEdit(QDate::currentDate().addDays(-90), this);
@@ -119,7 +119,7 @@ void TradesFeedPanel::build_ui() {
     filter_layout->addWidget(date_from_);
 
     auto* to_label = new QLabel(QStringLiteral("To"), this);
-    to_label->setStyleSheet(QString("QLabel { color:%1; font-size:12px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
+    to_label->setStyleSheet(QString("QLabel { color:%1; font-size:13px; background:transparent; }").arg(ui::colors::TEXT_SECONDARY()));
     filter_layout->addWidget(to_label);
 
     date_to_ = new QDateEdit(QDate::currentDate(), this);
@@ -178,7 +178,7 @@ void TradesFeedPanel::build_ui() {
 
     table_->setStyleSheet(
         QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:12px; font-family:Consolas,monospace;"
+                "  font-size:13px; font-family:Consolas,monospace;"
                 "  gridline-color:transparent; }"
                 "QTableWidget::item { padding:4px 8px; border-bottom:1px solid %3; }"
                 "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
@@ -191,7 +191,7 @@ void TradesFeedPanel::build_ui() {
     h->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:4px 6px; font-size:12px; font-weight:700; letter-spacing:0.5px; }")
+                "  padding:4px 6px; font-size:13px; font-weight:700; letter-spacing:0.5px; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 

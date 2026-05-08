@@ -87,10 +87,14 @@ class PowerTraderScreen : public QWidget {
     screens::CabinetPanel*       cabinet_panel_    = nullptr;
 
     // ── Loading / error / content stack ──────────────────────────────────────
-    QStackedWidget* stack_        = nullptr;
-    QLabel*         loading_lbl_  = nullptr;
-    QLabel*         error_lbl_    = nullptr;
-    QWidget*        content_area_ = nullptr;
+    QStackedWidget* stack_           = nullptr;
+    QLabel*         loading_lbl_     = nullptr;
+    QLabel*         error_lbl_       = nullptr;
+    QWidget*        content_area_    = nullptr;
+
+    // ── Congress vs Cabinet page switch ──────────────────────────────────────
+    QStackedWidget* view_stack_      = nullptr;  // 0=congress, 1=cabinet
+    QWidget*        congress_view_   = nullptr;  // sidebar + tab_widget_
 
     // ── State ─────────────────────────────────────────────────────────────────
     PowerTraderSummary current_summary_;

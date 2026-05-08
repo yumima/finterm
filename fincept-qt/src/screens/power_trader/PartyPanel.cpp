@@ -21,7 +21,7 @@ static QWidget* make_divider(const QString& label) {
                          .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED()));
     auto* l = new QLabel(label, w);
     l->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:700;letter-spacing:0.5px;padding:0 12px;")
+        QString("color:%1;font-size:13px;font-weight:700;letter-spacing:0.5px;padding:0 12px;")
             .arg(ui::colors::TEXT_SECONDARY()));
     auto* ll = new QHBoxLayout(w);
     ll->setContentsMargins(0, 0, 0, 0);
@@ -40,7 +40,7 @@ static QTableWidget* make_table(const QStringList& cols) {
     t->verticalHeader()->setVisible(false);
     t->setFocusPolicy(Qt::NoFocus);
     t->setStyleSheet(
-        QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
+        QString("QTableWidget{background:%1;color:%2;border:none;font-size:13px;"
                 "font-family:Consolas,monospace;gridline-color:transparent;}"
                 "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
                 "QTableWidget::item:selected{background:rgba(217,119,6,0.12);}"
@@ -49,7 +49,7 @@ static QTableWidget* make_table(const QStringList& cols) {
             .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED()));
     t->horizontalHeader()->setStyleSheet(
         QString("QHeaderView::section{background:%1;color:%2;border:none;"
-                "border-bottom:2px solid %3;padding:5px 8px;font-size:12px;font-weight:700;}")
+                "border-bottom:2px solid %3;padding:5px 8px;font-size:13px;font-weight:700;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::AMBER()));
     return t;
 }
@@ -69,7 +69,7 @@ void PartyPanel::build_ui() {
     // ── Header ────────────────────────────────────────────────────────────────
     auto* hdr = new QLabel(QStringLiteral("PARTY INTELLIGENCE  ·  DEMOCRAT vs REPUBLICAN TRADING COMPARISON"));
     hdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+        QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                 "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     root->addWidget(hdr);
@@ -78,7 +78,7 @@ void PartyPanel::build_ui() {
     compare_bar_ = new QLabel(QStringLiteral("Loading…"));
     compare_bar_->setAlignment(Qt::AlignCenter);
     compare_bar_->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;padding:6px 14px;"
+        QString("background:%1;color:%2;font-size:13px;padding:6px 14px;"
                 "border-bottom:1px solid %3;")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     root->addWidget(compare_bar_);
@@ -108,7 +108,7 @@ void PartyPanel::build_ui() {
 
     d_title_ = new QLabel(QStringLiteral("DEMOCRAT (D)"));
     d_title_->setStyleSheet(
-        QString("background:%1;color:%2;font-size:13px;font-weight:700;"
+        QString("background:%1;color:%2;font-size:14px;font-weight:700;"
                 "padding:10px 14px;border-bottom:1px solid %3;")
             .arg(ui::colors::BG_SURFACE(), kBlue, ui::colors::BORDER_DIM()));
     d_layout->addWidget(d_title_);
@@ -116,7 +116,7 @@ void PartyPanel::build_ui() {
     d_stats_ = new QLabel;
     d_stats_->setWordWrap(true);
     d_stats_->setStyleSheet(
-        QString("color:%1;font-size:12px;padding:8px 14px;"
+        QString("color:%1;font-size:13px;padding:8px 14px;"
                 "background:%2;border-bottom:1px solid %3;")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     d_layout->addWidget(d_stats_);
@@ -151,7 +151,7 @@ void PartyPanel::build_ui() {
 
     r_title_ = new QLabel(QStringLiteral("REPUBLICAN (R)"));
     r_title_->setStyleSheet(
-        QString("background:%1;color:%2;font-size:13px;font-weight:700;"
+        QString("background:%1;color:%2;font-size:14px;font-weight:700;"
                 "padding:10px 14px;border-bottom:1px solid %3;")
             .arg(ui::colors::BG_SURFACE(), kRed, ui::colors::BORDER_DIM()));
     r_layout->addWidget(r_title_);
@@ -159,7 +159,7 @@ void PartyPanel::build_ui() {
     r_stats_ = new QLabel;
     r_stats_->setWordWrap(true);
     r_stats_->setStyleSheet(
-        QString("color:%1;font-size:12px;padding:8px 14px;"
+        QString("color:%1;font-size:13px;padding:8px 14px;"
                 "background:%2;border-bottom:1px solid %3;")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     r_layout->addWidget(r_stats_);

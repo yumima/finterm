@@ -46,7 +46,7 @@ void InsiderWatchPanel::build_ui() {
 
     auto* hdr_title = new QLabel(QStringLiteral("INSIDER WATCH LIST"));
     hdr_title->setStyleSheet(
-        QString("color:%1;font-size:13px;font-weight:700;letter-spacing:1px;")
+        QString("color:%1;font-size:14px;font-weight:700;letter-spacing:1px;")
             .arg(ui::colors::AMBER()));
     hl->addWidget(hdr_title);
 
@@ -55,7 +55,7 @@ void InsiderWatchPanel::build_ui() {
                         "Trade size vs peers (15%) · Coordinated cluster (15%) · Estimated alpha (10%)  "
                         "·  For educational and informational purposes only."));
     hdr_note->setStyleSheet(
-        QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_TERTIARY()));
+        QString("color:%1;font-size:13px;").arg(ui::colors::TEXT_TERTIARY()));
     hdr_note->setWordWrap(true);
     hl->addWidget(hdr_note);
     root->addWidget(hdr);
@@ -75,7 +75,7 @@ void InsiderWatchPanel::build_ui() {
 
         auto* lhdr = new QLabel(QStringLiteral("RANKED BY INSIDER SCORE"));
         lhdr->setStyleSheet(
-            QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+            QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                     "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;")
                 .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
         ll->addWidget(lhdr);
@@ -102,11 +102,11 @@ void InsiderWatchPanel::build_ui() {
         wh->setStyleSheet(
             QString("QHeaderView::section{background:%1;color:%2;border:none;"
                     "border-bottom:2px solid %3;border-right:1px solid %4;"
-                    "padding:5px 8px;font-size:12px;font-weight:700;letter-spacing:0.5px;}")
+                    "padding:5px 8px;font-size:13px;font-weight:700;letter-spacing:0.5px;}")
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                      ui::colors::AMBER(), ui::colors::BORDER_MED()));
         watch_table_->setStyleSheet(
-            QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
+            QString("QTableWidget{background:%1;color:%2;border:none;font-size:13px;"
                     "font-family:Consolas,monospace;gridline-color:transparent;}"
                     "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
                     "QTableWidget::item:selected{background:rgba(217,119,6,0.18);color:%2;}"
@@ -145,19 +145,19 @@ void InsiderWatchPanel::build_ui() {
 
     detail_name_ = new QLabel(QStringLiteral("Select a member"));
     detail_name_->setStyleSheet(
-        QString("color:%1;font-size:14px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        QString("color:%1;font-size:15px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
     nrl->addWidget(detail_name_);
     nrl->addStretch();
 
     detail_score_ = new QLabel;
     detail_score_->setStyleSheet(
-        QString("font-size:22px;font-weight:700;font-family:Consolas,monospace;"));
+        QString("font-size:24px;font-weight:700;font-family:Consolas,monospace;"));
     nrl->addWidget(detail_score_);
     dl->addWidget(name_row);
 
     detail_meta_ = new QLabel;
     detail_meta_->setStyleSheet(
-        QString("color:%1;font-size:12px;padding:6px 14px;"
+        QString("color:%1;font-size:13px;padding:6px 14px;"
                 "background:%2;border-bottom:1px solid %3;")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     detail_meta_->setWordWrap(true);
@@ -166,7 +166,7 @@ void InsiderWatchPanel::build_ui() {
     // Score breakdown table
     auto* sbhdr = new QLabel(QStringLiteral("SCORE BREAKDOWN"));
     sbhdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+        QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                 "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     dl->addWidget(sbhdr);
@@ -186,10 +186,10 @@ void InsiderWatchPanel::build_ui() {
     bh->setSectionResizeMode(2, QHeaderView::Fixed); bh->resizeSection(2, 60);
     bh->setStyleSheet(
         QString("QHeaderView::section{background:%1;color:%2;border:none;"
-                "border-bottom:1px solid %3;padding:3px 6px;font-size:12px;font-weight:700;}")
+                "border-bottom:1px solid %3;padding:3px 6px;font-size:13px;font-weight:700;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     score_breakdown_->setStyleSheet(
-        QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;}"
+        QString("QTableWidget{background:%1;color:%2;border:none;font-size:13px;}"
                 "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
                 "QHeaderView::section{background:%1;}")
             .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
@@ -198,7 +198,7 @@ void InsiderWatchPanel::build_ui() {
     // Evidence bullets
     auto* evhdr = new QLabel(QStringLiteral("EVIDENCE  ·  KEY RED FLAGS"));
     evhdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
+        QString("background:%1;color:%2;font-size:13px;font-weight:700;"
                 "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
     dl->addWidget(evhdr);
@@ -282,7 +282,7 @@ void InsiderWatchPanel::show_entry(const power_trader::InsiderWatchEntry& e) {
 
     detail_name_->setText(e.member_name);
     detail_score_->setStyleSheet(
-        QString("font-size:22px;font-weight:700;font-family:Consolas,monospace;color:%1;")
+        QString("font-size:24px;font-weight:700;font-family:Consolas,monospace;color:%1;")
             .arg(sc));
     detail_score_->setText(
         QString("%1  %2").arg(int(e.insider_score)).arg(score_label(e.insider_score)));
@@ -345,7 +345,7 @@ void InsiderWatchPanel::show_entry(const power_trader::InsiderWatchEntry& e) {
         auto* lbl = new QLabel("▸  " + bullet);
         lbl->setWordWrap(true);
         lbl->setStyleSheet(
-            QString("color:%1;font-size:12px;padding:2px 0;")
+            QString("color:%1;font-size:13px;padding:2px 0;")
                 .arg(e.insider_score >= 45 ? sc : ui::colors::TEXT_SECONDARY()));
         evidence_layout_->addWidget(lbl);
     }
