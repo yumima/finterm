@@ -15,19 +15,15 @@ namespace fincept::screens {
 // ── Style helpers ──────────────────────────────────────────────────────────────
 
 static QString body_ss(bool secondary = false) {
-    return QString("color:%1;font-size:12px;background:transparent;line-height:1.6;")
+    return QString("color:%1;font-size:12px;background:transparent;")
         .arg(secondary ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_PRIMARY());
 }
 static QString heading_ss() {
     return QString("color:%1;font-size:14px;font-weight:700;background:transparent;"
                    "padding-top:8px;").arg(ui::colors::AMBER());
 }
-static QString subhead_ss() {
-    return QString("color:%1;font-size:13px;font-weight:700;background:transparent;")
-        .arg(ui::colors::TEXT_PRIMARY());
-}
-static QString callout_ss(const char* border_color = nullptr) {
-    const char* bc = border_color ? border_color : "#d97706";
+static QString callout_ss(const QString& border_color = {}) {
+    const QString bc = border_color.isEmpty() ? ui::colors::AMBER() : border_color;
     return QString("background:rgba(217,119,6,0.08);border-left:3px solid %1;"
                    "border-radius:2px;padding:8px 12px;font-size:12px;color:%2;")
         .arg(bc, ui::colors::TEXT_PRIMARY());
@@ -80,13 +76,12 @@ static QScrollArea* make_scroll(QWidget* content_widget) {
     return scroll;
 }
 
-static QLabel* add_para(QVBoxLayout* vl, const QString& text,
-                         bool secondary = false, bool wordwrap = true) {
+static void add_para(QVBoxLayout* vl, const QString& text,
+                      bool secondary = false, bool wordwrap = true) {
     auto* lbl = new QLabel(text);
     lbl->setStyleSheet(body_ss(secondary));
     lbl->setWordWrap(wordwrap);
     vl->addWidget(lbl);
-    return lbl;
 }
 
 // ── Constructor ────────────────────────────────────────────────────────────────
@@ -155,7 +150,7 @@ QWidget* PracticePanel::build_research_tab() {
     // Key stats row
     auto* stats_row = new QHBoxLayout;
     stats_row->setSpacing(8);
-    stats_row->addWidget(make_stat("+47%", "Annual alpha for committee\nchairs vs SPY (post-STOCK Act)", ui::colors::POSITIVE()));
+    stats_row->addWidget(make_stat("+47%", "Future leaders vs peers\n(post-STOCK Act, AInvest 2026)", ui::colors::POSITIVE()));
     stats_row->addWidget(make_stat("+12%", "Average S&P 500 annual\nreturn (benchmark)"));
     stats_row->addWidget(make_stat("45d",  "STOCK Act maximum\ndisclosure window"));
     stats_row->addWidget(make_stat("1,800+","Congressional trades\nper year (recent average)"));
@@ -219,7 +214,7 @@ QWidget* PracticePanel::build_research_tab() {
     auto* callout2 = new QLabel(
         "Practical implication: the Signal Builder's Herd factor specifically detects "
         "these coordinated windows. Set Herd to 200% if you prioritize cluster signals.");
-    callout2->setStyleSheet(callout_ss("#0891b2"));
+    callout2->setStyleSheet(callout_ss(QStringLiteral("#0891b2")));
     callout2->setWordWrap(true);
     vl->addWidget(callout2);
 
