@@ -35,9 +35,11 @@ class SignalBuilderPanel : public QWidget {
   signals:
     void member_selected(QString member_id);
 
+  public slots:
+    void on_preset_clicked(const QString& preset_id);  // called from PracticePanel
+
   private slots:
     void on_weight_changed();
-    void on_preset_clicked(const QString& preset_id);
     void on_save_preset();
     void on_trade_selected(int row);
 
