@@ -304,12 +304,11 @@ void OverviewPanel::build_ui() {
 
         auto* h = signal_table_->horizontalHeader();
         h->setMinimumSectionSize(20);
-        h->setSectionResizeMode(0, QHeaderView::Interactive); h->resizeSection(0, 160); h->setStretchLastSection(true);
+        // Equal distribution: all columns stretch — short fixed cols for party/signal only
+        h->setSectionResizeMode(QHeaderView::Stretch);
         h->setSectionResizeMode(1, QHeaderView::Fixed);  h->resizeSection(1, 36);   // PARTY
-        h->setSectionResizeMode(2, QHeaderView::Fixed);  h->resizeSection(2, 140);  // COMMITTEE
-        h->setSectionResizeMode(3, QHeaderView::Fixed);  h->resizeSection(3, 100);  // SECTOR
-        h->setSectionResizeMode(4, QHeaderView::Fixed);  h->resizeSection(4, 80);   // OVERLAP
-        h->setSectionResizeMode(5, QHeaderView::Fixed);  h->resizeSection(5, 56);   // SIGNAL
+        h->setSectionResizeMode(4, QHeaderView::Fixed);  h->resizeSection(4, 72);   // OVERLAP %
+        h->setSectionResizeMode(5, QHeaderView::Fixed);  h->resizeSection(5, 58);   // SIGNAL
 
         signal_table_->setStyleSheet(
             QString("QTableWidget { background:%1; color:%2; border:none;"

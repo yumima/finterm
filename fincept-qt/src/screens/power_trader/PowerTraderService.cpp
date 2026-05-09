@@ -67,8 +67,12 @@ void PowerTraderService::load_data() {
                 LOG_ERROR("PowerTrader",
                           "senate_disclosures_data.py failed: " + result.error.left(300));
                 emit self->error_occurred(
-                    QStringLiteral("Congressional disclosure data unavailable. "
-                                   "Check network connection."));
+                    QStringLiteral("Could not reach Senate eFTS or Finnhub.\n\n"
+                                   "To enable the Finnhub fallback (free):\n"
+                                   "  Set FINNHUB_API_KEY environment variable\n"
+                                   "  Get a free key at finnhub.io\n\n"
+                                   "Live data will load automatically when "
+                                   "efts.senate.gov is reachable."));
                 return;
             }
             const QString json_str = python::extract_json(result.output);
@@ -76,14 +80,19 @@ void PowerTraderService::load_data() {
             if (!doc.isObject()) {
                 LOG_ERROR("PowerTrader", "Invalid JSON from senate_disclosures_data.py");
                 emit self->error_occurred(
-                    QStringLiteral("Invalid data from disclosure source."));
+                    QStringLiteral("Invalid data from congressional disclosure source."));
                 return;
             }
             self->parse_summary(doc.object());
             if (self->summary_.members.isEmpty()) {
                 emit self->error_occurred(
-                    QStringLiteral("No congressional disclosure data available. "
-                                   "Check network connection and retry."));
+                    QStringLiteral("No congressional trades found in the last 90 days.\n\n"
+                                   "Sources tried:\n"
+                                   "  1. Senate eFTS (efts.senate.gov)\n"
+                                   "  2. House FDS (disclosures-clerk.house.gov)\n"
+                                   "  3. Finnhub API (set FINNHUB_API_KEY for this)\n\n"
+                                   "If network is available, refresh to try again.\n"
+                                   "Set FINNHUB_API_KEY env var for broader coverage."));
             }
         });
 }

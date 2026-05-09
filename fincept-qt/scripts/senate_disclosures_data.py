@@ -864,24 +864,30 @@ def build_all_data(days_back: int = 90) -> dict:
     Build {members, trades} compatible with PowerTraderService.parse_summary().
 
     Source priority:
-      1. Senate eFTS  (primary, authoritative)
+      1. Senate eFTS  (primary, authoritative — probed separately)
       2. House FDS    (primary, authoritative)
-      3. Finnhub API  (Option C fallback — set FINNHUB_API_KEY env var)
-      4. Empty result  (C++ caller shows error state)
+      3. Finnhub API  (Option C — set FINNHUB_API_KEY env var, tried even when
+                       Senate probe fails since Finnhub is a different domain)
+      4. Empty result  (C++ caller shows actionable error state)
     """
-    # Fast-fail offline: probe before any network calls (avoids 8s _load_roster timeout)
-    if not _network_available():
-        return {"members": [], "trades": []}
+    # Probe Senate eFTS specifically (not a general internet check).
+    # If Senate is unreachable we still try Finnhub (different domain).
+    senate_online = _network_available()
 
-    # Pre-load roster only when online so _enrich_member() is fast for live calls
-    _load_roster()
+    senate_filings: list = []
+    house_filings:  list = []
 
-    senate_filings = fetch_senate_ptrs(days_back=days_back)
-    house_filings  = fetch_house_ptrs(days_back=days_back)
-    all_filings    = senate_filings + house_filings
+    if senate_online:
+        # Pre-load roster only when Senate is reachable (avoids 8s timeout offline)
+        _load_roster()
+        senate_filings = fetch_senate_ptrs(days_back=days_back)
+        house_filings  = fetch_house_ptrs(days_back=days_back)
+
+    all_filings = senate_filings + house_filings
 
     if not all_filings:
-        # Option C: try Finnhub as secondary source
+        # Option C: Finnhub is at finnhub.io — reachable even when efts.senate.gov is not.
+        # Always attempted when FINNHUB_API_KEY is set, regardless of Senate probe.
         all_filings = _fetch_finnhub_congressional(days_back=days_back)
         if not all_filings:
             return {"members": [], "trades": []}
