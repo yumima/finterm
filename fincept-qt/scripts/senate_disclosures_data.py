@@ -971,6 +971,10 @@ def fetch_congress_members_full() -> list:
 
 def handle_action(action: str, payload: dict) -> object:
     if action == "all_data":
+        # Allow caller to inject a Finnhub key stored in user config (not env var)
+        global FINNHUB_API_KEY
+        if payload.get("finnhub_key"):
+            FINNHUB_API_KEY = payload["finnhub_key"]
         return build_all_data(days_back=payload.get("days_back", 90))
     if action == "senate_ptrs":
         return fetch_senate_ptrs(days_back=payload.get("days_back", 30))

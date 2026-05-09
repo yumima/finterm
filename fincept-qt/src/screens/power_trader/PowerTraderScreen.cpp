@@ -2,6 +2,7 @@
 #include "screens/power_trader/PowerTraderScreen.h"
 
 #include "screens/power_trader/CabinetPanel.h"
+#include "screens/power_trader/DataSourceDialog.h"
 #include "screens/power_trader/CommitteePanel.h"
 #include "screens/power_trader/InsiderWatchPanel.h"
 #include "screens/power_trader/PracticePanel.h"
@@ -33,6 +34,15 @@ PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
 
 void PowerTraderScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
+
+    // On first open without a Finnhub key, offer to set one up.
+    // Only shown once per session (shown_key_dialog_ guard).
+    if (!shown_key_dialog_ && !DataSourceDialog::has_key()) {
+        shown_key_dialog_ = true;
+        DataSourceDialog dlg(this);
+        dlg.exec();  // accept = key saved; reject = try without key
+    }
+
     if (!PowerTraderService::instance().is_loaded()) {
         show_loading();
         PowerTraderService::instance().load_data();
