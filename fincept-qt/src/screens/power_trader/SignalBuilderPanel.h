@@ -80,7 +80,8 @@ class SignalBuilderPanel : public QWidget {
     // ── State ─────────────────────────────────────────────────────────────────
     power_trader::PowerTraderSummary summary_;
     QVector<power_trader::TradeFactorScores> base_scores_;
-    bool updating_ = false;   // suppress re-entrant slider signals
+    bool    updating_    = false;   // suppress re-entrant slider signals
+    QWidget* factor_pane_ = nullptr; // ref to left pane for preset bar rebuild
 };
 
 } // namespace fincept::screens

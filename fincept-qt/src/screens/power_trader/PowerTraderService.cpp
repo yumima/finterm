@@ -1086,27 +1086,23 @@ QVector<TradeFactorScores> PowerTraderService::compute_trade_base_scores() const
 }
 
 QVector<SignalPreset> PowerTraderService::builtin_presets() {
+    // Use explicit field assignment to stay correct if SignalPreset fields are reordered.
+    auto make = [](const QString& id, const QString& name,
+                   double cmte, double sz, double lag, double herd, double hist) {
+        SignalPreset p;
+        p.id = id; p.name = name; p.builtin = true;
+        p.w_committee = cmte;  p.w_size    = sz;
+        p.w_lag       = lag;   p.w_herd    = herd;
+        p.w_timing    = 0.0;   p.w_bill    = 0.0;   p.w_lobbying = 0.0;
+        p.w_history   = hist;
+        return p;
+    };
     return {
-        {
-            "default", "Default", true,
-            1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.5
-        },
-        {
-            "committee_heavy", "Committee Heavy", true,
-            2.0, 0.8, 0.8, 1.0, 0.0, 0.0, 0.0, 0.5
-        },
-        {
-            "herd_focus", "Herd Focus", true,
-            1.5, 0.5, 0.5, 2.0, 0.0, 0.0, 0.0, 0.5
-        },
-        {
-            "size_first", "Large Trades", true,
-            0.8, 2.0, 0.8, 0.8, 0.0, 0.0, 0.0, 0.5
-        },
-        {
-            "timing_sensitive", "Fast Filers", true,
-            1.0, 1.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.5
-        },
+        make("default",           "Default",          1.0, 1.0, 1.0, 1.0, 0.5),
+        make("committee_heavy",   "Committee Heavy",   2.0, 0.8, 0.8, 1.0, 0.5),
+        make("herd_focus",        "Herd Focus",        1.5, 0.5, 0.5, 2.0, 0.5),
+        make("size_first",        "Large Trades",      0.8, 2.0, 0.8, 0.8, 0.5),
+        make("timing_sensitive",  "Fast Filers",       1.0, 1.0, 2.0, 1.0, 0.5),
     };
 }
 

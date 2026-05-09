@@ -126,8 +126,10 @@ void SignalBuilderPanel::build_ui() {
         QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM()));
 
     // ── LEFT: factor sliders ──────────────────────────────────────────────────
-    auto* left = new QWidget(splitter);
-    left->setFixedWidth(330);
+    factor_pane_ = new QWidget(splitter);
+    auto* left = factor_pane_;
+    left->setMinimumWidth(280);
+    left->setMaximumWidth(400);
     left->setStyleSheet(
         QString("QWidget{background:%1;border-right:1px solid %2;}")
             .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
@@ -462,8 +464,8 @@ void SignalBuilderPanel::on_save_preset() {
         preset_bar_->deleteLater();
         preset_bar_ = nullptr;
     }
-    auto* left = findChild<QWidget*>("left_panel");
-    if (left) build_preset_bar(left);
+    // factor_pane_ stored at construction; rebuild preset bar with new preset
+    if (factor_pane_) build_preset_bar(factor_pane_);
 }
 
 void SignalBuilderPanel::on_trade_selected(int row) {
@@ -595,22 +597,24 @@ void SignalBuilderPanel::update_breakdown(int row) {
     for (double w : weights) total_w += w;
 
     for (int i = 0; i < bd_factor_lbls_.size() && i < 8; ++i) {
-        const double contrib = total_w > 0
-            ? (weights[i] * base_vals[i] * weights[i]) / (total_w * 100.0) * 100.0
+        // Weighted contribution: what this factor adds to the final score
+        const double contrib = (total_w > 0 && !factors_[i].pending)
+            ? qMin(100.0, (weights[i] * base_vals[i]) / total_w)
             : 0.0;
         const QString txt = factors_[i].pending
-            ? QString("—")
-            : QString("%1").arg(base_vals[i], 0, 'f', 0);
+            ? QStringLiteral("—")
+            : QString("%1→%2")
+                  .arg(base_vals[i], 0, 'f', 0)
+                  .arg(contrib, 0, 'f', 0);
         bd_factor_lbls_[i]->setText(txt);
         bd_factor_lbls_[i]->setStyleSheet(
-            QString("color:%1;font-size:13px;font-weight:700;"
+            QString("color:%1;font-size:12px;font-weight:700;"
                     "font-family:Consolas,monospace;background:transparent;")
                 .arg(factors_[i].pending
                      ? ui::colors::TEXT_SECONDARY()
-                     : base_vals[i] >= 70 ? ui::colors::POSITIVE()
-                       : base_vals[i] >= 40 ? ui::colors::AMBER()
+                     : contrib >= 20 ? ui::colors::POSITIVE()
+                       : contrib >= 10 ? ui::colors::AMBER()
                        : ui::colors::TEXT_SECONDARY()));
-        Q_UNUSED(contrib);
     }
 }
 
