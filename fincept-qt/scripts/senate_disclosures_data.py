@@ -583,6 +583,7 @@ def _parse_house_fd_zip(year: int, cutoff: date) -> list:
                 # Try case-insensitive
                 index_name = next((n for n in zf.namelist() if n.lower() == f"{year}fd.xml"), None)
             if not index_name:
+                print(f"[house_fds] WARNING: {year}FD.xml not found in ZIP. Contents: {zf.namelist()}", flush=True)
                 return []
             filings = _parse_house_index_xml(zf.read(index_name), cutoff, year)
         return filings
@@ -640,20 +641,21 @@ def _parse_house_index_xml(xml_bytes: bytes, cutoff: date, year: int) -> list:
             doc_url    = (f"{HOUSE_FDS_BASE}/public_disc/ptr-pdfs/{year}/{doc_id}.pdf"
                           if doc_id else "")
 
-            # One synthetic trade entry per PTR filing (no tx details without PDF parse)
+            # One placeholder trade per PTR filing — individual transactions are in PDFs
+            # not included in the ZIP. Direction/amount unknown; excluded from signal scoring.
             trades = [{
                 "ticker":              "",
                 "asset_name":          "PTR Filing (see disclosure PDF)",
                 "asset_type":          "equity",
-                "direction":           "buy",
+                "direction":           "unknown",
                 "transaction_date":    filed_date.isoformat(),
                 "amount_low":          0.0,
                 "amount_high":         0.0,
                 "amount_range_label":  "",
                 "committee_relevance": "",
+                "placeholder":         True,
             }]
 
-            lag = 0
             filings.append({
                 "member_name":         member_name,
                 "chamber":             "house",
@@ -661,7 +663,7 @@ def _parse_house_index_xml(xml_bytes: bytes, cutoff: date, year: int) -> list:
                 "state":               state,
                 "committees":          committees,
                 "filed_date":          filed_date.isoformat(),
-                "disclosure_lag_days": lag,
+                "disclosure_lag_days": None,
                 "trades":              trades,
                 "filing_url":          doc_url,
                 "data_source":         "House FDS",
@@ -773,7 +775,7 @@ def build_all_data(days_back: int = 90) -> dict:
         committees  = filing.get("committees", [])
         member_id   = _make_member_id(member_name)
         filed_date  = filing.get("filed_date", "")
-        lag         = filing.get("disclosure_lag_days", 0)
+        lag         = filing.get("disclosure_lag_days")  # None for House index entries
 
         if member_id not in member_map:
             member_map[member_id] = {
@@ -800,8 +802,10 @@ def build_all_data(days_back: int = 90) -> dict:
         for t in filing.get("trades", []):
             trade_idx += 1
             mem["trade_count_ytd"] += 1
-            score = compute_signal_score(
-                {**t, "disclosure_lag_days": lag},
+            is_placeholder = t.get("placeholder", False)
+            # Skip signal scoring for House index placeholder entries (no tx details)
+            score = 0.0 if is_placeholder else compute_signal_score(
+                {**t, "disclosure_lag_days": lag or 0},
                 {"committees": committees}
             )
             trades.append({
@@ -824,6 +828,7 @@ def build_all_data(days_back: int = 90) -> dict:
                 "direction":           t.get("direction", "Other"),
                 "asset_type":          t.get("asset_type", "Stock"),
                 "data_source":         filing.get("data_source", "Senate eFTS"),
+                "placeholder":         is_placeholder,
             })
 
     trades.sort(key=lambda x: x.get("disclosure_date", ""), reverse=True)
