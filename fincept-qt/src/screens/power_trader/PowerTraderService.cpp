@@ -10,7 +10,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
-#include <QSettings>
 #include <QTimer>
 
 namespace fincept::power_trader {
@@ -54,12 +53,6 @@ void PowerTraderService::load_data() {
     QJsonObject req;
     req[QStringLiteral("days_back")] = 90;
 
-    // Inject Finnhub key stored in user config (set via DataSourceDialog).
-    // Passed in the JSON payload so Python can use it without requiring an env var.
-    const QString stored_key = QSettings("Fincept", "Terminal")
-                                   .value("finnhub_api_key").toString();
-    if (!stored_key.isEmpty())
-        req[QStringLiteral("finnhub_key")] = stored_key;
 
     python::PythonRunner::instance().run(
         QStringLiteral("senate_disclosures_data.py"),

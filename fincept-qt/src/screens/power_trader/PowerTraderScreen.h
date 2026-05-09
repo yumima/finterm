@@ -102,7 +102,6 @@ class PowerTraderScreen : public QWidget {
     // ── State ─────────────────────────────────────────────────────────────────
     PowerTraderSummary current_summary_;
     QString            selected_member_id_;
-    bool               shown_key_dialog_ = false;  // show DataSourceDialog once per session
 };
 
 } // namespace fincept::power_trader

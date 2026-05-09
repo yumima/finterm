@@ -2,7 +2,6 @@
 #include "screens/power_trader/PowerTraderScreen.h"
 
 #include "screens/power_trader/CabinetPanel.h"
-#include "screens/power_trader/DataSourceDialog.h"
 #include "screens/power_trader/CommitteePanel.h"
 #include "screens/power_trader/InsiderWatchPanel.h"
 #include "screens/power_trader/PracticePanel.h"
@@ -34,15 +33,6 @@ PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
 
 void PowerTraderScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-
-    // On first open without a Finnhub key, offer to set one up.
-    // Only shown once per session (shown_key_dialog_ guard).
-    if (!shown_key_dialog_ && !DataSourceDialog::has_key()) {
-        shown_key_dialog_ = true;
-        DataSourceDialog dlg(this);
-        dlg.exec();  // accept = key saved; reject = try without key
-    }
-
     if (!PowerTraderService::instance().is_loaded()) {
         show_loading();
         PowerTraderService::instance().load_data();
@@ -82,12 +72,38 @@ void PowerTraderScreen::build_ui() {
     auto* error_page = new QWidget;
     {
         auto* el = new QVBoxLayout(error_page);
+        el->setAlignment(Qt::AlignCenter);
+        el->setSpacing(14);
+        el->addStretch();
+
         error_lbl_ = new QLabel;
         error_lbl_->setAlignment(Qt::AlignCenter);
         error_lbl_->setWordWrap(true);
         error_lbl_->setStyleSheet(
-            QString("color:%1; font-size:13px;").arg(ui::colors::NEGATIVE()));
-        el->addStretch(); el->addWidget(error_lbl_); el->addStretch();
+            QString("color:%1; font-size:13px; max-width:500px;")
+                .arg(ui::colors::TEXT_SECONDARY()));
+        el->addWidget(error_lbl_);
+
+        // Action buttons below the error message
+        auto* btn_row = new QHBoxLayout;
+        btn_row->setSpacing(10);
+        btn_row->setAlignment(Qt::AlignCenter);
+
+        auto* retry_btn = new QPushButton("↻  Retry");
+        retry_btn->setCursor(Qt::PointingHandCursor);
+        retry_btn->setStyleSheet(
+            QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                    "border-radius:3px;padding:8px 18px;font-size:12px;font-weight:600;}"
+                    "QPushButton:hover{border-color:%1;}")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
+        connect(retry_btn, &QPushButton::clicked, this, [this]() {
+            show_loading();
+            PowerTraderService::instance().load_data();
+        });
+        btn_row->addWidget(retry_btn);
+
+        el->addLayout(btn_row);
+        el->addStretch();
     }
     stack_->addWidget(error_page);
 
@@ -222,6 +238,7 @@ QWidget* PowerTraderScreen::build_top_bar() {
     row1->addWidget(sub);
     row1->addStretch();
     row1->addWidget(timestamp_lbl_);
+
     row1->addWidget(refresh_btn_);
 
     auto* row2 = new QHBoxLayout;

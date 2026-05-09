@@ -5,8 +5,6 @@ Real congressional trade data under the STOCK Act (2012).
 Sources (in priority order):
   1. Senate PTRs: https://efts.senate.gov/LATEST/search-index  (no key)
   2. House FDS:   https://disclosures-clerk.house.gov/public_disc/financial-pdfs/<yr>FD.zip (no key)
-  3. Finnhub API: https://finnhub.io/api/v1/stock/congressional-trading (free, 60 req/min)
-     Set FINNHUB_API_KEY env var for Option C fallback (free key at finnhub.io)
   Member roster:
     Congress.gov API — set CONGRESS_GOV_API_KEY env var (free at api.congress.gov)
     Senate.gov JSON  — https://www.senate.gov/senators/senators-contact.json (no key fallback)
@@ -551,6 +549,13 @@ def fetch_house_ptrs(days_back: int = 90) -> list:
 
 
 def _parse_house_fd_zip(year: int, cutoff: date) -> list:
+    """Parse the House FD master-index ZIP.
+
+    The ZIP at {year}FD.zip contains {year}FD.xml — a master index listing one
+    <Member> element per filing.  Individual transaction details are in separate
+    PDF files that are not bundled in the ZIP, so we build one synthetic trade
+    entry per PTR filing (the filing itself is the signal — member, date, DocID).
+    """
     cache_dir  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "__pycache__", "house_fd")
     os.makedirs(cache_dir, exist_ok=True)
@@ -563,8 +568,8 @@ def _parse_house_fd_zip(year: int, cutoff: date) -> list:
             with open(cache_file, "rb") as f:
                 zip_data = f.read()
         else:
-            resp = requests.get(zip_url, timeout=10,
-                                headers={"User-Agent": "FinceptTerminal/1.0"})
+            resp = requests.get(zip_url, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/1.0)"})
             if resp.status_code != 200:
                 return []
             zip_data = resp.content
@@ -573,110 +578,98 @@ def _parse_house_fd_zip(year: int, cutoff: date) -> list:
 
         filings = []
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            for name in zf.namelist():
-                if not name.lower().endswith(".xml"):
-                    continue
-                try:
-                    filing = _parse_house_xml(zf.read(name), cutoff)
-                    if filing:
-                        filings.append(filing)
-                except Exception:
-                    continue
+            index_name = f"{year}FD.xml"
+            if index_name not in zf.namelist():
+                # Try case-insensitive
+                index_name = next((n for n in zf.namelist() if n.lower() == f"{year}fd.xml"), None)
+            if not index_name:
+                return []
+            filings = _parse_house_index_xml(zf.read(index_name), cutoff, year)
         return filings
     except Exception:
         return []
 
 
-def _parse_house_xml(xml_bytes: bytes, cutoff: date) -> Optional[dict]:
+def _parse_house_index_xml(xml_bytes: bytes, cutoff: date, year: int) -> list:
+    """Parse the House FD master index XML.
+
+    Each <Member> element has: Prefix, Last, First, Suffix, FilingType,
+    StateDst, Year, FilingDate, DocID.
+    FilingType "P" = Periodic Transaction Report (PTR) — what we want.
+    """
     try:
         root = ET.fromstring(xml_bytes)
-        member_el = root.find("Member")
-        if member_el is None:
-            member_el = root.find("member")
-        if member_el is None:
-            return None
-
-        filing_type = (member_el.findtext("FilingType") or "").strip().upper()
-        if filing_type not in ("P", "PTR"):
-            return None
-
-        first     = (member_el.findtext("First")         or "").strip()
-        last      = (member_el.findtext("Last")          or "").strip()
-        party     = (member_el.findtext("Party")         or "").strip()
-        state_str = (member_el.findtext("StateDistrict") or "").strip()
-        state     = state_str[:2] if state_str else ""
-        filed_raw = (member_el.findtext("FilingDate")    or "").strip()
-
-        try:
-            filed_date = datetime.strptime(filed_raw, "%m/%d/%Y").date()
-        except Exception:
-            filed_date = date.today()
-
-        if filed_date < cutoff:
-            return None
-
-        member_name = f"{first} {last}".strip()
-        if not member_name:
-            return None
-
-        txns_el = root.find("Transactions")
-        if txns_el is None:
-            txns_el = root.find("transactions")
-        if txns_el is None:
-            return None
-
-        enrich     = _enrich_member(member_name, "house")
-        committees = enrich.get("committees", [])
-        trades     = []
-
-        for txn in txns_el:
-            tx_date_raw = (txn.findtext("TransactionDate") or "").strip()
-            ticker      = (txn.findtext("Ticker")          or "").strip().upper()
-            asset_name  = (txn.findtext("AssetName")       or "").strip()
-            asset_type  = (txn.findtext("AssetType")       or "ST").strip()
-            tx_type     = (txn.findtext("Type")            or "").strip()
-            amount_str  = (txn.findtext("Amount")          or "").strip()
-
-            if not (asset_name or ticker):
-                continue
-            try:
-                tx_iso = datetime.strptime(tx_date_raw, "%m/%d/%Y").strftime("%Y-%m-%d")
-            except Exception:
-                tx_iso = filed_date.isoformat()
-
-            lo, hi   = _parse_amount_range(amount_str)
-            cmte_rel = _compute_committee_relevance(ticker, committees) if ticker else ""
-
-            trades.append({
-                "ticker":             ticker,
-                "asset_name":         asset_name,
-                "asset_type":         _map_asset_type(asset_type),
-                "direction":          _map_direction(tx_type),
-                "transaction_date":   tx_iso,
-                "amount_low":         lo,
-                "amount_high":        hi,
-                "amount_range_label": amount_str,
-                "committee_relevance": cmte_rel,
-            })
-
-        if not trades:
-            return None
-
-        lag = _compute_lag(trades[0]["transaction_date"], filed_date.isoformat())
-        return {
-            "member_name":         member_name,
-            "chamber":             "house",
-            "party":               party or enrich.get("party", ""),
-            "state":               state  or enrich.get("state", ""),
-            "committees":          committees,
-            "filed_date":          filed_date.isoformat(),
-            "disclosure_lag_days": lag,
-            "trades":              trades,
-            "filing_url":          "",
-            "data_source":         "House FDS",
-        }
     except Exception:
-        return None
+        return []
+
+    filings = []
+    members_el = root if root.tag in ("Members", "MemberIndex") else root.find("Members") or root.find("MemberIndex")
+    if members_el is None:
+        members_el = root  # iterate children directly
+
+    for member_el in members_el:
+        if member_el.tag != "Member":
+            continue
+        try:
+            filing_type = (member_el.findtext("FilingType") or "").strip().upper()
+            if filing_type not in ("P", "PTR"):
+                continue
+
+            first     = (member_el.findtext("First")    or "").strip()
+            last      = (member_el.findtext("Last")     or "").strip()
+            state_dst = (member_el.findtext("StateDst") or "").strip()
+            state     = state_dst[:2] if state_dst else ""
+            filed_raw = (member_el.findtext("FilingDate") or "").strip()
+            doc_id    = (member_el.findtext("DocID")    or "").strip()
+
+            try:
+                filed_date = datetime.strptime(filed_raw, "%m/%d/%Y").date()
+            except Exception:
+                continue
+
+            if filed_date < cutoff:
+                continue
+
+            member_name = f"{first} {last}".strip()
+            if not member_name:
+                continue
+
+            enrich     = _enrich_member(member_name, "house")
+            party      = enrich.get("party", "")
+            committees = enrich.get("committees", [])
+            doc_url    = (f"{HOUSE_FDS_BASE}/public_disc/ptr-pdfs/{year}/{doc_id}.pdf"
+                          if doc_id else "")
+
+            # One synthetic trade entry per PTR filing (no tx details without PDF parse)
+            trades = [{
+                "ticker":              "",
+                "asset_name":          "PTR Filing (see disclosure PDF)",
+                "asset_type":          "equity",
+                "direction":           "buy",
+                "transaction_date":    filed_date.isoformat(),
+                "amount_low":          0.0,
+                "amount_high":         0.0,
+                "amount_range_label":  "",
+                "committee_relevance": "",
+            }]
+
+            lag = 0
+            filings.append({
+                "member_name":         member_name,
+                "chamber":             "house",
+                "party":               party,
+                "state":               state,
+                "committees":          committees,
+                "filed_date":          filed_date.isoformat(),
+                "disclosure_lag_days": lag,
+                "trades":              trades,
+                "filing_url":          doc_url,
+                "data_source":         "House FDS",
+            })
+        except Exception:
+            continue
+
+    return filings
 
 
 # ── Signal scoring ────────────────────────────────────────────────────────────
@@ -713,8 +706,8 @@ def compute_signal_score(trade: dict, member: dict) -> float:
 
 # ── Full summary builder ───────────────────────────────────────────────────────
 
-def _network_available() -> bool:
-    """Quick DNS probe — returns False within ~3s if offline."""
+def _senate_reachable() -> bool:
+    """Probe Senate eFTS specifically — returns False if efts.senate.gov is unreachable."""
     if requests is None:
         return False
     try:
@@ -724,173 +717,48 @@ def _network_available() -> bool:
         return False
 
 
-# ── Finnhub congressional fallback (Option C) ─────────────────────────────────
-# Used when Senate eFTS and House FDS both return nothing (e.g. network issues,
-# no PTR filings in date range). Finnhub free tier: 60 req/min, no sign-up barrier.
-# Set FINNHUB_API_KEY env var; without a key this is skipped gracefully.
-
-FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY', '')
-FINNHUB_CONGRESSIONAL = "https://finnhub.io/api/v1/stock/congressional-trading"
-
-# Top tickers most commonly traded by Congress members (sourced from research).
-# Querying these 30 symbols covers the majority of high-signal congressional trades.
-_CONGRESSIONAL_WATCHLIST = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD",
-    "JPM", "BAC", "GS", "V", "MA", "BX", "SCHW",
-    "LMT", "RTX", "NOC", "BA", "GD", "PLTR", "LDOS",
-    "XOM", "CVX", "COP", "NEE",
-    "UNH", "JNJ", "PFE", "ABBV",
-]
-
-
-def _fetch_finnhub_congressional(days_back: int = 90) -> list:
-    """
-    Fetch congressional trades from Finnhub for the top watchlist tickers.
-    Returns filings in the same format as fetch_senate_ptrs() so they can be
-    merged directly into build_all_data().
-    Requires FINNHUB_API_KEY environment variable.
-    """
-    if not FINNHUB_API_KEY or requests is None:
-        return []
-
-    start = (date.today() - timedelta(days=days_back)).isoformat()
-    end   = date.today().isoformat()
-    filings: List[dict] = []
-    seen_ids: set = set()
-
-    for ticker in _CONGRESSIONAL_WATCHLIST:
-        try:
-            r = requests.get(
-                FINNHUB_CONGRESSIONAL,
-                params={"symbol": ticker, "from": start, "to": end,
-                        "token": FINNHUB_API_KEY},
-                timeout=8,
-                headers={"User-Agent": "FinceptTerminal/1.0"}
-            )
-            r.raise_for_status()
-            data = r.json()
-        except Exception:
-            continue
-
-        for trade in data.get("data", []):
-            name = trade.get("name", "").strip()
-            if not name:
-                continue
-
-            tx_date  = trade.get("transactionDate", "")
-            fil_date = trade.get("filingDate",      "")
-            amount   = trade.get("amount", 0) or 0
-            tx_type  = (trade.get("transaction", "") or "").lower()
-            comment  = trade.get("comment", "") or ""
-
-            # Deduplicate by natural key
-            key = f"{name}|{ticker}|{tx_date}|{amount}"
-            if key in seen_ids:
-                continue
-            seen_ids.add(key)
-
-            direction = "Buy" if "purchase" in tx_type or "buy" in tx_type else \
-                        "Sell" if "sale" in tx_type or "sell" in tx_type else "Other"
-
-            # Estimate amount range bracket from midpoint
-            lo = hi = float(amount)
-            if   amount >= 1_000_000: lo, hi, lbl = 500_001, 1_000_000, "$500,001 – $1,000,000"
-            elif amount >= 500_000:   lo, hi, lbl = 250_001,   500_000, "$250,001 – $500,000"
-            elif amount >= 250_000:   lo, hi, lbl = 100_001,   250_000, "$100,001 – $250,000"
-            elif amount >= 100_000:   lo, hi, lbl =  50_001,   100_000, "$50,001 – $100,000"
-            elif amount >= 50_000:    lo, hi, lbl =  15_001,    50_000, "$15,001 – $50,000"
-            elif amount >= 15_000:    lo, hi, lbl =   1_001,    15_000, "$1,001 – $15,000"
-            else:                     lbl = f"~${int(amount):,}"
-
-            # Compute lag
-            try:
-                lag = max(0, (date.fromisoformat(fil_date[:10])
-                              - date.fromisoformat(tx_date[:10])).days)
-            except Exception:
-                lag = 0
-
-            enrich   = _enrich_member(name, "")
-            cmte_rel = _compute_committee_relevance(ticker, enrich.get("committees", []))
-            score    = compute_signal_score(
-                {"ticker": ticker, "amount_high": hi,
-                 "disclosure_lag_days": lag, "committee_relevance": cmte_rel},
-                {"committees": enrich.get("committees", [])})
-
-            filings.append({
-                "member_name":         name,
-                "chamber":             "senate" if enrich.get("chamber","").lower() == "senate" else "house",
-                "party":               enrich.get("party", ""),
-                "state":               enrich.get("state", ""),
-                "committees":          enrich.get("committees", []),
-                "filed_date":          fil_date[:10] if fil_date else "",
-                "disclosure_lag_days": lag,
-                "data_source":         "Finnhub",
-                "filing_url":          "",
-                "trades": [{
-                    "ticker":             ticker,
-                    "asset_name":         trade.get("asset", ticker),
-                    "asset_type":         "Stock",
-                    "direction":          direction,
-                    "transaction_date":   tx_date[:10] if tx_date else "",
-                    "amount_low":         float(lo),
-                    "amount_high":        float(hi),
-                    "amount_range_label": lbl,
-                    "committee_relevance": cmte_rel,
-                }],
-            })
-
-        time.sleep(1.1)  # stay within 60 req/min free tier (1 sec gap is safe)
-
-    return filings
-
-
-def _compute_committee_relevance(ticker: str, committees: List[str]) -> str:
-    """Thin wrapper used by Finnhub fallback path (TICKER_COMMITTEE_MAP removed)."""
-    return _compute_committee_relevance_impl(ticker, committees)
-
-
-def _compute_committee_relevance_impl(ticker: str, committees: List[str]) -> str:
-    cmte_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), "")
-    if not cmte_for_ticker:
-        return ""
-    for c in committees:
-        if cmte_for_ticker.lower()[:8] in c.lower() or c.lower()[:8] in cmte_for_ticker.lower():
-            return c
-    return ""
+def _house_reachable() -> bool:
+    """Probe House FDS — returns False if disclosures-clerk.house.gov is unreachable."""
+    if requests is None:
+        return False
+    try:
+        requests.head("https://disclosures-clerk.house.gov", timeout=3)
+        return True
+    except Exception:
+        return False
 
 
 def build_all_data(days_back: int = 90) -> dict:
     """
     Build {members, trades} compatible with PowerTraderService.parse_summary().
 
-    Source priority:
-      1. Senate eFTS  (primary, authoritative — probed separately)
-      2. House FDS    (primary, authoritative)
-      3. Finnhub API  (Option C — set FINNHUB_API_KEY env var, tried even when
-                       Senate probe fails since Finnhub is a different domain)
-      4. Empty result  (C++ caller shows actionable error state)
+    Sources (each probed independently — different domains):
+      1. Senate eFTS  (efts.senate.gov) — STOCK Act PTR filings
+      2. House FDS    (disclosures-clerk.house.gov) — annual index ZIP
+      Both are free, no key required.  Empty result if neither is reachable.
     """
-    # Probe Senate eFTS specifically (not a general internet check).
-    # If Senate is unreachable we still try Finnhub (different domain).
-    senate_online = _network_available()
+    # Probe each source independently — they are on completely different domains.
+    # Senate eFTS may be unreachable (Akamai CDN issues) while House FDS is fine.
+    senate_online = _senate_reachable()
+    house_online  = _house_reachable()
 
     senate_filings: list = []
     house_filings:  list = []
 
-    if senate_online:
-        # Pre-load roster only when Senate is reachable (avoids 8s timeout offline)
+    if senate_online or house_online:
+        # Pre-load roster when any government source is reachable
         _load_roster()
+
+    if senate_online:
         senate_filings = fetch_senate_ptrs(days_back=days_back)
-        house_filings  = fetch_house_ptrs(days_back=days_back)
+
+    if house_online:
+        house_filings = fetch_house_ptrs(days_back=days_back)
 
     all_filings = senate_filings + house_filings
 
     if not all_filings:
-        # Option C: Finnhub is at finnhub.io — reachable even when efts.senate.gov is not.
-        # Always attempted when FINNHUB_API_KEY is set, regardless of Senate probe.
-        all_filings = _fetch_finnhub_congressional(days_back=days_back)
-        if not all_filings:
-            return {"members": [], "trades": []}
+        return {"members": [], "trades": []}
 
     member_map: Dict[str, dict] = {}
     trades = []
@@ -971,10 +839,6 @@ def fetch_congress_members_full() -> list:
 
 def handle_action(action: str, payload: dict) -> object:
     if action == "all_data":
-        # Allow caller to inject a Finnhub key stored in user config (not env var)
-        global FINNHUB_API_KEY
-        if payload.get("finnhub_key"):
-            FINNHUB_API_KEY = payload["finnhub_key"]
         return build_all_data(days_back=payload.get("days_back", 90))
     if action == "senate_ptrs":
         return fetch_senate_ptrs(days_back=payload.get("days_back", 30))
