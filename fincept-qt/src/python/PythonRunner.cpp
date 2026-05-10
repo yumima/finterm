@@ -39,7 +39,7 @@ static const QStringList kManagedCredentialKeys = {
     "BINANCE_SECRET_KEY",    "KRAKEN_API_KEY",       "KRAKEN_SECRET_KEY",
     "IEX_CLOUD_TOKEN",       "FINNHUB_API_KEY",      "TIINGO_API_KEY",
     "QUANDL_API_KEY",        "POLYMARKET_API_KEY",   "POLYMARKET_SECRET",
-    "POLYMARKET_PASSPHRASE", "POLYMARKET_WALLET",
+    "POLYMARKET_PASSPHRASE", "POLYMARKET_WALLET",    "CONGRESS_GOV_API_KEY",
 };
 
 // ── Sensitive shell-env stripping ────────────────────────────────────────────

@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "screens/power_trader/DataSourceDialog.h"
 
 #include <QDate>
 #include <QJsonArray>
@@ -47,12 +48,17 @@ void PowerTraderService::load_data() {
     }
 
     loading_ = true;
-    LOG_INFO("PowerTrader", "Loading congressional trade data from Senate eFTS + House FDS");
+    LOG_INFO("PowerTrader", "Loading congressional trade data from Senate eFD + House FDS");
 
     QPointer<PowerTraderService> self = this;
     QJsonObject req;
     req[QStringLiteral("days_back")] = 90;
 
+    // The Congress.gov API key is delivered to the script via the env var
+    // CONGRESS_GOV_API_KEY, injected by PythonRunner::build_python_env() from
+    // SecureStorage (see kManagedCredentialKeys). No need to pass it in the
+    // payload — that would also leak it into the subprocess argv visible via
+    // ps/proc.
 
     python::PythonRunner::instance().run(
         QStringLiteral("senate_disclosures_data.py"),
@@ -68,12 +74,14 @@ void PowerTraderService::load_data() {
                 LOG_ERROR("PowerTrader",
                           "senate_disclosures_data.py failed: " + result.error.left(300));
                 emit self->error_occurred(
-                    QStringLiteral("Could not reach Senate eFTS or Finnhub.\n\n"
-                                   "To enable the Finnhub fallback (free):\n"
-                                   "  Set FINNHUB_API_KEY environment variable\n"
-                                   "  Get a free key at finnhub.io\n\n"
-                                   "Live data will load automatically when "
-                                   "efts.senate.gov is reachable."));
+                    QStringLiteral("Could not reach the congressional disclosure sources.\n\n"
+                                   "Sources tried:\n"
+                                   "  • Senate eFD   — efdsearch.senate.gov\n"
+                                   "  • House FDS    — disclosures-clerk.house.gov\n\n"
+                                   "Check your network connection and try refreshing. "
+                                   "If you haven't yet set a Congress.gov API key, "
+                                   "press Refresh and use the prompt — it unlocks the "
+                                   "live member roster and committee data."));
                 return;
             }
             const QString json_str = python::extract_json(result.output);
@@ -89,11 +97,10 @@ void PowerTraderService::load_data() {
                 emit self->error_occurred(
                     QStringLiteral("No congressional trades found in the last 90 days.\n\n"
                                    "Sources tried:\n"
-                                   "  1. Senate eFTS (efts.senate.gov)\n"
-                                   "  2. House FDS (disclosures-clerk.house.gov)\n"
-                                   "  3. Finnhub API (set FINNHUB_API_KEY for this)\n\n"
-                                   "If network is available, refresh to try again.\n"
-                                   "Set FINNHUB_API_KEY env var for broader coverage."));
+                                   "  • Senate eFD   — efdsearch.senate.gov\n"
+                                   "  • House FDS    — disclosures-clerk.house.gov\n\n"
+                                   "The Senate eFD is occasionally in maintenance mode. "
+                                   "Refresh to retry."));
             }
         });
 }

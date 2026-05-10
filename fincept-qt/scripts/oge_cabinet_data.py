@@ -7,10 +7,20 @@ Nature of data:
   Unlike congressional PTRs, these are HOLDINGS snapshots (not individual trades).
   Filing deadline: within 30 days of taking office, then annually by May 15.
 
-Live sources attempted:
-  1. OGE eDisclosure search  — https://oge.gov/web/278eform.nsf/...
-  2. OGE bulk listing        — https://www.oge.gov/web/oge.nsf/Public+Financial+Disclosure+Reports
-  3. Curated fallback        — research-compiled from publicly filed documents (2025 Cabinet)
+Live source (OGE has no JSON API — content is HTML/PDF behind a Lotus Notes view):
+  https://www.oge.gov/web/OGE.nsf/Officials%20Individual%20Disclosures%20Search%20Collection?OpenForm
+
+Older URLs that the OGE redesign retired and that we used to point at — do NOT
+restore these without verifying first; they 404:
+  - https://oge.gov/web/278eform.nsf/...                     (eDisclosure subdomain)
+  - https://www.oge.gov/web/oge.nsf/Public+Financial+Disclosure+Reports
+
+Acquisition strategy:
+  - OGE Form 278 disclosures are filed as multi-page PDFs (no structured download).
+  - Parsing holdings out of those PDFs is brittle (table layouts vary per filer).
+  - This script ships a curated 2025 cabinet dataset compiled from publicly-filed
+    PDFs + Senate confirmation disclosures, and provides the live OGE search URL
+    for each filer so the user can drill in.
 
 Actions (PythonRunner):
   cabinet_data         — full summary for CabinetService.parse_summary()
@@ -33,9 +43,11 @@ except ImportError:
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
-OGE_BASE         = "https://www.oge.gov"
-OGE_EDISCLOSURE  = "https://oge.gov/web/278eform.nsf"
-OGE_REPORTS_PAGE = "https://www.oge.gov/web/oge.nsf/All+Public+Financial+Disclosure+Reports?OpenView"
+OGE_BASE              = "https://www.oge.gov"
+OGE_DISCLOSURE_SEARCH = ("https://www.oge.gov/web/OGE.nsf/"
+                        "Officials%20Individual%20Disclosures%20Search%20Collection?OpenForm")
+OGE_AGENCY_DOCS       = ("https://www.oge.gov/web/OGE.nsf/"
+                        "Agency%20Ethics%20Documents%20Search%20Collection?OpenForm")
 
 
 # ── Regulatory domain → conflict sectors ──────────────────────────────────────
@@ -571,13 +583,14 @@ def compute_conflict_score(member: Dict) -> Tuple[float, List[str]]:
 
 def _try_fetch_oge_data() -> List[Dict]:
     """
-    Attempt to fetch live OGE Form 278 disclosure data from oge.gov.
-    OGE does not publish a structured JSON API — their disclosure documents
-    are HTML/PDF. Until a proper parser is implemented, always return []
-    so the caller uses the curated fallback dataset.
+    OGE doesn't publish a structured JSON API, and the underlying disclosures
+    are multi-page PDFs whose table layouts vary per filer. Building a live
+    parser is out of scope (it would parse ~50 PDFs after each cabinet
+    appointment and rebuild after every annual May 15 refile cycle).
 
-    TODO: implement HTML scraping of
-    https://www.oge.gov/web/oge.nsf/All+Public+Financial+Disclosure+Reports
+    The curated 2025 dataset below is the authoritative source for this tab.
+    Each member entry carries a `source_url` pointing into the live OGE
+    disclosure-search portal (OGE_DISCLOSURE_SEARCH) so users can drill in.
     """
     return []
 
@@ -657,9 +670,11 @@ def build_cabinet_data() -> Dict:
         "total_est_min":  total_lo,
         "total_est_max":  total_hi,
         "disclosure_year": 2025,
+        "oge_search_url":  OGE_DISCLOSURE_SEARCH,
         "data_note": (
             "Annual holdings snapshot. These are asset positions, not trade transactions. "
-            "Conflict score reflects holdings in sectors regulated by the official's role."
+            "Conflict score reflects holdings in sectors regulated by the official's role. "
+            "Live OGE Form 278 PDFs available at oge.gov → Individual Disclosures Search."
         ),
     }
 

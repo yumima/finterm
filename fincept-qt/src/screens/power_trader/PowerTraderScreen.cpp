@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/CabinetPanel.h"
 #include "screens/power_trader/CommitteePanel.h"
+#include "screens/power_trader/DataSourceDialog.h"
 #include "screens/power_trader/InsiderWatchPanel.h"
 #include "screens/power_trader/PracticePanel.h"
 #include "screens/power_trader/SignalBuilderPanel.h"
@@ -33,6 +34,18 @@ PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
 
 void PowerTraderScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
+
+    // First-run: prompt for the user's Congress.gov API key if they haven't
+    // entered one yet. The key unlocks the rich live data set; if the user
+    // skips, the script still works with senate.gov fallback + KNOWN_MEMBERS.
+    // Only ask once per process so re-showing the screen doesn't re-prompt.
+    static bool shown_key_dialog_ = false;
+    if (!shown_key_dialog_ && !DataSourceDialog::has_key()) {
+        shown_key_dialog_ = true;
+        DataSourceDialog dlg(this);
+        dlg.exec();  // ignore return — both Save and Skip are valid paths
+    }
+
     if (!PowerTraderService::instance().is_loaded()) {
         show_loading();
         PowerTraderService::instance().load_data();

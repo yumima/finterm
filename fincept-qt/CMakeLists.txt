@@ -1030,6 +1030,7 @@ set(SCREEN_SOURCES
     src/screens/knowledge/RailWidget.cpp
     src/screens/power_trader/PowerTraderScreen.cpp
     src/screens/power_trader/PowerTraderService.cpp
+    src/screens/power_trader/DataSourceDialog.cpp
     src/screens/power_trader/LeaderboardPanel.cpp
     src/screens/power_trader/TradesFeedPanel.cpp
     src/screens/power_trader/MemberDetailPanel.cpp
@@ -1406,6 +1407,7 @@ set_source_files_properties(
     src/services/pre_ipo/PreIpoService.cpp
     src/screens/power_trader/PowerTraderScreen.cpp
     src/screens/power_trader/PowerTraderService.cpp
+    src/screens/power_trader/DataSourceDialog.cpp
     src/screens/power_trader/LeaderboardPanel.cpp
     src/screens/power_trader/TradesFeedPanel.cpp
     src/screens/power_trader/MemberDetailPanel.cpp
