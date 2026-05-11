@@ -64,7 +64,6 @@ struct PoliticalTrade {
     QString committee_relevance;   // overlapping committee name, if any
     double signal_score           = 0;  // 0–100
     QString source_url;
-    bool    is_demo               = false; // true when data is fallback/demo
 };
 
 // ── Portfolio reconstruction ──────────────────────────────────────────────────
@@ -262,7 +261,6 @@ struct PowerTraderSummary {
     QVector<PoliticalTrade> recent_trades;
     QDateTime last_updated;
     bool loaded  = false;
-    bool is_demo = false;  // true when fallback/mock data is shown
 };
 
 // ── Signal Builder ────────────────────────────────────────────────────────────

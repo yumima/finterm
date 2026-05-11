@@ -99,21 +99,6 @@ class PowerTraderService : public QObject {
     void on_daemon_response(bool ok, const QJsonObject& result, const QString& error);
     void parse_summary(const QJsonObject& root);
     void parse_cabinet(const QJsonObject& root);
-    void generate_mock_data();
-
-    static CongressMember make_member(const QString& id, const QString& name,
-                                      const QString& party, MemberChamber chamber,
-                                      const QString& state, const QStringList& committees,
-                                      double net_worth, int trades_ytd,
-                                      double portfolio_ret, double spy_ret);
-
-    static PoliticalTrade make_trade(int idx, const CongressMember& member,
-                                     const QString& ticker, const QString& asset_name,
-                                     TradeDirection direction,
-                                     double amount_low, double amount_high,
-                                     int txn_days_ago, int lag_days,
-                                     double signal_score,
-                                     AssetType asset_type = AssetType::Stock);
 
     PowerTraderSummary summary_;
     CabinetSummary     cabinet_;

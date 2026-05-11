@@ -56,8 +56,9 @@ HOUSE_FDS_BASE       = "https://disclosures-clerk.house.gov"
 
 CURRENT_CONGRESS     = 119   # 119th Congress (2025-2027)
 
-# Senate eFD report type codes (from the eFD search form options)
-EFD_REPORT_TYPE_PTR  = 11
+# Senate eFD report type codes (from the eFD search form on /search/)
+EFD_REPORT_TYPE_ANNUAL = 7   # Annual financial disclosure
+EFD_REPORT_TYPE_PTR    = 11  # Periodic Transaction Report
 
 # Politeness ceiling for parallel per-PTR HTTP fetches against
 # efdsearch.senate.gov. The site has no documented rate limit; 8 is well below
@@ -243,6 +244,50 @@ _CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 os.makedirs(_CACHE_DIR, exist_ok=True)
 
 
+# ── SPY YTD benchmark (live, cached per trading day) ──────────────────────────
+
+def _fetch_spy_ytd() -> Optional[float]:
+    """Return SPY's year-to-date percent return (e.g. 12.4 for +12.4%).
+
+    Fetched live via yfinance, cached on disk keyed by today's date so we hit
+    the network at most once per local day. Returns None on failure — callers
+    must handle the missing case rather than substitute a fake benchmark.
+    """
+    today_key = date.today().isoformat()
+    cache_file = os.path.join(_CACHE_DIR, f"spy_ytd_{today_key}.json")
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file) as f:
+                return float(json.load(f).get("ytd_pct"))
+        except Exception:
+            pass
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        return None
+
+    try:
+        # period="ytd" gives daily bars from Jan 1 of current year through latest
+        hist = yf.Ticker("SPY").history(period="ytd", auto_adjust=False)
+        if hist is None or hist.empty or len(hist) < 2:
+            return None
+        first_close = float(hist["Close"].iloc[0])
+        last_close  = float(hist["Close"].iloc[-1])
+        if first_close <= 0:
+            return None
+        ytd_pct = (last_close - first_close) / first_close * 100.0
+    except Exception:
+        return None
+
+    try:
+        with open(cache_file, "w") as f:
+            json.dump({"ytd_pct": ytd_pct, "as_of": today_key}, f)
+    except Exception:
+        pass
+    return ytd_pct
+
+
 # ── HTTP helper ───────────────────────────────────────────────────────────────
 
 def _get_json(url: str, params: dict = None, timeout: int = 8) -> dict:
@@ -345,28 +390,22 @@ def _iso_from_mdy(s: str) -> str:
 # mutate post-publication). The agreement cookie is short-lived; we just
 # re-do the agreement dance every run.
 
-class _PTRTransactionParser(HTMLParser):
-    """Pull rows out of the transactions table on a PTR detail page.
+class _SignatureTableParser(HTMLParser):
+    """Generic HTML-table extractor that finds the right table by column-header
+    signature. Subclasses set REQUIRED_HEADERS; the first table whose first row
+    contains all required headers (case-insensitive) wins.
 
-    Identifies the correct table by its column-header signature — every PTR's
-    transaction table has a header row containing "Transaction Date", "Ticker",
-    "Asset Name", and "Amount". This is structural (matches the data we're
-    extracting) rather than positional (which table on the page) or textual
-    (surrounding chrome), so it survives layout changes.
-
-    Nested tables are handled via a per-depth stack of frames, so an outer
-    layout table's <tr>/<td> state cannot bleed into an inner data table's
-    rows and vice-versa. The first table whose first row matches the header
-    signature wins; subsequent matching tables on the same page are ignored.
+    Maintains a per-depth stack of frames so nested layout tables don't bleed
+    into the data table's rows.
     """
-    REQUIRED_HEADERS = {"transaction date", "ticker", "asset name", "amount"}
+    REQUIRED_HEADERS: set = set()
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.stack:           List[Dict]        = []  # one frame per open <table>
-        self.headers:         List[str]         = []  # headers of the winning table
-        self.rows:            List[List[str]]   = []  # body rows of the winning table
-        self._target_claimed: bool              = False
+        self.stack:           List[Dict]      = []
+        self.headers:         List[str]       = []
+        self.rows:            List[List[str]] = []
+        self._target_claimed: bool            = False
 
     def _top(self) -> Optional[Dict]:
         return self.stack[-1] if self.stack else None
@@ -374,8 +413,8 @@ class _PTRTransactionParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag == "table":
             self.stack.append({
-                "headers":      None,   # filled on this table's first <tr>
-                "is_target":    False,  # True iff this table's headers match
+                "headers":      None,
+                "is_target":    False,
                 "in_tr":        False,
                 "current_row":  [],
                 "in_cell":      False,
@@ -406,7 +445,6 @@ class _PTRTransactionParser(HTMLParser):
             if not row:
                 return
             if top["headers"] is None:
-                # First row of this table: candidate header row.
                 top["headers"] = [c.strip() for c in row]
                 lowered = {c.lower() for c in top["headers"]}
                 if (not self._target_claimed
@@ -424,6 +462,18 @@ class _PTRTransactionParser(HTMLParser):
         if top is not None and top["in_cell"]:
             top["current_cell"].append(data)
 
+
+
+class _PTRTransactionParser(_SignatureTableParser):
+    """Senate PTR transactions table. Columns: # | Transaction Date | Owner |
+    Ticker | Asset Name | Asset Type | Type | Amount | Comment."""
+    REQUIRED_HEADERS = {"transaction date", "ticker", "asset name", "amount"}
+
+
+class _AnnualAssetsParser(_SignatureTableParser):
+    """Senate Annual disclosure assets table. Columns: # | Asset | Asset Type |
+    Owner | Value | Income Type | Income."""
+    REQUIRED_HEADERS = {"asset", "asset type", "value", "income type"}
 
 class SenateEFDScraper:
     """Stateful client for efdsearch.senate.gov."""
@@ -491,23 +541,33 @@ class SenateEFDScraper:
 
     # ── public methods ───────────────────────────────────────────────────────
 
-    def search_ptrs(self, start_date: date, end_date: Optional[date] = None,
-                    max_records: int = 500) -> List[Dict]:
-        """Return rows like {filer, first_name, last_name, full_name, ptr_uuid,
-        ptr_url, filed_date (ISO)}."""
+    def search_filings(self, report_type: int, kind_path: str,
+                       start_date: date, end_date: Optional[date] = None,
+                       max_records: int = 500) -> List[Dict]:
+        """Search eFD for filings of a given report type.
+
+        Args:
+            report_type: eFD report type code (7=Annual, 11=PTR)
+            kind_path: URL path component for the detail view ("ptr" or "annual")
+            start_date / end_date: date range filter
+            max_records: ceiling on results returned
+
+        Returns rows with: first_name, last_name, full_name, uuid, url, filed_date(ISO).
+        """
         if not self._accept_agreement():
             return []
         results: List[Dict] = []
         page = 0
         length = 100
         end_str = end_date.strftime("%m/%d/%Y 23:59:59") if end_date else ""
+        link_regex = re.compile(rf'/search/view/{re.escape(kind_path)}/([^/"]+)/')
         while True:
             try:
                 r = self.session.post(
                     f"{SENATE_EFD_BASE}/search/report/data/",
                     data={
                         "csrfmiddlewaretoken":   self.csrf_token,
-                        "report_types":          f"[{EFD_REPORT_TYPE_PTR}]",
+                        "report_types":          f"[{report_type}]",
                         "filer_types":           "[1]",      # 1 = Senator
                         "submitted_start_date":  start_date.strftime("%m/%d/%Y 00:00:00"),
                         "submitted_end_date":    end_str,
@@ -541,29 +601,25 @@ class SenateEFDScraper:
             for row in rows:
                 if len(row) < 5:
                     continue
-                # eFD DataTables row: [first_name, last_name, full_name, html_link, filed_date_mdy]
                 first, last, full, html_link, filed = row[0], row[1], row[2], row[3], row[4]
-                m = re.search(r'/search/view/ptr/([^/"]+)/', html_link or "")
+                m = link_regex.search(html_link or "")
                 if not m:
                     continue
                 uuid = m.group(1)
-                # eFD's full_name comes in as "Last, First Middle (Senator)".
-                # Normalize to "First Middle Last" so the roster lookup hits.
+                # Normalize "Last, First Middle (Senator)" → "First Middle Last".
                 cleaned = re.sub(r"\s*\(Senator\)\s*$", "", full or "").strip()
                 if "," in cleaned:
                     last_part, first_part = cleaned.split(",", 1)
                     cleaned = f"{first_part.strip()} {last_part.strip()}".strip()
-                # Fall back to building from the first_name/last_name cells if
-                # the full_name column was malformed.
                 if not cleaned:
                     cleaned = f"{first.strip()} {last.strip()}".strip()
                 results.append({
-                    "first_name":  first.strip(),
-                    "last_name":   last.strip(),
-                    "full_name":   cleaned,
-                    "ptr_uuid":    uuid,
-                    "ptr_url":     f"{SENATE_EFD_BASE}/search/view/ptr/{uuid}/",
-                    "filed_date":  _iso_from_mdy(filed),
+                    "first_name": first.strip(),
+                    "last_name":  last.strip(),
+                    "full_name":  cleaned,
+                    "uuid":       uuid,
+                    "url":        f"{SENATE_EFD_BASE}/search/view/{kind_path}/{uuid}/",
+                    "filed_date": _iso_from_mdy(filed),
                 })
                 if len(results) >= max_records:
                     break
@@ -574,6 +630,67 @@ class SenateEFDScraper:
                 break
 
         return results
+
+    def search_ptrs(self, start_date: date, end_date: Optional[date] = None,
+                    max_records: int = 500) -> List[Dict]:
+        """Thin wrapper preserving the legacy `ptr_uuid` / `ptr_url` keys."""
+        rows = self.search_filings(EFD_REPORT_TYPE_PTR, "ptr",
+                                   start_date, end_date, max_records)
+        # Legacy key names — keep until callers migrate.
+        for r in rows:
+            r["ptr_uuid"] = r["uuid"]
+            r["ptr_url"]  = r["url"]
+        return rows
+
+    def search_annuals(self, start_date: date, end_date: Optional[date] = None,
+                       max_records: int = 500) -> List[Dict]:
+        """Annual financial disclosures (eFD report type 7)."""
+        return self.search_filings(EFD_REPORT_TYPE_ANNUAL, "annual",
+                                   start_date, end_date, max_records)
+
+    def _fetch_filing_table(self, uuid: str, kind_path: str,
+                            parser_cls, cache_prefix: str) -> List[Dict]:
+        """Generic per-filing detail fetch + parse. Returns raw rows (untyped
+        list-of-cells); typed parsing happens in callers (fetch_transactions /
+        fetch_annual_assets) so the column schema stays explicit at each site.
+
+        Cached forever on disk keyed by UUID. Filings don't mutate post-publication.
+        """
+        cache_file = os.path.join(_CACHE_DIR, f"{cache_prefix}_{uuid}.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+        if not self._accept_agreement():
+            return []
+        try:
+            r = self.session.get(
+                f"{SENATE_EFD_BASE}/search/view/{kind_path}/{uuid}/",
+                headers={"Referer": f"{SENATE_EFD_BASE}/search/"},
+                timeout=15,
+            )
+            if r.status_code != 200:
+                return []
+            html_text = r.text
+        except Exception:
+            return []
+
+        parser = parser_cls()
+        try:
+            parser.feed(html_text)
+        except Exception:
+            return []
+
+        rows = [list(r) for r in parser.rows]
+        try:
+            with open(cache_file, "w") as f:
+                json.dump(rows, f)
+        except Exception:
+            pass
+        return rows
 
     def fetch_transactions(self, ptr_uuid: str) -> List[Dict]:
         """Return parsed transactions for one PTR. Cached on disk forever."""
@@ -644,6 +761,76 @@ class SenateEFDScraper:
         except Exception:
             pass
         return transactions
+
+    def fetch_annual_assets(self, annual_uuid: str) -> List[Dict]:
+        """Return parsed assets for one annual disclosure. Cached on disk
+        forever — annual filings are immutable post-publication.
+
+        Each row carries: asset_name, asset_type, owner, value_range_label,
+        value_low, value_high, income_type, income.
+        """
+        cache_file = os.path.join(_CACHE_DIR, f"annual_{annual_uuid}.json")
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+
+        if not self._accept_agreement():
+            return []
+        try:
+            r = self.session.get(
+                f"{SENATE_EFD_BASE}/search/view/annual/{annual_uuid}/",
+                headers={"Referer": f"{SENATE_EFD_BASE}/search/"},
+                timeout=15,
+            )
+            if r.status_code != 200:
+                return []
+            html_text = r.text
+        except Exception:
+            return []
+
+        parser = _AnnualAssetsParser()
+        try:
+            parser.feed(html_text)
+        except Exception:
+            return []
+
+        # Asset table columns (eFD): # | Asset | Asset Type | Owner | Value |
+        #                            Income Type | Income
+        assets = []
+        for row in parser.rows:
+            if len(row) < 5:
+                continue
+            asset_name  = row[1] if len(row) > 1 else ""
+            asset_type  = row[2] if len(row) > 2 else ""
+            owner       = row[3] if len(row) > 3 else ""
+            value_label = row[4] if len(row) > 4 else ""
+            income_type = row[5] if len(row) > 5 else ""
+            income      = row[6] if len(row) > 6 else ""
+            if not asset_name:
+                continue
+            lo, hi = _parse_amount_range(value_label)
+            # "Over $50,000,000" doesn't have a high — _parse_amount_range
+            # returns (50000000, 50000000), which is the conservative floor.
+            assets.append({
+                "asset_name":         asset_name,
+                "asset_type":         asset_type,
+                "owner":              owner,
+                "value_range_label":  value_label,
+                "value_low":          lo,
+                "value_high":         hi,
+                "income_type":        income_type,
+                "income":             income,
+            })
+
+        try:
+            with open(cache_file, "w") as f:
+                json.dump(assets, f)
+        except Exception:
+            pass
+        return assets
 
 
 # Module-level singleton (lazy)
@@ -1026,6 +1213,76 @@ def fetch_senate_ptrs(days_back: int = 90, max_records: int = 300) -> List[Dict]
     return filings
 
 
+# ── Senate Annual financial disclosures (for net worth estimation) ────────────
+
+def fetch_senate_annual_net_worth(days_back: int = 730,
+                                  max_records: int = 200) -> Dict[str, Dict]:
+    """
+    Fetch Senate annual financial disclosures and return a per-member net-worth
+    estimate keyed by full_name (lowercased).
+
+    Returns {member_name_lc: {
+        "estimated_net_worth_low":   float,   # sum of asset value_low across rows
+        "estimated_net_worth_high":  float,   # sum of asset value_high across rows
+        "estimated_net_worth":       float,   # midpoint of the two
+        "asset_count":               int,
+        "filing_url":                str,
+        "filed_date":                str (ISO),
+    }}
+
+    Annual reports are filed once per calendar year (May 15 deadline), so the
+    default 2-year window catches the most recent filing for each currently
+    serving senator. If a senator has multiple filings in window, the most
+    recent wins.
+    """
+    scraper = _get_scraper()
+    if scraper is None:
+        return {}
+
+    start = date.today() - timedelta(days=days_back)
+    rows  = scraper.search_annuals(start, max_records=max_records)
+    if not rows:
+        return {}
+
+    # Parallel asset-page fetches — same pattern as PTRs.
+    uuids = [r.get("uuid", "") for r in rows]
+    workers = min(_EFD_PARALLEL_WORKERS, max(1, len(uuids)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        assets_per_row = list(pool.map(
+            lambda u: scraper.fetch_annual_assets(u) if u else [],
+            uuids,
+        ))
+
+    by_member: Dict[str, Dict] = {}
+    for row, assets in zip(rows, assets_per_row):
+        if not assets:
+            continue
+        member_name = (row.get("full_name") or "").strip()
+        if not member_name:
+            continue
+        key = member_name.lower()
+        filed_date = row.get("filed_date", "")
+
+        # Keep only the most recent filing per member.
+        existing = by_member.get(key)
+        if existing and existing["filed_date"] >= filed_date:
+            continue
+
+        low  = sum(a.get("value_low",  0.0) for a in assets)
+        high = sum(a.get("value_high", 0.0) for a in assets)
+        mid  = (low + high) / 2.0 if high > 0 else low
+
+        by_member[key] = {
+            "estimated_net_worth_low":  low,
+            "estimated_net_worth_high": high,
+            "estimated_net_worth":      mid,
+            "asset_count":              len(assets),
+            "filing_url":               row.get("url", ""),
+            "filed_date":               filed_date,
+        }
+    return by_member
+
+
 # ── House FDS ──────────────────────────────────────────────────────────────────
 
 def fetch_house_ptrs(days_back: int = 90) -> list:
@@ -1239,11 +1496,23 @@ def build_all_data(days_back: int = 90) -> dict:
 
     all_filings = senate_filings + house_filings
 
+    # Fetch real SPY YTD benchmark (used by C++ for alpha computation). Cached
+    # per trading day. None on yfinance failure — caller must handle.
+    spy_ytd = _fetch_spy_ytd()
+
+    # Fetch annual-disclosure net-worth estimates for senators (Senate only —
+    # the House annual PDFs are not machine-readable from the FDS ZIP). Returns
+    # {member_name_lc: {estimated_net_worth, ...}}. Empty on eFD unreachable.
+    senate_net_worth: Dict[str, Dict] = {}
+    if senate_online:
+        senate_net_worth = fetch_senate_annual_net_worth()
+
     if not all_filings:
         scraper = _get_scraper()
         return {
-            "members": [],
-            "trades": [],
+            "members":         [],
+            "trades":          [],
+            "spy_return_ytd":  spy_ytd if spy_ytd is not None else 0.0,
             "diagnostics": {
                 "senate_online":   senate_online,
                 "house_online":    house_online,
@@ -1251,6 +1520,7 @@ def build_all_data(days_back: int = 90) -> dict:
                 "house_filings":   len(house_filings),
                 "scraper_reason":  scraper.unavailable_reason if scraper else "no scraper",
                 "has_congress_gov_key": bool(CONGRESS_GOV_API_KEY),
+                "spy_ytd_fetched": spy_ytd is not None,
             },
         }
 
@@ -1272,21 +1542,26 @@ def build_all_data(days_back: int = 90) -> dict:
         if member_id not in member_map:
             # Pull additional fields (district, image) from roster when available
             roster_entry = _enrich_member(member_name, chamber_raw)
+            nw = senate_net_worth.get(member_name.lower(), {})
             member_map[member_id] = {
-                "id":                   member_id,
-                "full_name":            member_name,
-                "party":                party or roster_entry.get("party", ""),
-                "chamber":              chamber,
-                "state":                state or roster_entry.get("state", ""),
-                "district":             roster_entry.get("district", ""),
-                "committees":           committees or roster_entry.get("committees", []),
-                "term_start":           "",
-                "estimated_net_worth":  0.0,
-                "trade_count_ytd":      0,
-                "portfolio_return_ytd": 0.0,
-                "spy_return_ytd":       0.0,
-                "bioguide_id":          roster_entry.get("bioguide_id", ""),
-                "image_url":            roster_entry.get("image_url", ""),
+                "id":                       member_id,
+                "full_name":                member_name,
+                "party":                    party or roster_entry.get("party", ""),
+                "chamber":                  chamber,
+                "state":                    state or roster_entry.get("state", ""),
+                "district":                 roster_entry.get("district", ""),
+                "committees":               committees or roster_entry.get("committees", []),
+                "term_start":               "",
+                "estimated_net_worth":      nw.get("estimated_net_worth", 0.0),
+                "estimated_net_worth_low":  nw.get("estimated_net_worth_low", 0.0),
+                "estimated_net_worth_high": nw.get("estimated_net_worth_high", 0.0),
+                "net_worth_source_url":     nw.get("filing_url", ""),
+                "net_worth_filed_date":     nw.get("filed_date", ""),
+                "trade_count_ytd":          0,
+                "portfolio_return_ytd":     0.0,
+                "spy_return_ytd":           0.0,
+                "bioguide_id":              roster_entry.get("bioguide_id", ""),
+                "image_url":                roster_entry.get("image_url", ""),
             }
 
         mem = member_map[member_id]
@@ -1326,14 +1601,52 @@ def build_all_data(days_back: int = 90) -> dict:
                 "placeholder":         is_placeholder,
             })
 
+    # Pull in senators who filed an annual disclosure but had no PTR in the
+    # window — they belong in the member list with trade_count=0 and a real
+    # net-worth estimate. Skip names already in member_map (PTR-filers already
+    # got their net worth merged at member-creation time above).
+    existing_lc = {m["full_name"].lower() for m in member_map.values()}
+    for name_lc, nw in senate_net_worth.items():
+        if name_lc in existing_lc:
+            continue
+        # Use _enrich_member's fuzzy last-name fallback so quirky name formats
+        # (e.g. "Justice, James Conley II") still hit the Congress.gov roster.
+        roster_match = _enrich_member(name_lc, "senate")
+        full_name = roster_match.get("full_name") or name_lc.title()
+        member_id = _make_member_id(full_name)
+        if member_id in member_map:
+            continue
+        member_map[member_id] = {
+            "id":                       member_id,
+            "full_name":                full_name,
+            "party":                    roster_match.get("party", ""),
+            "chamber":                  "Senate",
+            "state":                    roster_match.get("state", ""),
+            "district":                 roster_match.get("district", ""),
+            "committees":               roster_match.get("committees", []),
+            "term_start":               "",
+            "estimated_net_worth":      nw.get("estimated_net_worth", 0.0),
+            "estimated_net_worth_low":  nw.get("estimated_net_worth_low", 0.0),
+            "estimated_net_worth_high": nw.get("estimated_net_worth_high", 0.0),
+            "net_worth_source_url":     nw.get("filing_url", ""),
+            "net_worth_filed_date":     nw.get("filed_date", ""),
+            "trade_count_ytd":          0,
+            "portfolio_return_ytd":     0.0,
+            "spy_return_ytd":           0.0,
+            "bioguide_id":              roster_match.get("bioguide_id", ""),
+            "image_url":                roster_match.get("image_url", ""),
+        }
+
     trades.sort(key=lambda x: x.get("disclosure_date", ""), reverse=True)
     return {
-        "members": list(member_map.values()),
-        "trades":  trades,
+        "members":        list(member_map.values()),
+        "trades":         trades,
+        "spy_return_ytd": spy_ytd if spy_ytd is not None else 0.0,
         "diagnostics": {
             "senate_filings":  len(senate_filings),
             "house_filings":   len(house_filings),
             "has_congress_gov_key": bool(CONGRESS_GOV_API_KEY),
+            "spy_ytd_fetched": spy_ytd is not None,
         },
     }
 
