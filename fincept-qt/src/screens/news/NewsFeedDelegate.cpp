@@ -10,6 +10,13 @@
 
 namespace fincept::screens {
 
+// News reading palette — matches the Knowledge body so the news feed reads
+// like a book at length (warm cream on warm-dark brown). The global theme
+// TEXT_PRIMARY / TEXT_SECONDARY are cool greys tuned for data tables, which
+// read harsh against this warm-dark background.
+static const QColor kNewsTextPrimary  (0xf0, 0xe8, 0xd0);  // matches Knowledge HEAD_TEXT
+static const QColor kNewsTextSecondary(0xa8, 0x98, 0x78);  // matches Knowledge MUTED_TEXT
+
 NewsFeedDelegate::NewsFeedDelegate(QObject* parent)
     : QStyledItemDelegate(parent),
       data_font_(ui::fonts::DATA_FAMILY, ui::fonts::TINY),
@@ -67,15 +74,22 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     bool is_new = index.data(IsNewRole).toBool();
     int tier = index.data(SourceTierRole).toInt();
 
-    // Background
+    // Background — match the Knowledge body palette (warm-dark with a
+    // subtle brown undertone). The previous near-black bg + cool white text
+    // was harsh to read at length; the warm cream-on-brown of Knowledge
+    // reads like a book and the user asked for the same treatment.
+    static const QColor kNewsBgBase(0x1f, 0x1d, 0x1b);   // matches knowledge BODY_BG
+    static const QColor kNewsBgAlt (0x25, 0x22, 0x1f);   // a hair lighter for the stripe
+    static const QColor kNewsBgHover(0x2e, 0x2a, 0x24);  // hover lift
+    static const QColor kNewsBgSel (0x3a, 0x32, 0x28);   // selected
     if (selected)
-        painter->fillRect(rect, QColor(ui::colors::BG_HOVER()));
+        painter->fillRect(rect, kNewsBgSel);
     else if (hovered)
-        painter->fillRect(rect, QColor(ui::colors::BG_RAISED()));
+        painter->fillRect(rect, kNewsBgHover);
     else if (index.row() % 2 == 1)
-        painter->fillRect(rect, QColor(ui::colors::ROW_ALT()));
+        painter->fillRect(rect, kNewsBgAlt);
     else
-        painter->fillRect(rect, QColor(ui::colors::BG_BASE()));
+        painter->fillRect(rect, kNewsBgBase);
 
     int x = rect.left() + 2;
     int cy = rect.top() + rect.height() / 2;
@@ -104,7 +118,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
 
     // Time
     painter->setFont(tiny_font_);
-    painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+    painter->setPen(kNewsTextSecondary);
     QString time_str = services::relative_time(article.sort_ts);
     painter->drawText(QRect(x, rect.top(), 36, rect.height()), Qt::AlignVCenter | Qt::AlignRight, time_str);
     x += 40;
@@ -124,10 +138,10 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
         painter->setPen(QColor(ui::colors::AMBER()));
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xe2\x98\x85")); // ★
     } else if (tier == 2) {
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xe2\x97\x8f")); // ●
     } else if (tier == 3) {
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xc2\xb7")); // ·
     }
     x += 12;
@@ -148,7 +162,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     // Language badge (if not English)
     if (!lang_badge.isEmpty()) {
         painter->setFont(tiny_font_);
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
         painter->drawText(QRect(x, rect.top(), 20, rect.height()), Qt::AlignVCenter | Qt::AlignCenter, lang_badge);
         x += 22;
     }
@@ -162,9 +176,9 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     bool is_hot = article.priority == services::Priority::FLASH || article.priority == services::Priority::URGENT;
     if (is_hot) {
         painter->setFont(bold_font_);
-        painter->setPen(QColor(ui::colors::TEXT_PRIMARY()));
+        painter->setPen(kNewsTextPrimary);
     } else {
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
     }
 
     int right_reserve = 140; // space for credibility + threat + sentiment + tickers
@@ -209,7 +223,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
         painter->setPen(QColor(ui::colors::NEGATIVE()));
         painter->drawText(QPoint(x, text_y), QString::fromUtf8("\xe2\x96\xbc")); // ▼
     } else {
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
         painter->drawText(QPoint(x, text_y), "-");
     }
     x += 16;
@@ -234,9 +248,11 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     bool is_new = index.data(IsNewRole).toBool();
     auto velocity_text = index.data(VelocityTextRole).toString();
 
-    // Card background
-    QColor bg = selected ? QColor(ui::colors::BG_HOVER())
-                         : (hovered ? QColor(ui::colors::BG_RAISED()) : QColor(ui::colors::BG_SURFACE()));
+    // Card background — warm-dark per the news reading palette.
+    static const QColor kCardBg     (0x1f, 0x1d, 0x1b);   // matches BODY_BG
+    static const QColor kCardHover  (0x2e, 0x2a, 0x24);
+    static const QColor kCardSelect (0x3a, 0x32, 0x28);
+    QColor bg = selected ? kCardSelect : (hovered ? kCardHover : kCardBg);
     painter->fillRect(rect, bg);
 
     // Card border
@@ -264,7 +280,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
         QRect badge_rect(x, y, 62, 16);
         painter->drawRect(badge_rect);
         painter->setFont(tiny_font_);
-        painter->setPen(QColor(ui::colors::TEXT_PRIMARY()));
+        painter->setPen(kNewsTextPrimary);
         painter->drawText(badge_rect, Qt::AlignCenter, "BREAKING");
         x += 66;
     }
@@ -275,14 +291,14 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
         painter->setPen(QColor(ui::colors::AMBER()));
         painter->drawText(QPoint(x, y + 12), QString::fromUtf8("\xe2\x98\x85"));
     } else if (cluster.tier == 2) {
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
         painter->drawText(QPoint(x, y + 12), QString::fromUtf8("\xe2\x97\x8f"));
     }
     x += 14;
 
     // Headline
     painter->setFont(bold_font_);
-    painter->setPen(QColor(ui::colors::TEXT_PRIMARY()));
+    painter->setPen(kNewsTextPrimary);
     int headline_w = rect.right() - x - 80;
     QString elided = bold_fm_.elidedText(cluster.lead_article.headline, Qt::ElideRight, headline_w);
     painter->drawText(QRect(x, y, headline_w, 18), Qt::AlignVCenter | Qt::AlignLeft, elided);
@@ -292,7 +308,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
         int vx = rect.right() - 70;
         painter->setFont(tiny_font_);
         painter->setPen(cluster.velocity == "rising" ? QColor(ui::colors::POSITIVE())
-                                                     : QColor(ui::colors::TEXT_SECONDARY()));
+                                                     : kNewsTextSecondary);
         painter->drawText(QPoint(vx, y + 12), velocity_text);
     }
 
@@ -308,7 +324,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     x += data_fm_.horizontalAdvance(source) + 10;
 
     // Time
-    painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+    painter->setPen(kNewsTextSecondary);
     QString time_str = services::relative_time(cluster.latest_sort_ts);
     painter->drawText(QPoint(x, y + 12), time_str);
     x += data_fm_.horizontalAdvance(time_str) + 10;
@@ -335,7 +351,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     x = rect.left() + 8;
     if (cluster.articles.size() > 1) {
         painter->setFont(tiny_font_);
-        painter->setPen(QColor(ui::colors::TEXT_SECONDARY()));
+        painter->setPen(kNewsTextSecondary);
 
         QStringList also_sources;
         QSet<QString> seen;

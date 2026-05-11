@@ -100,10 +100,16 @@ QString news_screen_styles() {
                "#newsSentimentBear { background: %11; }"
 
                /* ── Content area ── */
-               "#newsContentArea { background: %1; }"
+               /* Warm-dark surface matching the Knowledge body palette       */
+               /* (#1f1d1b). Cream text on warm brown reads like a book at    */
+               /* length — replaced the prior near-black + smoke-white combo  */
+               /* that was harsh for sustained reading. Scoped to news only:  */
+               /* the global theme BG_BASE is unchanged so other panels keep  */
+               /* their existing look.                                        */
+               "#newsContentArea { background: #1f1d1b; }"
 
                /* ── Feed list ── */
-               "#newsFeedList { background: %1; border: none; outline: none; }"
+               "#newsFeedList { background: #1f1d1b; border: none; outline: none; }"
                "#newsFeedList::item { border: none; padding: 0; }"
                "#newsFeedList::item:selected { background: transparent; }"
                "#newsFeedList::item:hover { background: transparent; }"
