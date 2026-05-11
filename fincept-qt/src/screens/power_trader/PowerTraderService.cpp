@@ -60,6 +60,12 @@ void PowerTraderService::load_data() {
     // payload — that would also leak it into the subprocess argv visible via
     // ps/proc.
 
+    // The Senate eFD scrape does many sequential HTTPs (one per PTR detail
+    // page, partially parallelized). Cold start is ~35s for a typical 90-day
+    // window; worst case during a busy filing quarter can push toward 2 min.
+    // Override the default 30s timeout so the script isn't killed mid-scrape.
+    constexpr int kSenateScrapeTimeoutMs = 180'000;  // 3 min
+
     python::PythonRunner::instance().run(
         QStringLiteral("senate_disclosures_data.py"),
         {QStringLiteral("all_data"),
@@ -102,7 +108,9 @@ void PowerTraderService::load_data() {
                                    "The Senate eFD is occasionally in maintenance mode. "
                                    "Refresh to retry."));
             }
-        });
+        },
+        /*on_line=*/{},
+        kSenateScrapeTimeoutMs);
 }
 
 QVector<CongressMember> PowerTraderService::members() const {

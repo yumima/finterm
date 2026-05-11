@@ -299,7 +299,8 @@ QString PythonRunner::find_scripts_dir() const {
 
 // ── Run Script ───────────────────────────────────────────────────────────────
 
-void PythonRunner::run(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line) {
+void PythonRunner::run(const QString& script, const QStringList& args, Callback cb,
+                       StreamCallback on_line, int timeout_ms) {
     if (python_init_done_ && python_path_.isEmpty()) {
         cb({false, {}, "Python not available — run first-time setup from the app", -1});
         return;
@@ -312,7 +313,7 @@ void PythonRunner::run(const QString& script, const QStringList& args, Callback 
     }
 
     // Queue the request and start if under concurrency limit
-    queue_.enqueue({script, args, std::move(cb), std::move(on_line)});
+    queue_.enqueue({script, args, std::move(cb), std::move(on_line), timeout_ms});
     start_next();
 }
 
@@ -586,21 +587,27 @@ void PythonRunner::start_next() {
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency
         // slot forever (futures_router network calls, yf.download on bad tickers).
+        // Per-request override (req.timeout_ms) so legitimately long-running
+        // scrapers (e.g. Senate eFD with many per-PTR HTTP round-trips) can
+        // declare their own ceiling. 0 disables the timeout.
         // Use QPointer so the lambda is safe if the QProcess is destroyed before
         // the timer fires (OS address reuse would make a raw pointer check unreliable).
-        auto* tmr = new QTimer(this);
-        tmr->setSingleShot(true);
-        tmr->setInterval(kProcessTimeoutMs);
-        QPointer<QProcess> proc_guard(proc);
-        connect(tmr, &QTimer::timeout, this, [this, proc_guard, script_name]() {
-            if (!proc_guard || !proc_buffers_.contains(proc_guard.data())) return;
-            LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
-                                   .arg(script_name)
-                                   .arg(static_cast<double>(kProcessTimeoutMs) / 1000.0, 0, 'f', 0));
-            proc_guard->kill(); // triggers finished(), which calls cb + start_next()
-        });
-        proc_buffers_[proc].timeout_timer = tmr;
-        tmr->start();
+        const int timeout_ms = req.timeout_ms;
+        if (timeout_ms > 0) {
+            auto* tmr = new QTimer(this);
+            tmr->setSingleShot(true);
+            tmr->setInterval(timeout_ms);
+            QPointer<QProcess> proc_guard(proc);
+            connect(tmr, &QTimer::timeout, this, [this, proc_guard, script_name, timeout_ms]() {
+                if (!proc_guard || !proc_buffers_.contains(proc_guard.data())) return;
+                LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
+                                       .arg(script_name)
+                                       .arg(static_cast<double>(timeout_ms) / 1000.0, 0, 'f', 0));
+                proc_guard->kill(); // triggers finished(), which calls cb + start_next()
+            });
+            proc_buffers_[proc].timeout_timer = tmr;
+            tmr->start();
+        }
     }
 }
 

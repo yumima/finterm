@@ -29,13 +29,23 @@ class PythonRunner : public QObject {
     /// `is_stderr` is true for stderr lines, false for stdout.
     using StreamCallback = std::function<void(QString line, bool is_stderr)>;
 
+    // Default per-process hard timeout. Scripts that make network calls
+    // (futures_router, benchmark fetches, etc.) can hang indefinitely on
+    // DNS/connection failure. When the deadline fires the process is killed
+    // and the callback is called with success=false so callers show an error
+    // rather than loading forever. Override per call via run(..., timeout_ms).
+    static constexpr int kProcessTimeoutMs = 30'000;
+
     static PythonRunner& instance();
 
     /// Run a script asynchronously. Callback invoked on Qt event loop.
     /// Requests are queued if max concurrency is reached.
     /// Optional `on_line` delivers each complete stdout/stderr line as it arrives.
+    /// Optional `timeout_ms` overrides the default per-process timeout. Use
+    /// for scripts that legitimately need to run longer than the default
+    /// (e.g. network-heavy scrapers); 0 disables the timeout entirely.
     void run(const QString& script, const QStringList& args, Callback cb,
-             StreamCallback on_line = {});
+             StreamCallback on_line = {}, int timeout_ms = kProcessTimeoutMs);
 
     /// Run arbitrary Python code (for notebook/colab cells).
     /// Creates a temp file, executes it, returns stdout/stderr.
@@ -78,17 +88,12 @@ class PythonRunner : public QObject {
     int max_concurrent_ = DEFAULT_MAX_CONCURRENT;
     int active_count_ = 0;
 
-    // Per-process hard timeout. Scripts that make network calls (futures_router,
-    // benchmark fetches, etc.) can hang indefinitely on DNS/connection failure.
-    // When the deadline fires the process is killed and the callback is called
-    // with success=false so callers show an error rather than loading forever.
-    static constexpr int kProcessTimeoutMs = 30'000;
-
     struct QueuedRequest {
-        QString script;
-        QStringList args;
-        Callback cb;
+        QString        script;
+        QStringList    args;
+        Callback       cb;
         StreamCallback on_line;
+        int            timeout_ms = kProcessTimeoutMs;
     };
     QQueue<QueuedRequest> queue_;
 
