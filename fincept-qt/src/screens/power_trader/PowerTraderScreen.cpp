@@ -17,15 +17,21 @@
 
 #include <QButtonGroup>
 #include <QDesktopServices>
+#include <QEvent>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
+#include <QMenu>
+#include <QSettings>
+#include <QShortcut>
 #include <QShowEvent>
+#include <QStringList>
 #include <QUrl>
 #include <QVBoxLayout>
 
 namespace fincept::power_trader {
 
 PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
+    load_watchlist();
     build_ui();
     auto& svc = PowerTraderService::instance();
     connect(&svc, &PowerTraderService::data_loaded,    this, &PowerTraderScreen::on_data_loaded);
@@ -164,13 +170,81 @@ void PowerTraderScreen::build_ui() {
 
             tab_widget_->addTab(overview_panel_,  "Overview");
             tab_widget_->addTab(rankings_panel_,  "Rankings");
-            tab_widget_->addTab(member_panel_,    "Member");
+            // Member tab removed — member_panel_ is shown as a slide-in
+            // drawer (build_member_drawer()) so member selection doesn't
+            // force-navigate away from the user's current tab context.
             tab_widget_->addTab(feed_panel_,      "Feed");
             tab_widget_->addTab(committee_panel_, "By Committee");
             tab_widget_->addTab(party_panel_,     "Party Intel");
             tab_widget_->addTab(insider_panel_,   "⚠ Insider Watch");
-            tab_widget_->addTab(signal_panel_,    "Signal Builder");
-            tab_widget_->addTab(practice_panel_,  "Practice");
+
+            // Signal Builder + Practice are folded into a single tab with a
+            // sub-tab bar — both are research/strategy-builder views and the
+            // top-level tab strip was getting crowded. Sub-tab bar is a
+            // simple QPushButton row driving a QStackedWidget.
+            sb_practice_tab_ = new QWidget;
+            {
+                auto* spl = new QVBoxLayout(sb_practice_tab_);
+                spl->setContentsMargins(0, 0, 0, 0);
+                spl->setSpacing(0);
+
+                auto* sub_bar = new QWidget(sb_practice_tab_);
+                sub_bar->setFixedHeight(30);
+                sub_bar->setStyleSheet(
+                    QString("background:%1; border-bottom:1px solid %2;")
+                        .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+                auto* sbl = new QHBoxLayout(sub_bar);
+                sbl->setContentsMargins(10, 0, 10, 0);
+                sbl->setSpacing(2);
+
+                sb_practice_stack_ = new QStackedWidget(sb_practice_tab_);
+                sb_practice_stack_->addWidget(signal_panel_);
+                sb_practice_stack_->addWidget(practice_panel_);
+
+                const QString pill_ss =
+                    QString("QPushButton{background:transparent;color:%1;"
+                            "border:1px solid %2;border-radius:2px;"
+                            "padding:2px 14px;font-size:12px;font-weight:700;"
+                            "letter-spacing:0.5px;}"
+                            "QPushButton:checked{background:%3;color:%4;"
+                            "border-color:%3;}"
+                            "QPushButton:hover:!checked{border-color:%5;}")
+                        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                             ui::colors::AMBER_DIM(),      ui::colors::AMBER(),
+                             ui::colors::TEXT_SECONDARY());
+
+                auto* builder_btn = new QPushButton(QStringLiteral("BUILDER"), sub_bar);
+                builder_btn->setCheckable(true);
+                builder_btn->setChecked(true);
+                builder_btn->setCursor(Qt::PointingHandCursor);
+                builder_btn->setStyleSheet(pill_ss);
+                sbl->addWidget(builder_btn);
+
+                auto* practice_btn = new QPushButton(QStringLiteral("PRACTICE"), sub_bar);
+                practice_btn->setCheckable(true);
+                practice_btn->setCursor(Qt::PointingHandCursor);
+                practice_btn->setStyleSheet(pill_ss);
+                sbl->addWidget(practice_btn);
+
+                sbl->addStretch();
+
+                auto* sub_group = new QButtonGroup(sb_practice_tab_);
+                sub_group->setExclusive(true);
+                sub_group->addButton(builder_btn, 0);
+                sub_group->addButton(practice_btn, 1);
+                connect(sub_group, &QButtonGroup::idClicked,
+                        sb_practice_stack_, &QStackedWidget::setCurrentIndex);
+                // Reverse direction — keep the pill checked-state in sync if
+                // the stack flips programmatically (e.g. navigate-to-builder).
+                connect(sb_practice_stack_, &QStackedWidget::currentChanged,
+                        this, [builder_btn, practice_btn](int idx) {
+                            (idx == 0 ? builder_btn : practice_btn)->setChecked(true);
+                        });
+
+                spl->addWidget(sub_bar);
+                spl->addWidget(sb_practice_stack_, 1);
+            }
+            tab_widget_->addTab(sb_practice_tab_, "Signal Builder");
 
             connect(overview_panel_,  &screens::OverviewPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
@@ -183,7 +257,13 @@ void PowerTraderScreen::build_ui() {
             connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(practice_panel_, &screens::PracticePanel::navigate_to_signal_builder,
-                    this, [this]() { tab_widget_->setCurrentWidget(signal_panel_); });
+                    this, [this]() {
+                        // After folding, Signal Builder and Practice share one
+                        // tab. Switch to that tab and flip the sub-stack to
+                        // the BUILDER sub-page (index 0).
+                        tab_widget_->setCurrentWidget(sb_practice_tab_);
+                        if (sb_practice_stack_) sb_practice_stack_->setCurrentIndex(0);
+                    });
             connect(practice_panel_, &screens::PracticePanel::preset_requested,
                     signal_panel_,    &screens::SignalBuilderPanel::on_preset_clicked);
             connect(signal_panel_,    &screens::SignalBuilderPanel::member_selected,
@@ -194,6 +274,11 @@ void PowerTraderScreen::build_ui() {
                     });
 
             cl->addWidget(tab_widget_, 1);
+
+            // Member-detail drawer overlay (replaces former Member tab).
+            // Built AFTER tab_widget_ is added so we can attach an event filter
+            // to track its geometry and keep the drawer in sync on resize.
+            build_member_drawer();
         }
         view_stack_->addWidget(congress_view_);  // index 0
 
@@ -384,6 +469,22 @@ QWidget* PowerTraderScreen::build_body_strip() {
         if (active_days == days) btn->setChecked(true);
     }
 
+    // Second separator + WATCHLIST filter (persisted star list).
+    auto* gap2 = new QLabel("\xc2\xa0\xc2\xa0\xe2\x94\x82\xc2\xa0\xc2\xa0");
+    gap2->setStyleSheet(QString("color:%1;").arg(ui::colors::BORDER_DIM()));
+    hl->addWidget(gap2);
+
+    watchlist_filter_ = new QPushButton(QStringLiteral("\xe2\x98\x85 WATCHLIST"));  // ★
+    watchlist_filter_->setCheckable(true);
+    watchlist_filter_->setStyleSheet(pill_base);
+    watchlist_filter_->setCursor(Qt::PointingHandCursor);
+    watchlist_filter_->setToolTip(
+        QStringLiteral("Show only members you've added to your watchlist "
+                       "(right-click a member to add)"));
+    connect(watchlist_filter_, &QPushButton::toggled,
+            this, &PowerTraderScreen::on_watchlist_filter_toggled);
+    hl->addWidget(watchlist_filter_);
+
     hl->addStretch();
 
     auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
@@ -451,28 +552,163 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
                 if (!mid.isEmpty())
                     on_member_selected(mid);
             });
+
+    // Right-click on a member → toggle watchlist. Marker is a star prepended
+    // to the name in populate_member_list; the set is persisted via QSettings.
+    member_list_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(member_list_, &QListWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+                auto* item = member_list_->itemAt(pos);
+                if (!item) return;
+                const QString mid = item->data(Qt::UserRole).toString();
+                if (mid.isEmpty()) return;
+                QMenu menu(this);
+                const bool watched = watchlist_.contains(mid);
+                QAction* act = menu.addAction(
+                    watched ? QStringLiteral("Remove from watchlist")
+                            : QStringLiteral("Add to watchlist"));
+                if (menu.exec(member_list_->viewport()->mapToGlobal(pos)) == act)
+                    toggle_watchlist(mid);
+            });
     vl->addWidget(member_list_, 1);
     return sidebar;
+}
+
+// ── Member detail drawer ──────────────────────────────────────────────────────
+
+void PowerTraderScreen::build_member_drawer() {
+    // Drawer is a child of congress_view_, not part of any layout — we drive
+    // its geometry manually so it overlays tab_widget_'s area when shown.
+    // This lets the user dismiss the detail and return to whichever tab they
+    // were on, instead of being auto-navigated.
+    member_drawer_ = new QWidget(congress_view_);
+    member_drawer_->setStyleSheet(
+        QString("QWidget#powerTraderMemberDrawer { background:%1; "
+                " border-left:2px solid %2; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::AMBER()));
+    member_drawer_->setObjectName(QStringLiteral("powerTraderMemberDrawer"));
+
+    auto* vl = new QVBoxLayout(member_drawer_);
+    vl->setContentsMargins(0, 0, 0, 0);
+    vl->setSpacing(0);
+
+    // Top bar with title + close button. Close returns the user to whichever
+    // tab they had selected before opening the drawer.
+    auto* bar = new QWidget(member_drawer_);
+    bar->setFixedHeight(34);
+    bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                           .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* bl = new QHBoxLayout(bar);
+    bl->setContentsMargins(14, 0, 8, 0);
+    bl->setSpacing(8);
+
+    auto* title = new QLabel(QStringLiteral("MEMBER DETAIL"), bar);
+    title->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
+                                 "letter-spacing:1.5px;background:transparent;")
+                             .arg(ui::colors::AMBER()));
+    bl->addWidget(title);
+    bl->addStretch();
+
+    auto* close_btn = new QPushButton(QStringLiteral("\xc3\x97"), bar);  // ×
+    close_btn->setFixedSize(26, 22);
+    close_btn->setCursor(Qt::PointingHandCursor);
+    close_btn->setToolTip(QStringLiteral("Close (Esc)"));
+    close_btn->setStyleSheet(
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                "border-radius:2px;font-size:14px;font-weight:700;}"
+                "QPushButton:hover{color:%3;border-color:%3;background:%4;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::AMBER(),          ui::colors::BG_RAISED()));
+    connect(close_btn, &QPushButton::clicked, this, &PowerTraderScreen::hide_member_drawer);
+    bl->addWidget(close_btn);
+
+    vl->addWidget(bar);
+
+    // member_panel_ is reparented inside the drawer. Previously it was a tab
+    // of tab_widget_; here it lives only in the drawer.
+    member_panel_->setParent(member_drawer_);
+    vl->addWidget(member_panel_, 1);
+
+    member_drawer_->setVisible(false);
+    member_drawer_->raise();
+
+    // Track the tab area's geometry so the drawer follows on resize.
+    tab_widget_->installEventFilter(this);
+
+    // Esc closes the drawer.
+    auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), member_drawer_);
+    esc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(esc, &QShortcut::activated, this, &PowerTraderScreen::hide_member_drawer);
+}
+
+void PowerTraderScreen::show_member_drawer() {
+    if (!member_drawer_ || !tab_widget_) return;
+    const QPoint pos = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
+    member_drawer_->setGeometry(pos.x(), pos.y(),
+                                tab_widget_->width(), tab_widget_->height());
+    member_drawer_->raise();
+    member_drawer_->show();
+    member_drawer_->setFocus();
+}
+
+void PowerTraderScreen::hide_member_drawer() {
+    if (member_drawer_) member_drawer_->setVisible(false);
+}
+
+bool PowerTraderScreen::eventFilter(QObject* obj, QEvent* ev) {
+    if (obj == tab_widget_ && member_drawer_ && member_drawer_->isVisible() &&
+        (ev->type() == QEvent::Resize || ev->type() == QEvent::Move)) {
+        const QPoint pos = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
+        member_drawer_->setGeometry(pos.x(), pos.y(),
+                                    tab_widget_->width(), tab_widget_->height());
+    }
+    return QWidget::eventFilter(obj, ev);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& members) {
     member_list_->clear();
+
+    const bool only_watched = watchlist_filter_ && watchlist_filter_->isChecked();
+
     auto sorted = members;
     std::sort(sorted.begin(), sorted.end(),
               [](const CongressMember& a, const CongressMember& b) {
                   return a.alpha_ytd > b.alpha_ytd;
               });
+    const auto& svc = PowerTraderService::instance();
     for (const auto& m : sorted) {
+        const bool starred = watchlist_.contains(m.id);
+        if (only_watched && !starred) continue;
         auto* item = new QListWidgetItem;
+        const QString star_tag  = starred ? QStringLiteral("\xe2\x98\x85 ") : QString();  // ★
         const QString party_tag = m.party.isEmpty() ? "" : "[" + m.party + "] ";
         const QString chb_tag   = m.chamber == MemberChamber::Senate ? "SEN" : "HSE";
         const QString sign      = m.alpha_ytd >= 0 ? "+" : "";
-        item->setText(party_tag + m.full_name + "\n"
+        // Signal-score indicator: a tiny block character whose colour reflects
+        // the member's average per-trade signal score. ▌ green = low, amber =
+        // mid, red = high. Gives the user a glance-level cue about each
+        // member's overall insider-signal intensity without needing to open
+        // the detail drawer.
+        const double sig = svc.avg_signal_score(m.id);
+        const QString sig_glyph = QStringLiteral("\xe2\x96\x8c");  // ▌
+        item->setText(star_tag + party_tag + m.full_name + "  " + sig_glyph + "\n"
                       + chb_tag + "  " + m.state + "  "
                       + sign + QString::number(m.alpha_ytd, 'f', 1) + "% alpha");
         item->setData(Qt::UserRole, m.id);
+        // We can't colorize a portion of a QListWidgetItem's plain text — but
+        // we can attach a tooltip with the numeric score so hover discloses
+        // the value, and we set foreground to amber for high-signal members
+        // so the whole row reads "watch this one."
+        if (sig >= 60.0) {
+            item->setForeground(QColor(ui::colors::AMBER()));
+            item->setToolTip(QStringLiteral("Avg signal: %1 / 100  (high)").arg(sig, 0, 'f', 0));
+        } else if (sig >= 40.0) {
+            item->setToolTip(QStringLiteral("Avg signal: %1 / 100  (moderate)").arg(sig, 0, 'f', 0));
+        } else {
+            item->setToolTip(QStringLiteral("Avg signal: %1 / 100  (low)").arg(sig, 0, 'f', 0));
+        }
         member_list_->addItem(item);
     }
 
@@ -571,7 +807,9 @@ void PowerTraderScreen::on_member_selected(const QString& member_id) {
 
     member_panel_->set_member(member);
     feed_panel_->set_selected_member(member_id);
-    tab_widget_->setCurrentWidget(member_panel_);
+    // Show the member detail in the slide-in drawer instead of force-
+    // navigating to a Member tab — preserves the user's current tab context.
+    show_member_drawer();
 }
 
 void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
@@ -611,6 +849,37 @@ void PowerTraderScreen::on_range_changed(int days) {
     if (days == PowerTraderService::instance().days_back()) return;
     show_loading();
     PowerTraderService::instance().set_days_back(days);
+}
+
+// ── Watchlist (per-user follows, persisted across sessions) ──────────────────
+
+void PowerTraderScreen::load_watchlist() {
+    const QStringList ids = QSettings()
+        .value(QStringLiteral("power_trader/watchlist")).toStringList();
+    watchlist_ = QSet<QString>(ids.begin(), ids.end());
+}
+
+void PowerTraderScreen::save_watchlist() {
+    QStringList ids(watchlist_.begin(), watchlist_.end());
+    ids.sort();
+    QSettings().setValue(QStringLiteral("power_trader/watchlist"), ids);
+}
+
+void PowerTraderScreen::toggle_watchlist(const QString& member_id) {
+    if (member_id.isEmpty()) return;
+    if (watchlist_.contains(member_id))
+        watchlist_.remove(member_id);
+    else
+        watchlist_.insert(member_id);
+    save_watchlist();
+    // Re-render sidebar to update star markers and (if watchlist filter is
+    // active) the visible subset.
+    populate_member_list(PowerTraderService::instance().filtered_summary(active_body_).members);
+}
+
+void PowerTraderScreen::on_watchlist_filter_toggled(bool /*only_watched*/) {
+    // The filter is read inside populate_member_list. Just trigger a redraw.
+    populate_member_list(PowerTraderService::instance().filtered_summary(active_body_).members);
 }
 
 } // namespace fincept::power_trader
