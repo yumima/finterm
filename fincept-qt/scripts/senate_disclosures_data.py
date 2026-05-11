@@ -1450,49 +1450,27 @@ def compute_signal_score(trade: dict, member: dict) -> float:
 
 
 # ── Full summary builder ───────────────────────────────────────────────────────
-
-def _senate_reachable() -> bool:
-    """Probe efdsearch.senate.gov. 200 home, 302→home, or even 503 maintenance
-    all count as 'reachable' so the scraper can try and report its own error."""
-    if requests is None:
-        return False
-    try:
-        r = requests.head(f"{SENATE_EFD_BASE}/search/home/", timeout=4,
-                          allow_redirects=False)
-        return r.status_code in (200, 301, 302, 303, 307, 308)
-    except Exception:
-        return False
-
-
-def _house_reachable() -> bool:
-    if requests is None:
-        return False
-    try:
-        r = requests.head(HOUSE_FDS_BASE, timeout=4, allow_redirects=False)
-        return r.status_code in (200, 301, 302, 303, 307, 308)
-    except Exception:
-        return False
+#
+# Earlier versions had _senate_reachable()/_house_reachable() HEAD probes with
+# a 4s timeout as a "fail fast if the source is down" optimization. In Qt's
+# subprocess context (slower TLS setup, libsecret IPC contention on first run)
+# the probes occasionally timed out even when the actual full scrape would
+# have succeeded, returning 0 members to the UI. Both scrapers already handle
+# unreachable hosts cleanly (return [] + set unavailable_reason). Skip the
+# probes entirely — try the scrape and let it report its own outcome.
 
 
 def build_all_data(days_back: int = 90) -> dict:
     """
     Build {members, trades} compatible with PowerTraderService.parse_summary().
-    Probes each source independently — they're on different domains.
     """
-    senate_online = _senate_reachable()
-    house_online  = _house_reachable()
+    # Roster fetch is fast (Congress.gov API with key, or senate.gov JSON
+    # fallback). Worst case the script is online-but-government-down — the
+    # scrapers below return [] and we ship an empty result with diagnostics.
+    _load_roster()
 
-    senate_filings: list = []
-    house_filings:  list = []
-
-    if senate_online or house_online:
-        _load_roster()
-
-    if senate_online:
-        senate_filings = fetch_senate_ptrs(days_back=days_back)
-
-    if house_online:
-        house_filings = fetch_house_ptrs(days_back=days_back)
+    senate_filings = fetch_senate_ptrs(days_back=days_back)
+    house_filings  = fetch_house_ptrs(days_back=days_back)
 
     all_filings = senate_filings + house_filings
 
@@ -1501,11 +1479,10 @@ def build_all_data(days_back: int = 90) -> dict:
     spy_ytd = _fetch_spy_ytd()
 
     # Fetch annual-disclosure net-worth estimates for senators (Senate only —
-    # the House annual PDFs are not machine-readable from the FDS ZIP). Returns
-    # {member_name_lc: {estimated_net_worth, ...}}. Empty on eFD unreachable.
-    senate_net_worth: Dict[str, Dict] = {}
-    if senate_online:
-        senate_net_worth = fetch_senate_annual_net_worth()
+    # House annual PDFs aren't machine-readable from the FDS ZIP). Returns
+    # {member_name_lc: {estimated_net_worth, ...}}. Empty on eFD unreachable;
+    # the scraper records the reason in scraper.unavailable_reason.
+    senate_net_worth = fetch_senate_annual_net_worth()
 
     if not all_filings:
         scraper = _get_scraper()
@@ -1514,8 +1491,6 @@ def build_all_data(days_back: int = 90) -> dict:
             "trades":          [],
             "spy_return_ytd":  spy_ytd if spy_ytd is not None else 0.0,
             "diagnostics": {
-                "senate_online":   senate_online,
-                "house_online":    house_online,
                 "senate_filings":  len(senate_filings),
                 "house_filings":   len(house_filings),
                 "scraper_reason":  scraper.unavailable_reason if scraper else "no scraper",
