@@ -24,14 +24,21 @@ namespace {
 
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 
-// Sub-tab assignment — 3 content panes around the rail.
-//   BASICS   : core reference   — Glossary · Concepts · Abbreviations
-//   PRACTICE : applied learning — Formulas · Tracks · Playbooks
-//   REFERENCE: context & study  — Cases · Regulators
-//   (Interviews removed — was placeholder content with no real data)
-const QStringList BASICS_CATS    = {"glossary", "concepts"};
-const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks"};
-const QStringList REFERENCE_CATS = {"cases", "regulators"};
+// Sub-tab assignment — 4 content panes around the rail.
+//   BASICS   : definitional reference — Glossary · Concepts · Abbreviations · Regulators
+//   PRACTICE : applied learning       — Formulas · Tracks · Playbooks · Cases · Interviews
+//   CONTEXT  : finterm rail (live tied to last selection)
+//   QUANT    : quant curriculum       — Foundations · Risk & Return · Factors · Execution · Backtesting · Strategies · Practices
+//
+// (REFERENCE pane removed in favour of merging its cats into BASICS / PRACTICE
+//  by what they actually are: Regulators are reference rules → BASICS; Cases
+//  are applied scenario studies → PRACTICE. Interviews are profiles of real
+//  investors — Buffett, Munger, Dalio, Simons, Soros, Graham, Lynch, Marks —
+//  documented from their published letters/biographies, so they live in
+//  PRACTICE alongside the case studies.)
+const QStringList BASICS_CATS    = {"glossary", "concepts", "regulators"};
+const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks", "cases", "interviews"};
+const QStringList QUANT_CATS     = {"quant"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
@@ -195,24 +202,28 @@ void KnowledgeScreen::build_layout() {
     connect(rail_, &RailWidget::request_action, this,
             [this](const QString& screen, const QString& ticker) { emit navigate_to_screen(screen, ticker); });
 
-    // ── REFERENCE pane (Cases · Regulators) ──────────────────
-    reference_pane_ = new GroupedPane("reference", "REFERENCE", split);
-    reference_pane_->setMinimumWidth(260);
-    for (const auto& cat_id : REFERENCE_CATS) {
+    // ── QUANT pane (Foundations · Risk · Factors · Execution · Backtesting · Strategies · Practices) ─
+    // The quant curriculum is sourced from public quant literature (Asness/
+    // Frazzini factor work, Lopez de Prado's research methodology, the
+    // Quantopedia / SSRN factor zoo) and cross-linked to in-app tooling:
+    // AI Quant Lab · QuantLib · Backtesting · Algo Trading · Node Editor.
+    quant_pane_ = new GroupedPane("quant", "QUANT", split);
+    quant_pane_->setMinimumWidth(260);
+    for (const auto& cat_id : QUANT_CATS) {
         if (auto it = category_cols_.find(cat_id); it != category_cols_.end()) {
             const auto* meta = loader.category(cat_id);
             const QString lbl = meta ? meta->label : cat_id.toUpper();
-            reference_pane_->addSubPane(lbl, *it);
+            quant_pane_->addSubPane(lbl, *it);
         }
     }
-    split->addWidget(reference_pane_);
+    split->addWidget(quant_pane_);
 
-    // BASICS | PRACTICE | CONTEXT (rail) | REFERENCE — 25/20/35/20
-    split->setSizes({250, 200, 360, 200});
-    split->setStretchFactor(0, 25);
-    split->setStretchFactor(1, 20);
-    split->setStretchFactor(2, 35);
-    split->setStretchFactor(3, 20);
+    // BASICS | PRACTICE | CONTEXT (rail) | QUANT — 22/22/34/22
+    split->setSizes({250, 250, 360, 250});
+    split->setStretchFactor(0, 22);
+    split->setStretchFactor(1, 22);
+    split->setStretchFactor(2, 34);
+    split->setStretchFactor(3, 22);
 
     root->addWidget(split, 1);
 
@@ -220,8 +231,8 @@ void KnowledgeScreen::build_layout() {
     // already restored their own active entries at construction, so this also
     // makes the rail / breadcrumb reflect the user's last-viewed entry.
     basics_pane_->restoreActiveSubTab();
-    if (reference_pane_) reference_pane_->restoreActiveSubTab();
     practice_pane_->restoreActiveSubTab();
+    if (quant_pane_) quant_pane_->restoreActiveSubTab();
 
     // Trigger the rail to follow whichever sub-tab is currently active in BASICS
     // (the leftmost group leads on cold start).
@@ -244,10 +255,10 @@ void KnowledgeScreen::build_layout() {
                 rail_->set_entry(ContentLoader::instance().entry(id));
         }
     };
-    connect(basics_pane_,     &GroupedPane::subPaneActivated, this, refresh_from_subpane);
-    if (reference_pane_)
-        connect(reference_pane_,  &GroupedPane::subPaneActivated, this, refresh_from_subpane);
-    connect(practice_pane_,   &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(basics_pane_,   &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(practice_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    if (quant_pane_)
+        connect(quant_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
 
     // ── Search wiring (typeahead routes into the right column) ────────────────
     connect(search_, &QLineEdit::textChanged, this, &KnowledgeScreen::on_search);
@@ -285,9 +296,9 @@ void KnowledgeScreen::open_entry(const QString& entry_id) {
         return;
 
     auto* col = *it;
-    if (basics_pane_)    basics_pane_->showSubPane(col);
-    if (reference_pane_) reference_pane_->showSubPane(col);
-    if (practice_pane_)  practice_pane_->showSubPane(col);
+    if (basics_pane_)   basics_pane_->showSubPane(col);
+    if (practice_pane_) practice_pane_->showSubPane(col);
+    if (quant_pane_)    quant_pane_->showSubPane(col);
     col->open_entry(id);
 
     // Track in recently viewed (deduplicated, most recent first)
@@ -333,9 +344,9 @@ void KnowledgeScreen::on_category_active(CategoryColumn* col, const QString& ent
         QString cat = e->category;
         if (auto* c = ContentLoader::instance().category(e->category))
             cat = c->label;
-        const QString group = BASICS_CATS.contains(e->category)    ? "BASICS"
-                            : REFERENCE_CATS.contains(e->category) ? "REFERENCE"
-                                                                    : "PRACTICE";
+        const QString group = BASICS_CATS.contains(e->category) ? "BASICS"
+                            : QUANT_CATS.contains(e->category)  ? "QUANT"
+                                                                : "PRACTICE";
         breadcrumb_->setText(QString("Cockpit · %1 / %2 · %3").arg(group, cat, e->title));
     }
     Q_UNUSED(col);

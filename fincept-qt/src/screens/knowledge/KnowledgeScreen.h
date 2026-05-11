@@ -16,17 +16,19 @@ class AbbreviationsColumn;
 class GroupedPane;
 class RailWidget;
 
-/// KNOWLEDGE tab — 3-pane cockpit:
+/// KNOWLEDGE tab — 4-pane cockpit:
 ///
-///   [ BASICS  : Glossary | Concepts | Abbreviations ]
-///   [ CONTEXT : finterm rail tied to last selection ]
-///   [ PRACTICE: Cases    | Tracks   | Playbooks     ]
+///   [ BASICS  : Glossary | Concepts | Abbreviations | Regulators ]
+///   [ PRACTICE: Formulas | Tracks   | Playbooks | Cases | Interviews ]
+///   [ CONTEXT : finterm rail tied to last selection              ]
+///   [ QUANT   : Foundations | Risk · Return | Factors | Execution
+///                | Backtesting | Strategies | Practices          ]
 ///
 /// Within each grouped pane, sub-tabs are segmented buttons. Each
 /// sub-pane (CategoryColumn / AbbreviationsColumn) keeps its own
 /// last-viewed entry — switching sub-tabs preserves the picker /
 /// body state. The Context rail follows whichever sub-tab was most
-/// recently activated across both groups.
+/// recently activated across all groups.
 class KnowledgeScreen : public QWidget {
     Q_OBJECT
   public:
@@ -52,9 +54,9 @@ class KnowledgeScreen : public QWidget {
     QLabel* breadcrumb_ = nullptr;
     QLabel* count_label_ = nullptr;
 
-    GroupedPane* basics_pane_    = nullptr;
-    GroupedPane* reference_pane_ = nullptr;  // FORMULAS · REGULATORS
-    GroupedPane* practice_pane_  = nullptr;
+    GroupedPane* basics_pane_   = nullptr;
+    GroupedPane* practice_pane_ = nullptr;
+    GroupedPane* quant_pane_    = nullptr;
 
     QHash<QString, CategoryColumn*> category_cols_;
     AbbreviationsColumn* abbrev_col_ = nullptr;
