@@ -2,8 +2,10 @@
 #include "screens/power_trader/CommitteePanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/components/SignalTooltip.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -135,6 +137,10 @@ void CommitteePanel::build_ui() {
         trade_table_->setColumnCount(8);
         trade_table_->setHorizontalHeaderLabels(
             {"MEMBER", "PTY", "TICKER", "ASSET", "B/S", "AMOUNT", "LAG", "SIG"});
+        if (auto* a = trade_table_->horizontalHeaderItem(5))
+            a->setToolTip(fincept::ui::est::amount_tooltip());
+        if (auto* l = trade_table_->horizontalHeaderItem(6))
+            l->setToolTip(fincept::ui::est::disclosure_lag_tooltip());
         fincept::ui::ensure_header_fits(trade_table_);
         trade_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         trade_table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -289,6 +295,7 @@ void CommitteePanel::show_committee(const power_trader::CommitteeGroup& g) {
         sig_i->setForeground(QColor(t.signal_score >= 60
                                     ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
         sig_i->setFlags(sig_i->flags() & ~Qt::ItemIsEditable);
+        sig_i->setToolTip(fincept::ui::tooltip_for_trade_signal(t));
         trade_table_->setItem(r, 7, sig_i);
     }
 }

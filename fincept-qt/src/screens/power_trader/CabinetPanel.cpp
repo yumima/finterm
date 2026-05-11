@@ -2,6 +2,7 @@
 #include "screens/power_trader/CabinetPanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
 #include "ui/theme/Theme.h"
@@ -199,6 +200,10 @@ void CabinetPanel::build_content_page() {
         member_table_ = new QTableWidget;
         member_table_->setColumnCount(4);
         member_table_->setHorizontalHeaderLabels({"#", "NAME / TITLE", "CONFLICT", "HOLDINGS"});
+        if (auto* c = member_table_->horizontalHeaderItem(2))
+            c->setToolTip(fincept::ui::est::conflict_score_tooltip());
+        if (auto* h2 = member_table_->horizontalHeaderItem(3))
+            h2->setToolTip(fincept::ui::est::portfolio_tooltip());
         fincept::ui::ensure_header_fits(member_table_);
         member_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         member_table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -265,6 +270,10 @@ void CabinetPanel::build_content_page() {
         o_ranking_table_->setColumnCount(5);
         o_ranking_table_->setHorizontalHeaderLabels(
             {"#", "NAME", "TITLE", "CONFLICT", "PORTFOLIO (EST)"});
+        if (auto* c = o_ranking_table_->horizontalHeaderItem(3))
+            c->setToolTip(fincept::ui::est::conflict_score_tooltip());
+        if (auto* p = o_ranking_table_->horizontalHeaderItem(4))
+            p->setToolTip(fincept::ui::est::portfolio_tooltip());
         fincept::ui::ensure_header_fits(o_ranking_table_);
         o_ranking_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         o_ranking_table_->setSelectionMode(QAbstractItemView::SingleSelection);

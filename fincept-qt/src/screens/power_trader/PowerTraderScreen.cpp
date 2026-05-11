@@ -351,6 +351,39 @@ QWidget* PowerTraderScreen::build_body_strip() {
             btn->setChecked(true);
     }
 
+    // Visual separator between VIEW and RANGE
+    auto* gap = new QLabel("\xc2\xa0\xc2\xa0\xe2\x94\x82\xc2\xa0\xc2\xa0");  //  ·│·
+    gap->setStyleSheet(QString("color:%1;").arg(ui::colors::BORDER_DIM()));
+    hl->addWidget(gap);
+
+    // ── RANGE pills — drives PowerTraderService::set_days_back ───────────────
+    auto* range_lbl = new QLabel("RANGE:");
+    range_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                                 .arg(ui::colors::TEXT_SECONDARY()));
+    hl->addWidget(range_lbl);
+
+    struct Range { const char* label; int days; };
+    const Range ranges[] = {
+        {"30d", 30}, {"90d", 90}, {"1y", 365}, {"2y", 730},
+    };
+    range_btn_group_ = new QButtonGroup(this);
+    range_btn_group_->setExclusive(true);
+    const int active_days = power_trader::PowerTraderService::instance().days_back();
+    for (const auto& r : ranges) {
+        auto* btn = new QPushButton(r.label);
+        btn->setCheckable(true);
+        btn->setStyleSheet(pill_base);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setToolTip(QStringLiteral("Show trades disclosed within the last %1 days").arg(r.days));
+        const int days = r.days;
+        connect(btn, &QPushButton::clicked, this, [this, days]() {
+            on_range_changed(days);
+        });
+        range_btn_group_->addButton(btn);
+        hl->addWidget(btn);
+        if (active_days == days) btn->setChecked(true);
+    }
+
     hl->addStretch();
 
     auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
@@ -442,6 +475,19 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         item->setData(Qt::UserRole, m.id);
         member_list_->addItem(item);
     }
+
+    // Re-apply any active search filter — clear/addItem above resets each
+    // item's hidden state, so an in-progress search query would otherwise
+    // be ignored on the freshly inserted items.
+    if (member_search_) {
+        const QString q = member_search_->text();
+        if (!q.isEmpty()) {
+            for (int i = 0; i < member_list_->count(); ++i) {
+                auto* item = member_list_->item(i);
+                item->setHidden(!item->text().contains(q, Qt::CaseInsensitive));
+            }
+        }
+    }
 }
 
 void PowerTraderScreen::show_loading() { stack_->setCurrentIndex(0); }
@@ -459,7 +505,14 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
         QString("Updated %1")
             .arg(summary.last_updated.toLocalTime().toString("hh:mm")));
 
-    populate_member_list(summary.members);
+    // Respect the active VIEW filter on (re)load. A naive populate from
+    // `summary.members` would clobber the sidebar back to ALL members even
+    // when the user has SENATE or HOUSE selected — same for the panels'
+    // table data. Route everything through the filter so refresh stays
+    // consistent with the VIEW chip state.
+    const auto filtered = PowerTraderService::instance().filtered_summary(active_body_);
+
+    populate_member_list(filtered.members);
 
     const auto sectors          = PowerTraderService::instance().sector_breakdown();
     const auto insider_signals  = PowerTraderService::instance().committee_insider_signals();
@@ -467,19 +520,21 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
     const auto watch_list       = PowerTraderService::instance().insider_watch_list();
     const auto cmtes            = PowerTraderService::instance().available_committees();
 
-    overview_panel_ ->set_data(summary, sectors, insider_signals);
-    rankings_panel_ ->set_data(summary);
-    feed_panel_     ->set_trades(summary.recent_trades);
+    overview_panel_ ->set_data(filtered, sectors, insider_signals);
+    rankings_panel_ ->set_data(filtered);
+    feed_panel_     ->set_trades(filtered.recent_trades);
     feed_panel_     ->set_available_committees(cmtes);
-    committee_panel_->set_data(summary, committee_groups);
-    party_panel_    ->set_data(summary);
+    committee_panel_->set_data(filtered, committee_groups);
+    party_panel_    ->set_data(filtered);
     insider_panel_  ->set_data(watch_list);
-    signal_panel_   ->set_data(summary);
-    practice_panel_ ->set_data(summary);
+    signal_panel_   ->set_data(filtered);
+    practice_panel_ ->set_data(filtered);
 
-    // Pre-select highest-alpha member on first load
-    if (selected_member_id_.isEmpty() && !summary.members.isEmpty()) {
-        auto sorted = summary.members;
+    // Pre-select highest-alpha member on first load (from the filtered set,
+    // so a SENATE filter selects a senator rather than someone hidden from
+    // the sidebar).
+    if (selected_member_id_.isEmpty() && !filtered.members.isEmpty()) {
+        auto sorted = filtered.members;
         std::sort(sorted.begin(), sorted.end(),
                   [](const CongressMember& a, const CongressMember& b) {
                       return a.alpha_ytd > b.alpha_ytd;
@@ -547,6 +602,15 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     insider_panel_  ->set_data(watch);
     signal_panel_   ->set_data(filtered);
     practice_panel_ ->set_data(filtered);
+}
+
+void PowerTraderScreen::on_range_changed(int days) {
+    // Selecting a new range invalidates the cached summary and triggers a
+    // fresh scrape — for the Senate side that can take 30–180s, so show the
+    // loading state immediately so the user understands the click registered.
+    if (days == PowerTraderService::instance().days_back()) return;
+    show_loading();
+    PowerTraderService::instance().set_days_back(days);
 }
 
 } // namespace fincept::power_trader

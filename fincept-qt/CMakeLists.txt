@@ -958,6 +958,8 @@ set(UI_SOURCES
     src/ui/components/ComponentBrowserDialog.cpp
     src/ui/components/LayoutHelpers.cpp
     src/ui/components/SectionHeader.cpp
+    src/ui/components/SignalTooltip.cpp
+    src/ui/components/EstTooltip.cpp
     src/ui/widgets/SearchBar.cpp
     src/ui/widgets/GeometricBackground.cpp
     src/ui/widgets/WorldMapWidget.cpp

@@ -3,6 +3,7 @@
 
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/components/SignalTooltip.h"
 #include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
@@ -591,6 +592,7 @@ void OverviewPanel::populate_signal_table() {
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
             // Store numeric value for sort
             sig_item->setData(Qt::UserRole, sig.signal_score);
+            sig_item->setToolTip(fincept::ui::tooltip_for_peak_signal(sig.overlap_trades));
             signal_table_->setItem(r, 5, sig_item);
         }
     }

@@ -7,11 +7,15 @@
 #include "screens/power_trader/DataSourceDialog.h"
 
 #include <QDate>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QSettings>
 #include <QTimer>
+
+#include <algorithm>
 
 namespace fincept::power_trader {
 
@@ -23,10 +27,30 @@ PowerTraderService& PowerTraderService::instance() {
 }
 
 PowerTraderService::PowerTraderService(QObject* parent) : QObject(parent) {
+    // Restore the user's persisted date-range cutoff (default 90 days).
+    // Clamp to a sane range so a corrupted setting can't drive a 0- or
+    // 100-year scrape.
+    QSettings s;
+    const int stored = s.value(QStringLiteral("power_trader/days_back"), 90).toInt();
+    days_back_ = std::clamp(stored, 7, 3650);
+
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(kRefreshIntervalMs);
     refresh_timer_->setSingleShot(false);
     connect(refresh_timer_, &QTimer::timeout, this, [this]() { load_data(); });
+}
+
+void PowerTraderService::set_days_back(int days) {
+    days = std::clamp(days, 7, 3650);
+    if (days == days_back_) return;
+    days_back_ = days;
+    QSettings().setValue(QStringLiteral("power_trader/days_back"), days_back_);
+
+    // Invalidate cached summary so load_data() doesn't short-circuit on the
+    // age check and emit the previous range's data.
+    summary_.loaded = false;
+    summary_.last_updated = QDateTime();
+    load_data();
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -52,7 +76,7 @@ void PowerTraderService::load_data() {
 
     QPointer<PowerTraderService> self = this;
     QJsonObject req;
-    req[QStringLiteral("days_back")] = 90;
+    req[QStringLiteral("days_back")] = days_back_;
 
     // The Congress.gov API key is delivered to the script via the env var
     // CONGRESS_GOV_API_KEY, injected by PythonRunner::build_python_env() from

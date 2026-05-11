@@ -1,6 +1,7 @@
 // src/screens/power_trader/LeaderboardPanel.cpp
 #include "screens/power_trader/LeaderboardPanel.h"
 
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
 #include "ui/theme/Theme.h"
@@ -41,6 +42,10 @@ void LeaderboardPanel::build_ui() {
     table_ = new QTableWidget(this);
     table_->setColumnCount(kLeaderCols.size());
     table_->setHorizontalHeaderLabels(kLeaderCols);
+    // Header tooltips on the modeled columns so the user can hover any
+    // header to see how that number is derived.
+    if (auto* a = table_->horizontalHeaderItem(4)) a->setToolTip(fincept::ui::est::alpha_tooltip());
+    if (auto* r = table_->horizontalHeaderItem(5)) r->setToolTip(fincept::ui::est::return_tooltip());
     fincept::ui::ensure_header_fits(table_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);

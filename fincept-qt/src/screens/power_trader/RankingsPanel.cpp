@@ -2,8 +2,10 @@
 #include "screens/power_trader/RankingsPanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/components/SignalTooltip.h"
 #include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
@@ -361,29 +363,36 @@ void RankingsPanel::build_detail_card(QWidget* card, QVBoxLayout*) {
                 "font-family:Consolas,monospace;background:transparent;")
             .arg(ui::colors::TEXT_PRIMARY());
 
-    auto add_row = [&](const QString& label, QLabel*& out) {
+    auto add_row = [&](const QString& label, QLabel*& out,
+                       const QString& est_tip = QString()) {
         auto* row = new QWidget(card);
         row->setStyleSheet(row_ss);
         auto* hl = new QHBoxLayout(row);
         hl->setContentsMargins(12, 7, 12, 7);
         hl->setSpacing(4);
-        auto* lbl = new QLabel(label, row);
+        const QString shown = est_tip.isEmpty() ? label : fincept::ui::est::with_marker(label);
+        auto* lbl = new QLabel(shown, row);
         lbl->setStyleSheet(lbl_ss);
+        lbl->setTextFormat(Qt::RichText);
+        if (!est_tip.isEmpty())
+            lbl->setToolTip(est_tip);
         hl->addWidget(lbl);
         hl->addStretch();
         out = new QLabel(QStringLiteral("—"), row);
         out->setStyleSheet(val_ss);
         out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        if (!est_tip.isEmpty())
+            out->setToolTip(est_tip);
         hl->addWidget(out);
         vl->addWidget(row);
     };
 
-    add_row(QStringLiteral("Alpha vs SPY"),  card_alpha_);
-    add_row(QStringLiteral("YTD Return"),    card_return_);
+    add_row(QStringLiteral("Alpha vs SPY"),  card_alpha_,  fincept::ui::est::alpha_tooltip());
+    add_row(QStringLiteral("YTD Return"),    card_return_, fincept::ui::est::return_tooltip());
     add_row(QStringLiteral("Avg Signal"),    card_signal_);
     add_row(QStringLiteral("Avg Lag"),       card_lag_);
     add_row(QStringLiteral("Trades YTD"),    card_trades_);
-    add_row(QStringLiteral("Net Worth"),     card_nw_);
+    add_row(QStringLiteral("Net Worth"),     card_nw_,     fincept::ui::est::net_worth_tooltip());
 
     auto* cmte_hdr = new QLabel(QStringLiteral("COMMITTEES"), card);
     cmte_hdr->setStyleSheet(
@@ -424,6 +433,8 @@ void RankingsPanel::populate_detail_card(const QString& member_id) {
     card_alpha_ ->setText(fmt_pct(member.alpha_ytd));
     card_return_->setText(fmt_pct(member.portfolio_return_ytd));
     card_signal_->setText(QString::number(svc.avg_signal_score(member_id), 'f', 0) + "/100");
+    card_signal_->setToolTip(fincept::ui::tooltip_for_aggregate_signal(
+        svc.trades_for_member(member_id).size()));
     card_lag_   ->setText(QString::number(svc.avg_disclosure_lag(member_id), 'f', 0) + "d");
     card_trades_->setText(QString::number(member.trade_count_ytd));
 

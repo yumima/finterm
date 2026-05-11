@@ -52,6 +52,7 @@ class PowerTraderScreen : public QWidget {
     void on_error(const QString& msg);
     void on_member_selected(const QString& member_id);
     void on_body_filter_changed(BodyFilter body);
+    void on_range_changed(int days);
 
   private:
     void build_ui();
@@ -69,8 +70,9 @@ class PowerTraderScreen : public QWidget {
     QPushButton* refresh_btn_   = nullptr;
 
     // ── Body strip ────────────────────────────────────────────────────────────
-    QButtonGroup* body_btn_group_ = nullptr;
-    BodyFilter    active_body_    = BodyFilter::All;
+    QButtonGroup* body_btn_group_  = nullptr;
+    BodyFilter    active_body_     = BodyFilter::All;
+    QButtonGroup* range_btn_group_ = nullptr;
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
     QLineEdit*   member_search_ = nullptr;

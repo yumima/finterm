@@ -1,8 +1,10 @@
 // src/screens/power_trader/TradesFeedPanel.cpp
 #include "screens/power_trader/TradesFeedPanel.h"
 
-#include "ui/theme/Theme.h"
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SignalTooltip.h"
+#include "ui/theme/Theme.h"
 
 #include <QDate>
 #include <QHBoxLayout>
@@ -145,6 +147,8 @@ void TradesFeedPanel::build_ui() {
     table_ = new QTableWidget(this);
     table_->setColumnCount(kFeedCols.size());
     table_->setHorizontalHeaderLabels(kFeedCols);
+    if (auto* a = table_->horizontalHeaderItem(7)) a->setToolTip(fincept::ui::est::amount_tooltip());
+    if (auto* l = table_->horizontalHeaderItem(8)) l->setToolTip(fincept::ui::est::disclosure_lag_tooltip());
     fincept::ui::ensure_header_fits(table_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -328,13 +332,14 @@ void TradesFeedPanel::populate_table(const QVector<power_trader::PoliticalTrade>
             table_->setItem(r, 8, lag_item);
         }
 
-        // 9 SIG
+        // 9 SIG — tooltip breaks the score back down into its components
         {
             auto* sig_item = new QTableWidgetItem(QString::number(t.signal_score, 'f', 0));
             sig_item->setTextAlignment(Qt::AlignCenter);
             sig_item->setForeground(QColor(t.signal_score >= 60
                                            ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
+            sig_item->setToolTip(fincept::ui::tooltip_for_trade_signal(t));
             table_->setItem(r, 9, sig_item);
         }
 

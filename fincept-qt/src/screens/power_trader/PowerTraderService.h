@@ -17,6 +17,15 @@ class PowerTraderService : public QObject {
 
     void load_data();
 
+    /// Active date-range cutoff for trades (in days). Default 90.
+    int  days_back() const { return days_back_; }
+
+    /// Change the date-range cutoff. Invalidates any cached summary and
+    /// triggers a fresh load — the source scrapes from this many days back
+    /// from today. No-op if `days` is the same as the active value. The
+    /// chosen value is persisted (QSettings) so it survives restarts.
+    void set_days_back(int days);
+
     // ── Raw data ──────────────────────────────────────────────────────────────
     QVector<CongressMember> members() const;
     QVector<PoliticalTrade> trades()  const;
@@ -104,6 +113,7 @@ class PowerTraderService : public QObject {
     CabinetSummary     cabinet_;
     bool loading_         = false;
     bool cabinet_loading_ = false;
+    int  days_back_       = 90;
 
     QTimer* refresh_timer_ = nullptr;
     static constexpr int kRefreshIntervalMs = 6 * 60 * 60 * 1000;
