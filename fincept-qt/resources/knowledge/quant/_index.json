@@ -139,6 +139,125 @@
       "updated": "2026-05-11"
     },
     {
+      "id": "time-series-basics",
+      "title": "Time-Series Basics",
+      "subtitle": "Returns vs prices, stationarity, autocorrelation, cointegration — the four ideas every backtest depends on.",
+      "body": "quant/time-series-basics.md",
+      "difficulty": "beginner",
+      "tags": ["quant", "time-series", "statistics"],
+      "aliases": ["stationarity", "cointegration", "adf test", "garch"],
+      "related": ["ml-pipeline-pitfalls", "var-cvar", "strategy-patterns", "quant-research-workflow"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting — stationarity & ACF diagnostics"}
+      ],
+      "actions": [
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Princeton",         "title": "Hamilton (1994) — Time Series Analysis",  "url": "https://press.princeton.edu/books/hardcover/9780691042893/time-series-analysis"},
+        {"type": "reference", "source": "Quantitative Finance","title": "Cont (2001) — Stylized facts of asset returns","url": "https://doi.org/10.1080/713665670"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "portfolio-construction",
+      "title": "Portfolio Construction: Mean-Variance & Kelly",
+      "subtitle": "Markowitz, Kelly, fractional Kelly, risk parity, HRP — why neither pure MV nor full Kelly survives contact with estimation error.",
+      "body": "quant/portfolio-construction.md",
+      "difficulty": "intermediate",
+      "tags": ["quant", "portfolio", "kelly", "markowitz"],
+      "aliases": ["mean variance", "kelly criterion", "risk parity", "hrp", "black litterman"],
+      "related": ["kelly-criterion", "capm", "var-cvar", "risk-adjusted-returns", "factor-investing"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — portfolio sizing modules"},
+        {"screen": "portfolio",    "label": "Portfolio — allocation view"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Portfolio",    "screen": "portfolio",    "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Journal of Finance",       "title": "Markowitz (1952) — Portfolio Selection",                  "url": "https://doi.org/10.1111/j.1540-6261.1952.tb01525.x"},
+        {"type": "reference", "source": "Review of Financial Studies","title": "DeMiguel, Garlappi, Uppal (2009) — Optimal vs Naive Diversification","url": "https://doi.org/10.1093/rfs/hhm075"},
+        {"type": "reference", "source": "Bell System Tech. Journal","title": "Kelly (1956) — A New Interpretation of Information Rate", "url": "https://www.princeton.edu/~wbialek/rome/refs/kelly_56.pdf"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "var-cvar",
+      "title": "VaR and CVaR",
+      "subtitle": "Value-at-Risk and Conditional VaR — the dominant risk metrics, their estimation methods, and why CVaR has displaced VaR for serious use.",
+      "body": "quant/var-cvar.md",
+      "difficulty": "intermediate",
+      "tags": ["quant", "risk", "var", "cvar"],
+      "aliases": ["value at risk", "expected shortfall", "rockafellar uryasev", "es"],
+      "related": ["var-parametric", "cvar", "max-drawdown", "time-series-basics", "portfolio-construction", "risk-adjusted-returns"],
+      "seen_in": [
+        {"screen": "portfolio",   "label": "Portfolio — risk panel"},
+        {"screen": "backtesting", "label": "Backtesting — drawdown / VaR reports"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio",   "screen": "portfolio",   "ticker": ""},
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Mathematical Finance",      "title": "Artzner, Delbaen, Eber, Heath (1999) — Coherent Measures of Risk", "url": "https://doi.org/10.1111/1467-9965.00068"},
+        {"type": "reference", "source": "Journal of Risk",           "title": "Rockafellar & Uryasev (2000) — Optimization of CVaR",            "url": "https://doi.org/10.21314/JOR.2000.038"},
+        {"type": "reference", "source": "Basel Committee",           "title": "Basel III FRTB — Minimum capital requirements for market risk",  "url": "https://www.bis.org/bcbs/publ/d457.htm"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "ml-pipeline-pitfalls",
+      "title": "ML Pipeline Pitfalls",
+      "subtitle": "Why off-the-shelf ML pipelines produce Sharpe-4 backtests and live Sharpe-0 strategies in finance — and the corrections.",
+      "body": "quant/ml-pipeline-pitfalls.md",
+      "difficulty": "intermediate",
+      "tags": ["quant", "ml", "cross-validation", "research"],
+      "aliases": ["purged k-fold", "walk forward cv", "triple barrier", "meta labeling", "fractional differencing"],
+      "related": ["backtesting-discipline", "time-series-basics", "transaction-costs", "quant-research-workflow"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — ML strategy modules"},
+        {"screen": "backtesting",  "label": "Backtesting — purged k-fold"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Backtesting",  "screen": "backtesting",  "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Wiley",                     "title": "López de Prado (2018) — Advances in Financial Machine Learning",  "url": "https://www.wiley.com/en-us/Advances+in+Financial+Machine+Learning-p-9781119482086"},
+        {"type": "reference", "source": "Journal of Investment Mgmt","title": "Israel, Kelly, Moskowitz (2020) — Can Machines 'Learn' Finance?", "url": "https://www.aqr.com/Insights/Research/Working-Paper/Can-Machines-Learn-Finance"},
+        {"type": "reference", "source": "Review of Financial Studies","title": "Gu, Kelly, Xiu (2020) — Empirical Asset Pricing via ML",         "url": "https://doi.org/10.1093/rfs/hhaa009"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "volatility-quant",
+      "title": "Volatility as an Asset Class",
+      "subtitle": "VIX, term structure, variance swaps, the volatility risk premium, and the recurring vol crashes — Volmageddon, March 2020, August 2015.",
+      "body": "quant/volatility-quant.md",
+      "difficulty": "advanced",
+      "tags": ["quant", "volatility", "options", "vix"],
+      "aliases": ["vix futures", "variance swap", "volatility risk premium", "vrp", "dispersion trade", "volmageddon"],
+      "related": ["options-basics", "implied-volatility", "var-cvar", "strategy-patterns", "factor-investing"],
+      "seen_in": [
+        {"screen": "surface_analytics", "label": "Surface Analytics — IV surface"},
+        {"screen": "derivatives",       "label": "Derivatives — option chain & Greeks"},
+        {"screen": "futures",           "label": "Futures — VIX futures curve"}
+      ],
+      "actions": [
+        {"label": "Open Surface Analytics", "screen": "surface_analytics", "ticker": ""},
+        {"label": "Open Derivatives",       "screen": "derivatives",       "ticker": ""},
+        {"label": "Open Futures",           "screen": "futures",           "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Review of Financial Studies", "title": "Bollerslev, Tauchen, Zhou (2009) — Variance Risk Premia",  "url": "https://doi.org/10.1093/rfs/hhp008"},
+        {"type": "reference", "source": "CBOE",                        "title": "VIX White Paper",                                          "url": "https://www.cboe.com/products/vix-index-volatility/vix-options-and-futures/vix-index/the-vix-index-calculation"},
+        {"type": "reference", "source": "Goldman Sachs",               "title": "Derman & Demeterfi (1999) — More Than You Ever Wanted to Know About Volatility Swaps", "url": "https://emanuelderman.com/wp-content/uploads/1999/02/gs-volatility_swaps.pdf"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
       "id": "strategy-patterns",
       "title": "Strategy Patterns",
       "subtitle": "Seven structural patterns: trend, mean-reversion, carry, dispersion, vol risk premium, market-making, event-driven. The pattern fixes your Sharpe expectation, capacity, and failure mode.",
