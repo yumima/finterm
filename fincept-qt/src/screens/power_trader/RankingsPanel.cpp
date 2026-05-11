@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
 #include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
@@ -186,12 +187,7 @@ void RankingsPanel::build_ui() {
     lvl->setSpacing(0);
 
     // ── Section header ────────────────────────────────────────────────────────
-    auto* hdr = new QLabel(QStringLiteral("RANKINGS"), left);
-    hdr->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-                " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    lvl->addWidget(hdr);
+    lvl->addWidget(fincept::ui::make_section_header(QStringLiteral("RANKINGS"), left));
 
     // ── Dimension pill bar (horizontally scrollable) ──────────────────────────
     auto* pill_scroll = new QScrollArea(this);
@@ -335,12 +331,7 @@ void RankingsPanel::build_detail_card(QWidget* card, QVBoxLayout*) {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
-    auto* title = new QLabel(QStringLiteral("MEMBER STATS"), card);
-    title->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                "letter-spacing:1px;padding:6px 12px;border-bottom:1px solid %3;")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    vl->addWidget(title);
+    vl->addWidget(fincept::ui::make_section_header(QStringLiteral("MEMBER STATS"), card));
 
     card_name_ = new QLabel(QStringLiteral("Select a member"), card);
     card_name_->setWordWrap(true);

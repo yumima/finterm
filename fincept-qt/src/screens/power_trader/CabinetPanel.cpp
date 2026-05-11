@@ -2,8 +2,9 @@
 #include "screens/power_trader/CabinetPanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -14,12 +15,6 @@
 namespace fincept::screens {
 
 // ── Styling helpers ───────────────────────────────────────────────────────────
-
-static QString section_hdr() {
-    return QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                   "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
-}
 
 static QString table_ss() {
     return QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
@@ -198,9 +193,8 @@ void CabinetPanel::build_content_page() {
         ll->setContentsMargins(0, 0, 0, 0);
         ll->setSpacing(0);
 
-        auto* lhdr = new QLabel("RANKED BY CONFLICT SCORE");
-        lhdr->setStyleSheet(section_hdr());
-        ll->addWidget(lhdr);
+        ll->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("RANKED BY CONFLICT SCORE"), left));
 
         member_table_ = new QTableWidget;
         member_table_->setColumnCount(4);
@@ -264,9 +258,8 @@ void CabinetPanel::build_content_page() {
         ovl->setContentsMargins(0, 0, 0, 0);
         ovl->setSpacing(0);
 
-        auto* ov_r_hdr = new QLabel("CONFLICT RANKING  ·  ALL CABINET MEMBERS");
-        ov_r_hdr->setStyleSheet(section_hdr());
-        ovl->addWidget(ov_r_hdr);
+        ovl->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("CONFLICT RANKING  ·  ALL CABINET MEMBERS"), ov_body));
 
         o_ranking_table_ = new QTableWidget;
         o_ranking_table_->setColumnCount(5);
@@ -294,9 +287,8 @@ void CabinetPanel::build_content_page() {
                 });
         ovl->addWidget(o_ranking_table_);
 
-        auto* ov_s_hdr = new QLabel("CABINET-WIDE SECTOR EXPOSURE");
-        ov_s_hdr->setStyleSheet(section_hdr());
-        ovl->addWidget(ov_s_hdr);
+        ovl->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("CABINET-WIDE SECTOR EXPOSURE"), ov_body));
 
         o_sector_table_ = new QTableWidget;
         o_sector_table_->setColumnCount(3);
@@ -331,9 +323,8 @@ void CabinetPanel::build_content_page() {
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         hp->addWidget(h_header_);
 
-        auto* h_tbl_hdr = new QLabel("DISCLOSED ASSETS  ·  Annual holdings snapshot");
-        h_tbl_hdr->setStyleSheet(section_hdr());
-        hp->addWidget(h_tbl_hdr);
+        hp->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("DISCLOSED ASSETS  ·  Annual holdings snapshot"), holdings_page));
 
         h_table_ = new QTableWidget;
         h_table_->setColumnCount(6);
@@ -387,9 +378,8 @@ void CabinetPanel::build_content_page() {
         c_domain_->setWordWrap(true);
         cfl->addWidget(c_domain_);
 
-        auto* cf_flags_hdr = new QLabel("CONFLICT FLAGS  ·  Holdings overlapping regulatory domain");
-        cf_flags_hdr->setStyleSheet(section_hdr());
-        cfl->addWidget(cf_flags_hdr);
+        cfl->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("CONFLICT FLAGS  ·  Holdings overlapping regulatory domain"), cf_body));
 
         c_flags_widget_  = new QWidget;
         c_flags_widget_->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
@@ -415,9 +405,8 @@ void CabinetPanel::build_content_page() {
                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
         sp->addWidget(s_header_);
 
-        auto* s_tbl_hdr = new QLabel("HOLDINGS BY SECTOR  ·  Estimated midpoint values");
-        s_tbl_hdr->setStyleSheet(section_hdr());
-        sp->addWidget(s_tbl_hdr);
+        sp->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("HOLDINGS BY SECTOR  ·  Estimated midpoint values"), sector_page));
 
         s_table_ = new QTableWidget;
         s_table_->setColumnCount(4);

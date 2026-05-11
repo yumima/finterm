@@ -2,8 +2,9 @@
 #include "screens/power_trader/PartyPanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -69,12 +70,8 @@ void PartyPanel::build_ui() {
     root->setSpacing(0);
 
     // ── Header ────────────────────────────────────────────────────────────────
-    auto* hdr = new QLabel(QStringLiteral("PARTY INTELLIGENCE  ·  DEMOCRAT vs REPUBLICAN TRADING COMPARISON"));
-    hdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
-    root->addWidget(hdr);
+    root->addWidget(fincept::ui::make_section_header(
+        QStringLiteral("PARTY INTELLIGENCE  ·  DEMOCRAT vs REPUBLICAN TRADING COMPARISON"), this));
 
     // ── Comparison bar ────────────────────────────────────────────────────────
     compare_bar_ = new QLabel(QStringLiteral("Loading…"));

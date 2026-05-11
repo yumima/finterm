@@ -1,8 +1,9 @@
 // src/screens/power_trader/InsiderWatchPanel.cpp
 #include "screens/power_trader/InsiderWatchPanel.h"
 
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -74,12 +75,8 @@ void InsiderWatchPanel::build_ui() {
         ll->setContentsMargins(0, 0, 0, 0);
         ll->setSpacing(0);
 
-        auto* lhdr = new QLabel(QStringLiteral("RANKED BY INSIDER SCORE"));
-        lhdr->setStyleSheet(
-            QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                    "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;")
-                .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-        ll->addWidget(lhdr);
+        ll->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("RANKED BY INSIDER SCORE"), left));
 
         watch_table_ = new QTableWidget;
         watch_table_->setColumnCount(7);
@@ -166,12 +163,7 @@ void InsiderWatchPanel::build_ui() {
     dl->addWidget(detail_meta_);
 
     // Score breakdown table
-    auto* sbhdr = new QLabel(QStringLiteral("SCORE BREAKDOWN"));
-    sbhdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
-    dl->addWidget(sbhdr);
+    dl->addWidget(fincept::ui::make_section_header(QStringLiteral("SCORE BREAKDOWN"), detail_body));
 
     score_breakdown_ = new QTableWidget;
     score_breakdown_->setColumnCount(3);
@@ -199,12 +191,8 @@ void InsiderWatchPanel::build_ui() {
     dl->addWidget(score_breakdown_);
 
     // Evidence bullets
-    auto* evhdr = new QLabel(QStringLiteral("EVIDENCE  ·  KEY RED FLAGS"));
-    evhdr->setStyleSheet(
-        QString("background:%1;color:%2;font-size:12px;font-weight:700;"
-                "letter-spacing:1.5px;padding:5px 10px;border-bottom:1px solid %3;")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
-    dl->addWidget(evhdr);
+    dl->addWidget(fincept::ui::make_section_header(
+        QStringLiteral("EVIDENCE  ·  KEY RED FLAGS"), detail_body));
 
     evidence_widget_ = new QWidget;
     evidence_widget_->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));

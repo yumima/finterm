@@ -1,8 +1,9 @@
 // src/screens/power_trader/MemberDetailPanel.cpp
 #include "screens/power_trader/MemberDetailPanel.h"
 
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QFrame>
 #include <QGridLayout>
@@ -62,12 +63,7 @@ void MemberDetailPanel::build_ui() {
     root_layout->setSpacing(0);
 
     // ── Section header ────────────────────────────────────────────────────────
-    auto* hdr_label = new QLabel(QStringLiteral("MEMBER DETAIL"), this);
-    hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-                " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    root_layout->addWidget(hdr_label);
+    root_layout->addWidget(fincept::ui::make_section_header(QStringLiteral("MEMBER DETAIL"), this));
 
     // ── Placeholder ───────────────────────────────────────────────────────────
     placeholder_ = new QWidget(this);

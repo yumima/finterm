@@ -1,8 +1,9 @@
 // src/screens/power_trader/OverviewPanel.cpp
 #include "screens/power_trader/OverviewPanel.h"
 
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
 #include <QFrame>
@@ -53,16 +54,6 @@ QString OverviewPanel::fmt_amount(double v) {
 
 QString OverviewPanel::fmt_pct(double v) {
     return QStringLiteral("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 1);
-}
-
-// ── Section header widget factory ─────────────────────────────────────────────
-static QLabel* make_section_header(const QString& title, QWidget* parent) {
-    auto* lbl = new QLabel(title, parent);
-    lbl->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-                " letter-spacing:1.5px; padding:5px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    return lbl;
 }
 
 // ── Bar row widget — used by both alpha and sector charts ─────────────────────
@@ -244,7 +235,7 @@ void OverviewPanel::build_ui() {
         c1l->addWidget(stat_list);
 
         // Sector exposure bars below stat grid
-        auto* sec_hdr = make_section_header(QStringLiteral("SECTOR EXPOSURE"), col1);
+        auto* sec_hdr = fincept::ui::make_section_header(QStringLiteral("SECTOR EXPOSURE"), col1);
         c1l->addWidget(sec_hdr);
 
         sector_chart_ = new QWidget(col1);
@@ -265,7 +256,7 @@ void OverviewPanel::build_ui() {
         auto* c2l = new QVBoxLayout(col2);
         c2l->setContentsMargins(0, 0, 0, 0);
         c2l->setSpacing(0);
-        c2l->addWidget(make_section_header(QStringLiteral("TOP TRADERS  ·  ALPHA vs SPY YTD"), col2));
+        c2l->addWidget(fincept::ui::make_section_header(QStringLiteral("TOP TRADERS  ·  ALPHA vs SPY YTD"), col2));
 
         alpha_chart_ = new QWidget(col2);
         alpha_chart_->setStyleSheet("QWidget { background:transparent; border:none; }");
@@ -284,7 +275,7 @@ void OverviewPanel::build_ui() {
         auto* c3l = new QVBoxLayout(col3);
         c3l->setContentsMargins(0, 0, 0, 0);
         c3l->setSpacing(0);
-        c3l->addWidget(make_section_header(
+        c3l->addWidget(fincept::ui::make_section_header(
             QStringLiteral("COMMITTEE INSIDER CORRELATION"), col3));
 
         static const QStringList kSigCols = {

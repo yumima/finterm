@@ -2,8 +2,9 @@
 #include "screens/power_trader/CommitteePanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -11,12 +12,6 @@
 #include <QVBoxLayout>
 
 namespace fincept::screens {
-
-static QString section_header_style() {
-    return QString("QLabel{background:%1;color:%2;font-size:12px;font-weight:700;"
-                   "letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid %3;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
-}
 
 static QString table_style() {
     return QString("QTableWidget{background:%1;color:%2;border:none;font-size:12px;"
@@ -49,9 +44,7 @@ void CommitteePanel::build_ui() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    auto* hdr = new QLabel(QStringLiteral("COMMITTEE INTELLIGENCE"));
-    hdr->setStyleSheet(section_header_style());
-    root->addWidget(hdr);
+    root->addWidget(fincept::ui::make_section_header(QStringLiteral("COMMITTEE INTELLIGENCE"), this));
 
     // ── Horizontal splitter: committee list | detail ──────────────────────────
     auto* splitter = new QSplitter(Qt::Horizontal);
@@ -66,9 +59,7 @@ void CommitteePanel::build_ui() {
         ll->setContentsMargins(0, 0, 0, 0);
         ll->setSpacing(0);
 
-        auto* lhdr = new QLabel(QStringLiteral("COMMITTEES"));
-        lhdr->setStyleSheet(section_header_style());
-        ll->addWidget(lhdr);
+        ll->addWidget(fincept::ui::make_section_header(QStringLiteral("COMMITTEES"), left));
 
         committee_list_ = new QTableWidget;
         committee_list_->setColumnCount(3);
@@ -137,9 +128,8 @@ void CommitteePanel::build_ui() {
         rl->addWidget(info_row);
 
         // Trade table
-        auto* thdr = new QLabel(QStringLiteral("COMMITTEE-RELEVANT TRADES"));
-        thdr->setStyleSheet(section_header_style());
-        rl->addWidget(thdr);
+        rl->addWidget(fincept::ui::make_section_header(
+            QStringLiteral("COMMITTEE-RELEVANT TRADES"), right));
 
         trade_table_ = new QTableWidget;
         trade_table_->setColumnCount(8);

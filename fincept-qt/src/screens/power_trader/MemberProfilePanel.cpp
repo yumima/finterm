@@ -2,8 +2,9 @@
 #include "screens/power_trader/MemberProfilePanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QApplication>
 #include <QFrame>
@@ -40,26 +41,11 @@ static const char* party_color(const QString& p) {
     return kPartyI;
 }
 
-static QString section_header_style() {
-    return QString(
-        "QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-        " letter-spacing:0.5px; padding:0px 10px; border-bottom:1px solid %3; }")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED());
-}
-
-// Creates a correctly-sized section header label that works across DPI scales.
-// Height uses the explicit stylesheet font (12px) via a constructed QFont so
-// it's not affected by the lazy stylesheet application order.
+// Use the shared section-header helper for typographic consistency with the
+// other panels. (Was a local helper with 0px vertical padding that the user
+// flagged as visually inconsistent against the other panels' 6px padding.)
 static QLabel* make_section_hdr(const QString& title, QWidget* parent) {
-    auto* lbl = new QLabel(title, parent);
-    lbl->setStyleSheet(section_header_style());
-    // Use the same font parameters as section_header_style() to compute height.
-    // Cannot call lbl->font() here — stylesheet hasn't been applied yet.
-    QFont f(QStringLiteral("sans-serif"), -1);
-    f.setPixelSize(12);
-    const int h = QFontMetrics(f).height() + 8;  // content + 4px each side
-    lbl->setFixedHeight(qMax(h, 22));
-    return lbl;
+    return fincept::ui::make_section_header(title, parent);
 }
 
 // Format dollar amount with K/M/B suffix — free function used by NavChart + panel

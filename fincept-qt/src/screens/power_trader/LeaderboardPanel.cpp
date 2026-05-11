@@ -1,8 +1,9 @@
 // src/screens/power_trader/LeaderboardPanel.cpp
 #include "screens/power_trader/LeaderboardPanel.h"
 
-#include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "ui/components/SectionHeader.h"
+#include "ui/theme/Theme.h"
 
 #include <QHeaderView>
 #include <QLabel>
@@ -35,13 +36,7 @@ void LeaderboardPanel::build_ui() {
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    // Section header
-    auto* hdr_label = new QLabel(QStringLiteral("LEADERBOARD"), this);
-    hdr_label->setStyleSheet(
-        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
-                " letter-spacing:1.5px; padding:6px 10px; border-bottom:1px solid %3; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED()));
-    layout->addWidget(hdr_label);
+    layout->addWidget(fincept::ui::make_section_header(QStringLiteral("LEADERBOARD"), this));
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(kLeaderCols.size());
