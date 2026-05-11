@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QApplication>
 #include <QFrame>
@@ -177,7 +178,11 @@ void NavChart::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const QRectF r = QRectF(rect()).adjusted(48, 12, -12, -28);
+    // Chart inset: left 48 (Y-axis labels), top 12, right 36 (so the last
+    // X-axis date label centered on the last data point — 24px wide each
+    // side — has 12px breathing room before the widget edge), bottom 28
+    // (X-axis labels). Right margin was -12 which clipped the last label.
+    const QRectF r = QRectF(rect()).adjusted(48, 12, -36, -28);
 
     // Background
     p.fillRect(rect(), QColor(ui::colors::BG_BASE()));
@@ -522,8 +527,12 @@ void MemberProfilePanel::build_ui() {
         QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
 
     auto* info_pane = new QWidget(top_split);
-    info_pane->setMinimumWidth(230);
-    info_pane->setMaximumWidth(320);
+    // Widened from 230–320 → 360–460 so long names ("Shelley Moore Capito",
+    // "Tammy Duckworth", etc.) and the full party/state/committee badge row
+    // are no longer truncated. Steals horizontal real estate from the growth
+    // chart, which still has plenty of room at 1280+ window widths.
+    info_pane->setMinimumWidth(360);
+    info_pane->setMaximumWidth(460);
     info_pane->setStyleSheet(
         QString("QWidget { background:%1; border-right:1px solid %2; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
@@ -858,6 +867,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     holdings_table_ = new QTableWidget(parent);
     holdings_table_->setColumnCount(kCols.size());
     holdings_table_->setHorizontalHeaderLabels(kCols);
+    fincept::ui::ensure_header_fits(holdings_table_);
     holdings_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     holdings_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     holdings_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -918,6 +928,7 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     trades_table_ = new QTableWidget(parent);
     trades_table_->setColumnCount(kCols.size());
     trades_table_->setHorizontalHeaderLabels(kCols);
+    fincept::ui::ensure_header_fits(trades_table_);
     trades_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     trades_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     trades_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

@@ -2,6 +2,7 @@
 #include "screens/power_trader/LeaderboardPanel.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHeaderView>
 #include <QLabel>
@@ -45,6 +46,7 @@ void LeaderboardPanel::build_ui() {
     table_ = new QTableWidget(this);
     table_->setColumnCount(kLeaderCols.size());
     table_->setHorizontalHeaderLabels(kLeaderCols);
+    fincept::ui::ensure_header_fits(table_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

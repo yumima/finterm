@@ -2,6 +2,7 @@
 #include "screens/power_trader/TradesFeedPanel.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QDate>
 #include <QHBoxLayout>
@@ -144,6 +145,7 @@ void TradesFeedPanel::build_ui() {
     table_ = new QTableWidget(this);
     table_->setColumnCount(kFeedCols.size());
     table_->setHorizontalHeaderLabels(kFeedCols);
+    fincept::ui::ensure_header_fits(table_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

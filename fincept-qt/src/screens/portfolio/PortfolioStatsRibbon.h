@@ -18,12 +18,15 @@ class PortfolioStatsRibbon : public QWidget {
     void refresh_theme();
 
   private:
-    // Hero cell — primary row. Large value, label above, sub below.
+    // Hero cell — primary row. Two-line layout: small label, then a single
+    // value line that combines the primary value and secondary detail with a
+    // separator. Both portions render at the same (value) font size; the
+    // secondary detail uses a dimmer color via rich text. (Was three lines
+    // with a tiny 9-10px sub line that the user reported was unreadable.)
     struct HeroCell {
         QWidget* container = nullptr;
         QLabel* label = nullptr;
-        QLabel* value = nullptr;
-        QLabel* sub = nullptr;
+        QLabel* value = nullptr;   // rich text — holds both value and sub
     };
 
     // Compact cell — secondary row. Single-line "LABEL  value" chip.

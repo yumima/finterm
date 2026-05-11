@@ -2,6 +2,7 @@
 #include "screens/power_trader/RankingsPanel.h"
 
 #include "screens/power_trader/PowerTraderService.h"
+#include "ui/components/LayoutHelpers.h"
 #include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
@@ -214,12 +215,12 @@ void RankingsPanel::build_ui() {
     btn_group_ = new QButtonGroup(this);
     btn_group_->setExclusive(true);
 
+    QList<QPushButton*> pill_buttons;
     for (int i = 0; i < kDimCount; ++i) {
         auto* btn = new QPushButton(QLatin1String(kDims[i].label), pill_container);
         btn->setCheckable(true);
         btn->setFixedHeight(28);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
         const RankingDimension dim = kDims[i].dim;
         connect(btn, &QPushButton::clicked, this, [this, dim]() {
@@ -229,13 +230,20 @@ void RankingsPanel::build_ui() {
         btn_group_->addButton(btn, i);
         pill_layout->addWidget(btn);
         dim_buttons_.append(btn);
+        pill_buttons.append(btn);
 
         if (i == 0)
             btn->setChecked(true);
     }
 
-    pill_layout->addStretch();
-    pill_container->adjustSize();
+    // Equal-width pills distributed across the row — uses the longest label's
+    // width as the floor so "DISCLOSURE LAG" doesn't truncate.
+    QFont pill_font = pill_container->font();
+    pill_font.setBold(true);
+    fincept::ui::equalize_and_distribute(pill_buttons, pill_font);
+
+    // No addStretch — Expanding policy in the helper absorbs the slack itself.
+    pill_scroll->setWidgetResizable(true);
     pill_scroll->setWidget(pill_container);
     lvl->addWidget(pill_scroll);
 
@@ -248,6 +256,7 @@ void RankingsPanel::build_ui() {
     table_ = new QTableWidget(this);
     table_->setColumnCount(kCols.size());
     table_->setHorizontalHeaderLabels(kCols);
+    fincept::ui::ensure_header_fits(table_);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

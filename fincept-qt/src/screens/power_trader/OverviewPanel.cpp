@@ -2,6 +2,7 @@
 #include "screens/power_trader/OverviewPanel.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QButtonGroup>
 #include <QFrame>
@@ -293,6 +294,7 @@ void OverviewPanel::build_ui() {
         signal_table_ = new QTableWidget(col3);
         signal_table_->setColumnCount(kSigCols.size());
         signal_table_->setHorizontalHeaderLabels(kSigCols);
+        fincept::ui::ensure_header_fits(signal_table_);
         signal_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         signal_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         signal_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

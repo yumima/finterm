@@ -2,6 +2,7 @@
 #include "screens/power_trader/InsiderWatchPanel.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -84,6 +85,7 @@ void InsiderWatchPanel::build_ui() {
         watch_table_->setColumnCount(7);
         watch_table_->setHorizontalHeaderLabels(
             {"#", "MEMBER", "PTY", "CHB", "SCORE", "CMTE %", "TRADES"});
+        fincept::ui::ensure_header_fits(watch_table_);
         watch_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         watch_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         watch_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -174,6 +176,7 @@ void InsiderWatchPanel::build_ui() {
     score_breakdown_ = new QTableWidget;
     score_breakdown_->setColumnCount(3);
     score_breakdown_->setHorizontalHeaderLabels({"FACTOR", "SCORE", "WEIGHT"});
+    fincept::ui::ensure_header_fits(score_breakdown_);
     score_breakdown_->setSelectionMode(QAbstractItemView::NoSelection);
     score_breakdown_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     score_breakdown_->setShowGrid(false);

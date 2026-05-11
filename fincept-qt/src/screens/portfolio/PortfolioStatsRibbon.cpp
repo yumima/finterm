@@ -133,7 +133,7 @@ PortfolioStatsRibbon::HeroCell PortfolioStatsRibbon::add_hero(QHBoxLayout* row, 
     container->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     auto* vlayout = new QVBoxLayout(container);
     vlayout->setContentsMargins(14, 4, 14, 4);
-    vlayout->setSpacing(1);
+    vlayout->setSpacing(2);
 
     HeroCell cell;
     cell.container = container;
@@ -142,10 +142,8 @@ PortfolioStatsRibbon::HeroCell PortfolioStatsRibbon::add_hero(QHBoxLayout* row, 
     vlayout->addWidget(cell.label);
 
     cell.value = new QLabel("--");
+    cell.value->setTextFormat(Qt::RichText);
     vlayout->addWidget(cell.value);
-
-    cell.sub = new QLabel;
-    vlayout->addWidget(cell.sub);
 
     apply_hero_styles(cell, value_color);
 
@@ -156,7 +154,6 @@ PortfolioStatsRibbon::HeroCell PortfolioStatsRibbon::add_hero(QHBoxLayout* row, 
 void PortfolioStatsRibbon::apply_hero_styles(HeroCell& c, const char* value_color) {
     const int label_px = ui::fonts::font_px(-3); // ~10–11px
     const int value_px = ui::fonts::font_px(+4); // ~18px
-    const int sub_px = ui::fonts::font_px(-4);   // ~9–10px
 
     if (c.label) {
         c.label->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; letter-spacing:1.2px;"
@@ -165,16 +162,14 @@ void PortfolioStatsRibbon::apply_hero_styles(HeroCell& c, const char* value_colo
                                    .arg(label_px));
     }
     if (c.value) {
+        // value_color sets the *default* color for the value portion. Inline
+        // <span style="color:...">sub</span> in set_summary applies the
+        // dimmer secondary color to the sub portion only. Both portions
+        // render at value_px so the sub line is finally readable.
         c.value->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; letter-spacing:0.2px;"
                                        "  background:transparent;")
                                    .arg(value_color)
                                    .arg(value_px));
-    }
-    if (c.sub) {
-        c.sub->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:500;"
-                                     "  background:transparent;")
-                                 .arg(ui::colors::TEXT_SECONDARY())
-                                 .arg(sub_px));
     }
     if (c.container) {
         c.container->setStyleSheet(QString("QWidget#pfHeroCell { border-right:1px solid %1; background:transparent; }")
@@ -238,27 +233,31 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     auto color_tok = [](double v) -> const char* { return v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE; };
 
     // Total value
-    total_value_.value->setText(fmt(s.total_market_value));
-    total_value_.sub->setText(s.portfolio.currency);
+    const QString sub_color = ui::colors::TEXT_SECONDARY();
+    auto compose = [&](const QString& value, const QString& sub) {
+        if (sub.isEmpty()) return value;
+        return QString("%1 <span style=\"color:%2; font-weight:500;\">&nbsp;\xc2\xb7&nbsp; %3</span>")
+            .arg(value, sub_color, sub);
+    };
+    total_value_.value->setText(compose(fmt(s.total_market_value), s.portfolio.currency));
     apply_hero_styles(total_value_, ui::colors::WARNING);
 
     // P&L — value = absolute P&L, sub = percent
-    pnl_.value->setText(
-        QString("%1%2").arg(s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)));
-    pnl_.sub->setText(
-        QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent)));
+    pnl_.value->setText(compose(
+        QString("%1%2").arg(s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)),
+        QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent))));
     apply_hero_styles(pnl_, color_tok(s.total_unrealized_pnl));
 
     // Day change
-    day_change_.value->setText(
-        QString("%1%2").arg(s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)));
-    day_change_.sub->setText(
-        QString("%1%2%").arg(s.total_day_change_percent >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent)));
+    day_change_.value->setText(compose(
+        QString("%1%2").arg(s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
+        QString("%1%2%").arg(s.total_day_change_percent >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent))));
     apply_hero_styles(day_change_, color_tok(s.total_day_change));
 
     // Positions
-    positions_.value->setText(QString::number(s.total_positions));
-    positions_.sub->setText(QString("\u25B2 %1   \u25BC %2").arg(s.gainers).arg(s.losers));
+    positions_.value->setText(compose(
+        QString::number(s.total_positions),
+        QString("\u25B2 %1  \u25BC %2").arg(s.gainers).arg(s.losers)));
     apply_hero_styles(positions_, ui::colors::TEXT_PRIMARY);
 
     // Cost basis chip uses summary too

@@ -311,7 +311,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
     hl->setContentsMargins(10, 4, 14, 4);
     hl->setSpacing(4);
 
-    auto* lbl = new QLabel("BODY:");
+    auto* lbl = new QLabel("VIEW:");
     lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
                            .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(lbl);

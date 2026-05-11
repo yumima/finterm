@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -429,6 +430,7 @@ QWidget* PracticePanel::build_sector_map_tab() {
     sector_map_table_->setColumnCount(6);
     sector_map_table_->setHorizontalHeaderLabels(
         {"COMMITTEE", "SECTOR", "MEMBERS TRADING", "TRADES", "AVG SIGNAL", "OVERLAP %"});
+    fincept::ui::ensure_header_fits(sector_map_table_);
     sector_map_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     sector_map_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     sector_map_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

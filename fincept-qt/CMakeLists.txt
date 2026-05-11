@@ -956,6 +956,7 @@ set(UI_SOURCES
     src/ui/pushpins/PushpinBar.cpp
     src/ui/components/ComponentCard.cpp
     src/ui/components/ComponentBrowserDialog.cpp
+    src/ui/components/LayoutHelpers.cpp
     src/ui/widgets/SearchBar.cpp
     src/ui/widgets/GeometricBackground.cpp
     src/ui/widgets/WorldMapWidget.cpp

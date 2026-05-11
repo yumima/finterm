@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -33,6 +34,7 @@ static QTableWidget* make_table(const QStringList& cols) {
     auto* t = new QTableWidget;
     t->setColumnCount(cols.size());
     t->setHorizontalHeaderLabels(cols);
+    fincept::ui::ensure_header_fits(t);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
     t->setSelectionMode(QAbstractItemView::SingleSelection);
     t->setEditTriggers(QAbstractItemView::NoEditTriggers);

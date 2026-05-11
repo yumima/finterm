@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -204,6 +205,7 @@ void CabinetPanel::build_content_page() {
         member_table_ = new QTableWidget;
         member_table_->setColumnCount(4);
         member_table_->setHorizontalHeaderLabels({"#", "NAME / TITLE", "CONFLICT", "HOLDINGS"});
+        fincept::ui::ensure_header_fits(member_table_);
         member_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         member_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         member_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -270,6 +272,7 @@ void CabinetPanel::build_content_page() {
         o_ranking_table_->setColumnCount(5);
         o_ranking_table_->setHorizontalHeaderLabels(
             {"#", "NAME", "TITLE", "CONFLICT", "PORTFOLIO (EST)"});
+        fincept::ui::ensure_header_fits(o_ranking_table_);
         o_ranking_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         o_ranking_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         o_ranking_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -298,6 +301,7 @@ void CabinetPanel::build_content_page() {
         o_sector_table_ = new QTableWidget;
         o_sector_table_->setColumnCount(3);
         o_sector_table_->setHorizontalHeaderLabels({"SECTOR", "EST HOLDINGS", "MEMBERS"});
+        fincept::ui::ensure_header_fits(o_sector_table_);
         o_sector_table_->setSelectionMode(QAbstractItemView::NoSelection);
         o_sector_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         o_sector_table_->setShowGrid(false);
@@ -335,6 +339,7 @@ void CabinetPanel::build_content_page() {
         h_table_->setColumnCount(6);
         h_table_->setHorizontalHeaderLabels(
             {"ASSET", "TICKER", "TYPE", "SECTOR", "VALUE RANGE", "CONFLICT"});
+        fincept::ui::ensure_header_fits(h_table_);
         h_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         h_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         h_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -417,6 +422,7 @@ void CabinetPanel::build_content_page() {
         s_table_ = new QTableWidget;
         s_table_->setColumnCount(4);
         s_table_->setHorizontalHeaderLabels({"SECTOR", "EST AMOUNT", "% PORTFOLIO", "CONFLICT"});
+        fincept::ui::ensure_header_fits(s_table_);
         s_table_->setSelectionMode(QAbstractItemView::NoSelection);
         s_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
         s_table_->setShowGrid(false);

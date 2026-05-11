@@ -2,6 +2,7 @@
 #include "screens/power_trader/MemberDetailPanel.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QFrame>
 #include <QGridLayout>
@@ -195,6 +196,7 @@ void MemberDetailPanel::build_ui() {
     hist_table_ = new QTableWidget(detail_widget_);
     hist_table_->setColumnCount(kHistCols.size());
     hist_table_->setHorizontalHeaderLabels(kHistCols);
+    fincept::ui::ensure_header_fits(hist_table_);
     hist_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     hist_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     hist_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

@@ -3,6 +3,7 @@
 #include "screens/power_trader/PowerTraderService.h"
 
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -153,6 +154,7 @@ void SignalBuilderPanel::build_ui() {
         preview_table_->setColumnCount(8);
         preview_table_->setHorizontalHeaderLabels(
             {"SCORE", "MEMBER", "PTY", "TICKER", "B/S", "AMOUNT", "CMTE", "LAG"});
+        fincept::ui::ensure_header_fits(preview_table_);
         preview_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         preview_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         preview_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);

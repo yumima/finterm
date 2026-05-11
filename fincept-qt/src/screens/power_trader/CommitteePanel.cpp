@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/PowerTraderService.h"
 #include "ui/theme/Theme.h"
+#include "ui/components/LayoutHelpers.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -72,6 +73,7 @@ void CommitteePanel::build_ui() {
         committee_list_ = new QTableWidget;
         committee_list_->setColumnCount(3);
         committee_list_->setHorizontalHeaderLabels({"COMMITTEE", "TRADES", "CORR %"});
+        fincept::ui::ensure_header_fits(committee_list_);
         committee_list_->setSelectionBehavior(QAbstractItemView::SelectRows);
         committee_list_->setSelectionMode(QAbstractItemView::SingleSelection);
         committee_list_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -143,6 +145,7 @@ void CommitteePanel::build_ui() {
         trade_table_->setColumnCount(8);
         trade_table_->setHorizontalHeaderLabels(
             {"MEMBER", "PTY", "TICKER", "ASSET", "B/S", "AMOUNT", "LAG", "SIG"});
+        fincept::ui::ensure_header_fits(trade_table_);
         trade_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
         trade_table_->setSelectionMode(QAbstractItemView::SingleSelection);
         trade_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
