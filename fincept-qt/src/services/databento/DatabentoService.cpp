@@ -2,8 +2,10 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/util/DiskCache.h"
 #include "storage/secure/SecureStorage.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
@@ -13,6 +15,24 @@
 #include <set>
 
 namespace fincept {
+
+namespace {
+
+// Persistent on-disk cache. One file per logical surface family so cold
+// launches can paint the last-viewed surface immediately. Files match the
+// in-memory single-slot caches (cached_ohlcv_, cached_vol_, ...).
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("databento"));
+    return c;
+}
+
+constexpr const char* kOhlcvFile     = "ohlcv.json";
+constexpr const char* kVolFile       = "vol.json";
+constexpr const char* kFuturesFile   = "futures.json";
+constexpr const char* kDatasetsFile  = "datasets.json";
+constexpr const char* kSchemasFile   = "schemas.json";
+
+} // namespace
 
 using namespace fincept::python;
 
@@ -50,7 +70,93 @@ DatabentoService& DatabentoService::instance() {
     return inst;
 }
 
-DatabentoService::DatabentoService() {}
+DatabentoService::DatabentoService() {
+    // Hydrate the named in-memory caches from disk. Each file stores the
+    // raw Python JSON response plus the parser-context inputs (symbol,
+    // spot, etc.) so we can rebuild the parsed surface struct via the
+    // same parse_*() entrypoints used by the live path. The *_ready
+    // signals we'd normally fire after parse go to no listeners (UI wires
+    // up later) — that's the intended drop; last_*() accessors expose the
+    // hydrated structs to whoever subscribes next.
+    {
+        const QJsonDocument doc = disk_cache().load(QString::fromLatin1(kOhlcvFile));
+        if (doc.isObject()) {
+            const QJsonObject root = doc.object();
+            const QJsonObject data = root.value("data").toObject();
+            DatabentoOhlcvResult res;
+            res.success = true;
+            for (const QString& sym : data.keys()) {
+                QVector<QJsonObject> records;
+                for (const auto& v : data[sym].toArray())
+                    records.push_back(v.toObject());
+                res.data[sym] = records;
+            }
+            cached_ohlcv_ = res;
+            const QFileInfo fi(disk_cache().path(QString::fromLatin1(kOhlcvFile)));
+            if (fi.exists()) last_fetch_time_ = fi.lastModified();
+        }
+    }
+    {
+        const QJsonDocument doc = disk_cache().load(QString::fromLatin1(kVolFile));
+        if (doc.isObject()) {
+            const QJsonObject root = doc.object();
+            const QString symbol = root.value("symbol").toString();
+            const float spot = (float)root.value("spot").toDouble();
+            const QJsonObject raw = root.value("raw").toObject();
+            if (!symbol.isEmpty() && !raw.isEmpty()) {
+                DatabentoVolSurfaceResult res;
+                res.success = true;
+                res.vol   = parse_vol_surface(raw, symbol.toStdString(), spot);
+                res.delta = parse_greek_surface(raw, "Delta", symbol.toStdString(), spot);
+                res.gamma = parse_greek_surface(raw, "Gamma", symbol.toStdString(), spot);
+                res.vega  = parse_greek_surface(raw, "Vega",  symbol.toStdString(), spot);
+                res.theta = parse_greek_surface(raw, "Theta", symbol.toStdString(), spot);
+                res.skew  = parse_skew(raw, symbol.toStdString());
+                cached_vol_ = res;
+                const QFileInfo fi(disk_cache().path(QString::fromLatin1(kVolFile)));
+                if (fi.exists()) last_fetch_time_ = fi.lastModified();
+            }
+        }
+    }
+    {
+        const QJsonDocument doc = disk_cache().load(QString::fromLatin1(kFuturesFile));
+        if (doc.isObject()) {
+            const QJsonObject root = doc.object();
+            const QJsonObject raw = root.value("raw").toObject();
+            if (!raw.isEmpty()) {
+                DatabentoFuturesResult res;
+                res.success = true;
+                res.forward  = parse_commodity_forward(raw);
+                res.contango = parse_contango(raw);
+                cached_futures_ = res;
+                const QFileInfo fi(disk_cache().path(QString::fromLatin1(kFuturesFile)));
+                if (fi.exists()) last_fetch_time_ = fi.lastModified();
+            }
+        }
+    }
+    // Metadata: simple string maps, save/load as plain JSON.
+    {
+        const QJsonDocument doc = disk_cache().load(QString::fromLatin1(kDatasetsFile));
+        if (doc.isArray()) {
+            for (const auto& v : doc.array()) {
+                const QString s = v.toString();
+                if (!s.isEmpty()) cached_datasets_ << s;
+            }
+        }
+    }
+    {
+        const QJsonDocument doc = disk_cache().load(QString::fromLatin1(kSchemasFile));
+        if (doc.isObject()) {
+            const QJsonObject root = doc.object();
+            for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+                QStringList vals;
+                for (const auto& v : it.value().toArray())
+                    if (!v.toString().isEmpty()) vals << v.toString();
+                if (!vals.isEmpty()) cached_schemas_.insert(it.key(), vals);
+            }
+        }
+    }
+}
 
 // ── API key ────────────────────────────────────────────────────────────────
 // We accept both the legacy SECURE_KEY ("databento.api_key") and the canonical
@@ -191,6 +297,12 @@ void DatabentoService::fetch_ohlcv(const QStringList& symbols, int days) {
         }
         self->cached_ohlcv_ = res;
         self->last_fetch_time_ = QDateTime::currentDateTime();
+        // Persist the raw response so the next launch hydrates instantly.
+        {
+            QJsonObject root;
+            root.insert("data", data);
+            disk_cache().save(QString::fromLatin1(kOhlcvFile), QJsonDocument(root));
+        }
         LOG_INFO("Databento", "OHLCV ready, symbols=" + QString::number(res.data.size()));
         emit self->ohlcv_ready(res);
     });
@@ -225,6 +337,15 @@ void DatabentoService::fetch_options_surface(const QString& symbol, float spot) 
         res.skew = parse_skew(j, symbol.toStdString());
         self->cached_vol_ = res;
         self->last_fetch_time_ = QDateTime::currentDateTime();
+        // Save raw response + parser-context inputs (symbol, spot) so the
+        // next launch can rebuild the surface struct via the same parsers.
+        {
+            QJsonObject root;
+            root.insert("symbol", symbol);
+            root.insert("spot",   (double)spot);
+            root.insert("raw",    j);
+            disk_cache().save(QString::fromLatin1(kVolFile), QJsonDocument(root));
+        }
         LOG_INFO("Databento", "Vol surface ready for " + symbol);
         emit self->vol_surface_ready(res);
     });
@@ -256,6 +377,11 @@ void DatabentoService::fetch_futures_term_structure(const QStringList& commoditi
         res.contango = parse_contango(j);
         self->cached_futures_ = res;
         self->last_fetch_time_ = QDateTime::currentDateTime();
+        {
+            QJsonObject root;
+            root.insert("raw", j);
+            disk_cache().save(QString::fromLatin1(kFuturesFile), QJsonDocument(root));
+        }
         LOG_INFO("Databento", "Futures term structure ready");
         emit self->futures_ready(res);
     });
@@ -741,6 +867,9 @@ void DatabentoService::list_datasets(std::function<void(QStringList)> cb) {
                     out << id;
             }
             self->cached_datasets_ = out;
+            QJsonArray arr;
+            for (const auto& s : out) arr.append(s);
+            disk_cache().save(QString::fromLatin1(kDatasetsFile), QJsonDocument(arr));
         }
         cb(out);
     });
@@ -763,6 +892,17 @@ void DatabentoService::list_schemas(const QString& dataset, std::function<void(Q
                     out << id;
             }
             self->cached_schemas_[ds] = out;
+            // Re-flatten the full schemas map to a single file so we
+            // accumulate across datasets the user has visited rather
+            // than truncating the file every time.
+            QJsonObject root;
+            for (auto it = self->cached_schemas_.constBegin();
+                 it != self->cached_schemas_.constEnd(); ++it) {
+                QJsonArray arr;
+                for (const auto& s : it.value()) arr.append(s);
+                root.insert(it.key(), arr);
+            }
+            disk_cache().save(QString::fromLatin1(kSchemasFile), QJsonDocument(root));
         }
         cb(out);
     });

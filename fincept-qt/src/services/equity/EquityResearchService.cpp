@@ -4,8 +4,10 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -14,6 +16,45 @@
 #include <cmath>
 
 namespace fincept::services::equity {
+
+namespace {
+
+// Persistent on-disk cache so the equity research panels can paint the
+// most-recently-viewed symbol immediately on next launch. One file per
+// symbol holds every category (quote, info, candles by period, financials,
+// technicals by period, peers, news) — keeps the directory bounded by the
+// universe the user has actually browsed.
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("equity_research"));
+    return c;
+}
+
+// Sanitize a symbol into an alnum-only filename stem. Tickers can include
+// dots (BRK.B) or hyphens (BRK-B) which would break case-insensitive FAT
+// lookups on cross-platform mounts. ".json" is appended by the caller.
+QString symbol_filename(const QString& symbol) {
+    QString s;
+    s.reserve(symbol.size());
+    for (const QChar c : symbol)
+        if (c.isLetterOrNumber())
+            s.append(c.toUpper());
+    return s + QStringLiteral(".json");
+}
+
+// Load the per-symbol blob (or empty obj) and update one category key,
+// then save back. We do this rather than keep a process-wide in-memory
+// mirror because each fetch path can complete independently and we want
+// the on-disk file to always reflect the latest of every category.
+void update_symbol_cache(const QString& symbol, const QString& key,
+                          const QJsonValue& value) {
+    if (symbol.isEmpty()) return;
+    const QString fname = symbol_filename(symbol);
+    QJsonObject root = disk_cache().load(fname).object();
+    root.insert(key, value);
+    disk_cache().save(fname, QJsonDocument(root));
+}
+
+} // namespace
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 EquityResearchService& EquityResearchService::instance() {
@@ -26,6 +67,84 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
     search_debounce_->setSingleShot(true);
     search_debounce_->setInterval(kDebounceMs);
     connect(search_debounce_, &QTimer::timeout, this, [this]() { search_symbols(pending_query_); });
+
+    // Hydrate the in-memory CacheManager from every cached per-symbol file
+    // so subsequent load_symbol() / fetch_*() calls hit warm cache and emit
+    // immediately. The data_loaded-style signals fired by the per-category
+    // emits below go to no listeners (UI wires up later) — load_symbol()
+    // will re-emit when a panel subscribes, hitting CacheManager again.
+    const QStringList files = disk_cache().files();
+    for (const QString& fname : files) {
+        const QJsonDocument doc = disk_cache().load(fname);
+        if (!doc.isObject()) continue;
+        const QJsonObject root = doc.object();
+        const QString symbol = root.value("symbol").toString();
+        if (symbol.isEmpty()) continue;
+        const QFileInfo fi(disk_cache().path(fname));
+        const int age_sec = fi.exists()
+            ? std::max(1, int(fi.lastModified().secsTo(QDateTime::currentDateTime())))
+            : 1;
+
+        auto repopulate = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
+            if (!root.contains(sub)) return;
+            // Refuse to repopulate CacheManager entries that would already
+            // be expired against their normal TTL. The disk copy survives
+            // for the parser hydration path, but we don't want a stale
+            // quote masquerading as fresh.
+            if (age_sec >= ttl_sec) return;
+            const QJsonValue v = root.value(sub);
+            const QJsonDocument doc_for_blob = v.isArray()
+                ? QJsonDocument(v.toArray())
+                : QJsonDocument(v.toObject());
+            const QString blob = QString::fromUtf8(
+                doc_for_blob.toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put(
+                cache_prefix + symbol, QVariant(blob), ttl_sec - age_sec, "equity");
+        };
+        // quote / info / financials / news live in the root, peers as array
+        if (root.contains("quote"))
+            repopulate("quote", "equity:quote:", kQuoteTtlSec);
+        if (root.contains("info"))
+            repopulate("info", "equity:info:", kInfoTtlSec);
+        if (root.contains("financials"))
+            repopulate("financials", "equity:financials:", kFinancialsTtlSec);
+        if (root.contains("news"))
+            repopulate("news", "equity:news:", kNewsTtlSec);
+        // peer cache key includes the basket symbols — re-key by what we
+        // stored under "peers_key" so the next fetch_peers() with the same
+        // basket hits warm cache. If the user requests a different basket
+        // we just take the network miss.
+        if (root.contains("peers") && root.contains("peers_key")) {
+            const QJsonValue v = root.value("peers");
+            if (v.isArray() && age_sec < kPeersTtlSec) {
+                const QString blob = QString::fromUtf8(
+                    QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put(
+                    root.value("peers_key").toString(),
+                    QVariant(blob), kPeersTtlSec - age_sec, "equity");
+            }
+        }
+        // candles + technicals are nested per-period objects
+        const auto repopulate_periodic =
+            [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
+                const QJsonObject by_period = root.value(sub).toObject();
+                for (auto it = by_period.constBegin(); it != by_period.constEnd(); ++it) {
+                    if (age_sec >= ttl_sec) continue;
+                    const QJsonValue v = it.value();
+                    if (!v.isArray()) continue;
+                    const QString blob = QString::fromUtf8(
+                        QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
+                    fincept::CacheManager::instance().put(
+                        cache_prefix + symbol + ":" + it.key(),
+                        QVariant(blob), ttl_sec - age_sec, "equity");
+                }
+            };
+        repopulate_periodic("candles", "equity:candles:", kHistoricalTtlSec);
+        repopulate_periodic("technicals", "equity:technicals:", kTechnicalsTtlSec);
+    }
+    if (!files.isEmpty())
+        LOG_INFO("EquityResearch",
+                 QString("Hydrated %1 symbol caches from disk").arg(files.size()));
 }
 
 // ── Python helper ─────────────────────────────────────────────────────────────
@@ -131,6 +250,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                         "equity:quote:" + symbol,
                         QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
                         "equity");
+                    update_symbol_cache(symbol, "quote", obj);
+                    update_symbol_cache(symbol, "symbol", symbol);
                     emit quote_loaded(parse_quote(obj));
                 });
             }
@@ -159,6 +280,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                         "equity:info:" + symbol,
                         QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
                         "equity");
+                    update_symbol_cache(symbol, "info", obj);
+                    update_symbol_cache(symbol, "symbol", symbol);
                     emit info_loaded(parse_info(obj));
                 });
             }
@@ -198,6 +321,18 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                    candles_key,
                                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                                    kHistoricalTtlSec, "equity");
+                               // Per-symbol disk cache stores candles under a
+                               // nested period map so different period buttons
+                               // can each rehydrate independently.
+                               {
+                                   const QString fname = symbol_filename(symbol);
+                                   QJsonObject root = disk_cache().load(fname).object();
+                                   root.insert("symbol", symbol);
+                                   QJsonObject by_period = root.value("candles").toObject();
+                                   by_period.insert(period, arr);
+                                   root.insert("candles", by_period);
+                                   disk_cache().save(fname, QJsonDocument(root));
+                               }
                                emit historical_loaded(symbol, period, parse_candles(arr));
                            });
             }
@@ -236,6 +371,8 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
             "equity:financials:" + symbol,
             QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
             kFinancialsTtlSec, "equity");
+        update_symbol_cache(symbol, "financials", obj);
+        update_symbol_cache(symbol, "symbol", symbol);
         emit financials_loaded(parse_financials(obj));
     });
 }
@@ -291,6 +428,15 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 fincept::CacheManager::instance().put(
                     "equity:technicals:" + symbol + ":" + period, QVariant(blob),
                     kTechnicalsTtlSec, "equity");
+                {
+                    const QString fname = symbol_filename(symbol);
+                    QJsonObject root = disk_cache().load(fname).object();
+                    root.insert("symbol", symbol);
+                    QJsonObject by_period = root.value("technicals").toObject();
+                    by_period.insert(period, data);
+                    root.insert("technicals", by_period);
+                    disk_cache().save(fname, QJsonDocument(root));
+                }
                 emit self->technicals_loaded(self->parse_technicals(symbol, period, data));
             },
             python::PythonWorker::kComputeActionTimeoutMs);
@@ -333,6 +479,17 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
             const QString blob = QString::fromUtf8(QJsonDocument(candles).toJson(QJsonDocument::Compact));
             fincept::CacheManager::instance().put(candles_key, QVariant(blob),
                                                    kHistoricalTtlSec, "equity");
+            {
+                const QString fname = symbol_filename(symbol);
+                QJsonObject root = disk_cache().load(fname).object();
+                root.insert("symbol", symbol);
+                QJsonObject by_period = root.value("candles").toObject();
+                // candles_key looks like "equity:candles:<sym>:<period>"
+                const QString p = candles_key.section(':', -1);
+                by_period.insert(p, candles);
+                root.insert("candles", by_period);
+                disk_cache().save(fname, QJsonDocument(root));
+            }
             run_compute(candles);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -381,6 +538,9 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
             cache_key,
             QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kPeersTtlSec, "equity");
+        update_symbol_cache(symbol, "peers", arr);
+        update_symbol_cache(symbol, "peers_key", cache_key);
+        update_symbol_cache(symbol, "symbol", symbol);
         emit peers_loaded(symbol, parse_peers(arr));
     });
 }
@@ -413,6 +573,8 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
             "equity:news:" + symbol,
             QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kNewsTtlSec, "equity");
+        update_symbol_cache(symbol, "news", arr);
+        update_symbol_cache(symbol, "symbol", symbol);
         emit news_loaded(symbol, parse_news(arr));
     });
 }
@@ -455,7 +617,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-                   [this, symbol, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
+                   [this, symbol, period, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
                        if (!ok) {
                            emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
                            return;
@@ -466,6 +628,15 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                        const QString raw = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
                        fincept::CacheManager::instance().put(candles_key, QVariant(raw),
                                                              kHistoricalTtlSec, "equity");
+                       {
+                           const QString fname = symbol_filename(symbol);
+                           QJsonObject root = disk_cache().load(fname).object();
+                           root.insert("symbol", symbol);
+                           QJsonObject by_period = root.value("candles").toObject();
+                           by_period.insert(period, arr);
+                           root.insert("candles", by_period);
+                           disk_cache().save(fname, QJsonDocument(root));
+                       }
                        run_talipp(raw);
                    });
     }
