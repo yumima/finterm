@@ -106,11 +106,38 @@ void PipelineView::rebuild_grid() {
         return;
     }
 
-    // Sort newest first so cards flow chronologically: top-left = most recent
-    // filing, bottom-right = oldest. Matches reader's natural scan order.
+    // Sort by estimated IPO date *closest-to-today first* (i.e. soonest
+    // expected pricing). The actionable card for a pre-IPO investor is
+    // "who's IPO-ing in the next 2 weeks", not "who filed S-1 most
+    // recently". Estimated IPO = filed_date + 90d (sector-median lag);
+    // companies past that 90d window count as imminent/overdue and
+    // sort to the very top. Filings without a valid date fall to the
+    // bottom.
+    const QDate today = QDate::currentDate();
+    auto est_ipo_date = [&](const S1Filing& s) -> QDate {
+        if (!s.filed_date.isValid()) return QDate();
+        return s.filed_date.addDays(90);
+    };
+    auto days_to_est = [&](const S1Filing& s) -> qint64 {
+        const QDate est = est_ipo_date(s);
+        if (!est.isValid()) return std::numeric_limits<qint64>::max();
+        const qint64 d = today.daysTo(est);
+        // Overdue contracts (est in the past) get clamped to 0 so they
+        // sit at the top with imminent ones, ordered by how recently the
+        // 90-day window expired (smallest negative magnitude → most
+        // recently overdue, closest to "actually pricing now").
+        return d < 0 ? -d : d;
+    };
     QVector<S1Filing> sorted = pipeline_;
     std::sort(sorted.begin(), sorted.end(),
-              [](const S1Filing& a, const S1Filing& b) {
+              [&](const S1Filing& a, const S1Filing& b) {
+                  const qint64 da = days_to_est(a);
+                  const qint64 db = days_to_est(b);
+                  if (da != db) return da < db;
+                  // Tiebreak: more amendments first (= further along the
+                  // pricing process), then most recent filing.
+                  if (a.amendment_count != b.amendment_count)
+                      return a.amendment_count > b.amendment_count;
                   return a.filed_date > b.filed_date;
               });
 
