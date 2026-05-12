@@ -460,17 +460,20 @@ void NewsFeedPanel::update_two_column_layout() {
     // insertWidget(1, middle) shifted the right list to index 2.
     if (wide && !was_wide) {
         const bool has_middle = middle_widget_ != nullptr;
-        if (has_middle && middle_widget_->isVisible()) {
-            // 2/5 · 1/5 · 2/5 split — middle = width/5, side rails take
-            // the remaining 4/5 split evenly. 280px floor so the article
-            // reader stays usable on small viewports.
+        if (has_middle) {
+            // Seed middle's slot regardless of its current visibility —
+            // when the user later clicks an article and the detail panel
+            // shows itself, QSplitter does not re-balance, so we must
+            // reserve the 1/5 width up-front. Without this seed the
+            // previously-buggy fallback path saved middle=0 and the
+            // detail panel appeared as a sliver on first click.
+            //
+            // 2/5 · 1/5 · 2/5 split. 280px floor keeps the reader usable
+            // on small viewports.
             const int detail_w =
                 std::max(280, width() / 5);
             const int side = (width() - detail_w) / 2;
             feed_splitter_->setSizes({side, detail_w, side});
-        } else if (has_middle) {
-            const int half = width() / 2;
-            feed_splitter_->setSizes({half, 0, width() - half});
         } else {
             const int half = width() / 2;
             feed_splitter_->setSizes({half, width() - half});
