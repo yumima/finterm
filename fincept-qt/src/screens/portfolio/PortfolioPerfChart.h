@@ -115,18 +115,20 @@ class PortfolioPerfChart : public QWidget {
     bool show_benchmark_ = false;
     bool indexed_mode_ = false; // false = currency value, true = base-100 indexed
 
-    // Info bar — row 1 is portfolio/position summary (period change %,
-    // total return %, MV, COST). Row 2 only renders in symbol-focus mode
-    // and carries the live trade snapshot (last, bid/ask, day range, vol).
+    // Info bar — single row carrying two semantic groups:
+    //   left  group: period change %, total return %, MV, COST (overall)
+    //   right group: LAST, BID x ASK, DAY range, VOL (today, focus only)
+    // A fixed-width spacer separates the two so the user can read them as
+    // "overall | today". The live group hides at portfolio level.
     QLabel* period_change_label_ = nullptr;
     QLabel* total_return_label_ = nullptr;
     QLabel* nav_label_ = nullptr;
     QLabel* cost_basis_label_ = nullptr;
-    QWidget* live_row_ = nullptr;        // contains last/bid×ask/range/vol; hidden at portfolio level
     QLabel* live_last_label_ = nullptr;
     QLabel* live_bidask_label_ = nullptr;
     QLabel* live_range_label_ = nullptr;
     QLabel* live_vol_label_ = nullptr;
+    void set_live_group_visible(bool visible);
 
     // Chart
     CrosshairChartView* chart_view_ = nullptr;
@@ -153,6 +155,11 @@ class PortfolioPerfChart : public QWidget {
     QVector<double> intraday_values_;
     QString          intraday_for_symbol_;  // empty = portfolio aggregate
     bool             intraday_requested_   = false;  // 1D selected, waiting for data
+    // True once the fetch callback has fired for the current request. Lets
+    // render_intraday distinguish "still loading" from "loaded but empty"
+    // (e.g. weekend, holiday, pre-open) — the latter should show a terminal
+    // message, not "Loading…" forever.
+    bool             intraday_resolved_    = false;
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;

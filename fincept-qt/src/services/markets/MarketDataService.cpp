@@ -165,14 +165,23 @@ void MarketDataService::refresh(const QStringList& topics) {
                 co["bid_size"] = qd.bid_size;
                 co["ask_size"] = qd.ask_size;
                 const QString payload = QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
-                // Two parallel keys: 30s freshness + 7d last-known cold-start
-                // fallback. CacheManager is SQLite-backed so both survive
-                // app restarts.
+                // 30s key holds the live snapshot including bid/ask.
                 fincept::CacheManager::instance().put(
                     "market:" + qd.symbol, QVariant(payload),
                     kQuoteCacheTtlSec, "market_data");
+                // 7d "last-known" key is a cold-start fallback. Order-book
+                // fields (bid/ask/bid_size/ask_size) go stale within seconds,
+                // so we strip them from the long-TTL payload — the UI would
+                // otherwise show a week-old spread as if it were live.
+                QJsonObject co_long = co;
+                co_long.remove("bid");
+                co_long.remove("ask");
+                co_long.remove("bid_size");
+                co_long.remove("ask_size");
+                const QString payload_long =
+                    QString::fromUtf8(QJsonDocument(co_long).toJson(QJsonDocument::Compact));
                 fincept::CacheManager::instance().put(
-                    "market_last:" + qd.symbol, QVariant(payload),
+                    "market_last:" + qd.symbol, QVariant(payload_long),
                     kQuoteLastKnownTtlSec, "market_data");
 
                 self->publish_quote_to_hub(qd);
@@ -417,12 +426,20 @@ void MarketDataService::flush_batch() {
                     o["ask_size"] = q.ask_size;
                     const QString payload =
                         QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
-                    // 30s freshness + 7d last-known cold-start fallback.
                     fincept::CacheManager::instance().put(
                         "market:" + q.symbol, QVariant(payload),
                         kQuoteCacheTtlSec, "market_data");
+                    // 7d fallback: strip order-book fields (bid/ask go stale
+                    // within seconds — see comment in refresh() above).
+                    QJsonObject o_long = o;
+                    o_long.remove("bid");
+                    o_long.remove("ask");
+                    o_long.remove("bid_size");
+                    o_long.remove("ask_size");
+                    const QString payload_long =
+                        QString::fromUtf8(QJsonDocument(o_long).toJson(QJsonDocument::Compact));
                     fincept::CacheManager::instance().put(
-                        "market_last:" + q.symbol, QVariant(payload),
+                        "market_last:" + q.symbol, QVariant(payload_long),
                         kQuoteLastKnownTtlSec, "market_data");
                 };
 

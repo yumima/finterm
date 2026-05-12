@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioPerfChart.cpp
 #include "screens/portfolio/PortfolioPerfChart.h"
 
+#include "core/logging/Logger.h"
 #include "ui/theme/Theme.h"
 
 #include <QAreaSeries>
@@ -91,11 +92,22 @@ void CrosshairChartView::update_crosshair(const QPoint& widget_pos) {
     v_line_->setLine(scene_pos.x(), plot.top(), scene_pos.x(), plot.bottom());
     v_line_->setVisible(true);
 
-    // Format tooltip text
+    // Format tooltip text. For 1D / intraday series (all points within a
+    // single day) showing "12 May 2026" is redundant — every point shares
+    // the same date. Auto-detect: if the series spans < 36 hours, render
+    // "HH:mm" instead. The 36h threshold tolerates after-hours bars that
+    // sometimes cross midnight UTC without misclassifying a 5d series.
     const QDateTime dt = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(snap_pt.x()));
-    const QString date_str = dt.toString("dd MMM yyyy");
+    QString time_str;
+    if (pts_.size() >= 2) {
+        const qint64 span_ms = static_cast<qint64>(pts_.last().x() - pts_.first().x());
+        if (span_ms > 0 && span_ms <= qint64(36) * 60 * 60 * 1000)
+            time_str = dt.toString("HH:mm");
+    }
+    if (time_str.isEmpty())
+        time_str = dt.toString("dd MMM yyyy");
     const QString val_str = QString("%1 %2").arg(currency_, QString::number(snap_pt.y(), 'f', 2));
-    tooltip_->setText(date_str + "\n" + val_str);
+    tooltip_->setText(time_str + "\n" + val_str);
     tooltip_->adjustSize();
 
     // Position tooltip: above-right of cursor, clamped to screen bounds
@@ -261,54 +273,52 @@ void PortfolioPerfChart::build_ui() {
     cost_basis_label_->setToolTip("Total cost basis — the dashed horizontal line on the chart.");
     info_bar->addWidget(cost_basis_label_);
 
+    // Spacer + live-quote group on the SAME row, only shown in symbol-focus
+    // mode. The four tokens above (period change / TOTAL / MV / COST) cover
+    // position-level performance; the group below covers today's live trade
+    // (LAST / BID x ASK / DAY range / VOL). A fixed gap separates the two
+    // groups so the user can tell they're orthogonal — "overall" vs "today".
+    info_bar->addSpacing(40);
+
+    const QString live_prim = QString("color:%1; font-size:12px; font-weight:700;"
+                                      "font-family:Consolas,monospace; background:transparent;")
+                                  .arg(ui::colors::TEXT_PRIMARY());
+    const QString live_cyan = QString("color:%1; font-size:12px; font-weight:700;"
+                                      "font-family:Consolas,monospace; background:transparent;")
+                                  .arg(ui::colors::CYAN());
+    const QString live_dim  = QString("color:%1; font-size:12px;"
+                                      "font-family:Consolas,monospace; background:transparent;")
+                                  .arg(ui::colors::TEXT_SECONDARY());
+
+    live_last_label_ = new QLabel;
+    live_last_label_->setStyleSheet(live_prim);
+    live_last_label_->setToolTip(QStringLiteral(
+        "Last trade — most recent transaction price from yfinance."));
+    info_bar->addWidget(live_last_label_);
+
+    live_bidask_label_ = new QLabel;
+    live_bidask_label_->setStyleSheet(live_cyan);
+    live_bidask_label_->setToolTip(QStringLiteral(
+        "Bid x Ask — best-effort live order-book snapshot. May be delayed; "
+        "zero / dash outside regular trading hours or for illiquid tickers. "
+        "Not a real order book."));
+    info_bar->addWidget(live_bidask_label_);
+
+    live_range_label_ = new QLabel;
+    live_range_label_->setStyleSheet(live_dim);
+    live_range_label_->setToolTip(QStringLiteral("Today's intraday low - high."));
+    info_bar->addWidget(live_range_label_);
+
+    live_vol_label_ = new QLabel;
+    live_vol_label_->setStyleSheet(live_dim);
+    live_vol_label_->setToolTip(QStringLiteral("Today's traded volume."));
+    info_bar->addWidget(live_vol_label_);
+
     info_bar->addStretch();
     layout->addLayout(info_bar);
 
-    // Live row — appears only in symbol-focus mode. Carries LAST/BID×ASK/
-    // DAY range/VOL pulled from the holding's QuoteData. Hidden until
-    // update_chart_focus() unhides it; portfolio-level view never shows it.
-    live_row_ = new QWidget;
-    live_row_->setVisible(false);
-    {
-        auto* lh = new QHBoxLayout(live_row_);
-        lh->setContentsMargins(10, 0, 10, 6);
-        lh->setSpacing(14);
-        const QString prim = QString("color:%1; font-size:12px; font-weight:700;"
-                                     "font-family:Consolas,monospace; background:transparent;")
-                                 .arg(ui::colors::TEXT_PRIMARY());
-        const QString cyan = QString("color:%1; font-size:12px; font-weight:700;"
-                                     "font-family:Consolas,monospace; background:transparent;")
-                                 .arg(ui::colors::CYAN());
-        const QString dim  = QString("color:%1; font-size:12px;"
-                                     "font-family:Consolas,monospace; background:transparent;")
-                                 .arg(ui::colors::TEXT_SECONDARY());
-        live_last_label_ = new QLabel;
-        live_last_label_->setStyleSheet(prim);
-        live_last_label_->setToolTip(QStringLiteral(
-            "Last trade — most recent transaction price from yfinance."));
-        lh->addWidget(live_last_label_);
-
-        live_bidask_label_ = new QLabel;
-        live_bidask_label_->setStyleSheet(cyan);
-        live_bidask_label_->setToolTip(QStringLiteral(
-            "Bid x Ask — best-effort live order-book snapshot from yfinance "
-            "fast_info. May be delayed; zero / dash outside regular trading "
-            "hours or for illiquid tickers. Not a real order book."));
-        lh->addWidget(live_bidask_label_);
-
-        live_range_label_ = new QLabel;
-        live_range_label_->setStyleSheet(dim);
-        live_range_label_->setToolTip(QStringLiteral("Today's intraday low - high."));
-        lh->addWidget(live_range_label_);
-
-        live_vol_label_ = new QLabel;
-        live_vol_label_->setStyleSheet(dim);
-        live_vol_label_->setToolTip(QStringLiteral("Today's traded volume."));
-        lh->addWidget(live_vol_label_);
-
-        lh->addStretch();
-    }
-    layout->addWidget(live_row_);
+    // Default: hide the live group at startup (portfolio view).
+    set_live_group_visible(false);
 
     // Chart view
     auto* chart = new QChart;
@@ -381,18 +391,34 @@ void PortfolioPerfChart::set_period(const QString& period) {
     // the chart paints a placeholder until set_*_intraday() lands.
     if (period == QStringLiteral("1D")) {
         intraday_requested_ = true;
+        intraday_resolved_  = false;  // waiting for callback
         intraday_for_symbol_ = focus_symbol_;  // empty if portfolio view
         intraday_ts_ms_.clear();
         intraday_values_.clear();
+        // Indexed (base-100) mode only makes sense over multi-day windows;
+        // 1D is a raw-value series. Disable the toggle for the duration so
+        // the user can't accidentally render a meaningless rebase.
+        if (indexed_btn_) {
+            indexed_btn_->setEnabled(false);
+            indexed_btn_->setToolTip(QStringLiteral(
+                "Indexed view is unavailable in 1D — intraday is rendered "
+                "as raw price/NAV."));
+        }
         emit intraday_requested(focus_symbol_);
         update_chart();
         return;
     }
     // Switching away from 1D — clear the intraday cache so a return to 1D
-    // re-fetches fresh data.
+    // re-fetches fresh data, and restore the indexed-mode toggle.
     intraday_requested_ = false;
     intraday_ts_ms_.clear();
     intraday_values_.clear();
+    if (indexed_btn_) {
+        indexed_btn_->setEnabled(true);
+        indexed_btn_->setToolTip(
+            QStringLiteral("Indexed view: rebase portfolio and benchmark to 100 at the start of\n"
+                           "the period for a like-for-like return comparison."));
+    }
 
     // Focus mode: ask the owner to refetch this symbol's history for the new
     // period and exit early — backfill applies to NAV snapshots only.
@@ -441,8 +467,18 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
         return;
     }
     if (focus_symbol_ == symbol) {
-        // Already focused on this symbol — refresh data anyway.
-        emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+        // Already focused on this symbol — refresh data anyway. Route to the
+        // intraday fetch when in 1D so the curve refreshes against the right
+        // data source (not the daily fetch_benchmark_history path).
+        if (current_period_ == QStringLiteral("1D")) {
+            intraday_requested_ = true;
+            intraday_resolved_  = false;
+            intraday_ts_ms_.clear();
+            intraday_values_.clear();
+            emit intraday_requested(focus_symbol_);
+        } else {
+            emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+        }
         return;
     }
     focus_symbol_ = symbol.toUpper();
@@ -454,7 +490,20 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
             QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
                 .arg(ui::colors::WARNING(), focus_symbol_.toHtmlEscaped(),
                      ui::colors::TEXT_SECONDARY()));
-    emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+    // Route the fetch by current period: in 1D mode the daily fetch path
+    // returns ~5 daily bars which is useless. Emit the intraday request
+    // instead and clear the prior symbol's intraday bars so the chart shows
+    // a "Loading…" placeholder until the new symbol's bars land.
+    if (current_period_ == QStringLiteral("1D")) {
+        intraday_requested_  = true;
+        intraday_resolved_   = false;
+        intraday_for_symbol_ = focus_symbol_;
+        intraday_ts_ms_.clear();
+        intraday_values_.clear();
+        emit intraday_requested(focus_symbol_);
+    } else {
+        emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
+    }
     update_chart(); // renders loading placeholder until data lands
 }
 
@@ -469,7 +518,18 @@ void PortfolioPerfChart::clear_focus_symbol() {
         title_label_->setText(
             QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
                 .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
-    if (live_row_) live_row_->setVisible(false);
+    set_live_group_visible(false);
+    // Drop any focus-mode 1D intraday bars so a return to portfolio 1D
+    // doesn't briefly render the prior symbol's curve before the new
+    // aggregate fan-out lands. If we're currently in 1D, also re-request
+    // the portfolio aggregate so the chart starts loading immediately.
+    intraday_ts_ms_.clear();
+    intraday_values_.clear();
+    intraday_for_symbol_.clear();
+    if (current_period_ == QStringLiteral("1D")) {
+        intraday_requested_ = true;
+        emit intraday_requested(QString());
+    }
     update_chart();
 }
 
@@ -492,6 +552,7 @@ void PortfolioPerfChart::set_symbol_intraday(const QString& symbol,
     intraday_for_symbol_ = focus_symbol_;
     intraday_ts_ms_      = timestamps_ms;
     intraday_values_     = closes;
+    intraday_resolved_   = true;  // got a definitive answer (may be empty)
     update_chart();
 }
 
@@ -502,6 +563,7 @@ void PortfolioPerfChart::set_portfolio_intraday(const QVector<qint64>& timestamp
     intraday_for_symbol_ = QString();
     intraday_ts_ms_      = timestamps_ms;
     intraday_values_     = navs;
+    intraday_resolved_   = true;
     update_chart();
 }
 
@@ -513,20 +575,22 @@ qint64 PortfolioPerfChart::iso_date_to_ms_utc(const QString& iso_date) {
 }
 
 void PortfolioPerfChart::update_period_buttons_enabled() {
-    if (snapshots_.isEmpty())
-        return;
-    const QDate earliest = QDate::fromString(snapshots_.first().snapshot_date.left(10), Qt::ISODate);
+    // 1D rides on an on-demand yfinance 1m intraday fetch, so it does NOT
+    // require daily NAV snapshots. The old early-return-on-empty-snapshots
+    // left it disabled for freshly-imported portfolios — exactly the case
+    // where the user most wants to glance at today's curve.
     const QDate today = QDate::currentDate();
+    const QDate earliest = snapshots_.isEmpty()
+        ? QDate()
+        : QDate::fromString(snapshots_.first().snapshot_date.left(10), Qt::ISODate);
     const int span_days = earliest.isValid() ? earliest.daysTo(today) : 0;
     for (auto* btn : period_btns_) {
         const QString p = btn->text();
-        // 1D is now powered by an on-demand yfinance 1m intraday fetch (see
-        // PortfolioService::fetch_symbol_intraday + fetch_portfolio_intraday),
-        // so it's always enabled — it does NOT require daily snapshots.
         bool feasible = true;
         if (p == "1W")
             feasible = span_days >= 5;
-        // Other periods are always allowed: backfill kicks in when clicked.
+        // 1D and the longer periods always allowed: backfill / intraday fetch
+        // kicks in when clicked.
         btn->setEnabled(feasible);
         btn->setToolTip(feasible ? QString()
                                  : QStringLiteral("Needs more snapshot history."));
@@ -535,6 +599,17 @@ void PortfolioPerfChart::update_period_buttons_enabled() {
 
 QColor PortfolioPerfChart::chart_color() const {
     return summary_.total_unrealized_pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
+}
+
+void PortfolioPerfChart::set_live_group_visible(bool visible) {
+    // The four right-group labels live inside info_bar alongside the
+    // overall-performance tokens; toggle each individually since they share
+    // a layout. Hidden labels collapse to zero width by default (Qt's
+    // QSizePolicy::retainSizeWhenHidden is off).
+    if (live_last_label_)   live_last_label_->setVisible(visible);
+    if (live_bidask_label_) live_bidask_label_->setVisible(visible);
+    if (live_range_label_)  live_range_label_->setVisible(visible);
+    if (live_vol_label_)    live_vol_label_->setVisible(visible);
 }
 
 bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
@@ -546,12 +621,25 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         delete axis;
     }
 
+    if (intraday_ts_ms_.size() != intraday_values_.size()) {
+        LOG_WARN("PortfolioPerf",
+                 QString("Intraday series size mismatch: %1 ts vs %2 vals — rendering placeholder")
+                     .arg(intraday_ts_ms_.size()).arg(intraday_values_.size()));
+    }
     if (intraday_ts_ms_.isEmpty() || intraday_values_.isEmpty()
         || intraday_ts_ms_.size() != intraday_values_.size()) {
-        // Loading placeholder — owner is fetching, will re-call us.
         const QString label = is_aggregate ? QStringLiteral("portfolio NAV")
                                            : focus_symbol_;
-        period_change_label_->setText(QStringLiteral("Loading 1D %1…").arg(label));
+        // Distinguish "still loading" (callback hasn't fired yet) from
+        // "callback fired but returned empty" (market closed, holiday,
+        // illiquid symbol). The latter would otherwise show "Loading…"
+        // indefinitely, which is what the review flagged.
+        if (intraday_resolved_) {
+            period_change_label_->setText(
+                QStringLiteral("1D unavailable for %1 (market closed or no bars)").arg(label));
+        } else {
+            period_change_label_->setText(QStringLiteral("Loading 1D %1…").arg(label));
+        }
         total_return_label_->clear();
         nav_label_->clear();
         if (cost_basis_label_) cost_basis_label_->clear();
@@ -799,30 +887,28 @@ void PortfolioPerfChart::update_chart_focus() {
     // Live trade snapshot row — only shown when we have a held position
     // (the source of bid/ask/range data); hidden otherwise. Zeros render
     // as em-dash so the user knows the feed didn't provide that field.
-    if (live_row_) {
-        if (held) {
-            auto fmt_or_dash = [](double v, int dec) -> QString {
-                return v > 0 ? QString::number(v, 'f', dec) : QStringLiteral("—");
-            };
-            auto fmt_vol = [](double v) -> QString {
-                if (v <= 0) return QStringLiteral("—");
-                if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-                if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
-                if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
-                return QString::number(v, 'f', 0);
-            };
-            live_last_label_->setText(QString("LAST %1").arg(fmt_or_dash(held->current_price, 2)));
-            const QString bid_s = fmt_or_dash(held->bid, 2);
-            const QString ask_s = fmt_or_dash(held->ask, 2);
-            live_bidask_label_->setText(QString("BID %1 × ASK %2").arg(bid_s, ask_s));
-            live_range_label_->setText(
-                QString("DAY %1 – %2").arg(fmt_or_dash(held->day_low, 2),
-                                           fmt_or_dash(held->day_high, 2)));
-            live_vol_label_->setText(QString("VOL %1").arg(fmt_vol(held->day_volume)));
-            live_row_->setVisible(true);
-        } else {
-            live_row_->setVisible(false);
-        }
+    if (held) {
+        auto fmt_or_dash = [](double v, int dec) -> QString {
+            return v > 0 ? QString::number(v, 'f', dec) : QStringLiteral("--");
+        };
+        auto fmt_vol = [](double v) -> QString {
+            if (v <= 0) return QStringLiteral("--");
+            if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
+            if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
+            if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+            return QString::number(v, 'f', 0);
+        };
+        live_last_label_->setText(QString("LAST %1").arg(fmt_or_dash(held->current_price, 2)));
+        const QString bid_s = fmt_or_dash(held->bid, 2);
+        const QString ask_s = fmt_or_dash(held->ask, 2);
+        live_bidask_label_->setText(QString("BID %1 x ASK %2").arg(bid_s, ask_s));
+        live_range_label_->setText(
+            QString("DAY %1-%2").arg(fmt_or_dash(held->day_low, 2),
+                                     fmt_or_dash(held->day_high, 2)));
+        live_vol_label_->setText(QString("VOL %1").arg(fmt_vol(held->day_volume)));
+        set_live_group_visible(true);
+    } else {
+        set_live_group_visible(false);
     }
 }
 

@@ -111,10 +111,15 @@ portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     h.day_high             = o[QStringLiteral("day_high")].toDouble();
     h.day_low              = o[QStringLiteral("day_low")].toDouble();
     h.day_volume           = o[QStringLiteral("day_volume")].toDouble();
-    h.bid                  = o[QStringLiteral("bid")].toDouble();
-    h.ask                  = o[QStringLiteral("ask")].toDouble();
-    h.bid_size             = o[QStringLiteral("bid_size")].toDouble();
-    h.ask_size             = o[QStringLiteral("ask_size")].toDouble();
+    // bid/ask are order-book fields that go stale within seconds. The cached
+    // summary on disk can be hours old; rendering its bid/ask as if live
+    // would mislead the user. Leave them zeroed (the live live_row_ renders
+    // em-dashes for 0); the live batch_quotes refresh will repopulate them
+    // within the first second after this hydrate fires.
+    h.bid                  = 0;
+    h.ask                  = 0;
+    h.bid_size             = 0;
+    h.ask_size             = 0;
     return h;
 }
 
