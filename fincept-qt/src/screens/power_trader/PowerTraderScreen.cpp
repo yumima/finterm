@@ -691,24 +691,44 @@ void PowerTraderScreen::build_member_drawer() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
-    // Top bar with title + close button. Close returns the user to whichever
-    // tab they had selected before opening the drawer.
+    // Top bar — left-anchored BACK pill (highly visible: amber border, big
+    // text label) is the primary close affordance because users were getting
+    // stuck inside the drawer with no obvious return path. A subtle × on the
+    // right is the secondary "shut window" shortcut for power users.
     auto* bar = new QWidget(member_drawer_);
-    bar->setFixedHeight(34);
+    bar->setFixedHeight(36);
     bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
                            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* bl = new QHBoxLayout(bar);
-    bl->setContentsMargins(14, 0, 8, 0);
-    bl->setSpacing(8);
+    bl->setContentsMargins(10, 0, 10, 0);
+    bl->setSpacing(10);
+
+    auto* back_btn = new QPushButton(QStringLiteral("\xe2\x86\x90  BACK"), bar);
+    back_btn->setFixedHeight(24);
+    back_btn->setCursor(Qt::PointingHandCursor);
+    back_btn->setToolTip(QStringLiteral("Return to the previous tab (Esc)"));
+    back_btn->setStyleSheet(
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
+                "border-radius:2px;padding:0 12px;font-size:12px;font-weight:700;"
+                "letter-spacing:1.0px;}"
+                "QPushButton:hover{background:%2;color:%3;}")
+            .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::AMBER()));
+    connect(back_btn, &QPushButton::clicked, this, &PowerTraderScreen::hide_member_drawer);
+    bl->addWidget(back_btn);
 
     auto* title = new QLabel(QStringLiteral("MEMBER DETAIL"), bar);
     title->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                  "letter-spacing:1.5px;background:transparent;")
-                             .arg(ui::colors::AMBER()));
+                             .arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(title);
+
+    auto* hint = new QLabel(QStringLiteral("(Esc to close)"), bar);
+    hint->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;")
+                            .arg(ui::colors::TEXT_TERTIARY()));
+    bl->addWidget(hint);
     bl->addStretch();
 
-    auto* close_btn = new QPushButton(QStringLiteral("\xc3\x97"), bar);  // ×
+    auto* close_btn = new QPushButton(QStringLiteral("\xc3\x97"), bar);
     close_btn->setFixedSize(26, 22);
     close_btn->setCursor(Qt::PointingHandCursor);
     close_btn->setToolTip(QStringLiteral("Close (Esc)"));

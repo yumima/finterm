@@ -80,12 +80,11 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     int tier = index.data(SourceTierRole).toInt();
 
     // Background — solid deep dark to match the Knowledge column palette.
-    // The previous odd-row stripe was a hair lighter (#181613) but read as
-    // an out-of-place warm brown against the rest of the UI; collapse it
-    // into the base so every row carries the same dark.
-    static const QColor kNewsBgBase(0x13, 0x11, 0x0f);   // matches knowledge column BG
-    static const QColor kNewsBgHover(0x22, 0x1e, 0x1a);  // hover lift
-    static const QColor kNewsBgSel (0x33, 0x2b, 0x22);   // selected
+    // Hover is barely a notch above base (cool, not warm) so a cursor pass
+    // doesn't turn the whole row brown; selected is a subdued amber wash.
+    static const QColor kNewsBgBase (0x13, 0x11, 0x0f);  // matches knowledge column BG
+    static const QColor kNewsBgHover(0x1c, 0x1a, 0x18);  // +9 luminance, same hue
+    static const QColor kNewsBgSel  (0x33, 0x2b, 0x22);  // selected (amber tinted)
     if (selected)
         painter->fillRect(rect, kNewsBgSel);
     else if (hovered)
@@ -176,15 +175,15 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     if (!threat_color.isEmpty())
         painter->fillRect(QRect(rect.left(), rect.top(), 2, rect.height()), QColor(threat_color));
 
-    // Headline — fills remaining space
+    // Headline — fills remaining space. Always use the primary cream so the
+    // feed reads at the same brightness as the Knowledge body; bold only the
+    // FLASH / URGENT priority headlines. (The previous "non-hot = muted tan"
+    // dimmed 90% of articles into a yellow-brown wash.)
     painter->setFont(data_font_);
     bool is_hot = article.priority == services::Priority::FLASH || article.priority == services::Priority::URGENT;
-    if (is_hot) {
+    if (is_hot)
         painter->setFont(bold_font_);
-        painter->setPen(kNewsTextPrimary);
-    } else {
-        painter->setPen(kNewsTextSecondary);
-    }
+    painter->setPen(kNewsTextPrimary);
 
     // Right-side reservation: credibility flag (~12) + threat label (~30) +
     // sentiment arrow (~16) + tickers (up to "$XXXX $YYYY" tiny font ~90) +
@@ -257,10 +256,10 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     bool is_new = index.data(IsNewRole).toBool();
     auto velocity_text = index.data(VelocityTextRole).toString();
 
-    // Card background — warm-dark per the news reading palette.
-    static const QColor kCardBg     (0x1f, 0x1d, 0x1b);   // matches BODY_BG
-    static const QColor kCardHover  (0x2e, 0x2a, 0x24);
-    static const QColor kCardSelect (0x3a, 0x32, 0x28);
+    // Card background — same deep dark + neutral hover as the wire rows.
+    static const QColor kCardBg     (0x13, 0x11, 0x0f);
+    static const QColor kCardHover  (0x1c, 0x1a, 0x18);
+    static const QColor kCardSelect (0x33, 0x2b, 0x22);
     QColor bg = selected ? kCardSelect : (hovered ? kCardHover : kCardBg);
     painter->fillRect(rect, bg);
 
