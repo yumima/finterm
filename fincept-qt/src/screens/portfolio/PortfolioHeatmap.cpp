@@ -33,11 +33,23 @@ void PortfolioHeatmap::build_ui() {
     layout->setContentsMargins(8, 8, 8, 6);
     layout->setSpacing(5);
 
-    // Header: title + mode buttons
+    // Header: title + mode buttons. Pin the title's minimum width so it
+    // stays "HOLDINGS" even when the heatmap pane is narrow and the four
+    // mode pills crowd in from the right — the prior layout let the label
+    // elide to "HOL" once the row got tight.
     auto* header = new QHBoxLayout;
     auto* title = new QLabel("HOLDINGS");
     title->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
+    {
+        QFont tf = title->font();
+        tf.setBold(true);
+        tf.setPixelSize(12);
+        const int needed = QFontMetrics(tf).horizontalAdvance("HOLDINGS")
+                           + 8 * 2  // approximate letter-spacing budget at 1.5px × 8 chars
+                           + 4;
+        title->setMinimumWidth(needed);
+    }
     header->addWidget(title);
     header->addStretch();
 

@@ -117,9 +117,12 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Generation ID for stale async result rejection
     std::atomic<int> filter_generation_{0};
 
-    // Lazy loading
-    int visible_article_count_ = 50;
-    static constexpr int PAGE_SIZE = 50;
+    // Lazy loading — initial page + lazy-loader chunk. The 2-column wide
+    // layout fans out across two panes, so 200 = ~100 rows per pane —
+    // comfortably fills any monitor; near_bottom keeps appending PAGE_SIZE
+    // more as the user scrolls.
+    int visible_article_count_ = 200;
+    static constexpr int PAGE_SIZE = 200;
 
     // Deviation baseline
     struct CategoryBaseline {

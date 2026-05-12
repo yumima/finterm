@@ -79,20 +79,17 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     bool is_new = index.data(IsNewRole).toBool();
     int tier = index.data(SourceTierRole).toInt();
 
-    // Background — match the deeper Knowledge column palette (#13110f), the
-    // darker of the two Knowledge body tones. The previous #1f1d1b lacked
-    // contrast against the cream text; the user asked for the deeper variant
-    // for better legibility at a glance.
+    // Background — solid deep dark to match the Knowledge column palette.
+    // The previous odd-row stripe was a hair lighter (#181613) but read as
+    // an out-of-place warm brown against the rest of the UI; collapse it
+    // into the base so every row carries the same dark.
     static const QColor kNewsBgBase(0x13, 0x11, 0x0f);   // matches knowledge column BG
-    static const QColor kNewsBgAlt (0x18, 0x16, 0x13);   // a hair lighter for the stripe
     static const QColor kNewsBgHover(0x22, 0x1e, 0x1a);  // hover lift
     static const QColor kNewsBgSel (0x33, 0x2b, 0x22);   // selected
     if (selected)
         painter->fillRect(rect, kNewsBgSel);
     else if (hovered)
         painter->fillRect(rect, kNewsBgHover);
-    else if (index.row() % 2 == 1)
-        painter->fillRect(rect, kNewsBgAlt);
     else
         painter->fillRect(rect, kNewsBgBase);
 
