@@ -860,35 +860,4 @@ void CompanyDetailPanel::rebuild_tags(const QStringList& tags) {
     tags_layout_->addStretch();
 }
 
-// ── Metric tile ───────────────────────────────────────────────────────────────
-
-QWidget* CompanyDetailPanel::make_metric_tile(const QString& label, const QString& value,
-                                              const QString& color) const {
-    auto* tile = new QWidget;
-    tile->setStyleSheet(
-        QString("background:%1; border:1px solid %2; border-radius:4px;")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-    tile->setFixedHeight(60);
-
-    auto* vl = new QVBoxLayout(tile);
-    vl->setContentsMargins(10, 8, 10, 8);
-    vl->setSpacing(3);
-
-    auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-            .arg(colors::TEXT_SECONDARY()));
-
-    auto* val_lbl = new QLabel(value);
-    const QString val_color = color.isEmpty() ? colors::TEXT_PRIMARY() : color;
-    val_lbl->setStyleSheet(
-        QString("color:%1; font-size:13px; font-weight:700; background:transparent;")
-            .arg(val_color));
-    val_lbl->setWordWrap(true);
-
-    vl->addWidget(lbl);
-    vl->addWidget(val_lbl);
-    return tile;
-}
-
 } // namespace fincept::screens

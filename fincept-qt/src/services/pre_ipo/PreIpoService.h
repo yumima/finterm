@@ -67,9 +67,12 @@ class PreIpoService : public QObject {
     void recompute_analytics();
     void emit_loaded();
 
-    // Multi-stage loading guard. We wait for all 3 fetches before emitting.
+    // Multi-stage loading guard. We wait for all 3 fetches before emitting,
+    // and remember per-source success so a failed fetcher can be retried
+    // independently rather than the whole load being marked permanent.
     enum FetchBit { FB_FormD = 1, FB_Marks = 2, FB_S1 = 4, FB_All = 7 };
     int  pending_bits_ = 0;
+    int  failed_bits_  = 0;
     bool loading_ = false;
 
     QVector<pre_ipo::PrivateCompany> companies_;

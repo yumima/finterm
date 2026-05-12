@@ -86,6 +86,7 @@ void PreIpoService::refresh() {
     if (loading_) return;
     loading_ = true;
     pending_bits_ = FB_All;
+    failed_bits_  = 0;
     emit progress(QStringLiteral("Loading SEC Form D, IPO pipeline, fund marks…"));
 
     run_form_d_fetch();
@@ -126,12 +127,18 @@ void PreIpoService::run_form_d_fetch() {
          QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":200,\"include_known\":true}")},
         [self](python::PythonResult result) {
             if (!self) return;
-            if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_WARN("PreIpo", "Form D fetch failed: " + result.error.left(200));
-            } else {
+            bool parsed = false;
+            if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
                 const auto doc = QJsonDocument::fromJson(js.toUtf8());
-                if (doc.isObject()) self->parse_form_d_response(doc.object());
+                if (doc.isObject()) {
+                    self->parse_form_d_response(doc.object());
+                    parsed = true;
+                }
+            }
+            if (!parsed) {
+                LOG_WARN("PreIpo", "Form D fetch failed: " + result.error.left(200));
+                self->failed_bits_ |= FB_FormD;
             }
             self->pending_bits_ &= ~FB_FormD;
             if (self->pending_bits_ == 0) self->emit_loaded();
@@ -146,12 +153,18 @@ void PreIpoService::run_nport_marks_fetch() {
         {QStringLiteral("marks_all"), QStringLiteral("{\"quarters_back\":2}")},
         [self](python::PythonResult result) {
             if (!self) return;
-            if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_WARN("PreIpo", "N-PORT marks fetch failed: " + result.error.left(200));
-            } else {
+            bool parsed = false;
+            if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
                 const auto doc = QJsonDocument::fromJson(js.toUtf8());
-                if (doc.isObject()) self->parse_marks_response(doc.object());
+                if (doc.isObject()) {
+                    self->parse_marks_response(doc.object());
+                    parsed = true;
+                }
+            }
+            if (!parsed) {
+                LOG_WARN("PreIpo", "N-PORT marks fetch failed: " + result.error.left(200));
+                self->failed_bits_ |= FB_Marks;
             }
             self->pending_bits_ &= ~FB_Marks;
             if (self->pending_bits_ == 0) self->emit_loaded();
@@ -166,12 +179,18 @@ void PreIpoService::run_s1_pipeline_fetch() {
         {QStringLiteral("pipeline_all"), QStringLiteral("{\"days_back\":180}")},
         [self](python::PythonResult result) {
             if (!self) return;
-            if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_WARN("PreIpo", "S-1 pipeline fetch failed: " + result.error.left(200));
-            } else {
+            bool parsed = false;
+            if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
                 const auto doc = QJsonDocument::fromJson(js.toUtf8());
-                if (doc.isArray()) self->parse_pipeline_response(doc.array());
+                if (doc.isArray()) {
+                    self->parse_pipeline_response(doc.array());
+                    parsed = true;
+                }
+            }
+            if (!parsed) {
+                LOG_WARN("PreIpo", "S-1 pipeline fetch failed: " + result.error.left(200));
+                self->failed_bits_ |= FB_S1;
             }
             self->pending_bits_ &= ~FB_S1;
             if (self->pending_bits_ == 0) self->emit_loaded();
@@ -271,24 +290,62 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
         if (!f.company_name.isEmpty()) form_d_.append(f);
     }
 
-    // s1_filings (lightweight, may be overwritten by parse_pipeline_response)
-    pipeline_.clear();
-    for (const auto& v : root.value(QStringLiteral("s1_filings")).toArray()) {
-        const auto o = v.toObject();
-        S1Filing s;
-        s.company_name = o[QStringLiteral("company_name")].toString();
-        s.cik          = o[QStringLiteral("cik")].toString();
-        s.filed_date   = QDate::fromString(o[QStringLiteral("first_filed")].toString(), Qt::ISODate);
-        s.amendment_count = o[QStringLiteral("amendment_count")].toInt();
-        s.is_amendment   = s.amendment_count > 0;
-        s.edgar_url      = o[QStringLiteral("edgar_url")].toString();
-        if (!s.company_name.isEmpty()) pipeline_.append(s);
-    }
+    // Note: the Form D Python script also returns a lightweight `s1_filings`
+    // array, but we DON'T populate pipeline_ here. The dedicated S-1 fetcher
+    // (sec_s1_pipeline.py) returns richer data (form types, amendment dates,
+    // days-since-first-filed) and lands in parse_pipeline_response. If
+    // Form D's callback runs after the S-1 callback, we'd clobber the rich
+    // pipeline_ with thin rows. Skip it entirely — S-1 is the source of
+    // truth for the pipeline.
 }
 
 void PreIpoService::parse_marks_response(const QJsonObject& root) {
-    QHash<QString, int> by_id;
-    for (int i = 0; i < companies_.size(); ++i) by_id[companies_[i].id] = i;
+    // Three lookup indices into companies_, in priority order:
+    //   1. CIK (most reliable — only set when both sides have a CIK)
+    //   2. canonical id (e.g. "stripe") — set by Form D slug AND alias
+    //   3. case-folded name match (last resort)
+    QHash<QString, int> by_cik, by_id;
+    for (int i = 0; i < companies_.size(); ++i) {
+        if (!companies_[i].cik.isEmpty()) by_cik[companies_[i].cik] = i;
+        by_id[companies_[i].id] = i;
+    }
+
+    // Clear ALL existing marks first so a refresh doesn't leave stale entries
+    // on companies whose marks weren't included in the new response.
+    for (auto& c : companies_) c.fund_marks.clear();
+
+    // Alias map (cid → {name, cik, aliases}) — lets us reverse-look up a
+    // company entry by alias name or canonical CIK.
+    const auto aliases_obj = root.value(QStringLiteral("aliases")).toObject();
+
+    // Add aliases to existing Form D entries we recognize. After this pass,
+    // future lookups by cid hit the Form D entry instead of creating a stub.
+    for (auto it = aliases_obj.begin(); it != aliases_obj.end(); ++it) {
+        const QString cid = it.key();
+        const auto o = it.value().toObject();
+        const QString alias_cik = o[QStringLiteral("cik")].toString();
+        const QString canonical = o[QStringLiteral("name")].toString();
+
+        int idx = -1;
+        if (!alias_cik.isEmpty()) {
+            if (auto fc = by_cik.find(alias_cik); fc != by_cik.end()) idx = *fc;
+        }
+        if (idx < 0) {
+            if (auto fi = by_id.find(cid); fi != by_id.end()) idx = *fi;
+        }
+        if (idx < 0 && !canonical.isEmpty()) {
+            const QString cf = canonical.toLower();
+            for (int i = 0; i < companies_.size(); ++i)
+                if (companies_[i].name.toLower() == cf) { idx = i; break; }
+        }
+        if (idx >= 0) {
+            auto& c = companies_[idx];
+            // Mirror the canonical id into the company's aliases so future
+            // lookups by cid resolve.
+            if (!c.aliases.contains(cid)) c.aliases.append(cid);
+            by_id[cid] = idx;  // keep the index map consistent
+        }
+    }
 
     const auto marks_obj = root.value(QStringLiteral("marks")).toObject();
     for (auto it = marks_obj.begin(); it != marks_obj.end(); ++it) {
@@ -296,25 +353,38 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         const auto arr = it.value().toArray();
         if (arr.isEmpty()) continue;
 
-        // If the company isn't already in our universe (from Form D),
-        // create a stub so we can still surface it.
+        const auto first_mark = arr.first().toObject();
+        const QString mark_cik = first_mark[QStringLiteral("company_cik")].toString();
+        const QString canonical = first_mark[QStringLiteral("company_name")].toString();
+
+        // Resolve to an existing company entry by CIK, then alias-cid, then
+        // fall back to creating a stub.
         int idx = -1;
-        if (auto found = by_id.find(cid); found != by_id.end()) {
-            idx = *found;
-        } else {
+        if (!mark_cik.isEmpty()) {
+            if (auto fc = by_cik.find(mark_cik); fc != by_cik.end()) idx = *fc;
+        }
+        if (idx < 0) {
+            if (auto fi = by_id.find(cid); fi != by_id.end()) idx = *fi;
+        }
+        if (idx < 0) {
             PrivateCompany c;
             c.id   = cid;
-            c.name = arr.first().toObject()[QStringLiteral("company_name")].toString();
+            c.cik  = mark_cik;
+            // Prefer the canonical alias name over slugified cid; fall back
+            // to a humanized cid if neither is available.
+            c.name = !canonical.isEmpty() ? canonical
+                                          : cid.left(1).toUpper() + cid.mid(1).replace('-', ' ');
+            c.aliases.append(cid);
             c.description = QStringLiteral("Tracked via mutual-fund N-PORT marks");
             c.ipo_status  = IpoStatus::Unknown;
             c.tags = tags_for_company(c);
             by_id[cid] = companies_.size();
+            if (!c.cik.isEmpty()) by_cik[c.cik] = companies_.size();
             companies_.append(c);
             idx = companies_.size() - 1;
         }
 
         QVector<FundMark>& marks = companies_[idx].fund_marks;
-        marks.clear();
         for (const auto& mv : arr) {
             const auto mo = mv.toObject();
             FundMark m;
@@ -407,14 +477,33 @@ void PreIpoService::recompute_analytics() {
             a.smart_money_index = static_cast<int>(latest.size());
         }
 
-        // Mark drift vs last round price-per-share, if disclosed.
-        double last_round_pps = 0;
-        for (const auto& r : c.rounds) {
-            // Form D doesn't disclose PPS directly. Skip unless future enrichment fills it.
-            Q_UNUSED(r);
+        // Mark drift: prefer "consensus today vs consensus one quarter back"
+        // since Form D doesn't disclose price-per-share. Fall back to the
+        // oldest fund mark as a longer-term baseline. The label in the UI
+        // says "vs last round" but the meaning that matters to a user is
+        // "are funds raising or cutting their mark?".
+        if (a.consensus_mark_pps > 0 && c.fund_marks.size() >= 2) {
+            // fund_marks is already sorted as_of DESC. Find a baseline mark
+            // at least ~60 days older than the newest (one quarter back).
+            const QDate newest_as_of = c.fund_marks.first().as_of;
+            double baseline = 0;
+            for (const auto& m : c.fund_marks) {
+                if (m.mark_pps <= 0) continue;
+                if (newest_as_of.daysTo(m.as_of) <= -60) {
+                    baseline = m.mark_pps;
+                    break;
+                }
+            }
+            if (baseline <= 0) {
+                // No prior quarter available — use the oldest available mark.
+                for (auto it = c.fund_marks.rbegin(); it != c.fund_marks.rend(); ++it)
+                    if (it->mark_pps > 0) { baseline = it->mark_pps; break; }
+            }
+            if (baseline > 0 && std::abs(baseline - a.consensus_mark_pps) > 1e-9) {
+                a.mark_drift_vs_last_round_pct =
+                    (a.consensus_mark_pps - baseline) / baseline * 100.0;
+            }
         }
-        if (a.consensus_mark_pps > 0 && last_round_pps > 0)
-            a.mark_drift_vs_last_round_pct = (a.consensus_mark_pps - last_round_pps) / last_round_pps * 100.0;
 
         // Hiive premium vs consensus mark.
         if (!c.secondary.isEmpty() && a.consensus_mark_pps > 0) {
@@ -460,27 +549,36 @@ void PreIpoService::recompute_analytics() {
 
         c.analytics = a;
 
-        // Generate signals
+        // Generate signals. Timestamp each from the underlying event (latest
+        // mark as_of, latest amendment date, latest S-1 filing) so the
+        // chronological sort downstream is meaningful — every signal would
+        // otherwise share the same `now` and the sort would be a no-op.
         if (a.consensus_mark_pps > 0 && a.mark_drift_vs_last_round_pct > 10) {
             Signal s; s.company_id = c.id; s.company_name = c.name;
             s.kind = SignalKind::MarkUp;
-            s.description = QString("Consensus mark +%1% vs last round")
+            s.description = QString("Consensus mark +%1% vs prior quarter")
                                 .arg(a.mark_drift_vs_last_round_pct, 0, 'f', 1);
-            s.at = now;
+            s.at = c.fund_marks.isEmpty()
+                ? now
+                : QDateTime(c.fund_marks.first().as_of, QTime(16, 0));
             signals_.append(s);
         }
         if (c.s1.amendment_count >= 3) {
             Signal s; s.company_id = c.id; s.company_name = c.name;
             s.kind = SignalKind::AmendmentBurst;
             s.description = QString("%1 S-1 amendments — pricing imminent").arg(c.s1.amendment_count);
-            s.at = now;
+            s.at = c.s1.latest_amended.isValid()
+                ? QDateTime(c.s1.latest_amended, QTime(16, 0))
+                : now;
             signals_.append(s);
         }
         if (a.ipo_readiness_score >= 70) {
             Signal s; s.company_id = c.id; s.company_name = c.name;
             s.kind = SignalKind::ReadinessJump;
             s.description = QString("IPO readiness %1/100").arg(a.ipo_readiness_score);
-            s.at = now;
+            s.at = c.s1.first_filed.isValid()
+                ? QDateTime(c.s1.first_filed, QTime(16, 0))
+                : now;
             signals_.append(s);
         }
     }
@@ -501,8 +599,13 @@ void PreIpoService::recompute_analytics() {
 
 void PreIpoService::emit_loaded() {
     recompute_analytics();
-    loaded_ = true;
     loading_ = false;
+    // Only mark fully loaded when every source succeeded. With partial
+    // failures we still emit the data we have (so the UI updates), but
+    // `loaded_` stays false so a subsequent load_data() call retries.
+    const bool any_failed = failed_bits_ != 0;
+    loaded_ = !any_failed;
+
     PreIpoSummary summary;
     summary.companies     = companies_;
     summary.recent_form_d = form_d_;
@@ -510,14 +613,20 @@ void PreIpoService::emit_loaded() {
     summary.signal_list   = signals_;
     summary.funds         = funds_;
     summary.last_updated  = QDateTime::currentDateTime();
-    summary.loaded        = true;
+    summary.loaded        = !any_failed;
     LOG_INFO("PreIpo",
-             QString("Loaded %1 companies, %2 S-1 filers, %3 signals, %4 funds")
+             QString("Loaded %1 companies, %2 S-1 filers, %3 signals, %4 funds (failed_bits=%5)")
                  .arg(companies_.size())
                  .arg(pipeline_.size())
                  .arg(signals_.size())
-                 .arg(funds_.size()));
+                 .arg(funds_.size())
+                 .arg(failed_bits_));
     emit data_loaded(summary);
+    if (any_failed) {
+        emit error_occurred(
+            QStringLiteral("One or more SEC sources failed; partial data shown. "
+                           "The screen will retry on next open."));
+    }
 }
 
 } // namespace fincept::services

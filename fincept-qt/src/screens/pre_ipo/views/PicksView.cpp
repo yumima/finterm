@@ -178,7 +178,10 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
         signals_layout_->insertWidget(s_inserted++, make_signal_card(s));
         if (s_inserted >= 30) break;
     }
-    signals_count_lbl_->setText(QString::number(summary.signal_list.size()));
+    // Match picks_count_lbl_ semantics (count of cards actually rendered)
+    // rather than the universe-wide signal total. The two badges were
+    // inconsistent — picks showed inserted, signals showed total.
+    signals_count_lbl_->setText(QString::number(s_inserted));
 }
 
 QWidget* PicksView::make_pick_card(const PrivateCompany& c) const {

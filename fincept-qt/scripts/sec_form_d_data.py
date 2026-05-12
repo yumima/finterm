@@ -25,7 +25,7 @@ import json
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from xml.etree import ElementTree as ET
 
 try:
@@ -40,30 +40,14 @@ EDGAR_ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
 # Curated CIKs of well-known late-stage private companies that file Form D.
 # These are the names pre-IPO investors actually care about. We always
 # fetch their filings even if they don't show up in the noisy recent feed.
+#
+# Only verified CIKs go in this list; unverified ones (Anthropic, Databricks,
+# OpenAI, etc.) get picked up by the N-PORT mutual-fund-mark layer instead,
+# where issuer-name alias matching is the source of truth. SpaceX (1181412)
+# verified by smoke test → $8.2B across 8 rounds.
 KNOWN_PRIVATE_CIKS = [
-    "0001646180",  # Stripe
-    "0001181412",  # Space Exploration Technologies (SpaceX)
-    "0001770787",  # Databricks
-    "0001737806",  # Anthropic, PBC
-    "0001859995",  # Scale AI
-    "0001839570",  # Canva
-    "0001768990",  # Epic Games
-    "0001797303",  # Discord
-    "0001712923",  # Klarna
-    "0001674862",  # Plaid
-    "0001702030",  # Brex
-    "0001780312",  # Ramp
-    "0001682852",  # Rippling
-    "0001772525",  # Notion Labs
-    "0001772757",  # Chime Financial
-    "0001829589",  # Kraken (Payward)
-    "0001853775",  # Wiz
-    "0001856028",  # Perplexity AI
-    "0001900748",  # xAI
-    "0001838716",  # Vanta
-    "0001877825",  # Figma
-    "0001863005",  # Neuralink
-    "0001775347",  # Fanatics
+    "0001181412",  # Space Exploration Technologies (SpaceX)  — VERIFIED
+    "0001646180",  # Stripe                                  — to verify
 ]
 
 UA = {
@@ -74,8 +58,11 @@ UA = {
 UA_ARCHIVE = dict(UA)
 UA_ARCHIVE["Host"] = "www.sec.gov"
 
-# Polite rate limit: SEC asks for ≤10 req/s.
+# SEC asks for ≤10 req/s shared across User-Agent. PreIpoService runs up to 3
+# SEC scripts concurrently, so per-process gap must be ≥0.34s to stay under
+# the shared ceiling. Use 0.4s for safety margin.
 _LAST_REQ = 0.0
+_MIN_REQ_GAP = 0.4
 
 
 def _get(url, params=None, headers=None, timeout=15):
@@ -83,8 +70,8 @@ def _get(url, params=None, headers=None, timeout=15):
     if requests is None:
         return None
     elapsed = time.time() - _LAST_REQ
-    if elapsed < 0.12:
-        time.sleep(0.12 - elapsed)
+    if elapsed < _MIN_REQ_GAP:
+        time.sleep(_MIN_REQ_GAP - elapsed)
     try:
         r = requests.get(url, params=params, timeout=timeout,
                          headers=headers or UA)
@@ -146,9 +133,19 @@ def search_filings(forms, days_back, max_hits=200):
             adsh = h.get("_id", "")
             if ":" in adsh:
                 adsh = adsh.split(":", 1)[0]
+            # EDGAR returns either "form" (singular) or "forms" (list) depending
+            # on endpoint version. Prefer singular, then first of list, then
+            # empty.
+            form_val = src.get("form")
+            if not form_val:
+                forms_list = src.get("forms")
+                if isinstance(forms_list, list) and forms_list:
+                    form_val = forms_list[0]
+                else:
+                    form_val = ""
             out.append({
                 "adsh": adsh,
-                "form": src.get("form") or src.get("forms", [""])[0] if isinstance(src.get("forms"), list) else src.get("form", ""),
+                "form": form_val,
                 "filed_date": src.get("file_date") or src.get("filed_date", ""),
                 "display_names": src.get("display_names", []),
                 "ciks": src.get("ciks", []),
@@ -236,16 +233,36 @@ def fetch_form_d_xml(cik, adsh):
         except (TypeError, ValueError):
             minimum_inv = 0.0
         try:
-            nonaccr = int(offering.findtext(".//totalNumberAlreadyInvested", default="0") or 0)
-        except (TypeError, ValueError):
-            nonaccr = 0
-        try:
-            invested_count = int(offering.findtext(".//hasNonAccreditedInvestors", default="0") or 0)
+            invested_count = int(offering.findtext(".//totalNumberAlreadyInvested", default="0") or 0)
         except (TypeError, ValueError):
             invested_count = 0
+        # hasNonAccreditedInvestors is a boolean string ("true"/"false"), not
+        # a count. The previous code tried to int() it which silently failed
+        # and stored 0.
+        has_non_accr_raw = (offering.findtext(".//hasNonAccreditedInvestors", default="") or "").strip().lower()
+        has_non_accr = has_non_accr_raw == "true"
+        nonaccr = 0  # Form D doesn't disclose the *count* of non-accredited, only the flag
+        # Form D securities-type tags are camelCase booleans like
+        # <isEquityType>true</isEquityType>, <isDebtType>false</isDebtType>.
+        # Map to human-readable labels (the previous code shipped the raw tag
+        # strings to the UI).
+        _SEC_TYPE_LABELS = {
+            "isEquityType":           "Equity",
+            "isDebtType":             "Debt",
+            "isOptionToAcquireType":  "Option",
+            "isSecurityToBeAcquiredType": "Option",
+            "isPooledInvestmentFundType": "Pooled Fund",
+            "isTenantInCommonType":   "TIC",
+            "isMineralPropertyType":  "Mineral",
+            "isOtherType":            "Other",
+        }
         sec_types = offering.find(".//typesOfSecuritiesOffered")
         if sec_types is not None:
-            securities_type = [el.tag for el in sec_types if el.text and el.text.strip().lower() == "true"]
+            securities_type = [
+                _SEC_TYPE_LABELS.get(el.tag, el.tag)
+                for el in sec_types
+                if el.text and el.text.strip().lower() == "true"
+            ]
         try:
             sales_commissions = float(offering.findtext(".//salesCommissions/dollarAmount", default="0") or 0)
         except (TypeError, ValueError):
@@ -287,7 +304,8 @@ def fetch_form_d_xml(cik, adsh):
         "total_offering_usd": total_offering,
         "total_sold_usd": total_sold,
         "minimum_investment_usd": minimum_inv,
-        "non_accredited_count": nonaccr,
+        "has_non_accredited_investors": has_non_accr,
+        "non_accredited_count": nonaccr,         # always 0 — Form D doesn't disclose
         "already_invested_count": invested_count,
         "securities_types": securities_type,
         "sales_commissions_usd": sales_commissions,
@@ -318,15 +336,24 @@ def _is_operating_company(industry_group):
 
 
 def _filings_for_cik(cik, forms=("D", "D/A"), limit=10):
-    """Fetch a CIK's recent filings of a given form set from data.sec.gov/submissions."""
+    """Fetch a CIK's recent filings of a given form set from data.sec.gov/submissions.
+
+    Logs a stderr line on 404 so misspelled CIKs in KNOWN_PRIVATE_CIKS are
+    visible during development rather than silently masked by `r is None`.
+    """
     cik_pad = _cik_padded(cik)
     url = f"{EDGAR_SUBMISSIONS}/CIK{cik_pad}.json"
     r = _get(url, headers={**UA_ARCHIVE, "Host": "data.sec.gov"})
     if r is None:
+        # _get already swallowed the exception, but for known-CIK lookups
+        # surface it on stderr so the operator notices a stale curated entry.
+        print(f"sec_form_d_data: submissions lookup failed for CIK {cik_pad}",
+              file=sys.stderr)
         return []
     try:
         data = r.json()
     except Exception:
+        print(f"sec_form_d_data: invalid JSON for CIK {cik_pad}", file=sys.stderr)
         return []
     recent = data.get("filings", {}).get("recent", {})
     forms_ = recent.get("form", []) or []
@@ -452,6 +479,14 @@ def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
 
 def fetch_ipo_pipeline(days_back=120, max_hits=80):
     filings = search_filings(["S-1", "S-1/A", "F-1", "F-1/A", "S-11", "S-11/A"], days_back=days_back, max_hits=max_hits)
+    # Sort by filed_date ASC so that for each CIK we encounter the *original*
+    # filing first (if it's in our window); subsequent amendments then bump
+    # the counter without ever underflowing or mislabelling the first filed
+    # date. The previous code processed in EDGAR-search order (newest-first),
+    # so an initial filing arriving after an amendment in the same window
+    # corrupted the count.
+    filings.sort(key=lambda x: x.get("filed_date", ""))
+
     out = []
     seen = {}  # cik -> first index in out
     for f in filings:
@@ -463,11 +498,13 @@ def fetch_ipo_pipeline(days_back=120, max_hits=80):
         name = re.sub(r"\s*\(CIK.*$", "", names[0]).strip()
         is_amendment = "/A" in (f.get("form") or "")
         if cik in seen:
-            # already-recorded filer: bump amendment counter, update latest
             idx = seen[cik]
-            out[idx]["amendment_count"] += 1 if is_amendment else 0
-            if (f.get("filed_date") or "") > (out[idx]["latest_amended"] or ""):
-                out[idx]["latest_amended"] = f.get("filed_date", "")
+            if is_amendment:
+                out[idx]["amendment_count"] += 1
+                if (f.get("filed_date") or "") > (out[idx]["latest_amended"] or ""):
+                    out[idx]["latest_amended"] = f.get("filed_date", "")
+            # If we now meet a non-amendment for a CIK already seen, leave
+            # first_filed as the earliest-seen filing — same value, no change.
         else:
             seen[cik] = len(out)
             out.append({
@@ -497,7 +534,7 @@ def build_all_data(days_back_fd=180, days_back_ipo=120, max_filings=120, parse_x
         "form_d_companies": companies,
         "recent_form_d": recent_flat,
         "s1_filings": pipeline,
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
 

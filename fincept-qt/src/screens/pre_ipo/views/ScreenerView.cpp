@@ -174,9 +174,14 @@ void ScreenerView::rebuild_table() {
         if (!passes_filter(c)) continue;
         table_->insertRow(row);
 
-        auto numeric = [](double v) {
-            auto* it = new QTableWidgetItem(QString::number(v, 'f', 1));
-            it->setData(Qt::DisplayRole, v);
+        // numeric_item: numeric sort key in EditRole (used by Qt's default
+        // < operator when sorting is enabled), formatted text in DisplayRole.
+        // Caller may override the displayed string afterwards (e.g. "$5M")
+        // without losing the underlying sort order.
+        auto numeric_item = [](double v) {
+            auto* it = new QTableWidgetItem;
+            it->setData(Qt::EditRole, v);
+            it->setData(Qt::DisplayRole, QString::number(v, 'f', 1));
             it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
             it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             return it;
@@ -197,26 +202,34 @@ void ScreenerView::rebuild_table() {
         else if (hq.isEmpty()) hq = c.hq_state;
         table_->setItem(row, 2, text_item(hq.isEmpty() ? "—" : hq));
 
-        auto* raised = numeric(c.cumulative_raised_m);
-        raised->setText(c.cumulative_raised_m > 0
+        // Override DisplayRole only — leave EditRole holding the numeric sort
+        // key. Qt's QTableWidgetItem::operator< compares EditRole when sorting
+        // is enabled, so columns sort numerically while the cell renders the
+        // formatted string.
+        auto set_display = [](QTableWidgetItem* it, const QString& s) {
+            it->setData(Qt::DisplayRole, s);
+        };
+
+        auto* raised = numeric_item(c.cumulative_raised_m);
+        set_display(raised, c.cumulative_raised_m > 0
             ? "$" + QString::number(qRound(c.cumulative_raised_m)) + "M" : "—");
         table_->setItem(row, 3, raised);
 
-        auto* funds = numeric(static_cast<double>(c.analytics.smart_money_index));
-        funds->setText(c.analytics.smart_money_index > 0
+        auto* funds = numeric_item(static_cast<double>(c.analytics.smart_money_index));
+        set_display(funds, c.analytics.smart_money_index > 0
             ? QString::number(c.analytics.smart_money_index) : "—");
         funds->setTextAlignment(Qt::AlignCenter);
         table_->setItem(row, 4, funds);
 
-        auto* mark = numeric(c.analytics.consensus_mark_pps);
-        mark->setText(c.analytics.consensus_mark_pps > 0
+        auto* mark = numeric_item(c.analytics.consensus_mark_pps);
+        set_display(mark, c.analytics.consensus_mark_pps > 0
             ? "$" + QString::number(c.analytics.consensus_mark_pps, 'f', 2) : "—");
         if (c.analytics.consensus_mark_pps > 0)
             mark->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 5, mark);
 
-        auto* readi = numeric(c.analytics.ipo_readiness_score);
-        readi->setText(QString::number(c.analytics.ipo_readiness_score) + "/100");
+        auto* readi = numeric_item(c.analytics.ipo_readiness_score);
+        set_display(readi, QString::number(c.analytics.ipo_readiness_score) + "/100");
         if (c.analytics.ipo_readiness_score >= 70)
             readi->setForeground(QColor(colors::POSITIVE()));
         else if (c.analytics.ipo_readiness_score >= 40)
@@ -232,13 +245,13 @@ void ScreenerView::rebuild_table() {
         if (c.s1.first_filed.isValid()) s1->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 7, s1);
 
-        auto* drift = numeric(c.analytics.mark_drift_vs_last_round_pct);
+        auto* drift = numeric_item(c.analytics.mark_drift_vs_last_round_pct);
         if (c.analytics.mark_drift_vs_last_round_pct != 0) {
             const double v = c.analytics.mark_drift_vs_last_round_pct;
-            drift->setText((v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%");
+            set_display(drift, (v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%");
             drift->setForeground(QColor(v >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
         } else {
-            drift->setText("—");
+            set_display(drift, QStringLiteral("—"));
         }
         table_->setItem(row, 8, drift);
         ++row;

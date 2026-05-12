@@ -32,9 +32,6 @@ class CompanyDetailPanel : public QWidget {
 
     void populate(const pre_ipo::PrivateCompany& c);
 
-    QWidget* make_metric_tile(const QString& label, const QString& value,
-                              const QString& color = {}) const;
-    QWidget* make_tag_chip(const QString& text, bool clickable = false) const;
     void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds);
     void rebuild_comps_chips(const QStringList& tickers);
     void rebuild_investors(const QStringList& investors);

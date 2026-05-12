@@ -33,6 +33,9 @@ UA = {
 }
 
 _LAST_REQ = 0.0
+# 0.4s gap = ≤2.5 req/s per process; with up to 3 SEC scripts concurrent the
+# combined load stays well under the 10 req/s shared cap.
+_MIN_REQ_GAP = 0.4
 
 
 def _get(url, params=None, headers=None, timeout=15):
@@ -40,8 +43,8 @@ def _get(url, params=None, headers=None, timeout=15):
     if requests is None:
         return None
     elapsed = time.time() - _LAST_REQ
-    if elapsed < 0.12:
-        time.sleep(0.12 - elapsed)
+    if elapsed < _MIN_REQ_GAP:
+        time.sleep(_MIN_REQ_GAP - elapsed)
     try:
         r = requests.get(url, params=params, timeout=timeout, headers=headers or UA)
         _LAST_REQ = time.time()
@@ -64,9 +67,12 @@ def _clean_name(s):
 def fetch_pipeline(days_back=180, max_hits=200):
     start = (date.today() - timedelta(days=days_back)).isoformat()
     end = date.today().isoformat()
-    out_by_cik = {}
+
+    # Collect all hits first, then process oldest-first so amendment counts
+    # are stable even when EDGAR pagination returns newest-first.
+    raw = []
     from_ = 0
-    while len(out_by_cik) < max_hits:
+    while True:
         params = {
             "forms": "S-1,S-1/A,F-1,F-1/A,S-11,S-11/A",
             "dateRange": "custom",
@@ -84,40 +90,52 @@ def fetch_pipeline(days_back=180, max_hits=200):
         hits = data.get("hits", {}).get("hits", [])
         if not hits:
             break
-        for h in hits:
-            src = h.get("_source", {})
-            ciks = src.get("ciks") or []
-            names = src.get("display_names") or []
-            if not ciks or not names:
-                continue
-            cik = _cik_padded(ciks[0])
-            name = _clean_name(names[0])
-            form = src.get("form") or (src.get("forms", [""]) or [""])[0]
-            filed = src.get("file_date") or ""
-            is_amend = "/A" in (form or "")
-            entry = out_by_cik.setdefault(cik, {
-                "cik": cik,
-                "company_name": name,
-                "first_filed": filed,
-                "latest_amended": "",
-                "amendment_count": 0,
-                "form_types": [],
-                "days_since_first": 0,
-                "edgar_url": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=S-1",
-                "filings": [],
-            })
-            entry["filings"].append({"form": form, "filed_date": filed, "adsh": h.get("_id", "")})
-            if filed and (not entry["first_filed"] or filed < entry["first_filed"]):
-                entry["first_filed"] = filed
-            if is_amend:
-                entry["amendment_count"] += 1
-                if filed > (entry["latest_amended"] or ""):
-                    entry["latest_amended"] = filed
-            if form and form not in entry["form_types"]:
-                entry["form_types"].append(form)
-        if len(hits) < 10:
+        raw.extend(hits)
+        if len(raw) >= max_hits * 4 or len(hits) < 10:
             break
         from_ += len(hits)
+
+    raw.sort(key=lambda h: (h.get("_source", {}).get("file_date") or
+                            h.get("_source", {}).get("filed_date") or ""))
+
+    out_by_cik = {}
+    for h in raw:
+        if len(out_by_cik) >= max_hits and h.get("_source", {}).get("ciks", [""])[0] not in (
+                cikv for cikv in out_by_cik):
+            # Cap distinct filers; still allow updates to existing ones.
+            pass
+        src = h.get("_source", {})
+        ciks = src.get("ciks") or []
+        names = src.get("display_names") or []
+        if not ciks or not names:
+            continue
+        cik = _cik_padded(ciks[0])
+        if cik not in out_by_cik and len(out_by_cik) >= max_hits:
+            continue
+        name = _clean_name(names[0])
+        form = src.get("form") or (src.get("forms", [""]) or [""])[0]
+        filed = src.get("file_date") or ""
+        is_amend = "/A" in (form or "")
+        entry = out_by_cik.setdefault(cik, {
+            "cik": cik,
+            "company_name": name,
+            "first_filed": filed,
+            "latest_amended": "",
+            "amendment_count": 0,
+            "form_types": [],
+            "days_since_first": 0,
+            "edgar_url": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=S-1",
+            "filings": [],
+        })
+        entry["filings"].append({"form": form, "filed_date": filed, "adsh": h.get("_id", "")})
+        if filed and (not entry["first_filed"] or filed < entry["first_filed"]):
+            entry["first_filed"] = filed
+        if is_amend:
+            entry["amendment_count"] += 1
+            if filed > (entry["latest_amended"] or ""):
+                entry["latest_amended"] = filed
+        if form and form not in entry["form_types"]:
+            entry["form_types"].append(form)
 
     today = date.today()
     out = []
@@ -149,12 +167,26 @@ _CONCEPT_PRIORITY = {
 
 
 def _annual_value(concept, prefer="USD"):
-    """Pick the latest annual (FY) value from a companyconcept node."""
+    """Pick the latest annual value from a companyconcept node.
+
+    XBRL companies report annual figures as `fp=="FY"` (fiscal year) or
+    `fp=="CY"` (calendar year). Some filers also leave `fp` empty for
+    annual frames identified only by `frame="CY{YYYY}"`. We accept any
+    of those — picking just FY caused 0-revenue for calendar-year filers
+    and silently flunked them on the readiness gate.
+    """
     units = concept.get("units", {})
     bucket = units.get(prefer) or next(iter(units.values()), [])
     best = None
     for row in bucket:
-        if row.get("fp") != "FY":
+        fp = (row.get("fp") or "").upper()
+        frame = (row.get("frame") or "")
+        # Accept either fp=FY|CY or a frame string that names a calendar year
+        # (e.g. "CY2025" with no quarter suffix).
+        is_annual = (fp in ("FY", "CY")) or (
+            frame.startswith("CY") and "Q" not in frame and len(frame) >= 6
+        )
+        if not is_annual:
             continue
         if best is None or (row.get("end", "") > best.get("end", "")):
             best = row
