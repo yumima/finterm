@@ -135,6 +135,10 @@ static const QList<CredDef> CRED_KEYS = {
     {"POLYMARKET_SECRET", "Polymarket Secret"},
     {"POLYMARKET_PASSPHRASE", "Polymarket Passphrase"},
     {"POLYMARKET_WALLET", "Polymarket Wallet Address"},
+    // Power Trader / GovData. Stored under the same SecureStorage key the
+    // Power Trader DataSourceDialog already writes ("CONGRESS_GOV_API_KEY"),
+    // so a key set there shows up here with "Saved ✓" without migration.
+    {"CONGRESS_GOV_API_KEY", "Congress.gov (Power Trader)"},
 };
 
 // ── Construction ──────────────────────────────────────────────────────────────

@@ -41,16 +41,14 @@ void PortfolioHeatmap::build_ui() {
     auto* title = new QLabel("HOLDINGS");
     title->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
-    {
-        QFont tf = title->font();
-        tf.setBold(true);
-        tf.setPixelSize(12);
-        const int needed = QFontMetrics(tf).horizontalAdvance("HOLDINGS")
-                           + 8 * 2  // approximate letter-spacing budget at 1.5px × 8 chars
-                           + 4;
-        title->setMinimumWidth(needed);
-    }
+    // QFontMetrics::horizontalAdvance doesn't account for CSS letter-spacing,
+    // so the prior compute-then-pad approach still elided to "HOL" on narrow
+    // panes. Use a fixed lower bound that comfortably fits "HOLDINGS" at 12px
+    // bold + 1.5px letter-spacing across 8 chars with a safety buffer; this
+    // pins the column wide enough no matter how QFontMetrics rounds.
+    title->setMinimumWidth(110);
     header->addWidget(title);
+    header->addSpacing(8);  // guarantee gap between title and the mode pills
     header->addStretch();
 
     auto make_mode_btn = [&](const QString& text) {
@@ -323,13 +321,38 @@ void PortfolioHeatmap::rebuild_blocks() {
                                  .arg(bg.blue())
                                  .arg(border_style, ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
 
-        // Content
-        double chg_val = mode_ == portfolio::HeatmapMode::DayChange ? h.day_change_percent
-                         : mode_ == portfolio::HeatmapMode::Pnl     ? h.unrealized_pnl_percent
-                                                                    : h.weight;
-        QString chg_str = mode_ == portfolio::HeatmapMode::Weight
-                              ? QString("%1%").arg(QString::number(chg_val, 'f', 1))
-                              : QString("%1%2%").arg(chg_val >= 0 ? "+" : "").arg(QString::number(chg_val, 'f', 1));
+        // Content. Each mode needs its own value source — falling through to
+        // `weight` for Aft (the prior bug) made the tile display "+12.3%"
+        // (weight, always positive prefix) on a color computed from the
+        // after-hours change, so e.g. a real −2% AFT move showed red but with
+        // "+12.3%" text. We now read from aft_quotes_ for Aft and render "—"
+        // when the daemon hasn't returned a quote for that symbol.
+        QString chg_str;
+        switch (mode_) {
+            case portfolio::HeatmapMode::DayChange: {
+                const double v = h.day_change_percent;
+                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+                break;
+            }
+            case portfolio::HeatmapMode::Pnl: {
+                const double v = h.unrealized_pnl_percent;
+                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+                break;
+            }
+            case portfolio::HeatmapMode::Weight:
+                chg_str = QString("%1%").arg(QString::number(h.weight, 'f', 1));
+                break;
+            case portfolio::HeatmapMode::Aft: {
+                const auto it = aft_quotes_.find(h.symbol);
+                if (it == aft_quotes_.end()) {
+                    chg_str = QStringLiteral("—");  // matches gray tile from block_color
+                } else {
+                    const double v = it.value();
+                    chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+                }
+                break;
+            }
+        }
 
         block->setText(QString("%1\n%2").arg(h.symbol, chg_str));
 

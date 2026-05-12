@@ -375,9 +375,28 @@ void FuturesTermStructurePanel::render(const QVector<TermStructurePoint>& pts) {
     series->attachAxis(x_axis);
     series->attachAxis(y_axis);
 
-    if (std::isfinite(pts.first().last) && std::isfinite(pts.last().last)) {
+    if (std::isfinite(pts.first().last) && std::isfinite(pts.last().last) && pts.first().last > 0) {
         const bool contango = pts.last().last > pts.first().last;
-        contango_label_->setText(contango ? "CONTANGO" : "BACKWARDATION");
+        const double front  = pts.first().last;
+        const double back   = pts.last().last;
+        const double total_pct = (back - front) / front * 100.0;
+
+        // Roll cost: front → second-month is what a long position pays (or
+        // earns) each time it rolls. Magnitude matters more than the label —
+        // contango of 2% is meaningful, 0.05% isn't.
+        QString roll_segment;
+        if (pts.size() >= 2 && std::isfinite(pts[1].last) && pts[1].last > 0) {
+            const double roll_pct = (pts[1].last - front) / front * 100.0;
+            roll_segment = QString("  ·  Roll %1%2%")
+                               .arg(roll_pct >= 0 ? "+" : "")
+                               .arg(QString::number(roll_pct, 'f', 2));
+        }
+
+        contango_label_->setText(QString("%1  %2%3%%4")
+                                     .arg(contango ? "CONTANGO" : "BACKWARDATION")
+                                     .arg(total_pct >= 0 ? "+" : "")
+                                     .arg(QString::number(total_pct, 'f', 2))
+                                     .arg(roll_segment));
         contango_label_->setStyleSheet(lbl_ss(contango ? colors::POSITIVE() : colors::NEGATIVE(),
                                               true, fonts::font_px(-2)));
     } else {
