@@ -2,10 +2,14 @@
 #include "screens/portfolio/PortfolioHeatmap.h"
 
 #include "core/events/EventBus.h"
+#include "python/PythonWorker.h"
 #include "ui/theme/Theme.h"
 
 #include <QAction>
+#include <QDateTime>
 #include <QGridLayout>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMenu>
 #include <QScrollArea>
 #include <QVBoxLayout>
@@ -52,22 +56,32 @@ void PortfolioHeatmap::build_ui() {
         return btn;
     };
 
-    pnl_btn_ = make_mode_btn("PNL");
+    pnl_btn_    = make_mode_btn("PNL");
     weight_btn_ = make_mode_btn("WT");
-    day_btn_ = make_mode_btn("DAY");
+    day_btn_    = make_mode_btn("DAY");
+    aft_btn_    = make_mode_btn("AFT");
+    aft_btn_->setToolTip(QStringLiteral(
+        "After-hours / pre-market change for each symbol. "
+        "Live from the yfinance daemon — refreshed each time you switch "
+        "to AFT mode."));
     pnl_btn_->setChecked(true);
 
     auto set_mode = [this](portfolio::HeatmapMode m) {
         mode_ = m;
-        pnl_btn_->setChecked(m == portfolio::HeatmapMode::Pnl);
+        pnl_btn_->setChecked   (m == portfolio::HeatmapMode::Pnl);
         weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
-        day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
-        rebuild_blocks();
+        day_btn_->setChecked   (m == portfolio::HeatmapMode::DayChange);
+        aft_btn_->setChecked   (m == portfolio::HeatmapMode::Aft);
+        if (m == portfolio::HeatmapMode::Aft)
+            fetch_aft_quotes();
+        else
+            rebuild_blocks();
         emit mode_changed(m);
     };
-    connect(pnl_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
+    connect(pnl_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
     connect(weight_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Weight); });
-    connect(day_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
+    connect(day_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
+    connect(aft_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
 
     layout->addLayout(header);
 
@@ -210,6 +224,12 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
             break;
         case portfolio::HeatmapMode::DayChange:
             val = h.day_change_percent;
+            break;
+        case portfolio::HeatmapMode::Aft:
+            // Look up after-hours percent change from the local cache; 0 if
+            // the yfinance fetch hasn't returned yet or there's no ext quote
+            // for this symbol. The 0-case renders neutral-gray.
+            val = aft_quotes_.value(h.symbol, 0.0);
             break;
     }
 
@@ -456,6 +476,50 @@ void PortfolioHeatmap::refresh_theme() {
 
     // Rebuild blocks picks up new theme colors for borders/text
     rebuild_blocks();
+}
+
+// Fetch after-hours / pre-market percent change for each held symbol via the
+// persistent yfinance daemon. Same `extended_hours` action used by
+// PortfolioFuturesView::refresh_extended_hours — the daemon is already
+// running and warm, so this is a cheap network call rather than a fresh
+// Python subprocess. Generation counter supersedes any in-flight stale
+// requests when the user toggles AFT off and back on quickly.
+void PortfolioHeatmap::fetch_aft_quotes() {
+    if (holdings_.isEmpty()) {
+        aft_quotes_.clear();
+        rebuild_blocks();
+        return;
+    }
+
+    QJsonArray syms;
+    for (const auto& h : holdings_) syms.append(h.symbol);
+
+    const quint64 my_gen = ++aft_gen_;
+    QPointer<PortfolioHeatmap> guard(this);
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("symbols"), syms);
+
+    python::PythonWorker::instance().submit(
+        QStringLiteral("extended_hours"), payload,
+        [guard, my_gen](bool ok, QJsonObject result, QString /*err*/) {
+            if (!guard || my_gen != guard->aft_gen_) return;  // superseded or destroyed
+            if (!ok) return;
+            const QJsonArray rows = result.contains(QStringLiteral("_value"))
+                                        ? result.value(QStringLiteral("_value")).toArray()
+                                        : result.value(QStringLiteral("data")).toArray();
+            guard->aft_quotes_.clear();
+            for (const auto& v : rows) {
+                const auto o = v.toObject();
+                const auto pct_val = o.value(QStringLiteral("ext_change_pct"));
+                if (pct_val.isNull() || pct_val.isUndefined()) continue;
+                guard->aft_quotes_.insert(
+                    o.value(QStringLiteral("symbol")).toString(),
+                    pct_val.toDouble());
+            }
+            guard->rebuild_blocks();
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 } // namespace fincept::screens

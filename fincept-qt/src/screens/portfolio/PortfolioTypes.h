@@ -107,7 +107,7 @@ struct PortfolioSnapshot {
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
-enum class HeatmapMode { Pnl, Weight, DayChange };
+enum class HeatmapMode { Pnl, Weight, DayChange, Aft };
 
 enum class SortColumn { Symbol, Price, Change, Pnl, PnlPct, Weight, MarketValue };
 

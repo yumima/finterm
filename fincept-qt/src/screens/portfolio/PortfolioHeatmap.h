@@ -2,10 +2,12 @@
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
 
+#include <QHash>
 #include <QLabel>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QString>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -38,9 +40,18 @@ class PortfolioHeatmap : public QWidget {
     void update_top_movers();
 
     // Mode buttons
-    QPushButton* pnl_btn_ = nullptr;
+    QPushButton* pnl_btn_    = nullptr;
     QPushButton* weight_btn_ = nullptr;
-    QPushButton* day_btn_ = nullptr;
+    QPushButton* day_btn_    = nullptr;
+    QPushButton* aft_btn_    = nullptr;  // after-hours (pre/post market change)
+
+    // AFT cache — populated on demand via the yfinance daemon's
+    // `extended_hours` action when the user enters AFT mode. Map of
+    // symbol → post/pre-market percent change.
+    QHash<QString, double> aft_quotes_;
+    QLabel*  aft_status_ = nullptr;       // session/state hint shown when AFT active
+    quint64  aft_gen_    = 0;             // supersedes in-flight stale requests
+    void fetch_aft_quotes();
 
     // Blocks container
     QWidget* blocks_container_ = nullptr;
