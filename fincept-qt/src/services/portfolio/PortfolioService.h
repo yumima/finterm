@@ -184,6 +184,15 @@ class PortfolioService : public QObject {
     // Per-portfolio guard so compute_metrics doesn't kick off backfill on
     // every refresh tick. Cleared on app restart — that's the explicit retry.
     QSet<QString> backfill_attempted_;
+
+    // 1D fan-out epoch: each fetch_*_intraday() call increments its stream's
+    // counter and the callback captures the value at submit time. If the
+    // user switches periods/tickers before the in-flight request lands, the
+    // captured epoch no longer matches and the callback drops silently
+    // instead of emitting stale data over a newer request. Per-stream so a
+    // symbol fetch can't cancel a portfolio fetch and vice versa.
+    qint64 symbol_intraday_epoch_    = 0;
+    qint64 portfolio_intraday_epoch_ = 0;
 };
 
 } // namespace fincept::services

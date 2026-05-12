@@ -562,6 +562,18 @@ void PortfolioScreen::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     refresh_timer_->start();
     status_bar_->start_clock();
+    // Default to the aggregate HOLDINGS view every time the user lands on
+    // the Portfolio tab — chart, heatmap, blotter, order panel all reset to
+    // portfolio-level. The user requested this explicitly: "chart, and curve
+    // etc. all default to portfolio when entering". Symbol focus is opt-in
+    // (click a holding) rather than persistent across tab switches.
+    if (!selected_symbol_.isEmpty()) {
+        selected_symbol_.clear();
+        if (perf_chart_)   perf_chart_->clear_focus_symbol();
+        if (heatmap_)      heatmap_->set_selected_symbol(QString());
+        if (blotter_)      blotter_->set_selected_symbol(QString());
+        if (order_panel_)  order_panel_->set_holding(nullptr);
+    }
     // User just brought this tab to the front — make sure they see fresh data,
     // not whatever was last cached. Force-fresh bypasses the quote TTL.
     if (!selected_id_.isEmpty())
@@ -1264,11 +1276,11 @@ QVariantMap PortfolioScreen::save_state() const {
 
 void PortfolioScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value("portfolio_id").toString();
-    const QString sym = state.value("symbol").toString();
     if (!id.isEmpty())
         on_portfolio_selected(id);
-    if (!sym.isEmpty())
-        selected_symbol_ = sym;
+    // Symbol focus is intentionally *not* restored — Portfolio always opens
+    // on the aggregate HOLDINGS view (showEvent enforces the same on tab
+    // switch). Symbol selection is opt-in per session.
 }
 
 // ── IGroupLinked ─────────────────────────────────────────────────────────────

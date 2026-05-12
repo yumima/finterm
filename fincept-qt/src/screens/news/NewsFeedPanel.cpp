@@ -461,7 +461,11 @@ void NewsFeedPanel::update_two_column_layout() {
     if (wide && !was_wide) {
         const bool has_middle = middle_widget_ != nullptr;
         if (has_middle && middle_widget_->isVisible()) {
-            const int detail_w = 420;
+            // 2/5 · 1/5 · 2/5 split — middle = width/5, side rails take
+            // the remaining 4/5 split evenly. 280px floor so the article
+            // reader stays usable on small viewports.
+            const int detail_w =
+                std::max(280, width() / 5);
             const int side = (width() - detail_w) / 2;
             feed_splitter_->setSizes({side, detail_w, side});
         } else if (has_middle) {
@@ -478,28 +482,33 @@ void NewsFeedPanel::set_middle_widget(QWidget* widget) {
     if (middle_widget_ == widget)
         return;
     if (middle_widget_) {
-        // Detach the prior widget. The caller retains the pointer; the
-        // widget's Qt parent is set to null here, so the caller MUST keep
-        // a reference (or reparent immediately) or the widget will leak.
         middle_widget_->setParent(nullptr);
         middle_widget_ = nullptr;
     }
     if (widget) {
-        // Insert between left list (index 0) and right list (index 1).
+        // Insert between left list (index 0) and right list (index 2).
         feed_splitter_->insertWidget(1, widget);
         middle_widget_ = widget;
-        // Re-seed sizes so the new pane gets a sensible width. If we're in
-        // narrow mode the right column stays hidden; the detail pane takes
-        // the right slot anyway because the splitter's hidden child shrinks
-        // to zero width.
+
+        // Standard QSplitter behavior: dragging the left partition
+        // redistributes width between left list and middle (right
+        // unchanged); dragging the right partition redistributes between
+        // middle and right list (left unchanged). That matches the user's
+        // mental model — no width lock on middle; the partition bars are
+        // independent. We only seed initial widths here; from then on the
+        // user's drags are honoured.
+        //
+        // Detail seed: width/5 (the middle of the 2/5 · 1/5 · 2/5 split),
+        // floored at 280px so the reader stays usable on small viewports.
+        const int detail_w =
+            std::max(280, width() / 5);
         const bool wide = width() >= kWideViewportThreshold;
-        const int detail_w = std::min(420, std::max(280, width() / 3));
         if (wide) {
             const int side = (width() - detail_w) / 2;
             feed_splitter_->setSizes({side, detail_w, side});
         } else {
-            // Narrow: split between left list and middle widget (right list
-            // is hidden by update_two_column_layout).
+            // Narrow: split between left list and middle (right hidden by
+            // update_two_column_layout).
             feed_splitter_->setSizes({width() - detail_w, detail_w, 0});
         }
     }

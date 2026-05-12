@@ -4,17 +4,16 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 ## What you get
 
-- **Markets / Watchlist / News** — live quotes via yfinance; optional Stooq for fast EOD. News feed auto-splits into two columns on wide viewports; the source column is drag-resizable.
-- **Portfolio** — multi-account holdings, P&L, sparklines, heatmap (PNL / WT / DAY / AFT after-hours modes), blotter, and a *Futures & Ext Hours* sub-view.
-- **Equity Research** — financials, analyst targets, technicals (RSI / MACD / EMA / stochastic / ATR), peers, news, sentiment.
-- **FUTURES** — 8-asset-class watchlist (Index · Rates · Energy · Metals · Ags · FX · Crypto · China), heatmap, term structure, spread monitor, settlements, continuous chart.
-- **POWER TRADER** — STOCK Act congressional trade analytics: searchable member sidebar with watchlist + signal-score indicators, member drawer (replaces tab-jump), trades feed with right-click provenance to the source filing, signal-score popovers, by-committee view, insider watch, signal builder + practice, compare mode for 2-3 members side by side, and a cabinet view. Date-range pill (30d / 90d / 1y / 2y) on the top bar.
-- **KNOWLEDGE** — 4-pane cockpit (Basics · Practice · Context rail · Quant). Quant has seven sub-tracks (Foundations · Risk & Return · Factors · Execution · Backtesting · Strategies · Practices) covering ~30 real-citation-grounded entries cross-linked to in-app tools. Curated content, live data lookups, formula calculators, peer comparison charts, and an embedded AI tutor.
-- **AI chat bubble** — pluggable LLM provider (OpenAI / Anthropic / local Ollama / etc.); none wired by default.
-- **Concurrent yfinance daemon** — long-lived Python child communicating over a Unix domain socket. A `ThreadPoolExecutor` (6 network + 2 compute workers) runs fetches in parallel. Interactive equity-research requests are prioritised over background market-data sweeps; background batch actions are deduplicated so slow symbols never block the UI.
-- **Boot prefetch** — futures cache and active portfolios warmed at startup.
-- **Component browser, dock layouts, multi-window, workspaces** — full Qt-Advanced-Docking.
-- **Desktop launcher** — `finterm install` registers a `.desktop` entry pinnable to your dock.
+- **Markets / Watchlist / News** — live global quotes, charts, and curated news.
+- **Portfolio** — multi-account holdings, performance chart, heatmap, blotter, and an extended-hours sub-view.
+- **Equity Research** — per-ticker dashboard: financials, analyst targets, technicals, peers, news, sentiment.
+- **Futures** — multi-asset-class watchlist with heatmap, term structure, spreads, settlements, and continuous charts.
+- **Power Trader** — STOCK Act congressional trading analytics with member drawers, signal scores, and side-by-side compare.
+- **Pre-IPO** — private-market cockpit fed by public SEC EDGAR sources (Form D, S-1, mutual-fund N-PORT marks): picks, screener, company dossiers, IPO pipeline.
+- **Knowledge** — markets and quant curriculum with practice tools, formula calculators, and an embedded AI tutor.
+- **AI chat bubble** — pluggable LLM provider; none wired by default.
+- **Concurrent yfinance daemon** — long-lived Python child runs market-data fetches in parallel over a Unix domain socket; interactive requests are prioritised over background sweeps.
+- **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; `finterm install` registers a desktop launcher.
 
 ## Data flow
 

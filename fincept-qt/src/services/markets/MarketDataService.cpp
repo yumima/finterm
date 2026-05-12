@@ -525,6 +525,45 @@ void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallbac
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
+// ── Live order-book snapshot (single-symbol fast_info) ─────────────────────
+//
+// Routed to its own daemon action so the per-symbol fast_info HTTP call
+// stays out of the batch_quotes hot path — calling fast_info inside the
+// batch loop balloons a 50-holding refresh from ~2s to 20-40s and trips
+// yfinance's rate limit. No caching: bid/ask go stale within seconds and
+// callers want the freshest snapshot.
+void MarketDataService::fetch_orderbook(const QString& symbol, OrderbookCallback cb) {
+    if (symbol.isEmpty()) {
+        cb(false, {});
+        return;
+    }
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    python::PythonWorker::instance().submit(
+        "quote_orderbook", payload,
+        [cb, symbol](bool ok, QJsonObject result, QString err) {
+            // The Python `get_orderbook` action returns zeros for unavailable
+            // fields (closed market, illiquid ticker, paid-feed exchange) and
+            // never emits {"error": ...} — exceptions are caught upstream. So
+            // the only failure mode that reaches here is daemon-level (timeout,
+            // process crash), captured by `ok=false`.
+            if (!ok) {
+                LOG_WARN("MarketData",
+                         "Orderbook fetch failed for " + symbol + ": " + err.left(200));
+                cb(false, {});
+                return;
+            }
+            OrderbookData ob;
+            ob.symbol   = result["symbol"].toString(symbol);
+            ob.bid      = result["bid"].toDouble();
+            ob.ask      = result["ask"].toDouble();
+            ob.bid_size = result["bid_size"].toDouble();
+            ob.ask_size = result["ask_size"].toDouble();
+            cb(true, ob);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
 // ── Info fetch (company fundamentals) ───────────────────────────────────────
 
 void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {

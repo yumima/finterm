@@ -34,6 +34,46 @@ def _reset_yfinance_session() -> None:
     except Exception:
         pass
 
+def get_orderbook(symbol):
+    """Best-effort live order-book snapshot (bid/ask + sizes) for a single symbol.
+
+    Uses `Ticker.info` (Yahoo quoteSummary endpoint), NOT `fast_info`. fast_info
+    advertises `bid`/`ask` attributes but the free-tier feed leaves them at 0
+    for *every* symbol — including liquid US large-caps during regular hours
+    (verified 2026-05-12 against AAPL/MSFT/NVDA/SPY/TSLA). The quoteSummary
+    payload returned by `info` does carry real values (`bid`, `ask`, `bidSize`,
+    `askSize`).
+
+    Trade-off: `info` is ~1-2s per symbol vs fast_info's ~150ms — but bid/ask
+    is only fetched on focus-mode enter (PortfolioPerfChart::fetch_focus_orderbook),
+    never inside the batch-quote hot path. One-off latency is acceptable; an
+    empty spread is not. Returns zeros outside RTH / for illiquid tickers /
+    on exchanges Yahoo can't quote, which consumers treat as "unavailable".
+    """
+    if not symbol:
+        return {"symbol": "", "bid": 0, "ask": 0, "bid_size": 0, "ask_size": 0}
+    try:
+        import io, contextlib
+        # ticker.info chatters to stdout (deprecation notices, progress bars)
+        # which would corrupt the JSON protocol; redirect to a sink.
+        _buf = io.StringIO()
+        with contextlib.redirect_stdout(_buf):
+            info = yf.Ticker(symbol).info
+        bid = float(info.get("bid", 0) or 0)
+        ask = float(info.get("ask", 0) or 0)
+        bid_size = float(info.get("bidSize", 0) or 0)
+        ask_size = float(info.get("askSize", 0) or 0)
+    except Exception:
+        bid = ask = bid_size = ask_size = 0
+    return {
+        "symbol": symbol,
+        "bid": round(bid, 2) if bid > 0 else 0,
+        "ask": round(ask, 2) if ask > 0 else 0,
+        "bid_size": bid_size,
+        "ask_size": ask_size,
+        "timestamp": int(datetime.now().timestamp()),
+    }
+
 def get_quote(symbol):
     """Fetch real-time quote for a single symbol"""
     try:
@@ -313,20 +353,14 @@ def get_batch_quotes(symbols):
                 change = current_price - previous_close
                 change_percent = (change / previous_close) * 100 if previous_close else 0
 
-                # Best-effort live order-book snapshot from fast_info. yfinance
-                # returns zeros (or omits the field) outside RTH, for illiquid
-                # tickers, and for exchanges where bid/ask is paid-feed-only.
-                # Treat 0 as "unavailable" rather than a real quote.
-                bid = ask = 0.0
-                bid_size = ask_size = 0.0
-                try:
-                    fi = yf.Ticker(symbol).fast_info
-                    bid = float(getattr(fi, "bid", 0) or 0)
-                    ask = float(getattr(fi, "ask", 0) or 0)
-                    bid_size = float(getattr(fi, "bid_size", 0) or 0)
-                    ask_size = float(getattr(fi, "ask_size", 0) or 0)
-                except Exception:
-                    pass  # leave zeros
+                # Bid/ask intentionally omitted from the batch hot path.
+                # yfinance's fast_info hits a separate Yahoo endpoint per
+                # symbol — calling it inside the per-symbol loop would balloon
+                # a 50-holding refresh from ~2s to 20-40s and trip rate limits.
+                # Order-book data is now served by the dedicated
+                # `quote_orderbook` action, called only when a panel actually
+                # needs bid/ask (e.g. when the user focuses a single ticker
+                # in the portfolio perf chart). See get_orderbook() below.
 
                 results.append({
                     "symbol": symbol,
@@ -338,10 +372,6 @@ def get_batch_quotes(symbols):
                     "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
                     "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
                     "previous_close": round(previous_close, 2),
-                    "bid": round(bid, 2) if bid > 0 else 0,
-                    "ask": round(ask, 2) if ask > 0 else 0,
-                    "bid_size": bid_size,
-                    "ask_size": ask_size,
                     "timestamp": int(datetime.now().timestamp()),
                     "exchange": ""
                 })
@@ -1206,6 +1236,8 @@ def _daemon_dispatch_inner(action, payload):
             p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"))
     if action == "quote":
         return get_quote((payload or {}).get("symbol"))
+    if action == "quote_orderbook":
+        return get_orderbook((payload or {}).get("symbol"))
     if action == "info":
         return get_info((payload or {}).get("symbol"))
     if action == "news":

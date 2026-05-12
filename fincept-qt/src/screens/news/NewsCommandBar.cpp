@@ -136,10 +136,24 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
 
     hl->addStretch();
 
-    // Unseen count
-    unseen_label_ = new QLabel(row);
+    // Unseen count — clickable so the user has a one-click return to the
+    // default view after the BREAKING filter is applied. Styled flat so it
+    // still reads as a label, not a button.
+    unseen_label_ = new QPushButton(row);
     unseen_label_->setObjectName("newsCommandBarUnseen");
+    unseen_label_->setFlat(true);
+    unseen_label_->setCursor(Qt::PointingHandCursor);
+    unseen_label_->setToolTip(QStringLiteral(
+        "Unseen articles since you last opened News. "
+        "Click to return to the default view (clears the BREAKING filter)."));
     unseen_label_->hide();
+    // Click → reset the WIRE/CLUSTERS pill back to WIRE so the local
+    // command-bar state matches what NewsScreen will do, then signal up.
+    connect(unseen_label_, &QPushButton::clicked, this, [this]() {
+        active_view_ = "WIRE";
+        update_pill_group({view_wire_, view_clusters_}, "WIRE");
+        emit unseen_clicked();
+    });
     hl->addWidget(unseen_label_);
 
     // Breaking-news counter — number of clusters currently flagged as

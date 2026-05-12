@@ -40,9 +40,12 @@ class CompanyDetailPanel : public QWidget {
     void rebuild_analytics(const pre_ipo::PrivateCompany& c);
 
     // ── Stacked widget ────────────────────────────────────────────────────────
+    // detail_view_ is hosted directly in the stack — no outer QScrollArea.
+    // The dossier is sized so a populated company fits in the typical center
+    // pane without a page-level scrollbar; data-heavy tiles (rounds table,
+    // fund-mark table, investors list, about) get internal scroll instead.
     QStackedWidget* stack_     = nullptr;
     QWidget*        placeholder_ = nullptr;
-    QScrollArea*    detail_scroll_ = nullptr;
     QWidget*        detail_view_ = nullptr;
 
     // ── Header fields ─────────────────────────────────────────────────────────
@@ -82,19 +85,26 @@ class CompanyDetailPanel : public QWidget {
     QTableWidget* rounds_table_ = nullptr;
 
     // ── Investors ─────────────────────────────────────────────────────────────
+    // investors_card_ is the surrounding tile (hidden when investor list is
+    // empty so a sparse company doesn't waste a half-row of vertical space).
+    QWidget*     investors_card_      = nullptr;
     QWidget*     investors_container_ = nullptr;
     QVBoxLayout* investors_layout_    = nullptr;
+    QScrollArea* investors_scroll_    = nullptr;
 
     // ── Public comps ──────────────────────────────────────────────────────────
+    QWidget*     comps_section_   = nullptr;  // header + chip row; hidden when empty
     QWidget*     comps_container_ = nullptr;
     QHBoxLayout* comps_layout_    = nullptr;
 
     // ── Tags ──────────────────────────────────────────────────────────────────
-    QWidget*     tags_container_  = nullptr;
-    QHBoxLayout* tags_layout_     = nullptr;
+    QWidget*     tags_section_   = nullptr;  // header + chip row; hidden when empty
+    QWidget*     tags_container_ = nullptr;
+    QHBoxLayout* tags_layout_    = nullptr;
 
     // ── Description ───────────────────────────────────────────────────────────
-    QLabel* desc_lbl_ = nullptr;
+    QWidget* desc_section_ = nullptr;  // header + scroll-wrapped label; hidden when empty
+    QLabel*  desc_lbl_     = nullptr;
 
     // ── Fund marks (consensus + per-fund rows) ────────────────────────────────
     QWidget*      marks_section_   = nullptr;

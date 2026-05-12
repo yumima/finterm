@@ -28,7 +28,7 @@ CompanyDetailPanel::CompanyDetailPanel(QWidget* parent) : QWidget(parent) {
 
 void CompanyDetailPanel::set_company(const PrivateCompany& company) {
     populate(company);
-    stack_->setCurrentWidget(detail_scroll_);
+    stack_->setCurrentWidget(detail_view_);
 }
 
 void CompanyDetailPanel::clear() {
@@ -51,18 +51,12 @@ void CompanyDetailPanel::build_ui() {
     placeholder_ = build_placeholder();
     stack_->addWidget(placeholder_);
 
-    detail_view_   = build_detail_view();
-    detail_scroll_ = new QScrollArea;
-    detail_scroll_->setWidgetResizable(true);
-    detail_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    detail_scroll_->setStyleSheet(
-        QString("QScrollArea { border:none; background:%1; }"
-                "QScrollBar:vertical { width:5px; background:transparent; }"
-                "QScrollBar::handle:vertical { background:%2; border-radius:2px; min-height:20px; }"
-                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-            .arg(colors::BG_BASE(), colors::BORDER_MED()));
-    detail_scroll_->setWidget(detail_view_);
-    stack_->addWidget(detail_scroll_);
+    // detail_view_ is added directly — no outer QScrollArea. Cards size
+    // themselves to content (with internal scroll on data-heavy tiles), so
+    // a populated dossier fits the pane vertically without a page-level
+    // scrollbar.
+    detail_view_ = build_detail_view();
+    stack_->addWidget(detail_view_);
 
     root->addWidget(stack_, 1);
     stack_->setCurrentWidget(placeholder_);
@@ -86,46 +80,81 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     auto* view = new QWidget;
     view->setStyleSheet(QString("background:%1;").arg(colors::BG_BASE()));
     auto* vl = new QVBoxLayout(view);
-    vl->setContentsMargins(16, 12, 16, 16);
+    vl->setContentsMargins(8, 6, 8, 6);
     vl->setSpacing(0);
 
-    // ── Header: name + status badge + sector ──────────────────────────────────
+    // Reusable thin-scrollbar styling for the internal scroll wrappers
+    // (investors, description). Page-level scroll is gone — these are the
+    // only scrollbars in the panel, and they're 4px ghost bars.
+    const QString thin_scroll_ss =
+        QString("QScrollArea{border:none;background:transparent;}"
+                "QScrollBar:vertical{width:4px;background:transparent;}"
+                "QScrollBar::handle:vertical{background:%1;border-radius:2px;min-height:20px;}"
+                "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
+            .arg(colors::BORDER_MED());
+
+    const QString section_header_ss =
+        QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;")
+            .arg(colors::TEXT_SECONDARY());
+    const QString surface_card_ss =
+        QString("QWidget#detailCard{background:%1;border-radius:4px;border:1px solid %2;}")
+            .arg(colors::BG_SURFACE(), colors::BORDER_DIM());
+
+    auto make_card = [&]() -> QWidget* {
+        auto* w = new QWidget;
+        w->setObjectName("detailCard");
+        w->setStyleSheet(surface_card_ss);
+        return w;
+    };
+
+    auto make_card_title = [&](QWidget* parent, const QString& title) -> QLabel* {
+        auto* l = new QLabel(title, parent);
+        l->setStyleSheet(section_header_ss + QString("background:transparent;"));
+        return l;
+    };
+
+    // ── Header: name + sector + meta (full width) ──────────────────────────
     {
         auto* h = new QWidget;
         h->setStyleSheet(
             QString("background:%1;border-bottom:1px solid %2;")
                 .arg(colors::BG_BASE(), colors::BORDER_DIM()));
         auto* hl = new QVBoxLayout(h);
-        hl->setContentsMargins(0, 0, 0, 10);
-        hl->setSpacing(3);
+        hl->setContentsMargins(0, 0, 0, 6);
+        hl->setSpacing(2);
 
-        auto* row1 = new QHBoxLayout;
         name_lbl_ = new QLabel;
         name_lbl_->setStyleSheet(
-            QString("color:%1;font-size:20px;font-weight:700;background:transparent;")
+            QString("color:%1;font-size:18px;font-weight:700;background:transparent;")
                 .arg(colors::AMBER()));
-        row1->addWidget(name_lbl_);
-        // Note: status_badge_ is created in the IPO STATUS section below —
-        // do NOT construct it here to avoid a double-construction leak.
-        row1->addStretch();
-        hl->addLayout(row1);
+        hl->addWidget(name_lbl_);
 
         sector_lbl_ = new QLabel;
         sector_lbl_->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+            QString("color:%1;font-size:11px;background:transparent;").arg(colors::TEXT_SECONDARY()));
         hl->addWidget(sector_lbl_);
 
-        meta_lbl_ = new QLabel;  // founded · HQ · IPO window
+        meta_lbl_ = new QLabel;
         meta_lbl_->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+            QString("color:%1;font-size:11px;background:transparent;").arg(colors::TEXT_SECONDARY()));
         hl->addWidget(meta_lbl_);
 
         vl->addWidget(h);
-        vl->addSpacing(8);
+        vl->addSpacing(6);
     }
 
-    // ── Key metrics: compact 2-column label:value (no tile borders) ──────────
-    {
+    // ── Section builders ────────────────────────────────────────────────────
+    // Each returns a self-contained card; layout below composes them into
+    // 3-col (top band) + 2-col (mid bands) + full-width (bottom).
+
+    // KEY FACTS — 2×2 label:value grid inside a card.
+    auto build_facts_card = [&]() -> QWidget* {
+        auto* card = make_card();
+        auto* outer = new QVBoxLayout(card);
+        outer->setContentsMargins(8, 6, 8, 6);
+        outer->setSpacing(4);
+        outer->addWidget(make_card_title(card, "KEY FACTS"));
+
         const QString sep =
             QString("QWidget{background:transparent;border-bottom:1px solid %1;}")
                 .arg(colors::BORDER_DIM());
@@ -141,18 +170,14 @@ QWidget* CompanyDetailPanel::build_detail_view() {
                     "font-family:Consolas,monospace;background:transparent;")
                 .arg(colors::TEXT_PRIMARY());
 
-        // 2 rows × 2 cols — no boxes, just spaced label:value. We capture
-        // pointers to BOTH the label widget and the value widget so populate()
-        // can rename the labels per-company (different data sources fill
-        // different tiles meaningfully).
         auto make_kv = [&](const QString& initial_label,
                            QLabel*& label_out, QLabel*& value_out,
                            bool amber = false) -> QWidget* {
             auto* row = new QWidget;
             row->setStyleSheet(sep);
             auto* rl = new QHBoxLayout(row);
-            rl->setContentsMargins(0, 6, 0, 6);
-            rl->setSpacing(8);
+            rl->setContentsMargins(0, 3, 0, 3);
+            rl->setSpacing(6);
             label_out = new QLabel(initial_label, row);
             label_out->setStyleSheet(lbl_ss);
             rl->addWidget(label_out);
@@ -169,71 +194,58 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         g->setSpacing(0);
         g->setColumnStretch(0, 1);
         g->setColumnStretch(1, 1);
-        g->setHorizontalSpacing(16);
+        g->setHorizontalSpacing(14);
 
-        g->addWidget(make_kv("Valuation",    val_lbl_label_,  val_lbl_,   true), 0, 0);
-        g->addWidget(make_kv("Last Round",   round_lbl_label_, round_lbl_),     0, 1);
-        g->addWidget(make_kv("Revenue Est.", rev_lbl_label_,  rev_lbl_),        1, 0);
-        g->addWidget(make_kv("Employees",    emp_lbl_label_,  emp_lbl_),        1, 1);
+        g->addWidget(make_kv("Valuation",    val_lbl_label_,   val_lbl_,   true), 0, 0);
+        g->addWidget(make_kv("Last Round",   round_lbl_label_, round_lbl_),       0, 1);
+        g->addWidget(make_kv("Revenue Est.", rev_lbl_label_,   rev_lbl_),         1, 0);
+        g->addWidget(make_kv("Employees",    emp_lbl_label_,   emp_lbl_),         1, 1);
+        outer->addLayout(g);
+        outer->addStretch();
+        return card;
+    };
 
-        auto* gw = new QWidget;
-        gw->setStyleSheet("background:transparent;");
-        gw->setLayout(g);
-        vl->addWidget(gw);
-        vl->addSpacing(8);
-    }
+    // IPO STATUS — stacked: badge / window / S-1 date.
+    auto build_ipo_card = [&]() -> QWidget* {
+        auto* card = make_card();
+        auto* il = new QVBoxLayout(card);
+        il->setContentsMargins(8, 6, 8, 6);
+        il->setSpacing(6);
+        il->addWidget(make_card_title(card, "IPO STATUS"));
 
-    // ── IPO status + S-1 (inline, no box border) ─────────────────────────────
-    {
-        auto* row = new QWidget;
-        row->setStyleSheet(
-            QString("QWidget{background:%1;border-radius:4px;}")
-                .arg(colors::BG_SURFACE()));
-        auto* rl = new QHBoxLayout(row);
-        rl->setContentsMargins(10, 6, 10, 6);
-        rl->setSpacing(10);
+        status_badge_ = new QLabel(card);
+        status_badge_->setStyleSheet("font-size:12px;font-weight:700;border-radius:3px;padding:3px 10px;");
+        status_badge_->setAlignment(Qt::AlignCenter);
+        // Wrap badge in a row with addStretch so it shrinks to content width.
+        auto* badge_row = new QHBoxLayout;
+        badge_row->setContentsMargins(0, 0, 0, 0);
+        badge_row->addWidget(status_badge_);
+        badge_row->addStretch();
+        il->addLayout(badge_row);
 
-        auto* ipo_lbl = new QLabel("IPO STATUS", row);
-        ipo_lbl->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-                .arg(colors::TEXT_SECONDARY()));
-        rl->addWidget(ipo_lbl);
-
-        status_badge_ = new QLabel(row);
-        status_badge_->setStyleSheet("font-size:12px;font-weight:700;border-radius:3px;padding:2px 8px;");
-        rl->addWidget(status_badge_);
-
-        window_lbl_ = new QLabel(row);
+        window_lbl_ = new QLabel(card);
         window_lbl_->setStyleSheet(
             QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_PRIMARY()));
-        rl->addWidget(window_lbl_);
+        window_lbl_->setWordWrap(true);
+        il->addWidget(window_lbl_);
 
-        rl->addStretch();
-
-        s1_date_lbl_ = new QLabel(row);
+        s1_date_lbl_ = new QLabel(card);
         s1_date_lbl_->setStyleSheet(
             QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
-        rl->addWidget(s1_date_lbl_);
+        s1_date_lbl_->setWordWrap(true);
+        il->addWidget(s1_date_lbl_);
 
-        vl->addWidget(row);
-        vl->addSpacing(10);
-    }
+        il->addStretch();
+        return card;
+    };
 
-    // ── Share price section ───────────────────────────────────────────────────
-    {
-        price_section_ = new QWidget;
-        price_section_->setStyleSheet(
-            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
-                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    // SHARE PRICE — label/value rows.
+    auto build_price_card = [&]() -> QWidget* {
+        price_section_ = make_card();
         auto* ps = new QVBoxLayout(price_section_);
-        ps->setContentsMargins(10, 8, 10, 8);
+        ps->setContentsMargins(8, 6, 8, 6);
         ps->setSpacing(4);
-
-        auto* ph = new QLabel("SHARE PRICE  ·  Private Market Estimates", price_section_);
-        ph->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-                .arg(colors::TEXT_SECONDARY()));
-        ps->addWidget(ph);
+        ps->addWidget(make_card_title(price_section_, "SHARE PRICE"));
 
         const QString price_val_ss =
             QString("color:%1;font-size:13px;font-weight:700;"
@@ -245,6 +257,7 @@ QWidget* CompanyDetailPanel::build_detail_view() {
 
         auto make_price_row = [&](const QString& label, QLabel*& out) {
             auto* row = new QHBoxLayout;
+            row->setContentsMargins(0, 0, 0, 0);
             auto* ll = new QLabel(label, price_section_);
             ll->setStyleSheet(lbl2_ss);
             row->addWidget(ll);
@@ -255,12 +268,13 @@ QWidget* CompanyDetailPanel::build_detail_view() {
             ps->addLayout(row);
         };
 
-        make_price_row("Secondary Market:", sec_price_lbl_);
-        make_price_row("Implied (last round):", implied_price_lbl_);
-        make_price_row("Form D implied:", formd_price_lbl_);
+        make_price_row("Secondary:", sec_price_lbl_);
+        make_price_row("Implied:",   implied_price_lbl_);
+        make_price_row("Form D:",    formd_price_lbl_);
 
         auto* delta_row = new QHBoxLayout;
-        auto* dl = new QLabel("Δ vs last round:", price_section_);
+        delta_row->setContentsMargins(0, 0, 0, 0);
+        auto* dl = new QLabel("Δ vs mark:", price_section_);
         dl->setStyleSheet(lbl2_ss);
         delta_row->addWidget(dl);
         delta_row->addStretch();
@@ -270,22 +284,19 @@ QWidget* CompanyDetailPanel::build_detail_view() {
                 .arg(colors::TEXT_SECONDARY()));
         delta_row->addWidget(price_delta_lbl_);
         ps->addLayout(delta_row);
+        ps->addStretch();
+        return price_section_;
+    };
 
-        vl->addWidget(price_section_);
-        vl->addSpacing(10);
-    }
+    // FUNDING ROUNDS — table inside a card.
+    auto build_rounds_card = [&]() -> QWidget* {
+        auto* card = make_card();
+        auto* outer = new QVBoxLayout(card);
+        outer->setContentsMargins(8, 6, 8, 6);
+        outer->setSpacing(4);
+        outer->addWidget(make_card_title(card, "FUNDING ROUNDS"));
 
-    // ── Funding rounds table (no outer border, with $/share column) ───────────
-    {
-        auto* rh = new QLabel("FUNDING ROUNDS", view);
-        rh->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;"
-                    "padding:4px 0;")
-                .arg(colors::TEXT_SECONDARY()));
-        vl->addWidget(rh);
-        vl->addSpacing(4);
-
-        rounds_table_ = new QTableWidget;
+        rounds_table_ = new QTableWidget(card);
         rounds_table_->setColumnCount(5);
         rounds_table_->setHorizontalHeaderLabels(
             {"Date", "Round", "Amount", "$/Share", "Lead Investors"});
@@ -296,163 +307,134 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         rounds_table_->setAlternatingRowColors(false);
         rounds_table_->verticalHeader()->setVisible(false);
         rounds_table_->setFocusPolicy(Qt::NoFocus);
+        // Table sizes to its actual row count via setFixedHeight in
+        // rebuild_rounds_table() — no inflation, no blank rows below data.
+        // Internal vertical scrollbar appears only when row count would
+        // exceed the cap (rebuild_rounds_table chooses the cap).
         rounds_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        rounds_table_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 
         auto* hdr = rounds_table_->horizontalHeader();
-        hdr->setSectionResizeMode(QHeaderView::Stretch);  // equal distribution
-        hdr->setSectionResizeMode(0, QHeaderView::Fixed);  hdr->resizeSection(0, 80);  // Date
-        hdr->setSectionResizeMode(1, QHeaderView::Fixed);  hdr->resizeSection(1, 80);  // Round
-        hdr->setSectionResizeMode(2, QHeaderView::Fixed);  hdr->resizeSection(2, 72);  // Amount
-        hdr->setSectionResizeMode(3, QHeaderView::Fixed);  hdr->resizeSection(3, 72);  // $/Share
+        hdr->setSectionResizeMode(QHeaderView::Stretch);
+        hdr->setSectionResizeMode(0, QHeaderView::Fixed); hdr->resizeSection(0, 76);
+        hdr->setSectionResizeMode(1, QHeaderView::Fixed); hdr->resizeSection(1, 76);
+        hdr->setSectionResizeMode(2, QHeaderView::Fixed); hdr->resizeSection(2, 68);
+        hdr->setSectionResizeMode(3, QHeaderView::Fixed); hdr->resizeSection(3, 68);
 
         rounds_table_->setStyleSheet(
-            QString("QTableWidget{background:%1;color:%2;border:none;"
+            QString("QTableWidget{background:transparent;color:%1;border:none;"
                     "  font-size:12px;font-family:Consolas,monospace;"
                     "  gridline-color:transparent;}"
-                    "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %3;}"
-                    "QTableWidget::item:selected{background:rgba(217,119,6,0.15);color:%2;}"
-                    "QScrollBar:vertical{width:4px;background:%1;}"
-                    "QScrollBar::handle:vertical{background:%3;}")
-                .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
-
+                    "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %2;}"
+                    "QTableWidget::item:selected{background:rgba(217,119,6,0.15);color:%1;}"
+                    "QScrollBar:vertical{width:4px;background:transparent;}"
+                    "QScrollBar::handle:vertical{background:%2;}")
+                .arg(colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
         hdr->setStyleSheet(
             QString("QHeaderView::section{background:%1;color:%2;border:none;"
                     "  border-bottom:2px solid %3;padding:4px 8px;"
                     "  font-size:12px;font-weight:700;}")
-                .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::AMBER()));
-
-        vl->addWidget(rounds_table_);
-        vl->addSpacing(12);
-    }
-
-    auto make_divider = [&]() -> QWidget* {
-        auto* d = new QWidget;
-        d->setFixedHeight(1);
-        d->setStyleSheet(QString("background:%1;").arg(colors::BORDER_DIM()));
-        return d;
+                .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), colors::AMBER()));
+        outer->addWidget(rounds_table_);
+        return card;
     };
-    Q_UNUSED(make_divider);
 
-    // ── Key Investors ─────────────────────────────────────────────────────────
-    auto* inv_header = new QLabel("KEY INVESTORS");
-    inv_header->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
-            .arg(colors::TEXT_SECONDARY()));
-    vl->addWidget(inv_header);
-    vl->addSpacing(6);
+    // KEY INVESTORS — bullet list inside a card. Internal scroll on the list
+    // so the card height stays bounded — a 30-investor company doesn't push
+    // the rest of the dossier off-screen.
+    auto build_investors_card = [&]() -> QWidget* {
+        investors_card_ = make_card();
+        auto* outer = new QVBoxLayout(investors_card_);
+        outer->setContentsMargins(8, 6, 8, 6);
+        outer->setSpacing(4);
+        outer->addWidget(make_card_title(investors_card_, "KEY INVESTORS"));
 
-    investors_container_ = new QWidget;
-    investors_layout_ = new QVBoxLayout(investors_container_);
-    investors_layout_->setContentsMargins(0, 0, 0, 0);
-    investors_layout_->setSpacing(3);
-    vl->addWidget(investors_container_);
-    vl->addSpacing(14);
-    vl->addWidget(make_divider());
-    vl->addSpacing(12);
+        investors_container_ = new QWidget;
+        investors_container_->setStyleSheet("background:transparent;");
+        investors_layout_ = new QVBoxLayout(investors_container_);
+        investors_layout_->setContentsMargins(0, 0, 0, 0);
+        investors_layout_->setSpacing(3);
 
-    // ── Public Comparables ────────────────────────────────────────────────────
-    auto* comps_header = new QLabel("PUBLIC COMPARABLES");
-    comps_header->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
-            .arg(colors::TEXT_SECONDARY()));
-    vl->addWidget(comps_header);
-    vl->addSpacing(6);
+        investors_scroll_ = new QScrollArea(investors_card_);
+        investors_scroll_->setWidget(investors_container_);
+        investors_scroll_->setWidgetResizable(true);
+        investors_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        investors_scroll_->setStyleSheet(thin_scroll_ss);
+        investors_scroll_->setFrameShape(QFrame::NoFrame);
+        // Scroll height is set in rebuild_investors() once the actual name
+        // count is known — see there for the cap.
+        investors_scroll_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        outer->addWidget(investors_scroll_);
+        return investors_card_;
+    };
 
-    comps_container_ = new QWidget;
-    comps_layout_ = new QHBoxLayout(comps_container_);
-    comps_layout_->setContentsMargins(0, 0, 0, 0);
-    comps_layout_->setSpacing(6);
-    comps_layout_->addStretch();
-    vl->addWidget(comps_container_);
-    vl->addSpacing(14);
-    vl->addWidget(make_divider());
-    vl->addSpacing(12);
+    // ANALYTICS KPI band — 3×2 grid inside a card so it stacks neatly in
+    // a 2-column row (was 1×5 originally; 5-wide doesn't fit half-width).
+    auto build_analytics_card = [&]() -> QWidget* {
+        kpi_section_ = make_card();
+        auto* outer = new QVBoxLayout(kpi_section_);
+        outer->setContentsMargins(8, 6, 8, 6);
+        outer->setSpacing(4);
+        outer->addWidget(make_card_title(kpi_section_, "ANALYTICS"));
 
-    // ── Tags ──────────────────────────────────────────────────────────────────
-    auto* tags_header = new QLabel("TAGS");
-    tags_header->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
-            .arg(colors::TEXT_SECONDARY()));
-    vl->addWidget(tags_header);
-    vl->addSpacing(6);
-
-    tags_container_ = new QWidget;
-    tags_layout_ = new QHBoxLayout(tags_container_);
-    tags_layout_->setContentsMargins(0, 0, 0, 0);
-    tags_layout_->setSpacing(6);
-    tags_layout_->addStretch();
-    vl->addWidget(tags_container_);
-    vl->addSpacing(14);
-    vl->addWidget(make_divider());
-    vl->addSpacing(12);
-
-    // ── ANALYTICS / KPI band ──────────────────────────────────────────────────
-    {
-        kpi_section_ = new QWidget;
-        kpi_section_->setStyleSheet(
-            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
-                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-        auto* kg = new QGridLayout(kpi_section_);
-        kg->setContentsMargins(10, 8, 10, 8);
-        kg->setHorizontalSpacing(18);
+        auto* kg = new QGridLayout;
+        kg->setContentsMargins(0, 0, 0, 0);
+        kg->setHorizontalSpacing(14);
         kg->setVerticalSpacing(4);
 
-        auto add_kpi = [&](int col, const QString& label, QLabel*& out, const QString& color) {
+        auto add_kpi = [&](int row, int col, const QString& label,
+                           QLabel*& out, const QString& color) {
             auto* l = new QLabel(label, kpi_section_);
             l->setStyleSheet(
-                QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
+                QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;background:transparent;")
                     .arg(colors::TEXT_SECONDARY()));
-            kg->addWidget(l, 0, col);
+            kg->addWidget(l, row * 2, col);
             out = new QLabel(QStringLiteral("—"), kpi_section_);
             out->setStyleSheet(
-                QString("color:%1;font-size:14px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+                QString("color:%1;font-size:14px;font-weight:700;"
+                        "font-family:Consolas,monospace;background:transparent;")
                     .arg(color));
-            kg->addWidget(out, 1, col);
+            kg->addWidget(out, row * 2 + 1, col);
         };
 
-        add_kpi(0, "READINESS",     kpi_readiness_lbl_, colors::AMBER());
-        add_kpi(1, "MARK DRIFT",    kpi_drift_lbl_,     colors::POSITIVE());
-        add_kpi(2, "HIIVE PREM.",   kpi_premium_lbl_,   colors::CYAN());
-        add_kpi(3, "DAYS→PRICE",    kpi_days_lbl_,      colors::TEXT_PRIMARY());
-        add_kpi(4, "CUM. RAISED",   kpi_raised_lbl_,    colors::AMBER());
+        // 3 columns × 2 rows so the band stays readable at half width.
+        add_kpi(0, 0, "READINESS",   kpi_readiness_lbl_, colors::AMBER());
+        add_kpi(0, 1, "MARK DRIFT",  kpi_drift_lbl_,     colors::POSITIVE());
+        add_kpi(0, 2, "HIIVE PREM.", kpi_premium_lbl_,   colors::CYAN());
+        add_kpi(1, 0, "DAYS→PRICE",  kpi_days_lbl_,      colors::TEXT_PRIMARY());
+        add_kpi(1, 1, "CUM. RAISED", kpi_raised_lbl_,    colors::AMBER());
+        outer->addLayout(kg);
+        outer->addStretch();
+        return kpi_section_;
+    };
 
-        vl->addWidget(kpi_section_);
-        vl->addSpacing(10);
-    }
-
-    // ── FUND MARKS section ───────────────────────────────────────────────────
-    {
-        marks_section_ = new QWidget;
-        marks_section_->setStyleSheet(
-            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
-                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    // FUND MARKS — consensus row + table inside a card.
+    auto build_marks_card = [&]() -> QWidget* {
+        marks_section_ = make_card();
         auto* mvl = new QVBoxLayout(marks_section_);
-        mvl->setContentsMargins(10, 8, 10, 8);
+        mvl->setContentsMargins(8, 6, 8, 6);
         mvl->setSpacing(4);
-
-        auto* hdr = new QLabel("MUTUAL FUND MARKS  ·  Consensus from N-PORT-P filings", marks_section_);
-        hdr->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-                .arg(colors::TEXT_SECONDARY()));
-        mvl->addWidget(hdr);
+        mvl->addWidget(make_card_title(marks_section_, "FUND MARKS"));
 
         auto* row = new QHBoxLayout;
-        row->setSpacing(16);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(12);
         auto make_metric = [&](const QString& label, QLabel*& out, const QString& color) {
             auto* l = new QLabel(label, marks_section_);
             l->setStyleSheet(
-                QString("color:%1;font-size:12px;background:transparent;")
+                QString("color:%1;font-size:11px;background:transparent;")
                     .arg(colors::TEXT_SECONDARY()));
             row->addWidget(l);
             out = new QLabel("—", marks_section_);
             out->setStyleSheet(
-                QString("color:%1;font-size:12px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+                QString("color:%1;font-size:12px;font-weight:700;"
+                        "font-family:Consolas,monospace;background:transparent;")
                     .arg(color));
             row->addWidget(out);
         };
-        make_metric("Consensus:",  consensus_lbl_,   colors::AMBER());
-        make_metric("Dispersion:", dispersion_lbl_,  colors::TEXT_PRIMARY());
-        make_metric("Funds:",      smart_money_lbl_, colors::CYAN());
+        make_metric("Cons:",  consensus_lbl_,   colors::AMBER());
+        make_metric("Disp:",  dispersion_lbl_,  colors::TEXT_PRIMARY());
+        make_metric("Funds:", smart_money_lbl_, colors::CYAN());
         row->addStretch();
         mvl->addLayout(row);
 
@@ -467,45 +449,127 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         marks_table_->verticalHeader()->setVisible(false);
         marks_table_->setFocusPolicy(Qt::NoFocus);
         marks_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        marks_table_->horizontalHeader()->setStretchLastSection(false);
-        marks_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        marks_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-        marks_table_->horizontalHeader()->resizeSection(1, 80);
-        marks_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
-        marks_table_->horizontalHeader()->resizeSection(2, 90);
-        marks_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
-        marks_table_->horizontalHeader()->resizeSection(3, 90);
+        marks_table_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        auto* mhdr = marks_table_->horizontalHeader();
+        mhdr->setStretchLastSection(false);
+        mhdr->setSectionResizeMode(0, QHeaderView::Stretch);
+        mhdr->setSectionResizeMode(1, QHeaderView::Fixed); mhdr->resizeSection(1, 70);
+        mhdr->setSectionResizeMode(2, QHeaderView::Fixed); mhdr->resizeSection(2, 80);
+        mhdr->setSectionResizeMode(3, QHeaderView::Fixed); mhdr->resizeSection(3, 80);
         marks_table_->setStyleSheet(
             QString("QTableWidget{background:transparent;color:%1;border:none;"
                     "  font-size:12px;font-family:Consolas,monospace;}"
                     "QTableWidget::item{padding:3px 6px;border-bottom:1px solid %2;}")
                 .arg(colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
-        marks_table_->horizontalHeader()->setStyleSheet(
+        mhdr->setStyleSheet(
             QString("QHeaderView::section{background:%1;color:%2;border:none;"
-                    "  border-bottom:1px solid %3;padding:3px 6px;font-size:12px;font-weight:700;}")
+                    "  border-bottom:1px solid %3;padding:3px 6px;"
+                    "  font-size:12px;font-weight:700;}")
                 .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
         mvl->addWidget(marks_table_);
+        return marks_section_;
+    };
 
-        vl->addWidget(marks_section_);
-        vl->addSpacing(10);
+    // Layout strategy — each section hugs its content (no inflation):
+    //   header        — natural height
+    //   top band      — natural height (KEY FACTS / IPO STATUS / SHARE PRICE)
+    //   mid 1         — natural height (max of ROUNDS, INVESTORS card heights)
+    //   mid 2         — natural height (max of ANALYTICS, FUND MARKS heights)
+    //   tail sections — natural height (COMPS / TAGS / ABOUT; each hides empty)
+    //   vl->addStretch() at the very end — leftover pane vertical sinks to
+    //     the bottom instead of inflating cards.
+    //
+    // Data-heavy tiles (rounds_table, marks_table, investors scroll,
+    // description scroll) each set their own setFixedHeight / setMaximumHeight
+    // = min(cap, row_count × row_h + header_pad). They are *exactly* as tall
+    // as their data, capped, with an internal scrollbar that activates only
+    // when the cap is exceeded. A sparse company (1 investor, 0 rounds) lands
+    // at ~480px total; a maxed-out company (20 rounds + 12 investors + 8
+    // marks) lands at ~720px with three internal scrollbars.
+    auto add_row = [&](std::initializer_list<std::pair<QWidget*, int>> cards) {
+        auto* row = new QHBoxLayout;
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(6);
+        for (const auto& [w, s] : cards)
+            row->addWidget(w, s);
+        vl->addLayout(row);
+        vl->addSpacing(4);
+    };
+
+    // ── 3-column top band: KEY FACTS · IPO STATUS · SHARE PRICE ────────────
+    add_row({{build_facts_card(), 2}, {build_ipo_card(), 1}, {build_price_card(), 1}});
+    // ── 2-column mid 1: FUNDING ROUNDS · KEY INVESTORS ─────────────────────
+    add_row({{build_rounds_card(), 3}, {build_investors_card(), 2}});
+    // ── 2-column mid 2: ANALYTICS · FUND MARKS ─────────────────────────────
+    add_row({{build_analytics_card(), 2}, {build_marks_card(), 3}});
+
+    // ── Full-width tail: COMPS · TAGS · ABOUT ──────────────────────────────
+    // Each section lives in a wrapper widget (*_section_) so it can be hidden
+    // wholesale when the company has no data — keeps sparse companies tight
+    // instead of showing three label-only stubs.
+    auto make_chip_section = [&](const QString& title, QWidget*& section_out,
+                                 QWidget*& container_out, QHBoxLayout*& layout_out) {
+        section_out = new QWidget;
+        section_out->setStyleSheet("background:transparent;");
+        auto* sl = new QVBoxLayout(section_out);
+        sl->setContentsMargins(0, 0, 0, 0);
+        sl->setSpacing(4);
+        auto* hdr = new QLabel(title, section_out);
+        hdr->setStyleSheet(section_header_ss);
+        sl->addWidget(hdr);
+        container_out = new QWidget(section_out);
+        container_out->setStyleSheet("background:transparent;");
+        layout_out = new QHBoxLayout(container_out);
+        layout_out->setContentsMargins(0, 0, 0, 0);
+        layout_out->setSpacing(6);
+        layout_out->addStretch();
+        sl->addWidget(container_out);
+    };
+    make_chip_section("PUBLIC COMPARABLES", comps_section_, comps_container_, comps_layout_);
+    vl->addWidget(comps_section_);
+    vl->addSpacing(4);
+    make_chip_section("TAGS", tags_section_, tags_container_, tags_layout_);
+    vl->addWidget(tags_section_);
+    vl->addSpacing(4);
+
+    desc_section_ = new QWidget;
+    desc_section_->setStyleSheet("background:transparent;");
+    {
+        auto* dl = new QVBoxLayout(desc_section_);
+        dl->setContentsMargins(0, 0, 0, 0);
+        dl->setSpacing(4);
+        auto* desc_header = new QLabel("ABOUT", desc_section_);
+        desc_header->setStyleSheet(section_header_ss);
+        dl->addWidget(desc_header);
+
+        desc_lbl_ = new QLabel;
+        desc_lbl_->setWordWrap(true);
+        desc_lbl_->setStyleSheet(
+            QString("color:%1;font-size:12px;line-height:1.5;background:transparent;")
+                .arg(colors::TEXT_PRIMARY()));
+        desc_lbl_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+        desc_lbl_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+
+        // Wrap description in a height-bounded scroll so multi-paragraph
+        // bios don't push the dossier off-screen. Companies without a
+        // description hide the whole section instead of showing an
+        // empty scroll viewport.
+        auto* desc_scroll = new QScrollArea(desc_section_);
+        desc_scroll->setWidget(desc_lbl_);
+        desc_scroll->setWidgetResizable(true);
+        desc_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        desc_scroll->setFrameShape(QFrame::NoFrame);
+        desc_scroll->setStyleSheet(thin_scroll_ss);
+        desc_scroll->setMaximumHeight(56);
+        dl->addWidget(desc_scroll);
     }
+    vl->addWidget(desc_section_);
 
-    // ── Description ───────────────────────────────────────────────────────────
-    auto* desc_header = new QLabel("ABOUT");
-    desc_header->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;")
-            .arg(colors::TEXT_SECONDARY()));
-    vl->addWidget(desc_header);
-    vl->addSpacing(6);
-
-    desc_lbl_ = new QLabel;
-    desc_lbl_->setWordWrap(true);
-    desc_lbl_->setStyleSheet(
-        QString("color:%1; font-size:12px; line-height:1.5; background:transparent;")
-            .arg(colors::TEXT_PRIMARY()));
-    vl->addWidget(desc_lbl_);
-
-    vl->addStretch();
+    // Push any leftover pane vertical to the bottom instead of inflating
+    // cards. With every card sized to its content, a populated dossier in a
+    // tall pane will show empty space below "ABOUT"; that's the right place
+    // for whitespace, not inside the data tiles.
+    vl->addStretch(1);
     return view;
 }
 
@@ -744,6 +808,8 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
 
     // ── Description ──────────────────────────────────────────────────────────
     desc_lbl_->setText(c.description);
+    if (desc_section_)
+        desc_section_->setVisible(!c.description.trimmed().isEmpty());
 
     // ── Fund marks & analytics ───────────────────────────────────────────────
     rebuild_fund_marks(c.fund_marks);
@@ -792,11 +858,15 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& round
         rounds_table_->setItem(i, 4, make_item(persons.join(", ")));
     }
 
-    // Adjust height based on row count
-    const int rows = rounds.size();
-    const int row_h = 28;
-    const int header_h = 30;
-    rounds_table_->setFixedHeight(qMin(200, header_h + rows * row_h + 2));
+    // Table is exactly tall enough for its rows — no blank rows below the
+    // last data row. Cap = 200px (≈ 6-7 visible rows); excess scrolls inside
+    // the table itself, so a 20-round company doesn't push the dossier past
+    // the pane.
+    const int rows     = rounds.size();
+    const int row_h    = 26;
+    const int header_h = 28;
+    const int natural  = header_h + rows * row_h + 4;
+    rounds_table_->setFixedHeight(qMin(200, std::max(header_h + row_h, natural)));
 }
 
 // ── Fund-mark consensus + per-fund rows ──────────────────────────────────────
@@ -858,9 +928,12 @@ void CompanyDetailPanel::rebuild_fund_marks(const QVector<FundMark>& marks) {
             m.mark_pps > 0 ? QString("$%1").arg(m.mark_pps, 0, 'f', 2) : "—",
             Qt::AlignRight | Qt::AlignVCenter));
     }
-    const int row_h = 24;
-    const int header_h = 26;
-    marks_table_->setFixedHeight(qMin(200, header_h + sorted.size() * row_h + 4));
+    // Same shrink-to-content as rebuild_rounds_table. Cap 180px (≈ 7 rows).
+    const int rows     = sorted.size();
+    const int row_h    = 22;
+    const int header_h = 24;
+    const int natural  = header_h + rows * row_h + 4;
+    marks_table_->setFixedHeight(qMin(180, std::max(header_h + row_h, natural)));
 }
 
 // ── Analytics KPI band ───────────────────────────────────────────────────────
@@ -903,6 +976,18 @@ void CompanyDetailPanel::rebuild_investors(const QStringList& investors) {
                 .arg(colors::TEXT_PRIMARY()));
         investors_layout_->addWidget(lbl);
     }
+    // Size the scroll viewport to fit actual names (no blank rows below the
+    // last bullet). Cap at 200px (≈ 9 visible names) — beyond that, scroll.
+    if (investors_scroll_) {
+        const int row_h    = 20;   // matches font-size:12px line height
+        const int pad      = 8;
+        const int natural  = investors.size() * row_h + pad;
+        investors_scroll_->setFixedHeight(qMin(200, std::max(row_h + pad, natural)));
+    }
+    // Hide the whole investors card when nothing to show — keeps the 2-col
+    // mid band balanced for sparse companies instead of leaving an empty tile.
+    if (investors_card_)
+        investors_card_->setVisible(!investors.isEmpty());
 }
 
 void CompanyDetailPanel::rebuild_comps_chips(const QStringList& tickers) {
@@ -926,6 +1011,8 @@ void CompanyDetailPanel::rebuild_comps_chips(const QStringList& tickers) {
         comps_layout_->addWidget(btn);
     }
     comps_layout_->addStretch();
+    if (comps_section_)
+        comps_section_->setVisible(!tickers.isEmpty());
 }
 
 void CompanyDetailPanel::rebuild_tags(const QStringList& tags) {
@@ -942,6 +1029,8 @@ void CompanyDetailPanel::rebuild_tags(const QStringList& tags) {
         tags_layout_->addWidget(lbl);
     }
     tags_layout_->addStretch();
+    if (tags_section_)
+        tags_section_->setVisible(!tags.isEmpty());
 }
 
 } // namespace fincept::screens

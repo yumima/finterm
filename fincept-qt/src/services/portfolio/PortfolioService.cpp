@@ -716,11 +716,17 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
     payload["period"]   = QStringLiteral("1d");
     payload["interval"] = QStringLiteral("1m");
 
+    const qint64 epoch = ++symbol_intraday_epoch_;
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit(
         "historical_period", payload,
-        [self, sym](bool ok, QJsonObject result, QString err) {
+        [self, sym, epoch](bool ok, QJsonObject result, QString err) {
             if (!self) return;
+            if (self->symbol_intraday_epoch_ != epoch) {
+                // Superseded by a newer fetch (user switched ticker/period).
+                // Drop silently — emitting would overwrite fresher results.
+                return;
+            }
             QVector<qint64> ts_ms;
             QVector<double> closes;
             if (ok) {
@@ -765,13 +771,17 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
     // Per-symbol intraday series accumulator. The aggregate emit fires once
     // every symbol has reported (or errored out). Using a shared_ptr lets the
     // multiple callback lambdas all mutate the same accumulator without races
-    // on the main thread.
+    // on the main thread. epoch is captured at fan-out start; if it no longer
+    // matches portfolio_intraday_epoch_ when the last symbol returns, we
+    // drop the accumulator without emitting (a newer 1D request is live).
     struct Accum {
         int pending = 0;
+        qint64 epoch = 0;
         QHash<QString, QHash<qint64, double>> by_symbol; // symbol → {ts_ms: close}
     };
     auto state = std::make_shared<Accum>();
     state->pending = unique_symbols.size();
+    state->epoch   = ++portfolio_intraday_epoch_;
 
     QPointer<PortfolioService> self = this;
     for (const QString& sym : unique_symbols) {
@@ -799,6 +809,12 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                              QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
                 }
                 if (--state->pending > 0) return;
+
+                // All symbols reported — but the user may have moved on
+                // (clicked a different period, switched portfolio) while the
+                // fan-out was running. Drop the accumulator silently in that
+                // case so a fresher fetch's result isn't overwritten.
+                if (self->portfolio_intraday_epoch_ != state->epoch) return;
 
                 // All symbols reported. Union timestamps across every symbol —
                 // a NAV point exists wherever at least one symbol has a bar.

@@ -227,7 +227,12 @@ void PortfolioCommandBar::build_portfolio_selector() {
 void PortfolioCommandBar::build_stats_cluster(QHBoxLayout* layout) {
     auto make_stat = [](QLabel*& lbl) {
         lbl = new QLabel("--");
-        lbl->setStyleSheet("color:inherit; font-size:12px; font-weight:700; letter-spacing:0.3px;");
+        // QSS does not honour `color:inherit` — the labels would render in
+        // Qt's default (often near-black on a dark theme, invisible until
+        // populate() lands and sets a real color). Seed with TEXT_SECONDARY
+        // so the "--" placeholders are legible during the initial load.
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.3px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
     };
     make_stat(nav_label_);
     make_stat(pnl_label_);

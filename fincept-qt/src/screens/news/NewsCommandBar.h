@@ -52,6 +52,11 @@ class NewsCommandBar : public QWidget {
     // NewsScreen routes this into a filter that limits the feed to clusters
     // currently flagged as breaking so the user can see what triggered it.
     void breaking_filter_requested();
+    // Emitted when the user clicks the "X NEW" counter — used as the
+    // "back to default view" affordance after the BREAKING filter is on,
+    // so the user has a one-click return path without hunting for the
+    // WIRE pill.
+    void unseen_clicked();
 
   private:
     QPushButton* make_pill(const QString& text, const QString& value, QHBoxLayout* layout);
@@ -73,7 +78,7 @@ class NewsCommandBar : public QWidget {
     QLabel* summary_label_ = nullptr;
     QLabel* count_label_ = nullptr;
     QPushButton* alert_label_ = nullptr;
-    QLabel* unseen_label_ = nullptr;
+    QPushButton* unseen_label_ = nullptr;
     QLabel* progress_label_ = nullptr;
 
     QComboBox* variant_combo_ = nullptr;

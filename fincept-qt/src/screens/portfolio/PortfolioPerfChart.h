@@ -91,11 +91,23 @@ class PortfolioPerfChart : public QWidget {
     void build_ui();
     void update_chart();
     void update_chart_focus(); ///< Render focused-symbol daily-close series.
+    /// Seed intraday_ts_ms_/intraday_values_ with a 2-point line from
+    /// previous-close → current. Gives the user an immediate visual baseline
+    /// during the ~1–5s yfinance fan-out instead of a "Loading…" placeholder.
+    /// Replaced as soon as set_*_intraday() lands. Reads from summary_
+    /// (aggregate) or summary_.holdings[focus_symbol_] (focus mode).
+    void seed_intraday_from_summary();
     /// Render the 1D intraday series stored in intraday_ts_ms_/intraday_values_.
     /// is_aggregate=true → portfolio NAV mode (uses currency formatting and
     /// resets info-bar labels accordingly). Returns true if data was drawn,
     /// false if the series is empty and a loading placeholder rendered.
     bool render_intraday(bool is_aggregate);
+    /// Render the daily-history chart from focus_dates_/focus_closes_ for the
+    /// non-1D periods (1W/1M/3M/YTD/1Y/5Y/ALL). Sets period_change_label_ in
+    /// both data-present and loading states. On success, writes the series'
+    /// last close to *last_out for the caller's "PRICE" fallback. Returns
+    /// true if data was drawn, false if a loading placeholder was rendered.
+    bool render_daily_focus(double* last_out);
     void set_period(const QString& period);
     void update_period_buttons_enabled();
     QColor chart_color() const;
@@ -163,6 +175,24 @@ class PortfolioPerfChart : public QWidget {
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;
+
+    // Per-symbol order-book cache (fed by MarketDataService::fetch_orderbook
+    // on focus enter). Kept local because (a) bid/ask are intentionally
+    // stripped from the batch quote path — fast_info is too expensive there
+    // — and (b) cache lifetime is "while focused", which fits no shared
+    // policy. ob_symbol_ must match focus_symbol_ before values are read;
+    // otherwise we'd show the prior ticker's spread after a fast switch.
+    void fetch_focus_orderbook();
+    QString ob_symbol_;
+    // Symbol of the in-flight fetch_orderbook request (empty when idle).
+    // Rapid focus switches A→B→C otherwise fan out N concurrent fast_info
+    // calls — with this marker we fire one at a time and chase the latest
+    // focus_symbol_ from the callback when it lands.
+    QString ob_fetch_for_;
+    double  ob_bid_      = 0;
+    double  ob_ask_      = 0;
+    double  ob_bid_size_ = 0;
+    double  ob_ask_size_ = 0;
 };
 
 } // namespace fincept::screens

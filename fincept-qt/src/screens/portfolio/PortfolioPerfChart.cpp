@@ -2,7 +2,10 @@
 #include "screens/portfolio/PortfolioPerfChart.h"
 
 #include "core/logging/Logger.h"
+#include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
+
+#include <QPointer>
 
 #include <QAreaSeries>
 #include <QChart>
@@ -393,8 +396,9 @@ void PortfolioPerfChart::set_period(const QString& period) {
         intraday_requested_ = true;
         intraday_resolved_  = false;  // waiting for callback
         intraday_for_symbol_ = focus_symbol_;  // empty if portfolio view
-        intraday_ts_ms_.clear();
-        intraday_values_.clear();
+        // Plant a 2-point prev-close → current seed so the chart isn't blank
+        // during the fan-out. Real intraday data replaces this on arrival.
+        seed_intraday_from_summary();
         // Indexed (base-100) mode only makes sense over multi-day windows;
         // 1D is a raw-value series. Disable the toggle for the duration so
         // the user can't accidentally render a meaningless rebase.
@@ -473,18 +477,22 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
         if (current_period_ == QStringLiteral("1D")) {
             intraday_requested_ = true;
             intraday_resolved_  = false;
-            intraday_ts_ms_.clear();
-            intraday_values_.clear();
+            seed_intraday_from_summary();
             emit intraday_requested(focus_symbol_);
         } else {
             emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
         }
+        fetch_focus_orderbook();
         return;
     }
     focus_symbol_ = symbol.toUpper();
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
+    // Invalidate prior symbol's order-book snapshot so a fast switch can't
+    // briefly show the previous spread.
+    ob_symbol_.clear();
+    ob_bid_ = ob_ask_ = ob_bid_size_ = ob_ask_size_ = 0;
     if (title_label_)
         title_label_->setText(
             QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
@@ -498,13 +506,56 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
         intraday_requested_  = true;
         intraday_resolved_   = false;
         intraday_for_symbol_ = focus_symbol_;
-        intraday_ts_ms_.clear();
-        intraday_values_.clear();
+        seed_intraday_from_summary();
         emit intraday_requested(focus_symbol_);
     } else {
         emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     }
-    update_chart(); // renders loading placeholder until data lands
+    fetch_focus_orderbook();
+    update_chart(); // renders seed/loading placeholder until real data lands
+}
+
+void PortfolioPerfChart::fetch_focus_orderbook() {
+    if (focus_symbol_.isEmpty())
+        return;
+    // In-flight guard: if a request is already in flight for the current
+    // focus symbol, do nothing — its callback will install the result and,
+    // if focus has since moved, kick off a fresh fetch then. This collapses
+    // rapid focus switches (A→B→C→D) into at most 2 yfinance round trips
+    // (A fires immediately, D fires after A returns) instead of 4.
+    if (ob_fetch_for_ == focus_symbol_)
+        return;
+    ob_fetch_for_ = focus_symbol_;
+
+    const QString want = focus_symbol_;
+    QPointer<PortfolioPerfChart> self = this;
+    services::MarketDataService::instance().fetch_orderbook(
+        want,
+        [self, want](bool ok, services::MarketDataService::OrderbookData ob) {
+            if (!self)
+                return;
+            // Clear the in-flight marker only if it still matches *this*
+            // request — defensive against an unlikely re-entry.
+            if (self->ob_fetch_for_ == want)
+                self->ob_fetch_for_.clear();
+            // Race guard: if the user has switched tickers since the request
+            // went out, drop the result rather than overwriting the current
+            // symbol's spread with stale data. Then chase the new focus so
+            // the user still gets a fresh spread for whatever they landed on.
+            if (self->focus_symbol_ != want) {
+                if (!self->focus_symbol_.isEmpty())
+                    self->fetch_focus_orderbook();
+                return;
+            }
+            if (!ok)
+                return;
+            self->ob_symbol_   = want;
+            self->ob_bid_      = ob.bid;
+            self->ob_ask_      = ob.ask;
+            self->ob_bid_size_ = ob.bid_size;
+            self->ob_ask_size_ = ob.ask_size;
+            self->update_chart();
+        });
 }
 
 void PortfolioPerfChart::clear_focus_symbol() {
@@ -514,6 +565,8 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false;
+    ob_symbol_.clear();
+    ob_bid_ = ob_ask_ = ob_bid_size_ = ob_ask_size_ = 0;
     if (title_label_)
         title_label_->setText(
             QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
@@ -528,6 +581,7 @@ void PortfolioPerfChart::clear_focus_symbol() {
     intraday_for_symbol_.clear();
     if (current_period_ == QStringLiteral("1D")) {
         intraday_requested_ = true;
+        seed_intraday_from_summary();  // aggregate seed now that focus is gone
         emit intraday_requested(QString());
     }
     update_chart();
@@ -612,6 +666,40 @@ void PortfolioPerfChart::set_live_group_visible(bool visible) {
     if (live_vol_label_)    live_vol_label_->setVisible(visible);
 }
 
+void PortfolioPerfChart::seed_intraday_from_summary() {
+    intraday_ts_ms_.clear();
+    intraday_values_.clear();
+
+    double prev_val = 0;
+    double cur_val  = 0;
+    if (focus_symbol_.isEmpty()) {
+        // Aggregate path: previous NAV = current MV minus today's $ change.
+        if (summary_.total_market_value <= 0) return;
+        cur_val  = summary_.total_market_value;
+        prev_val = cur_val - summary_.total_day_change;
+    } else {
+        const portfolio::HoldingWithQuote* held = nullptr;
+        for (const auto& h : summary_.holdings) {
+            if (h.symbol == focus_symbol_) { held = &h; break; }
+        }
+        if (!held || held->current_price <= 0) return;
+        cur_val  = held->current_price;
+        prev_val = cur_val - held->day_change;
+    }
+    if (prev_val <= 0) return;
+
+    // Span the seed across a 6.5h "session length" window ending at now.
+    // Anchoring to UTC midnight made the prior point land at 20:00 ET on the
+    // previous day for US-listed names, which produced confusing HH:mm tick
+    // labels. A rolling session-length window is exchange-agnostic and gets
+    // overwritten by real bars within a few seconds anyway.
+    const qint64 now_ms          = QDateTime::currentMSecsSinceEpoch();
+    constexpr qint64 kSessionMs  = 6 * 60 * 60 * 1000 + 30 * 60 * 1000;  // 6.5h
+    const qint64 session_open_ms = now_ms - kSessionMs;
+    intraday_ts_ms_  = {session_open_ms, now_ms};
+    intraday_values_ = {prev_val, cur_val};
+}
+
 bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     auto* chart = chart_view_->chart();
     chart->removeAllSeries();
@@ -640,9 +728,14 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         } else {
             period_change_label_->setText(QStringLiteral("Loading 1D %1…").arg(label));
         }
-        total_return_label_->clear();
-        nav_label_->clear();
-        if (cost_basis_label_) cost_basis_label_->clear();
+        // Aggregate path owns its own info-bar; per-symbol path's
+        // TOTAL/MV/COST + live row is populated by update_chart_focus()'s
+        // tail from summary_.holdings, so leave those labels alone here.
+        if (is_aggregate) {
+            total_return_label_->clear();
+            nav_label_->clear();
+            if (cost_basis_label_) cost_basis_label_->clear();
+        }
         chart_view_->set_series_data({}, currency_);
         return false;
     }
@@ -720,25 +813,14 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
         if (cost_basis_label_) cost_basis_label_->clear();
-    } else {
-        total_return_label_->setText(QString("LAST %1").arg(QString::number(last, 'f', 2)));
-        total_return_label_->setStyleSheet(
-            QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
-        nav_label_->clear();
-        if (cost_basis_label_) cost_basis_label_->clear();
     }
+    // Non-aggregate: TOTAL/MV/COST handled by update_chart_focus()'s tail
+    // so the labels track summary_.holdings instead of being overwritten
+    // with a duplicate "LAST" token (the live row already shows LAST).
     return true;
 }
 
-void PortfolioPerfChart::update_chart_focus() {
-    // 1D intraday for a focused symbol — distinct render path because the
-    // data shape (epoch-ms timestamps) differs from the daily ISO-date
-    // history used by the longer-period chart.
-    if (current_period_ == QStringLiteral("1D")) {
-        render_intraday(/*is_aggregate=*/false);
-        return;
-    }
-
+bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     auto* chart = chart_view_->chart();
     chart->removeAllSeries();
     const auto old_axes = chart->axes();
@@ -749,19 +831,12 @@ void PortfolioPerfChart::update_chart_focus() {
 
     if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
         focus_dates_.size() != focus_closes_.size()) {
-        // Show "Loading" while the fetch is in-flight; PortfolioService now
-        // always returns data (synthetic flat series for unknown tickers), so
-        // this branch is transient — it clears once the callback fires.
+        // Loading placeholder; caller's tail still populates held-based labels.
         period_change_label_->setText(QStringLiteral("Loading %1…").arg(focus_symbol_));
-        total_return_label_->clear();
-        nav_label_->clear();
-        if (cost_basis_label_)
-            cost_basis_label_->clear();
         chart_view_->set_series_data({}, currency_);
-        return;
+        return false;
     }
 
-    // Build (ms, close) points.
     QVector<QPointF> pts;
     pts.reserve(focus_closes_.size());
     for (int i = 0; i < focus_closes_.size(); ++i) {
@@ -771,9 +846,10 @@ void PortfolioPerfChart::update_chart_focus() {
     std::sort(pts.begin(), pts.end(),
               [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
 
-    const double first = pts.first().y();
-    const double last = pts.last().y();
-    const double pnl = last - first;
+    const double first    = pts.first().y();
+    const double last_val = pts.last().y();
+    if (last_out) *last_out = last_val;
+    const double pnl     = last_val - first;
     const double pnl_pct = first > 0 ? (pnl / first) * 100.0 : 0.0;
 
     auto to_display = [&](double v) -> double {
@@ -782,7 +858,7 @@ void PortfolioPerfChart::update_chart_focus() {
         return first > 0 ? (v / first) * 100.0 : 0.0;
     };
 
-    auto* line = new QLineSeries;
+    auto* line  = new QLineSeries;
     auto* upper = new QLineSeries;
     auto* lower = new QLineSeries;
     double y_min = std::numeric_limits<double>::max();
@@ -821,9 +897,8 @@ void PortfolioPerfChart::update_chart_focus() {
     y->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     y->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     y->setLinePenColor(QColor(ui::colors::BORDER_MED()));
-    // Guard against a zero-range axis (flat series where all closes are equal,
-    // e.g. synthetic $1.00 cash series). setRange(v, v) makes Qt Charts render
-    // each point as a full-height vertical spike rather than a horizontal line.
+    // Guard against zero-range axis (flat synthetic series) — Qt Charts
+    // otherwise stretches each point into a full-height vertical spike.
     const double range = y_max - y_min;
     const double pad = range > 0 ? range * 0.05 : std::max(1.0, std::abs(y_max) * 0.02);
     y->setRange(y_min - pad, y_max + pad);
@@ -834,23 +909,6 @@ void PortfolioPerfChart::update_chart_focus() {
 
     chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"));
 
-    // Info bar — mirror the portfolio-view shape so the user sees the same
-    // four tokens (period change %, total return %, market value, cost basis)
-    // regardless of whether they're looking at the aggregate NAV curve or a
-    // single position. The trailing symbol token was dropped — the symbol is
-    // already in the title prefix above, so repeating it here was redundant.
-    //
-    // Position-level cost basis comes from the user's recorded avg_buy_price.
-    // If the focused symbol isn't held (e.g. user typed a search), we fall
-    // back to "current price" framing the same way the chart's flat segment
-    // does — period% only, market/cost labels cleared.
-    const portfolio::HoldingWithQuote* held = nullptr;
-    for (const auto& h : summary_.holdings) {
-        if (h.symbol == focus_symbol_) { held = &h; break; }
-    }
-
-    // Period change uses series first→last, matching the portfolio chart's
-    // period_pnl computation (and now sharing format: "1M  +2.34%").
     const char* period_color = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
     period_change_label_->setText(QString("%1  %2%3%")
                                       .arg(current_period_)
@@ -858,6 +916,35 @@ void PortfolioPerfChart::update_chart_focus() {
                                       .arg(QString::number(pnl_pct, 'f', 2)));
     period_change_label_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:600;").arg(period_color));
+    return true;
+}
+
+void PortfolioPerfChart::update_chart_focus() {
+    // Chart-render branches:
+    //   1D            → render_intraday() (epoch-ms axis, HH:mm labels).
+    //   1W/1M/…/ALL   → daily-close ISO-date series.
+    // Both branches set period_change_label_ themselves. The shared tail
+    // below populates TOTAL/MV/COST and the live row (LAST/BID/ASK/DAY/VOL)
+    // from summary_.holdings unconditionally, so a ticker switch reflects
+    // in those labels immediately — before the per-period fetch returns.
+    bool have_data = false;
+    double last_price = 0;
+
+    if (current_period_ == QStringLiteral("1D")) {
+        have_data = render_intraday(/*is_aggregate=*/false);
+        if (have_data && !intraday_values_.isEmpty())
+            last_price = intraday_values_.last();
+    } else {
+        have_data = render_daily_focus(&last_price);
+    }
+
+    // ── Shared tail: position-level labels + live row ──────────────────────
+    // Pulls from summary_.holdings so a ticker switch refreshes immediately,
+    // independent of the chart's fetch state.
+    const portfolio::HoldingWithQuote* held = nullptr;
+    for (const auto& h : summary_.holdings) {
+        if (h.symbol == focus_symbol_) { held = &h; break; }
+    }
 
     if (held && held->cost_basis > 0) {
         const double total_pct = held->unrealized_pnl_percent;
@@ -873,20 +960,22 @@ void PortfolioPerfChart::update_chart_focus() {
         if (cost_basis_label_)
             cost_basis_label_->setText(
                 QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2)));
-    } else {
-        // Not a held position — current price stands in for market value, no
-        // cost basis to show.
+    } else if (have_data && last_price > 0) {
+        // Not a held position but chart drew — stand-in price.
         total_return_label_->setText(QString("PRICE %1 %2")
-                                         .arg(currency_).arg(QString::number(last, 'f', 2)));
+                                         .arg(currency_).arg(QString::number(last_price, 'f', 2)));
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
         if (cost_basis_label_) cost_basis_label_->clear();
+    } else {
+        total_return_label_->clear();
+        nav_label_->clear();
+        if (cost_basis_label_) cost_basis_label_->clear();
     }
 
-    // Live trade snapshot row — only shown when we have a held position
-    // (the source of bid/ask/range data); hidden otherwise. Zeros render
-    // as em-dash so the user knows the feed didn't provide that field.
+    // Live trade snapshot row — only when we have a held position.
+    // Zeros render as "--" so the user knows the feed didn't provide that field.
     if (held) {
         auto fmt_or_dash = [](double v, int dec) -> QString {
             return v > 0 ? QString::number(v, 'f', dec) : QStringLiteral("--");
@@ -899,8 +988,14 @@ void PortfolioPerfChart::update_chart_focus() {
             return QString::number(v, 'f', 0);
         };
         live_last_label_->setText(QString("LAST %1").arg(fmt_or_dash(held->current_price, 2)));
-        const QString bid_s = fmt_or_dash(held->bid, 2);
-        const QString ask_s = fmt_or_dash(held->ask, 2);
+        // Prefer the on-demand orderbook snapshot (fetch_focus_orderbook → fast_info)
+        // over the held quote, which leaves bid/ask at 0 because batch_quotes
+        // intentionally skips fast_info for performance.
+        const bool ob_match = (ob_symbol_ == focus_symbol_);
+        const double bid = ob_match && ob_bid_ > 0 ? ob_bid_ : held->bid;
+        const double ask = ob_match && ob_ask_ > 0 ? ob_ask_ : held->ask;
+        const QString bid_s = fmt_or_dash(bid, 2);
+        const QString ask_s = fmt_or_dash(ask, 2);
         live_bidask_label_->setText(QString("BID %1 x ASK %2").arg(bid_s, ask_s));
         live_range_label_->setText(
             QString("DAY %1-%2").arg(fmt_or_dash(held->day_low, 2),

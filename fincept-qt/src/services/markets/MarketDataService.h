@@ -120,6 +120,22 @@ class MarketDataService : public QObject
     using NewsCallback = std::function<void(bool, QJsonArray)>;
     void fetch_news(const QString& symbol, int count, NewsCallback cb);
 
+    /// Live order-book snapshot (bid/ask + sizes) for a single symbol.
+    /// Separate from the batch quote path because it hits yfinance's
+    /// fast_info endpoint per-symbol — calling it inside the batch loop
+    /// would scale O(N) network round trips. Callers invoke this only
+    /// when they actually need bid/ask (e.g. when the perf chart enters
+    /// focus mode for one ticker).
+    struct OrderbookData {
+        QString symbol;
+        double  bid       = 0;
+        double  ask       = 0;
+        double  bid_size  = 0;
+        double  ask_size  = 0;
+    };
+    using OrderbookCallback = std::function<void(bool, OrderbookData)>;
+    void fetch_orderbook(const QString& symbol, OrderbookCallback cb);
+
     /// Fetch full company info (P/E, 52W range, market cap, ratios, etc.)
     using InfoCallback = std::function<void(bool, InfoData)>;
     void fetch_info(const QString& symbol, InfoCallback cb);

@@ -22,7 +22,11 @@ namespace fincept::screens {
 
 NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDetailOverlay");
-    setFixedWidth(420);
+    // Width is now governed by whatever QSplitter cell hosts this widget
+    // — NewsFeedPanel::set_middle_widget seeds an initial size and the user
+    // can resize via the partition handles. Setting setFixedWidth here
+    // would re-lock the widget and make the splitter handles slide the
+    // middle as a rigid block (the wrong-pane-moves bug, 2026-05-12).
     hide(); // start hidden — shown on article click
 
     auto* root = new QVBoxLayout(this);
@@ -438,11 +442,18 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     stack_->setCurrentIndex(1);
     open_panel();
 
-    // Render headline as a link to the article URL. Use rich-text escape on
-    // the headline so quote chars / ampersands don't break the markup.
+    // Render headline as a link to the article URL. Qt's rich-text engine
+    // does NOT honour `color:inherit` — without an explicit color the anchor
+    // falls back to QPalette::Link, which on our dark theme renders as a
+    // dark blue indistinguishable from the background. Wrap the text in a
+    // <span> with the literal TEXT_PRIMARY hex so the anchor reads in the
+    // same cream/white as the rest of the article body.
     headline_label_->setText(
-        QString("<a href=\"%1\" style=\"text-decoration:none;color:inherit;\">%2</a>")
-            .arg(article.link.toHtmlEscaped(), article.headline.toHtmlEscaped()));
+        QString("<a href=\"%1\" style=\"text-decoration:none;\">"
+                "<span style=\"color:%2;\">%3</span></a>")
+            .arg(article.link.toHtmlEscaped(),
+                 ui::colors::TEXT_PRIMARY(),
+                 article.headline.toHtmlEscaped()));
     headline_label_->setToolTip(article.link);
 
     // Priority badge

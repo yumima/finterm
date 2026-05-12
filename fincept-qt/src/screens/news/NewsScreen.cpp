@@ -115,6 +115,12 @@ void NewsScreen::connect_signals() {
     connect(command_bar_, &NewsCommandBar::breaking_filter_requested, this, [this]() {
         on_view_mode_changed(QStringLiteral("CLUSTERS"));
     });
+    // "X NEW" click — back-out from the BREAKING/clusters view to the
+    // default WIRE feed. Gives the user a one-click escape from the
+    // alert filter without hunting for the WIRE pill.
+    connect(command_bar_, &NewsCommandBar::unseen_clicked, this, [this]() {
+        on_view_mode_changed(QStringLiteral("WIRE"));
+    });
 
     // Feed panel
     connect(feed_panel_, &NewsFeedPanel::article_clicked, this, &NewsScreen::on_article_clicked);
