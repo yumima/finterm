@@ -234,12 +234,14 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
 
     // Disk-cache hydration: emit the last-built summary from the previous
     // session immediately so the UI paints with real (if stale) numbers while
-    // the quote refetch + recompute runs below. Cached summary is the same
-    // shape consumers expect — they can't tell it's from disk.
+    // the quote refetch + recompute runs below. The cached summary carries
+    // `from_cache=true` so the UI can flag it as stale until the live recompute
+    // overwrites it.
     const auto cached_doc = portfolio_disk_cache().load(summary_filename(portfolio_id));
     if (cached_doc.isObject()) {
-        const auto summary = summary_from_json(cached_doc.object());
+        auto summary = summary_from_json(cached_doc.object());
         if (!summary.portfolio.id.isEmpty()) {
+            summary.from_cache = true;
             emit summary_loaded(summary);
         }
     }

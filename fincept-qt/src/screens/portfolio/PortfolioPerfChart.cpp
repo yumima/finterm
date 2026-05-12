@@ -279,6 +279,20 @@ void PortfolioPerfChart::build_ui() {
 
 void PortfolioPerfChart::set_summary(const portfolio::PortfolioSummary& summary) {
     summary_ = summary;
+    // Refresh the title so the "CACHED" badge reflects the freshness of
+    // the newly-arrived summary — the cached-then-live emit pattern in
+    // PortfolioService::load_summary lands cached=true first, then a
+    // second emit with cached=false replaces it.
+    if (title_label_ && focus_symbol_.isEmpty()) {
+        const QString stale_tag = summary.from_cache
+            ? QString(" <span style='color:%1;font-weight:600'>CACHED</span>")
+                  .arg(ui::colors::TEXT_TERTIARY())
+            : QString();
+        title_label_->setText(
+            QString("<span style='color:%1'>HOLDINGS</span>"
+                    " <span style='color:%2'>PERFORMANCE</span>%3")
+                .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY(), stale_tag));
+    }
     update_chart();
 }
 

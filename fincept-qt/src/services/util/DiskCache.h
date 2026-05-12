@@ -52,8 +52,20 @@ public:
     // Reads filename and returns the parsed JSON document, or an empty
     // document on any failure (missing file, unreadable, malformed). Callers
     // typically test the return with isObject() / isArray().
+    //
+    // Pre-existing cache files written before save() started clamping perms
+    // get a one-time chmod 0600 on first load so older installs migrate
+    // forward without needing a fresh write. Cheap (a stat + maybe-chmod
+    // per file) and idempotent.
     QJsonDocument load(const QString& filename) const {
-        QFile f(path(filename));
+        const QString p = path(filename);
+        const QFile::Permissions cur = QFile::permissions(p);
+        const QFile::Permissions owner_only =
+            QFile::ReadOwner | QFile::WriteOwner;
+        if (cur && (cur & ~owner_only)) {
+            QFile::setPermissions(p, owner_only);
+        }
+        QFile f(p);
         if (!f.open(QIODevice::ReadOnly)) return {};
         const QByteArray bytes = f.readAll();
         f.close();

@@ -78,6 +78,11 @@ struct PortfolioSummary {
     int gainers = 0;
     int losers = 0;
     QString last_updated;
+    // True when this summary was hydrated from the on-disk cache rather
+    // than a fresh live computation. Used by the UI to surface a small
+    // "CACHED" badge so the user knows the numbers may be stale until
+    // the in-flight quote refetch lands and emits a fresh summary.
+    bool from_cache = false;
 };
 
 // ── Computed analytics ───────────────────────────────────────────────────────
