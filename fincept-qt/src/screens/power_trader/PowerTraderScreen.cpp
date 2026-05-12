@@ -371,6 +371,13 @@ void PowerTraderScreen::build_ui() {
             // Built AFTER tab_widget_ is added so we can attach an event filter
             // to track its geometry and keep the drawer in sync on resize.
             build_member_drawer();
+
+            // Switching tabs while the member-detail drawer is open auto-
+            // dismisses it — clicking any tab IS the return path. Wiring
+            // this here (after the drawer exists) avoids a stale this/null
+            // capture order.
+            connect(tab_widget_, &QTabWidget::currentChanged, this,
+                    [this](int) { hide_member_drawer(); });
         }
         view_stack_->addWidget(congress_view_);  // index 0
 
@@ -566,7 +573,10 @@ QWidget* PowerTraderScreen::build_body_strip() {
     gap2->setStyleSheet(QString("color:%1;").arg(ui::colors::BORDER_DIM()));
     hl->addWidget(gap2);
 
-    watchlist_filter_ = new QPushButton(QStringLiteral("\xe2\x98\x85 WATCHLIST"));  // ★
+    // Plain "WATCHLIST" — the prior ★ prefix rendered as a missing-glyph box
+    // on systems whose default font lacks U+2605. The pill's checked-state
+    // amber background is the visual cue when active.
+    watchlist_filter_ = new QPushButton(QStringLiteral("WATCHLIST"));
     watchlist_filter_->setCheckable(true);
     watchlist_filter_->setStyleSheet(pill_base);
     watchlist_filter_->setCursor(Qt::PointingHandCursor);
@@ -691,10 +701,12 @@ void PowerTraderScreen::build_member_drawer() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
-    // Top bar — left-anchored BACK pill (highly visible: amber border, big
-    // text label) is the primary close affordance because users were getting
-    // stuck inside the drawer with no obvious return path. A subtle × on the
-    // right is the secondary "shut window" shortcut for power users.
+    // Top bar — title + close pill. The drawer no longer covers the tab bar
+    // above tab_widget_'s content area, so the user can switch back to any
+    // tab (Overview / Rankings / etc.) directly — that's the return path.
+    // The explicit "BACK" pill was removed because users were asking "back to
+    // what?"; the tab bar above is the obvious affordance. A subtle × stays
+    // on the right for keyboard-shy power users alongside the Esc shortcut.
     auto* bar = new QWidget(member_drawer_);
     bar->setFixedHeight(36);
     bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
@@ -703,26 +715,13 @@ void PowerTraderScreen::build_member_drawer() {
     bl->setContentsMargins(10, 0, 10, 0);
     bl->setSpacing(10);
 
-    auto* back_btn = new QPushButton(QStringLiteral("\xe2\x86\x90  BACK"), bar);
-    back_btn->setFixedHeight(24);
-    back_btn->setCursor(Qt::PointingHandCursor);
-    back_btn->setToolTip(QStringLiteral("Return to the previous tab (Esc)"));
-    back_btn->setStyleSheet(
-        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                "border-radius:2px;padding:0 12px;font-size:12px;font-weight:700;"
-                "letter-spacing:1.0px;}"
-                "QPushButton:hover{background:%2;color:%3;}")
-            .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::AMBER()));
-    connect(back_btn, &QPushButton::clicked, this, &PowerTraderScreen::hide_member_drawer);
-    bl->addWidget(back_btn);
-
     auto* title = new QLabel(QStringLiteral("MEMBER DETAIL"), bar);
     title->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
                                  "letter-spacing:1.5px;background:transparent;")
                              .arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(title);
 
-    auto* hint = new QLabel(QStringLiteral("(Esc to close)"), bar);
+    auto* hint = new QLabel(QStringLiteral("(switch tabs above, or Esc to close)"), bar);
     hint->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;")
                             .arg(ui::colors::TEXT_TERTIARY()));
     bl->addWidget(hint);
@@ -762,9 +761,15 @@ void PowerTraderScreen::build_member_drawer() {
 
 void PowerTraderScreen::show_member_drawer() {
     if (!member_drawer_ || !tab_widget_) return;
-    const QPoint pos = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
-    member_drawer_->setGeometry(pos.x(), pos.y(),
-                                tab_widget_->width(), tab_widget_->height());
+    // Position the drawer so it covers only the tab's CONTENT area, leaving
+    // the tab bar at the top visible and clickable. The user can dismiss the
+    // detail by clicking any other tab — that's the obvious return path the
+    // old "BACK" pill was trying (and failing) to communicate.
+    const QPoint pos    = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
+    const int    tab_h  = tab_widget_->tabBar() ? tab_widget_->tabBar()->height() : 0;
+    member_drawer_->setGeometry(pos.x(), pos.y() + tab_h,
+                                tab_widget_->width(),
+                                tab_widget_->height() - tab_h);
     member_drawer_->raise();
     member_drawer_->show();
     member_drawer_->setFocus();
@@ -777,9 +782,11 @@ void PowerTraderScreen::hide_member_drawer() {
 bool PowerTraderScreen::eventFilter(QObject* obj, QEvent* ev) {
     if (obj == tab_widget_ && member_drawer_ && member_drawer_->isVisible() &&
         (ev->type() == QEvent::Resize || ev->type() == QEvent::Move)) {
-        const QPoint pos = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
-        member_drawer_->setGeometry(pos.x(), pos.y(),
-                                    tab_widget_->width(), tab_widget_->height());
+        const QPoint pos   = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
+        const int    tab_h = tab_widget_->tabBar() ? tab_widget_->tabBar()->height() : 0;
+        member_drawer_->setGeometry(pos.x(), pos.y() + tab_h,
+                                    tab_widget_->width(),
+                                    tab_widget_->height() - tab_h);
     }
     return QWidget::eventFilter(obj, ev);
 }
@@ -801,7 +808,10 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         const bool starred = watchlist_.contains(m.id);
         if (only_watched && !starred) continue;
         auto* item = new QListWidgetItem;
-        const QString star_tag  = starred ? QStringLiteral("\xe2\x98\x85 ") : QString();  // ★
+        // ASCII "* " prefix marks watched members. Same reason as the
+        // WATCHLIST button: the U+2605 ★ glyph rendered as a missing-glyph
+        // box on some installs.
+        const QString star_tag  = starred ? QStringLiteral("* ") : QString();
         const QString party_tag = m.party.isEmpty() ? "" : "[" + m.party + "] ";
         const QString chb_tag   = m.chamber == MemberChamber::Senate ? "SEN" : "HSE";
         const QString sign      = m.alpha_ytd >= 0 ? "+" : "";
