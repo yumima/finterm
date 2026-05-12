@@ -3,11 +3,13 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,8 +18,60 @@ namespace fincept::services {
 
 using namespace fincept::relmap;
 
+namespace {
+
+// Persistent on-disk cache so the relationship-map panel paints the most
+// recently-viewed ticker immediately on next launch. One file per ticker;
+// directory bounded by the universe the user has actually browsed.
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("relationship_map"));
+    return c;
+}
+
+// Sanitize a ticker into an alnum-only filename stem. Tickers can include
+// dots (BRK.B) or hyphens (BRK-B) which would break case-insensitive
+// filesystem lookups. ".json" is appended by the caller.
+QString ticker_filename(const QString& ticker) {
+    QString s;
+    s.reserve(ticker.size());
+    for (const QChar c : ticker)
+        if (c.isLetterOrNumber())
+            s.append(c.toUpper());
+    return s + QStringLiteral(".json");
+}
+
+}  // namespace
+
 RelationshipMapService& RelationshipMapService::instance() {
     static RelationshipMapService s;
+    // First-touch hydrate: replay each cached ticker through CacheManager so
+    // the next fetch(ticker) hits warm in-memory cache and emits instantly.
+    // Done here rather than in the ctor because RelationshipMapService is an
+    // aggregate type (defaulted ctor) and we want to keep it that way.
+    static bool hydrated = false;
+    if (!hydrated) {
+        hydrated = true;
+        const QStringList files = disk_cache().files();
+        for (const QString& fname : files) {
+            const QJsonDocument doc = disk_cache().load(fname);
+            if (!doc.isObject()) continue;
+            // Recover the ticker from the JSON (rather than parsing fname) so
+            // a corrupted filename doesn't poison the cache key. Falls back to
+            // fname stem if the payload doesn't carry company.ticker.
+            const QJsonObject root = doc.object();
+            QString ticker = root.value("company").toObject().value("ticker").toString();
+            if (ticker.isEmpty()) {
+                ticker = fname;
+                if (ticker.endsWith(QStringLiteral(".json"))) ticker.chop(5);
+            }
+            const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+            // Use the same TTL the live fetch uses so a stale on-disk copy
+            // doesn't masquerade as fresh — CacheManager will expire it.
+            fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(),
+                                                  QVariant(blob),
+                                                  /*ttl_sec=*/10 * 60, "relmap");
+        }
+    }
     return s;
 }
 
@@ -58,6 +112,13 @@ void RelationshipMapService::fetch(const QString& ticker) {
 
             // Cache raw JSON output
             fincept::CacheManager::instance().put(cache_key, QVariant(result.output), kRelMapTtlSec, "relmap");
+
+            // Persist to disk so the next launch hydrates the CacheManager
+            // entry above without a Python round-trip. Save the parsed JSON
+            // (not the raw stdout) so we get a clean, validated payload.
+            const auto doc = QJsonDocument::fromJson(result.output.toUtf8());
+            if (doc.isObject())
+                disk_cache().save(ticker_filename(current_ticker_), doc);
 
             emit progress_changed(70, "Parsing results...");
             parse_result(result.output);

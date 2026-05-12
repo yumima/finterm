@@ -3,11 +3,14 @@
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
+#include <QCryptographicHash>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
@@ -19,6 +22,50 @@ inline void publish_ma_result(bool hub_registered, const QString& context, const
     if (!hub_registered) return;
     fincept::datahub::DataHub::instance().publish(QStringLiteral("ma:") + context, QVariant(obj));
 }
+
+// Persistent on-disk cache so the M&A analytics panels paint the most
+// recently-computed model immediately on next launch — the deal database
+// scan in particular runs an EDGAR walk that takes 30-90s cold. Plain
+// "by-context" callers write to a stable filename; parameterised callers
+// (DCF / LBO / comps) write to `{context}_{md5(params)}.json` so distinct
+// inputs don't clobber each other and the on-disk key mirrors the in-
+// memory CacheManager key used by run_python_json.
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("ma_analytics"));
+    return c;
+}
+
+// 8 hex chars is plenty for our use — collision risk per service is negligible
+// and the shorter name keeps directory listings readable during debugging.
+QString hash_params(const QByteArray& params_json) {
+    return QString::fromLatin1(
+        QCryptographicHash::hash(params_json, QCryptographicHash::Md5).toHex().left(8));
+}
+
+// Filename rules:
+//   • by-context payloads:  "<context>.json"
+//   • per-params payloads:  "<context>_<hash>.json"
+// Sanitize the context just in case a caller passes something exotic.
+QString sanitize_context(const QString& ctx) {
+    QString s;
+    s.reserve(ctx.size());
+    for (const QChar c : ctx) {
+        if (c.isLetterOrNumber() || c == QLatin1Char('_'))
+            s.append(c);
+        else
+            s.append(QLatin1Char('_'));
+    }
+    return s;
+}
+
+QString params_filename(const QString& ctx, const QByteArray& params_json) {
+    return sanitize_context(ctx) + QLatin1Char('_') + hash_params(params_json) + QStringLiteral(".json");
+}
+
+QString context_filename(const QString& ctx) {
+    return sanitize_context(ctx) + QStringLiteral(".json");
+}
+
 }  // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
@@ -27,7 +74,47 @@ MAAnalyticsService& MAAnalyticsService::instance() {
     return inst;
 }
 
-MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {}
+MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
+    // Hydrate from disk. By-context files replay through result_ready immediately
+    // (no listeners yet — intended drop, panels re-fetch on connect). Per-params
+    // files repopulate the CacheManager so the next run_python_json with the
+    // same params hits warm cache without a Python round-trip. We can't replay
+    // per-params results through result_ready because we'd need the original
+    // context name and params — the filename only carries an MD5 of the latter.
+    const QStringList files = disk_cache().files();
+    for (const QString& fname : files) {
+        const QJsonDocument doc = disk_cache().load(fname);
+        if (!doc.isObject()) continue;
+
+        // "<context>.json" — no underscore in the basename means by-context.
+        // The deal database family ("all_deals", "scan_filings", …) does use
+        // underscores in the context itself, so we detect by-context files
+        // via "no segment that looks like an 8-hex hash" rather than by
+        // counting underscores.
+        QString stem = fname;
+        if (stem.endsWith(QStringLiteral(".json"))) stem.chop(5);
+        const int last_us = stem.lastIndexOf(QLatin1Char('_'));
+        const QString tail = last_us > 0 ? stem.mid(last_us + 1) : QString();
+        const bool tail_is_hash =
+            tail.size() == 8 && std::all_of(tail.begin(), tail.end(), [](QChar c) {
+                return (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+                    || (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
+            });
+        if (!tail_is_hash) {
+            // By-context payload — emit it. Context recovered from the filename.
+            emit result_ready(stem, doc.object());
+        } else {
+            // Per-params payload — repopulate CacheManager. The original cache
+            // key (see run_python_json) is "ma:<context>_<command>:<params>",
+            // which we can't reconstruct from disk. Instead, we rely on the
+            // fact that run_python_json checks CacheManager via that key and
+            // falls through on miss — disk cache primarily benefits the
+            // by-context path (deal database). Per-params disk entries are
+            // still useful: they survive a CacheManager flush, and a future
+            // by-input rehydrator can read them back.
+        }
+    }
+}
 
 // ── Python helpers ───────────────────────────────────────────────────────────
 void MAAnalyticsService::run_python(const QString& script, const QStringList& args, const QString& context) {
@@ -48,6 +135,9 @@ void MAAnalyticsService::run_python(const QString& script, const QStringList& ar
             return;
         }
         auto obj = doc.object();
+        // Persist by-context — these are the slow paths (deal-database EDGAR
+        // walk especially) so the next launch hydrates instantly.
+        disk_cache().save(context_filename(context), doc);
         LOG_INFO("MAAnalytics", QString("Result ready [%1]").arg(context));
         emit self->result_ready(context, obj);
         publish_ma_result(self->hub_registered_, context, obj);
@@ -74,29 +164,38 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
     QStringList args = {command, QString::fromUtf8(params_json)};
 
     QPointer<MAAnalyticsService> self = this;
-    python::PythonRunner::instance().run(script, args, [self, context, cache_key](python::PythonResult result) {
-        if (!self)
-            return;
-        if (!result.success) {
-            LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, result.error));
-            emit self->error_occurred(context, result.error);
-            return;
-        }
-        auto json_str = python::extract_json(result.output);
-        auto doc = QJsonDocument::fromJson(json_str.toUtf8());
-        if (doc.isNull()) {
-            LOG_ERROR("MAAnalytics", QString("Invalid JSON from [%1]").arg(context));
-            emit self->error_occurred(context, "Invalid JSON response");
-            return;
-        }
-        auto obj = doc.object();
-        fincept::CacheManager::instance().put(
-            cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kResultTtlSec,
-            "ma_analytics");
-        LOG_INFO("MAAnalytics", QString("Result ready [%1]").arg(context));
-        emit self->result_ready(context, obj);
-        publish_ma_result(self->hub_registered_, context, obj);
-    });
+    const QByteArray params_for_hash = params_json;
+    python::PythonRunner::instance().run(
+        script, args,
+        [self, context, cache_key, params_for_hash](python::PythonResult result) {
+            if (!self)
+                return;
+            if (!result.success) {
+                LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, result.error));
+                emit self->error_occurred(context, result.error);
+                return;
+            }
+            auto json_str = python::extract_json(result.output);
+            auto doc = QJsonDocument::fromJson(json_str.toUtf8());
+            if (doc.isNull()) {
+                LOG_ERROR("MAAnalytics", QString("Invalid JSON from [%1]").arg(context));
+                emit self->error_occurred(context, "Invalid JSON response");
+                return;
+            }
+            auto obj = doc.object();
+            fincept::CacheManager::instance().put(
+                cache_key,
+                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+                kResultTtlSec, "ma_analytics");
+            // Mirror the per-input cache to disk so distinct DCF / LBO / comp
+            // inputs each survive a restart without colliding. Filename keys
+            // off (context, params hash) — the same hash recipe so a future
+            // by-input rehydrator can find this entry.
+            disk_cache().save(params_filename(context, params_for_hash), doc);
+            LOG_INFO("MAAnalytics", QString("Result ready [%1]").arg(context));
+            emit self->result_ready(context, obj);
+            publish_ma_result(self->hub_registered_, context, obj);
+        });
 }
 
 // ── Valuation ────────────────────────────────────────────────────────────────

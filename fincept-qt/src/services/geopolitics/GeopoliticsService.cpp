@@ -4,11 +4,13 @@
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
+#include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPointer>
@@ -24,6 +26,64 @@ namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
     fincept::datahub::DataHub::instance().publish(topic, value);
 }
+
+// Persistent on-disk cache so the geopolitics panels hydrate from the most
+// recent dataset on cold start. One file per category — HDX (per subtype),
+// trade analysis (per direction), and geolocation. Sanitized to alnum-only
+// basenames so user-supplied country/topic strings can't escape the dir.
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("geopolitics"));
+    return c;
+}
+
+QString sanitize_token(const QString& in) {
+    QString s;
+    s.reserve(in.size());
+    for (const QChar c : in) {
+        if (c.isLetterOrNumber()) s.append(c.toLower());
+        else                      s.append(QChar('_'));
+    }
+    return s;
+}
+
+// Parse a cached HDX file back to a QVector<HDXDataset>. The raw Python output
+// is stored as-is, so this mirrors parse_hdx_results below but works off a
+// QJsonDocument directly.
+QVector<HDXDataset> hdx_from_doc(const QJsonDocument& doc) {
+    QVector<HDXDataset> datasets;
+    if (doc.isNull()) return datasets;
+    QJsonArray arr;
+    if (doc.isObject()) {
+        const auto root = doc.object();
+        if (root.contains("data"))
+            arr = root.value("data").toObject().value("datasets").toArray();
+        else if (root.contains("datasets"))
+            arr = root.value("datasets").toArray();
+    } else if (doc.isArray()) {
+        arr = doc.array();
+    }
+    datasets.reserve(arr.size());
+    for (const auto& v : arr) {
+        const auto o = v.toObject();
+        HDXDataset d;
+        d.id = o["id"].toString();
+        d.title = o["title"].toString();
+        d.organization = o["organization"].toString();
+        d.notes = o["notes"].toString();
+        d.date = o["dataset_date"].toString();
+        d.num_resources = o["num_resources"].toInt();
+        for (const auto& t : o["tags"].toArray()) {
+            if (t.isString())
+                d.tags.append(t.toString());
+            else
+                d.tags.append(t.toObject()["name"].toString());
+        }
+        d.raw = o;
+        datasets.append(d);
+    }
+    return datasets;
+}
+
 }  // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
@@ -32,7 +92,46 @@ GeopoliticsService& GeopoliticsService::instance() {
     return inst;
 }
 
-GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {}
+GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
+    // Hydrate from disk if we have a prior session's cache. The *_loaded
+    // signals emitted here go to no listeners (UI wires up later) — that's
+    // the intended drop; the live fetch will re-emit when a panel subscribes.
+    const QStringList files = disk_cache().files();
+    for (const QString& fname : files) {
+        const QJsonDocument doc = disk_cache().load(fname);
+        if (doc.isNull()) continue;
+
+        if (fname.startsWith(QStringLiteral("hdx_"))) {
+            // hdx_<context>.json — context is the suffix between "hdx_" and ".json".
+            // For per-query variants ("country_brazil", "topic_food", "search_xxx")
+            // collapse back to the bare category ("country" / "topic" / "search")
+            // so the emit matches the live-fetch path the UI subscribes to.
+            QString context = fname.mid(4);
+            if (context.endsWith(QStringLiteral(".json")))
+                context.chop(5);
+            const int us = context.indexOf(QLatin1Char('_'));
+            if (us > 0) {
+                const QString head = context.left(us);
+                if (head == QStringLiteral("country") || head == QStringLiteral("topic")
+                    || head == QStringLiteral("search"))
+                    context = head;
+            }
+            const auto datasets = hdx_from_doc(doc);
+            emit hdx_results_loaded(context, datasets);
+        } else if (fname == QStringLiteral("trade_benefits.json")) {
+            if (doc.isObject())
+                emit trade_result_ready(QStringLiteral("trade_benefits"), doc.object());
+        } else if (fname == QStringLiteral("trade_restrictions.json")) {
+            if (doc.isObject())
+                emit trade_result_ready(QStringLiteral("trade_restrictions"), doc.object());
+        } else if (fname == QStringLiteral("geolocation.json")) {
+            if (doc.isObject())
+                emit geolocation_ready(doc.object());
+        }
+        // events.json reserved for future use when the conflict-monitor
+        // endpoint comes back online (currently kApiBase is empty).
+    }
+}
 
 // ── Python helper ────────────────────────────────────────────────────────────
 void GeopoliticsService::run_python(const QString& script, const QStringList& args, const QString& context,
@@ -307,12 +406,24 @@ static QVector<HDXDataset> parse_hdx_results(const QString& output) {
     return datasets;
 }
 
+// Persist the raw Python output for an HDX search so the next launch hydrates
+// instantly. Filename is "hdx_<context>.json" where context matches the value
+// passed to hdx_results_loaded — keep that 1:1 with the hydration map in the
+// constructor so a saved file always replays through the same emit path.
+static void persist_hdx_response(const QString& context, const QString& out) {
+    const QString json_str = python::extract_json(out);
+    const auto doc = QJsonDocument::fromJson(json_str.toUtf8());
+    if (doc.isNull()) return;
+    disk_cache().save(QStringLiteral("hdx_") + context + QStringLiteral(".json"), doc);
+}
+
 void GeopoliticsService::search_hdx_conflicts() {
     run_python("hdx_data.py", {"search_conflict", "", "20"}, "hdx_conflicts", [this](bool ok, const QString& out) {
         if (!ok) {
             emit error_occurred("hdx_conflicts", out);
             return;
         }
+        persist_hdx_response(QStringLiteral("conflicts"), out);
         const auto datasets = parse_hdx_results(out);
         emit hdx_results_loaded("conflicts", datasets);
         publish_hdx_result(QStringLiteral("conflicts"), datasets);
@@ -326,6 +437,7 @@ void GeopoliticsService::search_hdx_humanitarian() {
                        emit error_occurred("hdx_humanitarian", out);
                        return;
                    }
+                   persist_hdx_response(QStringLiteral("humanitarian"), out);
                    const auto datasets = parse_hdx_results(out);
                    emit hdx_results_loaded("humanitarian", datasets);
                    publish_hdx_result(QStringLiteral("humanitarian"), datasets);
@@ -338,6 +450,9 @@ void GeopoliticsService::search_hdx_by_country(const QString& country) {
             emit error_occurred("hdx_country", out);
             return;
         }
+        // Country queries share a single file keyed by the country slug so the
+        // last-viewed country survives a restart without ballooning the dir.
+        persist_hdx_response(QStringLiteral("country_") + sanitize_token(country), out);
         const auto datasets = parse_hdx_results(out);
         emit hdx_results_loaded("country", datasets);
         publish_hdx_result(QStringLiteral("country:") + country, datasets);
@@ -350,6 +465,7 @@ void GeopoliticsService::search_hdx_by_topic(const QString& topic) {
             emit error_occurred("hdx_topic", out);
             return;
         }
+        persist_hdx_response(QStringLiteral("topic_") + sanitize_token(topic), out);
         const auto datasets = parse_hdx_results(out);
         emit hdx_results_loaded("topic", datasets);
         publish_hdx_result(QStringLiteral("topic:") + topic, datasets);
@@ -364,6 +480,7 @@ void GeopoliticsService::search_hdx_advanced(const QString& query) {
                        emit error_occurred("hdx_search", out);
                        return;
                    }
+                   persist_hdx_response(QStringLiteral("search_") + sanitize_token(query), out);
                    const auto datasets = parse_hdx_results(out);
                    emit hdx_results_loaded("search", datasets);
                    publish_hdx_result(QStringLiteral("search:") + query, datasets);
@@ -384,6 +501,8 @@ void GeopoliticsService::analyze_trade_benefits(const QJsonObject& params) {
                    }
                    auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
                    const auto obj = doc.object();
+                   if (!doc.isNull())
+                       disk_cache().save(QStringLiteral("trade_benefits.json"), doc);
                    emit trade_result_ready("trade_benefits", obj);
                    if (hub_registered_)
                        publish_to_hub(QStringLiteral("geopolitics:trade:benefits"), QVariant(obj));
@@ -400,6 +519,8 @@ void GeopoliticsService::analyze_trade_restrictions(const QJsonObject& params) {
                    }
                    auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
                    const auto obj = doc.object();
+                   if (!doc.isNull())
+                       disk_cache().save(QStringLiteral("trade_restrictions.json"), doc);
                    emit trade_result_ready("trade_restrictions", obj);
                    if (hub_registered_)
                        publish_to_hub(QStringLiteral("geopolitics:trade:restrictions"), QVariant(obj));
@@ -420,6 +541,8 @@ void GeopoliticsService::extract_geolocations(const QStringList& headlines) {
                    }
                    auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
                    const auto obj = doc.object();
+                   if (!doc.isNull())
+                       disk_cache().save(QStringLiteral("geolocation.json"), doc);
                    emit geolocation_ready(obj);
                    if (hub_registered_)
                        publish_to_hub(QStringLiteral("geopolitics:geolocation"), QVariant(obj));
