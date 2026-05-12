@@ -33,23 +33,19 @@ void PortfolioHeatmap::build_ui() {
     layout->setContentsMargins(8, 8, 8, 6);
     layout->setSpacing(5);
 
-    // Header: title + mode buttons. Pin the title's minimum width so it
-    // stays "HOLDINGS" even when the heatmap pane is narrow and the four
-    // mode pills crowd in from the right — the prior layout let the label
-    // elide to "HOL" once the row got tight.
-    auto* header = new QHBoxLayout;
+    // Header: "HOLDINGS" title on its own row so the label always renders
+    // in full. The four mode pills (PNL/WT/DAY/AFT) live on a second row
+    // below — the pane caps at 220px wide and 110px (title) + 4×38px
+    // (pills) + spacing overflows that budget, which used to elide the
+    // title to "HOL" / overlap "INGS" onto "PNL".
     auto* title = new QLabel("HOLDINGS");
     title->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
-    // QFontMetrics::horizontalAdvance doesn't account for CSS letter-spacing,
-    // so the prior compute-then-pad approach still elided to "HOL" on narrow
-    // panes. Use a fixed lower bound that comfortably fits "HOLDINGS" at 12px
-    // bold + 1.5px letter-spacing across 8 chars with a safety buffer; this
-    // pins the column wide enough no matter how QFontMetrics rounds.
-    title->setMinimumWidth(110);
-    header->addWidget(title);
-    header->addSpacing(8);  // guarantee gap between title and the mode pills
-    header->addStretch();
+    layout->addWidget(title);
+
+    auto* mode_row = new QHBoxLayout;
+    mode_row->setSpacing(4);
+    mode_row->setContentsMargins(0, 0, 0, 0);
 
     auto make_mode_btn = [&](const QString& text) {
         auto* btn = new QPushButton(text);
@@ -62,7 +58,7 @@ void PortfolioHeatmap::build_ui() {
                                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
                                     ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
-        header->addWidget(btn);
+        mode_row->addWidget(btn);
         return btn;
     };
 
@@ -98,7 +94,7 @@ void PortfolioHeatmap::build_ui() {
     connect(day_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
     connect(aft_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
 
-    layout->addLayout(header);
+    layout->addLayout(mode_row);
 
     // Scrollable blocks area
     auto* scroll = new QScrollArea;
