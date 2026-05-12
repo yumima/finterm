@@ -689,6 +689,185 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
+// ── 1D intraday ──────────────────────────────────────────────────────────────
+//
+// Both single-symbol and portfolio-aggregate intraday rendering go through
+// the same yfinance 1m-interval pull: period="1d", interval="1m" returns
+// ~390 close prices for today's RTH (or whatever portion has elapsed).
+//
+// The implementation is intentionally on-demand and stateless — no
+// background sampler, no intraday_snapshots DB table. The aggregate path
+// (Path 3) is just N parallel single-symbol fetches; we union the returned
+// timestamps and sum (qty × close) at each point.
+
+void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
+    const QString sym = symbol.trimmed();
+    if (sym.isEmpty()) {
+        emit symbol_intraday_loaded(sym, {}, {});
+        return;
+    }
+    QJsonObject payload;
+    payload["symbol"]   = sym;
+    payload["period"]   = QStringLiteral("1d");
+    payload["interval"] = QStringLiteral("1m");
+
+    QPointer<PortfolioService> self = this;
+    python::PythonWorker::instance().submit(
+        "historical_period", payload,
+        [self, sym](bool ok, QJsonObject result, QString err) {
+            if (!self) return;
+            QVector<qint64> ts_ms;
+            QVector<double> closes;
+            if (ok) {
+                const QJsonArray arr = result.contains("_value")
+                    ? result["_value"].toArray() : result["history"].toArray();
+                ts_ms.reserve(arr.size());
+                closes.reserve(arr.size());
+                for (const auto& v : arr) {
+                    const auto o = v.toObject();
+                    const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
+                    if (sec <= 0) continue;
+                    ts_ms.append(sec * 1000);
+                    closes.append(o["close"].toDouble());
+                }
+            } else {
+                LOG_WARN("PortfolioSvc",
+                         QString("Intraday %1 fetch failed: %2").arg(sym, err.left(200)));
+            }
+            emit self->symbol_intraday_loaded(sym, ts_ms, closes);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
+    auto assets_r = PortfolioRepository::instance().get_assets(portfolio_id);
+    if (assets_r.is_err() || assets_r.value().isEmpty()) {
+        emit portfolio_intraday_loaded(portfolio_id, {}, {});
+        return;
+    }
+    const auto assets = assets_r.value();
+
+    // Quantity lookup keyed by upper-cased symbol — yfinance normalises case
+    // but the user may have stored mixed case in the DB.
+    QHash<QString, double> qty_by_symbol;
+    QStringList unique_symbols;
+    for (const auto& a : assets) {
+        const QString up = a.symbol.toUpper();
+        if (!qty_by_symbol.contains(up)) unique_symbols.append(up);
+        qty_by_symbol[up] += a.quantity;
+    }
+
+    // Per-symbol intraday series accumulator. The aggregate emit fires once
+    // every symbol has reported (or errored out). Using a shared_ptr lets the
+    // multiple callback lambdas all mutate the same accumulator without races
+    // on the main thread.
+    struct Accum {
+        int pending = 0;
+        QHash<QString, QHash<qint64, double>> by_symbol; // symbol → {ts_ms: close}
+    };
+    auto state = std::make_shared<Accum>();
+    state->pending = unique_symbols.size();
+
+    QPointer<PortfolioService> self = this;
+    for (const QString& sym : unique_symbols) {
+        QJsonObject payload;
+        payload["symbol"]   = sym;
+        payload["period"]   = QStringLiteral("1d");
+        payload["interval"] = QStringLiteral("1m");
+        python::PythonWorker::instance().submit(
+            "historical_period", payload,
+            [self, portfolio_id, sym, state, qty_by_symbol](
+                bool ok, QJsonObject result, QString err) {
+                if (!self) return;
+                QHash<qint64, double>& bars = state->by_symbol[sym];
+                if (ok) {
+                    const QJsonArray arr = result.contains("_value")
+                        ? result["_value"].toArray() : result["history"].toArray();
+                    for (const auto& v : arr) {
+                        const auto o = v.toObject();
+                        const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
+                        if (sec <= 0) continue;
+                        bars.insert(sec * 1000, o["close"].toDouble());
+                    }
+                } else {
+                    LOG_WARN("PortfolioSvc",
+                             QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
+                }
+                if (--state->pending > 0) return;
+
+                // All symbols reported. Union timestamps across every symbol —
+                // a NAV point exists wherever at least one symbol has a bar.
+                // For missing symbols at a timestamp, fall back to that
+                // symbol's most-recent prior bar (matches the "last trade
+                // price" behaviour of any live ticker).
+                QSet<qint64> all_ts_set;
+                for (auto it = state->by_symbol.cbegin();
+                     it != state->by_symbol.cend(); ++it) {
+                    for (auto bit = it.value().cbegin();
+                         bit != it.value().cend(); ++bit) {
+                        all_ts_set.insert(bit.key());
+                    }
+                }
+                QVector<qint64> all_ts(all_ts_set.cbegin(), all_ts_set.cend());
+                std::sort(all_ts.begin(), all_ts.end());
+
+                // For each symbol, walk its sorted bars and carry the most
+                // recent close forward to the next aggregate timestamp.
+                QHash<QString, QVector<QPair<qint64, double>>> sorted_bars;
+                for (auto it = state->by_symbol.cbegin();
+                     it != state->by_symbol.cend(); ++it) {
+                    QVector<QPair<qint64, double>> v;
+                    v.reserve(it.value().size());
+                    for (auto bit = it.value().cbegin();
+                         bit != it.value().cend(); ++bit) {
+                        v.append({bit.key(), bit.value()});
+                    }
+                    std::sort(v.begin(), v.end(),
+                              [](const auto& a, const auto& b) { return a.first < b.first; });
+                    sorted_bars[it.key()] = std::move(v);
+                }
+
+                QVector<qint64> ts_ms;
+                QVector<double> navs;
+                ts_ms.reserve(all_ts.size());
+                navs.reserve(all_ts.size());
+
+                QHash<QString, int> cursor;
+                QHash<QString, double> last_close;
+                for (const auto& sym2 : sorted_bars.keys()) cursor[sym2] = 0;
+
+                for (qint64 t : all_ts) {
+                    double nav = 0;
+                    bool any = false;
+                    for (auto it = sorted_bars.cbegin(); it != sorted_bars.cend(); ++it) {
+                        const QString& s2 = it.key();
+                        const auto& v = it.value();
+                        // Advance cursor while next bar <= t
+                        int& c = cursor[s2];
+                        while (c < v.size() && v[c].first <= t) {
+                            last_close[s2] = v[c].second;
+                            ++c;
+                        }
+                        const auto lcit = last_close.constFind(s2);
+                        if (lcit == last_close.cend()) continue; // no bar yet for this symbol
+                        nav += qty_by_symbol.value(s2) * lcit.value();
+                        any = true;
+                    }
+                    if (any) {
+                        ts_ms.append(t);
+                        navs.append(nav);
+                    }
+                }
+
+                LOG_INFO("PortfolioSvc",
+                         QString("Aggregate intraday %1: %2 points across %3 symbols")
+                             .arg(portfolio_id).arg(ts_ms.size()).arg(sorted_bars.size()));
+                emit self->portfolio_intraday_loaded(portfolio_id, ts_ms, navs);
+            },
+            python::PythonWorker::kNetworkActionTimeoutMs);
+    }
+}
+
 // ── Risk-free rate (FRED DGS10) ───────────────────────────────────────────────
 
 void PortfolioService::fetch_risk_free_rate() {

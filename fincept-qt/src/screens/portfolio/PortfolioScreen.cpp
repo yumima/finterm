@@ -850,6 +850,29 @@ QWidget* PortfolioScreen::build_main_view() {
             [](const QString& symbol, const QString& period) {
                 services::PortfolioService::instance().fetch_benchmark_history(symbol, period);
             });
+    // 1D intraday — symbol-focus mode passes the focused symbol; portfolio
+    // mode passes an empty string. Service drives the underlying yfinance
+    // 1m-interval pull and emits the matching *_intraday_loaded signal.
+    connect(perf_chart_, &PortfolioPerfChart::intraday_requested, this,
+            [this](const QString& symbol) {
+                auto& svc = services::PortfolioService::instance();
+                if (!symbol.isEmpty()) {
+                    svc.fetch_symbol_intraday(symbol);
+                } else if (!selected_id_.isEmpty()) {
+                    svc.fetch_portfolio_intraday(selected_id_);
+                }
+            });
+    connect(&services::PortfolioService::instance(),
+            &services::PortfolioService::symbol_intraday_loaded,
+            perf_chart_, &PortfolioPerfChart::set_symbol_intraday);
+    connect(&services::PortfolioService::instance(),
+            &services::PortfolioService::portfolio_intraday_loaded, perf_chart_,
+            [this](const QString& portfolio_id, const QVector<qint64>& ts,
+                   const QVector<double>& navs) {
+                // Discard stale fetches if the user switched portfolios mid-flight.
+                if (portfolio_id == selected_id_)
+                    perf_chart_->set_portfolio_intraday(ts, navs);
+            });
     sector_panel_ = new PortfolioSectorPanel;
     connect(sector_panel_, &PortfolioSectorPanel::sector_selected, this, [this](const QString& sector) {
         if (sector.isEmpty()) {

@@ -63,6 +63,16 @@ class PortfolioPerfChart : public QWidget {
                            const QVector<double>& closes);
     QString focus_symbol() const { return focus_symbol_; }
 
+    // ── 1D intraday ─────────────────────────────────────────────────────────
+    /// Feed today's 1-minute close series for the currently focused symbol.
+    /// Mismatched symbol → ignored (race-safe against stale fetches).
+    void set_symbol_intraday(const QString& symbol,
+                             const QVector<qint64>& timestamps_ms,
+                             const QVector<double>& closes);
+    /// Feed today's 1-minute aggregate-NAV series for portfolio view.
+    void set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
+                                const QVector<double>& navs);
+
   signals:
     /// Emitted when the user clicks a period button that requires backfilling
     /// (e.g. 5Y when only 1Y is cached). Owner can call
@@ -71,11 +81,21 @@ class PortfolioPerfChart : public QWidget {
     /// Focus mode: owner should fetch daily closes for @p symbol over the
     /// yfinance @p period (e.g. "1mo", "1y", "max").
     void focus_symbol_period_requested(QString symbol, QString period);
+    /// User clicked 1D. Owner calls PortfolioService::fetch_symbol_intraday
+    /// (focus mode, symbol non-empty) or fetch_portfolio_intraday (aggregate,
+    /// symbol empty). The chart paints a placeholder until set_*_intraday()
+    /// lands.
+    void intraday_requested(QString symbol_or_empty);
 
   private:
     void build_ui();
     void update_chart();
     void update_chart_focus(); ///< Render focused-symbol daily-close series.
+    /// Render the 1D intraday series stored in intraday_ts_ms_/intraday_values_.
+    /// is_aggregate=true → portfolio NAV mode (uses currency formatting and
+    /// resets info-bar labels accordingly). Returns true if data was drawn,
+    /// false if the series is empty and a loading placeholder rendered.
+    bool render_intraday(bool is_aggregate);
     void set_period(const QString& period);
     void update_period_buttons_enabled();
     QColor chart_color() const;
@@ -124,6 +144,15 @@ class PortfolioPerfChart : public QWidget {
     // Per-symbol focus mode (empty focus_symbol_ → portfolio NAV view).
     QString focus_symbol_;
     QStringList focus_dates_;
+    // 1D intraday series. Populated by set_symbol_intraday() (focus mode)
+    // and set_portfolio_intraday() (aggregate). Timestamps are epoch-ms so
+    // the chart's QDateTimeAxis can plot sub-day resolution. Render path
+    // routes here whenever current_period_ == "1D" and the matching series
+    // is non-empty.
+    QVector<qint64> intraday_ts_ms_;
+    QVector<double> intraday_values_;
+    QString          intraday_for_symbol_;  // empty = portfolio aggregate
+    bool             intraday_requested_   = false;  // 1D selected, waiting for data
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;

@@ -376,6 +376,24 @@ void PortfolioPerfChart::set_period(const QString& period) {
     for (auto* btn : period_btns_)
         btn->setChecked(btn->text() == period);
 
+    // 1D goes through a separate yfinance 1m-intraday pull (see
+    // PortfolioService::fetch_*_intraday). The owner handles the fetch;
+    // the chart paints a placeholder until set_*_intraday() lands.
+    if (period == QStringLiteral("1D")) {
+        intraday_requested_ = true;
+        intraday_for_symbol_ = focus_symbol_;  // empty if portfolio view
+        intraday_ts_ms_.clear();
+        intraday_values_.clear();
+        emit intraday_requested(focus_symbol_);
+        update_chart();
+        return;
+    }
+    // Switching away from 1D — clear the intraday cache so a return to 1D
+    // re-fetches fresh data.
+    intraday_requested_ = false;
+    intraday_ts_ms_.clear();
+    intraday_values_.clear();
+
     // Focus mode: ask the owner to refetch this symbol's history for the new
     // period and exit early — backfill applies to NAV snapshots only.
     if (!focus_symbol_.isEmpty()) {
@@ -465,6 +483,28 @@ void PortfolioPerfChart::set_focus_history(const QString& symbol, const QStringL
     update_chart();
 }
 
+void PortfolioPerfChart::set_symbol_intraday(const QString& symbol,
+                                             const QVector<qint64>& timestamps_ms,
+                                             const QVector<double>& closes) {
+    // Race-safe: only accept if we're still showing 1D for this symbol.
+    if (current_period_ != QStringLiteral("1D")) return;
+    if (focus_symbol_.isEmpty() || symbol.toUpper() != focus_symbol_) return;
+    intraday_for_symbol_ = focus_symbol_;
+    intraday_ts_ms_      = timestamps_ms;
+    intraday_values_     = closes;
+    update_chart();
+}
+
+void PortfolioPerfChart::set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
+                                                const QVector<double>& navs) {
+    if (current_period_ != QStringLiteral("1D")) return;
+    if (!focus_symbol_.isEmpty()) return; // stale aggregate while symbol focused
+    intraday_for_symbol_ = QString();
+    intraday_ts_ms_      = timestamps_ms;
+    intraday_values_     = navs;
+    update_chart();
+}
+
 qint64 PortfolioPerfChart::iso_date_to_ms_utc(const QString& iso_date) {
     const QDate d = QDate::fromString(iso_date.left(10), Qt::ISODate);
     if (!d.isValid())
@@ -480,16 +520,16 @@ void PortfolioPerfChart::update_period_buttons_enabled() {
     const int span_days = earliest.isValid() ? earliest.daysTo(today) : 0;
     for (auto* btn : period_btns_) {
         const QString p = btn->text();
-        // Daily snapshots only — 1D needs intraday data we don't capture.
+        // 1D is now powered by an on-demand yfinance 1m intraday fetch (see
+        // PortfolioService::fetch_symbol_intraday + fetch_portfolio_intraday),
+        // so it's always enabled — it does NOT require daily snapshots.
         bool feasible = true;
-        if (p == "1D")
-            feasible = false; // explicitly unsupported with daily snapshots
-        else if (p == "1W")
+        if (p == "1W")
             feasible = span_days >= 5;
         // Other periods are always allowed: backfill kicks in when clicked.
         btn->setEnabled(feasible);
         btn->setToolTip(feasible ? QString()
-                                 : QStringLiteral("Needs intraday data — daily snapshots only."));
+                                 : QStringLiteral("Needs more snapshot history."));
     }
 }
 
@@ -497,7 +537,120 @@ QColor PortfolioPerfChart::chart_color() const {
     return summary_.total_unrealized_pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
 }
 
+bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
+    auto* chart = chart_view_->chart();
+    chart->removeAllSeries();
+    const auto old_axes = chart->axes();
+    for (auto* axis : old_axes) {
+        chart->removeAxis(axis);
+        delete axis;
+    }
+
+    if (intraday_ts_ms_.isEmpty() || intraday_values_.isEmpty()
+        || intraday_ts_ms_.size() != intraday_values_.size()) {
+        // Loading placeholder — owner is fetching, will re-call us.
+        const QString label = is_aggregate ? QStringLiteral("portfolio NAV")
+                                           : focus_symbol_;
+        period_change_label_->setText(QStringLiteral("Loading 1D %1…").arg(label));
+        total_return_label_->clear();
+        nav_label_->clear();
+        if (cost_basis_label_) cost_basis_label_->clear();
+        chart_view_->set_series_data({}, currency_);
+        return false;
+    }
+
+    // Build (ms, value) points.
+    QVector<QPointF> pts;
+    pts.reserve(intraday_ts_ms_.size());
+    for (int i = 0; i < intraday_ts_ms_.size(); ++i)
+        pts.append(QPointF(static_cast<double>(intraday_ts_ms_[i]), intraday_values_[i]));
+
+    const double first = pts.first().y();
+    const double last  = pts.last().y();
+    const double pnl_pct = first > 0 ? (last - first) / first * 100.0 : 0.0;
+
+    auto* line  = new QLineSeries;
+    auto* upper = new QLineSeries;
+    auto* lower = new QLineSeries;
+    double y_min = std::numeric_limits<double>::max();
+    double y_max = std::numeric_limits<double>::lowest();
+    for (const auto& p : pts) {
+        line->append(p);
+        upper->append(p);
+        lower->append(p.x(), first);
+        y_min = std::min(y_min, p.y());
+        y_max = std::max(y_max, p.y());
+    }
+    const QColor lc = pnl_pct >= 0 ? QColor(ui::colors::POSITIVE())
+                                   : QColor(ui::colors::NEGATIVE());
+    line->setPen(QPen(lc, 2));
+    auto* area = new QAreaSeries(upper, lower);
+    QColor fill = lc; fill.setAlpha(35);
+    area->setBrush(fill);
+    area->setPen(QPen(Qt::NoPen));
+
+    chart->addSeries(area);
+    chart->addSeries(line);
+
+    auto* x = new QDateTimeAxis;
+    x->setFormat(QStringLiteral("HH:mm"));
+    x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
+    x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
+    x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
+    x->setRange(QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.first()),
+                QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.last()));
+    chart->addAxis(x, Qt::AlignBottom);
+    line->attachAxis(x);
+    area->attachAxis(x);
+
+    auto* y = new QValueAxis;
+    y->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
+    y->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
+    y->setLinePenColor(QColor(ui::colors::BORDER_MED()));
+    const double range = y_max - y_min;
+    const double pad = range > 0 ? range * 0.05 : std::max(1.0, std::abs(y_max) * 0.02);
+    y->setRange(y_min - pad, y_max + pad);
+    y->setLabelFormat(QStringLiteral("%.2f"));
+    chart->addAxis(y, Qt::AlignLeft);
+    line->attachAxis(y);
+    area->attachAxis(y);
+
+    chart_view_->set_series_data(pts, QStringLiteral("$"));
+
+    // Info-bar: period change %, current value, and (aggregate only) cost.
+    const char* pcol = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    period_change_label_->setText(QString("1D  %1%2%")
+                                      .arg(pnl_pct >= 0 ? "+" : "")
+                                      .arg(QString::number(pnl_pct, 'f', 2)));
+    period_change_label_->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:600;").arg(pcol));
+
+    if (is_aggregate) {
+        total_return_label_->setText(QString("NAV %1 %2")
+                                         .arg(currency_).arg(QString::number(last, 'f', 2)));
+        total_return_label_->setStyleSheet(
+            QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        nav_label_->clear();
+        if (cost_basis_label_) cost_basis_label_->clear();
+    } else {
+        total_return_label_->setText(QString("LAST %1").arg(QString::number(last, 'f', 2)));
+        total_return_label_->setStyleSheet(
+            QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        nav_label_->clear();
+        if (cost_basis_label_) cost_basis_label_->clear();
+    }
+    return true;
+}
+
 void PortfolioPerfChart::update_chart_focus() {
+    // 1D intraday for a focused symbol — distinct render path because the
+    // data shape (epoch-ms timestamps) differs from the daily ISO-date
+    // history used by the longer-period chart.
+    if (current_period_ == QStringLiteral("1D")) {
+        render_intraday(/*is_aggregate=*/false);
+        return;
+    }
+
     auto* chart = chart_view_->chart();
     chart->removeAllSeries();
     const auto old_axes = chart->axes();
@@ -676,6 +829,13 @@ void PortfolioPerfChart::update_chart_focus() {
 void PortfolioPerfChart::update_chart() {
     if (!focus_symbol_.isEmpty()) {
         update_chart_focus();
+        return;
+    }
+    // Portfolio-level 1D — render the aggregate intraday NAV curve assembled
+    // by PortfolioService::fetch_portfolio_intraday. Same daily snapshot
+    // path is used for everything else.
+    if (current_period_ == QStringLiteral("1D")) {
+        render_intraday(/*is_aggregate=*/true);
         return;
     }
 

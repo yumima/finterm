@@ -64,6 +64,17 @@ class PortfolioService : public QObject {
     /// Legacy shim — calls fetch_benchmark_history("SPY", period).
     void fetch_spy_history(const QString& period = "1y");
 
+    // ── 1D intraday ──────────────────────────────────────────────────────────
+    /// Fetch today's 1-minute OHLC bars for a single symbol from yfinance.
+    /// Returns close prices keyed by epoch-ms timestamps so a sub-day curve
+    /// can be charted. Emits symbol_intraday_loaded() on success.
+    void fetch_symbol_intraday(const QString& symbol);
+
+    /// Build today's aggregate portfolio-NAV curve by fetching 1-minute bars
+    /// for every holding and summing (qty × close) at each shared timestamp.
+    /// Emits portfolio_intraday_loaded() once all per-symbol fetches return.
+    void fetch_portfolio_intraday(const QString& portfolio_id);
+
     // ── Risk-free rate ────────────────────────────────────────────────────────
     /// Fetch the current 10-year Treasury yield (DGS10) from FRED.
     /// Result is cached 24h in SettingsRepository. Emits risk_free_rate_loaded(rate).
@@ -130,6 +141,16 @@ class PortfolioService : public QObject {
     /// Fired when backfill_history finishes. point_count is the number of
     /// trading days written (0 on failure).
     void history_backfilled(QString portfolio_id, int point_count);
+
+    /// 1-minute intraday close series for a single symbol. Timestamps are
+    /// epoch-ms (so the chart's QDateTimeAxis can plot sub-day resolution
+    /// without lossy date-only string conversion).
+    void symbol_intraday_loaded(QString symbol, QVector<qint64> timestamps_ms,
+                                QVector<double> closes);
+    /// 1-minute aggregate-NAV intraday series for a portfolio. Built by
+    /// summing (qty × close) across all holdings at each shared timestamp.
+    void portfolio_intraday_loaded(QString portfolio_id, QVector<qint64> timestamps_ms,
+                                   QVector<double> navs);
 
   private:
     PortfolioService();
