@@ -133,16 +133,20 @@ void PortfolioPerfChart::build_ui() {
     auto* header = new QHBoxLayout;
     header->setContentsMargins(10, 6, 10, 4);
 
-    // Scope-prefixed title: "HOLDINGS · PERFORMANCE" at portfolio level, or
-    // "{SYMBOL} · PERFORMANCE" when a single ticker is focused. Putting the
-    // scope first matches eye-flow (left-to-right) and standard terminal
-    // headers ("AAPL · GP"); it also reads naturally as a breadcrumb so the
-    // user always knows whether they're looking at the aggregate NAV curve
-    // or a single position's price. "HOLDINGS" rather than "ALL" because
-    // ALL could collide with a real ticker symbol — HOLDINGS is unambiguous.
-    title_label_ = new QLabel(QStringLiteral("HOLDINGS · PERFORMANCE"));
+    // Scope-prefixed title: "HOLDINGS PERFORMANCE" at portfolio level, or
+    // "{SYMBOL} PERFORMANCE" when a single ticker is focused. The scope word
+    // renders in amber (same as the position-level data tokens below) so
+    // the eye can distinguish scope from label without a separator glyph —
+    // the prior "·" middle-dot rendered as a missing-glyph box on systems
+    // without a font that covers U+00B7. Using rich text (color spans)
+    // means the label needs Qt::RichText interpretation.
+    title_label_ = new QLabel;
+    title_label_->setTextFormat(Qt::RichText);
     title_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("font-size:12px; font-weight:700; letter-spacing:1.5px; background:transparent;"));
+    title_label_->setText(
+        QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
+            .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
     header->addWidget(title_label_);
 
     // The former "← PORTFOLIO" back pill lived here; it was removed because
@@ -368,7 +372,9 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_closes_.clear();
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
     if (title_label_)
-        title_label_->setText(focus_symbol_ + QStringLiteral(" \xc2\xb7 PERFORMANCE"));
+        title_label_->setText(
+            QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
+                .arg(ui::colors::WARNING(), focus_symbol_, ui::colors::TEXT_SECONDARY()));
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     update_chart(); // renders loading placeholder until data lands
 }
@@ -381,7 +387,9 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_closes_.clear();
     focus_data_loaded_ = false;
     if (title_label_)
-        title_label_->setText(QStringLiteral("HOLDINGS \xc2\xb7 PERFORMANCE"));
+        title_label_->setText(
+            QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
+                .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
     update_chart();
 }
 
@@ -523,18 +531,55 @@ void PortfolioPerfChart::update_chart_focus() {
 
     chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"));
 
-    // Info bar — re-purposed for the focused symbol.
-    const QString sign = pnl >= 0 ? QStringLiteral("▲") : QStringLiteral("▼");
-    period_change_label_->setText(QString("%1  %2  %3%")
-                                      .arg(sign)
-                                      .arg(QString::number(pnl, 'f', 2))
+    // Info bar — mirror the portfolio-view shape so the user sees the same
+    // four tokens (period change %, total return %, market value, cost basis)
+    // regardless of whether they're looking at the aggregate NAV curve or a
+    // single position. The trailing symbol token was dropped — the symbol is
+    // already in the title prefix above, so repeating it here was redundant.
+    //
+    // Position-level cost basis comes from the user's recorded avg_buy_price.
+    // If the focused symbol isn't held (e.g. user typed a search), we fall
+    // back to "current price" framing the same way the chart's flat segment
+    // does — period% only, market/cost labels cleared.
+    const portfolio::HoldingWithQuote* held = nullptr;
+    for (const auto& h : summary_.holdings) {
+        if (h.symbol == focus_symbol_) { held = &h; break; }
+    }
+
+    // Period change uses series first→last, matching the portfolio chart's
+    // period_pnl computation (and now sharing format: "1M  +2.34%").
+    const char* period_color = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    period_change_label_->setText(QString("%1  %2%3%")
+                                      .arg(current_period_)
+                                      .arg(pnl_pct >= 0 ? "+" : "")
                                       .arg(QString::number(pnl_pct, 'f', 2)));
     period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700;").arg(lc.name()));
-    total_return_label_->setText(QString("$%1").arg(QString::number(last, 'f', 2)));
-    nav_label_->setText(focus_symbol_);
-    if (cost_basis_label_)
-        cost_basis_label_->clear();
+        QString("color:%1; font-size:12px; font-weight:600;").arg(period_color));
+
+    if (held && held->cost_basis > 0) {
+        const double total_pct = held->unrealized_pnl_percent;
+        const char* tot_color = total_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        total_return_label_->setText(
+            QString("TOTAL  %1%2%").arg(total_pct >= 0 ? "+" : "")
+                                   .arg(QString::number(total_pct, 'f', 2)));
+        total_return_label_->setStyleSheet(
+            QString("color:%1; font-size:14px; font-weight:700;").arg(tot_color));
+
+        nav_label_->setText(
+            QString("MV %1 %2").arg(currency_).arg(QString::number(held->market_value, 'f', 2)));
+        if (cost_basis_label_)
+            cost_basis_label_->setText(
+                QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2)));
+    } else {
+        // Not a held position — current price stands in for market value, no
+        // cost basis to show.
+        total_return_label_->setText(QString("PRICE %1 %2")
+                                         .arg(currency_).arg(QString::number(last, 'f', 2)));
+        total_return_label_->setStyleSheet(
+            QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        nav_label_->clear();
+        if (cost_basis_label_) cost_basis_label_->clear();
+    }
 }
 
 void PortfolioPerfChart::update_chart() {
