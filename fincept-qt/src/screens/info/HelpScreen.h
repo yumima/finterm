@@ -12,7 +12,6 @@ class HelpScreen : public QWidget {
   signals:
     void navigate_back();
     void navigate_register();
-    void navigate_forgot_password();
 };
 
 } // namespace fincept::screens

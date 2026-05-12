@@ -229,19 +229,11 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             const char* a;
         };
         const FAQ faqs[] = {
-            {"🔑", "How do I reset my password?",
-             "Click \"Forgot Password\" on the login screen. Enter your email address and we'll "
-             "send you a reset link. The link expires in 24 hours."},
-
-            {"👤", "What is Guest Access?",
-             "Guest access lets you explore the terminal without creating an account. "
-             "Features like trading, portfolio management, and AI analytics require a "
-             "registered account."},
-
-            {"💳", "What is a Credit?",
-             "Credits are the in-app currency used for premium features such as AI analysis, "
-             "advanced data feeds, and quantitative analytics. Free accounts receive a limited "
-             "number of credits on signup. Additional credits can be purchased in Settings → Billing."},
+            {"🔑", "I forgot my PIN — how do I reset it?",
+             "On the login screen, pick your user, then click \"Forgot PIN? Reset this "
+             "user.\" The local user (and their per-user data) is deleted; sign up again "
+             "from the login screen to recreate it. Everything runs locally — there is no "
+             "email-based recovery flow."},
 
             {"📊", "How do I connect a broker?",
              "Navigate to Settings → Brokers, select your broker from the list, and enter your "
