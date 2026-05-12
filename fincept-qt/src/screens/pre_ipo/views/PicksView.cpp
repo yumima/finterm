@@ -19,6 +19,43 @@ namespace fincept::screens {
 using namespace fincept::ui;
 using namespace fincept::pre_ipo;
 
+namespace {
+
+// Hand-curated "marquee" pre-IPO names that the Picks tab always surfaces at
+// the top — these are the companies a serious pre-IPO investor wants to see
+// on day one (high-profile, late-stage, frequently mentioned in mutual-fund
+// N-PORT marks). The list intentionally stays short; the algorithmic ranking
+// below covers everything else.
+//
+// Ids match the slug pattern produced by sec_form_d_data.py and
+// sec_nport_marks.py (lowercase, hyphenated). Aliases entries are also
+// matched so a company whose canonical id differs (e.g. "spaceX" filed under
+// a sub-entity) still resolves.
+const QStringList& featured_pick_ids() {
+    static const QStringList ids = {
+        QStringLiteral("spacex"),
+        QStringLiteral("stripe"),
+        QStringLiteral("anthropic"),
+        QStringLiteral("openai"),
+        QStringLiteral("anduril"),
+        QStringLiteral("databricks"),
+    };
+    return ids;
+}
+
+// Returns the featured-position rank (0..N-1) for a company, or -1 if the
+// company is not in the featured list. Used as the primary sort key in the
+// picks view so the curated names always come first.
+int featured_rank(const PrivateCompany& c) {
+    const auto& ids = featured_pick_ids();
+    for (int i = 0; i < ids.size(); ++i) {
+        if (c.id == ids[i] || c.aliases.contains(ids[i])) return i;
+    }
+    return -1;
+}
+
+} // namespace
+
 PicksView::PicksView(QWidget* parent) : QWidget(parent) {
     build_ui();
 }
@@ -179,15 +216,36 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
         return;
     }
 
-    // ── Top picks: top-10 by composite score ─────────────────────────────────
+    // ── Top picks ────────────────────────────────────────────────────────────
+    // Featured marquee names (SpaceX, Stripe, Anthropic, OpenAI, Anduril,
+    // Databricks) come first in curated order so the user always sees the
+    // most actionable late-stage names on entry — the algorithmic composite
+    // score can suppress them on quiet weeks (e.g. no fresh fund marks, no
+    // S-1 amendments) even though they're exactly what a pre-IPO investor
+    // wants to track. After the featured block, the rest of the universe
+    // falls in by composite_picks_score desc.
     QVector<PrivateCompany> ranked = summary.companies;
     std::sort(ranked.begin(), ranked.end(),
               [](const PrivateCompany& a, const PrivateCompany& b) {
+                  const int ra = featured_rank(a);
+                  const int rb = featured_rank(b);
+                  if (ra != rb) {
+                      if (ra < 0) return false;
+                      if (rb < 0) return true;
+                      return ra < rb;  // earlier in featured list = higher
+                  }
                   return a.analytics.composite_picks_score > b.analytics.composite_picks_score;
               });
     int inserted = 0;
     for (const auto& c : ranked) {
-        if (c.analytics.composite_picks_score <= 0 && c.cumulative_raised_m < 50) continue;
+        // Featured picks always render even if their composite is 0 (the
+        // user explicitly wants to track them). For non-featured names,
+        // keep the prior "score > 0 or raised >= $50M" gate so the list
+        // doesn't fill with no-signal companies.
+        const bool is_featured = featured_rank(c) >= 0;
+        if (!is_featured &&
+            c.analytics.composite_picks_score <= 0 && c.cumulative_raised_m < 50)
+            continue;
         picks_layout_->insertWidget(inserted++, make_pick_card(c));
         if (inserted >= 12) break;
     }

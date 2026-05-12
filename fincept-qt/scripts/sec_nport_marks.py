@@ -144,6 +144,7 @@ PRIVATE_NAMES = {
     "kraken":      {"aliases": ["Payward", "Kraken"],         "cik": ""},
     "chime":       {"aliases": ["Chime Financial"],           "cik": ""},
     "plaid":       {"aliases": ["Plaid Inc"],                 "cik": ""},
+    "anduril":     {"aliases": ["Anduril"],                   "cik": ""},
 }
 
 # Pre-compile per-alias word-boundary regex once. The previous substring
