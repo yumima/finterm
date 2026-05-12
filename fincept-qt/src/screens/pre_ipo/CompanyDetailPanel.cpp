@@ -4,9 +4,14 @@
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QSet>
+
+#include <algorithm>
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -377,6 +382,110 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     vl->addWidget(make_divider());
     vl->addSpacing(12);
 
+    // ── ANALYTICS / KPI band ──────────────────────────────────────────────────
+    {
+        kpi_section_ = new QWidget;
+        kpi_section_->setStyleSheet(
+            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
+                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        auto* kg = new QGridLayout(kpi_section_);
+        kg->setContentsMargins(10, 8, 10, 8);
+        kg->setHorizontalSpacing(18);
+        kg->setVerticalSpacing(4);
+
+        auto add_kpi = [&](int col, const QString& label, QLabel*& out, const QString& color) {
+            auto* l = new QLabel(label, kpi_section_);
+            l->setStyleSheet(
+                QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
+                    .arg(colors::TEXT_SECONDARY()));
+            kg->addWidget(l, 0, col);
+            out = new QLabel(QStringLiteral("—"), kpi_section_);
+            out->setStyleSheet(
+                QString("color:%1;font-size:14px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+                    .arg(color));
+            kg->addWidget(out, 1, col);
+        };
+
+        add_kpi(0, "READINESS",     kpi_readiness_lbl_, colors::AMBER());
+        add_kpi(1, "MARK DRIFT",    kpi_drift_lbl_,     colors::POSITIVE());
+        add_kpi(2, "HIIVE PREM.",   kpi_premium_lbl_,   colors::CYAN());
+        add_kpi(3, "DAYS→PRICE",    kpi_days_lbl_,      colors::TEXT_PRIMARY());
+        add_kpi(4, "CUM. RAISED",   kpi_raised_lbl_,    colors::AMBER());
+
+        vl->addWidget(kpi_section_);
+        vl->addSpacing(10);
+    }
+
+    // ── FUND MARKS section ───────────────────────────────────────────────────
+    {
+        marks_section_ = new QWidget;
+        marks_section_->setStyleSheet(
+            QString("QWidget{background:%1;border-radius:4px;border:1px solid %2;}")
+                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        auto* mvl = new QVBoxLayout(marks_section_);
+        mvl->setContentsMargins(10, 8, 10, 8);
+        mvl->setSpacing(4);
+
+        auto* hdr = new QLabel("MUTUAL FUND MARKS  ·  Consensus from N-PORT-P filings", marks_section_);
+        hdr->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                .arg(colors::TEXT_SECONDARY()));
+        mvl->addWidget(hdr);
+
+        auto* row = new QHBoxLayout;
+        row->setSpacing(16);
+        auto make_metric = [&](const QString& label, QLabel*& out, const QString& color) {
+            auto* l = new QLabel(label, marks_section_);
+            l->setStyleSheet(
+                QString("color:%1;font-size:12px;background:transparent;")
+                    .arg(colors::TEXT_SECONDARY()));
+            row->addWidget(l);
+            out = new QLabel("—", marks_section_);
+            out->setStyleSheet(
+                QString("color:%1;font-size:12px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+                    .arg(color));
+            row->addWidget(out);
+        };
+        make_metric("Consensus:",  consensus_lbl_,   colors::AMBER());
+        make_metric("Dispersion:", dispersion_lbl_,  colors::TEXT_PRIMARY());
+        make_metric("Funds:",      smart_money_lbl_, colors::CYAN());
+        row->addStretch();
+        mvl->addLayout(row);
+
+        marks_table_ = new QTableWidget(marks_section_);
+        marks_table_->setColumnCount(4);
+        marks_table_->setHorizontalHeaderLabels({"Fund", "As of", "Shares", "Mark $/sh"});
+        marks_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+        marks_table_->setSelectionMode(QAbstractItemView::NoSelection);
+        marks_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        marks_table_->setShowGrid(false);
+        marks_table_->setAlternatingRowColors(false);
+        marks_table_->verticalHeader()->setVisible(false);
+        marks_table_->setFocusPolicy(Qt::NoFocus);
+        marks_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        marks_table_->horizontalHeader()->setStretchLastSection(false);
+        marks_table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        marks_table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+        marks_table_->horizontalHeader()->resizeSection(1, 80);
+        marks_table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+        marks_table_->horizontalHeader()->resizeSection(2, 90);
+        marks_table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+        marks_table_->horizontalHeader()->resizeSection(3, 90);
+        marks_table_->setStyleSheet(
+            QString("QTableWidget{background:transparent;color:%1;border:none;"
+                    "  font-size:12px;font-family:Consolas,monospace;}"
+                    "QTableWidget::item{padding:3px 6px;border-bottom:1px solid %2;}")
+                .arg(colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+        marks_table_->horizontalHeader()->setStyleSheet(
+            QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                    "  border-bottom:1px solid %3;padding:3px 6px;font-size:12px;font-weight:700;}")
+                .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+        mvl->addWidget(marks_table_);
+
+        vl->addWidget(marks_section_);
+        vl->addSpacing(10);
+    }
+
     // ── Description ───────────────────────────────────────────────────────────
     auto* desc_header = new QLabel("ABOUT");
     desc_header->setStyleSheet(
@@ -441,8 +550,8 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
             : QStringLiteral("—"));
 
     if (emp_lbl_)
-        emp_lbl_->setText(c.employee_count > 0
-            ? QString::number(c.employee_count) + "+"
+        emp_lbl_->setText(c.employee_count_est > 0
+            ? QString::number(c.employee_count_est) + "+"
             : QStringLiteral("—"));
 
     // ── IPO status ────────────────────────────────────────────────────────────
@@ -479,9 +588,12 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
 
     // ── Share price ───────────────────────────────────────────────────────────
     if (price_section_) {
+        // Show price section if we have a secondary/Hiive quote, fund-mark consensus,
+        // or any legacy implied price.
         const bool has_price = c.secondary_market_price > 0
                             || c.implied_share_price > 0
-                            || c.form_d_implied_price > 0;
+                            || c.form_d_implied_price > 0
+                            || c.analytics.consensus_mark_pps > 0;
         price_section_->setVisible(has_price);
 
         auto fmt_price = [](double p) -> QString {
@@ -495,22 +607,22 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
                 ? "  " + c.secondary_market_date.toString("MMM yyyy") : "";
             sec_price_lbl_->setText(fmt_price(c.secondary_market_price) + src + dt);
         }
-        if (implied_price_lbl_)
-            implied_price_lbl_->setText(fmt_price(c.implied_share_price));
+        if (implied_price_lbl_) {
+            // Prefer consensus mark from fund N-PORTs when available; fall back to legacy implied.
+            const double v = c.analytics.consensus_mark_pps > 0
+                ? c.analytics.consensus_mark_pps : c.implied_share_price;
+            implied_price_lbl_->setText(fmt_price(v));
+        }
         if (formd_price_lbl_)
             formd_price_lbl_->setText(fmt_price(c.form_d_implied_price));
 
-        // Delta: secondary vs last round's price_per_share
+        // Delta: secondary vs latest fund-mark consensus (replaces old PPS lookup).
         if (price_delta_lbl_) {
-            double base_price = 0;
-            if (!c.rounds.isEmpty()) {
-                for (auto it = c.rounds.rbegin(); it != c.rounds.rend(); ++it)
-                    if (it->price_per_share > 0) { base_price = it->price_per_share; break; }
-            }
+            const double base_price = c.analytics.consensus_mark_pps;
             if (base_price > 0 && c.secondary_market_price > 0) {
                 const double delta = (c.secondary_market_price - base_price) / base_price * 100.0;
                 const QString sign = delta >= 0 ? "+" : "";
-                price_delta_lbl_->setText(sign + QString::number(delta, 'f', 1) + "% vs last round");
+                price_delta_lbl_->setText(sign + QString::number(delta, 'f', 1) + "% vs consensus mark");
                 price_delta_lbl_->setStyleSheet(
                     QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
                         .arg(delta >= 0
@@ -525,7 +637,20 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
     rebuild_rounds_table(c.rounds);
 
     // ── Investors ─────────────────────────────────────────────────────────────
-    rebuild_investors(c.key_investors);
+    QStringList investor_names = c.key_investors;
+    if (investor_names.isEmpty()) {
+        QSet<QString> seen;
+        for (const auto& r : c.rounds) {
+            for (const auto& rp : r.related_persons) {
+                if (seen.contains(rp.name)) continue;
+                seen.insert(rp.name);
+                investor_names << rp.name;
+                if (investor_names.size() >= 10) break;
+            }
+            if (investor_names.size() >= 10) break;
+        }
+    }
+    rebuild_investors(investor_names);
 
     // ── Comps ─────────────────────────────────────────────────────────────────
     rebuild_comps_chips(c.public_comps);
@@ -535,11 +660,15 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
 
     // ── Description ──────────────────────────────────────────────────────────
     desc_lbl_->setText(c.description);
+
+    // ── Fund marks & analytics ───────────────────────────────────────────────
+    rebuild_fund_marks(c.fund_marks);
+    rebuild_analytics(c);
 }
 
 // ── Rebuild helpers ──────────────────────────────────────────────────────────
 
-void CompanyDetailPanel::rebuild_rounds_table(const QVector<FundingRound>& rounds) {
+void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& rounds) {
     rounds_table_->setRowCount(0);
     rounds_table_->setRowCount(rounds.size());
 
@@ -548,32 +677,35 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<FundingRound>& round
 
         auto make_item = [](const QString& text,
                             Qt::Alignment align = Qt::AlignLeft | Qt::AlignVCenter,
-                            const char* color = nullptr) {
+                            const QString& color = {}) {
             auto* it = new QTableWidgetItem(text);
             it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
             it->setTextAlignment(align);
-            if (color) it->setForeground(QColor(color));
+            if (!color.isEmpty()) it->setForeground(QColor(color));
             return it;
         };
 
         rounds_table_->setItem(i, 0,
-            make_item(r.date.isValid() ? r.date.toString("MMM yyyy") : "—"));
-        rounds_table_->setItem(i, 1,
-            make_item(r.round_name, Qt::AlignLeft | Qt::AlignVCenter, colors::AMBER()));
+            make_item(r.filed_date.isValid() ? r.filed_date.toString("MMM yyyy") : "—"));
 
-        const QString amt = r.amount_usd > 0
-            ? "$" + QString::number(qRound(r.amount_usd)) + "M" : "—";
+        const QString round_label = !r.round_name_inferred.isEmpty()
+            ? r.round_name_inferred
+            : (r.exemption.isEmpty() ? "Form D" : "Form D · " + r.exemption);
+        rounds_table_->setItem(i, 1,
+            make_item(round_label, Qt::AlignLeft | Qt::AlignVCenter, colors::AMBER()));
+
+        const QString amt = r.amount_sold_m > 0
+            ? "$" + QString::number(qRound(r.amount_sold_m)) + "M" : "—";
         rounds_table_->setItem(i, 2,
             make_item(amt, Qt::AlignRight | Qt::AlignVCenter));
 
-        const QString pps = r.price_per_share > 0
-            ? "$" + QString::number(r.price_per_share, 'f', 2) : "—";
+        // Form D doesn't disclose PPS; we keep the column for future enrichment.
         rounds_table_->setItem(i, 3,
-            make_item(pps, Qt::AlignRight | Qt::AlignVCenter,
-                      r.price_per_share > 0 ? colors::POSITIVE() : nullptr));
+            make_item("—", Qt::AlignRight | Qt::AlignVCenter));
 
-        rounds_table_->setItem(i, 4,
-            make_item(r.lead_investors.join(", ")));
+        QStringList persons;
+        for (const auto& rp : r.related_persons) persons << rp.name;
+        rounds_table_->setItem(i, 4, make_item(persons.join(", ")));
     }
 
     // Adjust height based on row count
@@ -581,6 +713,98 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<FundingRound>& round
     const int row_h = 28;
     const int header_h = 30;
     rounds_table_->setFixedHeight(qMin(200, header_h + rows * row_h + 2));
+}
+
+// ── Fund-mark consensus + per-fund rows ──────────────────────────────────────
+
+void CompanyDetailPanel::rebuild_fund_marks(const QVector<FundMark>& marks) {
+    if (!marks_section_) return;
+    if (marks.isEmpty()) {
+        marks_section_->setVisible(false);
+        return;
+    }
+    marks_section_->setVisible(true);
+
+    // Aggregate latest period (within 120 days of newest as_of).
+    QDate newest;
+    for (const auto& m : marks)
+        if (newest.isNull() || m.as_of > newest) newest = m.as_of;
+    double sum_w = 0, sum_wx = 0;
+    QVector<double> recent_pps;
+    for (const auto& m : marks) {
+        if (m.mark_pps <= 0) continue;
+        if (newest.isValid() && m.as_of.daysTo(newest) > 120) continue;
+        const double w = std::max(m.shares_held, 1.0);
+        sum_w  += w;
+        sum_wx += w * m.mark_pps;
+        recent_pps.append(m.mark_pps);
+    }
+    const double consensus = (sum_w > 0) ? sum_wx / sum_w : 0;
+    double dispersion = 0;
+    if (recent_pps.size() >= 2 && consensus > 0) {
+        double var = 0;
+        for (double v : recent_pps) { const double d = v - consensus; var += d * d; }
+        dispersion = std::sqrt(var / recent_pps.size()) / consensus * 100.0;
+    }
+    consensus_lbl_->setText(consensus > 0 ? QString("$%1").arg(consensus, 0, 'f', 2) : "—");
+    dispersion_lbl_->setText(dispersion > 0 ? QString("±%1%").arg(dispersion, 0, 'f', 1) : "—");
+    smart_money_lbl_->setText(QString::number(recent_pps.size()));
+
+    // Per-fund rows (newest as_of first).
+    QVector<FundMark> sorted = marks;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const FundMark& a, const FundMark& b) { return a.as_of > b.as_of; });
+    marks_table_->setRowCount(sorted.size());
+    for (int i = 0; i < sorted.size(); ++i) {
+        const auto& m = sorted[i];
+        auto cell = [](const QString& text, Qt::Alignment align = Qt::AlignLeft | Qt::AlignVCenter) {
+            auto* it = new QTableWidgetItem(text);
+            it->setFlags(Qt::ItemIsEnabled);
+            it->setTextAlignment(align);
+            return it;
+        };
+        marks_table_->setItem(i, 0, cell(m.fund_name));
+        marks_table_->setItem(i, 1, cell(m.as_of.isValid() ? m.as_of.toString("yyyy-MM") : "—",
+                                         Qt::AlignCenter));
+        marks_table_->setItem(i, 2, cell(
+            m.shares_held > 0 ? QString::number(qRound(m.shares_held))
+                              : "—",
+            Qt::AlignRight | Qt::AlignVCenter));
+        marks_table_->setItem(i, 3, cell(
+            m.mark_pps > 0 ? QString("$%1").arg(m.mark_pps, 0, 'f', 2) : "—",
+            Qt::AlignRight | Qt::AlignVCenter));
+    }
+    const int row_h = 24;
+    const int header_h = 26;
+    marks_table_->setFixedHeight(qMin(200, header_h + sorted.size() * row_h + 4));
+}
+
+// ── Analytics KPI band ───────────────────────────────────────────────────────
+
+void CompanyDetailPanel::rebuild_analytics(const PrivateCompany& c) {
+    if (!kpi_section_) return;
+    const auto& a = c.analytics;
+    if (kpi_readiness_lbl_)
+        kpi_readiness_lbl_->setText(QString::number(a.ipo_readiness_score) + "/100");
+    if (kpi_drift_lbl_) {
+        if (a.mark_drift_vs_last_round_pct != 0) {
+            const double v = a.mark_drift_vs_last_round_pct;
+            kpi_drift_lbl_->setText((v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%");
+            kpi_drift_lbl_->setStyleSheet(
+                QString("color:%1;font-size:14px;font-weight:700;font-family:Consolas,monospace;background:transparent;")
+                    .arg(v >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
+        } else {
+            kpi_drift_lbl_->setText("—");
+        }
+    }
+    if (kpi_premium_lbl_)
+        kpi_premium_lbl_->setText(a.hiive_premium_pct != 0
+            ? QString::number(a.hiive_premium_pct, 'f', 1) + "%" : "—");
+    if (kpi_days_lbl_)
+        kpi_days_lbl_->setText(a.days_to_price_est > 0 ? QString("~%1d").arg(a.days_to_price_est) : "—");
+    if (kpi_raised_lbl_)
+        kpi_raised_lbl_->setText(c.cumulative_raised_m > 0
+            ? "$" + QString::number(qRound(c.cumulative_raised_m)) + "M" : "—");
 }
 
 void CompanyDetailPanel::rebuild_investors(const QStringList& investors) {

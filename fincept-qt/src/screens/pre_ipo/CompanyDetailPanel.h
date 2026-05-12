@@ -35,10 +35,12 @@ class CompanyDetailPanel : public QWidget {
     QWidget* make_metric_tile(const QString& label, const QString& value,
                               const QString& color = {}) const;
     QWidget* make_tag_chip(const QString& text, bool clickable = false) const;
-    void rebuild_rounds_table(const QVector<pre_ipo::FundingRound>& rounds);
+    void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds);
     void rebuild_comps_chips(const QStringList& tickers);
     void rebuild_investors(const QStringList& investors);
     void rebuild_tags(const QStringList& tags);
+    void rebuild_fund_marks(const QVector<pre_ipo::FundMark>& marks);
+    void rebuild_analytics(const pre_ipo::PrivateCompany& c);
 
     // ── Stacked widget ────────────────────────────────────────────────────────
     QStackedWidget* stack_     = nullptr;
@@ -86,6 +88,21 @@ class CompanyDetailPanel : public QWidget {
 
     // ── Description ───────────────────────────────────────────────────────────
     QLabel* desc_lbl_ = nullptr;
+
+    // ── Fund marks (consensus + per-fund rows) ────────────────────────────────
+    QWidget*      marks_section_   = nullptr;
+    QLabel*       consensus_lbl_   = nullptr;
+    QLabel*       dispersion_lbl_  = nullptr;
+    QLabel*       smart_money_lbl_ = nullptr;
+    QTableWidget* marks_table_     = nullptr;
+
+    // ── Analytics KPI band ────────────────────────────────────────────────────
+    QWidget* kpi_section_       = nullptr;
+    QLabel*  kpi_readiness_lbl_ = nullptr;
+    QLabel*  kpi_drift_lbl_     = nullptr;
+    QLabel*  kpi_premium_lbl_   = nullptr;
+    QLabel*  kpi_days_lbl_      = nullptr;
+    QLabel*  kpi_raised_lbl_    = nullptr;
 };
 
 } // namespace fincept::screens

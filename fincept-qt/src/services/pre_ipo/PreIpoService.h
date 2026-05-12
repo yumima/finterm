@@ -6,62 +6,78 @@
 #include <QString>
 #include <QVector>
 
+class QJsonObject;
+class QJsonArray;
+
 namespace fincept::services {
 
 /// Singleton service for pre-IPO / private company data.
 ///
-/// Data sources (free, no API key):
-///   SEC EDGAR Form D — amount raised, date, exemption (no valuation/price)
-///   SEC EDGAR S-1/F-1 — IPO pipeline, filing date, underwriters
+/// Data sources (free, no API key, public):
+///   • SEC EDGAR Form D XML        — primary rounds, amount raised, exemption,
+///                                   issuer address, related persons.
+///   • SEC EDGAR S-1 / F-1         — IPO pipeline, amendment cadence.
+///   • SEC EDGAR XBRL companyfacts — revenue, net income, gross margin for
+///                                   companies that have filed S-1 with XBRL.
+///   • SEC EDGAR N-PORT-P          — mutual-fund fair-value marks (Fidelity,
+///                                   T. Rowe Price, BlackRock, Wellington, …).
 ///
-/// Fields not available from free sources show "—" in the UI.
-/// Crunchbase/PitchBook integrations (valuation, rounds detail) are
-/// paid and not currently integrated.
+/// Each source is fetched asynchronously via a Python script run by
+/// `python::PythonRunner`; results are merged into `PrivateCompany`
+/// dossiers keyed by slug id (CIK when known).
 class PreIpoService : public QObject {
     Q_OBJECT
   public:
     static PreIpoService& instance();
 
-    // ── Data access ───────────────────────────────────────────────────────────
-
-    /// Trigger initial data load (idempotent — safe to call multiple times).
+    /// Trigger initial data load (idempotent).
     void load_data();
 
-    /// All companies in the universe.
+    /// Force a refresh (re-runs all fetchers). Emits data_loaded on completion.
+    void refresh();
+
     QVector<pre_ipo::PrivateCompany> companies() const;
-
-    /// Single company by slug id. Returns default-constructed if not found.
     pre_ipo::PrivateCompany company(const QString& id) const;
-
-    /// Toggle the "watched" flag for a company. Emits company_updated(id).
     void toggle_watch(const QString& id);
 
-    /// Recent Form D SEC filings.
     QVector<pre_ipo::FormDFiling> recent_form_d() const;
+    QVector<pre_ipo::S1Filing>    ipo_pipeline() const;
+    QVector<pre_ipo::Signal>      signal_list() const;
+    QVector<pre_ipo::FundEntry>   funds() const;
 
-    /// Active IPO pipeline (S-1 filers).
-    QVector<pre_ipo::S1Filing> ipo_pipeline() const;
-
-    /// True after load_data() has successfully completed.
     bool is_loaded() const { return loaded_; }
 
   signals:
     void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
     void company_updated(QString id);
     void error_occurred(QString message);
+    void progress(QString message);  // "Loading Form D…", "Loading marks…"
 
   private:
     explicit PreIpoService(QObject* parent = nullptr);
 
-    void load_from_sec();
-    void parse_sec_summary(const QJsonObject& root);
+    void run_form_d_fetch();
+    void run_nport_marks_fetch();
+    void run_s1_pipeline_fetch();
+
+    void parse_form_d_response(const QJsonObject& root);
+    void parse_marks_response(const QJsonObject& root);
+    void parse_pipeline_response(const QJsonArray& arr);
+
+    void recompute_analytics();
     void emit_loaded();
+
+    // Multi-stage loading guard. We wait for all 3 fetches before emitting.
+    enum FetchBit { FB_FormD = 1, FB_Marks = 2, FB_S1 = 4, FB_All = 7 };
+    int  pending_bits_ = 0;
+    bool loading_ = false;
 
     QVector<pre_ipo::PrivateCompany> companies_;
     QVector<pre_ipo::FormDFiling>    form_d_;
     QVector<pre_ipo::S1Filing>       pipeline_;
-    bool loaded_  = false;
-    bool loading_ = false;   // guard against concurrent Python spawns
+    QVector<pre_ipo::Signal>         signals_;
+    QVector<pre_ipo::FundEntry>      funds_;
+    bool loaded_ = false;
 };
 
 } // namespace fincept::services

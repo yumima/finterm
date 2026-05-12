@@ -1279,6 +1279,9 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/CompanyDetailPanel.cpp
     src/screens/pre_ipo/IpoPipelinePanel.cpp
     src/screens/pre_ipo/PreIpoScreen.cpp
+    src/screens/pre_ipo/views/PicksView.cpp
+    src/screens/pre_ipo/views/ScreenerView.cpp
+    src/screens/pre_ipo/views/PipelineView.cpp
     src/services/pre_ipo/PreIpoService.cpp
 
     # Alternative Investments
@@ -1409,6 +1412,9 @@ set_source_files_properties(
     src/screens/pre_ipo/CompanyDetailPanel.cpp
     src/screens/pre_ipo/IpoPipelinePanel.cpp
     src/screens/pre_ipo/PreIpoScreen.cpp
+    src/screens/pre_ipo/views/PicksView.cpp
+    src/screens/pre_ipo/views/ScreenerView.cpp
+    src/screens/pre_ipo/views/PipelineView.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/screens/power_trader/PowerTraderScreen.cpp
     src/screens/power_trader/PowerTraderService.cpp
