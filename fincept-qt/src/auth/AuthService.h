@@ -46,6 +46,21 @@ class AuthService : public QObject {
     void login(const LoginRequest& req, Callback cb);
     void verify_otp(const VerifyOtpRequest& req, Callback cb);
 
+    // ── Local multi-user (username + PIN, no email/OTP/MFA) ──────────────────
+    /// Listed for the LoginScreen user picker. Each entry is { "username":
+    /// QString, "last_login_at": QString (ISO) }. Empty list → first launch.
+    QVector<QJsonObject> list_local_users();
+    /// Create a new local user. Stores a synthetic email "<username>@local"
+    /// so the existing email-keyed columns stay populated; auto-flags
+    /// otp_verified = true. Fails 409 if username already exists.
+    void register_local_user(const QString& username, const QString& pin, Callback cb);
+    /// Log in by username + PIN. Mirrors the email-based login response so
+    /// AuthManager can stay agnostic.
+    void login_local(const QString& username, const QString& pin, Callback cb);
+    /// Remove a local user and the per-user DB at users/<username>.db.
+    /// Used by the LoginScreen "forgot PIN" reset path.
+    void delete_local_user(const QString& username, Callback cb);
+
     /// Local reset: logs a console message ("use any 6-digit OTP"), returns success.
     void forgot_password(const ForgotPasswordRequest& req, Callback cb);
     /// Accepts any 6-digit OTP; updates the stored password hash.

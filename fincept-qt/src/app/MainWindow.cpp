@@ -784,12 +784,9 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // Toolbar logout
     connect(toolbar, &ui::ToolBar::logout_clicked, this, []() { auth::AuthManager::instance().logout(); });
 
-    // Toolbar plan label → pricing screen
-    connect(toolbar, &ui::ToolBar::plan_clicked, this, [this]() {
-        set_shell_visible(false);
-        stack_->setCurrentIndex(0);
-        auth_stack_->setCurrentIndex(3); // PricingScreen
-    });
+    // Plan label is a no-op in the localhost-only fork — all features are
+    // locally available; there's nowhere to upgrade.
+    connect(toolbar, &ui::ToolBar::plan_clicked, this, []() {});
 
     // Auth state
     connect(&auth::AuthManager::instance(), &auth::AuthManager::auth_state_changed, this,
@@ -961,10 +958,12 @@ void MainWindow::toggle_chat_mode() {
 }
 
 void MainWindow::setup_auth_screens() {
+    // Localhost-only fork: no email = no email-recovery flow, and no payment
+    // backend means no pricing wall. ForgotPasswordScreen + PricingScreen
+    // stay in the source tree (their files compile cleanly) but are never
+    // mounted in the auth stack, so the user can't reach them.
     auto* login = new screens::LoginScreen;
     auto* reg = new screens::RegisterScreen;
-    auto* forgot = new screens::ForgotPasswordScreen;
-    auto* pricing = new screens::PricingScreen;
 
     // Info screens stack (shared between auth and app via master stack index 2)
     info_stack_ = new QStackedWidget;
@@ -982,20 +981,17 @@ void MainWindow::setup_auth_screens() {
 
     auth_stack_->addWidget(login);       // index 0
     auth_stack_->addWidget(reg);         // index 1
-    auth_stack_->addWidget(forgot);      // index 2
-    auth_stack_->addWidget(pricing);     // index 3
+    // index 2 / 3 were ForgotPasswordScreen + PricingScreen — removed in
+    // the localhost-only flow. Add placeholder widgets so existing
+    // setCurrentIndex(...) calls don't go out of range; show_forgot_password
+    // / show_pricing now just route back to login.
+    auth_stack_->addWidget(new QWidget(this)); // index 2 (was forgot)
+    auth_stack_->addWidget(new QWidget(this)); // index 3 (was pricing)
     auth_stack_->addWidget(info_stack_); // index 4
 
     // ── Auth navigation ──────────────────────────────────────────────────────
     connect(login, &screens::LoginScreen::navigate_register, this, &MainWindow::show_register);
-    connect(login, &screens::LoginScreen::navigate_forgot_password, this, &MainWindow::show_forgot_password);
-    connect(reg, &screens::RegisterScreen::navigate_login, this, &MainWindow::show_login);
-    connect(forgot, &screens::ForgotPasswordScreen::navigate_login, this, &MainWindow::show_login);
-    connect(pricing, &screens::PricingScreen::navigate_dashboard, this, [this]() {
-        set_shell_visible(true);
-        stack_->setCurrentIndex(1);
-        dock_router_->navigate("dashboard");
-    });
+    connect(reg,   &screens::RegisterScreen::navigate_login,  this, &MainWindow::show_login);
 
     // ── Info screen navigation ───────────────────────────────────────────────
     // Back from info → return to previous auth screen (login by default)
@@ -1009,7 +1005,7 @@ void MainWindow::setup_auth_screens() {
     connect(trademarks, &screens::TrademarksScreen::navigate_back, this, &MainWindow::show_login);
     connect(help, &screens::HelpScreen::navigate_back, this, &MainWindow::show_login);
     connect(help, &screens::HelpScreen::navigate_register, this, &MainWindow::show_register);
-    connect(help, &screens::HelpScreen::navigate_forgot_password, this, &MainWindow::show_forgot_password);
+    // help::navigate_forgot_password is unused in the localhost-only flow.
 }
 
 void MainWindow::setup_docking_mode() {
@@ -1217,8 +1213,8 @@ void MainWindow::on_auth_state_changed() {
                                         .arg(pin_gate_cleared_));
             return;
         }
-        if (stack_->currentIndex() == 0 && auth_stack_->currentIndex() == 3)
-            return; // user is on pricing screen — let PricingScreen handle it
+        // Pricing screen exception removed: the localhost-only fork no
+        // longer routes users to a paywall.
 
         // ── PIN gate: require PIN setup or PIN unlock before proceeding ──
         // On first login (no PIN configured): show mandatory PIN setup.
@@ -1281,10 +1277,10 @@ void MainWindow::on_auth_state_changed() {
             fincept::trading::InstrumentService::instance().load_from_db_async("angelone");
             fincept::trading::InstrumentService::instance().load_from_db_async("groww");
         } else {
-            // Free/no plan → show pricing gate
-            set_shell_visible(false);
-            stack_->setCurrentIndex(0);
-            auth_stack_->setCurrentIndex(3);
+            // Localhost-only fork: no paywall. Everyone goes to the dashboard.
+            set_shell_visible(true);
+            stack_->setCurrentIndex(1);
+            WorkspaceManager::instance().load_last_workspace();
         }
     } else {
         // Disable inactivity guard when logged out and drop the locked flag
@@ -1316,10 +1312,13 @@ void MainWindow::show_register() {
     enter_auth_stack(1);
 }
 void MainWindow::show_forgot_password() {
-    enter_auth_stack(2);
+    // Localhost-only fork: no forgot-password flow. Surface the login picker.
+    enter_auth_stack(0);
 }
 void MainWindow::show_pricing() {
-    enter_auth_stack(3);
+    // Localhost-only fork: no paywall. Surface the dashboard instead.
+    set_shell_visible(true);
+    stack_->setCurrentIndex(1);
 }
 void MainWindow::show_info_contact() {
     info_stack_->setCurrentIndex(0);
@@ -1437,10 +1436,10 @@ void MainWindow::on_terminal_unlocked() {
             services::UpdateService::instance().check_for_updates(true);
         });
     } else {
-        // Free/no plan → pricing gate
-        set_shell_visible(false);
-        stack_->setCurrentIndex(0);
-        auth_stack_->setCurrentIndex(3);
+        // Localhost-only fork: no pricing gate. Drop straight into the shell.
+        set_shell_visible(true);
+        stack_->setCurrentIndex(1);
+        WorkspaceManager::instance().load_last_workspace();
     }
 
     emit auth.terminal_unlocked();

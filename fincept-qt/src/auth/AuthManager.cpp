@@ -282,6 +282,54 @@ void AuthManager::signup(const QString& username, const QString& email, const QS
     });
 }
 
+// ── Local (no email, no OTP) ─────────────────────────────────────────────────
+
+void AuthManager::signup_local(const QString& username, const QString& pin) {
+    set_loading(true);
+    AuthService::instance().register_local_user(username, pin, [this](ApiResponse r) {
+        set_loading(false);
+        if (r.success)
+            emit signup_succeeded();
+        else
+            emit signup_failed(r.error.isEmpty() ? "Could not create user" : r.error);
+    });
+}
+
+void AuthManager::login_local(const QString& username, const QString& pin) {
+    set_loading(true);
+    AuthService::instance().login_local(username, pin, [this](ApiResponse r) {
+        if (!r.success) {
+            set_loading(false);
+            emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
+            return;
+        }
+        const auto data = unwrap_data(r.data);
+        const QString api_key = data["api_key"].toString();
+        if (api_key.isEmpty()) {
+            set_loading(false);
+            emit login_failed("Internal error (no api_key)");
+            return;
+        }
+        const QString session_token = data["session_token"].toString();
+        apply_tokens(api_key, session_token);
+
+        session_.authenticated = true;
+        session_.api_key       = api_key;
+        session_.session_token = session_token;
+        session_.device_id     = generate_device_id();
+
+        fetch_user_profile([this] { emit login_succeeded(); });
+    });
+}
+
+QVector<QJsonObject> AuthManager::list_local_users() const {
+    return AuthService::instance().list_local_users();
+}
+
+void AuthManager::delete_local_user(const QString& username) {
+    AuthService::instance().delete_local_user(username, [](ApiResponse) {});
+}
+
 // ── OTP verification ─────────────────────────────────────────────────────────
 
 void AuthManager::verify_otp(const QString& email, const QString& otp) {

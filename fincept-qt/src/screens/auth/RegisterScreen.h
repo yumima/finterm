@@ -2,12 +2,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
-#include <QStackedWidget>
 #include <QWidget>
 
 namespace fincept::screens {
 
-/// Registration screen — Obsidian design, compact form + OTP verification.
+/// Local-only registration: pick a username + set a 4-6 digit PIN.
+/// No email, no OTP, no MFA — everything is stored in the local auth.db.
 class RegisterScreen : public QWidget {
     Q_OBJECT
   public:
@@ -18,42 +18,20 @@ class RegisterScreen : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent* event) override;
-    /// Wipe registration + OTP fields whenever the screen leaves the stack so
-    /// entered credentials do not linger.
     void hideEvent(QHideEvent* event) override;
 
   private:
-    QStackedWidget* pages_ = nullptr;
+    QLineEdit*   username_     = nullptr;
+    QLineEdit*   pin_          = nullptr;
+    QLineEdit*   pin_confirm_  = nullptr;
+    QPushButton* create_btn_   = nullptr;
+    QPushButton* back_btn_     = nullptr;
+    QLabel*      error_label_  = nullptr;
 
-    QLineEdit* first_name_ = nullptr;
-    QLineEdit* last_name_ = nullptr;
-    QLineEdit* email_ = nullptr;
-    QLineEdit* phone_ = nullptr;
-    QLineEdit* country_code_ = nullptr;
-    QLineEdit* password_ = nullptr;
-    QLineEdit* confirm_pw_ = nullptr;
-    QPushButton* register_btn_ = nullptr;
-    QLabel* error_label_ = nullptr;
-
-    QLabel* pw_len_ = nullptr;
-    QLabel* pw_up_ = nullptr;
-    QLabel* pw_low_ = nullptr;
-    QLabel* pw_num_ = nullptr;
-    QLabel* pw_spec_ = nullptr;
-
-    QLineEdit* otp_input_ = nullptr;
-    QPushButton* verify_btn_ = nullptr;
-    QLabel* otp_error_ = nullptr;
-    QLabel* otp_email_ = nullptr;
-
-    void build_form_page();
-    void build_otp_page();
-    void update_password_strength();
+    void build_form();
 
   private slots:
-    void on_register();
-    void on_verify_otp();
-    void on_resend_otp();
+    void on_create();
 };
 
 } // namespace fincept::screens

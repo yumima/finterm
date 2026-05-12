@@ -1,14 +1,17 @@
 #pragma once
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QWidget>
 
 namespace fincept::screens {
 
-/// Login screen — email/password, MFA step, force-login for active sessions.
-/// Obsidian design: sharp corners, monospace, no shadows, terminal aesthetic.
+/// Local login: pick a user from the list (sourced from the local auth.db),
+/// then punch in their 4-6 digit PIN. No email, no MFA, no remote auth.
+/// Falls through to a "first-run" panel that nudges new users into signup
+/// when the local user database is empty.
 class LoginScreen : public QWidget {
     Q_OBJECT
   public:
@@ -16,49 +19,46 @@ class LoginScreen : public QWidget {
 
   signals:
     void navigate_register();
+    /// Deprecated in the local-only flow but kept so MainWindow's existing
+    /// wiring compiles. Never emitted in normal use.
     void navigate_forgot_password();
-
-  private:
-    QLineEdit* email_input_ = nullptr;
-    QLineEdit* password_input_ = nullptr;
-    QPushButton* login_btn_ = nullptr;
-    QLabel* error_label_ = nullptr;
-    QPushButton* show_pw_btn_ = nullptr;
-
-    QWidget* mfa_page_ = nullptr;
-    QLineEdit* mfa_input_ = nullptr;
-    QPushButton* mfa_verify_btn_ = nullptr;
-    QLabel* mfa_error_ = nullptr;
-
-    QWidget* conflict_page_ = nullptr;
-    QLabel* conflict_msg_ = nullptr;
-
-    QStackedWidget* pages_ = nullptr;
-
-    void build_login_page();
-    void build_mfa_page();
-    void build_conflict_page();
-
-    void show_error(const QString& msg);
-    void clear_error();
-    void set_loading(bool loading);
 
   protected:
     void paintEvent(QPaintEvent* event) override;
-    /// Wipe email/password/MFA fields whenever the screen leaves the stack so
-    /// credentials do not linger across logout → login cycles.
     void hideEvent(QHideEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+
+  private:
+    QStackedWidget* pages_         = nullptr;
+
+    // ── Picker page ───────────────────────────────────────────────────────
+    QWidget*      picker_page_     = nullptr;
+    QListWidget*  user_list_       = nullptr;
+    QPushButton*  create_btn_      = nullptr;
+    QLabel*       picker_empty_    = nullptr;
+
+    // ── PIN page ──────────────────────────────────────────────────────────
+    QWidget*      pin_page_        = nullptr;
+    QLabel*       pin_username_lbl_ = nullptr;
+    QLineEdit*    pin_input_       = nullptr;
+    QPushButton*  pin_unlock_btn_  = nullptr;
+    QPushButton*  pin_back_btn_    = nullptr;
+    QPushButton*  pin_delete_btn_  = nullptr;
+    QLabel*       pin_error_       = nullptr;
+    QString       active_username_;
+
+    void build_picker_page();
+    void build_pin_page();
+    void refresh_user_list();
+    void show_picker();
+    void show_pin_pad(const QString& username);
 
   private slots:
-    void on_login();
-    void on_mfa_verify();
-    void on_force_login();
+    void on_user_selected(QListWidgetItem* item);
+    void on_unlock();
+    void on_delete_user();
     void on_login_succeeded();
     void on_login_failed(const QString& error);
-    void on_mfa_required();
-    void on_active_session(const QString& msg);
-    void on_mfa_verified();
-    void on_mfa_failed(const QString& error);
 };
 
 } // namespace fincept::screens

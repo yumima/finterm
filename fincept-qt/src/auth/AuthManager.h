@@ -22,6 +22,12 @@ class AuthManager : public QObject {
     void login(const QString& email, const QString& password, bool force_login = false);
     void signup(const QString& username, const QString& email, const QString& password, const QString& phone,
                 const QString& country = {}, const QString& country_code = {});
+
+    // Local (no email, no OTP). Multi-user picker + 4-6 digit PIN.
+    void signup_local(const QString& username, const QString& pin);
+    void login_local(const QString& username, const QString& pin);
+    QVector<QJsonObject> list_local_users() const;
+    void delete_local_user(const QString& username);
     void verify_otp(const QString& email, const QString& otp);
     void verify_mfa(const QString& email, const QString& otp);
     void forgot_password(const QString& email);

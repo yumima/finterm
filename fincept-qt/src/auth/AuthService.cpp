@@ -8,6 +8,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDateTime>
+#include <QFile>
 #include <QRandomGenerator>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -206,6 +207,119 @@ void AuthService::register_user(const RegisterRequest& req, Callback cb) {
         return;
     }
     LOG_INFO("AuthService", "Registered user: " + req.email);
+    cb({true, {}, {}, 200});
+}
+
+// ── Local multi-user (username + PIN) ─────────────────────────────────────────
+
+QVector<QJsonObject> AuthService::list_local_users() {
+    QVector<QJsonObject> out;
+    QSqlQuery q(db_);
+    if (!q.exec("SELECT username, last_login_at FROM users "
+                "WHERE otp_verified = 1 ORDER BY last_login_at DESC, username ASC")) {
+        LOG_WARN("AuthService", "list_local_users query failed: " + q.lastError().text());
+        return out;
+    }
+    while (q.next()) {
+        QJsonObject row;
+        row["username"]      = q.value(0).toString();
+        row["last_login_at"] = q.value(1).toString();
+        out.append(row);
+    }
+    return out;
+}
+
+void AuthService::register_local_user(const QString& username, const QString& pin, Callback cb) {
+    const QString u = username.toLower().trimmed();
+    if (u.isEmpty()) {
+        cb({false, {}, "Username can't be empty.", 400});
+        return;
+    }
+    // Synthetic email — keeps the existing unique-email constraint satisfied
+    // without exposing it in the local-user flow.
+    const QString synthetic_email = u + "@local";
+    const QString api_key = QUuid::createUuid().toString(QUuid::WithoutBraces);
+
+    QSqlQuery q(db_);
+    q.prepare("INSERT INTO users (username, email, password_hash, api_key, otp_verified, created_at) "
+              "VALUES (?, ?, ?, ?, 1, ?)");
+    q.addBindValue(u);
+    q.addBindValue(synthetic_email);
+    q.addBindValue(hash_password(pin));
+    q.addBindValue(api_key);
+    q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    if (!q.exec()) {
+        const QString err = q.lastError().text();
+        LOG_ERROR("AuthService", "register_local_user failed: " + err);
+        if (err.contains("username", Qt::CaseInsensitive) || err.contains("email", Qt::CaseInsensitive))
+            cb({false, {}, "That username is already taken on this device.", 409});
+        else
+            cb({false, {}, "Could not create user. Try a different name.", 500});
+        return;
+    }
+    LOG_INFO("AuthService", "Registered local user: " + u);
+    QJsonObject data;
+    data["username"] = u;
+    data["api_key"]  = api_key;
+    cb({true, data, {}, 200});
+}
+
+void AuthService::login_local(const QString& username, const QString& pin, Callback cb) {
+    const QString u = username.toLower().trimmed();
+    QSqlQuery q(db_);
+    q.prepare("SELECT username, email, password_hash, api_key "
+              "FROM users WHERE username = ? AND otp_verified = 1");
+    q.addBindValue(u);
+    q.exec();
+    if (!q.next()) {
+        cb({false, {}, "User not found on this device.", 404});
+        return;
+    }
+
+    const QString stored_username = q.value(0).toString();
+    const QString stored_email    = q.value(1).toString();
+    const QString stored_hash     = q.value(2).toString();
+    const QString api_key         = q.value(3).toString();
+
+    if (!verify_password(pin, stored_hash)) {
+        cb({false, {}, "Incorrect PIN.", 401});
+        return;
+    }
+
+    const QString now           = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    const QString session_token = make_token();
+
+    QSqlQuery upd(db_);
+    upd.prepare("UPDATE users SET last_login_at = ? WHERE username = ?");
+    upd.addBindValue(now);
+    upd.addBindValue(stored_username);
+    upd.exec();
+
+    QJsonObject data;
+    data["api_key"]        = api_key;
+    data["session_token"]  = session_token;
+    data["active_session"] = false;
+    data["mfa_required"]   = false;
+    data["username"]       = stored_username;
+    data["email"]          = stored_email;
+    LOG_INFO("AuthService", "Local login: " + stored_username);
+    cb({true, data, {}, 200});
+}
+
+void AuthService::delete_local_user(const QString& username, Callback cb) {
+    const QString u = username.toLower().trimmed();
+    // Delete per-user DB file first; if SQLite says no, we still try the row.
+    const QString path = user_db_path(u);
+    QFile::remove(path);
+
+    QSqlQuery q(db_);
+    q.prepare("DELETE FROM users WHERE username = ?");
+    q.addBindValue(u);
+    if (!q.exec()) {
+        cb({false, {}, "Could not delete user.", 500});
+        return;
+    }
+    LOG_INFO("AuthService", "Deleted local user: " + u);
     cb({true, {}, {}, 200});
 }
 
