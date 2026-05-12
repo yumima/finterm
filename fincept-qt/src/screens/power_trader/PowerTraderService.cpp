@@ -5,9 +5,11 @@
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "screens/power_trader/DataSourceDialog.h"
+#include "services/util/DiskCache.h"
 
 #include <QDate>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,6 +20,18 @@
 #include <algorithm>
 
 namespace fincept::power_trader {
+
+namespace {
+// Persistent on-disk cache so the next launch paints the most-recent dataset
+// immediately (Senate eFD scrape can take 30–90s on cold start). Refreshes
+// overwrite atomically; we never delete on app close.
+fincept::services::util::DiskCache& disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("power_trader"));
+    return c;
+}
+constexpr const char* kSummaryFile = "summary.json";
+constexpr const char* kCabinetFile = "cabinet.json";
+} // namespace
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
@@ -38,6 +52,28 @@ PowerTraderService::PowerTraderService(QObject* parent) : QObject(parent) {
     refresh_timer_->setInterval(kRefreshIntervalMs);
     refresh_timer_->setSingleShot(false);
     connect(refresh_timer_, &QTimer::timeout, this, [this]() { load_data(); });
+
+    // Hydrate from disk if we have a prior session's cache. The data_loaded
+    // signals emitted from parse_*() go to no listeners (UI wires up later),
+    // which is the intended drop — load_data() will re-emit once the UI
+    // connects. We override last_updated to the file mtime so the in-memory
+    // staleness check uses the real cache age, not "now".
+    const auto sum_doc = disk_cache().load(QString::fromLatin1(kSummaryFile));
+    if (sum_doc.isObject()) {
+        parse_summary(sum_doc.object());
+        QFileInfo fi(disk_cache().path(QString::fromLatin1(kSummaryFile)));
+        if (fi.exists()) summary_.last_updated = fi.lastModified().toUTC();
+        LOG_INFO("PowerTrader",
+                 QString("Hydrated %1 members, %2 trades from cache")
+                     .arg(summary_.members.size())
+                     .arg(summary_.recent_trades.size()));
+    }
+    const auto cab_doc = disk_cache().load(QString::fromLatin1(kCabinetFile));
+    if (cab_doc.isObject()) {
+        parse_cabinet(cab_doc.object());
+        QFileInfo fi(disk_cache().path(QString::fromLatin1(kCabinetFile)));
+        if (fi.exists()) cabinet_.last_updated = fi.lastModified().toUTC();
+    }
 }
 
 void PowerTraderService::set_days_back(int days) {
@@ -61,14 +97,18 @@ void PowerTraderService::load_data() {
         return;
     }
 
-    // If we have cached data that is less than 6 hours old, emit it immediately
-    // and skip the network hit.
-    if (summary_.loaded && summary_.last_updated.isValid()) {
+    // If we have any cached data (from this session or persisted from a prior
+    // launch), emit it immediately so the UI paints instantly. Then decide
+    // whether to skip or trigger a background refresh based on cache age.
+    const bool have_cache = summary_.loaded && summary_.last_updated.isValid();
+    if (have_cache) {
+        emit data_loaded(summary_);
         const qint64 age_secs = summary_.last_updated.secsTo(QDateTime::currentDateTimeUtc());
         if (age_secs < kRefreshIntervalMs / 1000) {
-            emit data_loaded(summary_);
-            return;
+            return;  // cache fresh; skip network
         }
+        LOG_INFO("PowerTrader",
+                 QString("Cache is %1h old — refreshing in background").arg(age_secs / 3600));
     }
 
     loading_ = true;
@@ -122,6 +162,8 @@ void PowerTraderService::load_data() {
                     QStringLiteral("Invalid data from congressional disclosure source."));
                 return;
             }
+            // Persist the raw response so the next launch hydrates instantly.
+            disk_cache().save(QString::fromLatin1(kSummaryFile), doc);
             self->parse_summary(doc.object());
             if (self->summary_.members.isEmpty()) {
                 emit self->error_occurred(
@@ -651,6 +693,7 @@ void PowerTraderService::load_cabinet_data() {
                 LOG_ERROR("PowerTrader", "oge_cabinet_data.py returned invalid JSON");
                 return;
             }
+            disk_cache().save(QString::fromLatin1(kCabinetFile), doc);
             self->parse_cabinet(doc.object());
         });
 }

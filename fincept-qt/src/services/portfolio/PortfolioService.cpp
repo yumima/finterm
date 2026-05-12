@@ -5,6 +5,7 @@
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "services/sectors/SectorResolver.h"
+#include "services/util/DiskCache.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -21,6 +22,126 @@
 #include <numeric>
 
 namespace fincept::services {
+
+namespace {
+
+fincept::services::util::DiskCache& portfolio_disk_cache() {
+    static fincept::services::util::DiskCache c(QStringLiteral("portfolio"));
+    return c;
+}
+
+// Per-portfolio summary cache filename. Slashes / weird chars in portfolio
+// ids would break filesystem use; sanitize to a flat alnum-only basename.
+QString summary_filename(const QString& portfolio_id) {
+    QString safe = portfolio_id;
+    for (auto& ch : safe) {
+        if (!ch.isLetterOrNumber()) ch = QChar('_');
+    }
+    return QStringLiteral("summary_") + safe + QStringLiteral(".json");
+}
+
+// ── PortfolioSummary <-> JSON ────────────────────────────────────────────────
+//
+// Used only for the disk cache. Field set must match build_summary's output
+// so a cached summary survives a round-trip and is indistinguishable from a
+// freshly-computed one — UI consumers can't tell the difference.
+
+QJsonObject portfolio_to_json(const portfolio::Portfolio& p) {
+    QJsonObject o;
+    o[QStringLiteral("id")]          = p.id;
+    o[QStringLiteral("name")]        = p.name;
+    o[QStringLiteral("owner")]       = p.owner;
+    o[QStringLiteral("currency")]    = p.currency;
+    o[QStringLiteral("description")] = p.description;
+    o[QStringLiteral("created_at")]  = p.created_at;
+    o[QStringLiteral("updated_at")]  = p.updated_at;
+    return o;
+}
+
+portfolio::Portfolio portfolio_from_json(const QJsonObject& o) {
+    portfolio::Portfolio p;
+    p.id          = o[QStringLiteral("id")].toString();
+    p.name        = o[QStringLiteral("name")].toString();
+    p.owner       = o[QStringLiteral("owner")].toString();
+    p.currency    = o[QStringLiteral("currency")].toString(QStringLiteral("USD"));
+    p.description = o[QStringLiteral("description")].toString();
+    p.created_at  = o[QStringLiteral("created_at")].toString();
+    p.updated_at  = o[QStringLiteral("updated_at")].toString();
+    return p;
+}
+
+QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
+    QJsonObject o;
+    o[QStringLiteral("symbol")]              = h.symbol;
+    o[QStringLiteral("quantity")]            = h.quantity;
+    o[QStringLiteral("avg_buy_price")]       = h.avg_buy_price;
+    o[QStringLiteral("sector")]              = h.sector;
+    o[QStringLiteral("current_price")]       = h.current_price;
+    o[QStringLiteral("market_value")]        = h.market_value;
+    o[QStringLiteral("cost_basis")]          = h.cost_basis;
+    o[QStringLiteral("unrealized_pnl")]      = h.unrealized_pnl;
+    o[QStringLiteral("unrealized_pnl_percent")] = h.unrealized_pnl_percent;
+    o[QStringLiteral("day_change")]          = h.day_change;
+    o[QStringLiteral("day_change_percent")]  = h.day_change_percent;
+    o[QStringLiteral("weight")]              = h.weight;
+    return o;
+}
+
+portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
+    portfolio::HoldingWithQuote h;
+    h.symbol               = o[QStringLiteral("symbol")].toString();
+    h.quantity             = o[QStringLiteral("quantity")].toDouble();
+    h.avg_buy_price        = o[QStringLiteral("avg_buy_price")].toDouble();
+    h.sector               = o[QStringLiteral("sector")].toString();
+    h.current_price        = o[QStringLiteral("current_price")].toDouble();
+    h.market_value         = o[QStringLiteral("market_value")].toDouble();
+    h.cost_basis           = o[QStringLiteral("cost_basis")].toDouble();
+    h.unrealized_pnl       = o[QStringLiteral("unrealized_pnl")].toDouble();
+    h.unrealized_pnl_percent = o[QStringLiteral("unrealized_pnl_percent")].toDouble();
+    h.day_change           = o[QStringLiteral("day_change")].toDouble();
+    h.day_change_percent   = o[QStringLiteral("day_change_percent")].toDouble();
+    h.weight               = o[QStringLiteral("weight")].toDouble();
+    return h;
+}
+
+QJsonObject summary_to_json(const portfolio::PortfolioSummary& s) {
+    QJsonObject o;
+    o[QStringLiteral("portfolio")] = portfolio_to_json(s.portfolio);
+    QJsonArray hs;
+    for (const auto& h : s.holdings) hs.append(holding_to_json(h));
+    o[QStringLiteral("holdings")]            = hs;
+    o[QStringLiteral("total_market_value")]  = s.total_market_value;
+    o[QStringLiteral("total_cost_basis")]    = s.total_cost_basis;
+    o[QStringLiteral("total_unrealized_pnl")] = s.total_unrealized_pnl;
+    o[QStringLiteral("total_unrealized_pnl_percent")] = s.total_unrealized_pnl_percent;
+    o[QStringLiteral("total_day_change")]    = s.total_day_change;
+    o[QStringLiteral("total_day_change_percent")] = s.total_day_change_percent;
+    o[QStringLiteral("total_positions")]     = s.total_positions;
+    o[QStringLiteral("gainers")]             = s.gainers;
+    o[QStringLiteral("losers")]              = s.losers;
+    o[QStringLiteral("last_updated")]        = s.last_updated;
+    return o;
+}
+
+portfolio::PortfolioSummary summary_from_json(const QJsonObject& o) {
+    portfolio::PortfolioSummary s;
+    s.portfolio = portfolio_from_json(o[QStringLiteral("portfolio")].toObject());
+    for (const auto& v : o[QStringLiteral("holdings")].toArray())
+        s.holdings.append(holding_from_json(v.toObject()));
+    s.total_market_value         = o[QStringLiteral("total_market_value")].toDouble();
+    s.total_cost_basis           = o[QStringLiteral("total_cost_basis")].toDouble();
+    s.total_unrealized_pnl       = o[QStringLiteral("total_unrealized_pnl")].toDouble();
+    s.total_unrealized_pnl_percent = o[QStringLiteral("total_unrealized_pnl_percent")].toDouble();
+    s.total_day_change           = o[QStringLiteral("total_day_change")].toDouble();
+    s.total_day_change_percent   = o[QStringLiteral("total_day_change_percent")].toDouble();
+    s.total_positions            = o[QStringLiteral("total_positions")].toInt();
+    s.gainers                    = o[QStringLiteral("gainers")].toInt();
+    s.losers                     = o[QStringLiteral("losers")].toInt();
+    s.last_updated               = o[QStringLiteral("last_updated")].toString();
+    return s;
+}
+
+} // namespace
 
 PortfolioService& PortfolioService::instance() {
     static PortfolioService s;
@@ -98,7 +219,7 @@ void PortfolioService::delete_portfolio(const QString& id) {
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 void PortfolioService::load_summary(const QString& portfolio_id) {
-    // Check cache first (P11)
+    // Check in-memory cache first (P11). 5-min TTL — short-circuits everything.
     {
         QMutexLocker lock(&cache_mutex_);
         auto it = summary_cache_.find(portfolio_id);
@@ -108,6 +229,18 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
                 emit summary_loaded(it->summary);
                 return;
             }
+        }
+    }
+
+    // Disk-cache hydration: emit the last-built summary from the previous
+    // session immediately so the UI paints with real (if stale) numbers while
+    // the quote refetch + recompute runs below. Cached summary is the same
+    // shape consumers expect — they can't tell it's from disk.
+    const auto cached_doc = portfolio_disk_cache().load(summary_filename(portfolio_id));
+    if (cached_doc.isObject()) {
+        const auto summary = summary_from_json(cached_doc.object());
+        if (!summary.portfolio.id.isEmpty()) {
+            emit summary_loaded(summary);
         }
     }
 
@@ -230,6 +363,11 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             QMutexLocker lock(&self->cache_mutex_);
             self->summary_cache_[portfolio_id] = {summary, QDateTime::currentSecsSinceEpoch()};
         }
+
+        // Persist to disk so the next app launch hydrates instantly without
+        // waiting for the quote round-trip.
+        portfolio_disk_cache().save(summary_filename(portfolio_id),
+                                    QJsonDocument(summary_to_json(summary)));
 
         // Save snapshot for performance history
         QString today = QDate::currentDate().toString(Qt::ISODate);
