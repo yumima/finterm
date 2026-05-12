@@ -8,16 +8,22 @@
 namespace fincept {
 
 namespace {
-// Escape LIKE wildcards (% and _) in user-supplied prefixes. Paired with "ESCAPE '\\'" in SQL.
-QString escape_like(const QString& s) {
-    QString out;
-    out.reserve(s.size());
-    for (QChar ch : s) {
-        if (ch == '\\' || ch == '%' || ch == '_')
-            out.append('\\');
-        out.append(ch);
+// Exclusive upper bound for a prefix range query: increment the last char
+// (e.g. "market:" → "market;"). Used so DELETE/SELECT on a key prefix can be
+// expressed as `key >= prefix AND key < upper`, which is sargable on the
+// PRIMARY KEY index. SQLite's default LIKE is case-insensitive and cannot
+// use a TEXT-PK index, so the old `LIKE 'prefix%'` did a full table scan.
+QString prefix_upper_bound(const QString& prefix) {
+    QString upper = prefix;
+    const QChar last = upper.at(upper.size() - 1);
+    // ushort + 1 wraps for U+FFFF; our prefixes are ASCII (e.g. "market:")
+    // so this can't happen in practice. Guard anyway with an appended sentinel.
+    if (last.unicode() == 0xFFFF) {
+        upper.append(QChar(0xFFFF));
+    } else {
+        upper[upper.size() - 1] = QChar(static_cast<ushort>(last.unicode() + 1));
     }
-    return out;
+    return upper;
 }
 } // namespace
 
@@ -69,6 +75,37 @@ QVariant CacheManager::get(const QString& key) const {
     return q.value(0).toString();
 }
 
+QHash<QString, QString> CacheManager::multi_get(const QStringList& keys) const {
+    QHash<QString, QString> out;
+    if (keys.isEmpty())
+        return out;
+    auto& cdb = CacheDatabase::instance();
+    if (!cdb.is_open())
+        return out;
+
+    QStringList placeholders;
+    placeholders.reserve(keys.size());
+    QVariantList params;
+    params.reserve(keys.size());
+    for (const auto& k : keys) {
+        placeholders.append(QStringLiteral("?"));
+        params.append(k);
+    }
+    const QString sql = QStringLiteral(
+        "SELECT key, value FROM unified_cache WHERE key IN (%1) AND expires_at > datetime('now')")
+        .arg(placeholders.join(QStringLiteral(",")));
+
+    auto r = cdb.execute(sql, params);
+    if (r.is_err())
+        return out;
+
+    QSqlQuery q = std::move(r.value());
+    out.reserve(keys.size());
+    while (q.next())
+        out.insert(q.value(0).toString(), q.value(1).toString());
+    return out;
+}
+
 std::optional<QString> CacheManager::try_get(const QString& key) const {
     const QVariant v = get(key);
     if (v.isNull())
@@ -104,8 +141,14 @@ void CacheManager::remove_prefix(const QString& prefix) {
     if (prefix.isEmpty())
         return;
     auto& cdb = CacheDatabase::instance();
-    if (cdb.is_open())
-        cdb.execute("DELETE FROM unified_cache WHERE key LIKE ? ESCAPE '\\'", {escape_like(prefix) + "%"});
+    if (!cdb.is_open())
+        return;
+    // Range query is sargable on the PRIMARY KEY index. The previous
+    // `LIKE 'prefix%'` form forced a full table scan on every call because
+    // SQLite's default LIKE is case-insensitive and cannot use a TEXT PK
+    // index — that was the GUI-thread freeze on every tab show.
+    cdb.execute("DELETE FROM unified_cache WHERE key >= ? AND key < ?",
+                {prefix, prefix_upper_bound(prefix)});
 }
 
 void CacheManager::clear() {

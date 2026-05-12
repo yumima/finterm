@@ -38,7 +38,22 @@ class PortfolioHeatmap : public QWidget {
 
   private:
     void build_ui();
+    /// Re-build the grid structure. Only called when the symbol set or order
+    /// changes. Reuses block widgets keyed by symbol — only new symbols cause
+    /// widget allocation; removed symbols are deleted.
     void rebuild_blocks();
+    /// Update text + stylesheet on every existing block. Cheap — no layout
+    /// touching, no widget allocation. Called on data refresh, mode change,
+    /// AFT-fetch completion, theme change.
+    void refresh_block_appearances();
+    /// Restyle exactly the previously-selected and newly-selected blocks.
+    /// Cheap — touches at most two widgets, no layout touching.
+    void restyle_selection(const QString& prev, const QString& next);
+    /// Create one block widget for the given symbol, wire its click +
+    /// context-menu signals, and return it. Does NOT add to the layout.
+    QPushButton* create_block_widget(const QString& symbol);
+    /// Set the text + stylesheet on a block based on the current mode + data.
+    void update_block_appearance(QPushButton* block, const portfolio::HoldingWithQuote& h);
     QColor block_color(const portfolio::HoldingWithQuote& h) const;
     void update_detail();
     void update_risk_gauge();
@@ -60,6 +75,10 @@ class PortfolioHeatmap : public QWidget {
 
     // Blocks container
     QWidget* blocks_container_ = nullptr;
+    // Symbol → block widget. Persists across refreshes so we don't churn
+    // QPushButton objects (with their stylesheets, signals, and context-menu
+    // lambdas) every time data ticks or the user toggles a mode.
+    QHash<QString, QPushButton*> block_widgets_;
 
     // Selected holding detail
     QWidget* detail_panel_ = nullptr;

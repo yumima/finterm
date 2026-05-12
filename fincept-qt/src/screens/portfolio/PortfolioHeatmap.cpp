@@ -50,9 +50,10 @@ void PortfolioHeatmap::build_ui() {
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     connect(title, &QPushButton::clicked, this, [this]() {
         if (!selected_symbol_.isEmpty()) {
+            const QString prev = selected_symbol_;
             selected_symbol_.clear();
+            restyle_selection(prev, QString());  // touch only the un-highlighted block
             update_detail();
-            rebuild_blocks();  // un-highlight selection
         }
         emit portfolio_view_requested();
     });
@@ -97,10 +98,10 @@ void PortfolioHeatmap::build_ui() {
             fetch_aft_quotes();
         } else {
             // Switching out of AFT supersedes any in-flight fetch so its
-            // callback won't fire a stale rebuild_blocks() while the user
-            // is looking at a different mode.
+            // callback won't fire a stale block refresh while the user is
+            // looking at a different mode.
             ++aft_gen_;
-            rebuild_blocks();
+            refresh_block_appearances();
         }
         emit mode_changed(m);
     };
@@ -211,8 +212,26 @@ void PortfolioHeatmap::build_ui() {
 }
 
 void PortfolioHeatmap::set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings) {
+    // Detect whether the symbol set + order matches the existing layout. If
+    // it does (the common case — same portfolio, just refreshed quotes), we
+    // skip the layout dance entirely and just update text + color on the
+    // existing widgets. Full rebuild only on actual structural change
+    // (position added, removed, or re-sorted).
+    bool same_layout = (holdings.size() == holdings_.size());
+    if (same_layout) {
+        for (int i = 0; i < holdings.size(); ++i) {
+            if (holdings[i].symbol != holdings_[i].symbol) {
+                same_layout = false;
+                break;
+            }
+        }
+    }
+
     holdings_ = holdings;
-    rebuild_blocks();
+    if (same_layout)
+        refresh_block_appearances();
+    else
+        rebuild_blocks();
     update_detail();
     update_top_movers();
     stat_holdings_->setText(QString::number(holdings.size()));
@@ -230,8 +249,11 @@ void PortfolioHeatmap::set_metrics(const portfolio::ComputedMetrics& metrics) {
 }
 
 void PortfolioHeatmap::set_selected_symbol(const QString& symbol) {
+    if (selected_symbol_ == symbol)
+        return;
+    const QString prev = selected_symbol_;
     selected_symbol_ = symbol;
-    rebuild_blocks();
+    restyle_selection(prev, symbol);
     update_detail();
 }
 
@@ -287,15 +309,177 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
     }
 }
 
+QPushButton* PortfolioHeatmap::create_block_widget(const QString& symbol) {
+    auto* block = new QPushButton(blocks_container_);
+    // Uniform tile height — weight is already shown as a column in the
+    // PortfolioBlotter table and in the Position Detail panel, so we
+    // don't need to encode it here as well. Variable heights also caused
+    // the apparent grid-gap inconsistency (a QGridLayout row's height is
+    // the tallest tile, leaving extra space below shorter neighbours).
+    // 40px fits two lines (symbol + Δ%) at 10px font with comfortable
+    // breathing room.
+    block->setFixedHeight(40);
+    block->setCursor(Qt::PointingHandCursor);
+
+    connect(block, &QPushButton::clicked, this, [this, symbol]() {
+        if (selected_symbol_ != symbol) {
+            const QString prev = selected_symbol_;
+            selected_symbol_ = symbol;
+            restyle_selection(prev, symbol);
+        }
+        // Refresh the detail pane every click (preserves prior behaviour
+        // where same-symbol clicks still updated detail from fresh data)
+        // and re-emit so PortfolioScreen broadcasts to the linked group.
+        update_detail();
+        emit symbol_selected(symbol);
+    });
+
+    // Right-click context menu — mirrors PortfolioBlotter so the user
+    // can take the same actions from this sidebar (especially useful in
+    // a side-by-side layout where the blotter is hidden behind another
+    // pane). "Open in Equity Research" uses split_alongside so ER opens
+    // beside Portfolio rather than replacing it.
+    block->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(block, &QWidget::customContextMenuRequested, this,
+            [this, btn = QPointer<QPushButton>(block), symbol](const QPoint& pos) {
+        if (!btn) return;
+        // Parent menu to the heatmap widget, NOT the block button.  Parenting
+        // to btn means Qt calls delete on the stack-allocated menu when btn is
+        // destroyed via deleteLater() inside the nested event loop opened by
+        // exec() — that double-frees a stack address → SIGABRT.
+        QMenu menu(this);
+        // Solid background — without this the menu inherits a transparent
+        // style from the heatmap block (which is itself styled with rgba
+        // colors), making the popup hard to read against the panels
+        // behind it.
+        menu.setStyleSheet(QString(
+            "QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
+            "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
+            "QMenu::item:selected { background:%4; color:%5; }"
+            "QMenu::item:disabled { color:%6; }"
+            "QMenu::item[data='danger'] { color:%7; }"
+            "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
+                 ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::colors::AMBER(),
+                 ui::colors::NEGATIVE()));
+
+        auto* sym_label = menu.addAction(symbol);
+        sym_label->setEnabled(false);
+        sym_label->setFont([] {
+            QFont f;
+            f.setBold(true);
+            f.setPointSize(10);
+            return f;
+        }());
+        menu.addSeparator();
+
+        auto* research_act = menu.addAction("Open in Equity Research");
+        menu.addSeparator();
+        auto* edit_act = menu.addAction("Edit Transaction");
+        auto* delete_act = menu.addAction("Close / Delete Position");
+        delete_act->setData("danger");
+
+        connect(research_act, &QAction::triggered, this, [symbol]() {
+            EventBus::instance().publish("nav.split_alongside",
+                                         QVariantMap{{"screen_id", "equity_research"}});
+            EventBus::instance().publish("equity_research.load_symbol",
+                                         QVariantMap{{"symbol", symbol}});
+        });
+        connect(edit_act, &QAction::triggered, this,
+                [this, symbol]() { emit edit_transaction_requested(symbol); });
+        connect(delete_act, &QAction::triggered, this,
+                [this, symbol]() { emit delete_position_requested(symbol); });
+
+        menu.exec(btn->mapToGlobal(pos));
+    });
+
+    return block;
+}
+
+void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfolio::HoldingWithQuote& h) {
+    const bool selected = (h.symbol == selected_symbol_);
+    const QColor bg = block_color(h);
+    const QString border_style = selected ? QString("border:2px solid %1;").arg(ui::colors::AMBER())
+                                          : QString("border:1px solid %1;").arg(ui::colors::BORDER_DIM());
+
+    block->setStyleSheet(QString("QPushButton { background:rgb(%1,%2,%3); %4"
+                                 "  text-align:left; padding:4px 6px; border-radius:2px;"
+                                 "  color:%6; font-size:12px; font-weight:700; }"
+                                 "QPushButton:hover { border-color:%5; }")
+                             .arg(bg.red())
+                             .arg(bg.green())
+                             .arg(bg.blue())
+                             .arg(border_style, ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
+
+    // Content. Each mode needs its own value source — falling through to
+    // `weight` for Aft (the prior bug) made the tile display "+12.3%"
+    // (weight, always positive prefix) on a color computed from the
+    // after-hours change. We now read from aft_quotes_ for Aft and render
+    // "—" when the daemon hasn't returned a quote for that symbol.
+    QString chg_str;
+    switch (mode_) {
+        case portfolio::HeatmapMode::DayChange: {
+            const double v = h.day_change_percent;
+            chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+            break;
+        }
+        case portfolio::HeatmapMode::Pnl: {
+            const double v = h.unrealized_pnl_percent;
+            chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+            break;
+        }
+        case portfolio::HeatmapMode::Weight:
+            chg_str = QString("%1%").arg(QString::number(h.weight, 'f', 1));
+            break;
+        case portfolio::HeatmapMode::Aft: {
+            const auto it = aft_quotes_.find(h.symbol);
+            if (it == aft_quotes_.end()) {
+                chg_str = QStringLiteral("—");  // matches gray tile from block_color
+            } else {
+                const double v = it.value();
+                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+            }
+            break;
+        }
+    }
+
+    block->setText(QString("%1\n%2").arg(h.symbol, chg_str));
+}
+
+void PortfolioHeatmap::refresh_block_appearances() {
+    for (const auto& h : holdings_) {
+        const auto it = block_widgets_.constFind(h.symbol);
+        if (it != block_widgets_.constEnd() && it.value())
+            update_block_appearance(it.value(), h);
+    }
+}
+
+void PortfolioHeatmap::restyle_selection(const QString& prev, const QString& next) {
+    if (prev == next)
+        return;
+    auto restyle_one = [this](const QString& sym) {
+        if (sym.isEmpty()) return;
+        const auto it = block_widgets_.constFind(sym);
+        if (it == block_widgets_.constEnd() || !it.value()) return;
+        for (const auto& h : holdings_) {
+            if (h.symbol == sym) {
+                update_block_appearance(it.value(), h);
+                return;
+            }
+        }
+    };
+    restyle_one(prev);
+    restyle_one(next);
+}
+
 void PortfolioHeatmap::rebuild_blocks() {
-    // Clear existing blocks — delete children first, then layout
+    // Take widgets out of the old layout without destroying them — they'll
+    // be re-added in the new order. Only widgets whose symbols no longer
+    // appear in `holdings_` are deleted at the end.
     if (auto* old_layout = blocks_container_->layout()) {
         QLayoutItem* item;
-        while ((item = old_layout->takeAt(0)) != nullptr) {
-            if (item->widget())
-                item->widget()->deleteLater();
-            delete item;
-        }
+        while ((item = old_layout->takeAt(0)) != nullptr)
+            delete item;  // owns only the QLayoutItem wrapper, not the widget
         delete old_layout;
     }
 
@@ -303,142 +487,33 @@ void PortfolioHeatmap::rebuild_blocks() {
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setSpacing(2);
 
+    QSet<QString> current_syms;
     int col = 0, row = 0;
     for (const auto& h : holdings_) {
-        auto* block = new QPushButton;
-        bool selected = (h.symbol == selected_symbol_);
-
-        // Uniform tile height — weight is already shown as a column in the
-        // PortfolioBlotter table and in the Position Detail panel, so we
-        // don't need to encode it here as well. Variable heights also caused
-        // the apparent grid-gap inconsistency (a QGridLayout row's height is
-        // the tallest tile, leaving extra space below shorter neighbours).
-        // 40px fits two lines (symbol + Δ%) at 10px font with comfortable
-        // breathing room — was 50px, which wasted vertical space and clipped
-        // the bottom row when a column had ~13 holdings.
-        block->setFixedHeight(40);
-        block->setCursor(Qt::PointingHandCursor);
-
-        QColor bg = block_color(h);
-        QString border_style = selected ? QString("border:2px solid %1;").arg(ui::colors::AMBER())
-                                        : QString("border:1px solid %1;").arg(ui::colors::BORDER_DIM());
-
-        block->setStyleSheet(QString("QPushButton { background:rgb(%1,%2,%3); %4"
-                                     "  text-align:left; padding:4px 6px; border-radius:2px;"
-                                     "  color:%6; font-size:12px; font-weight:700; }"
-                                     "QPushButton:hover { border-color:%5; }")
-                                 .arg(bg.red())
-                                 .arg(bg.green())
-                                 .arg(bg.blue())
-                                 .arg(border_style, ui::colors::AMBER(), ui::colors::TEXT_PRIMARY()));
-
-        // Content. Each mode needs its own value source — falling through to
-        // `weight` for Aft (the prior bug) made the tile display "+12.3%"
-        // (weight, always positive prefix) on a color computed from the
-        // after-hours change, so e.g. a real −2% AFT move showed red but with
-        // "+12.3%" text. We now read from aft_quotes_ for Aft and render "—"
-        // when the daemon hasn't returned a quote for that symbol.
-        QString chg_str;
-        switch (mode_) {
-            case portfolio::HeatmapMode::DayChange: {
-                const double v = h.day_change_percent;
-                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
-                break;
-            }
-            case portfolio::HeatmapMode::Pnl: {
-                const double v = h.unrealized_pnl_percent;
-                chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
-                break;
-            }
-            case portfolio::HeatmapMode::Weight:
-                chg_str = QString("%1%").arg(QString::number(h.weight, 'f', 1));
-                break;
-            case portfolio::HeatmapMode::Aft: {
-                const auto it = aft_quotes_.find(h.symbol);
-                if (it == aft_quotes_.end()) {
-                    chg_str = QStringLiteral("—");  // matches gray tile from block_color
-                } else {
-                    const double v = it.value();
-                    chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
-                }
-                break;
-            }
+        current_syms.insert(h.symbol);
+        auto it = block_widgets_.find(h.symbol);
+        QPushButton* block = (it != block_widgets_.end()) ? it.value() : nullptr;
+        if (!block) {
+            block = create_block_widget(h.symbol);
+            block_widgets_.insert(h.symbol, block);
         }
-
-        block->setText(QString("%1\n%2").arg(h.symbol, chg_str));
-
-        connect(block, &QPushButton::clicked, this, [this, sym = h.symbol]() {
-            selected_symbol_ = sym;
-            rebuild_blocks();
-            update_detail();
-            emit symbol_selected(sym);
-        });
-
-        // Right-click context menu — mirrors PortfolioBlotter so the user
-        // can take the same actions from this sidebar (especially useful in
-        // a side-by-side layout where the blotter is hidden behind another
-        // pane). "Open in Equity Research" uses split_alongside so ER opens
-        // beside Portfolio rather than replacing it.
-        block->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(block, &QWidget::customContextMenuRequested, this,
-                [this, btn = QPointer<QPushButton>(block), sym = h.symbol](const QPoint& pos) {
-            if (!btn) return; // block was deleted by rebuild_blocks() before the event delivered
-            // Parent menu to the heatmap widget, NOT the block button.  Parenting
-            // to btn means Qt calls delete on the stack-allocated menu when btn is
-            // destroyed via deleteLater() inside the nested event loop opened by
-            // exec() — that double-frees a stack address → SIGABRT.
-            QMenu menu(this);
-            // Solid background — without this the menu inherits a transparent
-            // style from the heatmap block (which is itself styled with rgba
-            // colors), making the popup hard to read against the panels
-            // behind it. Match PortfolioBlotter's menu styling so both
-            // context-menu sources look identical.
-            menu.setStyleSheet(QString(
-                "QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
-                "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
-                "QMenu::item:selected { background:%4; color:%5; }"
-                "QMenu::item:disabled { color:%6; }"
-                "QMenu::item[data='danger'] { color:%7; }"
-                "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
-                     ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::colors::AMBER(),
-                     ui::colors::NEGATIVE()));
-
-            auto* sym_label = menu.addAction(sym);
-            sym_label->setEnabled(false);
-            sym_label->setFont([] {
-                QFont f;
-                f.setBold(true);
-                f.setPointSize(10);
-                return f;
-            }());
-            menu.addSeparator();
-
-            auto* research_act = menu.addAction("Open in Equity Research");
-            menu.addSeparator();
-            auto* edit_act = menu.addAction("Edit Transaction");
-            auto* delete_act = menu.addAction("Close / Delete Position");
-            delete_act->setData("danger");
-
-            connect(research_act, &QAction::triggered, this, [sym]() {
-                EventBus::instance().publish("nav.split_alongside",
-                                             QVariantMap{{"screen_id", "equity_research"}});
-                EventBus::instance().publish("equity_research.load_symbol",
-                                             QVariantMap{{"symbol", sym}});
-            });
-            connect(edit_act, &QAction::triggered, this,
-                    [this, sym]() { emit edit_transaction_requested(sym); });
-            connect(delete_act, &QAction::triggered, this,
-                    [this, sym]() { emit delete_position_requested(sym); });
-
-            menu.exec(btn->mapToGlobal(pos));
-        });
-
+        update_block_appearance(block, h);
         grid->addWidget(block, row, col);
         col++;
         if (col >= 2) {
             col = 0;
             row++;
+        }
+    }
+
+    // Drop orphaned blocks (positions that were removed from the portfolio).
+    for (auto it = block_widgets_.begin(); it != block_widgets_.end(); ) {
+        if (!current_syms.contains(it.key())) {
+            if (it.value())
+                it.value()->deleteLater();
+            it = block_widgets_.erase(it);
+        } else {
+            ++it;
         }
     }
 
@@ -530,8 +605,9 @@ void PortfolioHeatmap::refresh_theme() {
     detail_panel_->setStyleSheet(
         QString("background:%1; border:1px solid %2; padding:4px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
 
-    // Rebuild blocks picks up new theme colors for borders/text
-    rebuild_blocks();
+    // Only block appearance depends on theme colors — refresh in place
+    // rather than rebuilding the grid + recreating QPushButton widgets.
+    refresh_block_appearances();
 }
 
 // Fetch after-hours / pre-market percent change for each held symbol via the
@@ -543,7 +619,7 @@ void PortfolioHeatmap::refresh_theme() {
 void PortfolioHeatmap::fetch_aft_quotes() {
     if (holdings_.isEmpty()) {
         aft_quotes_.clear();
-        rebuild_blocks();
+        refresh_block_appearances();
         return;
     }
 
@@ -557,7 +633,7 @@ void PortfolioHeatmap::fetch_aft_quotes() {
     // the fresh fetch returns; without this the user briefly sees the
     // previous AFT session's colors against a different symbol set.
     aft_quotes_.clear();
-    rebuild_blocks();
+    refresh_block_appearances();
 
     QJsonObject payload;
     payload.insert(QStringLiteral("symbols"), syms);
@@ -579,7 +655,7 @@ void PortfolioHeatmap::fetch_aft_quotes() {
                     o.value(QStringLiteral("symbol")).toString(),
                     pct_val.toDouble());
             }
-            guard->rebuild_blocks();
+            guard->refresh_block_appearances();
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }

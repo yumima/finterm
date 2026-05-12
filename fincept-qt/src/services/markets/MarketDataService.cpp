@@ -318,13 +318,27 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
         return;
     }
 
-    // Check if ALL requested symbols are cached and fresh
-    bool all_cached = true;
-    QVector<QuoteData> cached_results;
-    for (const auto& sym : symbols) {
-        const QVariant cv = fincept::CacheManager::instance().get("market:" + sym);
-        if (!cv.isNull()) {
-            const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
+    // Check if ALL requested symbols are cached and fresh — single SELECT for
+    // the whole cohort. The previous implementation did N round-trips and
+    // bailed on the first miss, but each round-trip still acquired the cache
+    // DB mutex, which stalled the GUI thread on portfolio-sized requests.
+    QStringList cache_keys;
+    cache_keys.reserve(symbols.size());
+    for (const auto& sym : symbols)
+        cache_keys.append("market:" + sym);
+    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(cache_keys);
+
+    if (hits.size() == symbols.size()) {
+        QVector<QuoteData> cached_results;
+        cached_results.reserve(symbols.size());
+        for (const auto& sym : symbols) {
+            const auto it = hits.constFind("market:" + sym);
+            if (it == hits.constEnd()) {
+                // Defensive: shouldn't happen given the size check above.
+                cached_results.clear();
+                break;
+            }
+            const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
             QuoteData qd{};
             qd.symbol     = o["symbol"].toString();
             qd.name       = o["name"].toString();
@@ -339,14 +353,11 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
             qd.bid_size   = o["bid_size"].toDouble();
             qd.ask_size   = o["ask_size"].toDouble();
             cached_results.append(qd);
-        } else {
-            all_cached = false;
-            break;
         }
-    }
-    if (all_cached) {
-        cb(true, cached_results);
-        return;
+        if (!cached_results.isEmpty()) {
+            cb(true, cached_results);
+            return;
+        }
     }
 
     // Queue for batching
