@@ -360,8 +360,9 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
-    if (title_label_)
-        title_label_->setText(focus_symbol_);
+    // Title stays "PERFORMANCE" across focus changes — the symbol is shown
+    // in the chart's data band, so re-labeling the header was redundant
+    // (and made the screen jiggle on every selection).
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     update_chart(); // renders loading placeholder until data lands
 }
@@ -373,8 +374,7 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false;
-    if (title_label_)
-        title_label_->setText(QStringLiteral("PERFORMANCE"));
+    // Title is fixed to "PERFORMANCE" now; nothing to revert.
     update_chart();
 }
 
