@@ -38,7 +38,10 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 //  PRACTICE alongside the case studies.)
 const QStringList BASICS_CATS    = {"glossary", "concepts", "regulators"};
 const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks", "cases", "interviews"};
-const QStringList QUANT_CATS     = {"quant"};
+const QStringList QUANT_CATS     = {"quant-foundations", "quant-risk",
+                                     "quant-factors", "quant-execution",
+                                     "quant-backtesting", "quant-strategies",
+                                     "quant-practices"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"

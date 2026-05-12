@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-foundations",
+    "label": "Foundations",
+    "description": "Statistical groundwork that every quantitative trader leans on: probability, regression, and time-series properties of returns. Cross-references the in-app tools that surface these (AI Quant Lab, QuantLib).",
+    "order": 70
+  },
+  "entries": [
+    {
+      "id": "quant-overview",
+      "title": "What Quant Trading Is",
+      "subtitle": "Systematic, testable, encoded decisions — how quant differs from discretionary, and what the discipline looks like across horizons.",
+      "body": "quant-foundations/quant-overview.md",
+      "difficulty": "beginner",
+      "tags": ["quant", "overview", "philosophy"],
+      "aliases": ["quantitative trading", "what is quant", "quant introduction"],
+      "related": ["risk-adjusted-returns", "factor-investing", "backtesting-discipline", "transaction-costs", "quant-research-workflow"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab"},
+        {"screen": "quantlib", "label": "QuantLib"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open QuantLib", "screen": "quantlib", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SSRN", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies", "url": "https://ssrn.com/abstract=3247865"},
+        {"type": "reference", "source": "Wiley", "title": "López de Prado — Advances in Financial Machine Learning", "url": "https://www.wiley.com/en-us/Advances+in+Financial+Machine+Learning-p-9781119482086"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "probability-essentials",
+      "title": "Probability for Traders",
+      "subtitle": "Distributions, conditional probability, Bayes, and why financial returns aren't Gaussian — the statistical primitives every strategy depends on.",
+      "body": "quant-foundations/probability-essentials.md",
+      "difficulty": "beginner",
+      "tags": ["probability", "statistics", "foundations"],
+      "aliases": ["probability basics", "stats for traders", "bayes for trading"],
+      "related": ["time-series-basics", "regression-basics", "var-cvar"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "Taleb — The Black Swan (heavy-tail intuition)", "url": "https://www.fooledbyrandomness.com/"},
+        {"type": "reference", "source": "Springer", "title": "Embrechts, Klüppelberg, Mikosch — Modelling Extremal Events", "url": "https://link.springer.com/book/10.1007/978-3-642-33483-2"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "regression-basics",
+      "title": "Regression for Traders",
+      "subtitle": "OLS, multicollinearity, heteroskedasticity, and the difference between explanatory and predictive regression — what beta really means.",
+      "body": "quant-foundations/regression-basics.md",
+      "difficulty": "intermediate",
+      "tags": ["regression", "ols", "statistics", "foundations"],
+      "aliases": ["linear regression for trading", "beta estimation", "ols pitfalls"],
+      "related": ["factor-investing", "risk-adjusted-returns", "time-series-basics"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — regression modules"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Princeton", "title": "Greene — Econometric Analysis (8e)", "url": "https://www.pearson.com/en-us/subject-catalog/p/econometric-analysis/P200000005749"},
+        {"type": "reference", "source": "AQR", "title": "Asness et al. — Quality Minus Junk (regression in factor research)", "url": "https://www.aqr.com/Insights/Research/Working-Paper/Quality-Minus-Junk"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "time-series-basics",
+      "title": "Time-Series Properties of Returns",
+      "subtitle": "Stationarity, autocorrelation, volatility clustering, and why returns are not iid — the statistical reality every model has to respect.",
+      "body": "quant-foundations/time-series-basics.md",
+      "difficulty": "intermediate",
+      "tags": ["time-series", "stationarity", "autocorrelation", "garch"],
+      "aliases": ["return time series", "stationarity in returns", "volatility clustering"],
+      "related": ["volatility-quant", "regression-basics", "probability-essentials"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Springer", "title": "Tsay — Analysis of Financial Time Series (3e)", "url": "https://link.springer.com/book/10.1007/978-1-4419-7787-8"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

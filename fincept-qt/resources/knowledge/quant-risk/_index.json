@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-risk",
+    "label": "Risk & Return",
+    "description": "Measuring what you earned per unit of pain. Sharpe / Sortino / Calmar / Information Ratio, plus VaR / CVaR and drawdown metrics — what each captures and where each lies.",
+    "order": 71
+  },
+  "entries": [
+    {
+      "id": "risk-adjusted-returns",
+      "title": "Risk-Adjusted Return Measures",
+      "subtitle": "Sharpe, Sortino, Calmar, Information Ratio, Treynor — when each is appropriate and where each lies.",
+      "body": "quant-risk/risk-adjusted-returns.md",
+      "difficulty": "beginner",
+      "tags": ["quant", "risk", "performance"],
+      "aliases": ["sharpe vs sortino", "risk-adjusted return"],
+      "related": ["var-cvar", "drawdown-and-risk", "backtesting-discipline"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting performance metrics"},
+        {"screen": "portfolio", "label": "Portfolio risk panel"}
+      ],
+      "actions": [
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""},
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Stanford", "title": "Sharpe (1994) — The Sharpe Ratio", "url": "https://web.stanford.edu/~wfsharpe/art/sr/SR.htm"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "var-cvar",
+      "title": "VaR and CVaR (Expected Shortfall)",
+      "subtitle": "What's the worst plausible loss, and what does the tail beyond that look like — the two questions every risk manager asks, with the math that answers them.",
+      "body": "quant-risk/var-cvar.md",
+      "difficulty": "intermediate",
+      "tags": ["risk", "var", "cvar", "expected shortfall"],
+      "aliases": ["value at risk", "expected shortfall", "tail risk"],
+      "related": ["risk-adjusted-returns", "drawdown-and-risk", "probability-essentials"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio risk panel"},
+        {"screen": "derivatives", "label": "Derivatives — option risk"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "BIS", "title": "Minimum capital requirements for market risk (Basel)", "url": "https://www.bis.org/bcbs/publ/d457.htm"},
+        {"type": "reference", "source": "Wiley", "title": "Jorion — Value at Risk (3e)", "url": "https://www.mhprofessional.com/9780071464956-usa-value-at-risk-3rd-ed"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "drawdown-and-risk",
+      "title": "Drawdowns and Path-Dependent Risk",
+      "subtitle": "Max drawdown, ulcer index, time underwater — why path matters and which metrics actually predict whether you'll stay in a strategy.",
+      "body": "quant-risk/drawdown-and-risk.md",
+      "difficulty": "intermediate",
+      "tags": ["drawdown", "risk", "path", "behavioral"],
+      "aliases": ["maximum drawdown", "ulcer index", "time underwater"],
+      "related": ["risk-adjusted-returns", "var-cvar", "backtesting-discipline"],
+      "seen_in": [{"screen": "backtesting", "label": "Backtesting drawdown chart"}],
+      "actions": [{"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "Kestner — Quantitative Trading Strategies (ulcer index)", "url": "https://www.wiley.com/en-us/Quantitative+Trading+Strategies-p-9780071412391"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

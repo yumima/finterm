@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-backtesting",
+    "label": "Backtesting",
+    "description": "Building a backtest you can actually trust. In-sample / out-of-sample discipline, walk-forward validation, multiple-testing correction, and the pitfalls that turn ML pipelines into expensive overfitting.",
+    "order": 74
+  },
+  "entries": [
+    {
+      "id": "backtesting-discipline",
+      "title": "Backtesting Discipline (IS / OOS, Costs, Look-Ahead)",
+      "subtitle": "Run a backtest you can trust: in-sample / out-of-sample splits, walk-forward, realistic costs, point-in-time data, look-ahead avoidance.",
+      "body": "quant-backtesting/backtesting-discipline.md",
+      "difficulty": "intermediate",
+      "tags": ["backtesting", "is/oos", "walk-forward", "look-ahead"],
+      "aliases": ["backtesting", "out-of-sample testing", "walk forward"],
+      "related": ["walk-forward-validation", "multiple-testing-correction", "ml-pipeline-pitfalls", "transaction-costs"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting — IS/OOS, walk-forward"}
+      ],
+      "actions": [
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SSRN", "title": "Bailey, Borwein, López de Prado, Zhu — Probability of Backtest Overfitting", "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "walk-forward-validation",
+      "title": "Walk-Forward Validation",
+      "subtitle": "Why rolling windows, anchored vs sliding, and stitched OOS curves are how you avoid mistaking parameter luck for skill.",
+      "body": "quant-backtesting/walk-forward-validation.md",
+      "difficulty": "intermediate",
+      "tags": ["walk-forward", "rolling window", "validation"],
+      "aliases": ["walk forward analysis", "rolling validation"],
+      "related": ["backtesting-discipline", "multiple-testing-correction"],
+      "seen_in": [{"screen": "backtesting", "label": "Backtesting — walk-forward UI"}],
+      "actions": [{"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "Pardo — The Evaluation and Optimization of Trading Strategies (2e)", "url": "https://www.wiley.com/en-us/The+Evaluation+and+Optimization+of+Trading+Strategies%2C+2nd+Edition-p-9780470128015"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "multiple-testing-correction",
+      "title": "Multiple-Testing Correction (DSR, PBO, Bonferroni, FDR)",
+      "subtitle": "When you try 200 strategies, some will look great by luck alone. Deflated Sharpe Ratio, Probability of Backtest Overfitting, Bonferroni, and FDR — and which to use when.",
+      "body": "quant-backtesting/multiple-testing-correction.md",
+      "difficulty": "advanced",
+      "tags": ["multiple testing", "dsr", "pbo", "bonferroni", "fdr"],
+      "aliases": ["deflated sharpe", "probability of backtest overfitting"],
+      "related": ["backtesting-discipline", "walk-forward-validation", "ml-pipeline-pitfalls"],
+      "seen_in": [{"screen": "backtesting", "label": "Backtesting — strategy library"}],
+      "actions": [{"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "SSRN", "title": "Bailey & López de Prado — The Deflated Sharpe Ratio", "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551"},
+        {"type": "reference", "source": "SSRN", "title": "Bailey, Borwein, López de Prado, Zhu — Probability of Backtest Overfitting", "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "ml-pipeline-pitfalls",
+      "title": "ML Pipeline Pitfalls in Trading",
+      "subtitle": "Where machine-learning research goes wrong: leakage via cross-validation, label engineering, hyperparameter overfitting, and feature stability under regime shifts.",
+      "body": "quant-backtesting/ml-pipeline-pitfalls.md",
+      "difficulty": "advanced",
+      "tags": ["ml", "leakage", "cross-validation", "overfitting"],
+      "aliases": ["machine learning for trading", "ml pitfalls", "cv leakage"],
+      "related": ["backtesting-discipline", "walk-forward-validation", "multiple-testing-correction"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — ML modules"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "López de Prado — Advances in Financial Machine Learning", "url": "https://www.wiley.com/en-us/Advances+in+Financial+Machine+Learning-p-9781119482086"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

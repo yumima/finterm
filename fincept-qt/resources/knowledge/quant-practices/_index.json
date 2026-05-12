@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-practices",
+    "label": "Practices",
+    "description": "How successful quant teams actually work: hypothesis-first research, data hygiene, decision logs, post-mortems. The boring parts that turn one-off backtests into a portfolio of repeatable, debuggable strategies.",
+    "order": 76
+  },
+  "entries": [
+    {
+      "id": "quant-research-workflow",
+      "title": "Quant Research Workflow",
+      "subtitle": "From idea to live trade: hypothesis, data prep, exploratory testing, formal validation, paper trade, live, monitor, retire. The lifecycle most successful teams follow.",
+      "body": "quant-practices/quant-research-workflow.md",
+      "difficulty": "intermediate",
+      "tags": ["workflow", "process", "research"],
+      "aliases": ["quant workflow", "research process", "strategy lifecycle"],
+      "related": ["hypothesis-first", "data-hygiene", "log-keeping", "backtesting-discipline"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab"},
+        {"screen": "notes", "label": "Research notes"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Notes", "screen": "notes", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "López de Prado — Advances in Financial Machine Learning (research process)", "url": "https://www.wiley.com/en-us/Advances+in+Financial+Machine+Learning-p-9781119482086"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "data-hygiene",
+      "title": "Data Hygiene (Point-in-Time, Splits, Survivorship)",
+      "subtitle": "Point-in-time databases, corporate action handling, survivorship bias, look-ahead from restatements, and why getting the data right is 70% of the job.",
+      "body": "quant-practices/data-hygiene.md",
+      "difficulty": "intermediate",
+      "tags": ["data", "point-in-time", "survivorship", "splits"],
+      "aliases": ["data quality", "point in time", "survivorship bias"],
+      "related": ["quant-research-workflow", "hypothesis-first", "backtesting-discipline"],
+      "seen_in": [{"screen": "file_manager", "label": "Data ingest"}],
+      "actions": [],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Brown, Goetzmann, Ross — Survival (1992)", "url": "https://doi.org/10.1111/j.1540-6261.1995.tb05182.x"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "hypothesis-first",
+      "title": "Hypothesis-First Research",
+      "subtitle": "Why specifying your prior — and the falsification test — before you look at data prevents p-hacking from eating your whole research budget.",
+      "body": "quant-practices/hypothesis-first.md",
+      "difficulty": "intermediate",
+      "tags": ["hypothesis", "p-hacking", "research", "methodology"],
+      "aliases": ["pre-registration", "hypothesis-first", "p-hacking"],
+      "related": ["quant-research-workflow", "data-hygiene", "multiple-testing-correction"],
+      "seen_in": [{"screen": "notes", "label": "Research notes"}],
+      "actions": [{"label": "Open Notes", "screen": "notes", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "Nature", "title": "Munafò et al. — A manifesto for reproducible science", "url": "https://www.nature.com/articles/s41562-016-0021"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "log-keeping",
+      "title": "Decision Journals and Strategy Logs",
+      "subtitle": "Why every research result, parameter choice, and live trade should be journaled — and what your log should record so future-you can debug today's PnL.",
+      "body": "quant-practices/log-keeping.md",
+      "difficulty": "beginner",
+      "tags": ["journal", "log", "process", "postmortem"],
+      "aliases": ["research journal", "decision diary", "trade log"],
+      "related": ["quant-research-workflow", "hypothesis-first", "data-hygiene"],
+      "seen_in": [{"screen": "notes", "label": "Research notes"}],
+      "actions": [{"label": "Open Notes", "screen": "notes", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "FSP", "title": "Kahneman et al. — Before You Make That Big Decision (HBR)", "url": "https://hbr.org/2011/06/before-you-make-that-big-decision"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

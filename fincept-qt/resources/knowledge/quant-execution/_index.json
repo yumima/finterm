@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-execution",
+    "label": "Execution",
+    "description": "Turning a paper signal into real PnL. Spread, slippage, market impact, optimal trade scheduling, and how much to bet on each idea — all the things that turn a 'profitable' backtest into a real strategy.",
+    "order": 73
+  },
+  "entries": [
+    {
+      "id": "transaction-costs",
+      "title": "Transaction Costs and Slippage",
+      "subtitle": "Spread + market impact + opportunity cost — the three components that turn a paper-profitable signal into a real or imaginary strategy. Almgren-Chriss optimal execution.",
+      "body": "quant-execution/transaction-costs.md",
+      "difficulty": "intermediate",
+      "tags": ["execution", "slippage", "market impact", "almgren-chriss"],
+      "aliases": ["transaction costs", "slippage", "tca", "market impact"],
+      "related": ["position-sizing", "backtesting-discipline"],
+      "seen_in": [
+        {"screen": "algo_trading", "label": "Algo Trading — execution algorithms"},
+        {"screen": "backtesting", "label": "Backtesting — cost model"}
+      ],
+      "actions": [
+        {"label": "Open Algo Trading", "screen": "algo_trading", "ticker": ""},
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JRisk", "title": "Almgren & Chriss (2001) — Optimal Execution of Portfolio Transactions", "url": "https://www.smallake.kr/wp-content/uploads/2016/03/optliq.pdf"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "position-sizing",
+      "title": "Position Sizing (Kelly, Fractional Kelly, Vol Targeting)",
+      "subtitle": "How much to risk on each trade. The full Kelly criterion, why fractional Kelly is the real-world answer, and volatility-targeting as a more robust alternative.",
+      "body": "quant-execution/position-sizing.md",
+      "difficulty": "intermediate",
+      "tags": ["sizing", "kelly", "fractional kelly", "vol targeting"],
+      "aliases": ["kelly criterion", "vol targeting", "position sizing"],
+      "related": ["transaction-costs", "risk-adjusted-returns", "portfolio-construction"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio sizing tools"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — sizing modules"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "BellLabs", "title": "Kelly (1956) — A New Interpretation of Information Rate", "url": "http://www.princeton.edu/~wbialek/rome/refs/kelly_56.pdf"},
+        {"type": "reference", "source": "AQR", "title": "Asness, Frazzini, Pedersen — Leverage Aversion and Risk Parity", "url": "https://www.aqr.com/Insights/Research/Journal-Article/Leverage-Aversion-and-Risk-Parity"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

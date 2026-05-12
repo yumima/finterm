@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-factors",
+    "label": "Factors",
+    "description": "The empirical anomalies that the academic and practitioner literature has documented across decades: value, momentum, quality, low-volatility, carry, seasonality. Each entry includes original references, key estimation choices, and the in-app screen where it's most actionable.",
+    "order": 72
+  },
+  "entries": [
+    {
+      "id": "factor-investing",
+      "title": "Factor Investing — the Umbrella",
+      "subtitle": "Why factor investing works (or used to), how factors are built, and the framework that ties value, momentum, quality, low-vol, and carry together.",
+      "body": "quant-factors/factor-investing.md",
+      "difficulty": "intermediate",
+      "tags": ["factors", "smart beta", "fama-french", "carhart"],
+      "aliases": ["smart beta", "factor models", "multifactor investing"],
+      "related": ["value-factor", "momentum-factor", "quality-factor", "low-vol-factor", "carry-factor", "regression-basics"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — multifactor templates"},
+        {"screen": "equity_research", "label": "Equity Research — factor screens"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Fama & French (1993) — Common risk factors in the returns on stocks and bonds", "url": "https://doi.org/10.1016/0304-405X(93)90023-5"},
+        {"type": "reference", "source": "AQR", "title": "Asness, Moskowitz, Pedersen — Value and Momentum Everywhere", "url": "https://www.aqr.com/Insights/Research/Journal-Article/Value-and-Momentum-Everywhere"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "value-factor",
+      "title": "Value Factor (HML, B/M, EBIT/EV)",
+      "subtitle": "Buying cheap. The original Fama-French value factor, the long history of P/B, the EV-based variants, and where value goes wrong (the 2007-2020 drawdown).",
+      "body": "quant-factors/value-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["value", "hml", "book-to-market", "fama-french"],
+      "aliases": ["value premium", "hml", "book to market"],
+      "related": ["factor-investing", "quality-factor", "regression-basics"],
+      "seen_in": [{"screen": "equity_research", "label": "Equity Research — value screens"}],
+      "actions": [{"label": "Open Equity Research", "screen": "equity_research", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Fama & French (1992) — Cross-section of expected stock returns", "url": "https://doi.org/10.1111/j.1540-6261.1992.tb04398.x"},
+        {"type": "reference", "source": "AQR", "title": "Israel et al. — Is (Systematic) Value Investing Dead?", "url": "https://www.aqr.com/Insights/Research/White-Papers/Is-Systematic-Value-Investing-Dead"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "momentum-factor",
+      "title": "Momentum Factor (Cross-Sectional and Time-Series)",
+      "subtitle": "Recent winners keep winning. Jegadeesh-Titman's original cross-section, Moskowitz-Ooi-Pedersen's TSMOM, and the formation/skip/holding choices that matter.",
+      "body": "quant-factors/momentum-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["momentum", "tsmom", "jegadeesh-titman"],
+      "aliases": ["price momentum", "tsmom", "trend"],
+      "related": ["factor-investing", "trend-following", "regression-basics"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — momentum templates"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Jegadeesh & Titman (1993) — Returns to buying winners", "url": "https://doi.org/10.1111/j.1540-6261.1993.tb04702.x"},
+        {"type": "reference", "source": "JFE", "title": "Moskowitz, Ooi, Pedersen (2012) — Time-Series Momentum", "url": "https://doi.org/10.1016/j.jfineco.2011.11.003"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "quality-factor",
+      "title": "Quality Factor (QMJ, Profitability, Earnings Stability)",
+      "subtitle": "Buying companies that earn high stable returns on capital — Asness-Frazzini-Pedersen's QMJ and Novy-Marx's gross profitability premium.",
+      "body": "quant-factors/quality-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["quality", "qmj", "profitability", "novy-marx"],
+      "aliases": ["quality minus junk", "gross profitability", "qmj"],
+      "related": ["factor-investing", "value-factor"],
+      "seen_in": [{"screen": "equity_research", "label": "Equity Research — quality screens"}],
+      "actions": [{"label": "Open Equity Research", "screen": "equity_research", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "AQR", "title": "Asness, Frazzini, Pedersen — Quality Minus Junk", "url": "https://www.aqr.com/Insights/Research/Working-Paper/Quality-Minus-Junk"},
+        {"type": "reference", "source": "JFE", "title": "Novy-Marx (2013) — The other side of value: the gross profitability premium", "url": "https://doi.org/10.1016/j.jfineco.2013.01.003"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "low-vol-factor",
+      "title": "Low-Volatility / Betting Against Beta",
+      "subtitle": "Low-beta stocks beat the CAPM prediction. Frazzini-Pedersen's BAB, the leverage-aversion story, and the implementation realities (rebalance costs, capacity).",
+      "body": "quant-factors/low-vol-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["low vol", "bab", "betting against beta", "low beta"],
+      "aliases": ["betting against beta", "bab factor", "low volatility anomaly"],
+      "related": ["factor-investing", "risk-adjusted-returns"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — low-vol templates"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Frazzini & Pedersen (2014) — Betting Against Beta", "url": "https://doi.org/10.1016/j.jfineco.2013.10.005"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "carry-factor",
+      "title": "Carry Factor (FX, Rates, Commodities, Equity Dividends)",
+      "subtitle": "Earning the spread you collect just for holding — FX interest-rate differential, fixed-income roll-down, commodity convenience yield, equity dividend yield.",
+      "body": "quant-factors/carry-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["carry", "fx carry", "roll-down", "dividend yield"],
+      "aliases": ["fx carry trade", "carry trade", "roll yield"],
+      "related": ["factor-investing", "momentum-factor"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — roll calendars"},
+        {"screen": "fx", "label": "FX desk"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Koijen, Moskowitz, Pedersen, Vrugt (2018) — Carry", "url": "https://doi.org/10.1016/j.jfineco.2017.11.002"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}

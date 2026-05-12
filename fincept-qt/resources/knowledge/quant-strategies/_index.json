@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "category": {
+    "id": "quant-strategies",
+    "label": "Strategies",
+    "description": "Strategy archetypes the literature has identified again and again: mean reversion, trend following, pairs / stat-arb, volatility, and portfolio construction across them. Each entry includes the original empirical evidence and the in-app screen to prototype it.",
+    "order": 75
+  },
+  "entries": [
+    {
+      "id": "strategy-patterns",
+      "title": "Strategy Patterns — the Catalog",
+      "subtitle": "Five recurring archetypes — mean reversion, trend / momentum, carry / yield, volatility, statistical arbitrage — what each one earns, what it dies on, and where to prototype it.",
+      "body": "quant-strategies/strategy-patterns.md",
+      "difficulty": "intermediate",
+      "tags": ["strategies", "patterns", "mean-reversion", "trend", "stat-arb"],
+      "aliases": ["strategy archetypes", "trading patterns"],
+      "related": ["mean-reversion", "trend-following", "pairs-trading", "stat-arb", "volatility-quant"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — strategy templates"},
+        {"screen": "algo_trading", "label": "Algo Trading"},
+        {"screen": "node_editor", "label": "Node Editor — visual builder"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Algo Trading", "screen": "algo_trading", "ticker": ""},
+        {"label": "Open Node Editor", "screen": "node_editor", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "SSRN", "title": "Kakushadze & Serur — 151 Trading Strategies", "url": "https://ssrn.com/abstract=3247865"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "mean-reversion",
+      "title": "Mean Reversion (Single-Name)",
+      "subtitle": "Buying drawdowns, selling rips. Z-score thresholds, Ornstein-Uhlenbeck calibration, half-life estimation, and why short-horizon mean reversion mostly works in equities (and mostly doesn't in FX majors).",
+      "body": "quant-strategies/mean-reversion.md",
+      "difficulty": "intermediate",
+      "tags": ["mean reversion", "ou process", "z-score"],
+      "aliases": ["mean reversion strategy", "ornstein-uhlenbeck", "z-score trading"],
+      "related": ["strategy-patterns", "pairs-trading", "time-series-basics"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — mean reversion template"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""},
+        {"label": "Open Backtesting", "screen": "backtesting", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Lo & MacKinlay (1990) — When are contrarian profits due to overreaction?", "url": "https://doi.org/10.1093/rfs/3.2.175"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "trend-following",
+      "title": "Trend Following (TSMOM)",
+      "subtitle": "Time-series momentum across asset classes. The classic 12-1 lookback, signed-vol scaling, the equity-bond-FX-commodity universe of TSMOM, and why long-only equity trend rarely works on its own.",
+      "body": "quant-strategies/trend-following.md",
+      "difficulty": "intermediate",
+      "tags": ["trend following", "tsmom", "momentum"],
+      "aliases": ["trend following", "tsmom", "time series momentum"],
+      "related": ["strategy-patterns", "momentum-factor", "carry-factor"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — trend templates"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Moskowitz, Ooi, Pedersen (2012) — Time-Series Momentum", "url": "https://doi.org/10.1016/j.jfineco.2011.11.003"},
+        {"type": "reference", "source": "AQR", "title": "Hurst, Ooi, Pedersen — A Century of Evidence on Trend-Following Investing", "url": "https://www.aqr.com/Insights/Research/White-Papers/A-Century-of-Evidence-on-Trend-Following-Investing"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "pairs-trading",
+      "title": "Pairs Trading and Cointegration",
+      "subtitle": "Build a stationary spread, fade the deviations, exit at mean. Engle-Granger and Johansen tests, half-life rules, the Gatev-Goetzmann-Rouwenhorst evidence, and why pairs profits decayed after 2003.",
+      "body": "quant-strategies/pairs-trading.md",
+      "difficulty": "advanced",
+      "tags": ["pairs", "cointegration", "stat-arb", "engle-granger"],
+      "aliases": ["pairs trading", "cointegration trading", "spread trading"],
+      "related": ["strategy-patterns", "mean-reversion", "stat-arb"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — pairs templates"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "RFS", "title": "Gatev, Goetzmann, Rouwenhorst — Pairs Trading: Performance of a Relative-Value Arbitrage Rule", "url": "https://doi.org/10.1093/rfs/hhj020"},
+        {"type": "reference", "source": "Econometrica", "title": "Engle & Granger (1987) — Cointegration and Error Correction", "url": "https://doi.org/10.2307/1913236"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "stat-arb",
+      "title": "Statistical Arbitrage (Cross-Sectional)",
+      "subtitle": "Hundreds of legs, sector- and beta-neutral. The Avellaneda-Lee residual mean-reversion model, factor-residual construction, and the realities of capacity and crowding.",
+      "body": "quant-strategies/stat-arb.md",
+      "difficulty": "advanced",
+      "tags": ["statarb", "statistical arbitrage", "cross-sectional"],
+      "aliases": ["statistical arbitrage", "statarb", "cross-sectional mean reversion"],
+      "related": ["strategy-patterns", "pairs-trading", "mean-reversion", "factor-investing"],
+      "seen_in": [{"screen": "ai_quant_lab", "label": "AI Quant Lab — stat-arb templates"}],
+      "actions": [{"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}],
+      "external_links": [
+        {"type": "reference", "source": "QF", "title": "Avellaneda & Lee (2010) — Statistical Arbitrage in the US Equities Market", "url": "https://www.tandfonline.com/doi/abs/10.1080/14697680903124632"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "volatility-quant",
+      "title": "Volatility Trading and the Surface",
+      "subtitle": "Implied vs realized, term structure, volatility risk premium, variance swaps, and the strategies you can build off the volatility surface.",
+      "body": "quant-strategies/volatility-quant.md",
+      "difficulty": "advanced",
+      "tags": ["volatility", "implied", "vix", "variance swap"],
+      "aliases": ["vol trading", "implied vs realized", "variance swap"],
+      "related": ["strategy-patterns", "var-cvar", "time-series-basics"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives — options chain"},
+        {"screen": "surface_analytics", "label": "Surface Analytics — vol surface"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": ""},
+        {"label": "Open Surface Analytics", "screen": "surface_analytics", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "Wiley", "title": "Sinclair — Volatility Trading (2e)", "url": "https://www.wiley.com/en-us/Volatility+Trading%2C+2nd+Edition-p-9781118347133"}
+      ],
+      "updated": "2026-05-11"
+    },
+    {
+      "id": "portfolio-construction",
+      "title": "Portfolio Construction (Markowitz, Risk Parity, Kelly)",
+      "subtitle": "Mean-variance with shrinkage, equal-risk-contribution / risk parity, and Kelly-style growth-optimal weights — how to combine alpha streams without giving back the alpha.",
+      "body": "quant-strategies/portfolio-construction.md",
+      "difficulty": "advanced",
+      "tags": ["portfolio", "markowitz", "risk parity", "shrinkage"],
+      "aliases": ["mean-variance", "risk parity", "portfolio optimization"],
+      "related": ["strategy-patterns", "position-sizing", "risk-adjusted-returns"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio — optimization tools"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — optimizer modules"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Markowitz (1952) — Portfolio Selection", "url": "https://doi.org/10.2307/2975974"},
+        {"type": "reference", "source": "AQR", "title": "Asness, Frazzini, Pedersen — Leverage Aversion and Risk Parity", "url": "https://www.aqr.com/Insights/Research/Journal-Article/Leverage-Aversion-and-Risk-Parity"}
+      ],
+      "updated": "2026-05-11"
+    }
+  ]
+}
