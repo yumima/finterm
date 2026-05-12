@@ -18,10 +18,14 @@
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
+
+#include <algorithm>
 
 namespace fincept::services::util {
 
@@ -52,34 +56,35 @@ public:
         return QJsonDocument::fromJson(bytes);
     }
 
-    // Atomic save: write to a sibling `.tmp` file, then rename over the
-    // destination. Avoids the half-truncated-on-crash failure mode where a
-    // partial JSON kills the next-launch hydration path.
+    // Atomic save via QSaveFile, which does the temp+rename dance correctly
+    // on every platform (rename(2) on POSIX, ReplaceFile on Windows) and
+    // skips the destination-remove window where QFile::remove + QFile::rename
+    // could leave a hole if a crash landed between the two calls.
+    //
+    // File permissions are clamped to 0600 (owner read/write only) so any
+    // sensitive payload — portfolio holdings, account-linked tickers — is
+    // not world-readable on multi-user systems.
     bool save(const QString& filename, const QJsonDocument& doc) const {
         const QString final_path = path(filename);
-        const QString tmp_path   = final_path + QStringLiteral(".tmp");
-        QFile f(tmp_path);
+        QSaveFile f(final_path);
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: failed to open ") + tmp_path);
+                     QStringLiteral("DiskCache: failed to open ") + final_path);
             return false;
         }
         const QByteArray bytes = doc.toJson(QJsonDocument::Compact);
-        const qint64 written = f.write(bytes);
-        f.close();
-        if (written != bytes.size()) {
-            QFile::remove(tmp_path);
+        if (f.write(bytes) != bytes.size()) {
+            f.cancelWriting();
             LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: short write for ") + tmp_path);
+                     QStringLiteral("DiskCache: short write for ") + final_path);
             return false;
         }
-        // QFile::rename refuses to overwrite — explicit remove first.
-        QFile::remove(final_path);
-        if (!QFile::rename(tmp_path, final_path)) {
+        if (!f.commit()) {
             LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: rename failed for ") + final_path);
+                     QStringLiteral("DiskCache: commit failed for ") + final_path);
             return false;
         }
+        QFile::setPermissions(final_path, QFile::ReadOwner | QFile::WriteOwner);
         return true;
     }
 
