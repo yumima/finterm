@@ -141,22 +141,26 @@ QWidget* CompanyDetailPanel::build_detail_view() {
                     "font-family:Consolas,monospace;background:transparent;")
                 .arg(colors::TEXT_PRIMARY());
 
-        // 2 rows × 2 cols — no boxes, just spaced label:value
-        auto make_kv = [&](const QString& label, QLabel*& out,
+        // 2 rows × 2 cols — no boxes, just spaced label:value. We capture
+        // pointers to BOTH the label widget and the value widget so populate()
+        // can rename the labels per-company (different data sources fill
+        // different tiles meaningfully).
+        auto make_kv = [&](const QString& initial_label,
+                           QLabel*& label_out, QLabel*& value_out,
                            bool amber = false) -> QWidget* {
             auto* row = new QWidget;
             row->setStyleSheet(sep);
             auto* rl = new QHBoxLayout(row);
             rl->setContentsMargins(0, 6, 0, 6);
             rl->setSpacing(8);
-            auto* ll = new QLabel(label, row);
-            ll->setStyleSheet(lbl_ss);
-            rl->addWidget(ll);
+            label_out = new QLabel(initial_label, row);
+            label_out->setStyleSheet(lbl_ss);
+            rl->addWidget(label_out);
             rl->addStretch();
-            out = new QLabel(QStringLiteral("—"), row);
-            out->setStyleSheet(amber ? val_amber : val_white);
-            out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            rl->addWidget(out);
+            value_out = new QLabel(QStringLiteral("—"), row);
+            value_out->setStyleSheet(amber ? val_amber : val_white);
+            value_out->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            rl->addWidget(value_out);
             return row;
         };
 
@@ -167,10 +171,10 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         g->setColumnStretch(1, 1);
         g->setHorizontalSpacing(16);
 
-        g->addWidget(make_kv("Valuation",    val_lbl_,   true), 0, 0);
-        g->addWidget(make_kv("Last Round",   round_lbl_),       0, 1);
-        g->addWidget(make_kv("Revenue Est.", rev_lbl_),         1, 0);
-        g->addWidget(make_kv("Employees",    emp_lbl_),         1, 1);
+        g->addWidget(make_kv("Valuation",    val_lbl_label_,  val_lbl_,   true), 0, 0);
+        g->addWidget(make_kv("Last Round",   round_lbl_label_, round_lbl_),     0, 1);
+        g->addWidget(make_kv("Revenue Est.", rev_lbl_label_,  rev_lbl_),        1, 0);
+        g->addWidget(make_kv("Employees",    emp_lbl_label_,  emp_lbl_),        1, 1);
 
         auto* gw = new QWidget;
         gw->setStyleSheet("background:transparent;");
@@ -532,27 +536,82 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
     }
     meta_lbl_->setText(meta);
 
-    // ── Key metrics (direct label updates) ───────────────────────────────────
-    if (val_lbl_)
-        val_lbl_->setText(c.last_valuation_usd > 0
-            ? QString("$%1B").arg(c.last_valuation_usd, 0, 'f',
-                                  c.last_valuation_usd >= 10 ? 0 : 1)
-            : QStringLiteral("—"));
+    // ── Key metrics — adaptive per data source ───────────────────────────────
+    // The 4 tiles relabel themselves based on what we know:
+    //   * Form D companies      → Valuation / Last Round / Cum. Raised / Last Filing
+    //   * N-PORT-only companies → Consensus Mark / Latest Mark / Funds / Mark Drift
+    // The previous static labels ("Valuation", "Employees", etc.) showed
+    // em-dashes for OpenAI/Anthropic-class names because N-PORT marks don't
+    // disclose valuation or employee count.
+    const bool has_marks  = !c.fund_marks.isEmpty();
+    const bool has_rounds = !c.rounds.isEmpty()
+                            || c.cumulative_raised_m > 0
+                            || c.last_round_date.isValid();
 
-    if (round_lbl_)
-        round_lbl_->setText(c.last_round_name.isEmpty() ? "—"
-            : c.last_round_name + (c.last_round_date.isValid()
-                ? "  " + c.last_round_date.toString("MMM yyyy") : ""));
+    auto set_kv = [](QLabel* label, QLabel* value, const QString& l, const QString& v) {
+        if (label) label->setText(l);
+        if (value) value->setText(v.isEmpty() ? QStringLiteral("—") : v);
+    };
 
-    if (rev_lbl_)
-        rev_lbl_->setText(c.revenue_est_usd > 0
-            ? "$" + QString::number(qRound(c.revenue_est_usd)) + "M est."
-            : QStringLiteral("—"));
-
-    if (emp_lbl_)
-        emp_lbl_->setText(c.employee_count_est > 0
-            ? QString::number(c.employee_count_est) + "+"
-            : QStringLiteral("—"));
+    if (has_rounds) {
+        // Form D path
+        set_kv(val_lbl_label_, val_lbl_, "Valuation",
+               c.last_valuation_usd > 0
+                   ? QString("$%1B").arg(c.last_valuation_usd, 0, 'f',
+                                         c.last_valuation_usd >= 10 ? 0 : 1)
+                   : QString());
+        set_kv(round_lbl_label_, round_lbl_, "Last Round",
+               c.last_round_name.isEmpty()
+                   ? QString()
+                   : c.last_round_name + (c.last_round_date.isValid()
+                         ? "  " + c.last_round_date.toString("MMM yyyy") : ""));
+        set_kv(rev_lbl_label_, rev_lbl_,
+               c.fin.revenue_m > 0 ? "Revenue Est." : "Cum. Raised",
+               c.fin.revenue_m > 0
+                   ? "$" + QString::number(qRound(c.fin.revenue_m)) + "M est."
+                   : (c.cumulative_raised_m > 0
+                          ? "$" + QString::number(qRound(c.cumulative_raised_m)) + "M"
+                          : QString()));
+        set_kv(emp_lbl_label_, emp_lbl_,
+               c.employee_count_est > 0 ? "Employees" : "Filings",
+               c.employee_count_est > 0
+                   ? QString::number(c.employee_count_est) + "+"
+                   : (c.rounds.isEmpty() ? QString() : QString::number(c.rounds.size())));
+    } else if (has_marks) {
+        // N-PORT-only path — surface what mutual-fund marks tell us.
+        const auto& latest = c.fund_marks.first();
+        set_kv(val_lbl_label_, val_lbl_, "Consensus Mark",
+               c.analytics.consensus_mark_pps > 0
+                   ? QString("$%1/sh").arg(c.analytics.consensus_mark_pps, 0, 'f', 2)
+                   : QString());
+        set_kv(round_lbl_label_, round_lbl_, "Latest Mark",
+               latest.as_of.isValid() ? latest.as_of.toString("MMM yyyy") : QString());
+        set_kv(rev_lbl_label_, rev_lbl_, "Funds Tracking",
+               c.analytics.smart_money_index > 0
+                   ? QString::number(c.analytics.smart_money_index) + " funds"
+                   : QString());
+        if (c.analytics.mark_drift_vs_last_round_pct != 0) {
+            const double d = c.analytics.mark_drift_vs_last_round_pct;
+            set_kv(emp_lbl_label_, emp_lbl_, "Mark Drift",
+                   (d >= 0 ? "+" : "") + QString::number(d, 'f', 1) + "%");
+            if (emp_lbl_)
+                emp_lbl_->setStyleSheet(
+                    QString("color:%1;font-size:13px;font-weight:700;"
+                            "font-family:Consolas,monospace;background:transparent;")
+                        .arg(d >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
+        } else {
+            set_kv(emp_lbl_label_, emp_lbl_, "Mark Dispersion",
+                   c.analytics.mark_dispersion_pct > 0
+                       ? "±" + QString::number(c.analytics.mark_dispersion_pct, 'f', 1) + "%"
+                       : QString());
+        }
+    } else {
+        // Nothing — keep generic labels but make em-dashes uniform.
+        set_kv(val_lbl_label_,   val_lbl_,   "Valuation",   QString());
+        set_kv(round_lbl_label_, round_lbl_, "Last Round",  QString());
+        set_kv(rev_lbl_label_,   rev_lbl_,   "Revenue Est.", QString());
+        set_kv(emp_lbl_label_,   emp_lbl_,   "Employees",    QString());
+    }
 
     // ── IPO status ────────────────────────────────────────────────────────────
     const QString sl = ipo_status_label(c.ipo_status);

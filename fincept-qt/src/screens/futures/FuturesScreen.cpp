@@ -122,24 +122,30 @@ void FuturesScreen::build_body() {
 
     // Row 0: heatmap full width (3 columns)
     grid->addWidget(heatmap_,     0, 0, 1, 3);
-    // Row 1: watchlist | term structure | continuous chart
+    // Row 1: watchlist | EXPIRY calendar | continuous chart.
+    // Expiry takes the slot that previously held term structure — most
+    // catalog contracts have a deterministic next-expiry date so this
+    // pane is rarely empty, unlike term structure which depends on a
+    // Databento key for the full forward curve.
     grid->addWidget(watchlist_,   1, 0);
-    grid->addWidget(term_,        1, 1);
+    grid->addWidget(expiry_,      1, 1);
     grid->addWidget(chart_,       1, 2);
-    // Row 2: settlements (2 cols) | spread (1 col)
+    // Row 2: settlements (2 cols) | TERM STRUCTURE (1 col).
+    // Term structure sits beside settlements/OI because both render the
+    // same per-month curve view (settlements = table, term = chart) so
+    // they're naturally compared side by side.
     grid->addWidget(settlements_, 2, 0, 1, 2);
-    grid->addWidget(spread_,      2, 2);
-    // Row 3: COT positioning (2 cols) | expiry calendar (1 col). COT shows
-    // managed-money net + WoW deltas + sentiment from free CFTC data.
-    // Expiry surfaces deterministically-computed next-expiry dates with
-    // days-to-expiry warnings (amber <30d, red <7d).
+    grid->addWidget(term_,        2, 2);
+    // Row 3: COT positioning (2 cols) | spread monitor (1 col).
+    // COT carries the most rows of any panel and benefits from extra
+    // stretch (3) so its table doesn't scroll with a single page of data.
     grid->addWidget(cot_,         3, 0, 1, 2);
-    grid->addWidget(expiry_,      3, 2);
+    grid->addWidget(spread_,      3, 2);
 
     grid->setRowStretch(0, 1);
-    grid->setRowStretch(1, 2);
+    grid->setRowStretch(1, 3);   // expiry + watchlist + chart — primary research row
     grid->setRowStretch(2, 2);
-    grid->setRowStretch(3, 1);
+    grid->setRowStretch(3, 3);   // COT — taller so the 3-row table doesn't get clipped
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 1);

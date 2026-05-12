@@ -9,22 +9,29 @@ namespace fincept::screens::futures {
 /// Expiry / first-notice rule kinds. Each rule yields a deterministic next
 /// expiry date given a reference date. We avoid network lookups for the
 /// calendar — CME publishes these conventions and they don't change. Note:
-/// the calendar is an *approximation*; for physical-delivery contracts the
-/// CME's actual last-trading-day may differ by a business day around
-/// holidays. The "days-to-expiry" shown is good enough for "is this front-
-/// month rolling soon?" awareness.
+/// the calendar is an *approximation* (US holidays aren't observed in the
+/// business-day math; CME's actual last-trading-day may shift one biz day
+/// around the major holidays). It's good enough for "is this rolling soon?"
+/// awareness; verify with your broker before any final-week action.
+///
+/// Contracts whose rule is significantly more complex than fits a one-line
+/// encoding (RB/HO/BZ each have month-shifted rules, several softs vary,
+/// many financial contracts have product-specific notice quirks) are
+/// intentionally left as `None` so the calendar shows "—" instead of a
+/// confidently-wrong date.
 enum class ExpiryRule {
-    None,                             // no rule mapped
-    QuarterlyThirdFriday,             // ES/NQ/YM/RTY — Mar/Jun/Sep/Dec, 3rd Friday
-    QuarterlyTwoBdaysBeforeThirdWed,  // FX (6E,6J,6B,6A,6C) — quarterly
-    QuarterlyLastBdayOfMonth,         // Rates quarterly (ZT,ZF,ZN,ZB,UB) approx
-    MonthlyThirdLastBdayEvenMonth,    // Gold/Platinum/Palladium even months
-    MonthlySilverHGEvenMonth,         // Silver/Copper similar
-    MonthlyEnergy3BdaysBefore25th,    // CL — front contract last-trading-day rule
-    MonthlyNG3BdaysBeforeDelivery,    // NG — 3 bdays before delivery month
-    MonthlyGrainsMid,                 // Corn/Wheat/Soy — ~15th of delivery month
-    MonthlyLastFriday,                // BTC (CME)
-    MonthlyLastBday,                  // SR3, ZQ — approximate
+    None,                                  // no rule mapped → render "—"
+    QuarterlyThirdFriday,                  // ES/NQ/YM/RTY — Mar/Jun/Sep/Dec, 3rd Friday
+    QuarterlyTwoBdaysBeforeThirdWed,       // FX (6E,6J,6B,6A,6C) — quarterly
+    QuarterlyTreasuryNote7BdaysBeforeEom,  // ZN/ZB/ZF/UB — 7 bdays before last bday of Mar/Jun/Sep/Dec
+    QuarterlyTreasuryLastBdayOfMonth,      // ZT — last bday of Mar/Jun/Sep/Dec
+    MonthlyMetals3rdLastBday,              // Gold (GC) — 3rd-last bday of delivery month (active months)
+    MonthlySilver3rdLastBday,              // Silver/Copper (SI/HG) — 3rd-last bday of delivery month (active months)
+    MonthlyEnergy3BdaysBefore25th,         // CL — 3 bdays before 25th of month preceding delivery
+    MonthlyNG3BdaysBeforeDelivery,         // NG — 3 bdays before first day of delivery month
+    MonthlyGrainsBdayBeforeMid,            // ZC/ZW/ZS/ZL/ZM — biz day prior to 15th of delivery month (Z,H,K,N,U months)
+    MonthlyLastFriday,                     // BTC, MET — last Friday of month
+    MonthlyLastBday,                       // SR3, ZQ — approximate (last bday of month)
 };
 
 struct ContractDef {
@@ -63,31 +70,38 @@ inline const QVector<ContractDef>& all_contracts() {
         {"YM",  "E-mini Dow",           "INDEX",  1.0,        5,          9'500, R::QuarterlyThirdFriday},
         {"RTY", "E-mini Russell 2000",  "INDEX",  0.10,      50,          8'500, R::QuarterlyThirdFriday},
         // Rates
-        {"ZT",  "2-Year T-Note",        "RATES",  0.0078125, 2000,        1'400, R::QuarterlyLastBdayOfMonth},
-        {"ZF",  "5-Year T-Note",        "RATES",  0.0078125, 1000,        1'900, R::QuarterlyLastBdayOfMonth},
-        {"ZN",  "10-Year T-Note",       "RATES",  0.015625,  1000,        2'400, R::QuarterlyLastBdayOfMonth},
-        {"ZB",  "30-Year T-Bond",       "RATES",  0.03125,   1000,        4'100, R::QuarterlyLastBdayOfMonth},
-        {"UB",  "Ultra T-Bond",         "RATES",  0.03125,   1000,        5'500, R::QuarterlyLastBdayOfMonth},
+        {"ZT",  "2-Year T-Note",        "RATES",  0.0078125, 2000,        1'400, R::QuarterlyTreasuryLastBdayOfMonth},
+        {"ZF",  "5-Year T-Note",        "RATES",  0.0078125, 1000,        1'900, R::QuarterlyTreasuryLastBdayOfMonth},
+        {"ZN",  "10-Year T-Note",       "RATES",  0.015625,  1000,        2'400, R::QuarterlyTreasuryNote7BdaysBeforeEom},
+        {"ZB",  "30-Year T-Bond",       "RATES",  0.03125,   1000,        4'100, R::QuarterlyTreasuryNote7BdaysBeforeEom},
+        {"UB",  "Ultra T-Bond",         "RATES",  0.03125,   1000,        5'500, R::QuarterlyTreasuryNote7BdaysBeforeEom},
         {"ZQ",  "30-Day Fed Funds",     "RATES",  0.0025,    4167,        1'200, R::MonthlyLastBday},
         {"SR3", "3-Month SOFR",         "RATES",  0.0025,    2500,        1'100, R::MonthlyLastBday},
-        // Energy
+        // Energy — only CL/NG have one-line rules. RB/HO use the month-before-delivery
+        // LTD which we don't currently track; BZ depends on ICE's settlement schedule.
+        // Leave the rest as None until properly modelled.
         {"CL",  "WTI Crude Oil",        "ENERGY", 0.01,      1000,        6'500, R::MonthlyEnergy3BdaysBefore25th},
-        {"BZ",  "Brent Crude",          "ENERGY", 0.01,      1000,        6'500, R::MonthlyEnergy3BdaysBefore25th},
+        {"BZ",  "Brent Crude",          "ENERGY", 0.01,      1000,        6'500, R::None},
         {"NG",  "Henry Hub Nat Gas",    "ENERGY", 0.001,     10000,       4'500, R::MonthlyNG3BdaysBeforeDelivery},
-        {"RB",  "RBOB Gasoline",        "ENERGY", 0.0001,    42000,       7'000, R::MonthlyEnergy3BdaysBefore25th},
-        {"HO",  "Heating Oil",          "ENERGY", 0.0001,    42000,       7'500, R::MonthlyEnergy3BdaysBefore25th},
-        // Metals
-        {"GC",  "Gold",                 "METALS", 0.10,      100,        12'500, R::MonthlyThirdLastBdayEvenMonth},
-        {"SI",  "Silver",               "METALS", 0.005,     5000,       18'000, R::MonthlySilverHGEvenMonth},
-        {"HG",  "Copper",               "METALS", 0.0005,    25000,       7'000, R::MonthlySilverHGEvenMonth},
-        {"PL",  "Platinum",             "METALS", 0.10,      50,          3'700, R::MonthlyThirdLastBdayEvenMonth},
-        {"PA",  "Palladium",            "METALS", 0.05,      100,         9'500, R::MonthlyThirdLastBdayEvenMonth},
-        // Agriculture / Softs
-        {"ZC",  "Corn",                 "AGS",    0.25,      50,          1'500, R::MonthlyGrainsMid},
-        {"ZW",  "Wheat",                "AGS",    0.25,      50,          2'200, R::MonthlyGrainsMid},
-        {"ZS",  "Soybeans",             "AGS",    0.25,      50,          3'200, R::MonthlyGrainsMid},
-        {"ZL",  "Soybean Oil",          "AGS",    0.0001,    60000,       2'000, R::MonthlyGrainsMid},
-        {"ZM",  "Soybean Meal",         "AGS",    0.10,      100,         2'600, R::MonthlyGrainsMid},
+        {"RB",  "RBOB Gasoline",        "ENERGY", 0.0001,    42000,       7'000, R::None},
+        {"HO",  "Heating Oil",          "ENERGY", 0.0001,    42000,       7'500, R::None},
+        // Metals (Gold/Plat/Palladium active = G/J/M/Q/Z; Silver/HG active = H/K/N/U/Z).
+        // We gate by active months in the rule arm itself; both groups use
+        // "3rd-last business day of the delivery month".
+        {"GC",  "Gold",                 "METALS", 0.10,      100,        12'500, R::MonthlyMetals3rdLastBday},
+        {"SI",  "Silver",               "METALS", 0.005,     5000,       18'000, R::MonthlySilver3rdLastBday},
+        {"HG",  "Copper",               "METALS", 0.0005,    25000,       7'000, R::MonthlySilver3rdLastBday},
+        {"PL",  "Platinum",             "METALS", 0.10,      50,          3'700, R::MonthlyMetals3rdLastBday},
+        {"PA",  "Palladium",            "METALS", 0.05,      100,         9'500, R::MonthlyMetals3rdLastBday},
+        // CBOT grains — LTD is biz day prior to 15th of delivery month;
+        // delivery months are (H,K,N,U,Z) for grains, (F,H,K,N,Q,U,X) for soy.
+        // We approximate with the grain set (good enough for ZC/ZW; ZS shows
+        // a slightly conservative date in Jan/Q/X months).
+        {"ZC",  "Corn",                 "AGS",    0.25,      50,          1'500, R::MonthlyGrainsBdayBeforeMid},
+        {"ZW",  "Wheat",                "AGS",    0.25,      50,          2'200, R::MonthlyGrainsBdayBeforeMid},
+        {"ZS",  "Soybeans",             "AGS",    0.25,      50,          3'200, R::MonthlyGrainsBdayBeforeMid},
+        {"ZL",  "Soybean Oil",          "AGS",    0.0001,    60000,       2'000, R::MonthlyGrainsBdayBeforeMid},
+        {"ZM",  "Soybean Meal",         "AGS",    0.10,      100,         2'600, R::MonthlyGrainsBdayBeforeMid},
         {"KC",  "Coffee",               "AGS",    0.05,      37500,       9'500, R::None},
         {"SB",  "Sugar #11",            "AGS",    0.01,      112000,      1'400, R::None},
         {"CC",  "Cocoa",                "AGS",    1.0,       10,          3'600, R::None},
@@ -140,9 +154,15 @@ inline QDate next_expiry(const ContractDef& c, const QDate& from) {
     using namespace detail;
     if (c.expiry_rule == ExpiryRule::None) return {};
 
+    // Active delivery months per rule. Tested against CME product specs;
+    // we still skip holidays in the business-day math (good-enough for
+    // "rolling soon?" awareness, not for an order desk).
+    auto in_active = [](int month, const std::initializer_list<int>& months) {
+        for (int m : months) if (month == m) return true;
+        return false;
+    };
+
     QDate ref = from.isValid() ? from : QDate::currentDate();
-    // We try months from current up to +18, returning the first expiry on or
-    // after `ref`. Quarterly/monthly rules are checked per candidate month.
     for (int delta = 0; delta < 18; ++delta) {
         QDate probe = ref.addMonths(delta);
         const int y = probe.year();
@@ -151,33 +171,43 @@ inline QDate next_expiry(const ContractDef& c, const QDate& from) {
         QDate cand;
         switch (c.expiry_rule) {
             case ExpiryRule::QuarterlyThirdFriday: {
-                if (m % 3 != 0) continue;
+                if (!in_active(m, {3, 6, 9, 12})) continue;
                 cand = nth_weekday(y, m, 5 /*Fri*/, 3);
                 break;
             }
             case ExpiryRule::QuarterlyTwoBdaysBeforeThirdWed: {
-                if (m % 3 != 0) continue;
+                if (!in_active(m, {3, 6, 9, 12})) continue;
                 cand = add_business_days(nth_weekday(y, m, 3 /*Wed*/, 3), -2);
                 break;
             }
-            case ExpiryRule::QuarterlyLastBdayOfMonth: {
-                if (m % 3 != 0) continue;
+            case ExpiryRule::QuarterlyTreasuryNote7BdaysBeforeEom: {
+                if (!in_active(m, {3, 6, 9, 12})) continue;
+                cand = add_business_days(last_business_day(y, m), -7);
+                break;
+            }
+            case ExpiryRule::QuarterlyTreasuryLastBdayOfMonth: {
+                if (!in_active(m, {3, 6, 9, 12})) continue;
                 cand = last_business_day(y, m);
                 break;
             }
-            case ExpiryRule::MonthlyThirdLastBdayEvenMonth: {
-                if (m % 2 != 0) continue;
-                QDate eom = last_business_day(y, m);
-                cand = add_business_days(eom, -2);
+            case ExpiryRule::MonthlyMetals3rdLastBday: {
+                // Gold/Plat/Palladium active months: G,J,M,Q,V,Z = Feb,Apr,Jun,Aug,Oct,Dec
+                if (!in_active(m, {2, 4, 6, 8, 10, 12})) continue;
+                // 3rd-last business day = 2 bdays back from last bday.
+                cand = add_business_days(last_business_day(y, m), -2);
                 break;
             }
-            case ExpiryRule::MonthlySilverHGEvenMonth: {
-                if (m % 2 != 0) continue;
-                QDate eom = last_business_day(y, m);
-                cand = add_business_days(eom, -3);
+            case ExpiryRule::MonthlySilver3rdLastBday: {
+                // Silver active: H,K,N,U,Z = Mar,May,Jul,Sep,Dec
+                // Copper (HG) active: H,K,N,U,Z = same
+                if (!in_active(m, {3, 5, 7, 9, 12})) continue;
+                cand = add_business_days(last_business_day(y, m), -2);
                 break;
             }
             case ExpiryRule::MonthlyEnergy3BdaysBefore25th: {
+                // CL: last-trading-day is 3 bdays before the 25th of the
+                // month *preceding* delivery. We model the contract delivering
+                // in month `m+1` as expiring in month `m`. Probe each month.
                 QDate d25(y, m, 25);
                 cand = add_business_days(d25, -3);
                 break;
@@ -187,8 +217,14 @@ inline QDate next_expiry(const ContractDef& c, const QDate& from) {
                 cand = add_business_days(d1, -3);
                 break;
             }
-            case ExpiryRule::MonthlyGrainsMid: {
-                cand = QDate(y, m, 15);
+            case ExpiryRule::MonthlyGrainsBdayBeforeMid: {
+                // CBOT grains active months (H,K,N,U,Z + F for soy complex).
+                // Use the union {1,3,5,7,9,12} as an upper-bound set — slightly
+                // permissive but the surfaced date is still close to the LTD.
+                if (!in_active(m, {1, 3, 5, 7, 9, 12})) continue;
+                // Business day prior to the 15th.
+                QDate d15(y, m, 15);
+                cand = add_business_days(d15, -1);
                 break;
             }
             case ExpiryRule::MonthlyLastFriday: {

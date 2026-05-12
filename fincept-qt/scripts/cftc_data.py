@@ -200,21 +200,31 @@ class CFTCDataWrapper:
             return 0
 
     def _build_search_query(self, identifier: str) -> str:
-        """Build search query for CFTC identifier"""
+        """Build search query for CFTC identifier.
+
+        Resolution order:
+          1. Friendly key in `market_mappings` (returns contract_market_name pattern)
+          2. Friendly key in `cot_codes`       (returns 6-digit cftc_contract_market_code
+                                                — matches via the cftc_contract_market_code
+                                                clause in the WHERE)
+          3. Bare 6-digit numeric code
+          4. Wildcard against everything
+
+        The previous version fell straight from #1 to wildcard, which left
+        ~10 well-known identifiers (treasury_notes_*, fed_funds, natural_gas,
+        heating_oil, etc.) returning zero rows because the SOQL `LIKE '%foo_bar%'`
+        wildcard never matched the human-readable contract names (which use
+        spaces, not underscores).
+        """
         if not identifier or identifier.lower() == "all":
             return ""
-
-        # Check if identifier is in our mappings
         identifier_lower = identifier.lower()
         if identifier_lower in self.market_mappings:
-            # Use the exact market name from mappings
             return self.market_mappings[identifier_lower][0]
-
-        # Check if identifier is a 6-digit code
+        if identifier_lower in self.cot_codes:
+            return self.cot_codes[identifier_lower]
         if identifier.isdigit() and len(identifier) == 6:
             return identifier
-
-        # Otherwise use as wildcard search
         return f"%{identifier}%"
 
     # COMMITMENT OF TRADERS (COT) ENDPOINTS

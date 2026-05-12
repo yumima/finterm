@@ -51,10 +51,20 @@ class CompanyDetailPanel : public QWidget {
     QLabel* meta_lbl_       = nullptr;   // founded · HQ
 
     // ── Key metrics (compact label:value — no tile boxes) ────────────────────
-    QLabel* val_lbl_       = nullptr;   // last valuation
-    QLabel* round_lbl_     = nullptr;   // last round name + date
-    QLabel* rev_lbl_       = nullptr;   // revenue estimate
-    QLabel* emp_lbl_       = nullptr;   // employee count
+    // Each metric has both a *label* and *value* pointer because the labels
+    // are repurposed per company depending on which data source has rows.
+    // For Form-D companies we show {Valuation, Last Round, Cum. Raised,
+    // Last Filing}; for N-PORT-only companies (OpenAI/Anthropic/etc.) we
+    // show {Consensus Mark, Mark As Of, Funds Tracking, Mark Drift} —
+    // populated unconditionally so the dossier is never "two empty boxes".
+    QLabel* val_lbl_label_  = nullptr;
+    QLabel* val_lbl_       = nullptr;
+    QLabel* round_lbl_label_ = nullptr;
+    QLabel* round_lbl_     = nullptr;
+    QLabel* rev_lbl_label_  = nullptr;
+    QLabel* rev_lbl_       = nullptr;
+    QLabel* emp_lbl_label_  = nullptr;
+    QLabel* emp_lbl_       = nullptr;
 
     // ── IPO status ────────────────────────────────────────────────────────────
     QLabel* status_badge_  = nullptr;

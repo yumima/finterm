@@ -310,9 +310,14 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         by_id[companies_[i].id] = i;
     }
 
-    // Clear ALL existing marks first so a refresh doesn't leave stale entries
-    // on companies whose marks weren't included in the new response.
-    for (auto& c : companies_) c.fund_marks.clear();
+    // Clear existing marks only if the new response actually contains marks
+    // for at least one company — a degenerate response (network glitch
+    // returning {marks:{}, aliases:{...}}) would otherwise silently wipe
+    // every company's existing fund-mark data.
+    const auto marks_root = root.value(QStringLiteral("marks")).toObject();
+    if (!marks_root.isEmpty()) {
+        for (auto& c : companies_) c.fund_marks.clear();
+    }
 
     // Alias map (cid → {name, cik, aliases}) — lets us reverse-look up a
     // company entry by alias name or canonical CIK.
@@ -347,8 +352,7 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         }
     }
 
-    const auto marks_obj = root.value(QStringLiteral("marks")).toObject();
-    for (auto it = marks_obj.begin(); it != marks_obj.end(); ++it) {
+    for (auto it = marks_root.begin(); it != marks_root.end(); ++it) {
         const QString cid = it.key();
         const auto arr = it.value().toArray();
         if (arr.isEmpty()) continue;
@@ -477,32 +481,30 @@ void PreIpoService::recompute_analytics() {
             a.smart_money_index = static_cast<int>(latest.size());
         }
 
-        // Mark drift: prefer "consensus today vs consensus one quarter back"
-        // since Form D doesn't disclose price-per-share. Fall back to the
-        // oldest fund mark as a longer-term baseline. The label in the UI
-        // says "vs last round" but the meaning that matters to a user is
-        // "are funds raising or cutting their mark?".
+        // Mark drift: "consensus today vs consensus one quarter back". Form D
+        // doesn't disclose price-per-share, so we use fund-mark history as
+        // proxy. The baseline must be at least 45 days older than the newest
+        // mark; otherwise comparing marks 2 weeks apart and labelling the
+        // delta "vs prior quarter" is misleading. If there's no 45-day-old
+        // mark, drift stays 0 and no signal fires.
         if (a.consensus_mark_pps > 0 && c.fund_marks.size() >= 2) {
-            // fund_marks is already sorted as_of DESC. Find a baseline mark
-            // at least ~60 days older than the newest (one quarter back).
             const QDate newest_as_of = c.fund_marks.first().as_of;
             double baseline = 0;
             for (const auto& m : c.fund_marks) {
                 if (m.mark_pps <= 0) continue;
-                if (newest_as_of.daysTo(m.as_of) <= -60) {
+                // newest_as_of.daysTo(m.as_of) is negative when m is older;
+                // ≤ -45 means m is at least 45 days older than the newest.
+                if (newest_as_of.daysTo(m.as_of) <= -45) {
                     baseline = m.mark_pps;
                     break;
                 }
-            }
-            if (baseline <= 0) {
-                // No prior quarter available — use the oldest available mark.
-                for (auto it = c.fund_marks.rbegin(); it != c.fund_marks.rend(); ++it)
-                    if (it->mark_pps > 0) { baseline = it->mark_pps; break; }
             }
             if (baseline > 0 && std::abs(baseline - a.consensus_mark_pps) > 1e-9) {
                 a.mark_drift_vs_last_round_pct =
                     (a.consensus_mark_pps - baseline) / baseline * 100.0;
             }
+            // No 45-day-stale baseline: leave drift as 0. The picks/signals
+            // engine then won't fire a MarkUp signal off a 2-week wobble.
         }
 
         // Hiive premium vs consensus mark.

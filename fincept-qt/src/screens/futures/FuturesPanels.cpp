@@ -696,9 +696,14 @@ void FuturesHeatmapPanel::render_from_cache() {
             tile->setMinimumSize(56, 36);
             tile->setToolTip(QString("%1\nLast %2  ·  %3").arg(q.name, fmt_num(q.last, 4),
                                                                 fmt_signed(q.change_pct, 2) + "%"));
+            // Use the standard POSITIVE/NEGATIVE accent colors (the same green
+            // and red used everywhere else for gains/losses) with alpha-scaled
+            // intensity for magnitude. The previous code used *_BG variants
+            // (darker, near-black) which made positive tiles read as
+            // "black-green" rather than "green".
             const double pct = std::clamp(q.change_pct / 3.0, -1.0, 1.0);
-            const int alpha = static_cast<int>(80 + std::abs(pct) * 175);
-            QColor bg = pct >= 0 ? QColor(colors::POSITIVE_BG()) : QColor(colors::NEGATIVE_BG());
+            const int alpha = static_cast<int>(70 + std::abs(pct) * 160); // 70..230
+            QColor bg = pct >= 0 ? QColor(colors::POSITIVE()) : QColor(colors::NEGATIVE());
             bg.setAlpha(alpha);
             tile->setStyleSheet(QString("QLabel { background:rgba(%1,%2,%3,%4); color:%5;"
                                         " border:1px solid %6; font-family:'%7';"
@@ -1199,14 +1204,18 @@ void FuturesCotPanel::refresh() {
 
     const quint64 my_gen = bump_gen();
     QPointer<FuturesCotPanel> self(this);
-    // cftc_data.py takes positional args:
+    // cftc_data.py positional args:
     //   cot_data <identifier> <report_type> <futures_only> <start> <end> <limit>
-    // Limit 4 = last 4 weekly reports — enough for WoW diff plus context.
+    // Explicit 35-day start covers ≥4 weekly reports — required because the
+    // script's default start (when none passed) is *7 days ago* for text
+    // identifiers, which leaves no prior week to compute WoW deltas against.
+    const QString start_date = QDate::currentDate().addDays(-35).toString("yyyy-MM-dd");
+    const QString end_date   = QDate::currentDate().toString("yyyy-MM-dd");
     python::PythonRunner::instance().run(
         QStringLiteral("cftc_data.py"),
         {QStringLiteral("cot_data"), ident,
          QStringLiteral("legacy"), QStringLiteral("false"),
-         QStringLiteral(""), QStringLiteral(""), QStringLiteral("4")},
+         start_date, end_date, QStringLiteral("8")},
         [self, my_gen, sym](python::PythonResult result) {
             if (!self) return;
             self->fetch_in_flight_ = false;
@@ -1242,9 +1251,24 @@ void FuturesCotPanel::render(const QJsonArray& rows) {
     if (auto* stack = qobject_cast<QStackedLayout*>(placeholder_->parentWidget()->layout()))
         stack->setCurrentIndex(0);
 
-    // Most recent first per cftc_data.py.
-    const auto latest = rows.first().toObject();
-    const auto prior  = rows.size() > 1 ? rows.at(1).toObject() : QJsonObject{};
+    // cftc_data.py orders rows by Report_Date ASC (oldest → newest). Copy and
+    // sort DESC so rows.first() is the latest report. The earlier code
+    // assumed DESC, which silently inverted every WoW delta (latest values
+    // were being subtracted from the oldest-week values) and stamped the
+    // table with a ~3-week-stale "Report:" date.
+    QVector<QJsonObject> sorted;
+    sorted.reserve(rows.size());
+    for (const auto& v : rows) sorted.append(v.toObject());
+    std::sort(sorted.begin(), sorted.end(), [](const QJsonObject& a, const QJsonObject& b) {
+        return a.value("report_date_as_yyyy_mm_dd").toString() >
+               b.value("report_date_as_yyyy_mm_dd").toString();
+    });
+    if (sorted.isEmpty()) {
+        show_placeholder("No COT rows in response.");
+        return;
+    }
+    const auto latest = sorted.first();
+    const auto prior  = sorted.size() > 1 ? sorted.at(1) : QJsonObject{};
 
     auto i = [](const QJsonObject& o, const char* key) -> long long {
         const auto v = o.value(QLatin1String(key));
