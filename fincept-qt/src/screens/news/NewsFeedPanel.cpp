@@ -3,14 +3,48 @@
 #include "core/logging/Logger.h"
 #include <QApplication>
 #include <QDateTime>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSettings>
 
 #if defined(Q_OS_WIN)
 #    include <windows.h>
 #endif
 
 namespace fincept::screens {
+
+namespace {
+
+// Filter proxy that shows only source rows whose row index matches a given
+// parity (0 = even, 1 = odd). Used to fan out the news feed across two
+// columns on wide viewports while keeping a single source model.
+class ParityProxy : public QSortFilterProxyModel {
+  public:
+    explicit ParityProxy(int parity, QObject* parent = nullptr)
+        : QSortFilterProxyModel(parent), parity_(parity) {}
+
+  protected:
+    bool filterAcceptsRow(int source_row, const QModelIndex&) const override {
+        return (source_row % 2) == parity_;
+    }
+
+  public:
+    // Source row inserts can change which rows match the parity (a row
+    // inserted at position 0 shifts everyone down). Refresh on every
+    // structural change so the two columns stay in lockstep.
+    void connect_source(QAbstractItemModel* src) {
+        connect(src, &QAbstractItemModel::rowsInserted, this, [this] { invalidateFilter(); });
+        connect(src, &QAbstractItemModel::rowsRemoved,  this, [this] { invalidateFilter(); });
+        connect(src, &QAbstractItemModel::modelReset,   this, [this] { invalidateFilter(); });
+        connect(src, &QAbstractItemModel::layoutChanged, this, [this] { invalidateFilter(); });
+    }
+
+  private:
+    int parity_;
+};
+
+} // namespace
 
 NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsFeedPanel");
@@ -26,20 +60,57 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
     // Use a QStackedWidget so skeleton and list can swap cleanly
     auto* stack = new QStackedWidget(this);
 
-    // QListView with model/delegate
+    // Source model + shared delegate. Two QListViews each wrap a parity
+    // proxy so wide viewports get a 2-column feed without splitting the
+    // underlying data.
     model_ = new NewsFeedModel(this);
     delegate_ = new NewsFeedDelegate(this);
 
-    list_view_ = new QListView(stack);
-    list_view_->setObjectName("newsFeedList");
-    list_view_->setModel(model_);
-    list_view_->setItemDelegate(delegate_);
-    list_view_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    list_view_->setSelectionMode(QAbstractItemView::NoSelection);
-    list_view_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    list_view_->setMouseTracking(true);
-    list_view_->setFrameShape(QFrame::NoFrame);
-    list_view_->setUniformItemSizes(true); // WIRE mode: all 26px — big perf win
+    auto* pl = new ParityProxy(0, this);
+    pl->setSourceModel(model_);
+    pl->connect_source(model_);
+    proxy_left_ = pl;
+
+    auto* pr = new ParityProxy(1, this);
+    pr->setSourceModel(model_);
+    pr->connect_source(model_);
+    proxy_right_ = pr;
+
+    auto build_view = [&](QSortFilterProxyModel* proxy, const char* name) {
+        auto* v = new QListView;
+        v->setObjectName(name);
+        v->setModel(proxy);
+        v->setItemDelegate(delegate_);
+        v->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        v->setSelectionMode(QAbstractItemView::NoSelection);
+        v->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        v->setMouseTracking(true);
+        v->setFrameShape(QFrame::NoFrame);
+        v->setUniformItemSizes(true);
+        v->viewport()->installEventFilter(this);
+        v->viewport()->setMouseTracking(true);
+        return v;
+    };
+    list_view_       = build_view(proxy_left_,  "newsFeedList");
+    list_view_right_ = build_view(proxy_right_, "newsFeedListRight");
+
+    // Restore saved source-column width.
+    {
+        const int saved = QSettings()
+                              .value(QStringLiteral("news/source_col_width"),
+                                     NewsFeedDelegate::kSourceColDefault)
+                              .toInt();
+        delegate_->set_source_col_width(saved);
+    }
+
+    feed_splitter_ = new QSplitter(Qt::Horizontal, stack);
+    feed_splitter_->setObjectName("newsFeedSplitter");
+    feed_splitter_->setChildrenCollapsible(false);
+    feed_splitter_->setHandleWidth(1);
+    feed_splitter_->addWidget(list_view_);
+    feed_splitter_->addWidget(list_view_right_);
+    feed_splitter_->setSizes({500, 500});
+    list_view_right_->hide();  // start narrow; update_two_column_layout() toggles on resize
 
     // Skeleton loading widget
     build_skeleton();
@@ -66,7 +137,7 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
         layout->addStretch();
     }
 
-    stack->addWidget(list_view_);        // index 0 = feed
+    stack->addWidget(feed_splitter_);    // index 0 = feed (left + optional right)
     stack->addWidget(skeleton_overlay_); // index 1 = skeleton
     stack->addWidget(empty_state_);      // index 2 = empty state
     stack->setCurrentIndex(0);
@@ -74,11 +145,22 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
 
     root->addWidget(stack, 1);
 
-    // Connect clicks
-    connect(list_view_, &QListView::clicked, this, &NewsFeedPanel::on_item_clicked);
+    // Wire clicks from both columns through on_item_clicked. Each handler
+    // converts the proxy index back to the source row before reading data.
+    connect(list_view_,       &QListView::clicked, this, &NewsFeedPanel::on_item_clicked);
+    connect(list_view_right_, &QListView::clicked, this, &NewsFeedPanel::on_item_clicked);
 
-    // Scroll-to-bottom detection for lazy loading
-    connect(list_view_->verticalScrollBar(), &QScrollBar::valueChanged, this, &NewsFeedPanel::check_scroll_position);
+    // Scroll-to-bottom detection — fire from either column, whichever the
+    // user is browsing. near_bottom() is idempotent for the consumer.
+    connect(list_view_->verticalScrollBar(),       &QScrollBar::valueChanged,
+            this, &NewsFeedPanel::check_scroll_position);
+    connect(list_view_right_->verticalScrollBar(), &QScrollBar::valueChanged,
+            this, &NewsFeedPanel::check_scroll_position);
+
+    // Wait until after the panel is mounted to compute the layout — we need
+    // a real viewport width before we can decide whether to show the right
+    // column.
+    QTimer::singleShot(0, this, [this]() { update_two_column_layout(); });
 
     // Banner dismiss timer
     banner_dismiss_timer_ = new QTimer(this);
@@ -218,7 +300,7 @@ void NewsFeedPanel::build_skeleton() {
 }
 
 void NewsFeedPanel::remove_skeleton() {
-    stack_->setCurrentWidget(list_view_);
+    stack_->setCurrentWidget(feed_splitter_);
     skeleton_anim_timer_->stop();
 }
 
@@ -238,14 +320,19 @@ void NewsFeedPanel::set_empty_state(bool empty) {
     if (empty) {
         stack_->setCurrentWidget(empty_state_);
     } else if (stack_->currentWidget() == empty_state_) {
-        stack_->setCurrentWidget(list_view_);
+        stack_->setCurrentWidget(feed_splitter_);
     }
 }
 
 void NewsFeedPanel::scroll_to(const QString& article_id) {
-    auto idx = model_->index_for_article(article_id);
-    if (idx.isValid())
-        list_view_->scrollTo(idx, QAbstractItemView::EnsureVisible);
+    auto src_idx = model_->index_for_article(article_id);
+    if (!src_idx.isValid()) return;
+    // Even source rows live in the left proxy, odd ones on the right.
+    auto* proxy = (src_idx.row() % 2 == 0) ? proxy_left_ : proxy_right_;
+    auto* view  = (src_idx.row() % 2 == 0) ? list_view_  : list_view_right_;
+    auto proxy_idx = proxy->mapFromSource(src_idx);
+    if (proxy_idx.isValid())
+        view->scrollTo(proxy_idx, QAbstractItemView::EnsureVisible);
 }
 
 void NewsFeedPanel::set_selected(const QString& article_id) {
@@ -254,50 +341,177 @@ void NewsFeedPanel::set_selected(const QString& article_id) {
 }
 
 void NewsFeedPanel::select_next() {
-    auto current = list_view_->currentIndex();
-    int next_row = current.isValid() ? current.row() + 1 : 0;
+    // Keyboard navigation moves through the source model directly so it
+    // sweeps both columns in chronological order rather than skipping rows.
+    auto current_proxy = list_view_->currentIndex();
+    int current_src = source_row_for(current_proxy);
+    int next_row = (current_src >= 0) ? current_src + 1 : 0;
     if (next_row < model_->rowCount()) {
-        auto next = model_->index(next_row, 0);
-        list_view_->setCurrentIndex(next);
-        list_view_->scrollTo(next);
-        on_item_clicked(next);
+        auto src_idx = model_->index(next_row, 0);
+        on_item_clicked(src_idx);
+        // also bring focus to the matching column for arrow-key continuity
+        auto* view  = (next_row % 2 == 0) ? list_view_  : list_view_right_;
+        auto* proxy = (next_row % 2 == 0) ? proxy_left_ : proxy_right_;
+        view->setCurrentIndex(proxy->mapFromSource(src_idx));
     }
 }
 
 void NewsFeedPanel::select_previous() {
-    auto current = list_view_->currentIndex();
-    int prev_row = current.isValid() ? current.row() - 1 : 0;
-    if (prev_row >= 0) {
-        auto prev = model_->index(prev_row, 0);
-        list_view_->setCurrentIndex(prev);
-        list_view_->scrollTo(prev);
-        on_item_clicked(prev);
+    auto current_proxy = list_view_->currentIndex();
+    int current_src = source_row_for(current_proxy);
+    int prev_row = (current_src > 0) ? current_src - 1 : 0;
+    if (prev_row >= 0 && prev_row < model_->rowCount()) {
+        auto src_idx = model_->index(prev_row, 0);
+        on_item_clicked(src_idx);
+        auto* view  = (prev_row % 2 == 0) ? list_view_  : list_view_right_;
+        auto* proxy = (prev_row % 2 == 0) ? proxy_left_ : proxy_right_;
+        view->setCurrentIndex(proxy->mapFromSource(src_idx));
     }
 }
 
-void NewsFeedPanel::on_item_clicked(const QModelIndex& index) {
-    if (!index.isValid())
+void NewsFeedPanel::on_item_clicked(const QModelIndex& proxy_index) {
+    const int src_row = source_row_for(proxy_index);
+    if (src_row < 0)
         return;
 
-    auto article = model_->article_at(index.row());
+    auto article = model_->article_at(src_row);
     model_->set_selected_id(article.id);
     model_->mark_seen(article.id);
 
     emit article_clicked(article);
 
     if (model_->view_mode() == "CLUSTERS") {
-        auto cluster = model_->cluster_at(index.row());
+        auto cluster = model_->cluster_at(src_row);
         emit cluster_clicked(cluster);
     }
 }
 
+int NewsFeedPanel::source_row_for(const QModelIndex& proxy_index) const {
+    if (!proxy_index.isValid())
+        return -1;
+    if (proxy_index.model() == proxy_left_)
+        return proxy_left_->mapToSource(proxy_index).row();
+    if (proxy_index.model() == proxy_right_)
+        return proxy_right_->mapToSource(proxy_index).row();
+    return proxy_index.row(); // already a source index
+}
+
+services::NewsArticle NewsFeedPanel::current_article() const {
+    int src_row = source_row_for(list_view_->currentIndex());
+    if (src_row < 0 && list_view_right_)
+        src_row = source_row_for(list_view_right_->currentIndex());
+    if (src_row < 0) return {};
+    return model_->article_at(src_row);
+}
+
+void NewsFeedPanel::mark_visible_seen(QSet<QString>& out_new) {
+    auto walk = [&](QListView* v, QSortFilterProxyModel* proxy) {
+        if (!v || !v->isVisible() || !proxy) return;
+        const QRect vp = v->viewport()->rect();
+        const int n = proxy->rowCount();
+        for (int i = 0; i < n; ++i) {
+            const auto pidx = proxy->index(i, 0);
+            if (v->visualRect(pidx).intersects(vp)) {
+                const int src_row = proxy->mapToSource(pidx).row();
+                const QString id = model_->article_at(src_row).id;
+                if (!id.isEmpty()) {
+                    model_->mark_seen(id);
+                    out_new.insert(id);
+                }
+            }
+        }
+    };
+    walk(list_view_,       proxy_left_);
+    walk(list_view_right_, proxy_right_);
+}
+
+void NewsFeedPanel::resizeEvent(QResizeEvent* ev) {
+    QWidget::resizeEvent(ev);
+    update_two_column_layout();
+}
+
+void NewsFeedPanel::update_two_column_layout() {
+    if (!list_view_right_) return;
+    const bool wide = width() >= kWideViewportThreshold;
+    list_view_right_->setVisible(wide);
+    if (wide) {
+        const int half = width() / 2;
+        feed_splitter_->setSizes({half, width() - half});
+    }
+}
+
+bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
+    if (!delegate_) return QWidget::eventFilter(obj, ev);
+
+    // Drag handle works in either column's viewport.
+    QWidget* viewport = nullptr;
+    if (list_view_       && obj == list_view_->viewport())       viewport = list_view_->viewport();
+    if (list_view_right_ && obj == list_view_right_->viewport()) viewport = list_view_right_->viewport();
+    if (!viewport) return QWidget::eventFilter(obj, ev);
+
+    const int boundary_x = delegate_->source_col_width() + 12 + 2;
+    // 12 = pre-source left padding (priority dot + indent),
+    // 2 = threat border. Mirrors paint_wire_row's x advance up to source.
+    auto near_boundary = [&](int x) {
+        return std::abs(x - boundary_x) <= kSourceColDragHotzone;
+    };
+
+    auto repaint_both = [this] {
+        if (list_view_)       list_view_->viewport()->update();
+        if (list_view_right_) list_view_right_->viewport()->update();
+    };
+
+    if (ev->type() == QEvent::MouseMove) {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        const int x = me->pos().x();
+        if (dragging_source_col_) {
+            const int delta = x - drag_start_x_;
+            delegate_->set_source_col_width(drag_start_width_ + delta);
+            repaint_both();
+            return true;
+        }
+        viewport->setCursor(near_boundary(x) ? Qt::SplitHCursor : Qt::ArrowCursor);
+        return false;
+    }
+    if (ev->type() == QEvent::MouseButtonPress) {
+        auto* me = static_cast<QMouseEvent*>(ev);
+        if (me->button() == Qt::LeftButton && near_boundary(me->pos().x())) {
+            dragging_source_col_ = true;
+            drag_start_x_        = me->pos().x();
+            drag_start_width_    = delegate_->source_col_width();
+            viewport->setCursor(Qt::SplitHCursor);
+            return true; // swallow so the list doesn't select
+        }
+        return false;
+    }
+    if (ev->type() == QEvent::MouseButtonRelease) {
+        if (dragging_source_col_) {
+            dragging_source_col_ = false;
+            QSettings().setValue(QStringLiteral("news/source_col_width"),
+                                 delegate_->source_col_width());
+            return true;
+        }
+        return false;
+    }
+    if (ev->type() == QEvent::Leave) {
+        if (!dragging_source_col_)
+            viewport->setCursor(Qt::ArrowCursor);
+        return false;
+    }
+    return QWidget::eventFilter(obj, ev);
+}
+
 void NewsFeedPanel::check_scroll_position() {
-    auto* sb = list_view_->verticalScrollBar();
-    if (!sb)
-        return;
-    int remaining = sb->maximum() - sb->value();
-    if (remaining < 200 && sb->maximum() > 0)
-        emit near_bottom();
+    auto check = [this](QListView* v) {
+        if (!v || !v->isVisible()) return;
+        auto* sb = v->verticalScrollBar();
+        if (!sb) return;
+        int remaining = sb->maximum() - sb->value();
+        if (remaining < 200 && sb->maximum() > 0)
+            emit near_bottom();
+    };
+    check(list_view_);
+    check(list_view_right_);
 }
 
 } // namespace fincept::screens

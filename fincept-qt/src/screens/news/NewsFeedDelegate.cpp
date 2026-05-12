@@ -7,6 +7,7 @@
 
 #include <QPainter>
 #include <QStyleOptionViewItem>
+#include <algorithm>
 
 namespace fincept::screens {
 
@@ -27,6 +28,10 @@ NewsFeedDelegate::NewsFeedDelegate(QObject* parent)
       tiny_fm_(tiny_font_) {
     bold_font_.setBold(true);
     bold_fm_ = QFontMetrics(bold_font_);
+}
+
+void NewsFeedDelegate::set_source_col_width(int px) {
+    source_col_width_ = std::clamp(px, kSourceColMin, kSourceColMax);
 }
 
 QSize NewsFeedDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const {
@@ -74,14 +79,14 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     bool is_new = index.data(IsNewRole).toBool();
     int tier = index.data(SourceTierRole).toInt();
 
-    // Background — match the Knowledge body palette (warm-dark with a
-    // subtle brown undertone). The previous near-black bg + cool white text
-    // was harsh to read at length; the warm cream-on-brown of Knowledge
-    // reads like a book and the user asked for the same treatment.
-    static const QColor kNewsBgBase(0x1f, 0x1d, 0x1b);   // matches knowledge BODY_BG
-    static const QColor kNewsBgAlt (0x25, 0x22, 0x1f);   // a hair lighter for the stripe
-    static const QColor kNewsBgHover(0x2e, 0x2a, 0x24);  // hover lift
-    static const QColor kNewsBgSel (0x3a, 0x32, 0x28);   // selected
+    // Background — match the deeper Knowledge column palette (#13110f), the
+    // darker of the two Knowledge body tones. The previous #1f1d1b lacked
+    // contrast against the cream text; the user asked for the deeper variant
+    // for better legibility at a glance.
+    static const QColor kNewsBgBase(0x13, 0x11, 0x0f);   // matches knowledge column BG
+    static const QColor kNewsBgAlt (0x18, 0x16, 0x13);   // a hair lighter for the stripe
+    static const QColor kNewsBgHover(0x22, 0x1e, 0x1a);  // hover lift
+    static const QColor kNewsBgSel (0x33, 0x2b, 0x22);   // selected
     if (selected)
         painter->fillRect(rect, kNewsBgSel);
     else if (hovered)
@@ -153,12 +158,14 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     const QString tickers_str = index.data(FormattedTickersRole).toString();
     const QString threat_color = index.data(ThreatColorRole).toString();
 
-    // Source name. Width bumped 72→110 so common long source slugs like
-    // "INVESTING.COM" or "BLOOMBERG GOV" stop eliding to "INVESTING…".
+    // Source name. Width is user-adjustable via the drag handle on the panel
+    // — default 110 px keeps "INVESTING.COM" / "BLOOMBERG GOV" intact, but
+    // the user can widen for "WALL STREET JOURNAL" or narrow it down.
     painter->setFont(bold_font_);
     painter->setPen(QColor(ui::colors::CYAN()));
-    painter->drawText(QRect(x, rect.top(), 110, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, source);
-    x += 114;
+    painter->drawText(QRect(x, rect.top(), source_col_width_, rect.height()),
+                      Qt::AlignVCenter | Qt::AlignLeft, source);
+    x += source_col_width_ + 4;
 
     // Language badge (if not English)
     if (!lang_badge.isEmpty()) {

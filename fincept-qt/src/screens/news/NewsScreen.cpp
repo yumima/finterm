@@ -183,21 +183,17 @@ void NewsScreen::connect_signals() {
         });
     });
 
-    // Scroll-based seen tracking
-    connect(feed_panel_->list_view()->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
-        auto* lv = feed_panel_->list_view();
-        const QRect viewport_rect = lv->viewport()->rect();
-        for (int i = 0; i < feed_panel_->model()->rowCount(); ++i) {
-            const auto idx = feed_panel_->model()->index(i, 0);
-            if (lv->visualRect(idx).intersects(viewport_rect)) {
-                const QString id = feed_panel_->model()->article_at(i).id;
-                feed_panel_->model()->mark_seen(id);
-                pending_seen_ids_.insert(id);
-            }
-        }
+    // Scroll-based seen tracking. The panel walks both columns (or just the
+    // left in narrow mode) and reports the article ids that became visible.
+    auto on_scroll = [this]() {
+        feed_panel_->mark_visible_seen(pending_seen_ids_);
         if (!pending_seen_ids_.isEmpty())
             seen_flush_timer_->start();
-    });
+    };
+    connect(feed_panel_->list_view()->verticalScrollBar(),
+            &QScrollBar::valueChanged, this, on_scroll);
+    if (auto* rv = feed_panel_->list_view_right())
+        connect(rv->verticalScrollBar(), &QScrollBar::valueChanged, this, on_scroll);
 
     // Summarize button
     connect(command_bar_, &NewsCommandBar::summarize_clicked, this, [this]() {
@@ -244,12 +240,9 @@ void NewsScreen::connect_signals() {
     act_open->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     addAction(act_open);
     connect(act_open, &QAction::triggered, this, [this]() {
-        auto idx = feed_panel_->list_view()->currentIndex();
-        if (idx.isValid()) {
-            auto article = feed_panel_->model()->article_at(idx.row());
-            if (!article.link.isEmpty())
-                QDesktopServices::openUrl(QUrl(article.link));
-        }
+        auto article = feed_panel_->current_article();
+        if (!article.link.isEmpty())
+            QDesktopServices::openUrl(QUrl(article.link));
     });
 
     auto* act_close = km.action(KeyAction::NewsClose);
