@@ -605,6 +605,31 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
                        ? "±" + QString::number(c.analytics.mark_dispersion_pct, 'f', 1) + "%"
                        : QString());
         }
+    } else if (c.s1.first_filed.isValid()) {
+        // S-1-only stub (filer not in Form D / N-PORT universe). Show
+        // what we know about the IPO timeline.
+        set_kv(val_lbl_label_, val_lbl_, "IPO Status",
+               c.s1.status_label.isEmpty() ? QStringLiteral("Filed") : c.s1.status_label);
+        set_kv(round_lbl_label_, round_lbl_, "First Filed",
+               c.s1.first_filed.toString("MMM d, yyyy"));
+        set_kv(rev_lbl_label_, rev_lbl_, "Amendments",
+               c.s1.amendment_count > 0
+                   ? "×" + QString::number(c.s1.amendment_count)
+                   : QStringLiteral("0"));
+        // Estimated pricing date — today + analytics.days_to_price_est.
+        // The estimate is a rough sector-median lag from first S-1 filing
+        // to pricing; presented as "Est. IPO ~MMM d" so the user knows
+        // it's not an announced date.
+        if (c.analytics.days_to_price_est > 0) {
+            const QDate est = QDate::currentDate().addDays(c.analytics.days_to_price_est);
+            set_kv(emp_lbl_label_, emp_lbl_, "Est. IPO",
+                   "~" + est.toString("MMM d, yyyy"));
+        } else {
+            set_kv(emp_lbl_label_, emp_lbl_, "Days Since File",
+                   c.s1.days_since_first_filed > 0
+                       ? QString::number(c.s1.days_since_first_filed) + "d"
+                       : QString());
+        }
     } else {
         // Nothing — keep generic labels but make em-dashes uniform.
         set_kv(val_lbl_label_,   val_lbl_,   "Valuation",   QString());

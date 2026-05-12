@@ -90,6 +90,22 @@ void PipelineView::rebuild_grid() {
     for (const auto& c : companies_)
         if (!c.cik.isEmpty()) cik_to_id[c.cik] = c.id;
 
+    // Loading state when nothing's arrived yet — single placeholder card.
+    if (pipeline_.isEmpty()) {
+        auto* placeholder = new QLabel(
+            "Loading SEC S-1 / F-1 filings…\n\n"
+            "First load can take ~60–90 seconds; subsequent visits load instantly from cache.");
+        placeholder->setAlignment(Qt::AlignCenter);
+        placeholder->setWordWrap(true);
+        placeholder->setStyleSheet(
+            QString("color:%1;font-size:13px;padding:40px;background:%2;"
+                    "border:1px dashed %3;border-radius:4px;")
+                .arg(colors::TEXT_SECONDARY(), colors::BG_SURFACE(), colors::BORDER_DIM()));
+        grid_->addWidget(placeholder, 0, 0, 1, kColumns);
+        count_lbl_->setText("loading…");
+        return;
+    }
+
     // Sort newest first so cards flow chronologically: top-left = most recent
     // filing, bottom-right = oldest. Matches reader's natural scan order.
     QVector<S1Filing> sorted = pipeline_;
@@ -114,7 +130,7 @@ void PipelineView::rebuild_grid() {
 QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) const {
     auto* card = new QWidget;
     card->setCursor(Qt::PointingHandCursor);
-    card->setFixedHeight(108);
+    card->setFixedHeight(124);
     card->setStyleSheet(
         QString("QWidget{background:%1;border:1px solid %2;border-radius:4px;}"
                 "QWidget:hover{border-color:%3;}")
@@ -183,6 +199,24 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
             .arg(colors::CYAN()));
     row3->addWidget(win_chip);
     vl->addLayout(row3);
+
+    // Row 4: estimated IPO date — today + sector-median lag from first filing
+    // to pricing. The S-1 itself doesn't disclose an IPO date, so we surface
+    // a "~MMM d" estimate that the user can read as a sanity check, not an
+    // announced date. Median 90 days from first S-1 to pricing for tech.
+    if (s.filed_date.isValid() && days >= 0) {
+        const int est_days = std::max(0, 90 - days);
+        const QDate est_date = today.addDays(est_days);
+        const QString est_text = est_days == 0
+            ? QStringLiteral("Est. IPO: overdue (pricing imminent)")
+            : QString("Est. IPO: ~%1").arg(est_date.toString("MMM d, yyyy"));
+        auto* est_lbl = new QLabel(est_text);
+        est_lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;font-family:Consolas,monospace;"
+                    "background:transparent;")
+                .arg(est_days < 30 ? colors::AMBER() : colors::TEXT_SECONDARY()));
+        vl->addWidget(est_lbl);
+    }
 
     vl->addStretch();
 

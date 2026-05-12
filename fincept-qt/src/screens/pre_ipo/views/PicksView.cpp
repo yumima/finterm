@@ -158,6 +158,27 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
         delete item;
     }
 
+    // ── Loading placeholder for an empty universe ────────────────────────────
+    if (summary.companies.isEmpty() && summary.signal_list.isEmpty()) {
+        auto make_loading = [](const QString& msg) {
+            auto* lbl = new QLabel(msg);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setStyleSheet(
+                QString("color:%1;font-size:12px;padding:40px 12px;background:transparent;")
+                    .arg(colors::TEXT_SECONDARY()));
+            lbl->setWordWrap(true);
+            return lbl;
+        };
+        picks_layout_->insertWidget(0, make_loading(
+            "Loading…\n\nFetching SEC EDGAR Form D filings, mutual-fund N-PORT "
+            "marks, and S-1 pipeline. First load can take ~60–90 seconds; "
+            "subsequent visits load instantly from cache."));
+        signals_layout_->insertWidget(0, make_loading("Loading signals…"));
+        picks_count_lbl_->setText("…");
+        signals_count_lbl_->setText("…");
+        return;
+    }
+
     // ── Top picks: top-10 by composite score ─────────────────────────────────
     QVector<PrivateCompany> ranked = summary.companies;
     std::sort(ranked.begin(), ranked.end(),

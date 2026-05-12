@@ -475,12 +475,23 @@ void FuturesSpreadPanel::render_from_cache() {
     if (!leg1_combo_ || !leg2_combo_) return;
     const QString a = leg1_combo_->currentText();
     const QString b = leg2_combo_->currentText();
-    if (a.isEmpty() || b.isEmpty() || a == b) {
-        spread_lbl_->setText("—");
-        pct_lbl_->setText("");
+    auto& cache = FuturesQuoteCache::instance();
+
+    // Empty body when nothing is selectable yet — the panel previously
+    // looked totally blank because pct_lbl_ stayed empty and spread_lbl_
+    // showed just "—". Tell the user *why*.
+    if (a.isEmpty() || b.isEmpty()) {
+        spread_lbl_->setText(QStringLiteral("—"));
+        pct_lbl_->setText(cache.has_data() ? QStringLiteral("Pick two legs")
+                                            : QStringLiteral("Loading live quotes…"));
+        set_status(cache.has_data() ? cache.last_source() : QStringLiteral("loading…"));
         return;
     }
-    auto& cache = FuturesQuoteCache::instance();
+    if (a == b) {
+        spread_lbl_->setText(QStringLiteral("0.0000"));
+        pct_lbl_->setText(QStringLiteral("Select different legs"));
+        return;
+    }
     const auto rows = cache.quotes_for_class(active_class_);
     const FuturesQuote* qa = nullptr;
     const FuturesQuote* qb = nullptr;
@@ -489,8 +500,10 @@ void FuturesSpreadPanel::render_from_cache() {
         if (q.symbol == b) qb = &q;
     }
     if (!qa || !qb) {
-        spread_lbl_->setText("—");
-        pct_lbl_->setText(cache.has_data() ? "missing leg" : "loading…");
+        spread_lbl_->setText(QStringLiteral("—"));
+        pct_lbl_->setText(cache.has_data()
+            ? QString("Missing %1quote").arg(!qa ? a + " " : b + " ")
+            : QStringLiteral("Loading live quotes…"));
         return;
     }
     const double spread = qa->last - qb->last;
@@ -1276,19 +1289,25 @@ void FuturesCotPanel::render(const QJsonArray& rows) {
         return v.toString().toLongLong();
     };
 
+    // The CFTC legacy_combined Socrata endpoint (jun7-fc8e) uses
+    // `comm_positions_long_all` / `noncomm_positions_long_all` /
+    // `nonrept_positions_long_all` (not the shorter `_long_all` forms the
+    // Python wrapper's position_summary helper assumes). The previous
+    // shorter names silently defaulted to 0 → every panel cell rendered "0"
+    // and net = 0 → sentiment was always "NEUTRAL". Use the real names.
     const long long oi          = i(latest, "open_interest_all");
-    const long long comm_long   = i(latest, "comm_long_all");
-    const long long comm_short  = i(latest, "comm_short_all");
-    const long long nc_long     = i(latest, "noncomm_long_all");
-    const long long nc_short    = i(latest, "noncomm_short_all");
-    const long long nr_long     = i(latest, "nonreportable_long_all");
-    const long long nr_short    = i(latest, "nonreportable_short_all");
-    const long long p_comm_long  = i(prior, "comm_long_all");
-    const long long p_comm_short = i(prior, "comm_short_all");
-    const long long p_nc_long    = i(prior, "noncomm_long_all");
-    const long long p_nc_short   = i(prior, "noncomm_short_all");
-    const long long p_nr_long    = i(prior, "nonreportable_long_all");
-    const long long p_nr_short   = i(prior, "nonreportable_short_all");
+    const long long comm_long   = i(latest, "comm_positions_long_all");
+    const long long comm_short  = i(latest, "comm_positions_short_all");
+    const long long nc_long     = i(latest, "noncomm_positions_long_all");
+    const long long nc_short    = i(latest, "noncomm_positions_short_all");
+    const long long nr_long     = i(latest, "nonrept_positions_long_all");
+    const long long nr_short    = i(latest, "nonrept_positions_short_all");
+    const long long p_comm_long  = i(prior, "comm_positions_long_all");
+    const long long p_comm_short = i(prior, "comm_positions_short_all");
+    const long long p_nc_long    = i(prior, "noncomm_positions_long_all");
+    const long long p_nc_short   = i(prior, "noncomm_positions_short_all");
+    const long long p_nr_long    = i(prior, "nonrept_positions_long_all");
+    const long long p_nr_short   = i(prior, "nonrept_positions_short_all");
 
     auto delta = [](long long now_long, long long now_short, long long was_long, long long was_short) {
         return (now_long - now_short) - (was_long - was_short);

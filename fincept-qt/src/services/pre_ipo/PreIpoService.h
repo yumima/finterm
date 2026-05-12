@@ -65,7 +65,21 @@ class PreIpoService : public QObject {
     void parse_pipeline_response(const QJsonArray& arr);
 
     void recompute_analytics();
-    void emit_loaded();
+    /// Emit the current data state. Called both incrementally (as each of
+    /// the 3 fetches lands) and finally (when all three are done).
+    void emit_summary();
+    /// Mark loading complete and persist cache. Called once when all
+    /// pending bits clear.
+    void finalize_load();
+
+    // ── Persistent cache ────────────────────────────────────────────────────
+    /// Directory where per-source raw JSON cache files live.
+    QString cache_dir() const;
+    /// Returns true if at least one cache file was successfully loaded and
+    /// parsed; populates companies_/form_d_/pipeline_/funds_ from cache.
+    bool   load_from_cache();
+    /// Persist the most recent raw response for a single source.
+    void   save_cache(const QString& filename, const QJsonDocument& doc);
 
     // Multi-stage loading guard. We wait for all 3 fetches before emitting,
     // and remember per-source success so a failed fetcher can be retried

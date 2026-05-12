@@ -91,9 +91,9 @@ void ScreenerView::build_ui() {
 
     // ── Table ─────────────────────────────────────────────────────────────────
     table_ = new QTableWidget;
-    table_->setColumnCount(9);
+    table_->setColumnCount(10);
     table_->setHorizontalHeaderLabels(
-        {"Company", "Sector", "HQ", "Raised", "Funds", "Mark $", "Readiness", "S-1", "Drift"});
+        {"Company", "Sector", "HQ", "Raised", "Funds", "Mark $", "Readiness", "S-1", "Est. IPO", "Drift"});
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -107,13 +107,14 @@ void ScreenerView::build_ui() {
     hdr->setSectionResizeMode(0, QHeaderView::Stretch);
     hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    for (int c = 3; c < 9; ++c) hdr->setSectionResizeMode(c, QHeaderView::Fixed);
+    for (int c = 3; c < 10; ++c) hdr->setSectionResizeMode(c, QHeaderView::Fixed);
     hdr->resizeSection(3, 80);
     hdr->resizeSection(4, 60);
     hdr->resizeSection(5, 80);
     hdr->resizeSection(6, 90);
     hdr->resizeSection(7, 70);
-    hdr->resizeSection(8, 80);
+    hdr->resizeSection(8, 110);
+    hdr->resizeSection(9, 80);
 
     table_->setStyleSheet(
         QString("QTableWidget{background:%1;color:%2;border:1px solid %3;"
@@ -168,6 +169,23 @@ void ScreenerView::set_companies(const QVector<PrivateCompany>& companies) {
 void ScreenerView::rebuild_table() {
     table_->setSortingEnabled(false);
     table_->setRowCount(0);
+
+    // Loading placeholder when the universe hasn't arrived yet. A single
+    // spanning row is friendlier than an empty rectangle with column
+    // headers — the user knows we're working on it.
+    if (companies_.isEmpty()) {
+        table_->clearSpans();
+        table_->setRowCount(1);
+        auto* lbl = new QTableWidgetItem("Loading SEC Form D + mutual-fund marks…");
+        lbl->setFlags(Qt::ItemIsEnabled);
+        lbl->setTextAlignment(Qt::AlignCenter);
+        lbl->setForeground(QColor(colors::TEXT_SECONDARY()));
+        table_->setItem(0, 0, lbl);
+        table_->setSpan(0, 0, 1, table_->columnCount());
+        return;
+    }
+    // Clear any previous loading-row span before populating real rows.
+    table_->clearSpans();
 
     int row = 0;
     for (const auto& c : companies_) {
@@ -245,6 +263,22 @@ void ScreenerView::rebuild_table() {
         if (c.s1.first_filed.isValid()) s1->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 7, s1);
 
+        // Estimated IPO date: today + analytics.days_to_price_est. Only
+        // meaningful for companies with an S-1 on file.
+        auto* est_ipo = numeric_item(c.analytics.days_to_price_est);
+        if (c.s1.first_filed.isValid() && c.analytics.days_to_price_est >= 0) {
+            const QDate est = QDate::currentDate().addDays(c.analytics.days_to_price_est);
+            set_display(est_ipo, "~" + est.toString("MMM yyyy"));
+            if (c.analytics.days_to_price_est < 30)
+                est_ipo->setForeground(QColor(colors::AMBER()));
+            else
+                est_ipo->setForeground(QColor(colors::TEXT_PRIMARY()));
+        } else {
+            set_display(est_ipo, QStringLiteral("—"));
+        }
+        est_ipo->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(row, 8, est_ipo);
+
         auto* drift = numeric_item(c.analytics.mark_drift_vs_last_round_pct);
         if (c.analytics.mark_drift_vs_last_round_pct != 0) {
             const double v = c.analytics.mark_drift_vs_last_round_pct;
@@ -253,7 +287,7 @@ void ScreenerView::rebuild_table() {
         } else {
             set_display(drift, QStringLiteral("—"));
         }
-        table_->setItem(row, 8, drift);
+        table_->setItem(row, 9, drift);
         ++row;
     }
     table_->setSortingEnabled(true);

@@ -6,12 +6,16 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <QtMath>
 
 #include <algorithm>
@@ -73,8 +77,29 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {}
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void PreIpoService::load_data() {
-    if (loaded_ || loading_) return;
-    refresh();
+    if (loading_) return;
+    // Two-phase strategy so the user never stares at an empty screen:
+    //   1. If we have a cached JSON dump from a prior session, hydrate
+    //      from it synchronously and emit data_loaded right away. The
+    //      cache may be stale (SEC publishes daily) but stale data beats
+    //      no data while the live refresh runs.
+    //   2. Always trigger a live refresh in the background so the cache
+    //      gets updated and the user sees the freshest numbers within
+    //      ~60s.
+    const bool had_cache = load_from_cache();
+    if (had_cache) {
+        loaded_ = true;
+        emit_summary();
+        emit progress(QStringLiteral("Loaded from cache · refreshing in background…"));
+    }
+    if (!loaded_ || !had_cache) {
+        // First-ever load: there's nothing to show until the network call
+        // completes. Caller's job to surface a loading placeholder.
+        refresh();
+    } else {
+        // Refresh quietly behind the displayed cache.
+        refresh();
+    }
 }
 
 void PreIpoService::refresh() {
@@ -124,15 +149,17 @@ void PreIpoService::run_form_d_fetch() {
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form_d_data.py"),
         {QStringLiteral("all_data"),
-         QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":200,\"include_known\":true}")},
+         QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":120,\"include_known\":true}")},
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
+            QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
-                const auto doc = QJsonDocument::fromJson(js.toUtf8());
+                doc = QJsonDocument::fromJson(js.toUtf8());
                 if (doc.isObject()) {
                     self->parse_form_d_response(doc.object());
+                    self->save_cache(QStringLiteral("form_d.json"), doc);
                     parsed = true;
                 }
             }
@@ -141,24 +168,34 @@ void PreIpoService::run_form_d_fetch() {
                 self->failed_bits_ |= FB_FormD;
             }
             self->pending_bits_ &= ~FB_FormD;
-            if (self->pending_bits_ == 0) self->emit_loaded();
+            // Emit progressively so the user sees Form D companies as soon
+            // as this source returns, instead of waiting for all three.
+            self->emit_summary();
+            if (self->pending_bits_ == 0) self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
 }
 
 void PreIpoService::run_nport_marks_fetch() {
     QPointer<PreIpoService> self = this;
+    // First load: cap to 1 quarter back and 6 fund families so we don't
+    // blow past the 180s timeout. Subsequent refreshes (with cache hot)
+    // can afford to widen — but for now, fast first-paint matters more
+    // than mark depth.
     python::PythonRunner::instance().run(
         QStringLiteral("sec_nport_marks.py"),
-        {QStringLiteral("marks_all"), QStringLiteral("{\"quarters_back\":2}")},
+        {QStringLiteral("marks_all"),
+         QStringLiteral("{\"quarters_back\":1,\"families_max\":6}")},
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
+            QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
-                const auto doc = QJsonDocument::fromJson(js.toUtf8());
+                doc = QJsonDocument::fromJson(js.toUtf8());
                 if (doc.isObject()) {
                     self->parse_marks_response(doc.object());
+                    self->save_cache(QStringLiteral("marks.json"), doc);
                     parsed = true;
                 }
             }
@@ -167,9 +204,10 @@ void PreIpoService::run_nport_marks_fetch() {
                 self->failed_bits_ |= FB_Marks;
             }
             self->pending_bits_ &= ~FB_Marks;
-            if (self->pending_bits_ == 0) self->emit_loaded();
+            self->emit_summary();
+            if (self->pending_bits_ == 0) self->finalize_load();
         },
-        /*stream*/ {}, /*timeout*/ 180'000);
+        /*stream*/ {}, /*timeout*/ 240'000);
 }
 
 void PreIpoService::run_s1_pipeline_fetch() {
@@ -180,11 +218,13 @@ void PreIpoService::run_s1_pipeline_fetch() {
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
+            QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
-                const auto doc = QJsonDocument::fromJson(js.toUtf8());
+                doc = QJsonDocument::fromJson(js.toUtf8());
                 if (doc.isArray()) {
                     self->parse_pipeline_response(doc.array());
+                    self->save_cache(QStringLiteral("pipeline.json"), doc);
                     parsed = true;
                 }
             }
@@ -193,7 +233,8 @@ void PreIpoService::run_s1_pipeline_fetch() {
                 self->failed_bits_ |= FB_S1;
             }
             self->pending_bits_ &= ~FB_S1;
-            if (self->pending_bits_ == 0) self->emit_loaded();
+            self->emit_summary();
+            if (self->pending_bits_ == 0) self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
 }
@@ -433,14 +474,42 @@ void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
         s.edgar_url       = o[QStringLiteral("edgar_url")].toString();
         if (!s.company_name.isEmpty()) pipeline_.append(s);
 
+        int idx = -1;
         if (auto it = by_cik.find(s.cik); it != by_cik.end()) {
-            auto& c = companies_[*it];
+            idx = *it;
+        } else if (!s.cik.isEmpty()) {
+            // S-1 filers usually aren't tracked elsewhere (Form D / N-PORT)
+            // so we create a stub in the universe. Without this, clicking
+            // a pipeline card produces no Markets dossier because the
+            // PipelineView's cik→id lookup misses.
+            PrivateCompany stub;
+            stub.cik    = s.cik;
+            stub.name   = s.company_name;
+            // Slugify the name for the id. Keep simple — same regex as the
+            // Python form-d script's _slug.
+            static const QRegularExpression non_alnum("[^a-z0-9]+");
+            QString slug = s.company_name.toLower();
+            slug.replace(non_alnum, "-");
+            while (slug.endsWith('-')) slug.chop(1);
+            while (slug.startsWith('-')) slug.remove(0, 1);
+            stub.id = slug.isEmpty() ? s.cik : slug;
+            stub.description = QStringLiteral("Tracked via SEC S-1 / F-1 filings");
+            stub.ipo_status  = IpoStatus::Filed;
+            stub.tags = tags_for_company(stub);
+            by_cik[stub.cik] = companies_.size();
+            companies_.append(stub);
+            idx = companies_.size() - 1;
+        }
+
+        if (idx >= 0) {
+            auto& c = companies_[idx];
             c.s1.first_filed     = s.filed_date;
             c.s1.amendment_count = s.amendment_count;
             c.s1.latest_amended  = QDate::fromString(o[QStringLiteral("latest_amended")].toString(), Qt::ISODate);
             c.s1.days_since_first_filed = o[QStringLiteral("days_since_first")].toInt();
             c.s1.edgar_url       = s.edgar_url;
             c.s1.status_label    = s.amendment_count > 0 ? "Amended" : "Filed";
+            c.s1.form_types.clear();
             for (const auto& ft : o[QStringLiteral("form_types")].toArray())
                 c.s1.form_types << ft.toString();
             c.ipo_status   = IpoStatus::Filed;
@@ -599,15 +668,8 @@ void PreIpoService::recompute_analytics() {
 
 // ── Emit ─────────────────────────────────────────────────────────────────────
 
-void PreIpoService::emit_loaded() {
+void PreIpoService::emit_summary() {
     recompute_analytics();
-    loading_ = false;
-    // Only mark fully loaded when every source succeeded. With partial
-    // failures we still emit the data we have (so the UI updates), but
-    // `loaded_` stays false so a subsequent load_data() call retries.
-    const bool any_failed = failed_bits_ != 0;
-    loaded_ = !any_failed;
-
     PreIpoSummary summary;
     summary.companies     = companies_;
     summary.recent_form_d = form_d_;
@@ -615,20 +677,83 @@ void PreIpoService::emit_loaded() {
     summary.signal_list   = signals_;
     summary.funds         = funds_;
     summary.last_updated  = QDateTime::currentDateTime();
-    summary.loaded        = !any_failed;
+    summary.loaded        = (pending_bits_ == 0 && failed_bits_ == 0);
+    emit data_loaded(summary);
+}
+
+void PreIpoService::finalize_load() {
+    loading_ = false;
+    const bool any_failed = failed_bits_ != 0;
+    loaded_ = !any_failed;
     LOG_INFO("PreIpo",
-             QString("Loaded %1 companies, %2 S-1 filers, %3 signals, %4 funds (failed_bits=%5)")
+             QString("Load finished: %1 companies, %2 S-1 filers, %3 signals, "
+                     "%4 funds (failed_bits=%5)")
                  .arg(companies_.size())
                  .arg(pipeline_.size())
                  .arg(signals_.size())
                  .arg(funds_.size())
                  .arg(failed_bits_));
-    emit data_loaded(summary);
     if (any_failed) {
         emit error_occurred(
             QStringLiteral("One or more SEC sources failed; partial data shown. "
                            "The screen will retry on next open."));
     }
+}
+
+// ── Persistent cache ─────────────────────────────────────────────────────────
+
+QString PreIpoService::cache_dir() const {
+    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString dir = root + "/cache/pre_ipo";
+    QDir().mkpath(dir);
+    return dir;
+}
+
+bool PreIpoService::load_from_cache() {
+    bool loaded_any = false;
+    auto read = [&](const QString& filename) -> QJsonDocument {
+        const QString path = cache_dir() + "/" + filename;
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) return {};
+        const QByteArray bytes = f.readAll();
+        f.close();
+        return QJsonDocument::fromJson(bytes);
+    };
+
+    const auto form_d_doc = read(QStringLiteral("form_d.json"));
+    if (form_d_doc.isObject()) {
+        parse_form_d_response(form_d_doc.object());
+        loaded_any = true;
+    }
+    const auto marks_doc = read(QStringLiteral("marks.json"));
+    if (marks_doc.isObject()) {
+        parse_marks_response(marks_doc.object());
+        loaded_any = true;
+    }
+    const auto pipeline_doc = read(QStringLiteral("pipeline.json"));
+    if (pipeline_doc.isArray()) {
+        parse_pipeline_response(pipeline_doc.array());
+        loaded_any = true;
+    }
+    if (loaded_any) {
+        LOG_INFO("PreIpo",
+                 QString("Hydrated %1 companies from cache (%2 S-1 filers, %3 funds)")
+                     .arg(companies_.size())
+                     .arg(pipeline_.size())
+                     .arg(funds_.size()));
+    }
+    return loaded_any;
+}
+
+void PreIpoService::save_cache(const QString& filename, const QJsonDocument& doc) {
+    const QString path = cache_dir() + "/" + filename;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_WARN("PreIpo", "Failed to open cache file for writing: " + path);
+        return;
+    }
+    f.write(doc.toJson(QJsonDocument::Compact));
+    f.close();
 }
 
 } // namespace fincept::services
