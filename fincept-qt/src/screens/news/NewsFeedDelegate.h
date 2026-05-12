@@ -24,6 +24,14 @@ class NewsFeedDelegate : public QStyledItemDelegate {
     static constexpr int kSourceColMax = 220;
     static constexpr int kSourceColDefault = 110;
 
+    // Distance from rect.left() at which the source name starts, in px.
+    // Sum of the fixed-width gutters before source in paint_wire_row:
+    //   rect.left()+2 + new-indicator-dot(6) + monitor-stripe(5)
+    //   + time-cell(40) + priority-dot(8) + tier-badge(12) = 73
+    // Exposed so NewsFeedPanel can locate the source/headline boundary
+    // for its drag-resize hot-zone.
+    static constexpr int kPreSourceX = 73;
+
   private:
     void paint_wire_row(QPainter* painter, const QRect& rect, const QModelIndex& index, bool selected,
                         bool hovered) const;

@@ -108,11 +108,12 @@ QString news_screen_styles() {
                /* their existing look.                                        */
                "#newsContentArea { background: #13110f; }"
 
-               /* ── Feed list ── */
-               "#newsFeedList { background: #13110f; border: none; outline: none; }"
-               "#newsFeedList::item { border: none; padding: 0; }"
-               "#newsFeedList::item:selected { background: transparent; }"
-               "#newsFeedList::item:hover { background: transparent; }"
+               /* ── Feed list (both columns in the 2-col wide layout) ── */
+               "#newsFeedList, #newsFeedListRight { background: #13110f; border: none; outline: none; }"
+               "#newsFeedList::item, #newsFeedListRight::item { border: none; padding: 0; }"
+               "#newsFeedList::item:selected, #newsFeedListRight::item:selected { background: transparent; }"
+               "#newsFeedList::item:hover, #newsFeedListRight::item:hover { background: transparent; }"
+               "#newsFeedSplitter::handle { background: #13110f; }"
 
                /* ── Breaking banner ── */
                "#newsBreakingBanner { background: %17; border-bottom: 1px solid %11; }"
@@ -215,10 +216,13 @@ QString news_screen_styles() {
                "#newsTickerStrip { background: %1; border-top: 1px solid %3; }"
 
                /* ── Skeleton ── */
-               "#newsSkeletonOverlay { background: %1; }"
+               /* Hard-coded #13110f to match the feed-list bg, otherwise the */
+               /* skeleton-to-loaded transition flashes the global near-black */
+               /* %1 (BG_BASE) for a frame before showing the warm-dark feed. */
+               "#newsSkeletonOverlay { background: #13110f; }"
 
                /* ── Empty state ── */
-               "#newsEmptyState { background: %1; }"
+               "#newsEmptyState { background: #13110f; }"
                "#newsEmptyStateTitle { color: %12; font-size: 13px; font-weight: 700; "
                "  letter-spacing: 0.5px; background: transparent; }"
                "#newsEmptyStateHint { color: %6; font-size: 11px; background: transparent; }")

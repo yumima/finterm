@@ -81,6 +81,7 @@ class NewsFeedPanel : public QWidget {
     QSortFilterProxyModel* proxy_right_ = nullptr;  // shows source rows where row%2==1
     NewsFeedModel* model_ = nullptr;
     NewsFeedDelegate* delegate_ = nullptr;
+    QListView*     last_active_view_ = nullptr;  // most recently clicked/key-navigated column
     static constexpr int kWideViewportThreshold = 1600; // px; below this, hide right column
 
     // Breaking banner

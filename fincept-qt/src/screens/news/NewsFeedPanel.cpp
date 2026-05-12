@@ -348,11 +348,12 @@ void NewsFeedPanel::select_next() {
     int next_row = (current_src >= 0) ? current_src + 1 : 0;
     if (next_row < model_->rowCount()) {
         auto src_idx = model_->index(next_row, 0);
-        on_item_clicked(src_idx);
-        // also bring focus to the matching column for arrow-key continuity
+        // bring focus to the matching column for arrow-key continuity
         auto* view  = (next_row % 2 == 0) ? list_view_  : list_view_right_;
         auto* proxy = (next_row % 2 == 0) ? proxy_left_ : proxy_right_;
+        last_active_view_ = view;
         view->setCurrentIndex(proxy->mapFromSource(src_idx));
+        on_item_clicked(proxy->mapFromSource(src_idx));
     }
 }
 
@@ -362,10 +363,11 @@ void NewsFeedPanel::select_previous() {
     int prev_row = (current_src > 0) ? current_src - 1 : 0;
     if (prev_row >= 0 && prev_row < model_->rowCount()) {
         auto src_idx = model_->index(prev_row, 0);
-        on_item_clicked(src_idx);
         auto* view  = (prev_row % 2 == 0) ? list_view_  : list_view_right_;
         auto* proxy = (prev_row % 2 == 0) ? proxy_left_ : proxy_right_;
+        last_active_view_ = view;
         view->setCurrentIndex(proxy->mapFromSource(src_idx));
+        on_item_clicked(proxy->mapFromSource(src_idx));
     }
 }
 
@@ -373,6 +375,11 @@ void NewsFeedPanel::on_item_clicked(const QModelIndex& proxy_index) {
     const int src_row = source_row_for(proxy_index);
     if (src_row < 0)
         return;
+
+    // Track which column the user just touched so current_article() knows
+    // which currentIndex to prefer when both columns hold a row.
+    if (proxy_index.model() == proxy_left_)  last_active_view_ = list_view_;
+    if (proxy_index.model() == proxy_right_) last_active_view_ = list_view_right_;
 
     auto article = model_->article_at(src_row);
     model_->set_selected_id(article.id);
@@ -397,9 +404,19 @@ int NewsFeedPanel::source_row_for(const QModelIndex& proxy_index) const {
 }
 
 services::NewsArticle NewsFeedPanel::current_article() const {
-    int src_row = source_row_for(list_view_->currentIndex());
-    if (src_row < 0 && list_view_right_)
-        src_row = source_row_for(list_view_right_->currentIndex());
+    // Both columns can carry a non-empty currentIndex from earlier keyboard
+    // navigation. We tracked the most recently-touched view in
+    // last_active_view_ (updated by on_item_clicked and select_*); prefer
+    // that one. Fall back to whichever has any valid index.
+    auto from = [this](QListView* v) {
+        if (!v) return -1;
+        return source_row_for(v->currentIndex());
+    };
+    int src_row = -1;
+    if (last_active_view_)
+        src_row = from(last_active_view_);
+    if (src_row < 0) src_row = from(list_view_);
+    if (src_row < 0) src_row = from(list_view_right_);
     if (src_row < 0) return {};
     return model_->article_at(src_row);
 }
@@ -433,8 +450,12 @@ void NewsFeedPanel::resizeEvent(QResizeEvent* ev) {
 void NewsFeedPanel::update_two_column_layout() {
     if (!list_view_right_) return;
     const bool wide = width() >= kWideViewportThreshold;
+    const bool was_wide = list_view_right_->isVisible();
     list_view_right_->setVisible(wide);
-    if (wide) {
+    // Only seed the 50/50 split when transitioning narrow→wide. On a
+    // straight resize we let QSplitter scale proportionally so the user's
+    // own drag-adjusted split isn't wiped out.
+    if (wide && !was_wide) {
         const int half = width() / 2;
         feed_splitter_->setSizes({half, width() - half});
     }
@@ -449,9 +470,9 @@ bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
     if (list_view_right_ && obj == list_view_right_->viewport()) viewport = list_view_right_->viewport();
     if (!viewport) return QWidget::eventFilter(obj, ev);
 
-    const int boundary_x = delegate_->source_col_width() + 12 + 2;
-    // 12 = pre-source left padding (priority dot + indent),
-    // 2 = threat border. Mirrors paint_wire_row's x advance up to source.
+    // Source/headline boundary lives at kPreSourceX + source_col_width()
+    // from the viewport left edge (mirrors paint_wire_row's x-advance).
+    const int boundary_x = NewsFeedDelegate::kPreSourceX + delegate_->source_col_width();
     auto near_boundary = [&](int x) {
         return std::abs(x - boundary_x) <= kSourceColDragHotzone;
     };
