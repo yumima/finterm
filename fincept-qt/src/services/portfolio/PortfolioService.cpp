@@ -84,6 +84,13 @@ QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
     o[QStringLiteral("day_change")]          = h.day_change;
     o[QStringLiteral("day_change_percent")]  = h.day_change_percent;
     o[QStringLiteral("weight")]              = h.weight;
+    o[QStringLiteral("day_high")]            = h.day_high;
+    o[QStringLiteral("day_low")]             = h.day_low;
+    o[QStringLiteral("day_volume")]          = h.day_volume;
+    o[QStringLiteral("bid")]                 = h.bid;
+    o[QStringLiteral("ask")]                 = h.ask;
+    o[QStringLiteral("bid_size")]            = h.bid_size;
+    o[QStringLiteral("ask_size")]            = h.ask_size;
     return o;
 }
 
@@ -101,6 +108,13 @@ portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     h.day_change           = o[QStringLiteral("day_change")].toDouble();
     h.day_change_percent   = o[QStringLiteral("day_change_percent")].toDouble();
     h.weight               = o[QStringLiteral("weight")].toDouble();
+    h.day_high             = o[QStringLiteral("day_high")].toDouble();
+    h.day_low              = o[QStringLiteral("day_low")].toDouble();
+    h.day_volume           = o[QStringLiteral("day_volume")].toDouble();
+    h.bid                  = o[QStringLiteral("bid")].toDouble();
+    h.ask                  = o[QStringLiteral("ask")].toDouble();
+    h.bid_size             = o[QStringLiteral("bid_size")].toDouble();
+    h.ask_size             = o[QStringLiteral("ask_size")].toDouble();
     return h;
 }
 
@@ -324,6 +338,16 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 h.current_price = it->price;
                 h.day_change = it->change;
                 h.day_change_percent = it->change_pct;
+                // Copy through the live order-book snapshot for the perf
+                // chart's focus-mode info bar to render bid/ask + day range.
+                // Zeros pass through unchanged; consumers treat 0 as "unavailable".
+                h.day_high  = it->high;
+                h.day_low   = it->low;
+                h.day_volume = it->volume;
+                h.bid       = it->bid;
+                h.ask       = it->ask;
+                h.bid_size  = it->bid_size;
+                h.ask_size  = it->ask_size;
             } else {
                 // Fallback to avg buy price if no quote
                 h.current_price = asset.avg_buy_price;

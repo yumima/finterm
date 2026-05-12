@@ -95,11 +95,18 @@ class PortfolioPerfChart : public QWidget {
     bool show_benchmark_ = false;
     bool indexed_mode_ = false; // false = currency value, true = base-100 indexed
 
-    // Info bar
+    // Info bar — row 1 is portfolio/position summary (period change %,
+    // total return %, MV, COST). Row 2 only renders in symbol-focus mode
+    // and carries the live trade snapshot (last, bid/ask, day range, vol).
     QLabel* period_change_label_ = nullptr;
     QLabel* total_return_label_ = nullptr;
     QLabel* nav_label_ = nullptr;
     QLabel* cost_basis_label_ = nullptr;
+    QWidget* live_row_ = nullptr;        // contains last/bid×ask/range/vol; hidden at portfolio level
+    QLabel* live_last_label_ = nullptr;
+    QLabel* live_bidask_label_ = nullptr;
+    QLabel* live_range_label_ = nullptr;
+    QLabel* live_vol_label_ = nullptr;
 
     // Chart
     CrosshairChartView* chart_view_ = nullptr;

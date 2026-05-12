@@ -136,15 +136,19 @@ void MarketDataService::refresh(const QStringList& topics) {
                 const QJsonObject q = v.toObject();
                 if (q.isEmpty() || q.contains("error"))
                     continue;
-                QuoteData qd{
-                    q["symbol"].toString(),
-                    q["name"].toString(q["symbol"].toString()),
-                    q["price"].toDouble(),
-                    q["change"].toDouble(),
-                    q["change_percent"].toDouble(),
-                    q["high"].toDouble(),
-                    q["low"].toDouble(),
-                    q["volume"].toDouble()};
+                QuoteData qd{};
+                qd.symbol     = q["symbol"].toString();
+                qd.name       = q["name"].toString(q["symbol"].toString());
+                qd.price      = q["price"].toDouble();
+                qd.change     = q["change"].toDouble();
+                qd.change_pct = q["change_percent"].toDouble();
+                qd.high       = q["high"].toDouble();
+                qd.low        = q["low"].toDouble();
+                qd.volume     = q["volume"].toDouble();
+                qd.bid        = q["bid"].toDouble();
+                qd.ask        = q["ask"].toDouble();
+                qd.bid_size   = q["bid_size"].toDouble();
+                qd.ask_size   = q["ask_size"].toDouble();
 
                 // Cache write — mirrors store_quote() in flush_batch.
                 QJsonObject co;
@@ -156,6 +160,10 @@ void MarketDataService::refresh(const QStringList& topics) {
                 co["high"] = qd.high;
                 co["low"] = qd.low;
                 co["volume"] = qd.volume;
+                co["bid"] = qd.bid;
+                co["ask"] = qd.ask;
+                co["bid_size"] = qd.bid_size;
+                co["ask_size"] = qd.ask_size;
                 const QString payload = QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
                 // Two parallel keys: 30s freshness + 7d last-known cold-start
                 // fallback. CacheManager is SQLite-backed so both survive
@@ -308,9 +316,20 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
         const QVariant cv = fincept::CacheManager::instance().get("market:" + sym);
         if (!cv.isNull()) {
             const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
-            cached_results.append({o["symbol"].toString(), o["name"].toString(), o["price"].toDouble(),
-                                   o["change"].toDouble(), o["change_pct"].toDouble(), o["high"].toDouble(),
-                                   o["low"].toDouble(), o["volume"].toDouble()});
+            QuoteData qd{};
+            qd.symbol     = o["symbol"].toString();
+            qd.name       = o["name"].toString();
+            qd.price      = o["price"].toDouble();
+            qd.change     = o["change"].toDouble();
+            qd.change_pct = o["change_pct"].toDouble();
+            qd.high       = o["high"].toDouble();
+            qd.low        = o["low"].toDouble();
+            qd.volume     = o["volume"].toDouble();
+            qd.bid        = o["bid"].toDouble();
+            qd.ask        = o["ask"].toDouble();
+            qd.bid_size   = o["bid_size"].toDouble();
+            qd.ask_size   = o["ask_size"].toDouble();
+            cached_results.append(qd);
         } else {
             all_cached = false;
             break;
@@ -366,14 +385,20 @@ void MarketDataService::flush_batch() {
 
             if (ok) {
                 auto parse_quote = [](const QJsonObject& q) -> QuoteData {
-                    return {q["symbol"].toString(),
-                            q["name"].toString(q["symbol"].toString()),
-                            q["price"].toDouble(),
-                            q["change"].toDouble(),
-                            q["change_percent"].toDouble(),
-                            q["high"].toDouble(),
-                            q["low"].toDouble(),
-                            q["volume"].toDouble()};
+                    QuoteData qd{};
+                    qd.symbol     = q["symbol"].toString();
+                    qd.name       = q["name"].toString(q["symbol"].toString());
+                    qd.price      = q["price"].toDouble();
+                    qd.change     = q["change"].toDouble();
+                    qd.change_pct = q["change_percent"].toDouble();
+                    qd.high       = q["high"].toDouble();
+                    qd.low        = q["low"].toDouble();
+                    qd.volume     = q["volume"].toDouble();
+                    qd.bid        = q["bid"].toDouble();
+                    qd.ask        = q["ask"].toDouble();
+                    qd.bid_size   = q["bid_size"].toDouble();
+                    qd.ask_size   = q["ask_size"].toDouble();
+                    return qd;
                 };
 
                 auto store_quote = [](const QuoteData& q) {
@@ -386,6 +411,10 @@ void MarketDataService::flush_batch() {
                     o["high"] = q.high;
                     o["low"] = q.low;
                     o["volume"] = q.volume;
+                    o["bid"] = q.bid;
+                    o["ask"] = q.ask;
+                    o["bid_size"] = q.bid_size;
+                    o["ask_size"] = q.ask_size;
                     const QString payload =
                         QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
                     // 30s freshness + 7d last-known cold-start fallback.
@@ -427,9 +456,20 @@ void MarketDataService::flush_batch() {
                         const QVariant cv = fincept::CacheManager::instance().get("market:" + sym);
                         if (!cv.isNull()) {
                             const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
-                            stale.append({o["symbol"].toString(), o["name"].toString(), o["price"].toDouble(),
-                                          o["change"].toDouble(), o["change_pct"].toDouble(), o["high"].toDouble(),
-                                          o["low"].toDouble(), o["volume"].toDouble()});
+                            QuoteData qd{};
+                            qd.symbol     = o["symbol"].toString();
+                            qd.name       = o["name"].toString();
+                            qd.price      = o["price"].toDouble();
+                            qd.change     = o["change"].toDouble();
+                            qd.change_pct = o["change_pct"].toDouble();
+                            qd.high       = o["high"].toDouble();
+                            qd.low        = o["low"].toDouble();
+                            qd.volume     = o["volume"].toDouble();
+                            qd.bid        = o["bid"].toDouble();
+                            qd.ask        = o["ask"].toDouble();
+                            qd.bid_size   = o["bid_size"].toDouble();
+                            qd.ask_size   = o["ask_size"].toDouble();
+                            stale.append(qd);
                         }
                     }
                     req.cb(!stale.isEmpty(), stale);

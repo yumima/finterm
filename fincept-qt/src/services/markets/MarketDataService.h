@@ -22,6 +22,14 @@ struct QuoteData {
     double high = 0;
     double low = 0;
     double volume = 0;
+    // Live order-book snapshot — populated when the upstream feed reports
+    // it. yfinance's fast_info returns bid/ask best-effort: zeros outside
+    // regular trading hours, illiquid tickers, or paid-feed-only exchanges.
+    // Consumers should treat 0 as "unavailable" rather than a real quote.
+    double bid = 0;
+    double ask = 0;
+    double bid_size = 0;
+    double ask_size = 0;
 };
 
 struct InfoData {

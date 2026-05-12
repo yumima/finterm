@@ -264,6 +264,52 @@ void PortfolioPerfChart::build_ui() {
     info_bar->addStretch();
     layout->addLayout(info_bar);
 
+    // Live row — appears only in symbol-focus mode. Carries LAST/BID×ASK/
+    // DAY range/VOL pulled from the holding's QuoteData. Hidden until
+    // update_chart_focus() unhides it; portfolio-level view never shows it.
+    live_row_ = new QWidget;
+    live_row_->setVisible(false);
+    {
+        auto* lh = new QHBoxLayout(live_row_);
+        lh->setContentsMargins(10, 0, 10, 6);
+        lh->setSpacing(14);
+        const QString prim = QString("color:%1; font-size:12px; font-weight:700;"
+                                     "font-family:Consolas,monospace; background:transparent;")
+                                 .arg(ui::colors::TEXT_PRIMARY());
+        const QString cyan = QString("color:%1; font-size:12px; font-weight:700;"
+                                     "font-family:Consolas,monospace; background:transparent;")
+                                 .arg(ui::colors::CYAN());
+        const QString dim  = QString("color:%1; font-size:12px;"
+                                     "font-family:Consolas,monospace; background:transparent;")
+                                 .arg(ui::colors::TEXT_SECONDARY());
+        live_last_label_ = new QLabel;
+        live_last_label_->setStyleSheet(prim);
+        live_last_label_->setToolTip(QStringLiteral(
+            "Last trade — most recent transaction price from yfinance."));
+        lh->addWidget(live_last_label_);
+
+        live_bidask_label_ = new QLabel;
+        live_bidask_label_->setStyleSheet(cyan);
+        live_bidask_label_->setToolTip(QStringLiteral(
+            "Bid x Ask — best-effort live order-book snapshot from yfinance "
+            "fast_info. May be delayed; zero / dash outside regular trading "
+            "hours or for illiquid tickers. Not a real order book."));
+        lh->addWidget(live_bidask_label_);
+
+        live_range_label_ = new QLabel;
+        live_range_label_->setStyleSheet(dim);
+        live_range_label_->setToolTip(QStringLiteral("Today's intraday low - high."));
+        lh->addWidget(live_range_label_);
+
+        live_vol_label_ = new QLabel;
+        live_vol_label_->setStyleSheet(dim);
+        live_vol_label_->setToolTip(QStringLiteral("Today's traded volume."));
+        lh->addWidget(live_vol_label_);
+
+        lh->addStretch();
+    }
+    layout->addWidget(live_row_);
+
     // Chart view
     auto* chart = new QChart;
     chart->setBackgroundBrush(QColor(ui::colors::BG_BASE()));
@@ -405,6 +451,7 @@ void PortfolioPerfChart::clear_focus_symbol() {
         title_label_->setText(
             QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
                 .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
+    if (live_row_) live_row_->setVisible(false);
     update_chart();
 }
 
@@ -594,6 +641,35 @@ void PortfolioPerfChart::update_chart_focus() {
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
         if (cost_basis_label_) cost_basis_label_->clear();
+    }
+
+    // Live trade snapshot row — only shown when we have a held position
+    // (the source of bid/ask/range data); hidden otherwise. Zeros render
+    // as em-dash so the user knows the feed didn't provide that field.
+    if (live_row_) {
+        if (held) {
+            auto fmt_or_dash = [](double v, int dec) -> QString {
+                return v > 0 ? QString::number(v, 'f', dec) : QStringLiteral("—");
+            };
+            auto fmt_vol = [](double v) -> QString {
+                if (v <= 0) return QStringLiteral("—");
+                if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
+                if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
+                if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+                return QString::number(v, 'f', 0);
+            };
+            live_last_label_->setText(QString("LAST %1").arg(fmt_or_dash(held->current_price, 2)));
+            const QString bid_s = fmt_or_dash(held->bid, 2);
+            const QString ask_s = fmt_or_dash(held->ask, 2);
+            live_bidask_label_->setText(QString("BID %1 × ASK %2").arg(bid_s, ask_s));
+            live_range_label_->setText(
+                QString("DAY %1 – %2").arg(fmt_or_dash(held->day_low, 2),
+                                           fmt_or_dash(held->day_high, 2)));
+            live_vol_label_->setText(QString("VOL %1").arg(fmt_vol(held->day_volume)));
+            live_row_->setVisible(true);
+        } else {
+            live_row_->setVisible(false);
+        }
     }
 }
 

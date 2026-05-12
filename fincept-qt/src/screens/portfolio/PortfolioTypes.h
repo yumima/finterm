@@ -62,6 +62,16 @@ struct HoldingWithQuote {
     double day_change = 0;
     double day_change_percent = 0;
     double weight = 0; // % of total portfolio
+    // Real-time order-book snapshot when the data source reports it.
+    // yfinance free-tier returns zeros outside RTH / for illiquid tickers
+    // — consumers treat 0 as "unavailable" rather than a live quote.
+    double day_high = 0;
+    double day_low = 0;
+    double day_volume = 0;
+    double bid = 0;
+    double ask = 0;
+    double bid_size = 0;
+    double ask_size = 0;
 };
 
 struct PortfolioSummary {

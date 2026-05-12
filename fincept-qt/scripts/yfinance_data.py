@@ -313,6 +313,21 @@ def get_batch_quotes(symbols):
                 change = current_price - previous_close
                 change_percent = (change / previous_close) * 100 if previous_close else 0
 
+                # Best-effort live order-book snapshot from fast_info. yfinance
+                # returns zeros (or omits the field) outside RTH, for illiquid
+                # tickers, and for exchanges where bid/ask is paid-feed-only.
+                # Treat 0 as "unavailable" rather than a real quote.
+                bid = ask = 0.0
+                bid_size = ask_size = 0.0
+                try:
+                    fi = yf.Ticker(symbol).fast_info
+                    bid = float(getattr(fi, "bid", 0) or 0)
+                    ask = float(getattr(fi, "ask", 0) or 0)
+                    bid_size = float(getattr(fi, "bid_size", 0) or 0)
+                    ask_size = float(getattr(fi, "ask_size", 0) or 0)
+                except Exception:
+                    pass  # leave zeros
+
                 results.append({
                     "symbol": symbol,
                     "price": round(current_price, 2),
@@ -323,6 +338,10 @@ def get_batch_quotes(symbols):
                     "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
                     "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
                     "previous_close": round(previous_close, 2),
+                    "bid": round(bid, 2) if bid > 0 else 0,
+                    "ask": round(ask, 2) if ask > 0 else 0,
+                    "bid_size": bid_size,
+                    "ask_size": ask_size,
                     "timestamp": int(datetime.now().timestamp()),
                     "exchange": ""
                 })
