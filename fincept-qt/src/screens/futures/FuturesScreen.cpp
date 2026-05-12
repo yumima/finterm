@@ -117,6 +117,8 @@ void FuturesScreen::build_body() {
     chart_       = new FuturesChartPanel(grid_host_);
     settlements_ = new FuturesSettlementsPanel(grid_host_);
     spread_      = new FuturesSpreadPanel(grid_host_);
+    cot_         = new FuturesCotPanel(grid_host_);
+    expiry_      = new FuturesExpiryPanel(grid_host_);
 
     // Row 0: heatmap full width (3 columns)
     grid->addWidget(heatmap_,     0, 0, 1, 3);
@@ -127,10 +129,17 @@ void FuturesScreen::build_body() {
     // Row 2: settlements (2 cols) | spread (1 col)
     grid->addWidget(settlements_, 2, 0, 1, 2);
     grid->addWidget(spread_,      2, 2);
+    // Row 3: COT positioning (2 cols) | expiry calendar (1 col). COT shows
+    // managed-money net + WoW deltas + sentiment from free CFTC data.
+    // Expiry surfaces deterministically-computed next-expiry dates with
+    // days-to-expiry warnings (amber <30d, red <7d).
+    grid->addWidget(cot_,         3, 0, 1, 2);
+    grid->addWidget(expiry_,      3, 2);
 
     grid->setRowStretch(0, 1);
     grid->setRowStretch(1, 2);
     grid->setRowStretch(2, 2);
+    grid->setRowStretch(3, 1);
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     grid->setColumnStretch(2, 1);
@@ -146,11 +155,12 @@ void FuturesScreen::build_body() {
     stack->addWidget(china_host);
 
     // Cross-panel wiring: clicking a watchlist row routes the symbol to the
-    // term structure / chart / settlements panels for drill-down.
+    // term structure / chart / settlements / COT panels for drill-down.
     connect(watchlist_, &FuturesWatchlistPanel::symbol_clicked, this, [this](const QString& sym) {
         if (term_) term_->set_symbol(sym);
         if (chart_) chart_->set_symbol(sym);
         if (settlements_) settlements_->set_symbol(sym);
+        if (cot_) cot_->set_symbol(sym);
     });
 }
 
@@ -180,7 +190,7 @@ void FuturesScreen::set_active_class(const QString& cls) {
     } else {
         if (stack) stack->setCurrentIndex(0);
         if (heatmap_) heatmap_->refresh();
-        for (auto* p : QVector<FuturesPanelBase*>{watchlist_, term_, chart_, settlements_, spread_}) {
+        for (auto* p : QVector<FuturesPanelBase*>{watchlist_, term_, chart_, settlements_, spread_, cot_, expiry_}) {
             if (p) p->set_asset_class(cls);
         }
     }

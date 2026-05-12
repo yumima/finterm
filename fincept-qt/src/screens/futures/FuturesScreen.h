@@ -16,6 +16,8 @@ class FuturesSettlementsPanel;
 class FuturesHeatmapPanel;
 class FuturesChartPanel;
 class FuturesChinaPanel;
+class FuturesCotPanel;
+class FuturesExpiryPanel;
 
 /// Futures terminal — top-level screen.
 ///
@@ -65,6 +67,8 @@ class FuturesScreen : public QWidget {
     FuturesSettlementsPanel* settlements_ = nullptr;
     FuturesSpreadPanel*    spread_       = nullptr;
     FuturesChinaPanel*     china_        = nullptr;
+    FuturesCotPanel*       cot_          = nullptr;
+    FuturesExpiryPanel*    expiry_       = nullptr;
 
     QTimer* refresh_timer_ = nullptr;
 };

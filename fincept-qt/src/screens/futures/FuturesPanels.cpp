@@ -1,5 +1,7 @@
 #include "screens/futures/FuturesPanels.h"
 
+#include "core/logging/Logger.h"
+#include "python/PythonRunner.h"
 #include "screens/futures/FuturesContracts.h"
 #include "screens/futures/FuturesQuoteCache.h"
 #include "ui/theme/Theme.h"
@@ -12,9 +14,11 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineSeries>
 #include <QPainter>
+#include <QPointer>
 #include <QPushButton>
 #include <QStackedLayout>
 #include <QValueAxis>
@@ -901,6 +905,432 @@ void FuturesChinaPanel::populate(const QJsonArray& rows) {
             table_->setItem(i, c, new QTableWidgetItem(text));
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  FuturesExpiryPanel — client-side expiry calendar, cache-free
+// ─────────────────────────────────────────────────────────────────────────────
+
+FuturesExpiryPanel::FuturesExpiryPanel(QWidget* parent)
+    : FuturesPanelBase("EXPIRY CALENDAR", parent) {
+    table_ = new QTableWidget(this);
+    table_->setColumnCount(5);
+    table_->setHorizontalHeaderLabels({"Symbol", "Name", "Next Expiry", "DTE", "Init. Margin"});
+    table_->setSelectionMode(QAbstractItemView::NoSelection);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setShowGrid(false);
+    table_->verticalHeader()->setVisible(false);
+    table_->setFocusPolicy(Qt::NoFocus);
+    table_->setSortingEnabled(true);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->horizontalHeader()->resizeSection(0, 60);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    table_->horizontalHeader()->resizeSection(2, 110);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    table_->horizontalHeader()->resizeSection(3, 60);
+    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    table_->horizontalHeader()->resizeSection(4, 100);
+    table_->setStyleSheet(
+        QString("QTableWidget{background:%1;color:%2;border:none;"
+                "  font-family:'%3';font-size:%4px;gridline-color:transparent;}"
+                "QTableWidget::item{padding:4px 6px;border-bottom:1px solid %5;}")
+            .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(),
+                 fonts::DATA_FAMILY())
+            .arg(fonts::font_px(-2))
+            .arg(colors::BORDER_DIM()));
+    table_->horizontalHeader()->setStyleSheet(
+        QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                "  border-bottom:1px solid %3;padding:4px 8px;font-weight:700;}")
+            .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+    layout()->addWidget(table_);
+}
+
+void FuturesExpiryPanel::set_asset_class(const QString& cls) {
+    active_class_ = cls;
+    rebuild();
+}
+
+void FuturesExpiryPanel::refresh() {
+    rebuild();
+}
+
+void FuturesExpiryPanel::rebuild() {
+    table_->setSortingEnabled(false);
+    table_->setRowCount(0);
+    if (active_class_.isEmpty()) return;
+
+    const QDate today = QDate::currentDate();
+    const auto& all = all_contracts();
+
+    QVector<ContractDef> in_class;
+    for (const auto& c : all)
+        if (c.asset_class == active_class_) in_class.append(c);
+
+    table_->setRowCount(in_class.size());
+    int row = 0;
+    for (const auto& c : in_class) {
+        const QDate exp = next_expiry(c, today);
+        const long long dte = exp.isValid() ? static_cast<long long>(today.daysTo(exp)) : -1;
+
+        auto* sym = new QTableWidgetItem(c.symbol);
+        sym->setForeground(QColor(colors::CYAN()));
+        table_->setItem(row, 0, sym);
+
+        table_->setItem(row, 1, new QTableWidgetItem(c.name));
+
+        auto* exp_item = new QTableWidgetItem;
+        if (exp.isValid()) {
+            exp_item->setData(Qt::EditRole, exp);
+            exp_item->setData(Qt::DisplayRole, exp.toString("yyyy-MM-dd"));
+        } else {
+            exp_item->setData(Qt::DisplayRole, QStringLiteral("—"));
+        }
+        exp_item->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(row, 2, exp_item);
+
+        auto* dte_item = new QTableWidgetItem;
+        if (dte >= 0) {
+            dte_item->setData(Qt::EditRole, dte);
+            dte_item->setData(Qt::DisplayRole, QString::number(dte) + "d");
+            if (dte < 7)       dte_item->setForeground(QColor(colors::NEGATIVE()));
+            else if (dte < 30) dte_item->setForeground(QColor(colors::AMBER()));
+            else               dte_item->setForeground(QColor(colors::TEXT_PRIMARY()));
+        } else {
+            dte_item->setData(Qt::DisplayRole, QStringLiteral("—"));
+        }
+        dte_item->setTextAlignment(Qt::AlignCenter);
+        table_->setItem(row, 3, dte_item);
+
+        auto* mg = new QTableWidgetItem;
+        mg->setData(Qt::EditRole, c.initial_margin_usd);
+        mg->setData(Qt::DisplayRole,
+                    c.initial_margin_usd > 0
+                        ? QString("$%L1").arg(static_cast<long long>(c.initial_margin_usd))
+                        : QStringLiteral("—"));
+        mg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        table_->setItem(row, 4, mg);
+
+        ++row;
+    }
+    table_->setSortingEnabled(true);
+    table_->sortByColumn(3, Qt::AscendingOrder);  // soonest expiries first
+    set_status("computed locally");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  FuturesCotPanel — CFTC Commitments of Traders positioning, symbol-driven
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+// Map our futures-catalog root symbols to CFTC market identifiers that
+// scripts/cftc_data.py understands. CFTC publishes COT for the full CME
+// product list every Friday; only a subset overlaps with our 36-contract
+// catalog. Roots not in this map render a "no COT mapping" placeholder
+// rather than firing a wasted CFTC fetch.
+static const QHash<QString, QString> kCotIdentifier = {
+    // Index
+    {"ES", "sp500"}, {"NQ", "nasdaq"},
+    // Rates
+    {"ZB", "treasury_bonds"}, {"ZN", "treasury_notes_10y"},
+    {"ZF", "treasury_notes_5y"}, {"ZT", "treasury_notes_2y"},
+    {"ZQ", "fed_funds"},
+    // Energy
+    {"CL", "crude_oil"}, {"BZ", "brent"}, {"NG", "natural_gas"},
+    {"RB", "gasoline"}, {"HO", "heating_oil"},
+    // Metals
+    {"GC", "gold"}, {"SI", "silver"}, {"HG", "copper"},
+    {"PL", "platinum"}, {"PA", "palladium"},
+    // Ags
+    {"ZC", "corn"}, {"ZW", "wheat"}, {"ZS", "soybeans"},
+    {"KC", "coffee"}, {"SB", "sugar"}, {"CC", "cocoa"}, {"CT", "cotton"},
+    // FX
+    {"6E", "euro"}, {"6J", "jpy"}, {"6B", "british_pound"},
+    {"6A", "australian_dollar"}, {"6C", "canadian_dollar"},
+    // Crypto
+    {"BTC", "bitcoin"}, {"MET", "ether"},
+};
+} // namespace
+
+QString FuturesCotPanel::cftc_identifier_for(const QString& symbol) {
+    return kCotIdentifier.value(symbol);
+}
+
+FuturesCotPanel::FuturesCotPanel(QWidget* parent)
+    : FuturesPanelBase("COT POSITIONING", parent) {
+    // ── Top row: symbol picker + sentiment badge + report date ───────────────
+    auto* row = new QHBoxLayout;
+    row->setContentsMargins(0, 2, 0, 2);
+    row->setSpacing(8);
+
+    auto* lbl = new QLabel("Symbol");
+    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    row->addWidget(lbl);
+
+    symbol_combo_ = new QComboBox;
+    symbol_combo_->setMinimumWidth(120);
+    row->addWidget(symbol_combo_);
+
+    sentiment_lbl_ = new QLabel;
+    sentiment_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(-2)));
+    row->addWidget(sentiment_lbl_);
+
+    row->addStretch();
+
+    date_lbl_ = new QLabel;
+    date_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    row->addWidget(date_lbl_);
+    layout()->addItem(row);
+
+    // ── Stack: table | placeholder ───────────────────────────────────────────
+    auto* stack_host = new QWidget(this);
+    auto* stack = new QStackedLayout(stack_host);
+    stack->setContentsMargins(0, 0, 0, 0);
+
+    table_ = new QTableWidget(stack_host);
+    table_->setColumnCount(5);
+    table_->setHorizontalHeaderLabels({"Category", "Long", "Short", "Net", "ΔWoW"});
+    table_->setSelectionMode(QAbstractItemView::NoSelection);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setShowGrid(false);
+    table_->verticalHeader()->setVisible(false);
+    table_->setFocusPolicy(Qt::NoFocus);
+    table_->setMinimumHeight(110);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int c = 1; c < 5; ++c)
+        table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::Fixed);
+    table_->horizontalHeader()->resizeSection(1, 90);
+    table_->horizontalHeader()->resizeSection(2, 90);
+    table_->horizontalHeader()->resizeSection(3, 100);
+    table_->horizontalHeader()->resizeSection(4, 100);
+    table_->setStyleSheet(
+        QString("QTableWidget{background:%1;color:%2;border:none;"
+                "  font-family:'%3';font-size:%4px;gridline-color:transparent;}"
+                "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %5;}")
+            .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(),
+                 fonts::DATA_FAMILY())
+            .arg(fonts::font_px(-2))
+            .arg(colors::BORDER_DIM()));
+    table_->horizontalHeader()->setStyleSheet(
+        QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                "  border-bottom:1px solid %3;padding:4px 8px;font-weight:700;}")
+            .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+    stack->addWidget(table_);
+
+    placeholder_ = new QLabel(stack_host);
+    placeholder_->setAlignment(Qt::AlignCenter);
+    placeholder_->setWordWrap(true);
+    placeholder_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
+    stack->addWidget(placeholder_);
+
+    layout()->addWidget(stack_host);
+
+    connect(symbol_combo_, &QComboBox::currentTextChanged, this, [this](const QString& s) {
+        if (s.isEmpty()) return;
+        active_symbol_ = s;
+        refresh();
+    });
+}
+
+void FuturesCotPanel::set_asset_class(const QString& cls) {
+    active_class_ = cls;
+    QStringList syms = symbols_for_class(cls);
+    // Only show symbols that have a CFTC mapping; the rest would just render
+    // a "no COT mapping" placeholder.
+    QStringList covered;
+    for (const auto& s : syms)
+        if (kCotIdentifier.contains(s)) covered.append(s);
+
+    symbol_combo_->blockSignals(true);
+    symbol_combo_->clear();
+    symbol_combo_->addItems(covered);
+    symbol_combo_->blockSignals(false);
+
+    if (!covered.isEmpty()) {
+        active_symbol_ = covered.first();
+        symbol_combo_->setCurrentText(active_symbol_);
+        fetch_in_flight_ = false;
+        last_failed_ms_ = 0;
+        refresh();
+    } else {
+        active_symbol_.clear();
+        show_placeholder(QString("COT positioning isn't published by CFTC for %1 contracts.").arg(cls));
+    }
+}
+
+void FuturesCotPanel::set_symbol(const QString& sym) {
+    if (sym.isEmpty()) return;
+    active_symbol_ = sym;
+    if (symbol_combo_) {
+        const int idx = symbol_combo_->findText(sym);
+        if (idx >= 0) {
+            symbol_combo_->blockSignals(true);
+            symbol_combo_->setCurrentIndex(idx);
+            symbol_combo_->blockSignals(false);
+        }
+    }
+    fetch_in_flight_ = false;
+    last_failed_ms_ = 0;
+    refresh();
+}
+
+void FuturesCotPanel::show_placeholder(const QString& message) {
+    if (auto* stack = qobject_cast<QStackedLayout*>(placeholder_->parentWidget()->layout()))
+        stack->setCurrentIndex(1);
+    placeholder_->setText(message);
+    sentiment_lbl_->setText("");
+    date_lbl_->setText("");
+}
+
+void FuturesCotPanel::refresh() {
+    const QString sym = active_symbol_;
+    if (sym.isEmpty()) return;
+    const QString ident = cftc_identifier_for(sym);
+    if (ident.isEmpty()) {
+        show_placeholder(QString("No CFTC mapping for %1.").arg(sym));
+        return;
+    }
+    if (fetch_in_flight_) return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (last_failed_ms_ > 0 && (now - last_failed_ms_) < kFailureBackoffMs) return;
+    fetch_in_flight_ = true;
+    set_status("loading…");
+    show_placeholder(QString("Loading CFTC COT for %1…").arg(sym));
+
+    const quint64 my_gen = bump_gen();
+    QPointer<FuturesCotPanel> self(this);
+    // cftc_data.py takes positional args:
+    //   cot_data <identifier> <report_type> <futures_only> <start> <end> <limit>
+    // Limit 4 = last 4 weekly reports — enough for WoW diff plus context.
+    python::PythonRunner::instance().run(
+        QStringLiteral("cftc_data.py"),
+        {QStringLiteral("cot_data"), ident,
+         QStringLiteral("legacy"), QStringLiteral("false"),
+         QStringLiteral(""), QStringLiteral(""), QStringLiteral("4")},
+        [self, my_gen, sym](python::PythonResult result) {
+            if (!self) return;
+            self->fetch_in_flight_ = false;
+            if (!self->is_current(my_gen)) return;
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                self->last_failed_ms_ = QDateTime::currentMSecsSinceEpoch();
+                self->set_status("error", colors::NEGATIVE());
+                self->show_placeholder(QString("CFTC COT unavailable for %1.\n\n"
+                                               "Source: publicreporting.cftc.gov (Socrata).\n"
+                                               "Check network access; no API key required.").arg(sym));
+                return;
+            }
+            const QString js = python::extract_json(result.output);
+            const auto doc = QJsonDocument::fromJson(js.toUtf8());
+            if (!doc.isObject() || !doc.object().value("success").toBool()) {
+                self->last_failed_ms_ = QDateTime::currentMSecsSinceEpoch();
+                self->set_status("error", colors::NEGATIVE());
+                self->show_placeholder(QString("CFTC returned no data for %1.").arg(sym));
+                return;
+            }
+            const auto arr = doc.object().value("data").toArray();
+            if (arr.isEmpty()) {
+                self->show_placeholder(QString("No recent COT reports for %1.").arg(sym));
+                return;
+            }
+            self->set_status(QString("CFTC · %1").arg(sym));
+            self->render(arr);
+        },
+        /*stream*/ {}, /*timeout*/ 30'000);
+}
+
+void FuturesCotPanel::render(const QJsonArray& rows) {
+    if (auto* stack = qobject_cast<QStackedLayout*>(placeholder_->parentWidget()->layout()))
+        stack->setCurrentIndex(0);
+
+    // Most recent first per cftc_data.py.
+    const auto latest = rows.first().toObject();
+    const auto prior  = rows.size() > 1 ? rows.at(1).toObject() : QJsonObject{};
+
+    auto i = [](const QJsonObject& o, const char* key) -> long long {
+        const auto v = o.value(QLatin1String(key));
+        if (v.isDouble()) return static_cast<long long>(v.toDouble());
+        return v.toString().toLongLong();
+    };
+
+    const long long oi          = i(latest, "open_interest_all");
+    const long long comm_long   = i(latest, "comm_long_all");
+    const long long comm_short  = i(latest, "comm_short_all");
+    const long long nc_long     = i(latest, "noncomm_long_all");
+    const long long nc_short    = i(latest, "noncomm_short_all");
+    const long long nr_long     = i(latest, "nonreportable_long_all");
+    const long long nr_short    = i(latest, "nonreportable_short_all");
+    const long long p_comm_long  = i(prior, "comm_long_all");
+    const long long p_comm_short = i(prior, "comm_short_all");
+    const long long p_nc_long    = i(prior, "noncomm_long_all");
+    const long long p_nc_short   = i(prior, "noncomm_short_all");
+    const long long p_nr_long    = i(prior, "nonreportable_long_all");
+    const long long p_nr_short   = i(prior, "nonreportable_short_all");
+
+    auto delta = [](long long now_long, long long now_short, long long was_long, long long was_short) {
+        return (now_long - now_short) - (was_long - was_short);
+    };
+
+    struct Row { QString name; long long lng, sht, net, wow; };
+    const QVector<Row> rs = {
+        {"Commercials (hedgers)",        comm_long, comm_short, comm_long - comm_short,
+            delta(comm_long, comm_short, p_comm_long, p_comm_short)},
+        {"Large Spec (managed money)",   nc_long,   nc_short,   nc_long - nc_short,
+            delta(nc_long, nc_short, p_nc_long, p_nc_short)},
+        {"Small Spec (non-reportable)",  nr_long,   nr_short,   nr_long - nr_short,
+            delta(nr_long, nr_short, p_nr_long, p_nr_short)},
+    };
+
+    table_->setRowCount(rs.size());
+    auto fmt_signed = [](long long v) {
+        const QString prefix = v > 0 ? "+" : "";
+        return prefix + QString("%L1").arg(v);
+    };
+    for (int row = 0; row < rs.size(); ++row) {
+        const auto& r = rs[row];
+        auto* name = new QTableWidgetItem(r.name);
+        name->setForeground(QColor(colors::TEXT_PRIMARY()));
+        table_->setItem(row, 0, name);
+
+        auto* lng = new QTableWidgetItem(QString("%L1").arg(r.lng));
+        lng->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        table_->setItem(row, 1, lng);
+
+        auto* sht = new QTableWidgetItem(QString("%L1").arg(r.sht));
+        sht->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        table_->setItem(row, 2, sht);
+
+        auto* net = new QTableWidgetItem(fmt_signed(r.net));
+        net->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        net->setForeground(QColor(r.net >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
+        table_->setItem(row, 3, net);
+
+        auto* wow = new QTableWidgetItem(fmt_signed(r.wow));
+        wow->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        wow->setForeground(QColor(r.wow >= 0 ? colors::POSITIVE() : colors::NEGATIVE()));
+        table_->setItem(row, 4, wow);
+    }
+
+    // Sentiment: large-spec net long as % of OI is the classic "managed
+    // money is X% long" gauge. >+15% is extreme long, <-15% extreme short.
+    const long long large_net = nc_long - nc_short;
+    const double pct = oi > 0 ? static_cast<double>(large_net) / oi * 100.0 : 0.0;
+    QString label;
+    const char* color = colors::TEXT_SECONDARY();
+    if (oi <= 0) {
+        label = "—";
+    } else if (pct >= 25) { label = "EXTREME LONG"; color = colors::POSITIVE(); }
+    else if (pct >= 10)   { label = "NET LONG";     color = colors::POSITIVE(); }
+    else if (pct <= -25)  { label = "EXTREME SHORT"; color = colors::NEGATIVE(); }
+    else if (pct <= -10)  { label = "NET SHORT";    color = colors::NEGATIVE(); }
+    else                  { label = "NEUTRAL";      color = colors::TEXT_SECONDARY(); }
+    sentiment_lbl_->setText(QString("Mgr Money: %1  (%2%3% of OI)")
+                                .arg(label)
+                                .arg(pct >= 0 ? "+" : "")
+                                .arg(QString::number(pct, 'f', 1)));
+    sentiment_lbl_->setStyleSheet(lbl_ss(color, true, fonts::font_px(-2)));
+
+    const QString rep_date = latest.value(QStringLiteral("report_date_as_yyyy_mm_dd")).toString();
+    date_lbl_->setText(rep_date.isEmpty() ? "" : "Report: " + rep_date.left(10));
 }
 
 } // namespace fincept::screens::futures

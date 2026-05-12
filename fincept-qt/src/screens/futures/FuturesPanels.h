@@ -169,4 +169,49 @@ class FuturesChinaPanel : public FuturesPanelBase {
     QComboBox*    exchange_combo_  = nullptr;
 };
 
+// ── 8. Expiry / first-notice calendar (computed from contract conventions) ───
+// CME publishes contract expiry rules that are deterministic (3rd Friday of
+// quarter for ES/NQ, etc.). We compute them client-side so no network is
+// required, then surface next-expiry + days-to-expiry per active-class
+// contract. Days-to-expiry < 30 highlights amber, < 7 highlights red so
+// users notice rolling pressure before it bites.
+class FuturesExpiryPanel : public FuturesPanelBase {
+    Q_OBJECT
+  public:
+    explicit FuturesExpiryPanel(QWidget* parent = nullptr);
+    void set_asset_class(const QString& cls) override;
+    void refresh() override;
+
+  private:
+    void rebuild();
+    QTableWidget* table_ = nullptr;
+};
+
+// ── 9. COT (CFTC Commitments of Traders) positioning ─────────────────────────
+// Surfaces commercial / large-spec / small-spec longs, shorts, nets, and the
+// week-over-week change for the active futures product. Powered by the
+// existing scripts/cftc_data.py wrapper around publicreporting.cftc.gov.
+class FuturesCotPanel : public FuturesPanelBase {
+    Q_OBJECT
+  public:
+    explicit FuturesCotPanel(QWidget* parent = nullptr);
+    void set_asset_class(const QString& cls) override;
+    void set_symbol(const QString& sym) override;
+    void refresh() override;
+
+  private:
+    void render(const QJsonArray& rows);
+    void show_placeholder(const QString& message);
+
+    /// Map a futures root ("ES","CL","GC", …) to a CFTC identifier the
+    /// cftc_data.py wrapper accepts ("sp500","crude","gold").
+    static QString cftc_identifier_for(const QString& symbol);
+
+    QTableWidget* table_         = nullptr;
+    QLabel*       date_lbl_      = nullptr;
+    QLabel*       sentiment_lbl_ = nullptr;
+    QLabel*       placeholder_   = nullptr;
+    QComboBox*    symbol_combo_  = nullptr;
+};
+
 } // namespace fincept::screens::futures
