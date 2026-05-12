@@ -562,20 +562,11 @@ void PortfolioScreen::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     refresh_timer_->start();
     status_bar_->start_clock();
-    // Default to the aggregate HOLDINGS view every time the user lands on
-    // the Portfolio tab — chart, heatmap, blotter, order panel all reset to
-    // portfolio-level. The user requested this explicitly: "chart, and curve
-    // etc. all default to portfolio when entering". Symbol focus is opt-in
-    // (click a holding) rather than persistent across tab switches.
-    if (!selected_symbol_.isEmpty()) {
-        selected_symbol_.clear();
-        if (perf_chart_)   perf_chart_->clear_focus_symbol();
-        if (heatmap_)      heatmap_->set_selected_symbol(QString());
-        if (blotter_)      blotter_->set_selected_symbol(QString());
-        if (order_panel_)  order_panel_->set_holding(nullptr);
-    }
-    // User just brought this tab to the front — make sure they see fresh data,
-    // not whatever was last cached. Force-fresh bypasses the quote TTL.
+    // Selection sticks across tab switches and dock layout reflows. Don't
+    // clear selected_symbol_ here — clearing it would let "Open in Equity
+    // Research" (which triggers a dock split → hide/show cycle on this
+    // pane) silently revert the user's selection to whatever the most
+    // recent summary's top-weighted holding happens to be.
     if (!selected_id_.isEmpty())
         request_refresh(/*force_fresh=*/true);
 }
@@ -652,18 +643,11 @@ void PortfolioScreen::on_summary_loaded(portfolio::PortfolioSummary summary) {
     update_main_view_data();
     update_content_state();
 
-    // Auto-select highest weighted holding if none selected
-    if (selected_symbol_.isEmpty() && !summary.holdings.isEmpty()) {
-        double max_w = -1;
-        QString top;
-        for (const auto& h : summary.holdings) {
-            if (h.weight > max_w) {
-                max_w = h.weight;
-                top = h.symbol;
-            }
-        }
-        on_symbol_selected(top);
-    }
+    // No auto-selection. With an empty selection the chart/heatmap/blotter
+    // stay on the portfolio-level (aggregate) view, which is the desired
+    // default. Auto-picking the top-weighted holding here previously made
+    // a single ticker (whichever held the largest weight) act as a phantom
+    // default and overrode the user's selection on every refresh.
 
     // Trigger metrics computation
     services::PortfolioService::instance().compute_metrics(summary);
