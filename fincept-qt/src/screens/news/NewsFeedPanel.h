@@ -38,9 +38,16 @@ class NewsFeedPanel : public QWidget {
     void cluster_clicked(const services::NewsCluster& cluster);
     void near_bottom();
 
+  protected:
+    bool eventFilter(QObject* obj, QEvent* ev) override;
+
   private slots:
     void on_item_clicked(const QModelIndex& index);
     void check_scroll_position();
+
+  private:
+    void update_column_mode();
+    bool two_column_active_ = false;
 
   private:
     void build_breaking_banner();
