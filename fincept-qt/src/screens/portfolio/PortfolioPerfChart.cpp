@@ -133,7 +133,14 @@ void PortfolioPerfChart::build_ui() {
     auto* header = new QHBoxLayout;
     header->setContentsMargins(10, 6, 10, 4);
 
-    title_label_ = new QLabel("PERFORMANCE");
+    // Scope-prefixed title: "HOLDINGS · PERFORMANCE" at portfolio level, or
+    // "{SYMBOL} · PERFORMANCE" when a single ticker is focused. Putting the
+    // scope first matches eye-flow (left-to-right) and standard terminal
+    // headers ("AAPL · GP"); it also reads naturally as a breadcrumb so the
+    // user always knows whether they're looking at the aggregate NAV curve
+    // or a single position's price. "HOLDINGS" rather than "ALL" because
+    // ALL could collide with a real ticker symbol — HOLDINGS is unambiguous.
+    title_label_ = new QLabel(QStringLiteral("HOLDINGS · PERFORMANCE"));
     title_label_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
     header->addWidget(title_label_);
@@ -360,9 +367,8 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
-    // Title stays "PERFORMANCE" across focus changes — the symbol is shown
-    // in the chart's data band, so re-labeling the header was redundant
-    // (and made the screen jiggle on every selection).
+    if (title_label_)
+        title_label_->setText(focus_symbol_ + QStringLiteral(" \xc2\xb7 PERFORMANCE"));
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     update_chart(); // renders loading placeholder until data lands
 }
@@ -374,7 +380,8 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false;
-    // Title is fixed to "PERFORMANCE" now; nothing to revert.
+    if (title_label_)
+        title_label_->setText(QStringLiteral("HOLDINGS \xc2\xb7 PERFORMANCE"));
     update_chart();
 }
 
