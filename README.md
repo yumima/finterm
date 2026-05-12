@@ -4,11 +4,12 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 ## What you get
 
-- **Markets / Watchlist / News** — live quotes via yfinance; optional Stooq for fast EOD.
-- **Portfolio** — multi-account holdings, P&L, sparklines, heatmap, blotter, and a *Futures & Ext Hours* sub-view.
+- **Markets / Watchlist / News** — live quotes via yfinance; optional Stooq for fast EOD. News feed auto-splits into two columns on wide viewports; the source column is drag-resizable.
+- **Portfolio** — multi-account holdings, P&L, sparklines, heatmap (PNL / WT / DAY / AFT after-hours modes), blotter, and a *Futures & Ext Hours* sub-view.
 - **Equity Research** — financials, analyst targets, technicals (RSI / MACD / EMA / stochastic / ATR), peers, news, sentiment.
 - **FUTURES** — 8-asset-class watchlist (Index · Rates · Energy · Metals · Ags · FX · Crypto · China), heatmap, term structure, spread monitor, settlements, continuous chart.
-- **KNOWLEDGE** — 5-pane cockpit (Glossary · Concepts · Tracks · Cases · Playbooks · Abbreviations) with curated content, live data lookups, formula calculators, peer comparison charts, and an embedded AI tutor.
+- **POWER TRADER** — STOCK Act congressional trade analytics: searchable member sidebar with watchlist + signal-score indicators, member drawer (replaces tab-jump), trades feed with right-click provenance to the source filing, signal-score popovers, by-committee view, insider watch, signal builder + practice, compare mode for 2-3 members side by side, and a cabinet view. Date-range pill (30d / 90d / 1y / 2y) on the top bar.
+- **KNOWLEDGE** — 4-pane cockpit (Basics · Practice · Context rail · Quant). Quant has seven sub-tracks (Foundations · Risk & Return · Factors · Execution · Backtesting · Strategies · Practices) covering ~30 real-citation-grounded entries cross-linked to in-app tools. Curated content, live data lookups, formula calculators, peer comparison charts, and an embedded AI tutor.
 - **AI chat bubble** — pluggable LLM provider (OpenAI / Anthropic / local Ollama / etc.); none wired by default.
 - **Concurrent yfinance daemon** — long-lived Python child communicating over a Unix domain socket. A `ThreadPoolExecutor` (6 network + 2 compute workers) runs fetches in parallel. Interactive equity-research requests are prioritised over background market-data sweeps; background batch actions are deduplicated so slow symbols never block the UI.
 - **Boot prefetch** — futures cache and active portfolios warmed at startup.
@@ -101,15 +102,14 @@ What `finterm start` does:
 
 ### Auth & user accounts
 
-Auth runs entirely in-process via `AuthService` (C++). Users and sessions are stored in `~/.local/share/com.fincept.terminal/data/auth.db`. Each user's portfolio, watchlists, and settings live in their own isolated `users/<username>.db`. No server process required.
+Local-only multi-user, no email, no SaaS round-trip. Auth runs entirely in-process via `AuthService` (C++); users and sessions are stored in `~/.local/share/com.fincept.terminal/data/auth.db`. Each user's portfolio, watchlists, and settings live in their own isolated `users/<username>.db`.
 
 **Sign-up flow:**
-1. Launch the app → Sign Up screen.
-2. Enter username, email, password → submit.
-3. OTP screen appears — enter any 6-digit code (e.g. `123456`).
-4. You're in. All subsequent launches restore your session automatically; entering your PIN unlocks the terminal.
+1. Launch the app → on first run, the login picker is empty; click **Create Account**.
+2. Pick a username (2–32 chars, `[a-zA-Z0-9_-]`) and a 4–6 digit PIN, confirm the PIN, submit.
+3. The login picker now lists your user — click it and enter the PIN to enter the terminal.
 
-**Multiple users:** Each user on the same machine logs in with their own credentials and sees only their own data. Accounts accumulate in `auth.db`; data is isolated in separate per-user DB files.
+**Multiple users:** Each user on the same machine appears in the picker (sorted by last login). Pick yours, enter your PIN, and you see only your own data. Forgot your PIN? On the picker, select the user → "Forgot PIN? Reset this user" — the row and its per-user DB are wiped; sign up again to recreate.
 
 ### Windows
 
@@ -134,10 +134,11 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 | Setup keeps offering "Install Analytics Libraries" | Install `portaudio19-dev` (or distro equivalent), then `finterm reset --full` once. |
 | Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it automatically. |
 | Stale socket file after crash | `rm ~/.local/share/com.fincept.terminal/runtime/yfinance.sock` — cleared automatically on next launch too. |
-| Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — you will need to sign up again. |
+| Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — every local user disappears; sign up again. |
+| Forgot a user's PIN | Login picker → select the user → **Forgot PIN? Reset this user**. Per-user DB is removed too. |
 
 ## License & attribution
 
 Licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).
 
-finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency, replaces it with an in-process C++ auth layer, adds the FUTURES + KNOWLEDGE tabs, and the various local-first conveniences described above. AGPL-3.0 inherits.
+finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency (no email signup, no OTP, no paywall), replaces it with a local username + PIN multi-user picker, adds the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed, and the various local-first conveniences described above. AGPL-3.0 inherits.
