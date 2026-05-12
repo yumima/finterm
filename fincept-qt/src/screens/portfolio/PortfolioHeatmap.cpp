@@ -84,10 +84,15 @@ void PortfolioHeatmap::build_ui() {
         weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
         day_btn_->setChecked   (m == portfolio::HeatmapMode::DayChange);
         aft_btn_->setChecked   (m == portfolio::HeatmapMode::Aft);
-        if (m == portfolio::HeatmapMode::Aft)
+        if (m == portfolio::HeatmapMode::Aft) {
             fetch_aft_quotes();
-        else
+        } else {
+            // Switching out of AFT supersedes any in-flight fetch so its
+            // callback won't fire a stale rebuild_blocks() while the user
+            // is looking at a different mode.
+            ++aft_gen_;
             rebuild_blocks();
+        }
         emit mode_changed(m);
     };
     connect(pnl_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
@@ -237,12 +242,17 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
         case portfolio::HeatmapMode::DayChange:
             val = h.day_change_percent;
             break;
-        case portfolio::HeatmapMode::Aft:
-            // Look up after-hours percent change from the local cache; 0 if
-            // the yfinance fetch hasn't returned yet or there's no ext quote
-            // for this symbol. The 0-case renders neutral-gray.
-            val = aft_quotes_.value(h.symbol, 0.0);
+        case portfolio::HeatmapMode::Aft: {
+            // Look up after-hours percent change from the local cache. If
+            // the yfinance fetch hasn't returned yet, or this symbol has no
+            // extended quote, render a neutral gray — NOT a 0-value green,
+            // which would falsely flag the symbol as flat-but-quoted.
+            auto it = aft_quotes_.find(h.symbol);
+            if (it == aft_quotes_.end())
+                return QColor(45, 45, 48);
+            val = it.value();
             break;
+        }
     }
 
     if (mode_ == portfolio::HeatmapMode::Weight) {
@@ -508,6 +518,12 @@ void PortfolioHeatmap::fetch_aft_quotes() {
 
     const quint64 my_gen = ++aft_gen_;
     QPointer<PortfolioHeatmap> guard(this);
+
+    // Wipe stale quotes immediately so blocks render gray ("loading") until
+    // the fresh fetch returns; without this the user briefly sees the
+    // previous AFT session's colors against a different symbol set.
+    aft_quotes_.clear();
+    rebuild_blocks();
 
     QJsonObject payload;
     payload.insert(QStringLiteral("symbols"), syms);

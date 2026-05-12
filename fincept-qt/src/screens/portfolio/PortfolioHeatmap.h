@@ -47,9 +47,9 @@ class PortfolioHeatmap : public QWidget {
 
     // AFT cache — populated on demand via the yfinance daemon's
     // `extended_hours` action when the user enters AFT mode. Map of
-    // symbol → post/pre-market percent change.
+    // symbol → post/pre-market percent change. Missing-key vs zero-value
+    // is meaningful — missing renders neutral gray in block_color().
     QHash<QString, double> aft_quotes_;
-    QLabel*  aft_status_ = nullptr;       // session/state hint shown when AFT active
     quint64  aft_gen_    = 0;             // supersedes in-flight stale requests
     void fetch_aft_quotes();
 
