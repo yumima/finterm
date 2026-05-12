@@ -3,7 +3,6 @@
 #include "core/logging/Logger.h"
 #include <QApplication>
 #include <QDateTime>
-#include <QEvent>
 #include <QPushButton>
 #include <QScrollBar>
 
@@ -85,41 +84,6 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
     banner_dismiss_timer_ = new QTimer(this);
     banner_dismiss_timer_->setSingleShot(true);
     connect(banner_dismiss_timer_, &QTimer::timeout, this, &NewsFeedPanel::clear_breaking);
-
-    // Auto-switch to 2-column flow on wide viewports. Implemented via the
-    // list-view's native LeftToRight flow + wrapping + grid sizing — no
-    // structural change to the model or delegate. Reading order in 2-col mode
-    // is row-major ("read across, then down"), matching newspaper layouts.
-    list_view_->viewport()->installEventFilter(this);
-    update_column_mode();
-}
-
-void NewsFeedPanel::update_column_mode() {
-    if (!list_view_) return;
-    const int viewport_w = list_view_->viewport()->width();
-    // Switch to 2-col at ≥ 1600px viewport; back to 1-col below that.
-    // Hysteresis-free — viewport size doesn't oscillate around the threshold.
-    const bool want_two = viewport_w >= 1600;
-    if (want_two == two_column_active_ && viewport_w > 0) return;
-    two_column_active_ = want_two;
-    if (want_two) {
-        list_view_->setFlow(QListView::LeftToRight);
-        list_view_->setWrapping(true);
-        list_view_->setResizeMode(QListView::Adjust);
-        list_view_->setGridSize(QSize(viewport_w / 2, 26));
-    } else {
-        list_view_->setFlow(QListView::TopToBottom);
-        list_view_->setWrapping(false);
-        list_view_->setResizeMode(QListView::Fixed);
-        list_view_->setGridSize(QSize());  // disable grid; back to size-hint flow
-    }
-}
-
-bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
-    if (list_view_ && obj == list_view_->viewport() && ev->type() == QEvent::Resize) {
-        update_column_mode();
-    }
-    return QWidget::eventFilter(obj, ev);
 }
 
 void NewsFeedPanel::build_breaking_banner() {
