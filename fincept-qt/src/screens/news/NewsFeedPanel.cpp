@@ -456,8 +456,44 @@ void NewsFeedPanel::update_two_column_layout() {
     // straight resize we let QSplitter scale proportionally so the user's
     // own drag-adjusted split isn't wiped out.
     if (wide && !was_wide) {
-        const int half = width() / 2;
-        feed_splitter_->setSizes({half, width() - half});
+        if (middle_widget_ && middle_widget_->isVisible()) {
+            const int detail_w = 420;
+            const int side = (width() - detail_w) / 2;
+            feed_splitter_->setSizes({side, detail_w, side});
+        } else {
+            const int half = width() / 2;
+            feed_splitter_->setSizes({half, width() - half});
+        }
+    }
+}
+
+void NewsFeedPanel::set_middle_widget(QWidget* widget) {
+    if (middle_widget_ == widget)
+        return;
+    if (middle_widget_) {
+        // Detach the prior widget; caller owns it (parent stays as the
+        // feed_splitter_ until reparented elsewhere or destroyed).
+        middle_widget_->setParent(nullptr);
+        middle_widget_ = nullptr;
+    }
+    if (widget) {
+        // Insert between left list (index 0) and right list (index 1).
+        feed_splitter_->insertWidget(1, widget);
+        middle_widget_ = widget;
+        // Re-seed sizes so the new pane gets a sensible width. If we're in
+        // narrow mode the right column stays hidden; the detail pane takes
+        // the right slot anyway because the splitter's hidden child shrinks
+        // to zero width.
+        const bool wide = width() >= kWideViewportThreshold;
+        const int detail_w = std::min(420, std::max(280, width() / 3));
+        if (wide) {
+            const int side = (width() - detail_w) / 2;
+            feed_splitter_->setSizes({side, detail_w, side});
+        } else {
+            // Narrow: split between left list and middle widget (right list
+            // is hidden by update_two_column_layout).
+            feed_splitter_->setSizes({width() - detail_w, detail_w, 0});
+        }
     }
 }
 

@@ -81,13 +81,15 @@ void NewsScreen::build_ui() {
     side_panel_ = new NewsSidePanel(content_widget);
     content_layout_->addWidget(side_panel_);
 
-    // Feed panel (fills remaining space)
+    // Feed panel (fills remaining space). The detail pane is docked INSIDE
+    // the feed's horizontal splitter (between the two news columns) rather
+    // than off to the right — reading a story flanked by related headlines
+    // on both sides is the layout the user requested.
     feed_panel_ = new NewsFeedPanel(content_widget);
     content_layout_->addWidget(feed_panel_, 1);
 
-    // Detail overlay (right, hidden by default, 420px)
     detail_panel_ = new NewsDetailPanel(content_widget);
-    content_layout_->addWidget(detail_panel_);
+    feed_panel_->set_middle_widget(detail_panel_);
 
     root->addWidget(content_widget, 1);
 

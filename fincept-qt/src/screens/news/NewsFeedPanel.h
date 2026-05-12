@@ -24,6 +24,13 @@ class NewsFeedPanel : public QWidget {
     QListView* list_view() { return list_view_; }
     QListView* list_view_right() { return list_view_right_; }
 
+    // Inserts a widget into the feed's horizontal splitter, between the
+    // left and right list columns. Used by NewsScreen to dock the article
+    // detail pane in the middle of the feed (rather than off to the right)
+    // so the user can read a story with related headlines flanking it on
+    // either side. Pass nullptr to remove a previously-set middle widget.
+    void set_middle_widget(QWidget* widget);
+
     // Walks both columns' visible viewports and mark_seens every article
     // currently on screen. Appends the just-marked article ids to `out_new`
     // so callers can flush them to persistence.
@@ -76,7 +83,8 @@ class NewsFeedPanel : public QWidget {
     QStackedWidget* stack_ = nullptr;
     QListView* list_view_ = nullptr;            // left column (or single)
     QListView* list_view_right_ = nullptr;      // right column, wide mode only
-    QSplitter* feed_splitter_ = nullptr;        // horizontal, holds both views
+    QSplitter* feed_splitter_ = nullptr;        // horizontal: left list | optional middle | right list
+    QWidget* middle_widget_ = nullptr;          // optional widget docked between the two columns
     QSortFilterProxyModel* proxy_left_  = nullptr;  // shows source rows where row%2==0
     QSortFilterProxyModel* proxy_right_ = nullptr;  // shows source rows where row%2==1
     NewsFeedModel* model_ = nullptr;
