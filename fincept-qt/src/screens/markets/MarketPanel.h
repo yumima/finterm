@@ -31,6 +31,7 @@ class MarketPanel : public QWidget {
 
     void refresh();
     const QString& panel_id() const { return config_.id; }
+    const QStringList& symbols() const { return config_.symbols; }
     void update_config(const MarketPanelConfig& cfg);
 
     QSize sizeHint() const override;

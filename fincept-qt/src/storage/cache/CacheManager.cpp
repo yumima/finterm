@@ -13,11 +13,19 @@ namespace {
 // expressed as `key >= prefix AND key < upper`, which is sargable on the
 // PRIMARY KEY index. SQLite's default LIKE is case-insensitive and cannot
 // use a TEXT-PK index, so the old `LIKE 'prefix%'` did a full table scan.
+//
+// Pre-condition: prefix must be non-empty — callers must guard. Returns an
+// empty string for empty input so range queries with two empty bounds match
+// nothing (rather than UB on .at(-1)).
 QString prefix_upper_bound(const QString& prefix) {
+    if (prefix.isEmpty())
+        return QString();
     QString upper = prefix;
     const QChar last = upper.at(upper.size() - 1);
     // ushort + 1 wraps for U+FFFF; our prefixes are ASCII (e.g. "market:")
-    // so this can't happen in practice. Guard anyway with an appended sentinel.
+    // so this can't happen in practice. Guard anyway with an appended sentinel
+    // — `prefix + U+FFFF` is still a valid exclusive upper bound for any
+    // realistic ASCII-prefix range, just not a tight one.
     if (last.unicode() == 0xFFFF) {
         upper.append(QChar(0xFFFF));
     } else {
@@ -147,6 +155,13 @@ void CacheManager::remove_prefix(const QString& prefix) {
     // `LIKE 'prefix%'` form forced a full table scan on every call because
     // SQLite's default LIKE is case-insensitive and cannot use a TEXT PK
     // index — that was the GUI-thread freeze on every tab show.
+    //
+    // Behavioral note: this is case-SENSITIVE (BINARY collation on the
+    // TEXT PK), unlike the old LIKE which was case-INSENSITIVE. All current
+    // callers write cache keys with the exact same case they invalidate
+    // with (`"market:" + SYM`), so this is not a regression. If a future
+    // caller mixes cases in the prefix portion of keys, they'll need to
+    // either normalise on write or call remove() per fully-qualified key.
     cdb.execute("DELETE FROM unified_cache WHERE key >= ? AND key < ?",
                 {prefix, prefix_upper_bound(prefix)});
 }

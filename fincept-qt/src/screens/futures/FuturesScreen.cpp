@@ -50,8 +50,12 @@ void FuturesScreen::showEvent(QShowEvent* event) {
     FuturesQuoteCache::instance().retain();
     if (refresh_timer_ && !refresh_timer_->isActive())
         refresh_timer_->start();
-    // Force-fresh on tab activation so the user always sees the latest data.
-    services::MarketDataService::instance().invalidate_quotes({});
+    // Force-fresh refresh — but DON'T invalidate MarketDataService's quote
+    // cache. Futures use FuturesDataService, a separate service with no
+    // connection to the "market:" cache prefix. The old code called
+    // invalidate_quotes({}) here, which wiped every other screen's quote
+    // cache for no benefit to Futures. refresh_all() below already triggers
+    // the futures fetch through FuturesQuoteCache.
     refresh_all();
 }
 

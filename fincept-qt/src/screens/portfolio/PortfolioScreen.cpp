@@ -602,9 +602,11 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     if (id == selected_id_ && summary_loaded_)
         return;
 
-    // Drop quote cache so the new portfolio's holdings get fresh values.
-    // (Cheap; CacheManager.remove_prefix is one DB op.)
-    services::MarketDataService::instance().invalidate_quotes({});
+    // We don't invalidate the quote cache here. The new portfolio's holdings
+    // aren't known until load_summary returns, so a blanket invalidation
+    // would only nuke unrelated cached quotes (markets panels, dashboard
+    // widgets). The 30s TTL plus DataHub's min_interval keep data fresh
+    // enough; if the user really wants force-fresh they can hit refresh.
 
     selected_id_ = id;
     ScreenStateManager::instance().notify_changed(this);
@@ -816,10 +818,21 @@ void PortfolioScreen::request_refresh(bool force_fresh) {
     if (selected_id_.isEmpty())
         return;
     if (force_fresh) {
-        // Drop the quote cache so the upcoming refresh hits the data source.
-        // The DataHub min_interval (2s) still rate-limits actual outbound
-        // calls, so this is safe even on rapid tab switches.
-        services::MarketDataService::instance().invalidate_quotes({});
+        // Invalidate only THIS portfolio's holdings — not the entire
+        // "market:*" bucket. The old code passed {} which dropped every
+        // other consumer's cache too (markets panels, dashboard widgets),
+        // forcing them to re-fetch on next show. Scoped invalidation
+        // means each screen only pays for its own freshness.
+        //
+        // On first show current_summary_.holdings is empty; nothing to
+        // invalidate. The subsequent fetch_quotes path checks the cache
+        // (≤30s old) anyway, so the user sees recent data immediately.
+        QStringList syms;
+        syms.reserve(current_summary_.holdings.size());
+        for (const auto& h : current_summary_.holdings)
+            syms.append(h.symbol);
+        if (!syms.isEmpty())
+            services::MarketDataService::instance().invalidate_quotes(syms);
         // Reset debounce keys so user-initiated refresh actually re-runs the
         // side-fetches even when the symbol set is unchanged. Timer-driven
         // ticks (force_fresh=false) keep the debounce so we don't re-spawn

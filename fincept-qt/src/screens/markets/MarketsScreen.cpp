@@ -518,11 +518,23 @@ void MarketsScreen::showEvent(QShowEvent* event) {
     if (auto_update_ && auto_refresh_timer_) auto_refresh_timer_->start();
     if (session_timer_) session_timer_->start();
     if (clock_timer_)   clock_timer_->start();
-    // User just brought MARKETS to the front — drop the quote cache and
-    // always refresh so they see fresh data, not whatever was last cached.
-    // The DataHub min_interval (2s) still rate-limits actual outbound calls,
-    // so rapid tab switching won't hammer yfinance.
-    services::MarketDataService::instance().invalidate_quotes({});
+    // User just brought MARKETS to the front — force-fresh by invalidating
+    // ONLY this screen's panel symbols. The old code passed {} which nukes
+    // the entire "market:*" cache, including symbols other screens
+    // (Portfolio holdings, dashboard widgets) had just cached. After a
+    // Markets→Portfolio→Markets round-trip every quote was re-fetched
+    // unnecessarily; with scoped invalidation each screen only drops its
+    // own cohort. The DataHub min_interval (2s) still rate-limits actual
+    // outbound calls.
+    QStringList panel_syms;
+    for (auto* p : panels_) {
+        for (const QString& s : p->symbols()) {
+            if (!panel_syms.contains(s))
+                panel_syms.append(s);
+        }
+    }
+    if (!panel_syms.isEmpty())
+        services::MarketDataService::instance().invalidate_quotes(panel_syms);
     refresh_all();
 }
 
