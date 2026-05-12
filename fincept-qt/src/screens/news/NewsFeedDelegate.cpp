@@ -153,11 +153,12 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     const QString tickers_str = index.data(FormattedTickersRole).toString();
     const QString threat_color = index.data(ThreatColorRole).toString();
 
-    // Source name
+    // Source name. Width bumped 72→110 so common long source slugs like
+    // "INVESTING.COM" or "BLOOMBERG GOV" stop eliding to "INVESTING…".
     painter->setFont(bold_font_);
     painter->setPen(QColor(ui::colors::CYAN()));
-    painter->drawText(QRect(x, rect.top(), 72, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, source);
-    x += 76;
+    painter->drawText(QRect(x, rect.top(), 110, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, source);
+    x += 114;
 
     // Language badge (if not English)
     if (!lang_badge.isEmpty()) {
@@ -181,7 +182,11 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
         painter->setPen(kNewsTextSecondary);
     }
 
-    int right_reserve = 140; // space for credibility + threat + sentiment + tickers
+    // Right-side reservation: credibility flag (~12) + threat label (~30) +
+    // sentiment arrow (~16) + tickers (up to "$XXXX $YYYY" tiny font ~90) +
+    // padding. 180px keeps tickers fully visible even at the worst case;
+    // headline elision absorbs the difference.
+    int right_reserve = 180;
     int headline_width = rect.right() - x - right_reserve;
     if (headline_width > 0) {
         QFontMetrics& fm = is_hot ? bold_fm_ : data_fm_;

@@ -122,7 +122,7 @@ void NewsFeedModel::set_wire_articles(const QVector<services::NewsArticle>& arti
 
         // Pre-format once — avoids allocation in paint() on every frame
         FormattedRow fr;
-        fr.source = a.source.left(10).toUpper();
+        fr.source = a.source.left(14).toUpper();
         fr.lang = (a.lang.isEmpty() || a.lang == "en") ? QString() : a.lang.toUpper();
         const bool show_threat =
             a.threat.level != services::ThreatLevel::INFO && a.threat.level != services::ThreatLevel::LOW;
