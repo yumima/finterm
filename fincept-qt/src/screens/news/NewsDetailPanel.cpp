@@ -96,6 +96,12 @@ QWidget* NewsDetailPanel::build_content_view() {
     // opens the article in the user's browser. The OPEN button still exists
     // for discoverability; this just removes the "the title is right there
     // but I have to click OPEN" friction the user flagged.
+    //
+    // Qt rich-text labels apply the document's default link color (blue,
+    // underlined) regardless of inline `style="color:..."` attributes
+    // (those are CSS-only and the Qt renderer ignores them). Style the
+    // anchor element via QSS on the label so the headline reads in the
+    // primary text color matching the rest of the detail pane.
     headline_label_ = new QLabel(content);
     headline_label_->setObjectName("newsDetailHeadline");
     headline_label_->setWordWrap(true);
@@ -103,6 +109,12 @@ QWidget* NewsDetailPanel::build_content_view() {
     headline_label_->setTextInteractionFlags(Qt::TextBrowserInteraction);
     headline_label_->setOpenExternalLinks(false);  // route via QDesktopServices below
     headline_label_->setCursor(Qt::PointingHandCursor);
+    {
+        QPalette pal = headline_label_->palette();
+        pal.setColor(QPalette::Link, QColor(ui::colors::TEXT_PRIMARY()));
+        pal.setColor(QPalette::LinkVisited, QColor(ui::colors::TEXT_PRIMARY()));
+        headline_label_->setPalette(pal);
+    }
     connect(headline_label_, &QLabel::linkActivated, this, [this](const QString& url) {
         if (!url.isEmpty())
             QDesktopServices::openUrl(QUrl(url));

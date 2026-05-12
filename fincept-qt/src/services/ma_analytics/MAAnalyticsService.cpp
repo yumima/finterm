@@ -23,29 +23,22 @@ inline void publish_ma_result(bool hub_registered, const QString& context, const
     fincept::datahub::DataHub::instance().publish(QStringLiteral("ma:") + context, QVariant(obj));
 }
 
-// Persistent on-disk cache so the M&A analytics panels paint the most
-// recently-computed model immediately on next launch — the deal database
-// scan in particular runs an EDGAR walk that takes 30-90s cold. Plain
-// "by-context" callers write to a stable filename; parameterised callers
-// (DCF / LBO / comps) write to `{context}_{md5(params)}.json` so distinct
-// inputs don't clobber each other and the on-disk key mirrors the in-
-// memory CacheManager key used by run_python_json.
+// Persistent on-disk cache for the M&A analytics screen. Only the slow
+// "by-context" payloads (the deal-database EDGAR walk: scan_filings,
+// all_deals, search_deals, parse_filing) get persisted — these cost 30-90s
+// cold and are the same data set per session. Per-input results (DCF /
+// LBO / comps) used to also persist under `<context>_<hash>.json`, but
+// the constructor couldn't replay them (filename only carried an MD5 of
+// the params, no way to reconstruct the cache key), so the writes were
+// pure disk bloat. The CacheManager 5-min TTL covers same-session reuse;
+// cross-session reuse for per-input models is rare enough that the cost
+// isn't worth the complexity.
 fincept::services::util::DiskCache& disk_cache() {
     static fincept::services::util::DiskCache c(QStringLiteral("ma_analytics"));
     return c;
 }
 
-// 8 hex chars is plenty for our use — collision risk per service is negligible
-// and the shorter name keeps directory listings readable during debugging.
-QString hash_params(const QByteArray& params_json) {
-    return QString::fromLatin1(
-        QCryptographicHash::hash(params_json, QCryptographicHash::Md5).toHex().left(8));
-}
-
-// Filename rules:
-//   • by-context payloads:  "<context>.json"
-//   • per-params payloads:  "<context>_<hash>.json"
-// Sanitize the context just in case a caller passes something exotic.
+// Sanitize the context for use as a filename basename.
 QString sanitize_context(const QString& ctx) {
     QString s;
     s.reserve(ctx.size());
@@ -56,10 +49,6 @@ QString sanitize_context(const QString& ctx) {
             s.append(QLatin1Char('_'));
     }
     return s;
-}
-
-QString params_filename(const QString& ctx, const QByteArray& params_json) {
-    return sanitize_context(ctx) + QLatin1Char('_') + hash_params(params_json) + QStringLiteral(".json");
 }
 
 QString context_filename(const QString& ctx) {
@@ -75,22 +64,13 @@ MAAnalyticsService& MAAnalyticsService::instance() {
 }
 
 MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
-    // Hydrate from disk. By-context files replay through result_ready immediately
-    // (no listeners yet — intended drop, panels re-fetch on connect). Per-params
-    // files repopulate the CacheManager so the next run_python_json with the
-    // same params hits warm cache without a Python round-trip. We can't replay
-    // per-params results through result_ready because we'd need the original
-    // context name and params — the filename only carries an MD5 of the latter.
+    // One-time housekeeping for installs that still have old per-params
+    // files on disk (we used to write them; commit removed the save path).
+    // Walk the dir, replay by-context payloads, delete any orphan hashed
+    // files so they don't keep occupying disk forever.
     const QStringList files = disk_cache().files();
     for (const QString& fname : files) {
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject()) continue;
-
-        // "<context>.json" — no underscore in the basename means by-context.
-        // The deal database family ("all_deals", "scan_filings", …) does use
-        // underscores in the context itself, so we detect by-context files
-        // via "no segment that looks like an 8-hex hash" rather than by
-        // counting underscores.
+        // Detect old per-params files by the "_<8-hex>.json" tail and unlink.
         QString stem = fname;
         if (stem.endsWith(QStringLiteral(".json"))) stem.chop(5);
         const int last_us = stem.lastIndexOf(QLatin1Char('_'));
@@ -100,19 +80,15 @@ MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
                 return (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
                     || (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
             });
-        if (!tail_is_hash) {
-            // By-context payload — emit it. Context recovered from the filename.
-            emit result_ready(stem, doc.object());
-        } else {
-            // Per-params payload — repopulate CacheManager. The original cache
-            // key (see run_python_json) is "ma:<context>_<command>:<params>",
-            // which we can't reconstruct from disk. Instead, we rely on the
-            // fact that run_python_json checks CacheManager via that key and
-            // falls through on miss — disk cache primarily benefits the
-            // by-context path (deal database). Per-params disk entries are
-            // still useful: they survive a CacheManager flush, and a future
-            // by-input rehydrator can read them back.
+        if (tail_is_hash) {
+            disk_cache().remove(fname);
+            continue;
         }
+        // By-context payload — replay through result_ready. No listeners
+        // yet (panels connect later); they re-emit via panel-driven fetch.
+        const QJsonDocument doc = disk_cache().load(fname);
+        if (!doc.isObject()) continue;
+        emit result_ready(stem, doc.object());
     }
 }
 
@@ -187,11 +163,19 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
                 cache_key,
                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                 kResultTtlSec, "ma_analytics");
-            // Mirror the per-input cache to disk so distinct DCF / LBO / comp
-            // inputs each survive a restart without colliding. Filename keys
-            // off (context, params hash) — the same hash recipe so a future
-            // by-input rehydrator can find this entry.
-            disk_cache().save(params_filename(context, params_for_hash), doc);
+            // Per-input results (DCF/LBO/comps) intentionally do NOT persist
+            // to disk: the constructor can't replay them anyway (filename
+            // only carries an MD5 of the params, not the original params or
+            // context), so writing them just bloated the cache directory
+            // without any cold-start benefit. The CacheManager 5-min TTL
+            // covers same-session reuse; cross-session reuse requires the
+            // user to re-enter the same inputs, which is rare for ad-hoc
+            // valuation work.
+            //
+            // params_for_hash is intentionally unused now; left in the
+            // signature so a future by-input rehydrator (storing context +
+            // raw params inside the JSON) can pick this back up.
+            (void)params_for_hash;
             LOG_INFO("MAAnalytics", QString("Result ready [%1]").arg(context));
             emit self->result_ready(context, obj);
             publish_ma_result(self->hub_registered_, context, obj);

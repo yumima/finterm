@@ -68,6 +68,12 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
     search_debounce_->setInterval(kDebounceMs);
     connect(search_debounce_, &QTimer::timeout, this, [this]() { search_symbols(pending_query_); });
 
+    // Trim the cache dir before hydrating: an active user can browse
+    // hundreds of distinct tickers over months, and each writes its own
+    // file. Cap at 200 most-recently-touched symbols so ctor hydration
+    // stays bounded and the dir doesn't grow without limit.
+    disk_cache().trim_to(200);
+
     // Hydrate the in-memory CacheManager from every cached per-symbol file
     // so subsequent load_symbol() / fetch_*() calls hit warm cache and emit
     // immediately. The data_loaded-style signals fired by the per-category

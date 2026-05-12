@@ -108,9 +108,10 @@ void NewsScreen::connect_signals() {
     connect(command_bar_, &NewsCommandBar::refresh_clicked, this, &NewsScreen::on_refresh);
     connect(command_bar_, &NewsCommandBar::drawer_toggle_requested, this, &NewsScreen::on_drawer_toggle);
     // BREAKING counter click → switch the feed to clusters view, where the
-    // breaking clusters sort to the top (NewsClusterService::sort_clusters
-    // promotes is_breaking ahead of everything else). Gives the user a
-    // one-click jump from "8 BREAKING" → seeing what those 8 are.
+    // breaking clusters sort to the top (cluster_articles() in
+    // NewsClusterService promotes is_breaking ahead of everything else).
+    // Gives the user a one-click jump from "8 BREAKING" → seeing what
+    // those 8 are.
     connect(command_bar_, &NewsCommandBar::breaking_filter_requested, this, [this]() {
         on_view_mode_changed(QStringLiteral("CLUSTERS"));
     });

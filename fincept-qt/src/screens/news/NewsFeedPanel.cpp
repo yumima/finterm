@@ -452,14 +452,21 @@ void NewsFeedPanel::update_two_column_layout() {
     const bool wide = width() >= kWideViewportThreshold;
     const bool was_wide = list_view_right_->isVisible();
     list_view_right_->setVisible(wide);
-    // Only seed the 50/50 split when transitioning narrow→wide. On a
-    // straight resize we let QSplitter scale proportionally so the user's
-    // own drag-adjusted split isn't wiped out.
+    // Only seed the split when transitioning narrow→wide. On a straight
+    // resize we let QSplitter scale proportionally so the user's own
+    // drag-adjusted split isn't wiped out. setSizes must always pass one
+    // entry per child — QSplitter zero-fills missing entries, which would
+    // collapse the middle widget if we only gave it two sizes after the
+    // insertWidget(1, middle) shifted the right list to index 2.
     if (wide && !was_wide) {
-        if (middle_widget_ && middle_widget_->isVisible()) {
+        const bool has_middle = middle_widget_ != nullptr;
+        if (has_middle && middle_widget_->isVisible()) {
             const int detail_w = 420;
             const int side = (width() - detail_w) / 2;
             feed_splitter_->setSizes({side, detail_w, side});
+        } else if (has_middle) {
+            const int half = width() / 2;
+            feed_splitter_->setSizes({half, 0, width() - half});
         } else {
             const int half = width() / 2;
             feed_splitter_->setSizes({half, width() - half});
@@ -471,8 +478,9 @@ void NewsFeedPanel::set_middle_widget(QWidget* widget) {
     if (middle_widget_ == widget)
         return;
     if (middle_widget_) {
-        // Detach the prior widget; caller owns it (parent stays as the
-        // feed_splitter_ until reparented elsewhere or destroyed).
+        // Detach the prior widget. The caller retains the pointer; the
+        // widget's Qt parent is set to null here, so the caller MUST keep
+        // a reference (or reparent immediately) or the widget will leak.
         middle_widget_->setParent(nullptr);
         middle_widget_ = nullptr;
     }

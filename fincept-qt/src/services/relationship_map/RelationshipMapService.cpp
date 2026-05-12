@@ -43,36 +43,40 @@ QString ticker_filename(const QString& ticker) {
 }  // namespace
 
 RelationshipMapService& RelationshipMapService::instance() {
-    static RelationshipMapService s;
-    // First-touch hydrate: replay each cached ticker through CacheManager so
-    // the next fetch(ticker) hits warm in-memory cache and emits instantly.
-    // Done here rather than in the ctor because RelationshipMapService is an
-    // aggregate type (defaulted ctor) and we want to keep it that way.
-    static bool hydrated = false;
-    if (!hydrated) {
-        hydrated = true;
-        const QStringList files = disk_cache().files();
-        for (const QString& fname : files) {
-            const QJsonDocument doc = disk_cache().load(fname);
-            if (!doc.isObject()) continue;
-            // Recover the ticker from the JSON (rather than parsing fname) so
-            // a corrupted filename doesn't poison the cache key. Falls back to
-            // fname stem if the payload doesn't carry company.ticker.
-            const QJsonObject root = doc.object();
-            QString ticker = root.value("company").toObject().value("ticker").toString();
-            if (ticker.isEmpty()) {
-                ticker = fname;
-                if (ticker.endsWith(QStringLiteral(".json"))) ticker.chop(5);
-            }
-            const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-            // Use the same TTL the live fetch uses so a stale on-disk copy
-            // doesn't masquerade as fresh — CacheManager will expire it.
-            fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(),
-                                                  QVariant(blob),
-                                                  /*ttl_sec=*/10 * 60, "relmap");
-        }
-    }
+    static RelationshipMapService s;  // C++11 thread-safe local-static init
     return s;
+}
+
+RelationshipMapService::RelationshipMapService() {
+    // Cap per-ticker cache to last 500 viewed companies.
+    disk_cache().trim_to(500);
+
+    // Hydrate: replay each cached ticker into CacheManager so the next
+    // fetch(ticker) hits warm in-memory cache and emits instantly. Lives
+    // in the ctor (not in instance()) so it runs exactly once under the
+    // function-local-static thread-safety guarantee — the prior bool flag
+    // version had a non-atomic read-modify-write race if instance() was
+    // ever called from two threads near-simultaneously.
+    const QStringList files = disk_cache().files();
+    for (const QString& fname : files) {
+        const QJsonDocument doc = disk_cache().load(fname);
+        if (!doc.isObject()) continue;
+        // Recover the ticker from the JSON (rather than parsing fname) so
+        // a corrupted filename doesn't poison the cache key. Falls back to
+        // fname stem if the payload doesn't carry company.ticker.
+        const QJsonObject root = doc.object();
+        QString ticker = root.value("company").toObject().value("ticker").toString();
+        if (ticker.isEmpty()) {
+            ticker = fname;
+            if (ticker.endsWith(QStringLiteral(".json"))) ticker.chop(5);
+        }
+        const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+        // Use the same TTL the live fetch uses so a stale on-disk copy
+        // doesn't masquerade as fresh — CacheManager will expire it.
+        fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(),
+                                              QVariant(blob),
+                                              /*ttl_sec=*/10 * 60, "relmap");
+    }
 }
 
 static constexpr int kRelMapTtlSec = 10 * 60; // 10 min

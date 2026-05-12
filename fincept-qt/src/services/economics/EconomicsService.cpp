@@ -27,14 +27,17 @@ fincept::services::util::DiskCache& disk_cache() {
     return c;
 }
 
-// Sanitize a logical key (script:command:args:source_id:request_id) into an
-// alnum filename. We hash to keep the path bounded for long arg lists
-// (some dbnomics queries serialize to >150 chars).
+// Sanitize a logical key (source_id:script:command:args) into an alnum
+// filename. We hash to keep the path bounded for long arg lists (some
+// dbnomics queries serialize to >150 chars). request_id is intentionally
+// EXCLUDED from the hash — it's a per-session identifier, so including
+// it would make identical reruns from new sessions write fresh files and
+// the cache dir would grow without bound.
 QString file_for_dispatch(const QString& source_id, const QString& script,
                           const QString& command, const QStringList& args,
-                          const QString& request_id) {
+                          const QString& /*request_id, unused on purpose*/) {
     const QString combined = source_id + "|" + script + "|" + command + "|"
-                              + args.join(",") + "|" + request_id;
+                              + args.join(",");
     const QByteArray digest =
         QCryptographicHash::hash(combined.toUtf8(), QCryptographicHash::Sha1).toHex();
     // Keep the script base + a short hash for some grep-ability in the
@@ -58,6 +61,12 @@ EconomicsService& EconomicsService::instance() {
 }
 
 EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
+    // Cap the cache dir at 500 distinct queries (per-(source, script,
+    // command, args) tuple). Heavy users of the economics screen browse
+    // dozens of series per session; 500 entries cover months of activity
+    // and the ctor hydration stays bounded.
+    disk_cache().trim_to(500);
+
     // Hydrate the dispatch_records_ map and CacheManager from every file on
     // disk. We don't emit result_ready here because no panel can be listening
     // yet — when the panel calls execute() with the same parameters, the

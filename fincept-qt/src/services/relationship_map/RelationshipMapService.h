@@ -38,7 +38,7 @@ class RelationshipMapService : public QObject
     void fetch_failed(const QString& error);
 
   private:
-    RelationshipMapService() = default;
+    RelationshipMapService();
 
     void parse_result(const QString& json_output);
     relmap::ValuationSignal compute_valuation(const relmap::CompanyInfo& co, const QVector<relmap::PeerCompany>& peers);

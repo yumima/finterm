@@ -374,7 +374,8 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     if (title_label_)
         title_label_->setText(
             QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
-                .arg(ui::colors::WARNING(), focus_symbol_, ui::colors::TEXT_SECONDARY()));
+                .arg(ui::colors::WARNING(), focus_symbol_.toHtmlEscaped(),
+                     ui::colors::TEXT_SECONDARY()));
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     update_chart(); // renders loading placeholder until data lands
 }

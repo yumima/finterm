@@ -93,6 +93,11 @@ GeopoliticsService& GeopoliticsService::instance() {
 }
 
 GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
+    // Cap the cache dir at 300 entries. Per-country / per-topic / per-search
+    // files would otherwise accumulate indefinitely for users who browse
+    // many HDX queries over months.
+    disk_cache().trim_to(300);
+
     // Hydrate from disk if we have a prior session's cache. The *_loaded
     // signals emitted here go to no listeners (UI wires up later) — that's
     // the intended drop; the live fetch will re-emit when a panel subscribes.

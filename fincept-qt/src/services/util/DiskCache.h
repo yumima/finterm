@@ -40,6 +40,10 @@ public:
         const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
         const QString d = root + QStringLiteral("/cache/") + service_id_;
         QDir().mkpath(d);
+        // Clamp dir perms to 0700 so cached payload filenames (which can
+        // leak account/ticker context) aren't world-traversable. Cheap
+        // and idempotent — no-op if already 0700.
+        QFile::setPermissions(d, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
         return d;
     }
 
@@ -79,12 +83,17 @@ public:
                      QStringLiteral("DiskCache: short write for ") + final_path);
             return false;
         }
+        // Clamp perms on the temp file BEFORE commit() does the rename so
+        // the chmod survives the rename atomically — a setPermissions
+        // after commit() leaves a brief window where the renamed file
+        // carries umask-default perms (typically 0644) and is readable by
+        // other users on a multi-user box.
+        f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (!f.commit()) {
             LOG_WARN(service_id_.toUtf8().constData(),
                      QStringLiteral("DiskCache: commit failed for ") + final_path);
             return false;
         }
-        QFile::setPermissions(final_path, QFile::ReadOwner | QFile::WriteOwner);
         return true;
     }
 
@@ -94,10 +103,40 @@ public:
 
     // Lists every cached file under the service directory (top-level only,
     // no recursion). Used by services that key by symbol / series id and
-    // need to enumerate at startup.
+    // need to enumerate at startup. Sorted by modification time, newest
+    // first (matches QDir::Time semantics) so the first N entries are the
+    // most recently touched.
     QStringList files() const {
         QDir d(dir());
         return d.entryList(QDir::Files | QDir::NoDotAndDotDot, QDir::Time);
+    }
+
+    // LRU trim: keep at most `keep_most_recent` files in the service's
+    // cache dir, sorted by mtime. Older files are unlinked. No-op if the
+    // dir holds <= keep_most_recent. Returns the number of files removed.
+    //
+    // Per-key services (equity_research by ticker, economics by query
+    // hash, geopolitics per-country) call this once at startup so users
+    // who've browsed thousands of distinct entries over months don't end
+    // up with a gigabyte of cached JSON. The cap is intentionally generous
+    // (call sites typically pass 200-500): cold-start hydration cost is
+    // proportional to file count, not file size, and 200 small JSON
+    // entries hydrate in ~50ms.
+    int trim_to(int keep_most_recent) const {
+        if (keep_most_recent < 0) return 0;
+        QDir d(dir());
+        const QStringList by_newest = d.entryList(
+            QDir::Files | QDir::NoDotAndDotDot, QDir::Time);
+        if (by_newest.size() <= keep_most_recent) return 0;
+        int removed = 0;
+        for (int i = keep_most_recent; i < by_newest.size(); ++i) {
+            if (QFile::remove(d.filePath(by_newest[i]))) ++removed;
+        }
+        if (removed > 0) {
+            LOG_INFO(service_id_.toUtf8().constData(),
+                     QStringLiteral("DiskCache: trimmed %1 old files").arg(removed));
+        }
+        return removed;
     }
 
 private:
