@@ -142,10 +142,20 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     unseen_label_->hide();
     hl->addWidget(unseen_label_);
 
-    // Alert count
-    alert_label_ = new QLabel(row);
+    // Breaking-news counter — number of clusters currently flagged as
+    // breaking (high-velocity, multi-source coverage). Clickable: clicking
+    // it filters the feed to those clusters so the user can immediately see
+    // what's hot. Tooltip explains the meaning since the prior "X ALERTS"
+    // label was ambiguous (alerts on what? from where?).
+    alert_label_ = new QPushButton(row);
     alert_label_->setObjectName("newsCommandBarAlert");
+    alert_label_->setFlat(true);
+    alert_label_->setCursor(Qt::PointingHandCursor);
+    alert_label_->setToolTip(QStringLiteral(
+        "Breaking-news clusters — stories getting high-velocity coverage "
+        "across multiple sources right now. Click to show only these."));
     alert_label_->hide();
+    connect(alert_label_, &QPushButton::clicked, this, &NewsCommandBar::breaking_filter_requested);
     hl->addWidget(alert_label_);
 
     // Article count
@@ -343,7 +353,7 @@ void NewsCommandBar::set_article_count(int count) {
 
 void NewsCommandBar::set_alert_count(int count) {
     if (count > 0) {
-        alert_label_->setText(QString("%1 ALERTS").arg(count));
+        alert_label_->setText(QString("%1 BREAKING").arg(count));
         alert_label_->show();
     } else {
         alert_label_->hide();

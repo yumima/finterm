@@ -48,6 +48,10 @@ class NewsCommandBar : public QWidget {
     void variant_changed(const QString& variant);
     void language_filter_changed(const QString& lang);
     void drawer_toggle_requested();
+    // Emitted when the user clicks the BREAKING counter in the command bar.
+    // NewsScreen routes this into a filter that limits the feed to clusters
+    // currently flagged as breaking so the user can see what triggered it.
+    void breaking_filter_requested();
 
   private:
     QPushButton* make_pill(const QString& text, const QString& value, QHBoxLayout* layout);
@@ -68,7 +72,7 @@ class NewsCommandBar : public QWidget {
     QPushButton* drawer_btn_ = nullptr;
     QLabel* summary_label_ = nullptr;
     QLabel* count_label_ = nullptr;
-    QLabel* alert_label_ = nullptr;
+    QPushButton* alert_label_ = nullptr;
     QLabel* unseen_label_ = nullptr;
     QLabel* progress_label_ = nullptr;
 

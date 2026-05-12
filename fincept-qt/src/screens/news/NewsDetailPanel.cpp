@@ -92,10 +92,21 @@ QWidget* NewsDetailPanel::build_content_view() {
     layout->setContentsMargins(12, 10, 12, 10);
     layout->setSpacing(8);
 
-    // Headline
+    // Headline — rendered as a rich-text link so a click on the title itself
+    // opens the article in the user's browser. The OPEN button still exists
+    // for discoverability; this just removes the "the title is right there
+    // but I have to click OPEN" friction the user flagged.
     headline_label_ = new QLabel(content);
     headline_label_->setObjectName("newsDetailHeadline");
     headline_label_->setWordWrap(true);
+    headline_label_->setTextFormat(Qt::RichText);
+    headline_label_->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    headline_label_->setOpenExternalLinks(false);  // route via QDesktopServices below
+    headline_label_->setCursor(Qt::PointingHandCursor);
+    connect(headline_label_, &QLabel::linkActivated, this, [this](const QString& url) {
+        if (!url.isEmpty())
+            QDesktopServices::openUrl(QUrl(url));
+    });
     layout->addWidget(headline_label_);
 
     // Badge row
@@ -415,7 +426,12 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     stack_->setCurrentIndex(1);
     open_panel();
 
-    headline_label_->setText(article.headline);
+    // Render headline as a link to the article URL. Use rich-text escape on
+    // the headline so quote chars / ampersands don't break the markup.
+    headline_label_->setText(
+        QString("<a href=\"%1\" style=\"text-decoration:none;color:inherit;\">%2</a>")
+            .arg(article.link.toHtmlEscaped(), article.headline.toHtmlEscaped()));
+    headline_label_->setToolTip(article.link);
 
     // Priority badge
     QString pstr = services::priority_string(article.priority);
