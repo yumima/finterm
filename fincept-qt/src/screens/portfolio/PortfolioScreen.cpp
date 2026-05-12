@@ -36,6 +36,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <memory>
 
 namespace fincept::screens {
@@ -615,6 +616,12 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     if (blotter_)
         blotter_->set_sector_filter({});
 
+    // New portfolio = different holdings cohort. Drop the cached correlation
+    // key so the next summary triggers a fresh fetch_correlation. Benchmark
+    // history and risk-free rate are session-scoped (data isn't
+    // portfolio-specific), so don't reset those.
+    last_correlation_syms_.clear();
+
     // Find portfolio and update UI
     for (const auto& p : portfolios_) {
         if (p.id == id) {
@@ -659,29 +666,51 @@ void PortfolioScreen::on_summary_loaded(portfolio::PortfolioSummary summary) {
     if (txn_panel_)
         services::PortfolioService::instance().load_transactions(summary.portfolio.id, 50);
 
-    // Fetch real 30-day correlation for the sector panel
+    // Fetch real 30-day correlation for the sector panel — but only when
+    // the symbol set actually changed. The previous code re-spawned the
+    // Python correlation process on every 20-second refresh tick, even
+    // when holdings hadn't moved.
     if (!summary.holdings.isEmpty()) {
         QStringList syms;
+        syms.reserve(summary.holdings.size());
         for (const auto& h : summary.holdings)
             syms.append(h.symbol);
-        services::PortfolioService::instance().fetch_correlation(syms);
+        // Sorted comparison so reorder-only summary updates don't re-fetch.
+        QStringList syms_sorted = syms;
+        std::sort(syms_sorted.begin(), syms_sorted.end());
+        if (syms_sorted != last_correlation_syms_) {
+            last_correlation_syms_ = syms_sorted;
+            services::PortfolioService::instance().fetch_correlation(syms);
+        }
     }
 
-    // Fetch benchmark history for perf chart overlay. Use the portfolio's
-    // currency to pick a sensible default index (TSX for CAD, SPY for USD,
-    // FTSE for GBP, …). We also always fetch SPY itself because Beta in
-    // compute_metrics() regresses against SPY regardless of currency.
+    // Fetch benchmark history for perf chart overlay — once per benchmark
+    // per session. Use the portfolio's currency to pick a sensible default
+    // index (TSX for CAD, SPY for USD, FTSE for GBP, …). We also always
+    // fetch SPY because Beta in compute_metrics() regresses against SPY
+    // regardless of currency. The service-level cache makes repeat calls
+    // cheap, but skipping them outright here also saves the QString
+    // marshalling and signal dispatch on every refresh tick.
     {
         auto& svc = services::PortfolioService::instance();
         const QString bench = services::PortfolioService::default_benchmark_for_currency(
             summary.portfolio.currency);
-        svc.fetch_benchmark_history(bench, "1y");
-        if (bench != QStringLiteral("SPY"))
+        if (!fetched_benchmarks_.contains(bench)) {
+            fetched_benchmarks_.insert(bench);
+            svc.fetch_benchmark_history(bench, "1y");
+        }
+        if (bench != QStringLiteral("SPY") && !fetched_benchmarks_.contains(QStringLiteral("SPY"))) {
+            fetched_benchmarks_.insert(QStringLiteral("SPY"));
             svc.fetch_benchmark_history("SPY", "1y");
+        }
     }
 
-    // Fetch live risk-free rate (DGS10) for Sharpe computation — cached 24h
-    services::PortfolioService::instance().fetch_risk_free_rate();
+    // Fetch live risk-free rate (DGS10) for Sharpe computation — server
+    // caches 24h, so we only need to ask once per session.
+    if (!risk_free_fetched_) {
+        risk_free_fetched_ = true;
+        services::PortfolioService::instance().fetch_risk_free_rate();
+    }
 }
 
 void PortfolioScreen::on_summary_error(QString portfolio_id, QString /*error*/) {
@@ -791,6 +820,13 @@ void PortfolioScreen::request_refresh(bool force_fresh) {
         // The DataHub min_interval (2s) still rate-limits actual outbound
         // calls, so this is safe even on rapid tab switches.
         services::MarketDataService::instance().invalidate_quotes({});
+        // Reset debounce keys so user-initiated refresh actually re-runs the
+        // side-fetches even when the symbol set is unchanged. Timer-driven
+        // ticks (force_fresh=false) keep the debounce so we don't re-spawn
+        // the correlation Python process every 20 seconds.
+        last_correlation_syms_.clear();
+        fetched_benchmarks_.clear();
+        risk_free_fetched_ = false;
     }
     command_bar_->set_refreshing(true);
     services::PortfolioService::instance().refresh_summary(selected_id_);
