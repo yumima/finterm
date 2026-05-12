@@ -120,7 +120,6 @@ class PortfolioPerfChart : public QWidget {
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;
-    QPushButton* back_btn_ = nullptr;
 };
 
 } // namespace fincept::screens

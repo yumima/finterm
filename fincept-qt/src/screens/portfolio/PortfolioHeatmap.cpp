@@ -33,14 +33,29 @@ void PortfolioHeatmap::build_ui() {
     layout->setContentsMargins(8, 8, 8, 6);
     layout->setSpacing(5);
 
-    // Header: "HOLDINGS" title on its own row so the label always renders
-    // in full. The four mode pills (PNL/WT/DAY/AFT) live on a second row
-    // below — the pane caps at 220px wide and 110px (title) + 4×38px
-    // (pills) + spacing overflows that budget, which used to elide the
-    // title to "HOL" / overlap "INGS" onto "PNL".
-    auto* title = new QLabel("HOLDINGS");
+    // Header: clickable "PORTFOLIO" title on its own row. Clicking it
+    // deselects the current symbol and returns the right-pane chart/blotter
+    // to portfolio-level view — that's the affordance the former "← PORTFOLIO"
+    // back pill provided; the pane title now IS the home-view button, and
+    // list items below are drill-downs. (Title is also intentionally short
+    // and bold so the pane reads as a navigation column, not just a list.)
+    auto* title = new QPushButton(QStringLiteral("PORTFOLIO"));
+    title->setCursor(Qt::PointingHandCursor);
+    title->setFlat(true);
+    title->setToolTip(QStringLiteral("Click to view the full portfolio (clears any selected symbol)"));
     title->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("QPushButton { color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;"
+                "  background:transparent; border:0; padding:0; text-align:left; }"
+                "QPushButton:hover { color:%2; }")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+    connect(title, &QPushButton::clicked, this, [this]() {
+        if (!selected_symbol_.isEmpty()) {
+            selected_symbol_.clear();
+            update_detail();
+            rebuild_blocks();  // un-highlight selection
+        }
+        emit portfolio_view_requested();
+    });
     layout->addWidget(title);
 
     auto* mode_row = new QHBoxLayout;

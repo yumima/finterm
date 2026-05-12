@@ -156,10 +156,16 @@ void MarketDataService::refresh(const QStringList& topics) {
                 co["high"] = qd.high;
                 co["low"] = qd.low;
                 co["volume"] = qd.volume;
+                const QString payload = QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
+                // Two parallel keys: 30s freshness + 7d last-known cold-start
+                // fallback. CacheManager is SQLite-backed so both survive
+                // app restarts.
                 fincept::CacheManager::instance().put(
-                    "market:" + qd.symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact))),
+                    "market:" + qd.symbol, QVariant(payload),
                     kQuoteCacheTtlSec, "market_data");
+                fincept::CacheManager::instance().put(
+                    "market_last:" + qd.symbol, QVariant(payload),
+                    kQuoteLastKnownTtlSec, "market_data");
 
                 self->publish_quote_to_hub(qd);
                 ++quotes_ok;
@@ -380,10 +386,15 @@ void MarketDataService::flush_batch() {
                     o["high"] = q.high;
                     o["low"] = q.low;
                     o["volume"] = q.volume;
+                    const QString payload =
+                        QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
+                    // 30s freshness + 7d last-known cold-start fallback.
                     fincept::CacheManager::instance().put(
-                        "market:" + q.symbol,
-                        QVariant(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact))), kQuoteCacheTtlSec,
-                        "market_data");
+                        "market:" + q.symbol, QVariant(payload),
+                        kQuoteCacheTtlSec, "market_data");
+                    fincept::CacheManager::instance().put(
+                        "market_last:" + q.symbol, QVariant(payload),
+                        kQuoteLastKnownTtlSec, "market_data");
                 };
 
                 // Daemon's batch_quotes returns a flat list; PythonWorker

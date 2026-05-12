@@ -813,6 +813,14 @@ QWidget* PortfolioScreen::build_main_view() {
     // Left: Heatmap (220px)
     heatmap_ = new PortfolioHeatmap;
     connect(heatmap_, &PortfolioHeatmap::symbol_selected, this, &PortfolioScreen::on_symbol_selected);
+    // Heatmap pane's "PORTFOLIO" title doubles as a home-view affordance:
+    // clicking it deselects the symbol and returns the perf chart and any
+    // dependent panels to portfolio-level (whole-NAV) view.
+    connect(heatmap_, &PortfolioHeatmap::portfolio_view_requested, this, [this]() {
+        selected_symbol_.clear();
+        if (perf_chart_) perf_chart_->clear_focus_symbol();
+        if (blotter_)    blotter_->set_selected_symbol({});
+    });
     h_layout->addWidget(heatmap_);
 
     // Center: chart + sector (top), blotter (bottom)

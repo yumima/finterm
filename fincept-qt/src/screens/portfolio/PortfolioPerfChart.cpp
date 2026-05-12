@@ -138,20 +138,11 @@ void PortfolioPerfChart::build_ui() {
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;").arg(ui::colors::TEXT_SECONDARY()));
     header->addWidget(title_label_);
 
-    // ← BACK button: hidden until focus mode is entered. Reverts to portfolio NAV.
-    back_btn_ = new QPushButton(QStringLiteral("← PORTFOLIO"));
-    back_btn_->setFixedHeight(22);
-    back_btn_->setCursor(Qt::PointingHandCursor);
-    back_btn_->setStyleSheet(
-        QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                "  font-size:12px; font-weight:700; padding:0 8px; border-radius:2px; }"
-                "QPushButton:hover { color:%3; border-color:%3; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
-    back_btn_->setVisible(false);
-    connect(back_btn_, &QPushButton::clicked, this, [this]() { clear_focus_symbol(); });
-    header->addSpacing(8);
-    header->addWidget(back_btn_);
-
+    // The former "← PORTFOLIO" back pill lived here; it was removed because
+    // users couldn't tell what they were going back to. The left pane's
+    // clickable "PORTFOLIO" title (PortfolioHeatmap) is now the affordance:
+    // clicking it deselects the symbol and emits portfolio_view_requested,
+    // which PortfolioScreen routes into clear_focus_symbol() below.
     header->addStretch();
 
     for (const auto& p : kPeriods) {
@@ -371,8 +362,6 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
     if (title_label_)
         title_label_->setText(focus_symbol_);
-    if (back_btn_)
-        back_btn_->setVisible(true);
     emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     update_chart(); // renders loading placeholder until data lands
 }
@@ -386,8 +375,6 @@ void PortfolioPerfChart::clear_focus_symbol() {
     focus_data_loaded_ = false;
     if (title_label_)
         title_label_->setText(QStringLiteral("PERFORMANCE"));
-    if (back_btn_)
-        back_btn_->setVisible(false);
     update_chart();
 }
 

@@ -4,6 +4,7 @@
 #include "python/PythonRunner.h"
 #include "screens/futures/FuturesContracts.h"
 #include "screens/futures/FuturesQuoteCache.h"
+#include "services/util/DiskCache.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -1211,9 +1212,28 @@ void FuturesCotPanel::refresh() {
     if (fetch_in_flight_) return;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (last_failed_ms_ > 0 && (now - last_failed_ms_) < kFailureBackoffMs) return;
+
+    // Per-identifier disk cache: COT is weekly data, so a cached response is
+    // valid until the next CFTC publish (Friday afternoons). Render the cached
+    // rows immediately so re-opening a symbol after restart paints in <100ms,
+    // then run the live fetch in the background to overwrite.
+    static fincept::services::util::DiskCache cot_cache(QStringLiteral("futures_cot"));
+    QString safe_ident = ident;
+    for (auto& ch : safe_ident) if (!ch.isLetterOrNumber()) ch = QChar('_');
+    const QString cache_file = QStringLiteral("cot_") + safe_ident + QStringLiteral(".json");
+    const auto cached_doc = cot_cache.load(cache_file);
+    if (cached_doc.isObject()) {
+        const auto cached_arr = cached_doc.object().value("data").toArray();
+        if (!cached_arr.isEmpty()) {
+            set_status(QString("CFTC · %1 · cached").arg(sym));
+            render(cached_arr);
+        }
+    }
+
     fetch_in_flight_ = true;
     set_status("loading…");
-    show_placeholder(QString("Loading CFTC COT for %1…").arg(sym));
+    if (!cached_doc.isObject())
+        show_placeholder(QString("Loading CFTC COT for %1…").arg(sym));
 
     const quint64 my_gen = bump_gen();
     QPointer<FuturesCotPanel> self(this);
@@ -1256,6 +1276,13 @@ void FuturesCotPanel::refresh() {
             }
             self->set_status(QString("CFTC · %1").arg(sym));
             self->render(arr);
+            // Persist for the next cold-start. Cache file name is derived
+            // from the identifier (computed at the top of refresh()), so a
+            // user re-opening the same symbol later sees data instantly.
+            static fincept::services::util::DiskCache cot_cache_w(QStringLiteral("futures_cot"));
+            QString safe = cftc_identifier_for(sym);
+            for (auto& ch : safe) if (!ch.isLetterOrNumber()) ch = QChar('_');
+            cot_cache_w.save(QStringLiteral("cot_") + safe + QStringLiteral(".json"), doc);
         },
         /*stream*/ {}, /*timeout*/ 30'000);
 }

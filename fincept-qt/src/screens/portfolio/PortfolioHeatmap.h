@@ -27,6 +27,11 @@ class PortfolioHeatmap : public QWidget {
   signals:
     void symbol_selected(QString symbol);
     void mode_changed(portfolio::HeatmapMode mode);
+    // Emitted when the "PORTFOLIO" title in the pane header is clicked.
+    // Receivers (PortfolioScreen) clear any selected symbol and switch the
+    // right-pane chart/blotter back to portfolio-level view — same effect
+    // as the former "← PORTFOLIO" back pill.
+    void portfolio_view_requested();
     // Mirror PortfolioBlotter — same actions, same screen-level dialogs.
     void edit_transaction_requested(QString symbol);
     void delete_position_requested(QString symbol);

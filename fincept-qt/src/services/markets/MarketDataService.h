@@ -161,8 +161,17 @@ class MarketDataService : public QObject
 
     bool hub_registered_ = false;
 
-    // ── Caching — delegated to CacheManager ──
-    static constexpr int kQuoteCacheTtlSec = 30;
+    // ── Caching — delegated to CacheManager (SQLite-backed, so entries
+    // persist across app restarts). Two parallel keys per symbol:
+    //   "market:{sym}"      — 30s TTL, drives in-session freshness so the
+    //                          watchlist/dashboard doesn't re-hit yfinance
+    //                          on every redraw.
+    //   "market_last:{sym}" — 7d TTL, used only as a cold-start fallback so
+    //                          the user sees their last-known prices the
+    //                          instant the app launches while the live
+    //                          quote refresh runs in the background.
+    static constexpr int kQuoteCacheTtlSec     = 30;
+    static constexpr int kQuoteLastKnownTtlSec = 7 * 24 * 60 * 60;
 };
 
 } // namespace fincept::services
