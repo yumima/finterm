@@ -161,7 +161,10 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
         };
         const Action actions[] = {
             {"👤", "Create Account", "Register for full access"},
-            {"🔑", "Reset Password", "Recover your account"},
+            // "Reset Password" was removed in the localhost-only fork: there
+            // is no email-recovery flow. Users reset by deleting their local
+            // user (Login screen → Forgot PIN? Reset this user) and signing
+            // up again.
             {"📖", "Documentation", "Guides, tutorials & API ref"},
             {"🐛", "Report a Bug", "Open an issue on GitHub"},
         };
@@ -208,8 +211,6 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             // Wire known actions
             if (QString(a.label) == "Create Account")
                 connect(btn, &QPushButton::clicked, this, &HelpScreen::navigate_register);
-            if (QString(a.label) == "Reset Password")
-                connect(btn, &QPushButton::clicked, this, &HelpScreen::navigate_forgot_password);
         }
 
         vl->addLayout(grid);

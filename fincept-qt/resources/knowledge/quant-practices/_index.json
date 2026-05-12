@@ -39,9 +39,9 @@
       "aliases": ["data quality", "point in time", "survivorship bias"],
       "related": ["quant-research-workflow", "hypothesis-first", "backtesting-discipline"],
       "seen_in": [{"screen": "file_manager", "label": "Data ingest"}],
-      "actions": [],
+      "actions": [{"label": "Open File Manager", "screen": "file_manager", "ticker": ""}],
       "external_links": [
-        {"type": "reference", "source": "JF", "title": "Brown, Goetzmann, Ross — Survival (1992)", "url": "https://doi.org/10.1111/j.1540-6261.1995.tb05182.x"}
+        {"type": "reference", "source": "JF", "title": "Brown, Goetzmann, Ross (1995) — Survival", "url": "https://doi.org/10.1111/j.1540-6261.1995.tb05182.x"}
       ],
       "updated": "2026-05-11"
     },

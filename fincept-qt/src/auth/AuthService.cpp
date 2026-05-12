@@ -308,10 +308,10 @@ void AuthService::login_local(const QString& username, const QString& pin, Callb
 
 void AuthService::delete_local_user(const QString& username, Callback cb) {
     const QString u = username.toLower().trimmed();
-    // Delete per-user DB file first; if SQLite says no, we still try the row.
-    const QString path = user_db_path(u);
-    QFile::remove(path);
-
+    // Delete the SQL row first — that's the transactional bit. Only then
+    // remove the per-user DB file. If the file removal fails the orphaned
+    // file is harmless (no row references it); the reverse order would
+    // leave the row pointing at a missing DB file.
     QSqlQuery q(db_);
     q.prepare("DELETE FROM users WHERE username = ?");
     q.addBindValue(u);
@@ -319,6 +319,7 @@ void AuthService::delete_local_user(const QString& username, Callback cb) {
         cb({false, {}, "Could not delete user.", 500});
         return;
     }
+    QFile::remove(user_db_path(u));
     LOG_INFO("AuthService", "Deleted local user: " + u);
     cb({true, {}, {}, 200});
 }

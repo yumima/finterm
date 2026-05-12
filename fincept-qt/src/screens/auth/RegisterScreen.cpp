@@ -108,8 +108,11 @@ void RegisterScreen::build_form() {
     username_->setPlaceholderText(QStringLiteral("Username"));
     username_->setMaxLength(32);
     username_->setStyleSheet(input_style());
+    // Min length is enforced both here (so the field can't visually accept a
+    // single char that the handler will reject) and again in on_create() as
+    // a defense-in-depth check.
     username_->setValidator(new QRegularExpressionValidator(
-        QRegularExpression("^[a-zA-Z0-9_-]{1,32}$"), this));
+        QRegularExpression("^[a-zA-Z0-9_-]{2,32}$"), this));
 
     pin_ = new QLineEdit(panel);
     pin_->setPlaceholderText(QStringLiteral("PIN (4\xe2\x80\x936 digits)"));

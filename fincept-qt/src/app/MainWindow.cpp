@@ -1277,7 +1277,24 @@ void MainWindow::on_auth_state_changed() {
             fincept::trading::InstrumentService::instance().load_from_db_async("angelone");
             fincept::trading::InstrumentService::instance().load_from_db_async("groww");
         } else {
-            // Localhost-only fork: no paywall. Everyone goes to the dashboard.
+            // Localhost-only fork: no paywall. Honor the same PIN-gate
+            // guard as the paid branch — without it, on_auth_state_changed
+            // can briefly flash the dashboard for users whose PIN setup or
+            // unlock hasn't been cleared yet.
+            if (locked_ || !pin_gate_cleared_) {
+                LOG_WARN("MainWindow",
+                         QString("on_auth_state_changed (no-plan): shell would become visible while "
+                                 "locked=%1 gate_cleared=%2 — forcing lock screen")
+                             .arg(locked_).arg(pin_gate_cleared_));
+                if (auth::PinManager::instance().has_pin())
+                    lock_screen_->show_unlock();
+                else
+                    lock_screen_->show_setup();
+                locked_ = true;
+                set_shell_visible(false);
+                stack_->setCurrentIndex(3);
+                return;
+            }
             set_shell_visible(true);
             stack_->setCurrentIndex(1);
             WorkspaceManager::instance().load_last_workspace();
