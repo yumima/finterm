@@ -25,6 +25,7 @@ class InsiderWatchPanel;
 class PracticePanel;
 class SignalBuilderPanel;
 class CabinetPanel;
+class CompareView;
 }
 
 namespace fincept::power_trader {
@@ -71,6 +72,7 @@ class PowerTraderScreen : public QWidget {
     void show_error(const QString& msg);
     void show_member_drawer();
     void hide_member_drawer();
+    void show_onboarding_overlay();
     void refresh_all_panels();
 
     // ── Top bar ───────────────────────────────────────────────────────────────
@@ -92,6 +94,15 @@ class PowerTraderScreen : public QWidget {
     void load_watchlist();
     void save_watchlist();
 
+    // Ticker subscriptions — second axis of the "follow X for activity" UX.
+    // Persisted under power_trader/ticker_watchlist. TradesFeedPanel offers a
+    // right-click "Follow $X" on any ticker cell and a SUBS filter pill that
+    // restricts the feed to followed-member OR followed-ticker trades.
+    QSet<QString> ticker_watchlist_;
+    void load_ticker_watchlist();
+    void save_ticker_watchlist();
+    void toggle_ticker_watchlist(const QString& ticker);
+
     // ── Sidebar ───────────────────────────────────────────────────────────────
     QLineEdit*   member_search_ = nullptr;
     QListWidget* member_list_   = nullptr;
@@ -108,6 +119,7 @@ class PowerTraderScreen : public QWidget {
     screens::CabinetPanel*       cabinet_panel_    = nullptr;
     screens::SignalBuilderPanel* signal_panel_     = nullptr;
     screens::PracticePanel*      practice_panel_   = nullptr;
+    screens::CompareView*        compare_view_     = nullptr;
 
     // Signal Builder + Practice are folded into one tab with a sub-stack.
     // Index 0 = signal_panel_, index 1 = practice_panel_.

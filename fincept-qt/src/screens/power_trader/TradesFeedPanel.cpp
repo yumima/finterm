@@ -6,10 +6,15 @@
 #include "ui/components/SignalTooltip.h"
 #include "ui/theme/Theme.h"
 
+#include <QClipboard>
 #include <QDate>
+#include <QDesktopServices>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QMenu>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -132,6 +137,27 @@ void TradesFeedPanel::build_ui() {
     filter_layout->addWidget(date_to_);
 
     filter_layout->addStretch();
+
+    // SUBS pill — when active, restrict to trades by followed members OR for
+    // followed tickers. The two watchlists are pushed in by PowerTraderScreen.
+    subs_filter_ = new QPushButton(QStringLiteral("\xe2\x98\x86 SUBS"), this);
+    subs_filter_->setCheckable(true);
+    subs_filter_->setCursor(Qt::PointingHandCursor);
+    subs_filter_->setToolTip(QStringLiteral(
+        "Show only trades by followed members or for followed tickers.\n"
+        "Right-click a ticker in the table to follow it."));
+    subs_filter_->setStyleSheet(
+        QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                "  border-radius:3px; padding:4px 10px; font-size:12px;"
+                "  font-weight:700; letter-spacing:0.5px; }"
+                "QPushButton:hover { border:1px solid %4; color:%4; }"
+                "QPushButton:checked { background:rgba(217,119,6,0.18); color:%4;"
+                "  border:1px solid %4; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(),
+                 ui::colors::BORDER_MED(), ui::colors::AMBER()));
+    connect(subs_filter_, &QPushButton::toggled, this, &TradesFeedPanel::apply_filters);
+    filter_layout->addWidget(subs_filter_);
+
     layout->addWidget(filter_row);
 
     // Connect filter controls
@@ -212,6 +238,48 @@ void TradesFeedPanel::build_ui() {
             emit member_selected(id);
     });
 
+    // Right-click → "Open source filing" + ticker follow/unfollow. Provenance:
+    // every row is one click from the underlying eFD / FDS PTR (source URL on
+    // column 0 UserRole). Subscriptions: when the cursor is on the TICKER
+    // column (5) we also offer a Follow/Unfollow action — emitted upward so
+    // PowerTraderScreen owns the persistence.
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QTableWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+                const int row = table_->rowAt(pos.y());
+                if (row < 0) return;
+                const int col = table_->columnAt(pos.x());
+                auto* date_item = table_->item(row, 0);
+                auto* ticker_item = table_->item(row, 5);
+                const QString url    = date_item   ? date_item->data(Qt::UserRole).toString() : QString();
+                const QString ticker = ticker_item ? ticker_item->text() : QString();
+
+                QMenu menu(this);
+                QAction* open_act = nullptr;
+                QAction* copy_act = nullptr;
+                QAction* sub_act  = nullptr;
+                if (!url.isEmpty()) {
+                    open_act = menu.addAction(QStringLiteral("Open source filing \xe2\x86\x97"));
+                    copy_act = menu.addAction(QStringLiteral("Copy filing URL"));
+                }
+                if (col == 5 && !ticker.isEmpty()) {
+                    if (!menu.isEmpty()) menu.addSeparator();
+                    const bool followed = ticker_watchlist_.contains(ticker);
+                    sub_act = menu.addAction(followed
+                        ? QStringLiteral("Unfollow $%1").arg(ticker)
+                        : QStringLiteral("Follow $%1").arg(ticker));
+                }
+                if (menu.isEmpty()) return;
+                QAction* chosen = menu.exec(table_->viewport()->mapToGlobal(pos));
+                if (chosen == nullptr) return;
+                if (chosen == open_act)
+                    QDesktopServices::openUrl(QUrl(url));
+                else if (chosen == copy_act)
+                    QGuiApplication::clipboard()->setText(url);
+                else if (chosen == sub_act)
+                    emit ticker_subscription_toggled(ticker);
+            });
+
     layout->addWidget(table_);
 }
 
@@ -222,6 +290,20 @@ void TradesFeedPanel::set_trades(const QVector<power_trader::PoliticalTrade>& tr
 
 void TradesFeedPanel::set_selected_member(const QString& member_id) {
     selected_member_id_ = member_id;
+}
+
+void TradesFeedPanel::set_member_watchlist(const QSet<QString>& watched) {
+    member_watchlist_ = watched;
+    if (subs_filter_ && subs_filter_->isChecked())
+        apply_filters();
+}
+
+void TradesFeedPanel::set_ticker_watchlist(const QSet<QString>& tickers) {
+    ticker_watchlist_ = tickers;
+    // Always re-paint the table: the ticker star prefix and the SUBS filter
+    // both depend on this set, so a refresh keeps the visual in sync even
+    // when the SUBS pill is off.
+    apply_filters();
 }
 
 void TradesFeedPanel::set_available_committees(const QStringList& committees) {
@@ -263,6 +345,12 @@ void TradesFeedPanel::apply_filters() {
             continue;
         if (t.disclosure_date < from_date || t.disclosure_date > to_date)
             continue;
+        if (subs_filter_ && subs_filter_->isChecked()) {
+            const bool member_followed = member_watchlist_.contains(t.member_id);
+            const bool ticker_followed = ticker_watchlist_.contains(t.ticker);
+            if (!member_followed && !ticker_followed)
+                continue;
+        }
         visible.append(t);
     }
 
@@ -285,9 +373,14 @@ void TradesFeedPanel::populate_table(const QVector<power_trader::PoliticalTrade>
             table_->setItem(r, col, item);
         };
 
-        // 0 DISCLOSED
+        // 0 DISCLOSED — stash the source filing URL on this column's UserRole
+        // so the row-level "Open source filing" context-menu can find it
+        // without an extra trade lookup. Provenance: every row is one click
+        // from the underlying eFD / FDS / FDR filing.
         mk(0, t.disclosure_date.toString(QStringLiteral("yyyy-MM-dd")),
            ui::colors::TEXT_SECONDARY);
+        if (auto* date_item = table_->item(r, 0))
+            date_item->setData(Qt::UserRole, t.source_url);
 
         // 1 MEMBER — store member_id in UserRole
         auto* name_item = new QTableWidgetItem(t.member_name);
@@ -308,8 +401,14 @@ void TradesFeedPanel::populate_table(const QVector<power_trader::PoliticalTrade>
         mk(4, t.committee_relevance.isEmpty() ? QStringLiteral("—") : t.committee_relevance,
            t.committee_relevance.isEmpty() ? ui::colors::TEXT_TERTIARY : ui::colors::AMBER);
 
-        // 5 TICKER
-        mk(5, t.ticker);
+        // 5 TICKER — star prefix when ticker is on the subscription list
+        {
+            const bool followed = ticker_watchlist_.contains(t.ticker);
+            const QString display = followed
+                ? QStringLiteral("\xe2\x98\x85 ") + t.ticker
+                : t.ticker;
+            mk(5, display, followed ? ui::colors::AMBER : ui::colors::TEXT_PRIMARY);
+        }
 
         // 6 B/S — color coded
         const bool is_buy  = t.direction == power_trader::TradeDirection::Buy;

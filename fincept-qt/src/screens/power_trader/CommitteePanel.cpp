@@ -8,9 +8,14 @@
 #include "ui/components/SignalTooltip.h"
 #include "ui/theme/Theme.h"
 
+#include <QClipboard>
+#include <QDesktopServices>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QMenu>
 #include <QProgressBar>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -165,6 +170,29 @@ void CommitteePanel::build_ui() {
             auto* item = trade_table_->item(row, 0);
             if (item) emit member_selected(item->data(Qt::UserRole).toString());
         });
+
+        // Right-click → "Open source filing" — same provenance pattern as the
+        // main trades feed. Source URL is stashed on column 0's UserRole+1 so
+        // it can coexist with the member_id stashed on UserRole.
+        trade_table_->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(trade_table_, &QTableWidget::customContextMenuRequested, this,
+                [this](const QPoint& pos) {
+                    const int row = trade_table_->rowAt(pos.y());
+                    if (row < 0) return;
+                    auto* name_item = trade_table_->item(row, 0);
+                    if (!name_item) return;
+                    const QString url = name_item->data(Qt::UserRole + 1).toString();
+                    if (url.isEmpty()) return;
+                    QMenu menu(this);
+                    auto* open_act = menu.addAction(QStringLiteral("Open source filing \xe2\x86\x97"));
+                    auto* copy_act = menu.addAction(QStringLiteral("Copy filing URL"));
+                    QAction* chosen = menu.exec(trade_table_->viewport()->mapToGlobal(pos));
+                    if (chosen == open_act)
+                        QDesktopServices::openUrl(QUrl(url));
+                    else if (chosen == copy_act)
+                        QGuiApplication::clipboard()->setText(url);
+                });
+
         rl->addWidget(trade_table_, 1);
     }
 
@@ -259,6 +287,7 @@ void CommitteePanel::show_committee(const power_trader::CommitteeGroup& g) {
         auto* name_item = new QTableWidgetItem(t.member_name);
         name_item->setForeground(QColor(ui::colors::CYAN()));
         name_item->setData(Qt::UserRole, t.member_id);
+        name_item->setData(Qt::UserRole + 1, t.source_url);
         name_item->setFlags(name_item->flags() & ~Qt::ItemIsEditable);
         trade_table_->setItem(r, 0, name_item);
 

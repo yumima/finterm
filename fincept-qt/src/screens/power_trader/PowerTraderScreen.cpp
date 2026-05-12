@@ -3,6 +3,7 @@
 
 #include "screens/power_trader/CabinetPanel.h"
 #include "screens/power_trader/CommitteePanel.h"
+#include "screens/power_trader/CompareView.h"
 #include "screens/power_trader/DataSourceDialog.h"
 #include "screens/power_trader/InsiderWatchPanel.h"
 #include "screens/power_trader/PracticePanel.h"
@@ -18,6 +19,7 @@
 #include <QButtonGroup>
 #include <QDesktopServices>
 #include <QEvent>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QListWidgetItem>
 #include <QMenu>
@@ -25,6 +27,7 @@
 #include <QShortcut>
 #include <QShowEvent>
 #include <QStringList>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -32,6 +35,7 @@ namespace fincept::power_trader {
 
 PowerTraderScreen::PowerTraderScreen(QWidget* parent) : QWidget(parent) {
     load_watchlist();
+    load_ticker_watchlist();
     build_ui();
     auto& svc = PowerTraderService::instance();
     connect(&svc, &PowerTraderService::data_loaded,    this, &PowerTraderScreen::on_data_loaded);
@@ -50,6 +54,15 @@ void PowerTraderScreen::showEvent(QShowEvent* e) {
         shown_key_dialog_ = true;
         DataSourceDialog dlg(this);
         dlg.exec();  // ignore return — both Save and Skip are valid paths
+    }
+
+    // First-run onboarding overlay — show once, then never again. Flag is
+    // persisted under QSettings power_trader/onboarded.
+    static bool shown_onboarding_ = false;
+    if (!shown_onboarding_ &&
+        !QSettings().value(QStringLiteral("power_trader/onboarded"), false).toBool()) {
+        shown_onboarding_ = true;
+        QTimer::singleShot(150, this, [this]() { show_onboarding_overlay(); });
     }
 
     if (!PowerTraderService::instance().is_loaded()) {
@@ -75,15 +88,85 @@ void PowerTraderScreen::build_ui() {
 
     stack_ = new QStackedWidget;
 
-    // Page 0 — loading
+    // Page 0 — skeleton-style loading. Mirrors the production layout shape
+    // (sidebar column, tab strip, content grid) with muted placeholder blocks
+    // and a subtle pulse animation so the wait is less jarring than a bare
+    // "Loading…" label. The Senate scrape can take 30–180s; the visual cue
+    // helps users understand the screen is working, not frozen.
     auto* loading_page = new QWidget;
+    loading_page->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
     {
-        auto* ll = new QVBoxLayout(loading_page);
-        loading_lbl_ = new QLabel("Loading congressional trade data…");
-        loading_lbl_->setAlignment(Qt::AlignCenter);
+        auto* outer = new QVBoxLayout(loading_page);
+        outer->setContentsMargins(0, 0, 0, 0);
+        outer->setSpacing(0);
+
+        // Faux tab strip
+        auto* tabs = new QWidget(loading_page);
+        tabs->setFixedHeight(36);
+        tabs->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+        auto* tl = new QHBoxLayout(tabs);
+        tl->setContentsMargins(8, 8, 8, 0);
+        tl->setSpacing(6);
+        for (int i = 0; i < 7; ++i) {
+            auto* placeholder = new QWidget(tabs);
+            placeholder->setFixedSize(80, 22);
+            placeholder->setStyleSheet(
+                QString("background:%1; border-radius:2px;").arg(ui::colors::BG_RAISED()));
+            tl->addWidget(placeholder);
+        }
+        tl->addStretch();
+        outer->addWidget(tabs);
+
+        // Faux sidebar + content
+        auto* row = new QHBoxLayout;
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(0);
+
+        // Sidebar shape
+        auto* side = new QWidget(loading_page);
+        side->setFixedWidth(240);
+        side->setStyleSheet(QString("background:%1; border-right:1px solid %2;")
+                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+        auto* sl = new QVBoxLayout(side);
+        sl->setContentsMargins(10, 10, 10, 10);
+        sl->setSpacing(8);
+        for (int i = 0; i < 12; ++i) {
+            auto* line = new QWidget(side);
+            line->setFixedHeight(18);
+            line->setStyleSheet(
+                QString("background:%1; border-radius:2px;").arg(ui::colors::BG_RAISED()));
+            sl->addWidget(line);
+        }
+        sl->addStretch();
+        row->addWidget(side);
+
+        // Content area shape
+        auto* content = new QWidget(loading_page);
+        content->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
+        auto* cl = new QVBoxLayout(content);
+        cl->setContentsMargins(24, 24, 24, 24);
+        cl->setSpacing(14);
+
+        loading_lbl_ = new QLabel(
+            QStringLiteral("Fetching congressional disclosures from Senate eFD + House FDS\xe2\x80\xa6\n"
+                           "Cold start: 30\xe2\x80\x9360 seconds. Warm cache: instant."));
+        loading_lbl_->setAlignment(Qt::AlignLeft);
         loading_lbl_->setStyleSheet(
-            QString("color:%1; font-size:13px;").arg(ui::colors::TEXT_SECONDARY()));
-        ll->addStretch(); ll->addWidget(loading_lbl_); ll->addStretch();
+            QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        cl->addWidget(loading_lbl_);
+
+        for (int i = 0; i < 6; ++i) {
+            auto* bar = new QWidget(content);
+            bar->setFixedHeight(40);
+            bar->setStyleSheet(
+                QString("background:%1; border-radius:2px;").arg(ui::colors::BG_SURFACE()));
+            cl->addWidget(bar);
+        }
+        cl->addStretch();
+        row->addWidget(content, 1);
+
+        outer->addLayout(row, 1);
     }
     stack_->addWidget(loading_page);
 
@@ -246,12 +329,21 @@ void PowerTraderScreen::build_ui() {
             }
             tab_widget_->addTab(sb_practice_tab_, "Signal Builder");
 
+            compare_view_ = new screens::CompareView;
+            tab_widget_->addTab(compare_view_, "Compare");
+            connect(compare_view_, &screens::CompareView::member_selected,
+                    this, &PowerTraderScreen::on_member_selected);
+
             connect(overview_panel_,  &screens::OverviewPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(rankings_panel_,  &screens::RankingsPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(feed_panel_,      &screens::TradesFeedPanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
+            connect(feed_panel_,      &screens::TradesFeedPanel::ticker_subscription_toggled,
+                    this, &PowerTraderScreen::toggle_ticker_watchlist);
+            feed_panel_->set_member_watchlist(watchlist_);
+            feed_panel_->set_ticker_watchlist(ticker_watchlist_);
             connect(committee_panel_, &screens::CommitteePanel::member_selected,
                     this, &PowerTraderScreen::on_member_selected);
             connect(insider_panel_,   &screens::InsiderWatchPanel::member_selected,
@@ -564,11 +656,18 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
                 if (mid.isEmpty()) return;
                 QMenu menu(this);
                 const bool watched = watchlist_.contains(mid);
-                QAction* act = menu.addAction(
+                QAction* watch_act = menu.addAction(
                     watched ? QStringLiteral("Remove from watchlist")
                             : QStringLiteral("Add to watchlist"));
-                if (menu.exec(member_list_->viewport()->mapToGlobal(pos)) == act)
+                QAction* compare_act = menu.addAction(QStringLiteral("Add to Compare"));
+                QAction* chosen = menu.exec(member_list_->viewport()->mapToGlobal(pos));
+                if (chosen == watch_act) {
                     toggle_watchlist(mid);
+                } else if (chosen == compare_act && compare_view_) {
+                    compare_view_->add_member(mid);
+                    if (tab_widget_)
+                        tab_widget_->setCurrentWidget(compare_view_);
+                }
             });
     vl->addWidget(member_list_, 1);
     return sidebar;
@@ -765,6 +864,8 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
     insider_panel_  ->set_data(watch_list);
     signal_panel_   ->set_data(filtered);
     practice_panel_ ->set_data(filtered);
+    if (compare_view_)
+        compare_view_->set_summary(filtered);
 
     // Pre-select highest-alpha member on first load (from the filtered set,
     // so a SENATE filter selects a senator rather than someone hidden from
@@ -840,6 +941,8 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     insider_panel_  ->set_data(watch);
     signal_panel_   ->set_data(filtered);
     practice_panel_ ->set_data(filtered);
+    if (compare_view_)
+        compare_view_->set_summary(filtered);
 }
 
 void PowerTraderScreen::on_range_changed(int days) {
@@ -849,6 +952,84 @@ void PowerTraderScreen::on_range_changed(int days) {
     if (days == PowerTraderService::instance().days_back()) return;
     show_loading();
     PowerTraderService::instance().set_days_back(days);
+}
+
+// ── Onboarding overlay (first-run only) ──────────────────────────────────────
+
+void PowerTraderScreen::show_onboarding_overlay() {
+    auto* overlay = new QFrame(this);
+    overlay->setObjectName(QStringLiteral("powerTraderOnboardingOverlay"));
+    overlay->setStyleSheet(
+        QString("QFrame#powerTraderOnboardingOverlay {"
+                "  background:rgba(8,8,8,0.85); }"
+                "QLabel { background:transparent; }")
+            .arg(ui::colors::BG_BASE()));
+    overlay->setGeometry(0, 0, width(), height());
+    overlay->raise();
+
+    auto* card = new QFrame(overlay);
+    card->setObjectName(QStringLiteral("powerTraderOnboardingCard"));
+    card->setStyleSheet(
+        QString("QFrame#powerTraderOnboardingCard {"
+                "  background:%1; border:2px solid %2; border-radius:4px; }"
+                "QLabel { background:transparent; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER()));
+    card->setFixedSize(520, 360);
+
+    auto place_card = [overlay, card]() {
+        card->move((overlay->width()  - card->width())  / 2,
+                   (overlay->height() - card->height()) / 2);
+    };
+    place_card();
+
+    auto* vl = new QVBoxLayout(card);
+    vl->setContentsMargins(24, 22, 24, 22);
+    vl->setSpacing(12);
+
+    auto* title = new QLabel(QStringLiteral("WELCOME TO POWER TRADER"), card);
+    title->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700;"
+                                 " letter-spacing:2px;").arg(ui::colors::AMBER()));
+    vl->addWidget(title);
+
+    auto* body = new QLabel(card);
+    body->setTextFormat(Qt::RichText);
+    body->setWordWrap(true);
+    body->setStyleSheet(QString("color:%1; font-size:12px; line-height:1.4;")
+                            .arg(ui::colors::TEXT_PRIMARY()));
+    body->setText(QStringLiteral(
+        "Tracks U.S. Congressional stock disclosures filed under the STOCK Act "
+        "(2012) and Cabinet OGE Form 278 holdings.<br/><br/>"
+
+        "<b>How to use it</b><br/>"
+        "&nbsp;&bull; Pick a chamber via the <b>VIEW</b> filter (ALL / SENATE / HOUSE / CABINET).<br/>"
+        "&nbsp;&bull; Pick a time window via <b>RANGE</b> (30d / 90d / 1y / 2y).<br/>"
+        "&nbsp;&bull; Click a member in the sidebar to open their detail drawer.<br/>"
+        "&nbsp;&bull; Right-click a member to add them to your <b>WATCHLIST</b>.<br/>"
+        "&nbsp;&bull; Hover any (est.) value to see how it was modelled.<br/><br/>"
+
+        "<i>All trade values are estimates from disclosed amount ranges. "
+        "Educational / informational use only — not investment advice.</i>"));
+    vl->addWidget(body, 1);
+
+    auto* btn_row = new QHBoxLayout;
+    btn_row->addStretch();
+    auto* got_it = new QPushButton(QStringLiteral("GOT IT"), card);
+    got_it->setFixedSize(110, 30);
+    got_it->setCursor(Qt::PointingHandCursor);
+    got_it->setStyleSheet(
+        QString("QPushButton{background:%1; color:%2; border:none; border-radius:2px;"
+                " font-size:12px; font-weight:700; letter-spacing:1px;}"
+                "QPushButton:hover{background:%3;}")
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER_DIM()));
+    btn_row->addWidget(got_it);
+    vl->addLayout(btn_row);
+
+    connect(got_it, &QPushButton::clicked, this, [overlay]() {
+        QSettings().setValue(QStringLiteral("power_trader/onboarded"), true);
+        overlay->deleteLater();
+    });
+
+    overlay->show();
 }
 
 // ── Watchlist (per-user follows, persisted across sessions) ──────────────────
@@ -875,6 +1056,31 @@ void PowerTraderScreen::toggle_watchlist(const QString& member_id) {
     // Re-render sidebar to update star markers and (if watchlist filter is
     // active) the visible subset.
     populate_member_list(PowerTraderService::instance().filtered_summary(active_body_).members);
+    if (feed_panel_)
+        feed_panel_->set_member_watchlist(watchlist_);
+}
+
+void PowerTraderScreen::load_ticker_watchlist() {
+    const QStringList syms = QSettings()
+        .value(QStringLiteral("power_trader/ticker_watchlist")).toStringList();
+    ticker_watchlist_ = QSet<QString>(syms.begin(), syms.end());
+}
+
+void PowerTraderScreen::save_ticker_watchlist() {
+    QStringList syms(ticker_watchlist_.begin(), ticker_watchlist_.end());
+    syms.sort();
+    QSettings().setValue(QStringLiteral("power_trader/ticker_watchlist"), syms);
+}
+
+void PowerTraderScreen::toggle_ticker_watchlist(const QString& ticker) {
+    if (ticker.isEmpty()) return;
+    if (ticker_watchlist_.contains(ticker))
+        ticker_watchlist_.remove(ticker);
+    else
+        ticker_watchlist_.insert(ticker);
+    save_ticker_watchlist();
+    if (feed_panel_)
+        feed_panel_->set_ticker_watchlist(ticker_watchlist_);
 }
 
 void PowerTraderScreen::on_watchlist_filter_toggled(bool /*only_watched*/) {

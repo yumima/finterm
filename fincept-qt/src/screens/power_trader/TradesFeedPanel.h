@@ -5,6 +5,8 @@
 #include <QComboBox>
 #include <QDateEdit>
 #include <QLineEdit>
+#include <QPushButton>
+#include <QSet>
 #include <QTableWidget>
 #include <QWidget>
 
@@ -20,8 +22,16 @@ class TradesFeedPanel : public QWidget {
     void set_selected_member(const QString& member_id);
     void set_available_committees(const QStringList& committees);
 
+    // Subscriptions: trades feed can highlight + filter to "followed" members
+    // (member watchlist) and "followed" tickers. The two sets are owned by
+    // PowerTraderScreen and pushed in via these setters; the SUBS pill in
+    // this panel's filter row narrows visible rows to subscribed entities.
+    void set_member_watchlist(const QSet<QString>& watched);
+    void set_ticker_watchlist(const QSet<QString>& tickers);
+
   signals:
     void member_selected(QString member_id);
+    void ticker_subscription_toggled(QString ticker);
 
   private:
     void build_ui();
@@ -34,10 +44,13 @@ class TradesFeedPanel : public QWidget {
     QComboBox*   committee_filter_ = nullptr;
     QDateEdit*   date_from_        = nullptr;
     QDateEdit*   date_to_          = nullptr;
+    QPushButton* subs_filter_      = nullptr;  // SUBS toggle pill
     QTableWidget* table_           = nullptr;
 
     QVector<power_trader::PoliticalTrade> trades_;
     QString selected_member_id_;
+    QSet<QString> member_watchlist_;
+    QSet<QString> ticker_watchlist_;
 };
 
 } // namespace fincept::screens
