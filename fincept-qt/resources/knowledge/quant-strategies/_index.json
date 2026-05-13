@@ -3,7 +3,7 @@
   "category": {
     "id": "quant-strategies",
     "label": "Strategies",
-    "description": "Strategy archetypes the literature has identified again and again: mean reversion, trend following, pairs / stat-arb, volatility, and portfolio construction across them. Each entry includes the original empirical evidence and the in-app screen to prototype it.",
+    "description": "Strategy archetypes the literature has identified again and again, plus a complete asset-class catalogue drawn from Kakushadze & Serur (2018) and the broader literature: mean reversion, trend following, pairs / stat-arb, volatility, portfolio construction, FX (carry, dollar carry, momentum-carry combo, triangular arb), fixed income (curve positioning, immunization, butterflies, curve spreads, factor investing, CDS basis and swap-spread arbitrage), and commodities (roll yield, hedging pressure, skewness, value, momentum). Each entry includes the original empirical evidence and the in-app screen to prototype it.",
     "order": 75
   },
   "entries": [
@@ -151,6 +151,914 @@
         {"type": "reference", "source": "AQR", "title": "Asness, Frazzini, Pedersen — Leverage Aversion and Risk Parity", "url": "https://www.aqr.com/Insights/Research/Journal-Article/Leverage-Aversion-and-Risk-Parity"}
       ],
       "updated": "2026-05-11"
+    },
+    {
+      "id": "fx-carry-trade",
+      "title": "FX Carry Trade",
+      "subtitle": "Borrow low-rate, invest high-rate. The forward premium puzzle (Fama 1984), the HML-Carry construction (Lustig-Roussanov-Verdelhan 2011), and the crash-risk story (Brunnermeier-Nagel-Pedersen 2008) — why the trade pays a premium and why it occasionally gives years back in months.",
+      "body": "quant-strategies/fx-carry-trade.md",
+      "difficulty": "intermediate",
+      "tags": ["fx", "carry", "uirp", "forward premium puzzle", "hml-carry"],
+      "aliases": ["currency carry", "fx carry", "hml carry", "carry trade"],
+      "related": ["fx-dollar-carry", "fx-momentum-carry-combo", "strategy-patterns", "trend-following"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — FX carry template"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "RFS", "title": "Lustig, Roussanov, Verdelhan (2011) — Common Risk Factors in Currency Markets", "url": "https://doi.org/10.1093/rfs/hhr068"},
+        {"type": "reference", "source": "NBER", "title": "Brunnermeier, Nagel, Pedersen (2008) — Carry Trades and Currency Crashes", "url": "https://www.nber.org/papers/w14473"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §8.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fx-dollar-carry",
+      "title": "Dollar Carry Trade",
+      "subtitle": "A directional USD bet driven by the average forward discount across foreign currencies (Lustig-Roussanov-Verdelhan 2014). Long all foreign forwards when foreign rates exceed US rates on average; short when the reverse. A time-series carry signal that complements the cross-sectional HML-carry.",
+      "body": "quant-strategies/fx-dollar-carry.md",
+      "difficulty": "intermediate",
+      "tags": ["fx", "carry", "dollar", "usd", "lustig-roussanov-verdelhan"],
+      "aliases": ["dollar carry", "average forward discount", "usd carry"],
+      "related": ["fx-carry-trade", "fx-momentum-carry-combo", "strategy-patterns"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — dollar carry template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Lustig, Roussanov, Verdelhan (2014) — Countercyclical Currency Risk Premia", "url": "https://doi.org/10.1016/j.jfineco.2013.12.005"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §8.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fx-momentum-carry-combo",
+      "title": "FX Momentum + Carry Combo",
+      "subtitle": "Minimum-variance blending of FX carry and FX trend signals. Two roughly uncorrelated return streams combined into one book — the two-asset Markowitz solution applied to strategy returns. The crash months of carry are partially offset by trend's defensive positioning.",
+      "body": "quant-strategies/fx-momentum-carry-combo.md",
+      "difficulty": "intermediate",
+      "tags": ["fx", "carry", "momentum", "combo", "min-variance", "amp"],
+      "aliases": ["carry momentum blend", "fx multi-strategy", "value and momentum everywhere"],
+      "related": ["fx-carry-trade", "fx-dollar-carry", "trend-following", "portfolio-construction"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — FX combo template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Asness, Moskowitz, Pedersen (2013) — Value and Momentum Everywhere", "url": "https://doi.org/10.1111/jofi.12021"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §8.4", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fx-triangular-arbitrage",
+      "title": "FX Triangular Arbitrage",
+      "subtitle": "The textbook arbitrage: if A→B→C→A loop produces more than you started, take the gap. In practice an HFT trade in major pairs (median opportunity lifetime < 1 second per Akram-Rime-Sarno 2008); a slower, real trade in EM crosses. Mostly useful to understand why FX spreads are tight.",
+      "body": "quant-strategies/fx-triangular-arbitrage.md",
+      "difficulty": "advanced",
+      "tags": ["fx", "arbitrage", "triangular", "hft", "microstructure"],
+      "aliases": ["triangular arb", "fx arbitrage", "currency arbitrage"],
+      "related": ["fx-carry-trade", "strategy-patterns"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting — triangular arb cost simulation"}
+      ],
+      "actions": [],
+      "external_links": [
+        {"type": "reference", "source": "JIE", "title": "Akram, Rime, Sarno (2008) — Arbitrage in the FX Market", "url": "https://doi.org/10.1016/j.jinteco.2008.07.004"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §8.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-yield-curve-positioning",
+      "title": "Yield Curve Positioning — Bullets, Barbells, Ladders, Rolling Down",
+      "subtitle": "Four directional bond-portfolio structures across maturities. Bullets concentrate at one point; barbells maximise convexity at a yield cost; ladders smooth reinvestment risk; rolling-down captures the carry from aging bonds on a steep upward-sloping curve. Same instruments, very different curve views.",
+      "body": "quant-strategies/fi-yield-curve-positioning.md",
+      "difficulty": "intermediate",
+      "tags": ["fixed income", "duration", "convexity", "bullet", "barbell", "ladder", "roll-down"],
+      "aliases": ["bond portfolio structure", "bullet barbell ladder", "rolling down the curve"],
+      "related": ["fi-bond-immunization", "fi-butterflies", "fi-curve-spreads", "fi-bond-factors"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio — bond positioning"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — curve-positioning template"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FAJ", "title": "Grantier (1988) — Convexity and Bond Performance", "url": "https://doi.org/10.2469/faj.v44.n6.79"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.2-5.4, §5.12", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-bond-immunization",
+      "title": "Bond Immunization",
+      "subtitle": "Match a bond portfolio's duration (and ideally convexity) to a future liability's horizon so that parallel rate shifts hurt assets and liabilities equally. Redington (1952), Fisher-Weil (1971), and the foundation of liability-driven investing (LDI) for pensions and insurers.",
+      "body": "quant-strategies/fi-bond-immunization.md",
+      "difficulty": "intermediate",
+      "tags": ["fixed income", "immunization", "duration matching", "ldi", "ala", "redington"],
+      "aliases": ["duration matching", "liability-driven investing", "ldi", "asset-liability management"],
+      "related": ["fi-yield-curve-positioning", "fi-butterflies", "portfolio-construction"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio — immunization diagnostics"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — immunization template"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JIA", "title": "Redington (1952) — Review of the Principles of Life Office Valuations", "url": "https://www.actuaries.org.uk/documents/review-principles-life-office-valuations"},
+        {"type": "reference", "source": "JB", "title": "Fisher & Weil (1971) — Coping with the Risk of Interest-Rate Fluctuations", "url": "https://doi.org/10.1086/295402"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-butterflies",
+      "title": "Bond Butterflies — Curvature Trades",
+      "subtitle": "Three-maturity duration-neutral positions (long wings / short body, or vice versa) that isolate the curvature of the yield curve. Four variants: dollar-duration-neutral, fifty-fifty, regression-weighted, maturity-weighted. PC3 of the bond-return decomposition.",
+      "body": "quant-strategies/fi-butterflies.md",
+      "difficulty": "advanced",
+      "tags": ["fixed income", "butterfly", "curvature", "pc3", "litterman-scheinkman"],
+      "aliases": ["bond butterfly", "fifty-fifty butterfly", "regression butterfly", "curvature trade"],
+      "related": ["fi-curve-spreads", "fi-yield-curve-positioning", "fi-bond-immunization"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — butterfly templates"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JPM", "title": "Grieves (1999) — Butterfly Trades", "url": "https://doi.org/10.3905/jpm.1999.319741"},
+        {"type": "reference", "source": "JFI", "title": "Litterman & Scheinkman (1991) — Common Factors Affecting Bond Returns", "url": "https://doi.org/10.3905/jfi.1991.692347"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.6-5.8", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-curve-spreads",
+      "title": "Yield Curve Spreads — Flatteners and Steepeners",
+      "subtitle": "Directional bets on the slope of the curve. Long 2s10s steepener when expecting Fed cuts; short the spread when expecting hikes. PC2 of bond returns, the watched recession indicator (Estrella-Mishkin), and the canonical macro-rates trade.",
+      "body": "quant-strategies/fi-curve-spreads.md",
+      "difficulty": "intermediate",
+      "tags": ["fixed income", "curve", "flattener", "steepener", "slope", "pc2", "recession indicator"],
+      "aliases": ["curve trade", "2s10s", "yield curve spread", "flattener steepener"],
+      "related": ["fi-butterflies", "fi-yield-curve-positioning", "fi-bond-factors"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — curve spread template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Estrella & Hardouvelis (1991) — The Term Structure as a Predictor of Real Economic Activity", "url": "https://doi.org/10.1111/j.1540-6261.1991.tb02683.x"},
+        {"type": "reference", "source": "RES", "title": "Estrella & Mishkin (1998) — Predicting U.S. Recessions", "url": "https://doi.org/10.1162/003465398557320"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.13", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-bond-factors",
+      "title": "Bond Factor Investing — Low-Risk, Value, Carry",
+      "subtitle": "Equity-style factor investing in corporate and Treasury bonds. Low-risk anomaly (short-duration, high-rated bonds outperform on risk-adjusted basis), value (bonds with wider-than-fair-modelled spreads), and carry (yield plus roll-down). Houweling-van Vundert (2017) is the synthesis.",
+      "body": "quant-strategies/fi-bond-factors.md",
+      "difficulty": "advanced",
+      "tags": ["fixed income", "factor investing", "low-risk", "value", "carry", "houweling"],
+      "aliases": ["bond factors", "corporate bond factors", "low-risk anomaly bonds"],
+      "related": ["fi-yield-curve-positioning", "fi-credit-arbitrage", "fx-carry-trade", "commodity-roll-yield"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — bond factor template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FAJ", "title": "Houweling & van Vundert (2017) — Factor Investing in the Corporate Bond Market", "url": "https://doi.org/10.2469/faj.v73.n2.1"},
+        {"type": "reference", "source": "JFE", "title": "Frazzini & Pedersen (2014) — Betting Against Beta", "url": "https://doi.org/10.1016/j.jfineco.2013.10.005"},
+        {"type": "reference", "source": "JFE", "title": "Koijen, Moskowitz, Pedersen, Vrugt (2018) — Carry", "url": "https://doi.org/10.1016/j.jfineco.2017.11.002"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.9-5.11", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "fi-credit-arbitrage",
+      "title": "Credit Arbitrage — CDS Basis and Swap-Spread",
+      "subtitle": "Two classic fixed-income 'arbitrages' that are really compensation for funding risk. CDS basis arb (bond + protection = synthetic risk-free) and swap-spread arb (swap rate vs Treasury yield financed at repo). Both made huge profits — until 2008 broke the financing.",
+      "body": "quant-strategies/fi-credit-arbitrage.md",
+      "difficulty": "advanced",
+      "tags": ["fixed income", "credit", "cds", "swap spread", "basis", "arbitrage"],
+      "aliases": ["cds basis arbitrage", "swap spread arbitrage", "credit arb", "fixed-income arb"],
+      "related": ["fi-bond-factors", "fi-curve-spreads", "strategy-patterns"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting — fixed-income arb with funding shocks"}
+      ],
+      "actions": [],
+      "external_links": [
+        {"type": "reference", "source": "JoT", "title": "Choudhry (2007) — Trading the CDS Basis", "url": "https://doi.org/10.3905/jot.2007.688977"},
+        {"type": "reference", "source": "RFS", "title": "Duarte, Longstaff, Yu (2006) — Risk and Return in Fixed-Income Arbitrage", "url": "https://doi.org/10.1093/rfs/hhl026"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §5.14-5.15", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "commodity-roll-yield",
+      "title": "Commodity Roll Yield",
+      "subtitle": "The unique-to-commodities return source: rolling long positions in backwardated curves earns positive yield, rolling in contango bleeds. Keynes's normal backwardation, the theory of storage, and the cross-sectional long-backwardation / short-contango premium (Erb-Harvey 2006, Gorton-Rouwenhorst 2006).",
+      "body": "quant-strategies/commodity-roll-yield.md",
+      "difficulty": "intermediate",
+      "tags": ["commodities", "roll yield", "backwardation", "contango", "term structure", "carry"],
+      "aliases": ["commodity carry", "roll return", "backwardation premium", "term structure premium"],
+      "related": ["commodity-hedging-pressure", "commodity-value-momentum", "commodity-skewness-premium", "fx-carry-trade"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — term structure curves"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — roll-yield template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "FAJ", "title": "Erb & Harvey (2006) — The Strategic and Tactical Value of Commodity Futures", "url": "https://doi.org/10.2469/faj.v62.n2.4084"},
+        {"type": "reference", "source": "FAJ", "title": "Gorton & Rouwenhorst (2006) — Facts and Fantasies About Commodity Futures", "url": "https://doi.org/10.2469/faj.v62.n2.4083"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §9.1", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "commodity-hedging-pressure",
+      "title": "Commodity Hedging Pressure",
+      "subtitle": "Use weekly CFTC Commitments of Traders (COT) data to identify commodities where producers are heavily short (paying speculators a premium per Keynes). Long the producer-hedged backwardation candidates, short the consumer-hedged contango candidates. Basu-Miffre 2013, de Roon-Nijman-Veld 2000.",
+      "body": "quant-strategies/commodity-hedging-pressure.md",
+      "difficulty": "advanced",
+      "tags": ["commodities", "hedging pressure", "cot", "cftc", "keynes", "normal backwardation"],
+      "aliases": ["hp signal", "cot strategy", "producer hedging", "commitment of traders"],
+      "related": ["commodity-roll-yield", "commodity-value-momentum", "commodity-skewness-premium"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — COT screen"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — hedging-pressure template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JBF", "title": "Basu & Miffre (2013) — Capturing the Risk Premium of Commodity Futures: The Role of Hedging Pressure", "url": "https://doi.org/10.1016/j.jbankfin.2013.02.031"},
+        {"type": "reference", "source": "JF", "title": "de Roon, Nijman, Veld (2000) — Hedging Pressure Effects in Futures Markets", "url": "https://doi.org/10.1111/0022-1082.00253"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §9.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "commodity-skewness-premium",
+      "title": "Commodity Skewness Premium",
+      "subtitle": "Long negatively-skewed commodities, short positively-skewed ones (Fernandez-Perez et al. 2018). Investors over-pay for 'lottery-ticket' positive-skew commodities (Barberis-Huang 2008) and under-pay for negatively-skewed ones — the premium is the gap.",
+      "body": "quant-strategies/commodity-skewness-premium.md",
+      "difficulty": "advanced",
+      "tags": ["commodities", "skewness", "lottery preference", "behavioural", "third moment"],
+      "aliases": ["skewness strategy", "lottery premium", "skewness anomaly"],
+      "related": ["commodity-roll-yield", "commodity-hedging-pressure", "commodity-value-momentum", "volatility-quant"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — skewness factor template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JBF", "title": "Fernandez-Perez et al. (2018) — The Skewness of Commodity Futures Returns", "url": "https://doi.org/10.1016/j.jbankfin.2017.06.015"},
+        {"type": "reference", "source": "AER", "title": "Barberis & Huang (2008) — Stocks as Lotteries", "url": "https://doi.org/10.1257/aer.98.5.2066"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §9.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "commodity-value-momentum",
+      "title": "Commodity Value and Momentum",
+      "subtitle": "The two factors that work in every asset class — applied to commodities. Value uses 5-year price ratios (long-horizon mean reversion); momentum uses 12-1 trailing returns. Asness-Moskowitz-Pedersen 2013 and Miffre-Rallis 2007 are the canonical references. Roughly uncorrelated, additive Sharpe in combination.",
+      "body": "quant-strategies/commodity-value-momentum.md",
+      "difficulty": "intermediate",
+      "tags": ["commodities", "value", "momentum", "amp", "asness-moskowitz-pedersen", "miffre"],
+      "aliases": ["commodity value", "commodity momentum", "value momentum everywhere commodities"],
+      "related": ["commodity-roll-yield", "commodity-hedging-pressure", "commodity-skewness-premium", "trend-following", "mean-reversion"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — factor scores"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — commodity multi-factor template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Asness, Moskowitz, Pedersen (2013) — Value and Momentum Everywhere", "url": "https://doi.org/10.1111/jofi.12021"},
+        {"type": "reference", "source": "JBF", "title": "Miffre & Rallis (2007) — Momentum Strategies in Commodity Futures Markets", "url": "https://doi.org/10.1016/j.jbankfin.2006.12.005"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §9.4", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-price-momentum",
+      "title": "Stock Price Momentum (Jegadeesh-Titman)",
+      "subtitle": "Buy past winners, sell past losers. The 12-1 cross-sectional momentum factor (Jegadeesh-Titman 1993), the Carhart UMD factor, the 2009 momentum crash, and how vol-scaling (Barroso-Santa-Clara 2014) and quality overlays (AFP 2019) keep the factor tradeable.",
+      "body": "quant-strategies/stocks-price-momentum.md",
+      "difficulty": "intermediate",
+      "tags": ["stocks", "momentum", "jegadeesh-titman", "umd", "carhart", "12-1"],
+      "aliases": ["price momentum", "12-1 momentum", "cross-sectional momentum"],
+      "related": ["stocks-residual-momentum", "stocks-earnings-momentum", "stocks-multifactor", "trend-following"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — momentum template"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Jegadeesh & Titman (1993) — Returns to Buying Winners and Selling Losers", "url": "https://doi.org/10.1111/j.1540-6261.1993.tb04702.x"},
+        {"type": "reference", "source": "JFE", "title": "Daniel & Moskowitz (2016) — Momentum Crashes", "url": "https://doi.org/10.1016/j.jfineco.2015.12.002"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.1", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-earnings-momentum",
+      "title": "Earnings Momentum (PEAD / SUE)",
+      "subtitle": "Post-earnings-announcement drift: companies that surprise positively on EPS continue to outperform for weeks. SUE-based long-short construction (Chan-Jegadeesh-Lakonishok 1996), Bernard-Thomas 1989 underreaction story, and the slow decay since the 2000s.",
+      "body": "quant-strategies/stocks-earnings-momentum.md",
+      "difficulty": "intermediate",
+      "tags": ["stocks", "earnings", "pead", "sue", "fundamental momentum"],
+      "aliases": ["pead", "post-earnings-announcement drift", "sue strategy"],
+      "related": ["stocks-price-momentum", "stocks-multifactor", "stocks-value-factor"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — PEAD template"},
+        {"screen": "equity_research", "label": "Equity Research — earnings calendar"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JAR", "title": "Bernard & Thomas (1989) — Post-Earnings-Announcement Drift", "url": "https://doi.org/10.2307/2491062"},
+        {"type": "reference", "source": "JF", "title": "Chan, Jegadeesh, Lakonishok (1996) — Momentum Strategies", "url": "https://doi.org/10.1111/j.1540-6261.1996.tb05222.x"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-value-factor",
+      "title": "Value Factor (Book-to-Price)",
+      "subtitle": "Cheap stocks (high B/P) outperform expensive stocks (low B/P) on risk-adjusted basis. Fama-French (1992/1993), the value-vs-growth 2007-2020 drawdown, the intangibles question (Arnott et al 2021), and the 2022 revival.",
+      "body": "quant-strategies/stocks-value-factor.md",
+      "difficulty": "intermediate",
+      "tags": ["stocks", "value", "fama-french", "book to price", "hml"],
+      "aliases": ["value factor", "book to market", "hml", "value investing"],
+      "related": ["stocks-multifactor", "stocks-price-momentum", "stocks-low-volatility-anomaly"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — value factor template"},
+        {"screen": "equity_research", "label": "Equity Research — valuation screener"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Fama & French (1992) — The Cross-Section of Expected Stock Returns", "url": "https://doi.org/10.1111/j.1540-6261.1992.tb04398.x"},
+        {"type": "reference", "source": "FAJ", "title": "Arnott, Harvey, Kalesnik, Linnainmaa (2021) — Reports of Value's Death May Be Greatly Exaggerated", "url": "https://doi.org/10.1080/0015198X.2020.1842704"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-low-volatility-anomaly",
+      "title": "Low-Volatility Anomaly (BAB)",
+      "subtitle": "Low-beta and low-vol stocks earn higher risk-adjusted returns than high-vol stocks. Betting Against Beta (Frazzini-Pedersen 2014), leverage aversion, lottery preference (Bali-Brown-Cakici), and benchmark-as-limit-to-arbitrage (Baker-Bradley-Wurgler 2011).",
+      "body": "quant-strategies/stocks-low-volatility-anomaly.md",
+      "difficulty": "intermediate",
+      "tags": ["stocks", "low volatility", "bab", "frazzini-pedersen", "leverage aversion"],
+      "aliases": ["bab factor", "low vol anomaly", "betting against beta", "low risk anomaly"],
+      "related": ["stocks-multifactor", "fi-bond-factors", "stocks-residual-momentum"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — BAB template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Frazzini & Pedersen (2014) — Betting Against Beta", "url": "https://doi.org/10.1016/j.jfineco.2013.10.005"},
+        {"type": "reference", "source": "JF", "title": "Ang, Hodrick, Xing, Zhang (2006) — The Cross-Section of Volatility and Expected Returns", "url": "https://doi.org/10.1111/j.1540-6261.2006.00836.x"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.4", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-implied-volatility-signal",
+      "title": "Implied Volatility Signal (Cross-Sectional)",
+      "subtitle": "Stocks with rising call IV outperform; stocks with rising put IV underperform. Informed-trading-leaks-from-options story (Cremers-Weinbaum 2010, An-Ang-Bali-Cakici 2014). Useful complement in multi-factor books, decayed since the 2010s.",
+      "body": "quant-strategies/stocks-implied-volatility-signal.md",
+      "difficulty": "advanced",
+      "tags": ["stocks", "implied volatility", "options", "put-call parity", "cremers-weinbaum"],
+      "aliases": ["iv signal", "delta iv strategy", "options informed trading"],
+      "related": ["stocks-multifactor", "volatility-quant", "stocks-price-momentum"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives — IV surface"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — IV signal template"},
+        {"screen": "surface_analytics", "label": "Surface Analytics"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "An, Ang, Bali, Cakici (2014) — The Joint Cross Section of Stocks and Options", "url": "https://doi.org/10.1111/jofi.12181"},
+        {"type": "reference", "source": "JFQA", "title": "Cremers & Weinbaum (2010) — Deviations from Put-Call Parity", "url": "https://doi.org/10.1017/S002210901000013X"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-multifactor",
+      "title": "Multifactor Equity Portfolio",
+      "subtitle": "Combine value, momentum, low-vol, quality, profitability into a single book. Integrated-score vs. portfolio-blending methods (Asness-Frazzini-Pedersen). Why factor diversification raises Sharpe and the limits of factor timing.",
+      "body": "quant-strategies/stocks-multifactor.md",
+      "difficulty": "advanced",
+      "tags": ["stocks", "multifactor", "smart beta", "factor investing", "afp"],
+      "aliases": ["multifactor portfolio", "smart beta", "factor combination", "alpha combos"],
+      "related": ["stocks-price-momentum", "stocks-value-factor", "stocks-low-volatility-anomaly", "stocks-residual-momentum", "portfolio-construction"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — multifactor template"},
+        {"screen": "portfolio", "label": "Portfolio — factor tilts"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Asness, Moskowitz, Pedersen (2013) — Value and Momentum Everywhere", "url": "https://doi.org/10.1111/jofi.12021"},
+        {"type": "reference", "source": "RAS", "title": "Asness, Frazzini, Pedersen (2019) — Quality Minus Junk", "url": "https://doi.org/10.1007/s11142-018-9470-2"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.6, §3.20", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-residual-momentum",
+      "title": "Residual Momentum",
+      "subtitle": "Apply momentum to FF3 regression residuals instead of raw returns. Same expected return, half the volatility — roughly double the Sharpe (Blitz-Huij-Martens 2011). Largely immune to the 2009 momentum crash because it has no factor-beta tilt.",
+      "body": "quant-strategies/stocks-residual-momentum.md",
+      "difficulty": "advanced",
+      "tags": ["stocks", "momentum", "residual", "factor-neutral", "blitz-huij-martens"],
+      "aliases": ["residual momentum", "factor-neutral momentum", "idiosyncratic momentum"],
+      "related": ["stocks-price-momentum", "stocks-multifactor", "stocks-low-volatility-anomaly"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — residual momentum template"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JEF", "title": "Blitz, Huij, Martens (2011) — Residual Momentum", "url": "https://doi.org/10.1016/j.jempfin.2011.01.003"},
+        {"type": "reference", "source": "JFE", "title": "Daniel & Moskowitz (2016) — Momentum Crashes", "url": "https://doi.org/10.1016/j.jfineco.2015.12.002"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.7", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-technical-analysis",
+      "title": "Technical Analysis — MA, Support/Resistance, Channels",
+      "subtitle": "Moving-average crossovers, pivot-based support/resistance, Donchian channels. Honest framing: TA is contested at single-stock daily horizons but underlies trend-following systems. Brock-Lakonishok-LeBaron (1992), Lo-Mamaysky-Wang (2000), Park-Irwin (2007) survey.",
+      "body": "quant-strategies/stocks-technical-analysis.md",
+      "difficulty": "intermediate",
+      "tags": ["stocks", "technical analysis", "moving average", "donchian", "support resistance"],
+      "aliases": ["ta", "technical analysis", "moving average crossover", "channel breakout"],
+      "related": ["stocks-price-momentum", "trend-following", "mean-reversion"],
+      "seen_in": [
+        {"screen": "equity_trading", "label": "Equity Trading — single-stock charts"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — TA templates"}
+      ],
+      "actions": [
+        {"label": "Open Equity Trading", "screen": "equity_trading", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Brock, Lakonishok, LeBaron (1992) — Simple Technical Trading Rules", "url": "https://doi.org/10.1111/j.1540-6261.1992.tb04681.x"},
+        {"type": "reference", "source": "JF", "title": "Lo, Mamaysky, Wang (2000) — Foundations of Technical Analysis", "url": "https://doi.org/10.1111/0022-1082.00265"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.11-3.15", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-merger-arbitrage",
+      "title": "Merger (Risk) Arbitrage",
+      "subtitle": "Capture the spread between announced M&A offer price and target trading price. Cash deals (long target) and stock deals (long target / short acquirer). Mitchell-Pulvino 2001 documented Sharpe ~0.8 in normal times, short-put-like exposure during crises (2008).",
+      "body": "quant-strategies/stocks-merger-arbitrage.md",
+      "difficulty": "advanced",
+      "tags": ["stocks", "merger arbitrage", "risk arbitrage", "event driven", "m&a"],
+      "aliases": ["merger arb", "risk arb", "deal arbitrage", "event-driven"],
+      "related": ["pairs-trading", "stocks-multifactor", "volatility-quant"],
+      "seen_in": [
+        {"screen": "equity_research", "label": "Equity Research — M&A screener"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — merger-arb template"}
+      ],
+      "actions": [
+        {"label": "Open Equity Research", "screen": "equity_research", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Mitchell & Pulvino (2001) — Characteristics of Risk and Return in Risk Arbitrage", "url": "https://doi.org/10.1111/0022-1082.00401"},
+        {"type": "reference", "source": "JFE", "title": "Baker & Savaşoglu (2002) — Limited Arbitrage in Mergers and Acquisitions", "url": "https://doi.org/10.1016/S0304-405X(02)00073-9"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.16", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "stocks-market-making",
+      "title": "Market-Making and Alpha Combos (HFT)",
+      "subtitle": "Quote both sides of the order book to capture spreads. Adverse selection is the central problem (Glosten-Milgrom 1985, Kyle 1985). Modern HFT modulates quoting with short-horizon directional signals. Alpha combos (Kakushadze-Yu 2017) combine hundreds of weak signals into a tradeable mega-alpha.",
+      "body": "quant-strategies/stocks-market-making.md",
+      "difficulty": "advanced",
+      "tags": ["stocks", "market making", "hft", "adverse selection", "alpha combos"],
+      "aliases": ["market making", "hft", "high frequency trading", "alpha combos"],
+      "related": ["stat-arb", "stocks-multifactor", "fx-triangular-arbitrage"],
+      "seen_in": [
+        {"screen": "algo_trading", "label": "Algo Trading — execution"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — alpha-combo module"}
+      ],
+      "actions": [
+        {"label": "Open Algo Trading", "screen": "algo_trading", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Glosten & Milgrom (1985) — Bid, Ask and Transaction Prices", "url": "https://doi.org/10.1016/0304-405X(85)90044-3"},
+        {"type": "reference", "source": "Econometrica", "title": "Kyle (1985) — Continuous Auctions and Insider Trading", "url": "https://doi.org/10.2307/1913210"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §3.19-3.20", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "etf-sector-rotation",
+      "title": "ETF Sector Rotation",
+      "subtitle": "Buy outperforming sector ETFs, optionally filter with moving averages and add a broad-market trend gate (dual momentum, Antonacci 2014). Moskowitz-Grinblatt 1999 showed industry momentum drives much of stock momentum — the ETF version captures it with 9 trades instead of 3000.",
+      "body": "quant-strategies/etf-sector-rotation.md",
+      "difficulty": "intermediate",
+      "tags": ["etf", "sector rotation", "momentum", "dual momentum", "antonacci"],
+      "aliases": ["sector rotation", "dual momentum", "alpha rotation", "sector momentum"],
+      "related": ["stocks-price-momentum", "trend-following", "etf-multi-asset-trend"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — sector rotation template"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Moskowitz & Grinblatt (1999) — Do Industries Explain Momentum?", "url": "https://doi.org/10.1111/0022-1082.00146"},
+        {"type": "reference", "source": "JoWM", "title": "Faber (2007) — A Quantitative Approach to Tactical Asset Allocation", "url": "https://ssrn.com/abstract=962461"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §4.1-4.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "etf-mean-reversion-ibs",
+      "title": "ETF Mean Reversion (Internal Bar Strength)",
+      "subtitle": "IBS = (close − low) / (high − low). Long ETFs with IBS near 0 (weak close), short those with IBS near 1 (strong close). Pagonidis 2014 documented Sharpe 1.5-2.5 gross on country ETFs — captures end-of-day flow dislocations that mean-revert overnight.",
+      "body": "quant-strategies/etf-mean-reversion-ibs.md",
+      "difficulty": "intermediate",
+      "tags": ["etf", "mean reversion", "ibs", "intraday", "pagonidis"],
+      "aliases": ["ibs strategy", "internal bar strength", "etf mean reversion"],
+      "related": ["mean-reversion", "etf-sector-rotation", "pairs-trading"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — IBS template"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JBF", "title": "Levy & Lieberman (2013) — Overreaction of Country ETFs to US Market Returns", "url": "https://doi.org/10.1016/j.jbankfin.2012.04.005"},
+        {"type": "reference", "source": "JBF", "title": "Marshall, Nguyen, Visaltanachoti (2013) — ETF Arbitrage: Intraday Evidence", "url": "https://doi.org/10.1016/j.jbankfin.2013.05.014"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §4.4", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "etf-leveraged-decay",
+      "title": "Leveraged ETF Decay (Short Both Sides)",
+      "subtitle": "LETFs systematically decay against their stated multiple due to compounded volatility. Short both leveraged-long and leveraged-short ETFs on the same underlying to capture decay regardless of direction. Avellaneda-Zhang 2010 formalised the math. Pays steadily in choppy markets, hurts in trending markets — and the 2018 XIV liquidation is the cautionary tale.",
+      "body": "quant-strategies/etf-leveraged-decay.md",
+      "difficulty": "advanced",
+      "tags": ["etf", "letf", "leveraged etf", "decay", "vol selling"],
+      "aliases": ["leveraged etf decay", "letf short", "etf decay"],
+      "related": ["volatility-quant", "etf-multi-asset-trend", "strategy-patterns"],
+      "seen_in": [
+        {"screen": "backtesting", "label": "Backtesting — LETF decay simulation"}
+      ],
+      "actions": [],
+      "external_links": [
+        {"type": "reference", "source": "JFM", "title": "Avellaneda & Zhang (2010) — Path-Dependence of Leveraged ETF Returns", "url": "https://doi.org/10.1137/090760805"},
+        {"type": "reference", "source": "JBF", "title": "Charupat & Miu (2011) — The Pricing and Performance of Leveraged Exchange-Traded Funds", "url": "https://doi.org/10.1016/j.jbankfin.2010.09.012"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §4.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "etf-multi-asset-trend",
+      "title": "Multi-Asset Trend Following on ETFs",
+      "subtitle": "Trend following across equity, bond, REIT, commodity, currency ETFs. The ETF version of Moskowitz-Ooi-Pedersen TSMOM and Hurst-Ooi-Pedersen century-of-evidence — same Sharpe ~0.7-1.0 with one-tenth the operational complexity of futures. 2008 was its best year; 2022 reminded everyone the strategy still works.",
+      "body": "quant-strategies/etf-multi-asset-trend.md",
+      "difficulty": "intermediate",
+      "tags": ["etf", "trend following", "tsmom", "multi-asset", "moskowitz-ooi-pedersen"],
+      "aliases": ["multi-asset trend", "etf trend", "tactical asset allocation"],
+      "related": ["trend-following", "etf-sector-rotation", "fx-momentum-carry-combo", "commodity-value-momentum"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — multi-asset trend template"},
+        {"screen": "portfolio", "label": "Portfolio — tactical overlay"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFE", "title": "Moskowitz, Ooi, Pedersen (2012) — Time Series Momentum", "url": "https://doi.org/10.1016/j.jfineco.2011.11.003"},
+        {"type": "reference", "source": "JPM", "title": "Hurst, Ooi, Pedersen (2017) — A Century of Evidence on Trend-Following Investing", "url": "https://doi.org/10.3905/jpm.2017.44.1.015"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §4.6", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "index-cash-and-carry",
+      "title": "Index Cash-and-Carry Arbitrage",
+      "subtitle": "Theoretical no-arbitrage: index futures price = spot − dividends + carry. When the actual futures price diverges, an HFT-style arbitrage locks in profit. MacKinlay-Ramaswamy 1988 documented S&P futures mispricings. Modern opportunities are sub-second. Also covers intraday SPY/IVV ETF arbitrage (§6.4, Marshall et al 2013).",
+      "body": "quant-strategies/index-cash-and-carry.md",
+      "difficulty": "advanced",
+      "tags": ["index", "futures", "arbitrage", "cash-and-carry", "etf arbitrage", "hft"],
+      "aliases": ["index arbitrage", "cash and carry", "futures spot arb", "etf arbitrage"],
+      "related": ["fx-triangular-arbitrage", "fi-credit-arbitrage", "index-dispersion-trading"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — basis monitor"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JFM", "title": "Cornell & French (1983) — The Pricing of Stock Index Futures", "url": "https://doi.org/10.1002/fut.3990030102"},
+        {"type": "reference", "source": "RFS", "title": "MacKinlay & Ramaswamy (1988) — Index-Futures Arbitrage", "url": "https://doi.org/10.1093/rfs/1.2.137"},
+        {"type": "reference", "source": "JBF", "title": "Marshall, Nguyen, Visaltanachoti (2013) — ETF Arbitrage: Intraday Evidence", "url": "https://doi.org/10.1016/j.jbankfin.2013.05.014"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §6.2, §6.4", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "index-dispersion-trading",
+      "title": "Dispersion Trading",
+      "subtitle": "Long single-stock straddles, short an index straddle. Captures the correlation risk premium (Driessen-Maenhout-Vilkov 2009) — implied index vol is typically higher than weighted single-stock vol because of institutional put demand (Gârleanu-Pedersen-Poteshman 2009). The 2008 cautionary tale: when correlations spike to 1, the trade loses spectacularly.",
+      "body": "quant-strategies/index-dispersion-trading.md",
+      "difficulty": "advanced",
+      "tags": ["index", "dispersion", "correlation", "volatility", "options"],
+      "aliases": ["dispersion trading", "correlation trade", "vol dispersion"],
+      "related": ["volatility-quant", "index-cash-and-carry", "stocks-implied-volatility-signal"],
+      "seen_in": [
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — dispersion template"},
+        {"screen": "derivatives", "label": "Derivatives — options chain"},
+        {"screen": "surface_analytics", "label": "Surface Analytics"}
+      ],
+      "actions": [
+        {"label": "Open AI Quant Lab", "screen": "ai_quant_lab", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Driessen, Maenhout, Vilkov (2009) — The Price of Correlation Risk", "url": "https://doi.org/10.1111/j.1540-6261.2009.01467.x"},
+        {"type": "reference", "source": "RFS", "title": "Gârleanu, Pedersen, Poteshman (2009) — Demand-Based Option Pricing", "url": "https://doi.org/10.1093/rfs/hhp005"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §6.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "index-vol-targeting",
+      "title": "Index Volatility Targeting",
+      "subtitle": "Scale risky-asset exposure inversely to realised volatility (w = σ*/σ). Equity vol is negatively correlated with returns (Moreira-Muir 2017) — the strategy improves Sharpe and substantially reduces drawdowns. Harvey-Hoyle et al 2018 documented the effect across 60+ markets.",
+      "body": "quant-strategies/index-vol-targeting.md",
+      "difficulty": "intermediate",
+      "tags": ["index", "vol targeting", "moreira-muir", "tactical risk management"],
+      "aliases": ["vol targeting", "volatility scaling", "managed volatility", "constant volatility"],
+      "related": ["volatility-quant", "etf-multi-asset-trend", "portfolio-construction", "fi-bond-immunization"],
+      "seen_in": [
+        {"screen": "portfolio", "label": "Portfolio — vol-targeting overlay"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — vol-targeting template"}
+      ],
+      "actions": [
+        {"label": "Open Portfolio", "screen": "portfolio", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Moreira & Muir (2017) — Volatility-Managed Portfolios", "url": "https://doi.org/10.1111/jofi.12513"},
+        {"type": "reference", "source": "JPM", "title": "Harvey et al (2018) — The Impact of Volatility Targeting", "url": "https://doi.org/10.3905/jpm.2018.45.1.014"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §6.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "vol-vix-futures-basis",
+      "title": "VIX Futures Basis Trading",
+      "subtitle": "The VIX futures basis (UX1 vs spot VIX) has substantial forecasting power for subsequent futures price changes (Simon-Campasano 2014, Mixon 2007). Sell UX1 in deep contango, buy in deep backwardation — hedged with mini-S&P to neutralise the VIX-equity beta. The Feb 2018 Volmageddon is the tail-risk warning.",
+      "body": "quant-strategies/vol-vix-futures-basis.md",
+      "difficulty": "advanced",
+      "tags": ["volatility", "vix", "vix futures", "basis", "mean reversion"],
+      "aliases": ["vix basis trading", "vix futures arbitrage", "ux1 basis"],
+      "related": ["volatility-quant", "vol-etn-decay", "vol-skew-risk-reversal", "index-vol-targeting"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives — VIX term structure"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — VIX basis template"},
+        {"screen": "surface_analytics", "label": "Surface Analytics"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JoD", "title": "Simon & Campasano (2014) — The VIX Futures Basis", "url": "https://doi.org/10.3905/jod.2014.21.3.054"},
+        {"type": "reference", "source": "JPM", "title": "Whaley (2000) — The Investor Fear Gauge", "url": "https://doi.org/10.3905/jpm.2000.319728"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §7.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "vol-etn-decay",
+      "title": "VIX ETN Decay Trade (Short VXX / Long VXZ)",
+      "subtitle": "VXX (front-month VIX ETN) systematically loses to roll in contango. Short VXX, hedge with VXZ (mid-maturity VIX ETN) or a VIX futures basket. Avellaneda-Papanicolaou 2018 formalised the math. 2010-2017 was a printing press; February 2018 (Volmageddon) wiped out XIV in one day — the cautionary tale.",
+      "body": "quant-strategies/vol-etn-decay.md",
+      "difficulty": "advanced",
+      "tags": ["volatility", "etn", "vxx", "vxz", "roll yield", "vol carry"],
+      "aliases": ["short vxx", "vix etn decay", "vxx vxz carry"],
+      "related": ["vol-vix-futures-basis", "etf-leveraged-decay", "volatility-quant", "vol-skew-risk-reversal"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives — VIX ETN monitor"},
+        {"screen": "backtesting", "label": "Backtesting"}
+      ],
+      "actions": [
+        {"label": "Open Derivatives", "screen": "derivatives", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "IJTAF", "title": "Avellaneda & Papanicolaou (2018) — Statistics of VIX Futures and Trading Volatility ETPs", "url": "https://doi.org/10.1142/S0219024918500012"},
+        {"type": "reference", "source": "JFM", "title": "Bordonado, Molnár, Samdal (2017) — VIX Exchange Traded Products", "url": "https://doi.org/10.1002/fut.21770"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §7.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "vol-skew-risk-reversal",
+      "title": "Volatility Skew — Long Risk Reversal",
+      "subtitle": "OTM puts trade at higher IV than equidistant OTM calls (the equity vol skew). Long risk reversal (buy OTM call, sell OTM put) captures this skew premium with bullish delta. Bates 1991 documented the post-1987 origin; Bollen-Whaley 2004 on net buying pressure. The trade is bullish + short skew + short vega.",
+      "body": "quant-strategies/vol-skew-risk-reversal.md",
+      "difficulty": "advanced",
+      "tags": ["volatility", "skew", "risk reversal", "options", "delta"],
+      "aliases": ["risk reversal", "vol skew", "long risk reversal", "skew premium"],
+      "related": ["volatility-quant", "vol-vix-futures-basis", "vol-etn-decay", "index-dispersion-trading", "stocks-implied-volatility-signal"],
+      "seen_in": [
+        {"screen": "derivatives", "label": "Derivatives — option chain with skew"},
+        {"screen": "surface_analytics", "label": "Surface Analytics"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — risk-reversal template"}
+      ],
+      "actions": [
+        {"label": "Open Surface Analytics", "screen": "surface_analytics", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Bollen & Whaley (2004) — Net Buying Pressure and Implied Vol Functions", "url": "https://doi.org/10.1111/j.1540-6261.2004.00647.x"},
+        {"type": "reference", "source": "JF", "title": "Bates (1991) — The Crash of '87", "url": "https://doi.org/10.1111/j.1540-6261.1991.tb03775.x"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §7.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "futures-hedging",
+      "title": "Hedging Risk with Futures",
+      "subtitle": "Direct hedge (matching futures contract), cross-hedge (proxy contract — jet fuel via heating oil), and interest-rate hedging (Treasury futures for bond portfolios). Ederington 1979 optimal hedge ratio. The Metallgesellschaft 1993 and LTCM 1998 lessons on maturity mismatch and funding-liquidity risk.",
+      "body": "quant-strategies/futures-hedging.md",
+      "difficulty": "intermediate",
+      "tags": ["futures", "hedging", "cross-hedge", "duration matching", "risk management"],
+      "aliases": ["futures hedging", "cross-hedging", "interest rate hedging"],
+      "related": ["fi-bond-immunization", "futures-calendar-spread", "futures-contrarian", "commodity-roll-yield"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — hedging calculator"},
+        {"screen": "portfolio", "label": "Portfolio — duration hedge"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — cross-hedge template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Ederington (1979) — The Hedging Performance of the New Futures Markets", "url": "https://doi.org/10.1111/j.1540-6261.1979.tb02077.x"},
+        {"type": "reference", "source": "JFQA", "title": "Ankirchner et al (2012) — Futures Cross-Hedging with a Stationary Basis", "url": "https://doi.org/10.1017/S0022109012000506"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §10.1", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "futures-calendar-spread",
+      "title": "Futures Calendar Spread",
+      "subtitle": "Long one expiry, short another of the same underlying — isolates the term structure. Bull spread (long near / short deferred) bets on tight supply; bear spread bets on glut. Natural gas March-April is the canonical seasonal spread; crude oil March 2020 contango blowout is the cautionary tale.",
+      "body": "quant-strategies/futures-calendar-spread.md",
+      "difficulty": "advanced",
+      "tags": ["futures", "calendar spread", "term structure", "seasonality"],
+      "aliases": ["calendar spread", "futures spread", "term structure spread"],
+      "related": ["commodity-roll-yield", "vol-vix-futures-basis", "fi-curve-spreads", "futures-hedging"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — calendar spread monitor"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — calendar spread template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "RFS", "title": "Bessembinder (1992) — Systematic Risk, Hedging Pressure, and Risk Premiums in Futures Markets", "url": "https://doi.org/10.1093/rfs/5.4.637"},
+        {"type": "reference", "source": "JBF", "title": "Adrangi et al (2006) — Petroleum Spreads and the Term Structure of Futures Prices", "url": "https://doi.org/10.1080/00036840500427270"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §10.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "futures-contrarian",
+      "title": "Futures Contrarian (Mean-Reversion)",
+      "subtitle": "Cross-sectional mean reversion across futures contracts: long underperformers, short outperformers w.r.t. weekly market index. Bessembinder et al 1995 documented mean reversion in the futures term structure. Volume + open-interest filter (Bianchi-Drew-Fan 2015) improves the signal.",
+      "body": "quant-strategies/futures-contrarian.md",
+      "difficulty": "intermediate",
+      "tags": ["futures", "mean reversion", "contrarian", "cross-sectional"],
+      "aliases": ["futures mean reversion", "futures contrarian", "cross-sectional futures"],
+      "related": ["mean-reversion", "trend-following", "commodity-value-momentum", "futures-calendar-spread"],
+      "seen_in": [
+        {"screen": "futures", "label": "Futures — cross-sectional rankings"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — futures contrarian template"}
+      ],
+      "actions": [
+        {"label": "Open Futures", "screen": "futures", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Bessembinder, Coughenour, Seguin, Smoller (1995) — Mean Reversion in Equilibrium Asset Prices", "url": "https://doi.org/10.1111/j.1540-6261.1995.tb05176.x"},
+        {"type": "reference", "source": "JBF", "title": "Bianchi, Drew, Fan (2015) — Combining Momentum with Reversal in Commodity Futures", "url": "https://doi.org/10.1016/j.jbankfin.2015.06.013"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §10.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "macro-fundamental-momentum",
+      "title": "Fundamental Macro Momentum",
+      "subtitle": "Rank countries on 4 macro state variables (business cycle, trade, monetary policy, risk sentiment), construct cross-asset long-short across equities, bonds, currencies. Brooks 2017 (AQR) documented Sharpe 0.7-0.9 over 50+ years and 30+ markets. The macro-level cousin of price momentum.",
+      "body": "quant-strategies/macro-fundamental-momentum.md",
+      "difficulty": "advanced",
+      "tags": ["global macro", "momentum", "cross-asset", "country selection"],
+      "aliases": ["macro momentum", "country momentum", "fundamental macro"],
+      "related": ["trend-following", "etf-multi-asset-trend", "macro-inflation-hedge", "macro-economic-announcement"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics — country macro data"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — macro momentum template"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "AQR", "title": "Brooks (2017) — A Half Century of Macro Momentum", "url": "https://www.aqr.com/-/media/AQR/Documents/Insights/White-Papers/A-Half-Century-of-Macro-Momentum.pdf"},
+        {"type": "reference", "source": "JF", "title": "Asness, Moskowitz, Pedersen (2013) — Value and Momentum Everywhere", "url": "https://doi.org/10.1111/jofi.12021"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §19.2", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "macro-inflation-hedge",
+      "title": "Global Macro Inflation Hedge",
+      "subtitle": "Use the headline-vs-core inflation spread as a leading indicator: when HI > CI, an oil/food shock is in progress that hasn't yet flowed to core. Scale commodity allocation accordingly (Fulli-Lemaire 2013 formula). Worked spectacularly in 2021-2022; the canonical macro inflation hedging strategy.",
+      "body": "quant-strategies/macro-inflation-hedge.md",
+      "difficulty": "intermediate",
+      "tags": ["global macro", "inflation hedge", "commodities", "cpi"],
+      "aliases": ["inflation hedge", "macro inflation", "commodity inflation hedge"],
+      "related": ["commodity-roll-yield", "commodity-value-momentum", "fi-bond-factors", "macro-fundamental-momentum"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics — CPI tracker"},
+        {"screen": "portfolio", "label": "Portfolio — inflation hedge overlay"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — inflation hedge template"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JIS", "title": "Fulli-Lemaire (2013) — An Inflation Hedging Strategy with Commodities", "url": "https://doi.org/10.21314/JOIS.2013.022"},
+        {"type": "reference", "source": "FAJ", "title": "Gorton & Rouwenhorst (2006) — Facts and Fantasies About Commodity Futures", "url": "https://doi.org/10.2469/faj.v62.n2.4083"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §19.3", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
+    },
+    {
+      "id": "macro-economic-announcement",
+      "title": "Trading on Economic Announcements (Pre-FOMC Drift)",
+      "subtitle": "Lucca-Moench 2015: ~80% of US equity risk premium was earned on the 8 FOMC meeting days per year. Be 100% in equities on announcement days, 100% in Treasuries otherwise. Effect weakened post-publication but still tradeable. Cieslak-Morse-Vissing-Jorgensen 2019 updated the analysis.",
+      "body": "quant-strategies/macro-economic-announcement.md",
+      "difficulty": "intermediate",
+      "tags": ["global macro", "fomc", "announcement", "event driven", "pre-fomc drift"],
+      "aliases": ["pre-fomc drift", "fomc strategy", "announcement effect", "macro announcements"],
+      "related": ["macro-fundamental-momentum", "macro-inflation-hedge", "volatility-quant", "stocks-price-momentum"],
+      "seen_in": [
+        {"screen": "economics", "label": "Economics — FOMC calendar"},
+        {"screen": "ai_quant_lab", "label": "AI Quant Lab — announcement-day template"}
+      ],
+      "actions": [
+        {"label": "Open Economics", "screen": "economics", "ticker": ""}
+      ],
+      "external_links": [
+        {"type": "reference", "source": "JF", "title": "Lucca & Moench (2015) — The Pre-FOMC Announcement Drift", "url": "https://doi.org/10.1111/jofi.12196"},
+        {"type": "reference", "source": "JFQA", "title": "Savor & Wilson (2013) — How Much Do Investors Care About Macroeconomic Risk?", "url": "https://doi.org/10.1017/S002210901300015X"},
+        {"type": "reference", "source": "JF", "title": "Cieslak, Morse, Vissing-Jorgensen (2019) — Stock Returns over the FOMC Cycle", "url": "https://doi.org/10.1111/jofi.12818"},
+        {"type": "reference", "source": "Palgrave", "title": "Kakushadze & Serur (2018) — 151 Trading Strategies, §19.5", "url": "https://doi.org/10.1007/978-3-030-02792-6"}
+      ],
+      "updated": "2026-05-12"
     }
   ]
 }
