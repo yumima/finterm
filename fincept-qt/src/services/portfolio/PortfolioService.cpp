@@ -745,6 +745,23 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
                 LOG_WARN("PortfolioSvc",
                          QString("Intraday %1 fetch failed: %2").arg(sym, err.left(200)));
             }
+
+            // Symbols yfinance doesn't know (FCASH, SPAXX, money-market funds)
+            // return an empty intraday pull. Mirror the daily-history fallback
+            // (line ~665) and synthesise a flat $1.00/share 2-point series
+            // spanning the rolling 6.5h session window the chart's seed uses.
+            // Without this, the chart shows the briefly-painted seed line and
+            // then clears to "1D unavailable" the moment the empty result
+            // lands — the disappearing-line bug.
+            if (ts_ms.isEmpty() && closes.isEmpty()) {
+                const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                constexpr qint64 kSessionMs =
+                    6LL * 60 * 60 * 1000 + 30LL * 60 * 1000;
+                ts_ms  = {now_ms - kSessionMs, now_ms};
+                closes = {1.0, 1.0};
+                LOG_INFO("PortfolioSvc",
+                         QString("Synthesised flat $1 intraday series for %1").arg(sym));
+            }
             emit self->symbol_intraday_loaded(sym, ts_ms, closes);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -807,6 +824,21 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 } else {
                     LOG_WARN("PortfolioSvc",
                              QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
+                }
+
+                // Cash / MMF / unknown-to-yfinance symbols return zero bars.
+                // Synthesise a flat $1.00 series at minute granularity over
+                // the rolling 6.5h session window so the aggregate forward-
+                // fill picks up the cash contribution at every real-symbol
+                // timestamp (matches the daily-history fallback at line ~665).
+                if (bars.isEmpty()) {
+                    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                    constexpr qint64 kMinMs = 60LL * 1000;
+                    constexpr qint64 kSessionMs =
+                        6LL * 60 * 60 * 1000 + 30LL * 60 * 1000;
+                    for (qint64 t = now_ms - kSessionMs; t <= now_ms; t += kMinMs) {
+                        bars.insert(t, 1.0);
+                    }
                 }
                 if (--state->pending > 0) return;
 
