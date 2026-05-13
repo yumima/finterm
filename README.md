@@ -6,13 +6,14 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Oldest first.
 
-- [`30e6fa9`](https://github.com/yumima/finterm/commit/30e6fa90) **fix(portfolio):** money-market tickers (FCASH, SPAXX, …) now render a flat $1 line on the 1D chart instead of a briefly-flashed line that disappears the moment the empty intraday fetch lands.
-- [`763da2c`](https://github.com/yumima/finterm/commit/763da2cd) **ui(news):** command-bar reordered to **WIRE | PTF | CLST** so the portfolio filter sits next to the default view; CLST (clusters) lives on the far side.
-- [`13c2546`](https://github.com/yumima/finterm/commit/13c25462) **docs(design):** new AI-stack wiring plan at `fincept-qt/docs/design/ai-stack-free-local.md` — two first-class paths (localhost LLM via a sibling project, *or* external API keys), no silent failover between them.
-- [`b25e4fb`](https://github.com/yumima/finterm/commit/b25e4fb1) **perf(pre-ipo):** first-paint refresh cut from ~96 s to ~24 s. Form D fetcher parses 30 filings instead of 120; status label no longer overwrites the "loaded from cache" message during background pulls.
-- [`f0126e7`](https://github.com/yumima/finterm/commit/f0126e75) **ui(news):** unseen-headline amber row tint is gone (its fade timer was disabled so the tint was pinned at peak brightness until the user hovered); the 3 px amber dot still flags new items.
-- [`df89561`](https://github.com/yumima/finterm/commit/df89561e) **perf(pre-ipo):** opening the Pre-IPO screen no longer triggers a network refresh if the cached data is less than 24 h old. The manual Refresh button still forces a pull.
-- [`9bad451`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** background auto-refresh every day at **05:00 America/New_York** while the app is running, so morning opens find fresh SEC data without a wait. DST handled automatically by re-arming from "now in ET" each tick.
+- [`30e6fa90`](https://github.com/yumima/finterm/commit/30e6fa90) **fix(portfolio):** synthesise flat $1 series for cash-like symbols on 1D
+- [`763da2cd`](https://github.com/yumima/finterm/commit/763da2cd) **ui(news):** place PTF pill between WIRE and CLST in the command bar
+- [`13c25462`](https://github.com/yumima/finterm/commit/13c25462) **docs(design):** dual-path AI stack wiring plan (local + external)
+- [`b25e4fb1`](https://github.com/yumima/finterm/commit/b25e4fb1) **perf(pre-ipo):** cut first-paint refresh from ~96s to ~24s
+- [`f0126e75`](https://github.com/yumima/finterm/commit/f0126e75) **ui(news):** drop amber row overlay for unseen headlines
+- [`df89561e`](https://github.com/yumima/finterm/commit/df89561e) **perf(pre-ipo):** TTL-gate the on-open refresh at 24h
+- [`9bad451f`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** daily 05:00 ET auto-refresh while app is running
+- [`b56d0053`](https://github.com/yumima/finterm/commit/b56d0053) **docs(readme):** add "Today's commits" section with oldest-first list
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
@@ -83,6 +84,14 @@ cd ~/fin/finterm
 ```
 
 `setup.sh` installs system deps on Linux/macOS automatically (build tools, OpenGL/xkbcommon/dbus, `portaudio19-dev` for AI voice input, etc.).
+
+**Optional — enable tracked git hooks.** This repo ships a pre-commit hook at `.githooks/pre-commit` that regenerates the "Today's commits" section near the top of this README (oldest-first, GitHub-linked) by calling `tools/update_todays_commits.py`. To turn it on in a fresh clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Per-commit opt-out: `git commit --no-verify`.
 
 ### `finterm.sh` — one-stop CLI
 
