@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace fincept::services {
 
@@ -78,28 +79,51 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {}
 
 void PreIpoService::load_data() {
     if (loading_) return;
-    // Two-phase strategy so the user never stares at an empty screen:
-    //   1. If we have a cached JSON dump from a prior session, hydrate
-    //      from it synchronously and emit data_loaded right away. The
-    //      cache may be stale (SEC publishes daily) but stale data beats
-    //      no data while the live refresh runs.
-    //   2. Always trigger a live refresh in the background so the cache
-    //      gets updated and the user sees the freshest numbers within
-    //      ~60s.
+    // Three-phase strategy so the user never stares at an empty screen
+    // and the network only runs when it actually buys fresher data:
+    //   1. Hydrate from disk cache (if any) and emit data_loaded
+    //      immediately so views populate.
+    //   2. If the cache is fresh (<24h old, measured against the OLDEST
+    //      of the three cache files so a partially-failed prior run
+    //      still triggers a refresh), stop. SEC Form D / S-1 cadence is
+    //      ~daily; pre-IPO data moves slowly enough that once-a-day is
+    //      plenty fresh. The manual Refresh button bypasses this gate.
+    //   3. Otherwise (no cache, or cache >24h old), kick off the live
+    //      refresh in the background.
     const bool had_cache = load_from_cache();
     if (had_cache) {
         loaded_ = true;
         emit_summary();
-        emit progress(QStringLiteral("Loaded from cache · refreshing in background…"));
     }
-    if (!loaded_ || !had_cache) {
-        // First-ever load: there's nothing to show until the network call
-        // completes. Caller's job to surface a loading placeholder.
-        refresh();
-    } else {
-        // Refresh quietly behind the displayed cache.
-        refresh();
+
+    auto cache_age_secs = [this]() -> qint64 {
+        const QString dir = cache_dir();
+        QDateTime oldest;
+        for (const QString& f : {QStringLiteral("form_d.json"),
+                                 QStringLiteral("marks.json"),
+                                 QStringLiteral("pipeline.json")}) {
+            QFileInfo fi(dir + "/" + f);
+            if (!fi.exists()) return std::numeric_limits<qint64>::max();
+            const QDateTime mtime = fi.lastModified();
+            if (!oldest.isValid() || mtime < oldest) oldest = mtime;
+        }
+        if (!oldest.isValid()) return std::numeric_limits<qint64>::max();
+        return oldest.secsTo(QDateTime::currentDateTime());
+    };
+
+    constexpr qint64 kCacheTtlSecs = 24 * 60 * 60;
+    if (had_cache && cache_age_secs() < kCacheTtlSecs) {
+        LOG_INFO("PreIpo",
+                 QString("Cache fresh (%1h old) — skipping refresh; "
+                         "use Refresh to force.")
+                     .arg(cache_age_secs() / 3600));
+        return;
     }
+
+    if (had_cache) {
+        emit progress(QStringLiteral("Cache > 24h old · refreshing in background…"));
+    }
+    refresh();
 }
 
 void PreIpoService::refresh() {
