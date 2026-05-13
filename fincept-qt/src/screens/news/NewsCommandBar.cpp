@@ -121,20 +121,12 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
 
     hl->addSpacing(2);
 
-    // View mode toggle
+    // View mode toggle. Visual order: WIRE | PTF | CLST.
+    // PTF sits between WIRE and CLST so the portfolio filter — the pill
+    // a user reaches for most often after the default WIRE view — is
+    // immediately to hand; CLST (the alternate view mode) lives on the
+    // far side of it.
     view_wire_ = make_pill("WIRE", "WIRE", hl);
-    view_clusters_ = make_pill("CLST", "CLUSTERS", hl);
-    connect(view_wire_, &QPushButton::clicked, this, [this]() {
-        active_view_ = "WIRE";
-        update_pill_group({view_wire_, view_clusters_}, "WIRE");
-        emit view_mode_changed("WIRE");
-    });
-    connect(view_clusters_, &QPushButton::clicked, this, [this]() {
-        active_view_ = "CLUSTERS";
-        update_pill_group({view_wire_, view_clusters_}, "CLST");
-        emit view_mode_changed("CLUSTERS");
-    });
-    update_pill_group({view_wire_, view_clusters_}, "WIRE");
 
     // PTF pill — independent toggle filter (not part of the WIRE/CLST
     // group). Restricts the feed to articles whose tickers intersect the
@@ -151,6 +143,19 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
         emit portfolio_filter_toggled(portfolio_active_);
     });
     refresh_portfolio_pill();
+
+    view_clusters_ = make_pill("CLST", "CLUSTERS", hl);
+    connect(view_wire_, &QPushButton::clicked, this, [this]() {
+        active_view_ = "WIRE";
+        update_pill_group({view_wire_, view_clusters_}, "WIRE");
+        emit view_mode_changed("WIRE");
+    });
+    connect(view_clusters_, &QPushButton::clicked, this, [this]() {
+        active_view_ = "CLUSTERS";
+        update_pill_group({view_wire_, view_clusters_}, "CLST");
+        emit view_mode_changed("CLUSTERS");
+    });
+    update_pill_group({view_wire_, view_clusters_}, "WIRE");
 
     hl->addStretch();
 
