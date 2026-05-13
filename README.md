@@ -13,7 +13,7 @@ Oldest first.
 - [`f0126e75`](https://github.com/yumima/finterm/commit/f0126e75) **ui(news):** drop amber row overlay for unseen headlines
 - [`df89561e`](https://github.com/yumima/finterm/commit/df89561e) **perf(pre-ipo):** TTL-gate the on-open refresh at 24h
 - [`9bad451f`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** daily 05:00 ET auto-refresh while app is running
-- [`b56d0053`](https://github.com/yumima/finterm/commit/b56d0053) **docs(readme):** add "Today's commits" section with oldest-first list
+- [`ba6d32d6`](https://github.com/yumima/finterm/commit/ba6d32d6) **chore(hooks):** pre-commit hook regenerates README "Today's commits" section
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

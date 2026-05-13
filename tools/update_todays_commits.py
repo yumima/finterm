@@ -45,8 +45,34 @@ def github_base() -> str | None:
     return None
 
 
+def _changed_files(sha: str) -> list[str]:
+    """Return the list of files touched by a single commit."""
+    try:
+        out = subprocess.check_output(
+            ["git", "show", "--pretty=", "--name-only", sha],
+            cwd=REPO_ROOT, text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        return []
+    return [line for line in out.splitlines() if line]
+
+
+def _is_readme_only(sha: str) -> bool:
+    """True if the commit touched only README.md.
+
+    Used to suppress self-referential noise: every time this script runs as
+    part of the pre-commit hook it re-stages README.md, and any standalone
+    README-only commit (typo fix, section edit, etc.) is meta to the section
+    we're regenerating. Listing it would be circular.
+    """
+    return _changed_files(sha) == ["README.md"]
+
+
 def todays_commits() -> list[tuple[str, str]]:
-    """Return [(short_sha, subject), ...] for today's commits, oldest first."""
+    """Return [(short_sha, subject), ...] for today's commits, oldest first.
+
+    Excludes README-only commits — see _is_readme_only.
+    """
     today = datetime.date.today().isoformat()
     try:
         out = subprocess.check_output(
@@ -59,8 +85,11 @@ def todays_commits() -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     for line in out.splitlines():
         sha, sep, subject = line.partition("|")
-        if sep and sha and subject:
-            pairs.append((sha, subject))
+        if not (sep and sha and subject):
+            continue
+        if _is_readme_only(sha):
+            continue
+        pairs.append((sha, subject))
     return pairs
 
 
