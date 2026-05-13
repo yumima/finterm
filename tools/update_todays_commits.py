@@ -69,15 +69,16 @@ def _is_readme_only(sha: str) -> bool:
 
 
 def todays_commits() -> list[tuple[str, str]]:
-    """Return [(short_sha, subject), ...] for today's commits, oldest first.
+    """Return [(short_sha, subject), ...] for today's commits, latest first.
 
-    Excludes README-only commits — see _is_readme_only.
+    `git log` default ordering is newest-first, which matches the list
+    we want. Excludes README-only commits — see _is_readme_only.
     """
     today = datetime.date.today().isoformat()
     try:
         out = subprocess.check_output(
             ["git", "log", f"--since={today} 00:00",
-             "--reverse", "--no-merges", "--pretty=format:%h|%s"],
+             "--no-merges", "--pretty=format:%h|%s"],
             cwd=REPO_ROOT, text=True,
         ).strip()
     except subprocess.CalledProcessError:
@@ -112,7 +113,7 @@ def format_line(gh_base: str, sha: str, subject: str) -> str:
 
 def build_section(gh_base: str, today: str,
                   commits: list[tuple[str, str]]) -> str:
-    parts = [f"## Today's commits ({today})", "", "Oldest first.", ""]
+    parts = [f"## Today's commits ({today})", "", "Latest first.", ""]
     parts.extend(format_line(gh_base, sha, subj) for sha, subj in commits)
     parts.extend(["", f"[See all commits →]({gh_base}/commits/main)", ""])
     # Trailing "\n" ensures a blank line separates this section from the
