@@ -2,6 +2,20 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
+## Today's commits (2026-05-13)
+
+Oldest first.
+
+- [`30e6fa9`](https://github.com/yumima/finterm/commit/30e6fa90) **fix(portfolio):** money-market tickers (FCASH, SPAXX, …) now render a flat $1 line on the 1D chart instead of a briefly-flashed line that disappears the moment the empty intraday fetch lands.
+- [`763da2c`](https://github.com/yumima/finterm/commit/763da2cd) **ui(news):** command-bar reordered to **WIRE | PTF | CLST** so the portfolio filter sits next to the default view; CLST (clusters) lives on the far side.
+- [`13c2546`](https://github.com/yumima/finterm/commit/13c25462) **docs(design):** new AI-stack wiring plan at `fincept-qt/docs/design/ai-stack-free-local.md` — two first-class paths (localhost LLM via a sibling project, *or* external API keys), no silent failover between them.
+- [`b25e4fb`](https://github.com/yumima/finterm/commit/b25e4fb1) **perf(pre-ipo):** first-paint refresh cut from ~96 s to ~24 s. Form D fetcher parses 30 filings instead of 120; status label no longer overwrites the "loaded from cache" message during background pulls.
+- [`f0126e7`](https://github.com/yumima/finterm/commit/f0126e75) **ui(news):** unseen-headline amber row tint is gone (its fade timer was disabled so the tint was pinned at peak brightness until the user hovered); the 3 px amber dot still flags new items.
+- [`df89561`](https://github.com/yumima/finterm/commit/df89561e) **perf(pre-ipo):** opening the Pre-IPO screen no longer triggers a network refresh if the cached data is less than 24 h old. The manual Refresh button still forces a pull.
+- [`9bad451`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** background auto-refresh every day at **05:00 America/New_York** while the app is running, so morning opens find fresh SEC data without a wait. DST handled automatically by re-arming from "now in ET" each tick.
+
+[See all commits →](https://github.com/yumima/finterm/commits/main)
+
 ## What you get
 
 - **Markets / Watchlist / News** — live global quotes, charts, and a two-column news feed with a portfolio filter (PTF) that matches articles by ticker *or* company name, plus an on-demand TL;DR of the visible headlines via your LLM.
