@@ -4,13 +4,13 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 ## What you get
 
-- **Markets / Watchlist / News** — live global quotes, charts, and curated news.
+- **Markets / Watchlist / News** — live global quotes, charts, and a two-column news feed with a portfolio filter (PTF) that matches articles by ticker *or* company name, plus an on-demand TL;DR of the visible headlines via your LLM.
 - **Portfolio** — multi-account holdings, performance chart, heatmap, blotter, and an extended-hours sub-view.
 - **Equity Research** — per-ticker dashboard: financials, analyst targets, technicals, peers, news, sentiment.
 - **Futures** — multi-asset-class watchlist with heatmap, term structure, spreads, settlements, and continuous charts.
 - **Power Trader** — STOCK Act congressional trading analytics with member drawers, signal scores, and side-by-side compare.
 - **Pre-IPO** — private-market cockpit fed by public SEC EDGAR sources (Form D, S-1, mutual-fund N-PORT marks): picks, screener, company dossiers, IPO pipeline.
-- **Knowledge** — markets and quant curriculum with practice tools, formula calculators, and an embedded AI tutor.
+- **Knowledge** — markets and quant curriculum with practice tools, formula calculators, and an embedded AI tutor. The quant catalogue ships 47 strategy entries (FX, factor, FI, vol, dispersion, macro, …) with intuition, math, and citations.
 - **AI chat bubble** — pluggable LLM provider; none wired by default.
 - **Concurrent yfinance daemon** — long-lived Python child runs market-data fetches in parallel over a Unix domain socket; interactive requests are prioritised over background sweeps.
 - **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; `finterm install` registers a desktop launcher.
@@ -140,4 +140,4 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 
 Licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).
 
-finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency (no email signup, no OTP, no paywall), replaces it with a local username + PIN multi-user picker, adds the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed, and the various local-first conveniences described above. AGPL-3.0 inherits.
+finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency (no email signup, no OTP, no paywall), replaces it with a local username + PIN multi-user picker, adds the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed with PTF / TL;DR, a 47-entry quant strategy catalogue, and the various local-first conveniences described above. AGPL-3.0 inherits.
