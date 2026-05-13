@@ -96,12 +96,15 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     int cy = rect.top() + rect.height() / 2;
     int text_y = rect.top() + (rect.height() + data_fm_.ascent() - data_fm_.descent()) / 2;
 
-    // Pulse animation for new items — amber glow that fades
-    int pulse = index.data(PulsePhaseRole).toInt();
-    if (is_new && pulse >= 0) {
-        int alpha = (pulse == 0) ? 40 : (pulse == 1 ? 25 : (pulse == 2 ? 15 : 8));
-        painter->fillRect(rect, QColor(217, 119, 6, alpha)); // amber glow overlay
-    }
+    // The amber background overlay that used to highlight unseen items
+    // was pinned to its brightest alpha because the pulse-fade timer is
+    // disabled (NewsScreen.cpp gated it off to avoid flicker when many
+    // articles arrive at once). With no fade, every new headline read
+    // as a yellow-brownish row until the user clicked or hovered and
+    // mark_seen() killed the overlay. The 3px amber dot below is enough
+    // of an unseen signal; drop the row tint so the theme background
+    // shows through consistently.
+    (void)index.data(PulsePhaseRole);
 
     // New indicator — 3px amber dot
     if (is_new) {
