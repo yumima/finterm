@@ -150,6 +150,19 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
 
     // Symbol group link — SymbolGroup::None when unlinked.
     SymbolGroup link_group_ = SymbolGroup::None;
+
+    // Portfolio (PTF) filter state. Holdings are loaded once on first show
+    // and refreshed each time apply_filters_async runs, so adds/removes via
+    // the Portfolio screen reflect here on the next feed update without
+    // needing an explicit signal.
+    bool portfolio_filter_active_ = false;
+    QSet<QString> portfolio_tickers_; // uppercased symbols
+    void reload_portfolio_holdings();
+
+    // TL;DR — guards against overlapping LlmService::chat_streaming calls
+    // while a request is in flight (we can't abort mid-stream, so the gate
+    // also prevents the user from racing themselves into duplicate work).
+    bool tldr_in_flight_ = false;
 };
 
 } // namespace fincept::screens

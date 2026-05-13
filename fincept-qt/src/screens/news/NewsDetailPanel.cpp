@@ -96,6 +96,28 @@ QWidget* NewsDetailPanel::build_content_view() {
     layout->setContentsMargins(12, 10, 12, 10);
     layout->setSpacing(8);
 
+    // ── TL;DR section ──────────────────────────────────────────────────
+    // Sits at the top so the brief stays in view regardless of which
+    // article is currently expanded. Populated from the intel-strip
+    // TL;DR button click via NewsScreen → show_tldr_summary().
+    tldr_section_ = new QWidget(content);
+    tldr_section_->setObjectName("newsTldrSection");
+    tldr_section_->hide();
+    auto* tldr_layout = new QVBoxLayout(tldr_section_);
+    tldr_layout->setContentsMargins(0, 0, 0, 6);
+    tldr_layout->setSpacing(2);
+
+    auto* tldr_title = new QLabel("TL;DR", tldr_section_);
+    tldr_title->setObjectName("newsTldrTitle");
+    tldr_layout->addWidget(tldr_title);
+
+    tldr_label_ = new QLabel(tldr_section_);
+    tldr_label_->setObjectName("newsTldrBody");
+    tldr_label_->setWordWrap(true);
+    tldr_layout->addWidget(tldr_label_);
+
+    layout->addWidget(tldr_section_);
+
     // Headline — rendered as a rich-text link so a click on the title itself
     // opens the article in the user's browser. The OPEN button still exists
     // for discoverability; this just removes the "the title is right there
@@ -734,6 +756,38 @@ void NewsDetailPanel::clear() {
     entities_section_->hide();
     infra_section_->hide();
     analyze_timeout_->stop();
+}
+
+// ── TL;DR ──────────────────────────────────────────────────────────────────
+
+void NewsDetailPanel::show_tldr_loading() {
+    // Force the content stack page so the TL;DR section is reachable even
+    // if no article has been selected yet. Keep the panel open while the
+    // request is in flight.
+    if (tldr_label_)
+        tldr_label_->setText(QStringLiteral("Generating brief…"));
+    if (tldr_section_)
+        tldr_section_->show();
+    stack_->setCurrentIndex(1);
+    open_panel();
+}
+
+void NewsDetailPanel::show_tldr_summary(const QString& text) {
+    if (!tldr_label_ || !tldr_section_)
+        return;
+    if (text.isEmpty()) {
+        tldr_section_->hide();
+        return;
+    }
+    tldr_label_->setText(text);
+    tldr_section_->show();
+    stack_->setCurrentIndex(1);
+    open_panel();
+}
+
+void NewsDetailPanel::hide_tldr() {
+    if (tldr_section_)
+        tldr_section_->hide();
 }
 
 } // namespace fincept::screens

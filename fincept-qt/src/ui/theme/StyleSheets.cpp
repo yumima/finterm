@@ -63,6 +63,8 @@ QString news_screen_styles() {
                "  padding: 0 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }"
                "#newsCommandBarPill:hover { color: %7; background: %8; }"
                "#newsCommandBarPill[active=\"true\"] { background: %9; color: %4; border-color: %10; }"
+               "#newsCommandBarPill:disabled { color: %6; border-color: %3; background: transparent; }"
+               "#newsCommandBarPill:disabled:hover { color: %6; background: transparent; }"
                "#newsCommandBarSep { color: %3; font-size: 12px; background: transparent; }"
                "#newsCommandBarCount { color: %7; font-size: 12px; background: transparent; padding: 0 4px; }"
                "#newsCommandBarAlert { color: %11; font-size: 11px; font-weight: 700; "
@@ -100,6 +102,12 @@ QString news_screen_styles() {
                "#newsIntelSep { color: %3; font-size: 10px; background: transparent; }"
                "#newsIntelScore { color: %7; font-size: 11px; font-weight: 700; background: transparent; }"
                "#newsIntelMonitors { color: %7; font-size: 11px; background: transparent; }"
+               "#newsIntelTldr { color: %14; font-size: 11px; font-weight: 700; "
+               "  background: transparent; padding: 0 6px; border: 0; "
+               "  letter-spacing: 0.5px; text-align: left; }"
+               "#newsIntelTldr:hover { color: %4; }"
+               "#newsIntelTldr:disabled { color: %6; }"
+               "#newsIntelTldr:focus { outline: 0; border: 0; }"
                "#newsIntelDeviations { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
                "#newsSentimentBull { background: %15; }"
                "#newsSentimentNeut { background: %16; }"
@@ -216,6 +224,15 @@ QString news_screen_styles() {
                "#newsRelatedBtn { background: transparent; color: %7; font-size: 11px; "
                "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
                "#newsRelatedBtn:hover { color: %4; background: %8; }"
+
+               /* ── TL;DR section (top of detail panel) ── */
+               /* Cyan border-bottom to echo the intel-strip TL;DR accent so */
+               /* the click-target and the destination are visually linked.  */
+               "#newsTldrSection { background: transparent; border-bottom: 1px solid %3; }"
+               "#newsTldrTitle { color: %14; font-size: 11px; font-weight: 700; "
+               "  letter-spacing: 1px; background: transparent; padding: 2px 0; }"
+               "#newsTldrBody { color: %7; font-size: 12px; line-height: 1.4; "
+               "  background: transparent; padding: 2px 0 4px; }"
                "#newsMonitorMatchLabel { color: %7; font-size: 11px; background: transparent; }"
 
                /* ── Ticker strip ── */

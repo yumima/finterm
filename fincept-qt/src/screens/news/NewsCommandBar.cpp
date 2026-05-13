@@ -1,5 +1,7 @@
 #include "screens/news/NewsCommandBar.h"
 
+#include "ui/theme/Theme.h"
+
 #include <QScrollArea>
 #include <QStyle>
 
@@ -134,6 +136,22 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     });
     update_pill_group({view_wire_, view_clusters_}, "WIRE");
 
+    // PTF pill — independent toggle filter (not part of the WIRE/CLST
+    // group). Restricts the feed to articles whose tickers intersect the
+    // user's active portfolio holdings. Greyed out until holdings exist;
+    // when active the label includes an inline count badge ("PTF 7").
+    view_ptf_ = make_pill("PTF", "PTF", hl);
+    view_ptf_->setCheckable(true);
+    view_ptf_->setToolTip(QStringLiteral(
+        "Filter the feed to articles tagged with tickers in your portfolio. "
+        "With no holdings the filter yields an empty feed — load a portfolio first."));
+    connect(view_ptf_, &QPushButton::clicked, this, [this]() {
+        portfolio_active_ = view_ptf_->isChecked();
+        refresh_portfolio_pill();
+        emit portfolio_filter_toggled(portfolio_active_);
+    });
+    refresh_portfolio_pill();
+
     hl->addStretch();
 
     // Unseen count — clickable so the user has a one-click return to the
@@ -241,6 +259,21 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     hl->setContentsMargins(6, 0, 6, 0);
     hl->setSpacing(8);
 
+    // TL;DR — clickable label rendered as the first token in the strip.
+    // Sits at the head of the row so it reads as a leading affordance for
+    // the inline live counters that follow ("X WATCHES Y HIT"). Styled
+    // via the dedicated #newsIntelTldr object name so the cyan accent
+    // pulls from the theme tokens, not a hard-coded hex.
+    tldr_btn_ = new QPushButton("TL;DR", row);
+    tldr_btn_->setObjectName("newsIntelTldr");
+    tldr_btn_->setFlat(true);
+    tldr_btn_->setCursor(Qt::PointingHandCursor);
+    tldr_btn_->setToolTip(QStringLiteral(
+        "AI-generated brief of the top headlines currently visible. "
+        "Renders into the article detail pane (the middle window)."));
+    connect(tldr_btn_, &QPushButton::clicked, this, &NewsCommandBar::tldr_clicked);
+    hl->addWidget(tldr_btn_);
+
     // Stats: FEEDS | ARTICLES | CLUSTERS | SOURCES
     auto make_intel_stat = [&](const QString& label_text) -> QLabel* {
         auto* container = new QWidget(row);
@@ -307,9 +340,13 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     sep2->setObjectName("newsIntelSep");
     hl->addWidget(sep2);
 
-    // Monitor alerts summary
-    intel_monitors_ = new QLabel("0 WATCHES", row);
+    // Monitor alerts summary — rich-text so the "WATCHES" / "HIT" tokens
+    // can be individually colored (green for the positive/fresh signal,
+    // red/amber for the warning). Colors are pulled from theme tokens in
+    // update_monitor_summary() so the strip tracks the active theme.
+    intel_monitors_ = new QLabel(row);
     intel_monitors_->setObjectName("newsIntelMonitors");
+    intel_monitors_->setTextFormat(Qt::RichText);
     hl->addWidget(intel_monitors_);
 
     // Deviation alerts
@@ -428,6 +465,53 @@ void NewsCommandBar::update_sentiment(int bullish, int bearish, int neutral) {
     sentiment_score_->setText(QString("%1%2").arg(score >= 0 ? "+" : "").arg(score, 0, 'f', 2));
 }
 
+// ── PTF pill ───────────────────────────────────────────────────────────────
+
+void NewsCommandBar::set_portfolio_available(bool available) {
+    // The pill is always clickable regardless of this flag — holdings
+    // availability is signalled by the inline count badge (empty filter
+    // result IS the "no holdings" affordance). The flag is kept on the
+    // bar so callers can introspect it via the existing setter contract
+    // and for future UI variants (e.g., subtle tinting) without touching
+    // the click path.
+    portfolio_available_ = available;
+    refresh_portfolio_pill();
+}
+
+void NewsCommandBar::set_portfolio_match_count(int count) {
+    portfolio_match_count_ = count;
+    refresh_portfolio_pill();
+}
+
+void NewsCommandBar::set_tldr_busy(bool busy) {
+    if (!tldr_btn_)
+        return;
+    tldr_btn_->setEnabled(!busy);
+    tldr_btn_->setText(busy ? QStringLiteral("TL;DR…") : QStringLiteral("TL;DR"));
+}
+
+void NewsCommandBar::refresh_portfolio_pill() {
+    if (!view_ptf_)
+        return;
+    // Always clickable. Clicking with no holdings simply produces an empty
+    // filtered feed (empty-state) — that's a more useful affordance than a
+    // greyed-out button the user can't interact with.
+    view_ptf_->setEnabled(true);
+    if (portfolio_active_ && portfolio_match_count_ > 0) {
+        // Inline count badge — "PTF 7" — analogous to the BREAKING
+        // pill's "%n BREAKING" rendering. Keeps the user oriented to
+        // how much the filter is narrowing the feed.
+        view_ptf_->setText(QString("PTF %1").arg(portfolio_match_count_));
+    } else {
+        view_ptf_->setText("PTF");
+    }
+    // Drive the [active="true"] QSS rule the other pills use, so the
+    // visual hit/state matches WIRE/CLST exactly.
+    view_ptf_->setProperty("active", portfolio_active_);
+    view_ptf_->style()->unpolish(view_ptf_);
+    view_ptf_->style()->polish(view_ptf_);
+}
+
 void NewsCommandBar::update_deviations(const QVector<QPair<QString, double>>& deviations) {
     if (deviations.isEmpty()) {
         intel_deviations_->hide();
@@ -441,10 +525,23 @@ void NewsCommandBar::update_deviations(const QVector<QPair<QString, double>>& de
 }
 
 void NewsCommandBar::update_monitor_summary(int total_monitors, int active_alerts) {
-    if (active_alerts > 0)
-        intel_monitors_->setText(QString("%1 WATCHES  %2 HIT").arg(total_monitors).arg(active_alerts));
-    else
-        intel_monitors_->setText(QString("%1 WATCHES").arg(total_monitors));
+    // "WATCHES" — positive/fresh signal (green); "HIT" — warning (red).
+    // Colors are read live from theme tokens so the strip recolors
+    // when the user switches themes.
+    const QString watches_color = ui::colors::POSITIVE();
+    const QString hit_color = ui::colors::NEGATIVE();
+    if (active_alerts > 0) {
+        intel_monitors_->setText(QString("<span style=\"color:%1;\">%2 WATCHES</span>  "
+                                         "<span style=\"color:%3;\">%4 HIT</span>")
+                                     .arg(watches_color)
+                                     .arg(total_monitors)
+                                     .arg(hit_color)
+                                     .arg(active_alerts));
+    } else {
+        intel_monitors_->setText(QString("<span style=\"color:%1;\">%2 WATCHES</span>")
+                                     .arg(watches_color)
+                                     .arg(total_monitors));
+    }
 }
 
 } // namespace fincept::screens

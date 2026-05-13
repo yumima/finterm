@@ -30,6 +30,18 @@ class NewsCommandBar : public QWidget {
     void hide_summary();
     void set_summarizing(bool busy);
 
+    // PTF pill — last filter pill in the command row. Always clickable;
+    // when the user has no holdings the active filter simply produces an
+    // empty feed (rather than a greyed-out button). Shows an inline count
+    // badge ("PTF 7") when active, or a preview of would-be matches when
+    // inactive.
+    void set_portfolio_available(bool available);
+    void set_portfolio_match_count(int count);
+    bool is_portfolio_active() const { return portfolio_active_; }
+
+    // TL;DR — disable/enable while a summary is in flight.
+    void set_tldr_busy(bool busy);
+
     // Intel strip updates (moved from side panel)
     void update_stats(int feeds, int articles, int clusters, int sources);
     void update_sentiment(int bullish, int bearish, int neutral);
@@ -57,6 +69,15 @@ class NewsCommandBar : public QWidget {
     // so the user has a one-click return path without hunting for the
     // WIRE pill.
     void unseen_clicked();
+    // PTF pill toggled. `active` reflects the new state (true = filter
+    // engaged, restrict feed to articles whose tickers intersect the
+    // user's holdings).
+    void portfolio_filter_toggled(bool active);
+    // TL;DR clicked in the intel strip. NewsScreen drives a streaming
+    // LlmService::chat_streaming() request against the top-N visible
+    // headlines (per-user API key) and routes the result into the detail
+    // panel.
+    void tldr_clicked();
 
   private:
     QPushButton* make_pill(const QString& text, const QString& value, QHBoxLayout* layout);
@@ -72,6 +93,7 @@ class NewsCommandBar : public QWidget {
     QPushButton* sort_newest_ = nullptr;
     QPushButton* view_wire_ = nullptr;
     QPushButton* view_clusters_ = nullptr;
+    QPushButton* view_ptf_ = nullptr;
     QPushButton* refresh_btn_ = nullptr;
     QPushButton* summarize_btn_ = nullptr;
     QPushButton* drawer_btn_ = nullptr;
@@ -100,6 +122,17 @@ class NewsCommandBar : public QWidget {
     QString active_time_ = "24H";
     QString active_sort_ = "RELEVANCE";
     QString active_view_ = "WIRE";
+
+    // PTF pill state — held locally because the count badge is rendered
+    // inline ("PTF 7") and needs to survive across set_portfolio_match_count
+    // calls that happen on every feed refresh.
+    bool portfolio_active_ = false;
+    bool portfolio_available_ = false;
+    int portfolio_match_count_ = 0;
+    void refresh_portfolio_pill();
+
+    // TL;DR — intel-strip clickable label.
+    QPushButton* tldr_btn_ = nullptr;
 };
 
 } // namespace fincept::screens
