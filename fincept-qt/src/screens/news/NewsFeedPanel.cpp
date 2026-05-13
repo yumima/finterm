@@ -123,17 +123,17 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
         layout->setContentsMargins(24, 24, 24, 24);
         layout->setSpacing(8);
         layout->addStretch();
-        auto* title = new QLabel(QStringLiteral("No articles available"), empty_state_);
-        title->setObjectName("newsEmptyStateTitle");
-        title->setAlignment(Qt::AlignCenter);
-        auto* hint = new QLabel(
+        empty_state_title_ = new QLabel(QStringLiteral("No articles available"), empty_state_);
+        empty_state_title_->setObjectName("newsEmptyStateTitle");
+        empty_state_title_->setAlignment(Qt::AlignCenter);
+        empty_state_hint_ = new QLabel(
             QStringLiteral("Check your network connection and click Refresh to retry."),
             empty_state_);
-        hint->setObjectName("newsEmptyStateHint");
-        hint->setAlignment(Qt::AlignCenter);
-        hint->setWordWrap(true);
-        layout->addWidget(title);
-        layout->addWidget(hint);
+        empty_state_hint_->setObjectName("newsEmptyStateHint");
+        empty_state_hint_->setAlignment(Qt::AlignCenter);
+        empty_state_hint_->setWordWrap(true);
+        layout->addWidget(empty_state_title_);
+        layout->addWidget(empty_state_hint_);
         layout->addStretch();
     }
 
@@ -321,6 +321,19 @@ void NewsFeedPanel::set_empty_state(bool empty) {
         stack_->setCurrentWidget(empty_state_);
     } else if (stack_->currentWidget() == empty_state_) {
         stack_->setCurrentWidget(feed_splitter_);
+    }
+}
+
+void NewsFeedPanel::set_empty_state_message(const QString& title, const QString& hint) {
+    if (empty_state_title_) {
+        empty_state_title_->setText(title.isEmpty()
+            ? QStringLiteral("No articles available")
+            : title);
+    }
+    if (empty_state_hint_) {
+        empty_state_hint_->setText(hint.isEmpty()
+            ? QStringLiteral("Check your network connection and click Refresh to retry.")
+            : hint);
     }
 }
 

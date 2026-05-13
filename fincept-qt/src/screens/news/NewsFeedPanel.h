@@ -45,9 +45,15 @@ class NewsFeedPanel : public QWidget {
     void clear_breaking();
     void set_loading(bool loading);
     /// When loading has finished but no articles arrived, show a non-blocking
-    /// empty-state message ("No articles available — check connection").
+    /// empty-state message. The default text reflects a network/refresh
+    /// problem; callers can override via set_empty_state_message() before
+    /// calling this with `true` to show context-specific copy (e.g., for
+    /// the PTF filter producing no matches).
     /// Calling with `false` (or any successful set_wire_articles) hides it.
     void set_empty_state(bool empty);
+    /// Replace the empty-state title + hint copy. Reset to defaults by
+    /// passing empty strings.
+    void set_empty_state_message(const QString& title, const QString& hint);
     void scroll_to(const QString& article_id);
     void set_selected(const QString& article_id);
     void select_next();
@@ -116,8 +122,12 @@ class NewsFeedPanel : public QWidget {
     int skeleton_phase_ = 0;
     bool is_loading_ = false;
 
-    // Empty-state widget (shown when loading is done + no articles)
+    // Empty-state widget (shown when loading is done + no articles). The
+    // title + hint labels are kept as members so set_empty_state_message()
+    // can rewrite them for context-specific copy (e.g., PTF filter misses).
     QWidget* empty_state_ = nullptr;
+    QLabel* empty_state_title_ = nullptr;
+    QLabel* empty_state_hint_ = nullptr;
 
     // Source-column drag-resize state
     bool dragging_source_col_ = false;

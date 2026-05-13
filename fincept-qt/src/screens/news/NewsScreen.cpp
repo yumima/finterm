@@ -880,11 +880,29 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
 
     // Empty-state toggle: only show "no articles" when we're not still loading
     // and the filter genuinely produced nothing. Hide it as soon as the user
-    // has any rows to look at.
-    if (!loading_)
+    // has any rows to look at. Pick context-specific copy when the cause is
+    // the PTF filter, not a network problem — the generic
+    // "check your network connection" hint is wrong in those cases.
+    if (!loading_) {
+        if (filtered.isEmpty()) {
+            if (portfolio_filter_active_ && portfolio_tickers_.isEmpty()) {
+                feed_panel_->set_empty_state_message(
+                    QStringLiteral("No portfolio loaded"),
+                    QStringLiteral("Add positions on the Portfolio screen, then toggle PTF again."));
+            } else if (portfolio_filter_active_ && !all_articles_.isEmpty()) {
+                feed_panel_->set_empty_state_message(
+                    QStringLiteral("No headlines match your portfolio"),
+                    QStringLiteral("None of the visible articles are tagged with your %1 holding(s). "
+                                   "Try widening the time range, or clear PTF to see the full feed.")
+                        .arg(portfolio_tickers_.size()));
+            } else {
+                feed_panel_->set_empty_state_message({}, {}); // reset to defaults
+            }
+        }
         feed_panel_->set_empty_state(filtered.isEmpty());
-    else if (!filtered.isEmpty())
+    } else if (!filtered.isEmpty()) {
         feed_panel_->set_empty_state(false);
+    }
 
     // Command bar counts
     command_bar_->set_article_count(filtered.size());
