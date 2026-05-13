@@ -22,6 +22,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QSettings>
 #include <QShortcut>
@@ -33,6 +34,71 @@
 #include <cmath>
 
 namespace fincept::screens {
+
+namespace {
+
+// Company-name and product aliases for a given ticker. The news-tagging
+// regex in NewsService is `\b[A-Z]{2,5}\b`, which only catches all-caps
+// tickers ("AAPL") inside article text — but financial reporting almost
+// always uses the company name ("Apple") instead, so the tagger misses
+// the bulk of real signal. The PTF filter therefore augments the tag
+// intersection with a regex pass over headline+summary using these
+// aliases for every active portfolio symbol. Only symbols that are
+// commonly discussed by name are included; for everything else the
+// fallback is to match the ticker itself as a word.
+const QStringList& portfolio_aliases(const QString& sym_upper) {
+    static const QHash<QString, QStringList> map = {
+        {"AAPL",  {"Apple"}},
+        {"AMZN",  {"Amazon"}},
+        {"GOOG",  {"Google", "Alphabet"}},
+        {"GOOGL", {"Google", "Alphabet"}},
+        {"NVDA",  {"Nvidia", "NVIDIA"}},
+        {"PLTR",  {"Palantir"}},
+        {"AVGO",  {"Broadcom"}},
+        {"BRK-B", {"Berkshire"}},
+        {"BRK.B", {"Berkshire"}},
+        {"ARM",   {"Arm Holdings", "Arm Ltd"}},
+        {"IONQ",  {"IonQ"}},
+        {"MSFT",  {"Microsoft"}},
+        {"META",  {"Meta Platforms", "Facebook"}},
+        {"TSLA",  {"Tesla"}},
+        {"AMD",   {"Advanced Micro Devices"}},
+    };
+    static const QStringList empty;
+    auto it = map.find(sym_upper);
+    return it == map.end() ? empty : it.value();
+}
+
+// Build a single combined regex over the portfolio symbols + their
+// company-name aliases. Bare symbols are matched case-sensitively (via
+// the inline `(?-i:...)` modifier) because tickers like ARM, CAR, or
+// CART are also common English words — only the all-caps form is
+// meaningful as a ticker reference. Aliases ("Apple", "Nvidia") are
+// matched case-insensitively. Returns an invalid regex if the set
+// yields no usable alternatives.
+QRegularExpression build_portfolio_text_regex(const QSet<QString>& ptf_tickers) {
+    if (ptf_tickers.isEmpty())
+        return QRegularExpression{};
+    QStringList alternatives;
+    for (const auto& sym : ptf_tickers) {
+        // Symbol itself — only worth checking if it can match the
+        // \w-boundary form (i.e., no hyphen/dot). Hyphenated symbols
+        // like BRK-B are caught via their alias entry instead.
+        if (!sym.contains('-') && !sym.contains('.')) {
+            alternatives << QStringLiteral("(?-i:\\b%1\\b)").arg(QRegularExpression::escape(sym));
+        }
+        for (const auto& a : portfolio_aliases(sym))
+            alternatives << QStringLiteral("\\b%1\\b").arg(QRegularExpression::escape(a));
+    }
+    if (alternatives.isEmpty())
+        return QRegularExpression{};
+    QRegularExpression re("(?:" + alternatives.join("|") + ")",
+                          QRegularExpression::CaseInsensitiveOption);
+    re.optimize();
+    return re;
+}
+
+} // namespace
 
 NewsScreen::NewsScreen(QWidget* parent) : QWidget(parent) {
     setObjectName("newsScreen");
@@ -728,6 +794,14 @@ void NewsScreen::apply_filters_async() {
         QVector<services::NewsArticle> filtered;
         filtered.reserve(articles_copy.size());
 
+        // Precompute the combined company-name regex once per filter pass.
+        // The NewsService tagger only catches all-caps tickers in article
+        // text, but financial reporting writes "Apple" rather than "AAPL",
+        // so for the PTF filter we also scan headline+summary with this
+        // regex when the tag intersection misses.
+        const QRegularExpression ptf_text_re =
+            ptf_active ? build_portfolio_text_regex(ptf_tickers) : QRegularExpression{};
+
         QMap<QString, int> category_counts;
         int bullish = 0, bearish = 0, neutral = 0;
 
@@ -771,9 +845,14 @@ void NewsScreen::apply_filters_async() {
                 }
             }
 
-            // PTF filter — set-intersection on tickers vs the user's
-            // active portfolio holdings. Empty ticker lists on an article
-            // are excluded (no overlap is possible).
+            // PTF filter — accept the article if (a) any tagged ticker
+            // is in the user's portfolio, or (b) any portfolio symbol /
+            // company-name alias appears in headline+summary text. The
+            // text-regex fallback exists because NewsService's tagger
+            // misses tickers referenced by company name (the dominant
+            // case for US-equity news), and without it the PTF feature
+            // would surface zero of the ~tens-to-hundreds of articles
+            // that actually discuss the user's holdings.
             if (ptf_active) {
                 if (ptf_tickers.isEmpty()) {
                     ++rejected_ptf;
@@ -785,6 +864,10 @@ void NewsScreen::apply_filters_async() {
                         overlap = true;
                         break;
                     }
+                }
+                if (!overlap && ptf_text_re.isValid() && !ptf_text_re.pattern().isEmpty()) {
+                    overlap = ptf_text_re.match(a.headline).hasMatch() ||
+                              ptf_text_re.match(a.summary).hasMatch();
                 }
                 if (!overlap) {
                     ++rejected_ptf;
@@ -892,7 +975,7 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
             } else if (portfolio_filter_active_ && !all_articles_.isEmpty()) {
                 feed_panel_->set_empty_state_message(
                     QStringLiteral("No headlines match your portfolio"),
-                    QStringLiteral("None of the visible articles are tagged with your %1 holding(s). "
+                    QStringLiteral("None of the visible articles mention your %1 holding(s). "
                                    "Try widening the time range, or clear PTF to see the full feed.")
                         .arg(portfolio_tickers_.size()));
             } else {
@@ -920,16 +1003,27 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     } else {
         // When inactive, badge shows the count of feed items that WOULD
         // match — a useful preview so the user can see whether toggling
-        // would yield anything before committing to the filter.
+        // would yield anything before committing to the filter. Mirrors
+        // the active-filter logic: tag intersection first, then a
+        // company-name regex fallback against headline+summary.
         int preview = 0;
         if (!portfolio_tickers_.isEmpty()) {
+            const QRegularExpression text_re = build_portfolio_text_regex(portfolio_tickers_);
+            const bool text_re_valid = text_re.isValid() && !text_re.pattern().isEmpty();
             for (const auto& a : filtered) {
+                bool overlap = false;
                 for (const auto& t : a.tickers) {
                     if (portfolio_tickers_.contains(t.toUpper())) {
-                        ++preview;
+                        overlap = true;
                         break;
                     }
                 }
+                if (!overlap && text_re_valid) {
+                    overlap = text_re.match(a.headline).hasMatch() ||
+                              text_re.match(a.summary).hasMatch();
+                }
+                if (overlap)
+                    ++preview;
             }
         }
         command_bar_->set_portfolio_match_count(preview);
