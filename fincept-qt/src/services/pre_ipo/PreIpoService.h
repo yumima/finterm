@@ -60,6 +60,12 @@ class PreIpoService : public QObject {
     void run_nport_marks_fetch();
     void run_s1_pipeline_fetch();
 
+    /// Arm a one-shot timer that fires at the next 05:00 America/New_York
+    /// to pre-warm the cache before the user opens the screen. Re-arms
+    /// itself on each fire so the cadence holds across DST transitions
+    /// without manual offset math.
+    void schedule_next_daily_refresh();
+
     void parse_form_d_response(const QJsonObject& root);
     void parse_marks_response(const QJsonObject& root);
     void parse_pipeline_response(const QJsonArray& arr);

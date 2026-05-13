@@ -16,6 +16,8 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QTimer>
+#include <QTimeZone>
 #include <QtMath>
 
 #include <algorithm>
@@ -73,7 +75,16 @@ PreIpoService& PreIpoService::instance() {
     return inst;
 }
 
-PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {}
+PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
+    // Pre-warm cadence: once the service is alive (= user has opened the
+    // Pre-IPO screen at least once this app session), fire a background
+    // refresh every day at 05:00 America/New_York. That's after EDGAR's
+    // 22:00 ET filing window has closed and before the user typically
+    // opens the terminal, so cached data is ready by morning. If the app
+    // is asleep at 05:00 ET, the TTL gate in load_data() picks up the
+    // slack on the next click.
+    schedule_next_daily_refresh();
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -737,6 +748,38 @@ void PreIpoService::finalize_load() {
             QStringLiteral("One or more SEC sources failed; partial data shown. "
                            "The screen will retry on next open."));
     }
+}
+
+// ── Daily auto-refresh ───────────────────────────────────────────────────────
+
+void PreIpoService::schedule_next_daily_refresh() {
+    const QTimeZone et("America/New_York");
+    if (!et.isValid()) {
+        LOG_WARN("PreIpo", "America/New_York timezone unavailable; daily auto-refresh disabled");
+        return;
+    }
+    const QDateTime now_et = QDateTime::currentDateTime().toTimeZone(et);
+    QDateTime target(now_et.date(), QTime(5, 0), et);
+    if (target <= now_et) target = target.addDays(1);
+    const qint64 ms = now_et.msecsTo(target);
+
+    LOG_INFO("PreIpo",
+             QString("Next daily auto-refresh at %1 ET (%2 min away)")
+                 .arg(target.toString("yyyy-MM-dd hh:mm"))
+                 .arg(ms / 60'000));
+
+    QPointer<PreIpoService> self = this;
+    QTimer::singleShot(static_cast<int>(std::min<qint64>(ms, INT_MAX)),
+                       this, [self]() {
+        if (!self) return;
+        if (self->loading_) {
+            LOG_INFO("PreIpo", "Daily auto-refresh fired while a load is in flight — skipping this tick");
+        } else {
+            LOG_INFO("PreIpo", "Daily auto-refresh firing (05:00 ET pre-warm)");
+            self->refresh();
+        }
+        self->schedule_next_daily_refresh();
+    });
 }
 
 // ── Persistent cache ─────────────────────────────────────────────────────────
