@@ -112,7 +112,15 @@ void PreIpoService::refresh() {
     loading_ = true;
     pending_bits_ = FB_All;
     failed_bits_  = 0;
-    emit progress(QStringLiteral("Loading SEC Form D, IPO pipeline, fund marks…"));
+    // Only show the "Loading…" status if we don't already have cached
+    // rows on screen. When the cache hydrated, load_data() has already
+    // emitted "Loaded from cache · refreshing in background…" — letting
+    // that stand keeps the user oriented (data is here, fresher is on
+    // the way) instead of flipping back to a generic Loading message
+    // for the 30-120s the network refresh takes.
+    if (!loaded_) {
+        emit progress(QStringLiteral("Loading SEC Form D, IPO pipeline, fund marks…"));
+    }
 
     run_form_d_fetch();
     run_nport_marks_fetch();
@@ -148,8 +156,15 @@ void PreIpoService::run_form_d_fetch() {
     QPointer<PreIpoService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form_d_data.py"),
+        // parse_xml_max=30: SEC asks for ≤10 req/s shared User-Agent and
+        // PreIpoService runs 3 scripts concurrently, so each XML parse
+        // costs ~2 requests × 0.4s gap ≈ 0.8s. At 120 parses that's ~96s
+        // of just rate-limit waits — the dominant first-load cost. 30
+        // parses ≈ 24s and is enough to filter the most-recent operating-
+        // company filings; the long tail of older filings retains its
+        // unfiltered display name until the next refresh widens.
         {QStringLiteral("all_data"),
-         QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":120,\"include_known\":true}")},
+         QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":30,\"include_known\":true}")},
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
