@@ -6,6 +6,8 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`499a4d7a`](https://github.com/yumima/finterm/commit/499a4d7a) **chore(hooks):** test post-commit docs follow-up
+- [`897f6ea9`](https://github.com/yumima/finterm/commit/897f6ea9) **chore(hooks):** post-commit creates docs(readme) follow-up for today's commits
 - [`349ecccb`](https://github.com/yumima/finterm/commit/349ecccb) **fix(portfolio-chart):** correct 1D aggregate, 1W focus, and session anchor
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
