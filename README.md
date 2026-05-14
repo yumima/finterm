@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`6b773de7`](https://github.com/yumima/finterm/commit/6b773de7) **fix(portfolio):** review findings — target coverage guard and dead field
 - [`d6c8cad1`](https://github.com/yumima/finterm/commit/d6c8cad1) **fix(portfolio):** correct target NAV math; drop upside % from TGT MEAN
 - [`efec30ab`](https://github.com/yumima/finterm/commit/efec30ab) **fix(portfolio):** fundamentals guard set before MV data available
 - [`7928ff18`](https://github.com/yumima/finterm/commit/7928ff18) **fix(portfolio):** deadlock in load_summary emit-while-holding-mutex
