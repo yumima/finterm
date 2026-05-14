@@ -123,6 +123,15 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     connect(&futures::FuturesQuoteCache::instance(),
             &futures::FuturesQuoteCache::quotes_updated,
             this, &PortfolioFuturesView::on_quote_cache_updated);
+    // Periodic extended-hours refresh. Without this the table only
+    // updated when PortfolioService re-emitted a summary, which is gated
+    // by a 5-minute TTL cache — so live pre/post-market prints would
+    // sit stale until the user manually refreshed. 20 s matches the
+    // futures cache cadence so both tables tick together.
+    ext_refresh_timer_ = new QTimer(this);
+    ext_refresh_timer_->setInterval(kExtRefreshIntervalMs);
+    connect(ext_refresh_timer_, &QTimer::timeout,
+            this, &PortfolioFuturesView::refresh_extended_hours);
 }
 
 void PortfolioFuturesView::showEvent(QShowEvent* event) {
@@ -131,11 +140,19 @@ void PortfolioFuturesView::showEvent(QShowEvent* event) {
     // The cache reference-counts subscribers so the timer pauses when
     // every consumer is hidden.
     futures::FuturesQuoteCache::instance().retain();
+    // Start the extended-hours refresh tick while visible. set_summary
+    // (which runs whenever the parent emits a new summary) still fires
+    // an immediate refresh; this timer keeps it ticking even when no
+    // new summary arrives.
+    if (ext_refresh_timer_ && !ext_refresh_timer_->isActive()) {
+        ext_refresh_timer_->start();
+    }
 }
 
 void PortfolioFuturesView::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     futures::FuturesQuoteCache::instance().release();
+    if (ext_refresh_timer_) ext_refresh_timer_->stop();
 }
 
 void PortfolioFuturesView::build_ui() {

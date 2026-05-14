@@ -7,6 +7,7 @@
 #include <QShowEvent>
 #include <QString>
 #include <QTableWidget>
+#include <QTimer>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -64,6 +65,15 @@ class PortfolioFuturesView : public QWidget {
 
     QHash<QString, ExtQuote> ext_quotes_;
     quint64                  ext_gen_ = 0;
+
+    // Periodic refresh of the extended-hours table while the view is
+    // visible. Runs in parallel with FuturesQuoteCache's own 20 s
+    // polling (which only feeds the futures table above). 20 s matches
+    // the futures cadence so both tables tick together; the timer is
+    // started in showEvent and stopped in hideEvent so no work happens
+    // when the view isn't on screen.
+    QTimer*                  ext_refresh_timer_ = nullptr;
+    static constexpr int     kExtRefreshIntervalMs = 20'000;
 };
 
 } // namespace fincept::screens
