@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`efec30ab`](https://github.com/yumima/finterm/commit/efec30ab) **fix(portfolio):** fundamentals guard set before MV data available
 - [`7928ff18`](https://github.com/yumima/finterm/commit/7928ff18) **fix(portfolio):** deadlock in load_summary emit-while-holding-mutex
 - [`a7a7d9c2`](https://github.com/yumima/finterm/commit/a7a7d9c2) **fix(portfolio):** three review findings on fundamentals panel
 - [`b98f4621`](https://github.com/yumima/finterm/commit/b98f4621) **feat(portfolio):** analyst-target panel in heatmap for portfolio-level view
