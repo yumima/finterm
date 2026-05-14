@@ -64,6 +64,16 @@ class FuturesQuoteCache : public QObject {
   private:
     FuturesQuoteCache();
 
+    /// On-disk JSON snapshot of `rows_` + last_refresh + last_source.
+    /// Written after each successful network refresh; read once at
+    /// construction so the grid can paint with stale-but-real data on
+    /// startup instead of waiting 1-2 s for the first live response.
+    /// No TTL gate — fast data; the existing 20 s polling timer
+    /// overwrites the snapshot with live values almost immediately.
+    QString cache_path() const;
+    void    save_to_disk();
+    void    load_from_disk();
+
     QHash<QString, FuturesQuote> rows_;          // keyed by symbol
     QString                      last_source_;
     QDateTime                    last_refresh_;

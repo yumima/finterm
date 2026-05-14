@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`19cb8f97`](https://github.com/yumima/finterm/commit/19cb8f97) **fix(portfolio-ext):** batched intraday fetch replaces per-symbol Ticker.info
 - [`5d8ccbae`](https://github.com/yumima/finterm/commit/5d8ccbae) **fix(quotes):** session-aware prior_reference for futures, FX, crypto
 - [`55b684da`](https://github.com/yumima/finterm/commit/55b684da) **chore(hooks):** list "Today's commits" latest-first instead of oldest-first
 - [`8d8a1d2f`](https://github.com/yumima/finterm/commit/8d8a1d2f) **chore(hooks):** exclude README-only commits from "Today's commits" list
