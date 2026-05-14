@@ -198,6 +198,12 @@ class PortfolioService : public QObject {
     // every refresh tick. Cleared on app restart — that's the explicit retry.
     QSet<QString> backfill_attempted_;
 
+    // Per-portfolio guard for fetch_portfolio_fundamentals. Analyst targets
+    // change at most daily; re-fetching on every 20 s summary tick would
+    // waste N yfinance calls. Cleared when the portfolio's holdings change
+    // (invalidate_cache) so a position add/remove re-fetches.
+    QSet<QString> fundamentals_fetched_;
+
     // 1D fan-out epoch: each fetch_*_intraday() call increments its stream's
     // counter and the callback captures the value at submit time. If the
     // user switches periods/tickers before the in-flight request lands, the

@@ -1632,6 +1632,11 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
 
 void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id) {
     if (portfolio_id.isEmpty()) return;
+    // Guard: analyst data changes at most daily — skip if we already fetched
+    // for this portfolio since the last holding change. Cleared by
+    // invalidate_cache() so an add/sell re-fetches on the next summary load.
+    if (fundamentals_fetched_.contains(portfolio_id)) return;
+    fundamentals_fetched_.insert(portfolio_id);
 
     // Build MV map from cached summary so we can weight each holding.
     QHash<QString, double> mv_by_symbol;
@@ -1682,7 +1687,8 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     r.tgt_low   = obj["target_low_price"].toDouble();
                     r.tgt_mean  = obj["target_mean_price"].toDouble();
                     r.tgt_high  = obj["target_high_price"].toDouble();
-                    r.pe        = obj["trailing_pe"].toDouble();
+                    // Python "info" action uses key "pe_ratio" (mapped from trailingPE).
+                    r.pe        = obj["pe_ratio"].toDouble();
                     // yfinance returns dividendYield as a fraction (e.g. 0.014)
                     r.yield     = obj["dividend_yield"].toDouble();
 
@@ -1748,6 +1754,7 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
 void PortfolioService::invalidate_cache(const QString& portfolio_id) {
     QMutexLocker lock(&cache_mutex_);
     summary_cache_.remove(portfolio_id);
+    fundamentals_fetched_.remove(portfolio_id);
 }
 
 } // namespace fincept::services

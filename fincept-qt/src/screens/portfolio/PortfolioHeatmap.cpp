@@ -742,8 +742,14 @@ void PortfolioHeatmap::refresh_theme() {
     setStyleSheet(
         QString("background:%1; border-right:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
 
-    detail_panel_->setStyleSheet(
-        QString("background:%1; border:1px solid %2; padding:4px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    const QString panel_ss = QString("background:%1; border:1px solid %2; padding:4px;")
+                                 .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
+    detail_panel_->setStyleSheet(panel_ss);
+    portfolio_panel_->setStyleSheet(panel_ss);
+
+    // Repaint portfolio panel data labels with current theme colours.
+    if (selected_symbol_.isEmpty())
+        update_portfolio_detail();
 
     // Only block appearance depends on theme colors — refresh in place
     // rather than rebuilding the grid + recreating QPushButton widgets.
