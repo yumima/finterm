@@ -240,7 +240,14 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
 void VideoPlayerWidget::refresh_data() {
     if (current_url_.isEmpty())
         return;
-
+#ifdef HAS_QT_MULTIMEDIA
+    // Live streams play continuously — there is nothing to "refresh".
+    // Re-calling play_url() on an active player re-creates the GStreamer
+    // pipeline without releasing the previous one's shmem frame buffers,
+    // which is the root cause of the OOM crash seen in practice.
+    if (player_ && player_->playbackState() == QMediaPlayer::PlayingState)
+        return;
+#endif
     play_url(current_url_, current_title_.isEmpty() ? "Custom Stream" : current_title_);
 }
 
@@ -292,11 +299,15 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     connect(proc, &QProcess::finished, proc, &QProcess::deleteLater);
     connect(proc, &QProcess::errorOccurred, this, &VideoPlayerWidget::on_ytdlp_error);
 
-    // -f bestvideo+bestaudio/best: best quality with audio
-    // --no-playlist: single video only
-    // -g: print URL only, don't download
+    // Cap at 480p: a financial news stream is perfectly readable at 480p and the
+    // smaller segment size dramatically reduces the GStreamer shmem frame buffers
+    // that accumulate during live HLS playback (root cause of prior OOM crash).
+    // -g: print URL only, no download. --no-playlist: single stream only.
     proc->start(ytdlp_program,
-                {"-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--no-playlist", "-g", youtube_url});
+                {"-f",
+                 "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]"
+                 "/best[height<=480][ext=mp4]/best[height<=480]/best",
+                 "--no-playlist", "-g", youtube_url});
 }
 
 void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*status*/) {
@@ -343,6 +354,13 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
+    // Stop and explicitly clear the current source before setting a new one.
+    // Without this, QMediaPlayer / GStreamer keeps the old pipeline alive and
+    // its shared-memory frame buffers stay allocated alongside the new ones.
+    // On a live HLS stream that means shmem can reach tens of gigabytes in
+    // minutes — the OOM killer terminates the process.
+    player_->stop();
+    player_->setSource(QUrl()); // empty URL tears down the GStreamer pipeline
     set_loading(false);
     status_label_->hide();
     player_->setSource(QUrl(stream_url));
