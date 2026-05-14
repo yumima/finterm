@@ -1685,7 +1685,6 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
         double pe        = 0;
         double yield     = 0;
         double rec_score = 0;  // 1=strong_buy … 5=strong_sell, 0=missing
-        bool   ok        = false;
     };
     struct Accum {
         int pending = 0;
@@ -1723,7 +1722,6 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     else if (rec == "sell"        || rec == "underperform") r.rec_score = 4;
                     else if (rec == "strong_sell" || rec == "strongsell")   r.rec_score = 5;
 
-                    r.ok = (r.tgt_mean > 0);
                 }
 
                 if (--state->pending > 0) return;
@@ -1752,7 +1750,10 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     const double price  = price_by_symbol.value(s, 0);
                     const double w      = total_mv > 0 ? mv / total_mv : 0;
 
-                    if (sr.tgt_mean > 0 && price > 0) {
+                    // Require all three target fields to be positive: some
+                    // symbols return only tgt_mean with tgt_low/high = 0,
+                    // which would push f.tgt_low below f.tgt_mean.
+                    if (sr.tgt_low > 0 && sr.tgt_mean > 0 && sr.tgt_high > 0 && price > 0) {
                         tgt_low_sum  += mv * sr.tgt_low  / price;
                         tgt_mean_sum += mv * sr.tgt_mean / price;
                         tgt_high_sum += mv * sr.tgt_high / price;
