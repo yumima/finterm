@@ -378,6 +378,33 @@ def get_batch_quotes(symbols):
             except Exception:
                 continue
 
+        # Session-aware fix-up for non-equity instruments (futures, FX, crypto
+        # spot). The daily-bar iloc[-2] above gives the wrong denominator for
+        # these: their trading session straddles the calendar day so "today's
+        # row" can be a live overnight session compared against day-before-
+        # yesterday's daily close. Replace previous_close / change / change_percent
+        # with values computed against the bar at the symbol's most-recent
+        # exchange session-end. See exchange_sessions.py for the registry.
+        try:
+            from exchange_sessions import batch_prior_references, is_non_equity
+            prior_refs = batch_prior_references([r["symbol"] for r in results])
+            for r in results:
+                sym = r["symbol"]
+                if not is_non_equity(sym) or sym not in prior_refs:
+                    continue
+                prior = prior_refs[sym]
+                if prior <= 0:
+                    continue
+                current = r["price"]
+                chg = current - prior
+                r["change"] = round(chg, 2)
+                r["change_percent"] = round((chg / prior) * 100, 2)
+                r["previous_close"] = round(prior, 2)
+        except Exception:
+            # Helper unavailable or failed — fall through with the
+            # daily-bar values rather than break the whole batch.
+            pass
+
         return results
     except Exception as e:
         # Fallback: fetch one by one

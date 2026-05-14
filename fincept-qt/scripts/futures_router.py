@@ -178,10 +178,35 @@ def _yf_quotes(symbols: List[str]) -> Dict[str, Any]:
                 "open_interest": 0,  # yfinance doesn't expose OI
                 "high": high,
                 "low": low,
+                "__yf_sym": yf_sym,  # internal, stripped before _ok
             })
         except Exception:
             continue
 
+    # Session-aware fix-up: replace daily-bar prev with the bar at each
+    # contract's exchange session-end. Daily-bar iloc[-2] reaches into
+    # the wrong calendar day for futures during the Globex evening
+    # session — see exchange_sessions.py.
+    try:
+        from exchange_sessions import batch_prior_references
+        yf_targets = [r["__yf_sym"] for r in rows if "__yf_sym" in r]
+        prior_refs = batch_prior_references(yf_targets)
+        for r in rows:
+            ys = r.get("__yf_sym")
+            if not ys or ys not in prior_refs:
+                continue
+            prior = prior_refs[ys]
+            if prior <= 0:
+                continue
+            last = r["last"]
+            chg = last - prior
+            r["change"] = chg
+            r["change_pct"] = (chg / prior) * 100.0 if prior else 0.0
+    except Exception:
+        pass
+
+    for r in rows:
+        r.pop("__yf_sym", None)
     return _ok(rows, "yfinance")
 
 

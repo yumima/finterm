@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`55b684da`](https://github.com/yumima/finterm/commit/55b684da) **chore(hooks):** list "Today's commits" latest-first instead of oldest-first
 - [`8d8a1d2f`](https://github.com/yumima/finterm/commit/8d8a1d2f) **chore(hooks):** exclude README-only commits from "Today's commits" list
 - [`ba6d32d6`](https://github.com/yumima/finterm/commit/ba6d32d6) **chore(hooks):** pre-commit hook regenerates README "Today's commits" section
 - [`9bad451f`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** daily 05:00 ET auto-refresh while app is running
