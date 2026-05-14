@@ -241,15 +241,27 @@ void PortfolioService::delete_portfolio(const QString& id) {
 
 void PortfolioService::load_summary(const QString& portfolio_id) {
     // Check in-memory cache first (P11). 5-min TTL — short-circuits everything.
+    // Copy the cached summary out before releasing the lock: emitting a signal
+    // while holding cache_mutex_ causes a deadlock because on_summary_loaded
+    // → fetch_portfolio_fundamentals re-acquires the same non-recursive mutex
+    // on the same thread.
     {
-        QMutexLocker lock(&cache_mutex_);
-        auto it = summary_cache_.find(portfolio_id);
-        if (it != summary_cache_.end()) {
-            qint64 now = QDateTime::currentSecsSinceEpoch();
-            if (now - it->timestamp < kCacheTtlSec) {
-                emit summary_loaded(it->summary);
-                return;
+        portfolio::PortfolioSummary cached;
+        bool hit = false;
+        {
+            QMutexLocker lock(&cache_mutex_);
+            auto it = summary_cache_.find(portfolio_id);
+            if (it != summary_cache_.end()) {
+                const qint64 now = QDateTime::currentSecsSinceEpoch();
+                if (now - it->timestamp < kCacheTtlSec) {
+                    cached = it->summary;
+                    hit = true;
+                }
             }
+        } // lock released before emit
+        if (hit) {
+            emit summary_loaded(cached);
+            return;
         }
     }
 
