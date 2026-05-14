@@ -1655,8 +1655,11 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
     // second (live) call that actually has MV weights available.
     if (fundamentals_fetched_.contains(portfolio_id)) return;
 
-    // Build MV map from cached summary so we can weight each holding.
+    // Build per-symbol MV and current-price maps from the cached summary.
+    // current_price is needed to convert per-share analyst targets into a
+    // portfolio-level target NAV: target_mv_i = mv_i × (tgt_i / price_i).
     QHash<QString, double> mv_by_symbol;
+    QHash<QString, double> price_by_symbol;
     double total_mv = 0;
     {
         QMutexLocker lock(&cache_mutex_);
@@ -1664,7 +1667,8 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
         if (cit != summary_cache_.cend()) {
             for (const auto& h : cit.value().summary.holdings) {
                 const QString up = h.symbol.toUpper();
-                mv_by_symbol[up] = h.market_value;
+                mv_by_symbol[up]    = h.market_value;
+                price_by_symbol[up] = h.current_price;
                 total_mv += h.market_value;
             }
         }
@@ -1697,7 +1701,7 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
         payload["symbol"] = sym;
         python::PythonWorker::instance().submit(
             "info", payload,
-            [self, portfolio_id, sym, state, mv_by_symbol, total_mv](
+            [self, portfolio_id, sym, state, mv_by_symbol, price_by_symbol, total_mv](
                 bool ok, QJsonObject obj, QString /*err*/) {
                 if (!self) return;
 
@@ -1713,42 +1717,58 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
 
                     // Map recommendation_key to a 1-5 score (lower = more bullish).
                     const QString rec = obj["recommendation_key"].toString().toLower();
-                    if      (rec == "strong_buy"  || rec == "strongbuy")  r.rec_score = 1;
-                    else if (rec == "buy")                                 r.rec_score = 2;
-                    else if (rec == "hold"        || rec == "neutral")    r.rec_score = 3;
+                    if      (rec == "strong_buy"  || rec == "strongbuy")    r.rec_score = 1;
+                    else if (rec == "buy")                                   r.rec_score = 2;
+                    else if (rec == "hold"        || rec == "neutral")      r.rec_score = 3;
                     else if (rec == "sell"        || rec == "underperform") r.rec_score = 4;
-                    else if (rec == "strong_sell" || rec == "strongsell") r.rec_score = 5;
+                    else if (rec == "strong_sell" || rec == "strongsell")   r.rec_score = 5;
 
                     r.ok = (r.tgt_mean > 0);
                 }
 
                 if (--state->pending > 0) return;
 
-                // All callbacks done — compute MV-weighted aggregates.
+                // All callbacks done — aggregate into portfolio-level fundamentals.
+                //
+                // TARGET NAV MATH:
+                //   Analyst target is a per-share price. To get the portfolio-level
+                //   target NAV we need qty_i × tgt_i = mv_i × (tgt_i / price_i).
+                //   For uncovered holdings (ETFs, MMFs, no analyst target) we keep
+                //   them at their current market value, so they contribute zero
+                //   upside/downside — the conservative, honest interpretation.
+                //   portfolio_tgt = Σ_covered(mv_i × tgt_i/price_i) + Σ_uncovered(mv_i)
+                //
+                // PE / YIELD / CONSENSUS use plain MV-weighted averages (dimensionless).
                 portfolio::PortfolioFundamentals f;
-                double w_tgt_low = 0, w_tgt_mean = 0, w_tgt_high = 0;
-                double w_pe = 0,   w_yield = 0,   w_rec = 0;
-                double cov_tgt = 0, cov_pe = 0, cov_yield = 0, cov_rec = 0;
+                double tgt_low_sum = 0, tgt_mean_sum = 0, tgt_high_sum = 0;
+                double covered_mv  = 0;
+                double w_pe = 0, w_yield = 0, w_rec = 0;
+                double cov_pe = 0, cov_yield = 0, cov_rec = 0;
 
                 for (auto jt = state->results.cbegin(); jt != state->results.cend(); ++jt) {
-                    const double w = mv_by_symbol.value(jt.key(), 0) / total_mv;
+                    const QString& s    = jt.key();
                     const SymResult& sr = jt.value();
-                    if (sr.tgt_mean > 0) {
-                        w_tgt_low  += w * sr.tgt_low;
-                        w_tgt_mean += w * sr.tgt_mean;
-                        w_tgt_high += w * sr.tgt_high;
-                        cov_tgt    += w;
+                    const double mv     = mv_by_symbol.value(s, 0);
+                    const double price  = price_by_symbol.value(s, 0);
+                    const double w      = total_mv > 0 ? mv / total_mv : 0;
+
+                    if (sr.tgt_mean > 0 && price > 0) {
+                        tgt_low_sum  += mv * sr.tgt_low  / price;
+                        tgt_mean_sum += mv * sr.tgt_mean / price;
+                        tgt_high_sum += mv * sr.tgt_high / price;
+                        covered_mv   += mv;
                     }
-                    if (sr.pe > 0) { w_pe  += w * sr.pe;    cov_pe    += w; }
-                    if (sr.yield > 0) { w_yield += w * sr.yield; cov_yield += w; }
-                    if (sr.rec_score > 0) { w_rec += w * sr.rec_score; cov_rec += w; }
+                    if (sr.pe    > 0) { w_pe    += w * sr.pe;        cov_pe    += w; }
+                    if (sr.yield > 0) { w_yield += w * sr.yield;     cov_yield += w; }
+                    if (sr.rec_score > 0) { w_rec += w * sr.rec_score; cov_rec   += w; }
                 }
 
-                // Re-normalise by actual coverage weight so sparse data stays unbiased.
-                if (cov_tgt > 0) {
-                    f.tgt_low  = w_tgt_low  / cov_tgt * total_mv;
-                    f.tgt_mean = w_tgt_mean / cov_tgt * total_mv;
-                    f.tgt_high = w_tgt_high / cov_tgt * total_mv;
+                if (covered_mv > 0) {
+                    // Covered holdings at analyst target + uncovered at current value.
+                    const double uncovered_mv = total_mv - covered_mv;
+                    f.tgt_low  = tgt_low_sum  + uncovered_mv;
+                    f.tgt_mean = tgt_mean_sum + uncovered_mv;
+                    f.tgt_high = tgt_high_sum + uncovered_mv;
                     f.has_analyst_data = true;
                 }
                 if (cov_pe    > 0) f.pe_ratio  = w_pe    / cov_pe;

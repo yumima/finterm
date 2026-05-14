@@ -614,21 +614,7 @@ void PortfolioHeatmap::update_portfolio_detail() {
         pfund_tgt_low_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
 
-        // Mean target with upside % relative to current MV.
-        double cur_mv = 0;
-        for (const auto& h : holdings_) cur_mv += h.market_value;
-        if (f.tgt_mean > 0 && cur_mv > 0) {
-            const double upside = (f.tgt_mean - cur_mv) / cur_mv * 100.0;
-            const char* up_col = upside >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-            pfund_tgt_mean_->setText(
-                QString("%1 <span style='color:%2; font-size:11px;'>%3%4%</span>")
-                    .arg(fmt_nav(f.tgt_mean), up_col,
-                         upside >= 0 ? "+" : "",
-                         QString::number(upside, 'f', 1)));
-        } else {
-            pfund_tgt_mean_->setText(fmt_nav(f.tgt_mean));
-        }
-        pfund_tgt_mean_->setTextFormat(Qt::RichText);
+        pfund_tgt_mean_->setText(fmt_nav(f.tgt_mean));
         pfund_tgt_mean_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::WARNING()));
 
