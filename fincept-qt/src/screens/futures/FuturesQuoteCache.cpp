@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QStandardPaths>
 
 namespace fincept::screens::futures {
@@ -115,10 +116,12 @@ void FuturesQuoteCache::save_to_disk() {
     root.insert("source",       last_source_);
     root.insert("quotes",       arr);
 
-    QFile f(cache_path());
+    // QSaveFile = write-to-tmp-then-rename. Survives a crash mid-write:
+    // the previous cache file stays intact until commit() succeeds.
+    QSaveFile f(cache_path());
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
     f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    f.close();
+    f.commit();
 }
 
 void FuturesQuoteCache::load_from_disk() {

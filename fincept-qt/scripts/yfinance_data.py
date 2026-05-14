@@ -400,10 +400,13 @@ def get_batch_quotes(symbols):
                 r["change"] = round(chg, 2)
                 r["change_percent"] = round((chg / prior) * 100, 2)
                 r["previous_close"] = round(prior, 2)
-        except Exception:
+        except Exception as e:
             # Helper unavailable or failed — fall through with the
-            # daily-bar values rather than break the whole batch.
-            pass
+            # daily-bar values rather than break the whole batch. Log
+            # so the silent fallback is visible.
+            import sys
+            print(f"[yfinance_data] session-aware fixup failed: {e!r}",
+                  file=sys.stderr)
 
         return results
     except Exception as e:
@@ -1421,7 +1424,10 @@ def get_extended_hours_quotes(symbols):
                 prepost=True, group_by="ticker", progress=False,
                 threads=True, auto_adjust=True,
             )
-        except Exception:
+        except Exception as e:
+            import sys as _sys
+            print(f"[yfinance_data] extended-hours download failed: {e!r}",
+                  file=_sys.stderr)
             return []
 
     # Defer session label so we can short-circuit on empty data without

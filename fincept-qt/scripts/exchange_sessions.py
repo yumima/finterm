@@ -18,9 +18,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+import sys
+from datetime import date, datetime, timedelta
+from typing import Dict, FrozenSet, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+
+
+def _warn(msg: str) -> None:
+    """Tagged stderr log so silent fallbacks aren't invisible in prod."""
+    print(f"[exchange_sessions] {msg}", file=sys.stderr)
 
 
 # Per-product futures session-end (settle) times. Hour/minute, all in
@@ -61,6 +67,19 @@ def _futures_root(symbol: str) -> str:
     return symbol[:-2] if symbol.endswith("=F") else symbol
 
 
+def _is_crypto_spot(symbol: str) -> bool:
+    """True for yfinance crypto-spot pairs: BTC-USD, ETH-USD, etc.
+
+    Tighter than `"-USD" in symbol` (which would match e.g.
+    `WEIRD-USD-FOO` or any symbol with `-USD` mid-string). All real
+    yfinance crypto pairs end with `-USD`, `-USDT`, `-USDC`, or `-EUR`;
+    we accept the USD family as our crypto canonicalisation.
+    """
+    return (symbol.endswith("-USD")
+            or symbol.endswith("-USDT")
+            or symbol.endswith("-USDC"))
+
+
 def is_non_equity(symbol: str) -> bool:
     """True iff the symbol's trading session doesn't match the US-equity
     calendar day. These are the symbols where daily-bar iloc[-2] is the
@@ -69,7 +88,7 @@ def is_non_equity(symbol: str) -> bool:
         return True
     if symbol.endswith("=X"):
         return True
-    if "-USD" in symbol:  # BTC-USD, ETH-USD, … (crypto spot)
+    if _is_crypto_spot(symbol):
         return True
     return False
 
@@ -81,9 +100,48 @@ def session_end_local(symbol: str) -> Tuple[int, int, str]:
         return (h, m, "America/New_York")
     if symbol.endswith("=X"):
         return (17, 0, "America/New_York")   # FX rollover at NY 17:00
-    if "-USD" in symbol:
+    if _is_crypto_spot(symbol):
         return (0, 0, "UTC")                  # crypto: midnight UTC
     return (16, 0, "America/New_York")        # equities default
+
+
+# US-market holiday cache (computed lazily on first lookup, per year).
+# Used by previous_session_end_utc to walk back past full closures so the
+# returned timestamp lands on a real trading session rather than a holiday
+# Monday with no bars. yfinance's intraday bar mask already degrades
+# gracefully (no bars on the holiday → next-earlier bar is picked), but
+# the timestamp itself is referenced in extended-hours logic for
+# same-day filtering and we want it correct there too.
+_HOLIDAYS_CACHE: Dict[int, FrozenSet[date]] = {}
+
+
+def _us_market_holidays(year: int) -> FrozenSet[date]:
+    cached = _HOLIDAYS_CACHE.get(year)
+    if cached is not None:
+        return cached
+    try:
+        from pandas.tseries.holiday import (
+            GoodFriday,
+            USFederalHolidayCalendar,
+        )
+
+        class _USMarketCal(USFederalHolidayCalendar):
+            # USFederalHolidayCalendar omits Good Friday but US equity
+            # markets and CME's equity-index products do close that day.
+            rules = USFederalHolidayCalendar.rules + [GoodFriday]
+
+        hols = _USMarketCal().holidays(
+            start=f"{year}-01-01", end=f"{year}-12-31"
+        )
+        result = frozenset(h.date() for h in hols)
+    except Exception as e:
+        # pandas missing or holiday lookup blew up. Fall back to "no
+        # holidays" — the bar-mask fallback in callers covers us. Warn
+        # so the silent degradation is visible in stderr / logs.
+        _warn(f"holiday calendar unavailable ({e!r}); skipping holiday walk-back")
+        result = frozenset()
+    _HOLIDAYS_CACHE[year] = result
+    return result
 
 
 def previous_session_end_utc(symbol: str,
@@ -110,9 +168,21 @@ def previous_session_end_utc(symbol: str,
     if candidate > now_local:
         candidate -= timedelta(days=1)
 
-    if tz_name != "UTC":  # weekend skip for non-crypto
-        while candidate.weekday() >= 5:  # Sat=5, Sun=6
-            candidate -= timedelta(days=1)
+    if tz_name != "UTC":  # weekend + US-holiday skip for non-crypto
+        # Bound the walk so a pathological calendar can't loop forever
+        # (e.g. an empty holiday set across a known-closed week still
+        # terminates via the weekday check; this is belt-and-braces).
+        max_steps = 14
+        while max_steps > 0:
+            if candidate.weekday() >= 5:  # Sat=5, Sun=6
+                candidate -= timedelta(days=1)
+                max_steps -= 1
+                continue
+            if candidate.date() in _us_market_holidays(candidate.year):
+                candidate -= timedelta(days=1)
+                max_steps -= 1
+                continue
+            break
 
     return candidate.astimezone(ZoneInfo("UTC"))
 
@@ -157,10 +227,12 @@ def batch_prior_references(symbols: List[str],
                 prepost=False, group_by="ticker", progress=False,
                 threads=True, auto_adjust=True,
             )
-    except Exception:
+    except Exception as e:
+        _warn(f"batch intraday download failed: {e!r}")
         return {}
 
     if data is None or getattr(data, "empty", True):
+        _warn(f"batch intraday returned empty for {len(targets)} symbols")
         return {}
 
     out: Dict[str, float] = {}
@@ -195,6 +267,7 @@ def batch_prior_references(symbols: List[str],
             if _pd.isna(close):
                 continue
             out[sym] = float(close)
-        except Exception:
+        except Exception as e:
+            _warn(f"prior-reference lookup failed for {sym}: {e!r}")
             continue
     return out
