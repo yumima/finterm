@@ -120,6 +120,23 @@ struct PortfolioSnapshot {
     QString snapshot_date;
 };
 
+// ── Portfolio-level aggregated analyst / fundamental data ─────────────────────
+//
+// Computed by PortfolioService::fetch_portfolio_fundamentals. Each numeric
+// field is the market-value-weighted average across holdings that reported a
+// valid (non-zero) value. Consensus maps each holding's recommendation_key to
+// a score (strong_buy=1 … strong_sell=5), takes the MV-weighted average, and
+// maps back to a display string.
+struct PortfolioFundamentals {
+    double tgt_low   = 0;  // weighted analyst low-target NAV
+    double tgt_mean  = 0;  // weighted analyst mean-target NAV
+    double tgt_high  = 0;  // weighted analyst high-target NAV
+    double pe_ratio  = 0;  // weighted trailing P/E
+    double div_yield = 0;  // weighted dividend yield (fraction, e.g. 0.014)
+    QString consensus;     // "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell"
+    bool has_analyst_data = false;  // false until at least one fetch returns
+};
+
 // ── Enums ────────────────────────────────────────────────────────────────────
 
 enum class HeatmapMode { Pnl, Weight, DayChange, Aft };

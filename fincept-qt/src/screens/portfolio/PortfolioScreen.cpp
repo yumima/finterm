@@ -64,6 +64,11 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
         if (sector_panel_)
             sector_panel_->set_correlation(matrix);
     });
+    connect(&svc, &services::PortfolioService::portfolio_fundamentals_loaded, this,
+            [this](QString portfolio_id, portfolio::PortfolioFundamentals f) {
+                if (portfolio_id == selected_id_ && heatmap_)
+                    heatmap_->set_portfolio_fundamentals(portfolio_id, f);
+            });
     connect(&svc, &services::PortfolioService::spy_history_loaded, this,
             [this](QStringList /*dates*/, QVector<double> /*closes*/) {
                 // Recompute metrics now that SPY data is available for OLS beta.
@@ -660,6 +665,10 @@ void PortfolioScreen::on_summary_loaded(portfolio::PortfolioSummary summary) {
 
     // Trigger metrics computation
     services::PortfolioService::instance().compute_metrics(summary);
+
+    // Fetch analyst targets, P/E, yield and consensus for the heatmap
+    // portfolio detail panel. Runs once per summary load (not every tick).
+    services::PortfolioService::instance().fetch_portfolio_fundamentals(summary.portfolio.id);
 
     // Load performance history for the chart
     services::PortfolioService::instance().load_snapshots(summary.portfolio.id);

@@ -79,6 +79,11 @@ class PortfolioService : public QObject {
     /// Emits portfolio_intraday_loaded() once all per-symbol fetches return.
     void fetch_portfolio_intraday(const QString& portfolio_id);
 
+    /// Fetch analyst targets, P/E, dividend yield and consensus for every
+    /// holding (one yfinance "info" call per symbol), compute MV-weighted
+    /// aggregates, and emit portfolio_fundamentals_loaded().
+    void fetch_portfolio_fundamentals(const QString& portfolio_id);
+
     // ── Risk-free rate ────────────────────────────────────────────────────────
     /// Fetch the current 10-year Treasury yield (DGS10) from FRED.
     /// Result is cached 24h in SettingsRepository. Emits risk_free_rate_loaded(rate).
@@ -155,6 +160,10 @@ class PortfolioService : public QObject {
     /// summing (qty × close) across all holdings at each shared timestamp.
     void portfolio_intraday_loaded(QString portfolio_id, QVector<qint64> timestamps_ms,
                                    QVector<double> navs);
+
+    /// MV-weighted analyst fundamentals for the whole portfolio.
+    void portfolio_fundamentals_loaded(QString portfolio_id,
+                                       portfolio::PortfolioFundamentals fundamentals);
 
   private:
     PortfolioService();

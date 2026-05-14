@@ -20,6 +20,8 @@ class PortfolioHeatmap : public QWidget {
 
     void set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings);
     void set_metrics(const portfolio::ComputedMetrics& metrics);
+    void set_portfolio_fundamentals(const QString& portfolio_id,
+                                    const portfolio::PortfolioFundamentals& f);
     void set_selected_symbol(const QString& symbol);
     void set_currency(const QString& currency);
     void refresh_theme();
@@ -56,6 +58,7 @@ class PortfolioHeatmap : public QWidget {
     void update_block_appearance(QPushButton* block, const portfolio::HoldingWithQuote& h);
     QColor block_color(const portfolio::HoldingWithQuote& h) const;
     void update_detail();
+    void update_portfolio_detail();
     void update_risk_gauge();
     void update_top_movers();
 
@@ -80,7 +83,7 @@ class PortfolioHeatmap : public QWidget {
     // lambdas) every time data ticks or the user toggles a mode.
     QHash<QString, QPushButton*> block_widgets_;
 
-    // Selected holding detail
+    // Selected holding detail (stock mode)
     QWidget* detail_panel_ = nullptr;
     QLabel* detail_symbol_ = nullptr;
     QLabel* detail_price_ = nullptr;
@@ -91,6 +94,18 @@ class PortfolioHeatmap : public QWidget {
     QLabel* detail_pnl_ = nullptr;
     QLabel* detail_pnl_pct_ = nullptr;
     QLabel* detail_weight_ = nullptr;
+
+    // Portfolio-level detail (no symbol selected)
+    QWidget* portfolio_panel_ = nullptr;
+    QLabel* pfund_name_      = nullptr;  // portfolio name / "PORTFOLIO"
+    QLabel* pfund_tgt_low_   = nullptr;
+    QLabel* pfund_tgt_mean_  = nullptr;
+    QLabel* pfund_tgt_high_  = nullptr;
+    QLabel* pfund_consensus_ = nullptr;
+    QLabel* pfund_pe_        = nullptr;
+    QLabel* pfund_yield_     = nullptr;
+    QLabel* pfund_beta_      = nullptr;
+    QLabel* pfund_breadth_   = nullptr;
 
     // Risk gauge
     QLabel* risk_label_ = nullptr;
@@ -109,6 +124,7 @@ class PortfolioHeatmap : public QWidget {
     // State
     QVector<portfolio::HoldingWithQuote> holdings_;
     portfolio::ComputedMetrics metrics_;
+    portfolio::PortfolioFundamentals fundamentals_;
     portfolio::HeatmapMode mode_ = portfolio::HeatmapMode::Pnl;
     QString selected_symbol_;
     QString currency_ = "USD";

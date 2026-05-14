@@ -163,6 +163,43 @@ void PortfolioHeatmap::build_ui() {
 
     layout->addWidget(detail_panel_);
 
+    // Portfolio-level detail (shown when no symbol is selected)
+    portfolio_panel_ = new QWidget(this);
+    portfolio_panel_->setStyleSheet(
+        QString("background:%1; border:1px solid %2; padding:4px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    portfolio_panel_->setVisible(false);
+
+    auto* pp_layout = new QVBoxLayout(portfolio_panel_);
+    pp_layout->setContentsMargins(6, 4, 6, 4);
+    pp_layout->setSpacing(2);
+
+    pfund_name_ = new QLabel("PORTFOLIO");
+    pfund_name_->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::AMBER()));
+    pp_layout->addWidget(pfund_name_);
+
+    auto add_pfund_row = [&](QLabel*& lbl, const QString& prefix) {
+        auto* row = new QHBoxLayout;
+        auto* lab = new QLabel(prefix);
+        lab->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
+        row->addWidget(lab);
+        lbl = new QLabel("--");
+        lbl->setAlignment(Qt::AlignRight);
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+        row->addWidget(lbl);
+        pp_layout->addLayout(row);
+    };
+
+    add_pfund_row(pfund_tgt_low_,   "TGT LOW");
+    add_pfund_row(pfund_tgt_mean_,  "TGT MEAN");
+    add_pfund_row(pfund_tgt_high_,  "TGT HIGH");
+    add_pfund_row(pfund_consensus_, "CONSENSUS");
+    add_pfund_row(pfund_pe_,        "P/E");
+    add_pfund_row(pfund_yield_,     "YIELD");
+    add_pfund_row(pfund_beta_,      "BETA");
+    add_pfund_row(pfund_breadth_,   "BREADTH");
+
+    layout->addWidget(portfolio_panel_);
+
     // Risk gauge
     auto* risk_header = new QLabel("RISK SCORE");
     risk_header->setStyleSheet(
@@ -531,9 +568,11 @@ void PortfolioHeatmap::update_detail() {
 
     if (!found) {
         detail_panel_->setVisible(false);
+        update_portfolio_detail();
         return;
     }
 
+    portfolio_panel_->setVisible(false);
     detail_panel_->setVisible(true);
     const auto& h = *found;
     auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
@@ -555,6 +594,107 @@ void PortfolioHeatmap::update_detail() {
     detail_pnl_pct_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.unrealized_pnl_percent)));
     detail_weight_->setText(QString("%1%").arg(fmt(h.weight, 1)));
+}
+
+void PortfolioHeatmap::update_portfolio_detail() {
+    portfolio_panel_->setVisible(true);
+
+    auto fmt_nav = [](double v) -> QString {
+        if (v <= 0) return QStringLiteral("--");
+        if (v >= 1e9) return QString("$%1B").arg(QString::number(v / 1e9, 'f', 2));
+        if (v >= 1e6) return QString("$%1M").arg(QString::number(v / 1e6, 'f', 2));
+        if (v >= 1e3) return QString("$%1K").arg(QString::number(v / 1e3, 'f', 1));
+        return QString("$%1").arg(QString::number(v, 'f', 2));
+    };
+
+    const auto& f = fundamentals_;
+
+    if (f.has_analyst_data) {
+        pfund_tgt_low_->setText(fmt_nav(f.tgt_low));
+        pfund_tgt_low_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+
+        // Mean target with upside % relative to current MV.
+        double cur_mv = 0;
+        for (const auto& h : holdings_) cur_mv += h.market_value;
+        if (f.tgt_mean > 0 && cur_mv > 0) {
+            const double upside = (f.tgt_mean - cur_mv) / cur_mv * 100.0;
+            const char* up_col = upside >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+            pfund_tgt_mean_->setText(
+                QString("%1 <span style='color:%2; font-size:11px;'>%3%4%</span>")
+                    .arg(fmt_nav(f.tgt_mean), up_col,
+                         upside >= 0 ? "+" : "",
+                         QString::number(upside, 'f', 1)));
+        } else {
+            pfund_tgt_mean_->setText(fmt_nav(f.tgt_mean));
+        }
+        pfund_tgt_mean_->setTextFormat(Qt::RichText);
+        pfund_tgt_mean_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::WARNING()));
+
+        pfund_tgt_high_->setText(fmt_nav(f.tgt_high));
+        pfund_tgt_high_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::POSITIVE()));
+    } else {
+        for (auto* lbl : {pfund_tgt_low_, pfund_tgt_mean_, pfund_tgt_high_})
+            lbl->setText(QStringLiteral("--"));
+    }
+
+    // Consensus — color-coded by sentiment.
+    if (!f.consensus.isEmpty()) {
+        const char* c_col = (f.consensus == "Strong Buy" || f.consensus == "Buy") ? ui::colors::POSITIVE
+                          : (f.consensus == "Sell" || f.consensus == "Strong Sell") ? ui::colors::NEGATIVE
+                          : ui::colors::WARNING;
+        pfund_consensus_->setText(f.consensus);
+        pfund_consensus_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(c_col));
+    } else {
+        pfund_consensus_->setText(QStringLiteral("--"));
+        pfund_consensus_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+    }
+
+    // P/E
+    pfund_pe_->setText(f.pe_ratio > 0 ? QString("%1×").arg(QString::number(f.pe_ratio, 'f', 1)) : "--");
+    pfund_pe_->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
+
+    // Dividend yield as %
+    pfund_yield_->setText(f.div_yield > 0 ? QString("%1%").arg(QString::number(f.div_yield * 100.0, 'f', 2)) : "--");
+    pfund_yield_->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
+
+    // Beta from already-computed metrics
+    if (metrics_.beta.has_value()) {
+        const double b = *metrics_.beta;
+        const char* b_col = b > 1.2 ? ui::colors::NEGATIVE : b < 0.8 ? ui::colors::POSITIVE : ui::colors::WARNING;
+        pfund_beta_->setText(QString::number(b, 'f', 2));
+        pfund_beta_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(b_col));
+    } else {
+        pfund_beta_->setText(QStringLiteral("--"));
+        pfund_beta_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+    }
+
+    // Breadth — count gainers / losers from existing holdings data.
+    int gainers = 0, losers = 0;
+    for (const auto& h : holdings_) {
+        if      (h.day_change_percent > 0) ++gainers;
+        else if (h.day_change_percent < 0) ++losers;
+    }
+    pfund_breadth_->setText(
+        QString("▲ %1  ▼ %2").arg(gainers).arg(losers));
+    pfund_breadth_->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+}
+
+void PortfolioHeatmap::set_portfolio_fundamentals(const QString& /*portfolio_id*/,
+                                                   const portfolio::PortfolioFundamentals& f) {
+    fundamentals_ = f;
+    // Only repopulate if the portfolio panel is currently visible (no stock selected).
+    if (selected_symbol_.isEmpty())
+        update_portfolio_detail();
 }
 
 void PortfolioHeatmap::update_risk_gauge() {

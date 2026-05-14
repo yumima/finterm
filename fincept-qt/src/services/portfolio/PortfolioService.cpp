@@ -1628,6 +1628,121 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
     python::PythonWorker::kComputeActionTimeoutMs);
 }
 
+// ── Portfolio analyst fundamentals ───────────────────────────────────────────
+
+void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id) {
+    if (portfolio_id.isEmpty()) return;
+
+    // Build MV map from cached summary so we can weight each holding.
+    QHash<QString, double> mv_by_symbol;
+    double total_mv = 0;
+    {
+        QMutexLocker lock(&cache_mutex_);
+        auto cit = summary_cache_.constFind(portfolio_id);
+        if (cit != summary_cache_.cend()) {
+            for (const auto& h : cit.value().summary.holdings) {
+                const QString up = h.symbol.toUpper();
+                mv_by_symbol[up] = h.market_value;
+                total_mv += h.market_value;
+            }
+        }
+    }
+    if (mv_by_symbol.isEmpty() || total_mv <= 0) return;
+
+    // Per-symbol accumulator, shared across all callbacks.
+    struct SymResult {
+        double tgt_low   = 0;
+        double tgt_mean  = 0;
+        double tgt_high  = 0;
+        double pe        = 0;
+        double yield     = 0;
+        double rec_score = 0;  // 1=strong_buy … 5=strong_sell, 0=missing
+        bool   ok        = false;
+    };
+    struct Accum {
+        int pending = 0;
+        QHash<QString, SymResult> results;
+    };
+    auto state = std::make_shared<Accum>();
+    state->pending = mv_by_symbol.size();
+
+    QPointer<PortfolioService> self = this;
+    for (auto it = mv_by_symbol.cbegin(); it != mv_by_symbol.cend(); ++it) {
+        const QString sym = it.key();
+        QJsonObject payload;
+        payload["symbol"] = sym;
+        python::PythonWorker::instance().submit(
+            "info", payload,
+            [self, portfolio_id, sym, state, mv_by_symbol, total_mv](
+                bool ok, QJsonObject obj, QString /*err*/) {
+                if (!self) return;
+
+                SymResult& r = state->results[sym];
+                if (ok && !obj.contains("error")) {
+                    r.tgt_low   = obj["target_low_price"].toDouble();
+                    r.tgt_mean  = obj["target_mean_price"].toDouble();
+                    r.tgt_high  = obj["target_high_price"].toDouble();
+                    r.pe        = obj["trailing_pe"].toDouble();
+                    // yfinance returns dividendYield as a fraction (e.g. 0.014)
+                    r.yield     = obj["dividend_yield"].toDouble();
+
+                    // Map recommendation_key to a 1-5 score (lower = more bullish).
+                    const QString rec = obj["recommendation_key"].toString().toLower();
+                    if      (rec == "strong_buy"  || rec == "strongbuy")  r.rec_score = 1;
+                    else if (rec == "buy")                                 r.rec_score = 2;
+                    else if (rec == "hold"        || rec == "neutral")    r.rec_score = 3;
+                    else if (rec == "sell"        || rec == "underperform") r.rec_score = 4;
+                    else if (rec == "strong_sell" || rec == "strongsell") r.rec_score = 5;
+
+                    r.ok = (r.tgt_mean > 0);
+                }
+
+                if (--state->pending > 0) return;
+
+                // All callbacks done — compute MV-weighted aggregates.
+                portfolio::PortfolioFundamentals f;
+                double w_tgt_low = 0, w_tgt_mean = 0, w_tgt_high = 0;
+                double w_pe = 0,   w_yield = 0,   w_rec = 0;
+                double cov_tgt = 0, cov_pe = 0, cov_yield = 0, cov_rec = 0;
+
+                for (auto jt = state->results.cbegin(); jt != state->results.cend(); ++jt) {
+                    const double w = mv_by_symbol.value(jt.key(), 0) / total_mv;
+                    const SymResult& sr = jt.value();
+                    if (sr.tgt_mean > 0) {
+                        w_tgt_low  += w * sr.tgt_low;
+                        w_tgt_mean += w * sr.tgt_mean;
+                        w_tgt_high += w * sr.tgt_high;
+                        cov_tgt    += w;
+                    }
+                    if (sr.pe > 0) { w_pe  += w * sr.pe;    cov_pe    += w; }
+                    if (sr.yield > 0) { w_yield += w * sr.yield; cov_yield += w; }
+                    if (sr.rec_score > 0) { w_rec += w * sr.rec_score; cov_rec += w; }
+                }
+
+                // Re-normalise by actual coverage weight so sparse data stays unbiased.
+                if (cov_tgt > 0) {
+                    f.tgt_low  = w_tgt_low  / cov_tgt * total_mv;
+                    f.tgt_mean = w_tgt_mean / cov_tgt * total_mv;
+                    f.tgt_high = w_tgt_high / cov_tgt * total_mv;
+                    f.has_analyst_data = true;
+                }
+                if (cov_pe    > 0) f.pe_ratio  = w_pe    / cov_pe;
+                if (cov_yield > 0) f.div_yield = w_yield / cov_yield;
+                if (cov_rec   > 0) {
+                    const double s = w_rec / cov_rec;
+                    if      (s < 1.5) f.consensus = QStringLiteral("Strong Buy");
+                    else if (s < 2.5) f.consensus = QStringLiteral("Buy");
+                    else if (s < 3.5) f.consensus = QStringLiteral("Hold");
+                    else if (s < 4.5) f.consensus = QStringLiteral("Sell");
+                    else              f.consensus = QStringLiteral("Strong Sell");
+                }
+
+                emit self->portfolio_fundamentals_loaded(portfolio_id, f);
+            },
+            python::PythonWorker::kNetworkActionTimeoutMs);
+    }
+}
+
 // ── Cache control ────────────────────────────────────────────────────────────
 
 void PortfolioService::invalidate_cache(const QString& portfolio_id) {
