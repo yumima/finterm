@@ -161,10 +161,19 @@ def main() -> int:
     if not gh_base:
         return 0
     commits = todays_commits()
-    if not commits:
-        # Per spec rule 3: no commits today → no change.
-        return 0
     today = datetime.date.today().isoformat()
+    if not commits:
+        # No commits today yet — still update if the section header is stale
+        # (different date) so the README date advances to today on the first
+        # commit of a new day. Leave file untouched if today's header is
+        # already present (nothing new to say).
+        text = README.read_text()
+        m = re.search(
+            r"^## Today's commits \((\d{4}-\d{2}-\d{2})\)",
+            text, re.MULTILINE,
+        )
+        if m and m.group(1) == today:
+            return 0
     section = build_section(gh_base, today, commits)
     update_readme(section)
     return 0

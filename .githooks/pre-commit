@@ -1,39 +1,10 @@
 #!/usr/bin/env bash
-# Pre-commit hook: regenerate README.md's "Today's commits" section.
+# Pre-commit hook.
 #
-# Calls tools/update_todays_commits.py, which lists today's commits
-# oldest-first with links. If the file changed, it's re-staged so the
-# update lands in this commit. If there are no commits yet today, the
-# script no-ops and no README change is staged.
-#
-# To opt out of this hook for a single commit, use `git commit
-# --no-verify`. To install this hook for fresh clones, run:
-#     git config core.hooksPath .githooks
-# once (intentionally not done automatically — Claude won't mutate
-# git config).
+# README "Today's commits" is maintained by .githooks/post-commit, which
+# runs after each commit and creates a follow-up docs(readme) commit so
+# every user commit appears with its real SHA + GitHub link.
 
 set -euo pipefail
-
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-SCRIPT="$REPO_ROOT/tools/update_todays_commits.py"
-
-if [ ! -x "$SCRIPT" ]; then
-    # Script missing or not executable — fall through silently rather
-    # than block a commit on a misconfigured hook.
-    exit 0
-fi
-
-# Run the regenerator. If it fails, surface the error and abort the
-# commit so the user can fix the script rather than land a broken
-# README state.
-if ! python3 "$SCRIPT"; then
-    echo "pre-commit: update_todays_commits.py failed; aborting commit" >&2
-    exit 1
-fi
-
-# Stage README only if it actually changed.
-if ! git diff --quiet -- "$REPO_ROOT/README.md"; then
-    git add "$REPO_ROOT/README.md"
-fi
 
 exit 0

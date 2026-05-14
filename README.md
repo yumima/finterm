@@ -2,26 +2,11 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-13)
+## Today's commits (2026-05-14)
 
 Latest first.
 
-- [`6298e9a8`](https://github.com/yumima/finterm/commit/6298e9a8) **feat(portfolio-ext):** disk-cache snapshot for instant first-paint
-- [`b05b0e8f`](https://github.com/yumima/finterm/commit/b05b0e8f) **feat(portfolio-ext):** 20 s refresh timer while view is visible
-- [`82862dd2`](https://github.com/yumima/finterm/commit/82862dd2) **chore(quotes):** address review findings on session-aware refactor
-- [`abb0af2f`](https://github.com/yumima/finterm/commit/abb0af2f) **feat(futures):** disk-cache snapshot for instant first-paint
-- [`19cb8f97`](https://github.com/yumima/finterm/commit/19cb8f97) **fix(portfolio-ext):** batched intraday fetch replaces per-symbol Ticker.info
-- [`5d8ccbae`](https://github.com/yumima/finterm/commit/5d8ccbae) **fix(quotes):** session-aware prior_reference for futures, FX, crypto
-- [`55b684da`](https://github.com/yumima/finterm/commit/55b684da) **chore(hooks):** list "Today's commits" latest-first instead of oldest-first
-- [`8d8a1d2f`](https://github.com/yumima/finterm/commit/8d8a1d2f) **chore(hooks):** exclude README-only commits from "Today's commits" list
-- [`ba6d32d6`](https://github.com/yumima/finterm/commit/ba6d32d6) **chore(hooks):** pre-commit hook regenerates README "Today's commits" section
-- [`9bad451f`](https://github.com/yumima/finterm/commit/9bad451f) **feat(pre-ipo):** daily 05:00 ET auto-refresh while app is running
-- [`df89561e`](https://github.com/yumima/finterm/commit/df89561e) **perf(pre-ipo):** TTL-gate the on-open refresh at 24h
-- [`f0126e75`](https://github.com/yumima/finterm/commit/f0126e75) **ui(news):** drop amber row overlay for unseen headlines
-- [`b25e4fb1`](https://github.com/yumima/finterm/commit/b25e4fb1) **perf(pre-ipo):** cut first-paint refresh from ~96s to ~24s
-- [`13c25462`](https://github.com/yumima/finterm/commit/13c25462) **docs(design):** dual-path AI stack wiring plan (local + external)
-- [`763da2cd`](https://github.com/yumima/finterm/commit/763da2cd) **ui(news):** place PTF pill between WIRE and CLST in the command bar
-- [`30e6fa90`](https://github.com/yumima/finterm/commit/30e6fa90) **fix(portfolio):** synthesise flat $1 series for cash-like symbols on 1D
+- [`349ecccb`](https://github.com/yumima/finterm/commit/349ecccb) **fix(portfolio-chart):** correct 1D aggregate, 1W focus, and session anchor
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

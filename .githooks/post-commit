@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Post-commit hook: regenerate README "Today's commits" and create a
+# follow-up docs(readme) commit so every user commit is visible with
+# its real short-SHA and GitHub link.
+#
+# Flow:
+#   user commit N  →  post-commit fires  →  regenerates README
+#                  →  docs(readme) commit created
+#                  →  post-commit fires again for docs commit
+#                  →  loop guard detects docs subject → exits cleanly
+#
+# To install on a fresh clone:
+#     git config core.hooksPath .githooks
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT="$REPO_ROOT/tools/update_todays_commits.py"
+
+# Loop guard: if HEAD is the docs follow-up we just created, stop here.
+last_subject=$(git log -1 --pretty=%s 2>/dev/null || true)
+if [[ "$last_subject" == "docs(readme): update today's commits" ]]; then
+    exit 0
+fi
+
+if [ ! -x "$SCRIPT" ]; then
+    exit 0
+fi
+
+if ! python3 "$SCRIPT"; then
+    echo "post-commit: update_todays_commits.py failed" >&2
+    exit 1
+fi
+
+# Only create the follow-up commit if the script actually modified README.
+if ! git diff --quiet -- "$REPO_ROOT/README.md"; then
+    git add "$REPO_ROOT/README.md"
+    git commit -m "docs(readme): update today's commits"
+fi
+
+exit 0
