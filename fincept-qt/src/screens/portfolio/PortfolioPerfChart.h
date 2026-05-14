@@ -17,7 +17,11 @@ class CrosshairChartView : public QChartView {
     explicit CrosshairChartView(QChart* chart, QWidget* parent = nullptr);
 
     /// Feed the raw series points so we can snap to the nearest one.
-    void set_series_data(const QVector<QPointF>& pts, const QString& currency);
+    /// Pass snap_ts_ms when pts uses sequential bar indices as x (multi-day
+    /// intraday or daily aggregate) so the crosshair tooltip can display the
+    /// real market time/date rather than interpreting the index as a timestamp.
+    void set_series_data(const QVector<QPointF>& pts, const QString& currency,
+                         const QVector<qint64>& snap_ts_ms = {});
 
   protected:
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -28,6 +32,7 @@ class CrosshairChartView : public QChartView {
     void hide_crosshair();
 
     QVector<QPointF> pts_;
+    QVector<qint64>  snap_ts_ms_; // real epoch-ms per point; empty = pts_.x() is epoch-ms
     QString currency_;
     QGraphicsLineItem* v_line_ = nullptr;
     QLabel* tooltip_ = nullptr;

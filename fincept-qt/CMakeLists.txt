@@ -2056,6 +2056,7 @@ target_precompile_headers(FinceptTerminal PRIVATE
     <QValueAxis>
     <QDateTimeAxis>
     <QBarCategoryAxis>
+    <QCategoryAxis>
     # ── Multimedia (always available — required dep) ───────────────────────────
     <QAudioFormat>
     <QMediaDevices>

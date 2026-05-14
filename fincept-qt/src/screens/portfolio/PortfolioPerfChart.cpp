@@ -8,9 +8,11 @@
 #include <QPointer>
 
 #include <QAreaSeries>
+#include <QCategoryAxis>
 #include <QChart>
 #include <QDateTime>
 #include <QDateTimeAxis>
+#include <QHash>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLineSeries>
@@ -25,6 +27,61 @@
 
 namespace {
 static const QStringList kPeriods = {"1D", "1W", "1M", "3M", "YTD", "1Y", "ALL"};
+
+// Filter ts_ms / vals in-place to NYSE regular-session bars only
+// (Mon–Fri, 09:30–16:00 America/New_York). yfinance already omits
+// non-trading bars for most symbols; this is a safety guard that also
+// strips weekend timestamps that appear in raw 5d/30m responses.
+void filter_to_market_hours(QVector<qint64>& ts_ms, QVector<double>& vals) {
+    static const QTimeZone kET("America/New_York");
+    int out = 0;
+    for (int i = 0; i < ts_ms.size(); ++i) {
+        const QDateTime dt = QDateTime::fromMSecsSinceEpoch(ts_ms[i], kET);
+        if (dt.date().dayOfWeek() > 5) continue;
+        const QTime t = dt.time();
+        if (t < QTime(9, 30) || t > QTime(16, 0)) continue;
+        ts_ms[out] = ts_ms[i];
+        vals[out]  = vals[i];
+        ++out;
+    }
+    ts_ms.resize(out);
+    vals.resize(out);
+}
+
+// Build QCategoryAxis label positions for a sequential-index daily chart.
+// Returns (sequential_index, label_string) pairs. Targets ~5 visible labels.
+// Consecutive identical dates (live-NAV point duplicating the last snapshot)
+// are silently de-duplicated.
+QVector<QPair<double, QString>> daily_seq_labels(const QVector<QDate>& dates,
+                                                  const QString& period) {
+    QVector<QPair<double, QString>> result;
+    const int n = dates.size();
+    if (n == 0) return result;
+
+    auto add = [&](int i, const QString& fmt) {
+        if (!result.isEmpty()
+            && dates[i] == dates[static_cast<int>(result.last().first)])
+            return; // de-duplicate consecutive identical dates
+        result.append({static_cast<double>(i), dates[i].toString(fmt)});
+    };
+
+    if (period == "1W") {
+        for (int i = 0; i < n; ++i) add(i, "ddd");
+    } else if (period == "1M") {
+        for (int i = 0; i < n; ++i)
+            if (i == 0 || dates[i].weekNumber() != dates[i - 1].weekNumber())
+                add(i, "MMM d");
+    } else if (period == "3M" || period == "YTD" || period == "1Y") {
+        for (int i = 0; i < n; ++i)
+            if (i == 0 || dates[i].month() != dates[i - 1].month())
+                add(i, "MMM");
+    } else { // 5Y, ALL
+        for (int i = 0; i < n; ++i)
+            if (i == 0 || dates[i].year() != dates[i - 1].year())
+                add(i, "yyyy");
+    }
+    return result;
+}
 } // namespace
 
 namespace fincept::screens {
@@ -50,9 +107,12 @@ CrosshairChartView::CrosshairChartView(QChart* chart, QWidget* parent) : QChartV
     tooltip_->hide();
 }
 
-void CrosshairChartView::set_series_data(const QVector<QPointF>& pts, const QString& currency) {
+void CrosshairChartView::set_series_data(const QVector<QPointF>& pts,
+                                          const QString& currency,
+                                          const QVector<qint64>& snap_ts_ms) {
     pts_ = pts;
     currency_ = currency;
+    snap_ts_ms_ = snap_ts_ms;
 }
 
 void CrosshairChartView::mouseMoveEvent(QMouseEvent* event) {
@@ -71,10 +131,10 @@ void CrosshairChartView::update_crosshair(const QPoint& widget_pos) {
         return;
     }
 
-    // Map widget pixel → chart value
+    // Map widget pixel → chart value (sequential index or ms, depending on series type)
     const QPointF chart_val = chart()->mapToValue(QPointF(widget_pos));
 
-    // Snap to nearest point by x (ms timestamp)
+    // Snap to nearest point by x
     int best_idx = 0;
     double best_dist = std::numeric_limits<double>::max();
     for (int i = 0; i < pts_.size(); ++i) {
@@ -87,28 +147,40 @@ void CrosshairChartView::update_crosshair(const QPoint& widget_pos) {
 
     const QPointF& snap_pt = pts_[best_idx];
 
-    // Map snapped data point back to scene coordinates
+    // Map snapped point back to scene for the vertical crosshair line.
+    // Only scene.x() is used (vertical line), so the y mismatch between
+    // raw and display-transformed series is harmless.
     const QPointF scene_pos = chart()->mapToPosition(snap_pt);
 
-    // Draw vertical line spanning the chart plot area
     const QRectF plot = chart()->plotArea();
     v_line_->setLine(scene_pos.x(), plot.top(), scene_pos.x(), plot.bottom());
     v_line_->setVisible(true);
 
-    // Format tooltip text. For 1D / intraday series (all points within a
-    // single day) showing "12 May 2026" is redundant — every point shares
-    // the same date. Auto-detect: if the series spans < 36 hours, render
-    // "HH:mm" instead. The 36h threshold tolerates after-hours bars that
-    // sometimes cross midnight UTC without misclassifying a 5d series.
-    const QDateTime dt = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(snap_pt.x()));
+    // Resolve the actual epoch-ms for this point. snap_ts_ms_ is populated
+    // when pts_ uses sequential bar indices as x (multi-day or daily-snap
+    // charts). For 1D intraday pts_.x() is the epoch-ms directly.
+    const bool has_real_ts = !snap_ts_ms_.isEmpty();
+    const qint64 display_ms = has_real_ts
+        ? (best_idx < snap_ts_ms_.size() ? snap_ts_ms_[best_idx] : 0)
+        : static_cast<qint64>(snap_pt.x());
+    const qint64 series_span_ms = has_real_ts && snap_ts_ms_.size() >= 2
+        ? snap_ts_ms_.last() - snap_ts_ms_.first()
+        : (pts_.size() >= 2
+               ? static_cast<qint64>(pts_.last().x() - pts_.first().x())
+               : 0);
+
+    // Timestamps from iso_date_to_ms_utc are midnight UTC; intraday bars are not.
+    // Use this to pick a format that shows time only when meaningful.
+    const bool is_midnight_utc = (display_ms % (24LL * 60 * 60 * 1000)) == 0;
+    constexpr qint64 k36hMs = 36LL * 60 * 60 * 1000;
+    const QDateTime dt = QDateTime::fromMSecsSinceEpoch(display_ms);
     QString time_str;
-    if (pts_.size() >= 2) {
-        const qint64 span_ms = static_cast<qint64>(pts_.last().x() - pts_.first().x());
-        if (span_ms > 0 && span_ms <= qint64(36) * 60 * 60 * 1000)
-            time_str = dt.toString("HH:mm");
-    }
-    if (time_str.isEmpty())
-        time_str = dt.toString("dd MMM yyyy");
+    if (series_span_ms > 0 && series_span_ms <= k36hMs)
+        time_str = dt.toString("HH:mm");           // 1D single session
+    else if (!is_midnight_utc)
+        time_str = dt.toString("ddd HH:mm");       // multi-day intraday (1W focus)
+    else
+        time_str = dt.toString("dd MMM yyyy");     // daily snapshot charts
     const QString val_str = QString("%1 %2").arg(currency_, QString::number(snap_pt.y(), 'f', 2));
     tooltip_->setText(time_str + "\n" + val_str);
     tooltip_->adjustSize();
@@ -796,11 +868,62 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         return false;
     }
 
-    // Build (ms, value) points.
+    // Multi-day intraday windows (1W focus, 30m bars): filter to market hours
+    // and assign sequential bar indices as x so weekend/overnight gaps vanish.
+    // Single-day (1D) keeps real ms timestamps — one session has no gaps.
+    constexpr qint64 kOneDayMs = 24LL * 60 * 60 * 1000;
+    const bool multi_day =
+        (intraday_ts_ms_.last() - intraday_ts_ms_.first()) > kOneDayMs;
+
     QVector<QPointF> pts;
-    pts.reserve(intraday_ts_ms_.size());
-    for (int i = 0; i < intraday_ts_ms_.size(); ++i)
-        pts.append(QPointF(static_cast<double>(intraday_ts_ms_[i]), intraday_values_[i]));
+    QVector<qint64>  pts_ts_ms; // actual timestamps for crosshair (multi-day only)
+    QAbstractAxis*   x = nullptr;
+
+    if (multi_day) {
+        QVector<qint64> mkt_ts   = intraday_ts_ms_;
+        QVector<double>  mkt_vals = intraday_values_;
+        filter_to_market_hours(mkt_ts, mkt_vals);
+        pts.reserve(mkt_ts.size());
+        pts_ts_ms = mkt_ts;
+
+        static const QTimeZone kET("America/New_York");
+        QDate prev_date;
+        QVector<QPair<double, QString>> session_starts;
+        for (int i = 0; i < mkt_ts.size(); ++i) {
+            const QDateTime dt = QDateTime::fromMSecsSinceEpoch(mkt_ts[i], kET);
+            const QDate d = dt.date();
+            if (d != prev_date) {
+                session_starts.append({static_cast<double>(i), dt.toString("ddd")});
+                prev_date = d;
+            }
+            pts.append(QPointF(static_cast<double>(i), mkt_vals[i]));
+        }
+
+        auto* cat_x = new QCategoryAxis;
+        cat_x->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
+        cat_x->setRange(-0.5, static_cast<double>(pts.size()) - 0.5);
+        for (const auto& [idx, lbl] : session_starts)
+            cat_x->append(lbl, idx);
+        cat_x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
+        cat_x->setGridLineVisible(false);
+        cat_x->setMinorGridLineVisible(false);
+        cat_x->setLinePen(QPen(QColor(ui::colors::BORDER_MED()), 1));
+        cat_x->setLabelsFont(QFont(ui::fonts::DATA_FAMILY(), 8));
+        x = cat_x;
+    } else {
+        pts.reserve(intraday_ts_ms_.size());
+        for (int i = 0; i < intraday_ts_ms_.size(); ++i)
+            pts.append(QPointF(static_cast<double>(intraday_ts_ms_[i]), intraday_values_[i]));
+
+        auto* dt_x = new QDateTimeAxis;
+        dt_x->setFormat(QStringLiteral("HH:mm"));
+        dt_x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
+        dt_x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
+        dt_x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
+        dt_x->setRange(QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.first()),
+                       QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.last()));
+        x = dt_x;
+    }
 
     const double first = pts.first().y();
     const double last  = pts.last().y();
@@ -829,20 +952,6 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     chart->addSeries(area);
     chart->addSeries(line);
 
-    auto* x = new QDateTimeAxis;
-    // Multi-day intraday windows (e.g. 1W focus mode at 30m bars) need a
-    // date-aware label format; HH:mm alone would repeat 09:30 each session
-    // with no way for the user to tell which day they're looking at.
-    const qint64 span_ms = intraday_ts_ms_.last() - intraday_ts_ms_.first();
-    constexpr qint64 kOneDayMs = 24LL * 60 * 60 * 1000;
-    x->setFormat(span_ms > kOneDayMs
-                     ? QStringLiteral("ddd HH:mm")
-                     : QStringLiteral("HH:mm"));
-    x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
-    x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
-    x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
-    x->setRange(QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.first()),
-                QDateTime::fromMSecsSinceEpoch(intraday_ts_ms_.last()));
     chart->addAxis(x, Qt::AlignBottom);
     line->attachAxis(x);
     area->attachAxis(x);
@@ -859,7 +968,7 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     line->attachAxis(y);
     area->attachAxis(y);
 
-    chart_view_->set_series_data(pts, QStringLiteral("$"));
+    chart_view_->set_series_data(pts, QStringLiteral("$"), pts_ts_ms);
 
     // Info-bar: period change %, current value, and (aggregate only) cost.
     const char* pcol = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
@@ -901,17 +1010,18 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
         return false;
     }
 
-    QVector<QPointF> pts;
-    pts.reserve(focus_closes_.size());
-    for (int i = 0; i < focus_closes_.size(); ++i) {
-        const qint64 ms = iso_date_to_ms_utc(focus_dates_[i]);
-        pts.append(QPointF(static_cast<double>(ms), focus_closes_[i]));
-    }
-    std::sort(pts.begin(), pts.end(),
+    // Sort by ms timestamp, then assign sequential bar indices as x so
+    // weekends don't produce gaps on the x-axis.
+    QVector<QPointF> ms_pts; // (ms, raw_close) — used only for ordering
+    ms_pts.reserve(focus_closes_.size());
+    for (int i = 0; i < focus_closes_.size(); ++i)
+        ms_pts.append(QPointF(static_cast<double>(iso_date_to_ms_utc(focus_dates_[i])),
+                              focus_closes_[i]));
+    std::sort(ms_pts.begin(), ms_pts.end(),
               [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
 
-    const double first    = pts.first().y();
-    const double last_val = pts.last().y();
+    const double first    = ms_pts.first().y();
+    const double last_val = ms_pts.last().y();
     if (last_out) *last_out = last_val;
     const double pnl     = last_val - first;
     const double pnl_pct = first > 0 ? (pnl / first) * 100.0 : 0.0;
@@ -921,6 +1031,20 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
             return v;
         return first > 0 ? (v / first) * 100.0 : 0.0;
     };
+
+    // Sequential-index pts (raw y for crosshair) + actual timestamps + dates
+    QVector<QPointF> pts;
+    QVector<qint64>  seq_ts_ms;
+    QVector<QDate>   seq_dates;
+    pts.reserve(ms_pts.size());
+    seq_ts_ms.reserve(ms_pts.size());
+    seq_dates.reserve(ms_pts.size());
+    for (int i = 0; i < ms_pts.size(); ++i) {
+        const qint64 ms = static_cast<qint64>(ms_pts[i].x());
+        pts.append(QPointF(static_cast<double>(i), ms_pts[i].y()));
+        seq_ts_ms.append(ms);
+        seq_dates.append(QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC).date());
+    }
 
     auto* line  = new QLineSeries;
     auto* upper = new QLineSeries;
@@ -946,13 +1070,16 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     chart->addSeries(area);
     chart->addSeries(line);
 
-    auto* x = new QDateTimeAxis;
-    x->setFormat("MMM d");
+    auto* x = new QCategoryAxis;
+    x->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
+    x->setRange(-0.5, static_cast<double>(pts.size()) - 0.5);
+    for (const auto& [idx, lbl] : daily_seq_labels(seq_dates, current_period_))
+        x->append(lbl, idx);
     x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
-    x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
-    x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
-    x->setRange(QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(pts.first().x())),
-                QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(pts.last().x())));
+    x->setGridLineVisible(false);
+    x->setMinorGridLineVisible(false);
+    x->setLinePen(QPen(QColor(ui::colors::BORDER_MED()), 1));
+    x->setLabelsFont(QFont(ui::fonts::DATA_FAMILY(), 8));
     chart->addAxis(x, Qt::AlignBottom);
     line->attachAxis(x);
     area->attachAxis(x);
@@ -971,7 +1098,8 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     line->attachAxis(y);
     area->attachAxis(y);
 
-    chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"));
+    chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"),
+                                 seq_ts_ms);
 
     const char* period_color = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
     period_change_label_->setText(QString("%1  %2%3%")
@@ -1134,46 +1262,53 @@ void PortfolioPerfChart::update_chart() {
             filtered.append(s);
     }
 
-    // ── Build raw NAV series in absolute currency value ──────────────────────
-    QVector<QPointF> nav_pts;       // (ms_utc, NAV)
+    // ── Build sequential-index NAV series (eliminates weekend/holiday gaps) ───
+    // nav_pts:   (sequential_index, NAV) — x used by series + crosshair snap
+    // nav_ts_ms: actual UTC ms per point — used by crosshair tooltip
+    // nav_dates: calendar dates per point — used for axis label building
+    // date_to_seq: snapshot date → sequential index (for benchmark overlay)
+    QVector<QPointF>  nav_pts;
+    QVector<qint64>   nav_ts_ms;
+    QVector<QDate>    nav_dates;
+    QHash<QDate, int> date_to_seq;
     nav_pts.reserve(filtered.size() + 1);
-    double period_baseline = 0; // first snapshot value within window
-    // True when we don't have a snapshot near the period cutoff and the
-    // "X%" return would actually be total return (cost → live NAV). We
-    // still draw what we have, but suppress the misleading number.
+    nav_ts_ms.reserve(filtered.size() + 1);
+    nav_dates.reserve(filtered.size() + 1);
+
+    double period_baseline = 0;
     bool baseline_unavailable = false;
 
     if (filtered.size() >= 2) {
         period_baseline = filtered.first().total_value;
-        for (const auto& s : filtered)
-            nav_pts.append(QPointF(static_cast<double>(iso_date_to_ms_utc(s.snapshot_date)),
-                                   s.total_value));
+        for (int i = 0; i < filtered.size(); ++i) {
+            const QDate d = QDate::fromString(filtered[i].snapshot_date.left(10), Qt::ISODate);
+            const qint64 ms = iso_date_to_ms_utc(filtered[i].snapshot_date);
+            nav_pts.append(QPointF(static_cast<double>(i), filtered[i].total_value));
+            nav_ts_ms.append(ms);
+            nav_dates.append(d);
+            date_to_seq[d] = i;
+        }
         // Pin a final point at "now" so the line meets the live NAV.
         const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
-        if (nav_pts.last().x() < now_ms)
-            nav_pts.append(QPointF(static_cast<double>(now_ms), live_nav));
-        // If the earliest snapshot is too far inside the window relative to
-        // the period (e.g. only 2 days of history for a 1W view), the
-        // baseline isn't representative of the period start — flag it so
-        // the displayed return isn't misread as a true period return.
+        nav_pts.append(QPointF(static_cast<double>(filtered.size()), live_nav));
+        nav_ts_ms.append(now_ms);
+        nav_dates.append(QDate::currentDate());
+
         const QDate first_date = QDate::fromString(
             filtered.first().snapshot_date.left(10), Qt::ISODate);
         const int window_days = cutoff.daysTo(QDate::currentDate());
         if (first_date.isValid() && window_days > 0) {
             const int have_days = first_date.daysTo(QDate::currentDate());
-            if (have_days * 2 < window_days)  // <50% coverage
+            if (have_days * 2 < window_days)
                 baseline_unavailable = true;
         }
     } else {
-        // No real history yet — render a clean cost→NAV reference segment
-        // but mark the period number as unavailable so we don't surface a
-        // total-return % as if it were a 1W/1M/etc. return.
-        // (Backfill is auto-triggered on import / first metrics call.)
         period_baseline = cost_basis > 0 ? cost_basis : live_nav;
         const qint64 yest = QDateTime::currentDateTimeUtc().addDays(-1).toMSecsSinceEpoch();
         const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
-        nav_pts.append(QPointF(static_cast<double>(yest), period_baseline));
-        nav_pts.append(QPointF(static_cast<double>(now_ms), live_nav));
+        nav_pts   = {QPointF(0.0, period_baseline), QPointF(1.0, live_nav)};
+        nav_ts_ms = {yest, now_ms};
+        nav_dates = {QDate::currentDate().addDays(-1), QDate::currentDate()};
         baseline_unavailable = true;
     }
 
@@ -1241,14 +1376,11 @@ void PortfolioPerfChart::update_chart() {
     }
 
     // ── Axes ──────────────────────────────────────────────────────────────────
-    auto* x_axis = new QDateTimeAxis;
-    if (current_period_ == "1D" || current_period_ == "1W")
-        x_axis->setFormat("MMM dd");
-    else if (current_period_ == "ALL" || current_period_ == "5Y" || current_period_ == "1Y")
-        x_axis->setFormat("MMM yy");
-    else
-        x_axis->setFormat("dd MMM");
-    x_axis->setTickCount(5);
+    auto* x_axis = new QCategoryAxis;
+    x_axis->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
+    x_axis->setRange(-0.5, static_cast<double>(nav_pts.size()) - 0.5);
+    for (const auto& [idx, lbl] : daily_seq_labels(nav_dates, current_period_))
+        x_axis->append(lbl, idx);
     x_axis->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x_axis->setGridLineVisible(false);
     x_axis->setMinorGridLineVisible(false);
@@ -1277,7 +1409,10 @@ void PortfolioPerfChart::update_chart() {
         cost_line->attachAxis(y_axis);
     }
 
-    chart_view_->set_series_data(nav_line->points(), indexed_mode_ ? QStringLiteral("idx") : currency_);
+    // nav_line->points() has sequential x + display-transformed y (matches chart)
+    chart_view_->set_series_data(nav_line->points(),
+                                 indexed_mode_ ? QStringLiteral("idx") : currency_,
+                                 nav_ts_ms);
 
     // ── Benchmark overlay ─────────────────────────────────────────────────────
     if (show_benchmark_ && nav_line->count() >= 2) {
@@ -1285,12 +1420,11 @@ void PortfolioPerfChart::update_chart() {
             nav_label_->setText(nav_label_->text() +
                                 QString("  |  %1: loading…").arg(benchmark_symbol_));
         } else {
-            const QDate start_date = QDateTime::fromMSecsSinceEpoch(
-                static_cast<qint64>(nav_line->at(0).x()), QTimeZone::UTC).date();
-            const QDate end_date = QDateTime::fromMSecsSinceEpoch(
-                static_cast<qint64>(nav_line->at(nav_line->count() - 1).x()), QTimeZone::UTC).date();
+            const QDate start_date =
+                QDateTime::fromMSecsSinceEpoch(nav_ts_ms.first(), QTimeZone::UTC).date();
+            const QDate end_date =
+                QDateTime::fromMSecsSinceEpoch(nav_ts_ms.last(), QTimeZone::UTC).date();
 
-            // First benchmark close on/after period start = base for normalisation.
             double bench_base = 0.0;
             int base_idx = -1;
             for (int i = 0; i < spy_dates_.size(); ++i) {
@@ -1308,17 +1442,13 @@ void PortfolioPerfChart::update_chart() {
                 double b_max = std::numeric_limits<double>::lowest();
                 for (int i = base_idx; i < spy_dates_.size(); ++i) {
                     const QDate d = QDate::fromString(spy_dates_[i], Qt::ISODate);
-                    if (d > end_date)
-                        break;
-                    const qint64 ms = iso_date_to_ms_utc(spy_dates_[i]);
-                    // In currency mode, scale benchmark to start at the
-                    // portfolio's period baseline so they share the y-axis
-                    // visually. In indexed mode, base-100 normalisation puts
-                    // them on the same dimensionless scale.
+                    if (d > end_date) break;
+                    auto it = date_to_seq.find(d);
+                    if (it == date_to_seq.end()) continue; // no matching snapshot
                     const double bench_disp = indexed_mode_
                         ? (spy_closes_[i] / bench_base) * 100.0
                         : period_baseline * (spy_closes_[i] / bench_base);
-                    bench_line->append(ms, bench_disp);
+                    bench_line->append(static_cast<double>(it.value()), bench_disp);
                     b_min = std::min(b_min, bench_disp);
                     b_max = std::max(b_max, bench_disp);
                 }
