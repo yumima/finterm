@@ -1647,8 +1647,13 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
     // Guard: analyst data changes at most daily — skip if we already fetched
     // for this portfolio since the last holding change. Cleared by
     // invalidate_cache() so an add/sell re-fetches on the next summary load.
+    // IMPORTANT: insert the guard only AFTER confirming we have live MV data.
+    // load_summary emits summary_loaded twice: once from the disk-cache path
+    // (before summary_cache_ is populated) and once from the live network
+    // result. Inserting the guard on the first (stale) call would mark the
+    // portfolio as fetched even though no fan-out was launched, blocking the
+    // second (live) call that actually has MV weights available.
     if (fundamentals_fetched_.contains(portfolio_id)) return;
-    fundamentals_fetched_.insert(portfolio_id);
 
     // Build MV map from cached summary so we can weight each holding.
     QHash<QString, double> mv_by_symbol;
@@ -1664,7 +1669,9 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
             }
         }
     }
+    // Only commit the guard once we know the fan-out will actually launch.
     if (mv_by_symbol.isEmpty() || total_mv <= 0) return;
+    fundamentals_fetched_.insert(portfolio_id);
 
     // Per-symbol accumulator, shared across all callbacks.
     struct SymResult {
