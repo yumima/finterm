@@ -55,6 +55,15 @@ class PortfolioFuturesView : public QWidget {
     void refresh_extended_hours();
     void on_quote_cache_updated();
 
+    /// Disk-cache last successful extended-hours batch so the table
+    /// paints with real (if stale) values on app startup instead of
+    /// "—" everywhere until the first 20 s refresh returns. Flat
+    /// symbol→ExtQuote map; symbols not in the current holdings are
+    /// silently ignored by populate_extended.
+    QString ext_cache_path() const;
+    void    save_ext_cache() const;
+    void    load_ext_cache();
+
     portfolio::PortfolioSummary summary_;
     QString                     currency_ = "USD";
 

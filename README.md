@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`b05b0e8f`](https://github.com/yumima/finterm/commit/b05b0e8f) **feat(portfolio-ext):** 20 s refresh timer while view is visible
 - [`82862dd2`](https://github.com/yumima/finterm/commit/82862dd2) **chore(quotes):** address review findings on session-aware refactor
 - [`abb0af2f`](https://github.com/yumima/finterm/commit/abb0af2f) **feat(futures):** disk-cache snapshot for instant first-paint
 - [`19cb8f97`](https://github.com/yumima/finterm/commit/19cb8f97) **fix(portfolio-ext):** batched intraday fetch replaces per-symbol Ticker.info

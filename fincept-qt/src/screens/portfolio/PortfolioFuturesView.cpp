@@ -7,6 +7,8 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -14,6 +16,8 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QRegularExpression>
+#include <QSaveFile>
+#include <QStandardPaths>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -132,6 +136,10 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     ext_refresh_timer_->setInterval(kExtRefreshIntervalMs);
     connect(ext_refresh_timer_, &QTimer::timeout,
             this, &PortfolioFuturesView::refresh_extended_hours);
+    // Hydrate ext_quotes_ from the disk snapshot so the table paints
+    // with stale-but-real values on first paint, instead of "—"
+    // everywhere until the first 20 s refresh returns.
+    load_ext_cache();
 }
 
 void PortfolioFuturesView::showEvent(QShowEvent* event) {
@@ -383,9 +391,68 @@ void PortfolioFuturesView::refresh_extended_hours() {
                 ext_quotes_.insert(o.value("symbol").toString(), q);
             }
             extended_status_->setText(QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+            save_ext_cache();
             populate_extended();
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+QString PortfolioFuturesView::ext_cache_path() const {
+    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString dir  = root + "/cache/portfolio_ext";
+    QDir().mkpath(dir);
+    return dir + "/quotes.json";
+}
+
+void PortfolioFuturesView::save_ext_cache() const {
+    QJsonArray arr;
+    for (auto it = ext_quotes_.cbegin(); it != ext_quotes_.cend(); ++it) {
+        const auto& q = it.value();
+        QJsonObject o;
+        o.insert("symbol",         it.key());
+        o.insert("regular",        q.regular);
+        o.insert("has_ext",        q.has_ext);
+        if (q.has_ext) {
+            o.insert("ext_price",      q.ext_price);
+            o.insert("ext_change",     q.ext_change);
+            o.insert("ext_change_pct", q.ext_change_pct);
+        }
+        o.insert("session",        q.session);
+        arr.append(o);
+    }
+    QJsonObject root;
+    root.insert("saved_at", QDateTime::currentDateTime().toString(Qt::ISODate));
+    root.insert("quotes",   arr);
+
+    // Atomic write: QSaveFile commits on success, otherwise leaves the
+    // previous snapshot intact.
+    QSaveFile f(ext_cache_path());
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+    f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    f.commit();
+}
+
+void PortfolioFuturesView::load_ext_cache() {
+    QFile f(ext_cache_path());
+    if (!f.open(QIODevice::ReadOnly)) return;
+    const auto bytes = f.readAll();
+    f.close();
+    const auto doc = QJsonDocument::fromJson(bytes);
+    if (!doc.isObject()) return;
+    const auto arr = doc.object().value("quotes").toArray();
+    for (const auto& v : arr) {
+        const auto o = v.toObject();
+        const QString sym = o.value("symbol").toString();
+        if (sym.isEmpty()) continue;
+        ExtQuote q;
+        q.regular         = o.value("regular").toDouble();
+        q.has_ext         = o.value("has_ext").toBool();
+        q.ext_price       = o.value("ext_price").toDouble();
+        q.ext_change      = o.value("ext_change").toDouble();
+        q.ext_change_pct  = o.value("ext_change_pct").toDouble();
+        q.session         = o.value("session").toString();
+        ext_quotes_.insert(sym, q);
+    }
 }
 
 } // namespace fincept::screens
