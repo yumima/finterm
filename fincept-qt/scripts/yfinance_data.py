@@ -1390,60 +1390,213 @@ def compute_technicals_from_candles(candles):
 
 
 # Extended-hours helper — returns regular / pre / post for each symbol so the
-# Portfolio Futures view can show after-hours moves. Sourced from
-# `Ticker.info` (preMarketPrice / postMarketPrice / regularMarketPrice).
+# Portfolio Futures view (and Portfolio Heatmap AFT mode) shows after-hours
+# moves for every holding. The previous implementation looped one
+# `Ticker(sym).info` call per symbol — a heavy Yahoo quote-page scrape
+# (~1-3 s/symbol, throttled, preMarketPrice/postMarketPrice often missing).
+# For a 20-row portfolio it routinely returned empty rows or timed out.
+#
+# This implementation does ONE batched intraday download
+# (period=5d, interval=1m, prepost=True) and derives the regular /
+# pre-market / post-market fields directly from the bar timeline. Same
+# JSON shape for the C++ side; faster, more reliable, no info-scrape.
 def get_extended_hours_quotes(symbols):
     if not symbols:
         return []
     try:
+        import io
+        import contextlib
         import yfinance as _yf
+        import pandas as _pd
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
     except Exception:
         return []
+
+    _buf = io.StringIO()
+    with contextlib.redirect_stdout(_buf):
+        try:
+            data = _yf.download(
+                symbols, period="5d", interval="1m",
+                prepost=True, group_by="ticker", progress=False,
+                threads=True, auto_adjust=True,
+            )
+        except Exception:
+            return []
+
+    # Defer session label so we can short-circuit on empty data without
+    # tripping the et zoneinfo lookup.
+    et = ZoneInfo("America/New_York")
+    now_et = datetime.now(et)
+
+    if data is None or getattr(data, "empty", True):
+        return [_empty_ext_row(s, _ext_session_label(now_et)) for s in symbols]
+
+    session = _ext_session_label(now_et)
+    today = now_et.date()
+
+    # Today's pre-market / open boundaries in UTC (only meaningful for
+    # equities; futures/crypto ignore these).
+    pre_open_utc = _pd.Timestamp(now_et.replace(hour=4,  minute=0,  second=0, microsecond=0)).tz_convert("UTC")
+    open_utc     = _pd.Timestamp(now_et.replace(hour=9,  minute=30, second=0, microsecond=0)).tz_convert("UTC")
+
+    # Per-symbol "most recent completed session-end" comes from the
+    # exchange_sessions registry — equities: 16:00 ET, futures: each
+    # exchange's settle time, crypto: 00:00 UTC, FX: 17:00 ET.
+    try:
+        from exchange_sessions import previous_session_end_utc as _prev_end
+    except Exception:
+        _prev_end = None
+
     rows = []
     for sym in symbols:
         try:
-            info = _yf.Ticker(sym).info or {}
+            if isinstance(data.columns, _pd.MultiIndex):
+                level0 = data.columns.get_level_values(0).unique().tolist()
+                level1 = data.columns.get_level_values(1).unique().tolist()
+                if sym in level0:
+                    hist = data[sym]
+                elif sym in level1:
+                    hist = data.xs(sym, axis=1, level=1)
+                else:
+                    rows.append(_empty_ext_row(sym, session))
+                    continue
+            else:
+                hist = data
+            hist = hist.dropna(how="all")
+            if hist.empty or "Close" not in hist.columns:
+                rows.append(_empty_ext_row(sym, session))
+                continue
+
+            idx = hist.index
+            if idx.tz is None:
+                idx = idx.tz_localize("UTC")
+
+            # "regular_end" = the most recent COMPLETED regular session-end
+            # for this symbol. Past 20:00 ET or before 04:00 ET we'd
+            # otherwise be tempted to use "today's 16:00 ET" — but if
+            # today's hasn't happened yet that reference is in the future
+            # and any "before today's 16:00 ET" filter would pick up the
+            # previous day's post-market bars, badly distorting `regular`.
+            if _prev_end is not None:
+                regular_end_utc = _pd.Timestamp(_prev_end(sym))
+            else:
+                # Fallback: equity convention (16:00 ET) on the most
+                # recent weekday <= now.
+                t = now_et.replace(hour=16, minute=0, second=0, microsecond=0)
+                if t > now_et:
+                    from datetime import timedelta as _td
+                    t -= _td(days=1)
+                while t.weekday() >= 5:
+                    from datetime import timedelta as _td
+                    t -= _td(days=1)
+                regular_end_utc = _pd.Timestamp(t).tz_convert("UTC")
+
+            # regular = last bar at or before regular_end. For a query at
+            # 00:10 ET Thursday this lands on Wed 16:00 ET (yesterday's
+            # close) — which is exactly the right denominator for
+            # Wednesday's post-market or Thursday's pre-market.
+            regular = None
+            mask_reg = idx <= regular_end_utc
+            if bool(mask_reg.any()):
+                v = hist["Close"][mask_reg].iloc[-1]
+                if not _pd.isna(v):
+                    regular = float(v)
+
+            # post-market: bars strictly after regular_end whose ET date
+            # equals regular_end's ET date (i.e. the same trading day —
+            # we don't want tomorrow's pre-market to bleed in as "post").
+            post = None
+            mask_post = idx > regular_end_utc
+            if bool(mask_post.any()):
+                idx_et = idx[mask_post].tz_convert(et)
+                same_day = (idx_et.date == regular_end_utc.tz_convert(et).date())
+                if same_day.any():
+                    close_series = hist["Close"][mask_post]
+                    v = close_series[same_day].iloc[-1]
+                    if not _pd.isna(v):
+                        post = float(v)
+
+            # pre-market: bars in TODAY's [04:00, 09:30) ET window.
+            # Only populated when we're currently past 04:00 ET today.
+            pre = None
+            mask_pre = (idx >= pre_open_utc) & (idx < open_utc)
+            if bool(mask_pre.any()):
+                idx_et = idx[mask_pre].tz_convert(et)
+                same_day = (idx_et.date == today)
+                if same_day.any():
+                    close_series = hist["Close"][mask_pre]
+                    v = close_series[same_day].iloc[-1]
+                    if not _pd.isna(v):
+                        pre = float(v)
+
+            # Pick the relevant extended-hours price for display:
+            # match current session; otherwise show most recently
+            # observed extended-hours print (post if both exist).
+            if session == "PRE" and pre is not None:
+                ext = pre
+            elif session == "POST" and post is not None:
+                ext = post
+            elif post is not None:
+                ext = post
+            elif pre is not None:
+                ext = pre
+            else:
+                ext = None
+
+            ext_chg = None
+            ext_pct = None
+            if ext is not None and regular:
+                ext_chg = ext - regular
+                ext_pct = (ext_chg / regular) * 100.0
+
+            rows.append({
+                "symbol": sym,
+                "regular": regular,
+                "pre_market": pre,
+                "post_market": post,
+                "ext_price": ext,
+                "ext_change": ext_chg,
+                "ext_change_pct": ext_pct,
+                "session": session,
+                # name/currency are no longer fetched — they required
+                # the per-symbol Ticker.info call we just removed. The
+                # consumer (PortfolioFuturesView, PortfolioHeatmap) gets
+                # display names elsewhere; an empty string is fine.
+                "currency": "",
+                "name": sym,
+            })
         except Exception:
-            info = {}
-        regular = info.get("regularMarketPrice") or info.get("currentPrice") or None
-        pre = info.get("preMarketPrice")
-        post = info.get("postMarketPrice")
-        state = (info.get("marketState") or "").upper()
-        if "PRE" in state:
-            session = "PRE"
-        elif "POST" in state:
-            session = "POST"
-        elif "REGULAR" in state:
-            session = "REGULAR"
-        else:
-            session = "CLOSED"
-        ext = None
-        if session == "PRE" and pre is not None:
-            ext = float(pre)
-        elif session == "POST" and post is not None:
-            ext = float(post)
-        elif post is not None:
-            ext = float(post)
-        elif pre is not None:
-            ext = float(pre)
-        ext_chg = None
-        ext_pct = None
-        if ext is not None and regular:
-            ext_chg = ext - float(regular)
-            ext_pct = (ext_chg / float(regular)) * 100.0 if regular else 0.0
-        rows.append({
-            "symbol": sym,
-            "regular": float(regular) if regular is not None else None,
-            "pre_market": float(pre) if pre is not None else None,
-            "post_market": float(post) if post is not None else None,
-            "ext_price": ext,
-            "ext_change": ext_chg,
-            "ext_change_pct": ext_pct,
-            "session": session,
-            "currency": info.get("currency", ""),
-            "name": info.get("shortName") or info.get("longName") or sym,
-        })
+            rows.append(_empty_ext_row(sym, session))
     return rows
+
+
+def _empty_ext_row(sym, session):
+    return {
+        "symbol": sym, "regular": None,
+        "pre_market": None, "post_market": None,
+        "ext_price": None, "ext_change": None, "ext_change_pct": None,
+        "session": session, "currency": "", "name": sym,
+    }
+
+
+def _ext_session_label(now_et):
+    """Derive a session label (PRE/REGULAR/POST/CLOSED) from the current ET
+    clock. Saturday/Sunday and overnight gaps map to CLOSED. Half-day or
+    holiday closes still report by clock alone — that's acceptable here
+    since the session label is purely cosmetic in the consumer view."""
+    if now_et.weekday() >= 5:
+        return "CLOSED"
+    h, m = now_et.hour, now_et.minute
+    if h < 4:
+        return "CLOSED"
+    if (h, m) < (9, 30):
+        return "PRE"
+    if h < 16:
+        return "REGULAR"
+    if h < 20:
+        return "POST"
+    return "CLOSED"
 
 
 def run_daemon_socket(socket_path):
