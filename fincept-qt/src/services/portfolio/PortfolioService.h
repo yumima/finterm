@@ -65,10 +65,14 @@ class PortfolioService : public QObject {
     void fetch_spy_history(const QString& period = "1y");
 
     // ── 1D intraday ──────────────────────────────────────────────────────────
-    /// Fetch today's 1-minute OHLC bars for a single symbol from yfinance.
-    /// Returns close prices keyed by epoch-ms timestamps so a sub-day curve
-    /// can be charted. Emits symbol_intraday_loaded() on success.
-    void fetch_symbol_intraday(const QString& symbol);
+    /// Fetch intraday OHLC bars for a single symbol from yfinance.
+    /// Default (1d / 1m) is the classic 1D today's session at 1-minute
+    /// resolution. Pass e.g. ("5d", "30m") to drive the 1W focused-symbol
+    /// chart at half-hour granularity over the trading week.
+    /// Emits symbol_intraday_loaded() on success.
+    void fetch_symbol_intraday(const QString& symbol,
+                               const QString& period = QStringLiteral("1d"),
+                               const QString& interval = QStringLiteral("1m"));
 
     /// Build today's aggregate portfolio-NAV curve by fetching 1-minute bars
     /// for every holding and summing (qty × close) at each shared timestamp.

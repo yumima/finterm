@@ -81,11 +81,15 @@ class PortfolioPerfChart : public QWidget {
     /// Focus mode: owner should fetch daily closes for @p symbol over the
     /// yfinance @p period (e.g. "1mo", "1y", "max").
     void focus_symbol_period_requested(QString symbol, QString period);
-    /// User clicked 1D. Owner calls PortfolioService::fetch_symbol_intraday
-    /// (focus mode, symbol non-empty) or fetch_portfolio_intraday (aggregate,
-    /// symbol empty). The chart paints a placeholder until set_*_intraday()
-    /// lands.
-    void intraday_requested(QString symbol_or_empty);
+    /// User clicked an intraday-rendered period (1D, or 1W when a symbol is
+    /// focused — multi-day at half-hour resolution). Owner calls
+    /// PortfolioService::fetch_symbol_intraday(symbol, period, interval) for
+    /// focus mode, or fetch_portfolio_intraday(portfolio_id) for the aggregate
+    /// 1D path (which keeps its 1d/1m defaults). The chart paints a
+    /// placeholder until set_*_intraday() lands.
+    void intraday_requested(QString symbol_or_empty,
+                            QString period,
+                            QString interval);
 
   private:
     void build_ui();
@@ -116,6 +120,12 @@ class PortfolioPerfChart : public QWidget {
     static qint64 iso_date_to_ms_utc(const QString& iso_date);
     /// Map the chart's internal period token to a yfinance period string.
     QString period_for_yfinance() const;
+    /// True when the current period is rendered as an epoch-ms intraday
+    /// series instead of daily closes. 1D for both views; 1W only when a
+    /// symbol is focused (aggregate 1W uses the snapshots path).
+    bool is_intraday_period() const;
+    /// yfinance interval token for the intraday fetch: 1m for 1D, 30m for 1W.
+    QString intraday_interval() const;
 
     // Period selector buttons
     QVector<QPushButton*> period_btns_;

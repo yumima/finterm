@@ -389,31 +389,39 @@ void PortfolioPerfChart::set_period(const QString& period) {
     for (auto* btn : period_btns_)
         btn->setChecked(btn->text() == period);
 
-    // 1D goes through a separate yfinance 1m-intraday pull (see
-    // PortfolioService::fetch_*_intraday). The owner handles the fetch;
-    // the chart paints a placeholder until set_*_intraday() lands.
-    if (period == QStringLiteral("1D")) {
+    // 1D, and 1W in focus mode, render from intraday bars (epoch-ms axis).
+    // PortfolioService::fetch_*_intraday is invoked by the screen owner; the
+    // chart paints a placeholder until set_*_intraday() lands.
+    if (is_intraday_period()) {
         intraday_requested_ = true;
         intraday_resolved_  = false;  // waiting for callback
         intraday_for_symbol_ = focus_symbol_;  // empty if portfolio view
-        // Plant a 2-point prev-close → current seed so the chart isn't blank
-        // during the fan-out. Real intraday data replaces this on arrival.
-        seed_intraday_from_summary();
+        // 1D gets a 2-point prev-close → current seed so the chart isn't
+        // blank during the fan-out. 1W intraday spans 5 trading days — the
+        // 6.5h seed would mislead, so skip the seed and let the placeholder
+        // render until real bars arrive.
+        if (current_period_ == QStringLiteral("1D"))
+            seed_intraday_from_summary();
+        else
+            { intraday_ts_ms_.clear(); intraday_values_.clear(); }
         // Indexed (base-100) mode only makes sense over multi-day windows;
-        // 1D is a raw-value series. Disable the toggle for the duration so
-        // the user can't accidentally render a meaningless rebase.
+        // 1D is a raw-value series. Keep it available for 1W intraday.
         if (indexed_btn_) {
-            indexed_btn_->setEnabled(false);
-            indexed_btn_->setToolTip(QStringLiteral(
-                "Indexed view is unavailable in 1D — intraday is rendered "
-                "as raw price/NAV."));
+            const bool indexed_ok = current_period_ != QStringLiteral("1D");
+            indexed_btn_->setEnabled(indexed_ok);
+            indexed_btn_->setToolTip(indexed_ok
+                ? QStringLiteral("Indexed view: rebase to 100 at the start of the period.")
+                : QStringLiteral(
+                    "Indexed view is unavailable in 1D — intraday is rendered "
+                    "as raw price/NAV."));
         }
-        emit intraday_requested(focus_symbol_);
+        emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
         update_chart();
         return;
     }
-    // Switching away from 1D — clear the intraday cache so a return to 1D
-    // re-fetches fresh data, and restore the indexed-mode toggle.
+    // Switching away from an intraday-rendered period — clear the cache so
+    // a return to it re-fetches fresh data, and restore the indexed-mode
+    // toggle.
     intraday_requested_ = false;
     intraday_ts_ms_.clear();
     intraday_values_.clear();
@@ -455,7 +463,7 @@ void PortfolioPerfChart::set_period(const QString& period) {
 QString PortfolioPerfChart::period_for_yfinance() const {
     // yfinance accepts: 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
     const QString& p = current_period_;
-    if (p == "1D") return QStringLiteral("5d"); // daily-only — show last few sessions
+    if (p == "1D") return QStringLiteral("1d");
     if (p == "1W") return QStringLiteral("5d");
     if (p == "1M") return QStringLiteral("1mo");
     if (p == "3M") return QStringLiteral("3mo");
@@ -465,6 +473,23 @@ QString PortfolioPerfChart::period_for_yfinance() const {
     return QStringLiteral("max"); // ALL
 }
 
+bool PortfolioPerfChart::is_intraday_period() const {
+    if (current_period_ == QStringLiteral("1D"))
+        return true;
+    // 1W focus-mode uses intraday bars so the user sees a real curve over
+    // the trading week rather than a 5-vertex polygon between daily closes.
+    // Aggregate 1W stays on the snapshots path (no intraday aggregation
+    // exists for multi-day windows).
+    if (current_period_ == QStringLiteral("1W") && !focus_symbol_.isEmpty())
+        return true;
+    return false;
+}
+
+QString PortfolioPerfChart::intraday_interval() const {
+    return current_period_ == QStringLiteral("1W")
+        ? QStringLiteral("30m") : QStringLiteral("1m");
+}
+
 void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     if (symbol.isEmpty()) {
         clear_focus_symbol();
@@ -472,13 +497,16 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     }
     if (focus_symbol_ == symbol) {
         // Already focused on this symbol — refresh data anyway. Route to the
-        // intraday fetch when in 1D so the curve refreshes against the right
-        // data source (not the daily fetch_benchmark_history path).
-        if (current_period_ == QStringLiteral("1D")) {
+        // intraday fetch when the current period is rendered intraday (1D
+        // always, 1W in focus mode) so we don't hit the daily-close path.
+        if (is_intraday_period()) {
             intraday_requested_ = true;
             intraday_resolved_  = false;
-            seed_intraday_from_summary();
-            emit intraday_requested(focus_symbol_);
+            if (current_period_ == QStringLiteral("1D"))
+                seed_intraday_from_summary();
+            else
+                { intraday_ts_ms_.clear(); intraday_values_.clear(); }
+            emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
         } else {
             emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
         }
@@ -489,6 +517,10 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     focus_dates_.clear();
     focus_closes_.clear();
     focus_data_loaded_ = false; // reset: waiting for set_focus_history()
+    // Entering focus mode: 1W moves to the intraday path and no longer
+    // requires 5+ days of snapshots, so re-evaluate which period buttons
+    // are feasible.
+    update_period_buttons_enabled();
     // Invalidate prior symbol's order-book snapshot so a fast switch can't
     // briefly show the previous spread.
     ob_symbol_.clear();
@@ -498,16 +530,19 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
             QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
                 .arg(ui::colors::WARNING(), focus_symbol_.toHtmlEscaped(),
                      ui::colors::TEXT_SECONDARY()));
-    // Route the fetch by current period: in 1D mode the daily fetch path
-    // returns ~5 daily bars which is useless. Emit the intraday request
-    // instead and clear the prior symbol's intraday bars so the chart shows
-    // a "Loading…" placeholder until the new symbol's bars land.
-    if (current_period_ == QStringLiteral("1D")) {
+    // Route the fetch by current period: intraday-rendered periods (1D, and
+    // 1W in focus mode) need bar-level data, not daily closes. Clear the
+    // prior symbol's intraday bars so the chart shows a "Loading…"
+    // placeholder until the new symbol's bars land.
+    if (is_intraday_period()) {
         intraday_requested_  = true;
         intraday_resolved_   = false;
         intraday_for_symbol_ = focus_symbol_;
-        seed_intraday_from_summary();
-        emit intraday_requested(focus_symbol_);
+        intraday_ts_ms_.clear();
+        intraday_values_.clear();
+        if (current_period_ == QStringLiteral("1D"))
+            seed_intraday_from_summary();
+        emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
     } else {
         emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
     }
@@ -572,6 +607,9 @@ void PortfolioPerfChart::clear_focus_symbol() {
             QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
                 .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
     set_live_group_visible(false);
+    // Leaving focus mode: 1W aggregate's feasibility depends on snapshot
+    // span again — re-evaluate the period buttons.
+    update_period_buttons_enabled();
     // Drop any focus-mode 1D intraday bars so a return to portfolio 1D
     // doesn't briefly render the prior symbol's curve before the new
     // aggregate fan-out lands. If we're currently in 1D, also re-request
@@ -582,7 +620,10 @@ void PortfolioPerfChart::clear_focus_symbol() {
     if (current_period_ == QStringLiteral("1D")) {
         intraday_requested_ = true;
         seed_intraday_from_summary();  // aggregate seed now that focus is gone
-        emit intraday_requested(QString());
+        emit intraday_requested(QString(), QStringLiteral("1d"), QStringLiteral("1m"));
+    } else if (current_period_ == QStringLiteral("1W")) {
+        // Aggregate 1W uses the snapshots path, not intraday — leave the
+        // chart to re-render from snapshots_ via update_chart() below.
     }
     update_chart();
 }
@@ -600,8 +641,9 @@ void PortfolioPerfChart::set_focus_history(const QString& symbol, const QStringL
 void PortfolioPerfChart::set_symbol_intraday(const QString& symbol,
                                              const QVector<qint64>& timestamps_ms,
                                              const QVector<double>& closes) {
-    // Race-safe: only accept if we're still showing 1D for this symbol.
-    if (current_period_ != QStringLiteral("1D")) return;
+    // Race-safe: only accept if we're still showing an intraday-rendered
+    // period (1D, or 1W in focus mode) for this symbol.
+    if (!is_intraday_period()) return;
     if (focus_symbol_.isEmpty() || symbol.toUpper() != focus_symbol_) return;
     intraday_for_symbol_ = focus_symbol_;
     intraday_ts_ms_      = timestamps_ms;
@@ -641,7 +683,9 @@ void PortfolioPerfChart::update_period_buttons_enabled() {
     for (auto* btn : period_btns_) {
         const QString p = btn->text();
         bool feasible = true;
-        if (p == "1W")
+        // 1W aggregate needs 5+ days of snapshots; 1W focus rides on the
+        // on-demand yfinance intraday pull, so it's always feasible there.
+        if (p == "1W" && focus_symbol_.isEmpty())
             feasible = span_days >= 5;
         // 1D and the longer periods always allowed: backfill / intraday fetch
         // kicks in when clicked.
@@ -688,15 +732,25 @@ void PortfolioPerfChart::seed_intraday_from_summary() {
     }
     if (prev_val <= 0) return;
 
-    // Span the seed across a 6.5h "session length" window ending at now.
-    // Anchoring to UTC midnight made the prior point land at 20:00 ET on the
-    // previous day for US-listed names, which produced confusing HH:mm tick
-    // labels. A rolling session-length window is exchange-agnostic and gets
-    // overwritten by real bars within a few seconds anyway.
+    // Anchor the seed to today's NYSE session (09:30 ET → now, capped at
+    // 16:00 ET). The previous "now − 6.5h rolling window" approach was
+    // exchange-agnostic in principle but in practice pushed the chart's
+    // x-axis start into pre-market wall-clock time (e.g. 04:15 PT at
+    // mid-session) since US bars themselves are NYSE-anchored. If we're
+    // called before today's open (rare — pre-market refresh), fall back to
+    // yesterday's session so prev_val→cur_val still spans a real interval.
+    const QTimeZone et("America/New_York");
+    const QDateTime now_et = QDateTime::currentDateTime().toTimeZone(et);
+    QDateTime open_et(now_et.date(), QTime(9, 30), et);
+    QDateTime close_et(now_et.date(), QTime(16, 0), et);
+    if (now_et < open_et) {
+        open_et  = open_et.addDays(-1);
+        close_et = close_et.addDays(-1);
+    }
     const qint64 now_ms          = QDateTime::currentMSecsSinceEpoch();
-    constexpr qint64 kSessionMs  = 6 * 60 * 60 * 1000 + 30 * 60 * 1000;  // 6.5h
-    const qint64 session_open_ms = now_ms - kSessionMs;
-    intraday_ts_ms_  = {session_open_ms, now_ms};
+    const qint64 session_open_ms = open_et.toMSecsSinceEpoch();
+    const qint64 session_end_ms  = std::min(close_et.toMSecsSinceEpoch(), now_ms);
+    intraday_ts_ms_  = {session_open_ms, session_end_ms};
     intraday_values_ = {prev_val, cur_val};
 }
 
@@ -724,9 +778,11 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         // indefinitely, which is what the review flagged.
         if (intraday_resolved_) {
             period_change_label_->setText(
-                QStringLiteral("1D unavailable for %1 (market closed or no bars)").arg(label));
+                QString("%1 unavailable for %2 (market closed or no bars)")
+                    .arg(current_period_, label));
         } else {
-            period_change_label_->setText(QStringLiteral("Loading 1D %1…").arg(label));
+            period_change_label_->setText(
+                QString("Loading %1 %2…").arg(current_period_, label));
         }
         // Aggregate path owns its own info-bar; per-symbol path's
         // TOTAL/MV/COST + live row is populated by update_chart_focus()'s
@@ -774,7 +830,14 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     chart->addSeries(line);
 
     auto* x = new QDateTimeAxis;
-    x->setFormat(QStringLiteral("HH:mm"));
+    // Multi-day intraday windows (e.g. 1W focus mode at 30m bars) need a
+    // date-aware label format; HH:mm alone would repeat 09:30 each session
+    // with no way for the user to tell which day they're looking at.
+    const qint64 span_ms = intraday_ts_ms_.last() - intraday_ts_ms_.first();
+    constexpr qint64 kOneDayMs = 24LL * 60 * 60 * 1000;
+    x->setFormat(span_ms > kOneDayMs
+                     ? QStringLiteral("ddd HH:mm")
+                     : QStringLiteral("HH:mm"));
     x->setLabelsColor(QColor(ui::colors::TEXT_SECONDARY()));
     x->setGridLineColor(QColor(ui::colors::BORDER_DIM()));
     x->setLinePenColor(QColor(ui::colors::BORDER_MED()));
@@ -800,7 +863,8 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
 
     // Info-bar: period change %, current value, and (aggregate only) cost.
     const char* pcol = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    period_change_label_->setText(QString("1D  %1%2%")
+    period_change_label_->setText(QString("%1  %2%3%")
+                                      .arg(current_period_)
                                       .arg(pnl_pct >= 0 ? "+" : "")
                                       .arg(QString::number(pnl_pct, 'f', 2)));
     period_change_label_->setStyleSheet(
@@ -921,8 +985,8 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
 
 void PortfolioPerfChart::update_chart_focus() {
     // Chart-render branches:
-    //   1D            → render_intraday() (epoch-ms axis, HH:mm labels).
-    //   1W/1M/…/ALL   → daily-close ISO-date series.
+    //   1D, and 1W (focus) → render_intraday() (epoch-ms axis).
+    //   1M/3M/…/ALL        → daily-close ISO-date series.
     // Both branches set period_change_label_ themselves. The shared tail
     // below populates TOTAL/MV/COST and the live row (LAST/BID/ASK/DAY/VOL)
     // from summary_.holdings unconditionally, so a ticker switch reflects
@@ -930,7 +994,7 @@ void PortfolioPerfChart::update_chart_focus() {
     bool have_data = false;
     double last_price = 0;
 
-    if (current_period_ == QStringLiteral("1D")) {
+    if (is_intraday_period()) {
         have_data = render_intraday(/*is_aggregate=*/false);
         if (have_data && !intraday_values_.isEmpty())
             last_price = intraday_values_.last();
@@ -1074,6 +1138,10 @@ void PortfolioPerfChart::update_chart() {
     QVector<QPointF> nav_pts;       // (ms_utc, NAV)
     nav_pts.reserve(filtered.size() + 1);
     double period_baseline = 0; // first snapshot value within window
+    // True when we don't have a snapshot near the period cutoff and the
+    // "X%" return would actually be total return (cost → live NAV). We
+    // still draw what we have, but suppress the misleading number.
+    bool baseline_unavailable = false;
 
     if (filtered.size() >= 2) {
         period_baseline = filtered.first().total_value;
@@ -1084,14 +1152,29 @@ void PortfolioPerfChart::update_chart() {
         const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
         if (nav_pts.last().x() < now_ms)
             nav_pts.append(QPointF(static_cast<double>(now_ms), live_nav));
+        // If the earliest snapshot is too far inside the window relative to
+        // the period (e.g. only 2 days of history for a 1W view), the
+        // baseline isn't representative of the period start — flag it so
+        // the displayed return isn't misread as a true period return.
+        const QDate first_date = QDate::fromString(
+            filtered.first().snapshot_date.left(10), Qt::ISODate);
+        const int window_days = cutoff.daysTo(QDate::currentDate());
+        if (first_date.isValid() && window_days > 0) {
+            const int have_days = first_date.daysTo(QDate::currentDate());
+            if (have_days * 2 < window_days)  // <50% coverage
+                baseline_unavailable = true;
+        }
     } else {
-        // No real history yet — render a clean cost→NAV reference segment.
+        // No real history yet — render a clean cost→NAV reference segment
+        // but mark the period number as unavailable so we don't surface a
+        // total-return % as if it were a 1W/1M/etc. return.
         // (Backfill is auto-triggered on import / first metrics call.)
         period_baseline = cost_basis > 0 ? cost_basis : live_nav;
         const qint64 yest = QDateTime::currentDateTimeUtc().addDays(-1).toMSecsSinceEpoch();
         const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
         nav_pts.append(QPointF(static_cast<double>(yest), period_baseline));
         nav_pts.append(QPointF(static_cast<double>(now_ms), live_nav));
+        baseline_unavailable = true;
     }
 
     // ── Period P&L is *always* relative to the period baseline ───────────────
@@ -1259,13 +1342,26 @@ void PortfolioPerfChart::update_chart() {
     }
 
     // ── Info labels ───────────────────────────────────────────────────────────
-    const char* pnl_color = period_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    period_change_label_->setText(QString("%1  %2%3%")
-                                      .arg(current_period_)
-                                      .arg(period_pnl_pct >= 0 ? "+" : "")
-                                      .arg(QString::number(period_pnl_pct, 'f', 2)));
-    period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
+    // When the snapshot history doesn't cover the requested period, the
+    // computed period_pnl_pct is really a (partial-window or total) return
+    // and would mislead as "1W +X%". Show "—" instead until backfill lands.
+    if (baseline_unavailable) {
+        period_change_label_->setText(QString("%1  —").arg(current_period_));
+        period_change_label_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:600;")
+                .arg(ui::colors::TEXT_SECONDARY()));
+        period_change_label_->setToolTip(
+            QStringLiteral("Not enough snapshot history yet — backfill in progress."));
+    } else {
+        const char* pnl_color = period_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        period_change_label_->setText(QString("%1  %2%3%")
+                                          .arg(current_period_)
+                                          .arg(period_pnl_pct >= 0 ? "+" : "")
+                                          .arg(QString::number(period_pnl_pct, 'f', 2)));
+        period_change_label_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
+        period_change_label_->setToolTip(QString());
+    }
 
     const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
     const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;

@@ -895,14 +895,16 @@ QWidget* PortfolioScreen::build_main_view() {
             [](const QString& symbol, const QString& period) {
                 services::PortfolioService::instance().fetch_benchmark_history(symbol, period);
             });
-    // 1D intraday — symbol-focus mode passes the focused symbol; portfolio
-    // mode passes an empty string. Service drives the underlying yfinance
-    // 1m-interval pull and emits the matching *_intraday_loaded signal.
+    // Intraday-rendered periods (1D always, 1W in focus mode). Focus mode
+    // passes the focused symbol along with the desired yfinance period/
+    // interval; aggregate 1D passes an empty symbol and the service
+    // ignores the period/interval (it only fans out 1d/1m).
     connect(perf_chart_, &PortfolioPerfChart::intraday_requested, this,
-            [this](const QString& symbol) {
+            [this](const QString& symbol, const QString& period,
+                   const QString& interval) {
                 auto& svc = services::PortfolioService::instance();
                 if (!symbol.isEmpty()) {
-                    svc.fetch_symbol_intraday(symbol);
+                    svc.fetch_symbol_intraday(symbol, period, interval);
                 } else if (!selected_id_.isEmpty()) {
                     svc.fetch_portfolio_intraday(selected_id_);
                 }

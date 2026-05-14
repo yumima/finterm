@@ -15,10 +15,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMutexLocker>
+#include <QTimeZone>
 #include <QtConcurrent>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numeric>
 
 namespace fincept::services {
@@ -705,7 +707,31 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
 // (Path 3) is just N parallel single-symbol fetches; we union the returned
 // timestamps and sum (qty × close) at each point.
 
-void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
+namespace {
+
+// Today's NYSE regular-trading-hours session in UTC ms. Returns {open, close}
+// for the most recent session that has begun: today if now ≥ today's open,
+// else the previous calendar day. Weekend/holiday handling is deliberately
+// not included — yfinance returns the last trading day's bars for those, and
+// the aggregator anchors to those real-bar timestamps when available. This
+// helper is only used as a fallback when no real bars exist at all.
+QPair<qint64, qint64> nyse_session_today_utc_ms() {
+    const QTimeZone et("America/New_York");
+    const QDateTime now_et = QDateTime::currentDateTime().toTimeZone(et);
+    QDateTime open_et(now_et.date(), QTime(9, 30), et);
+    QDateTime close_et(now_et.date(), QTime(16, 0), et);
+    if (now_et < open_et) {
+        open_et  = open_et.addDays(-1);
+        close_et = close_et.addDays(-1);
+    }
+    return {open_et.toMSecsSinceEpoch(), close_et.toMSecsSinceEpoch()};
+}
+
+} // namespace
+
+void PortfolioService::fetch_symbol_intraday(const QString& symbol,
+                                              const QString& period,
+                                              const QString& interval) {
     const QString sym = symbol.trimmed();
     if (sym.isEmpty()) {
         emit symbol_intraday_loaded(sym, {}, {});
@@ -713,14 +739,14 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
     }
     QJsonObject payload;
     payload["symbol"]   = sym;
-    payload["period"]   = QStringLiteral("1d");
-    payload["interval"] = QStringLiteral("1m");
+    payload["period"]   = period;
+    payload["interval"] = interval;
 
     const qint64 epoch = ++symbol_intraday_epoch_;
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit(
         "historical_period", payload,
-        [self, sym, epoch](bool ok, QJsonObject result, QString err) {
+        [self, sym, epoch, period](bool ok, QJsonObject result, QString err) {
             if (!self) return;
             if (self->symbol_intraday_epoch_ != epoch) {
                 // Superseded by a newer fetch (user switched ticker/period).
@@ -748,19 +774,32 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol) {
 
             // Symbols yfinance doesn't know (FCASH, SPAXX, money-market funds)
             // return an empty intraday pull. Mirror the daily-history fallback
-            // (line ~665) and synthesise a flat $1.00/share 2-point series
-            // spanning the rolling 6.5h session window the chart's seed uses.
-            // Without this, the chart shows the briefly-painted seed line and
-            // then clears to "1D unavailable" the moment the empty result
-            // lands — the disappearing-line bug.
+            // (line ~665) and synthesise a flat $1.00/share 2-point series.
+            // For 1D we anchor to today's NYSE session (09:30→16:00 ET) so
+            // the chart's x-axis matches real bars from other symbols rather
+            // than drifting with wall-clock time. Multi-day periods (1W/1M
+            // focus) span a fixed window back from now since there's no
+            // single "session open" anchor for them.
             if (ts_ms.isEmpty() && closes.isEmpty()) {
-                const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-                constexpr qint64 kSessionMs =
-                    6LL * 60 * 60 * 1000 + 30LL * 60 * 1000;
-                ts_ms  = {now_ms - kSessionMs, now_ms};
+                qint64 start_ms = 0;
+                qint64 end_ms   = 0;
+                if (period == QStringLiteral("1d")) {
+                    const auto [open_ms, close_ms] = nyse_session_today_utc_ms();
+                    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                    start_ms = open_ms;
+                    end_ms   = std::min(close_ms, now_ms);
+                } else {
+                    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                    qint64 span_ms = 5LL * 24 * 60 * 60 * 1000; // 5d default
+                    if (period == QStringLiteral("1mo"))
+                        span_ms = 30LL * 24 * 60 * 60 * 1000;
+                    start_ms = now_ms - span_ms;
+                    end_ms   = now_ms;
+                }
+                ts_ms  = {start_ms, end_ms};
                 closes = {1.0, 1.0};
                 LOG_INFO("PortfolioSvc",
-                         QString("Synthesised flat $1 intraday series for %1").arg(sym));
+                         QString("Synthesised flat $1 intraday series for %1 (%2)").arg(sym, period));
             }
             emit self->symbol_intraday_loaded(sym, ts_ms, closes);
         },
@@ -783,6 +822,27 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
         const QString up = a.symbol.toUpper();
         if (!qty_by_symbol.contains(up)) unique_symbols.append(up);
         qty_by_symbol[up] += a.quantity;
+    }
+
+    // Per-share price hint for the no-bars fallback. The live summary cache
+    // holds current_price for every holding (refreshed from MarketDataService
+    // batch quotes), which is what cash/MMF/unknown-to-yfinance positions
+    // should be valued at — not the legacy hardcoded $1.00 (correct only for
+    // a 1-share par-value cash position, wrong for everything else). Fall
+    // back to avg_buy_price when no cached quote is available.
+    QHash<QString, double> price_hint;
+    for (const auto& a : assets) {
+        price_hint[a.symbol.toUpper()] = a.avg_buy_price;
+    }
+    {
+        QMutexLocker lock(&cache_mutex_);
+        auto cit = summary_cache_.constFind(portfolio_id);
+        if (cit != summary_cache_.cend()) {
+            for (const auto& h : cit.value().summary.holdings) {
+                if (h.current_price > 0)
+                    price_hint[h.symbol.toUpper()] = h.current_price;
+            }
+        }
     }
 
     // Per-symbol intraday series accumulator. The aggregate emit fires once
@@ -808,7 +868,7 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
         payload["interval"] = QStringLiteral("1m");
         python::PythonWorker::instance().submit(
             "historical_period", payload,
-            [self, portfolio_id, sym, state, qty_by_symbol](
+            [self, portfolio_id, sym, state, qty_by_symbol, price_hint](
                 bool ok, QJsonObject result, QString err) {
                 if (!self) return;
                 QHash<qint64, double>& bars = state->by_symbol[sym];
@@ -827,19 +887,11 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 }
 
                 // Cash / MMF / unknown-to-yfinance symbols return zero bars.
-                // Synthesise a flat $1.00 series at minute granularity over
-                // the rolling 6.5h session window so the aggregate forward-
-                // fill picks up the cash contribution at every real-symbol
-                // timestamp (matches the daily-history fallback at line ~665).
-                if (bars.isEmpty()) {
-                    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-                    constexpr qint64 kMinMs = 60LL * 1000;
-                    constexpr qint64 kSessionMs =
-                        6LL * 60 * 60 * 1000 + 30LL * 60 * 1000;
-                    for (qint64 t = now_ms - kSessionMs; t <= now_ms; t += kMinMs) {
-                        bars.insert(t, 1.0);
-                    }
-                }
+                // Synthesis is deferred to the aggregator so it can match the
+                // real-bar window (NYSE 09:30 ET onward) instead of anchoring
+                // to "now − 6.5h" — which used to push the chart's x-axis
+                // start into pre-market wall-clock time (e.g. 04:15 PT at
+                // mid-session) and stretched the axis with cash-only padding.
                 if (--state->pending > 0) return;
 
                 // All symbols reported — but the user may have moved on
@@ -847,6 +899,42 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 // fan-out was running. Drop the accumulator silently in that
                 // case so a fresher fetch's result isn't overwritten.
                 if (self->portfolio_intraday_epoch_ != state->epoch) return;
+
+                // Synthesise bars for cash / MMF / unknown-to-yfinance symbols
+                // *now* that every real-bar symbol has reported. Anchoring
+                // their flat series to the real-bar window (rather than a
+                // wall-clock "now − 6.5h") keeps the chart's x-axis aligned
+                // with the actual NYSE session. If no symbol returned any
+                // real bars (all-cash portfolio), fall back to today's
+                // NYSE 09:30→16:00 ET so the chart still has something to
+                // anchor against.
+                qint64 win_start = std::numeric_limits<qint64>::max();
+                qint64 win_end   = std::numeric_limits<qint64>::min();
+                for (auto it = state->by_symbol.cbegin();
+                     it != state->by_symbol.cend(); ++it) {
+                    if (it.value().isEmpty()) continue;
+                    for (auto bit = it.value().cbegin();
+                         bit != it.value().cend(); ++bit) {
+                        win_start = std::min(win_start, bit.key());
+                        win_end   = std::max(win_end,   bit.key());
+                    }
+                }
+                if (win_start > win_end) {
+                    // No real bars at all — use today's NYSE session.
+                    const auto [open_ms, close_ms] = nyse_session_today_utc_ms();
+                    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                    win_start = open_ms;
+                    win_end   = std::min(close_ms, now_ms);
+                }
+                constexpr qint64 kMinMs = 60LL * 1000;
+                for (auto it = state->by_symbol.begin();
+                     it != state->by_symbol.end(); ++it) {
+                    if (!it.value().isEmpty()) continue;
+                    const double px = price_hint.value(it.key(), 1.0);
+                    for (qint64 t = win_start; t <= win_end; t += kMinMs) {
+                        it.value().insert(t, px);
+                    }
+                }
 
                 // All symbols reported. Union timestamps across every symbol —
                 // a NAV point exists wherever at least one symbol has a bar.
@@ -885,13 +973,22 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 ts_ms.reserve(all_ts.size());
                 navs.reserve(all_ts.size());
 
+                // Back-fill baseline: seed every symbol with its first bar so a
+                // position contributes to NAV at union timestamps before its
+                // first bar arrives. Without this, US stocks contribute zero
+                // during pre-market while the cash fallback's bars are present,
+                // producing a "cash-only NAV" flat segment that steps up as
+                // each stock's first bar lands at 09:30 ET.
                 QHash<QString, int> cursor;
                 QHash<QString, double> last_close;
-                for (const auto& sym2 : sorted_bars.keys()) cursor[sym2] = 0;
+                for (auto it = sorted_bars.cbegin(); it != sorted_bars.cend(); ++it) {
+                    cursor[it.key()] = 0;
+                    if (!it.value().isEmpty())
+                        last_close[it.key()] = it.value().first().second;
+                }
 
                 for (qint64 t : all_ts) {
                     double nav = 0;
-                    bool any = false;
                     for (auto it = sorted_bars.cbegin(); it != sorted_bars.cend(); ++it) {
                         const QString& s2 = it.key();
                         const auto& v = it.value();
@@ -901,15 +998,10 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                             last_close[s2] = v[c].second;
                             ++c;
                         }
-                        const auto lcit = last_close.constFind(s2);
-                        if (lcit == last_close.cend()) continue; // no bar yet for this symbol
-                        nav += qty_by_symbol.value(s2) * lcit.value();
-                        any = true;
+                        nav += qty_by_symbol.value(s2) * last_close.value(s2);
                     }
-                    if (any) {
-                        ts_ms.append(t);
-                        navs.append(nav);
-                    }
+                    ts_ms.append(t);
+                    navs.append(nav);
                 }
 
                 LOG_INFO("PortfolioSvc",
