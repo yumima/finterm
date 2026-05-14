@@ -134,8 +134,14 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     // futures cache cadence so both tables tick together.
     ext_refresh_timer_ = new QTimer(this);
     ext_refresh_timer_->setInterval(kExtRefreshIntervalMs);
-    connect(ext_refresh_timer_, &QTimer::timeout,
-            this, &PortfolioFuturesView::refresh_extended_hours);
+    connect(ext_refresh_timer_, &QTimer::timeout, this, [this]() {
+        // Timer-driven refreshes skip if one is already in flight — a
+        // slow yfinance response shouldn't cause request inflation.
+        // set_summary's direct refresh bypasses this guard so new
+        // holdings still get fresh data immediately on arrival.
+        if (ext_in_flight_) return;
+        refresh_extended_hours();
+    });
     // Hydrate ext_quotes_ from the disk snapshot so the table paints
     // with stale-but-real values on first paint, instead of "—"
     // everywhere until the first 20 s refresh returns.
@@ -355,6 +361,7 @@ void PortfolioFuturesView::refresh_extended_hours() {
 
     extended_status_->setText("loading ext hours…");
     const quint64 my_gen = ++ext_gen_;
+    ext_in_flight_ = true;
 
     QJsonObject payload;
     payload.insert("symbols", syms);
@@ -364,6 +371,7 @@ void PortfolioFuturesView::refresh_extended_hours() {
     python::PythonWorker::instance().submit(
         "extended_hours", payload,
         [this, my_gen](bool ok, QJsonObject result, QString /*err*/) {
+            ext_in_flight_ = false;  // release first, before any early-return
             if (my_gen != ext_gen_) return;  // superseded
             if (!ok) {
                 extended_status_->setText("ext hours error");
@@ -373,7 +381,10 @@ void PortfolioFuturesView::refresh_extended_hours() {
             const QJsonArray rows = result.contains("_value")
                                          ? result.value("_value").toArray()
                                          : result.value("data").toArray();
-            ext_quotes_.clear();
+            // Merge (don't clear): if yfinance dropped a symbol from this
+            // round, the previous value stays in ext_quotes_ rather than
+            // disappearing entirely. Matches FuturesQuoteCache::refresh's
+            // pattern and avoids disk-durable data loss on the next save.
             for (const auto& v : rows) {
                 const auto o = v.toObject();
                 ExtQuote q;
@@ -391,7 +402,11 @@ void PortfolioFuturesView::refresh_extended_hours() {
                 ext_quotes_.insert(o.value("symbol").toString(), q);
             }
             extended_status_->setText(QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
-            save_ext_cache();
+            // Skip the disk write when the response had no rows — that
+            // path is rare (only happens if the symbols list was empty
+            // or the daemon errored upstream) and would otherwise no-op
+            // overwrite a perfectly good prior snapshot.
+            if (!rows.isEmpty()) save_ext_cache();
             populate_extended();
         },
         python::PythonWorker::kNetworkActionTimeoutMs);

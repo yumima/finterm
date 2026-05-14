@@ -74,6 +74,13 @@ class PortfolioFuturesView : public QWidget {
 
     QHash<QString, ExtQuote> ext_quotes_;
     quint64                  ext_gen_ = 0;
+    // Suppresses timer-driven refresh while one is already in flight.
+    // Without this guard a slow yfinance response (>20 s) lets the
+    // 20 s tick fire repeatedly, stacking requests on the daemon. The
+    // ext_gen_ epoch only drops *responses*; this drops *requests*.
+    // set_summary still proceeds even when true — its callers explicitly
+    // want fresh data for newly-arrived holdings.
+    bool                     ext_in_flight_ = false;
 
     // Periodic refresh of the extended-hours table while the view is
     // visible. Runs in parallel with FuturesQuoteCache's own 20 s
