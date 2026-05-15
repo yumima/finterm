@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`619ee0bf`](https://github.com/yumima/finterm/commit/619ee0bf) **fix(video):** replace unavailable presets; expand to 6 verified channels
 - [`da6ced00`](https://github.com/yumima/finterm/commit/da6ced00) **fix(video):** normalise frames to RGBA8888 to fix texture update failure
 - [`df6c489c`](https://github.com/yumima/finterm/commit/df6c489c) **chore(setup):** update setup.sh to current dependency requirements
 - [`e9ed7b6e`](https://github.com/yumima/finterm/commit/e9ed7b6e) **fix(video):** install yt-dlp, add node JS runtime, use channel live URLs
