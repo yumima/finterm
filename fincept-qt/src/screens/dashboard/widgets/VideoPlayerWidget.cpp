@@ -198,14 +198,15 @@ struct PresetChannel {
 
 // Channel /live URLs redirect to whatever is currently streaming, so they
 // never go stale the way specific watch?v= video IDs do.
+// All presets verified live and accessible (no membership/geo-gate) via yt-dlp.
+// Bloomberg @BloombergTV requires channel membership; NDTV Profit handle is 404.
 static const PresetChannel kPresets[] = {
-    // Bloomberg @BloombergTV/live requires a channel membership — use their
-    // free public live stream (Bloomberg Technology / Markets feed).
-    {"Bloomberg",     "https://www.youtube.com/@BloombergMarkets/live",   "Global business & markets", "#9D4EDD"},
-    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",               "US market coverage",        "#2563eb"},
-    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",       "Market analysis",           "#16a34a"},
-    {"NDTV Profit",   "https://www.youtube.com/@NDTVProfit/live",         "India business & markets",  "#0891b2"},
-    {"Al Jazeera",    "https://www.youtube.com/@AlJazeeraEnglish/live",   "World news & finance",      "#d97706"},
+    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",              "US markets & business",      "#2563eb"},
+    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",      "Markets & analysis",         "#16a34a"},
+    {"ET Now",        "https://www.youtube.com/@ETNow/live",             "India markets & economy",    "#f59e0b"},
+    {"Euronews",      "https://www.youtube.com/@euronews/live",          "Europe business & finance",  "#9D4EDD"},
+    {"Al Jazeera",    "https://www.youtube.com/@AlJazeeraEnglish/live",  "Global news & markets",      "#d97706"},
+    {"DW News",       "https://www.youtube.com/@dwnews/live",            "International business",     "#0891b2"},
 };
 
 static constexpr int kPresetCount = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
