@@ -186,12 +186,14 @@ struct PresetChannel {
     const char* accent;
 };
 
+// Channel /live URLs redirect to whatever is currently streaming, so they
+// never go stale the way specific watch?v= video IDs do.
 static const PresetChannel kPresets[] = {
-    {"Bloomberg TV", "https://www.youtube.com/watch?v=iEpJwprxDdk", "Global business & markets", "#9D4EDD"},
-    {"CNBC Live", "https://www.youtube.com/watch?v=rGgBsS3cm7E", "US market coverage", "#2563eb"},
-    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live", "Market analysis", "#16a34a"},
-    {"NDTV Profit", "https://www.youtube.com/watch?v=kf8tVmwfUHI", "India business & markets", "#0891b2"},
-    {"Al Jazeera", "https://www.youtube.com/watch?v=gCNeDWCI0vo", "World news & finance", "#d97706"},
+    {"Bloomberg TV",  "https://www.youtube.com/@BloombergTV/live",       "Global business & markets", "#9D4EDD"},
+    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",              "US market coverage",        "#2563eb"},
+    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",      "Market analysis",           "#16a34a"},
+    {"NDTV Profit",   "https://www.youtube.com/@NDTVProfit/live",        "India business & markets",  "#0891b2"},
+    {"Al Jazeera",    "https://www.youtube.com/@AlJazeeraEnglish/live",  "World news & finance",      "#d97706"},
 };
 
 static constexpr int kPresetCount = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
@@ -505,12 +507,16 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     // are not accessible via bestvideo+bestaudio and have no separate tracks.
     // We select directly with `best[protocol=m3u8_native]` which always returns
     // a single muxed .m3u8 URL — no two-line DASH output to misparse.
+    // --js-runtimes node: yt-dlp 2025+ requires a JS runtime for YouTube
+    // extraction. Node.js v22 is installed on this system; without this flag
+    // newer yt-dlp versions may miss certain HLS formats.
     proc->start(ytdlp_program,
                 {"-f",
                  "best[protocol=m3u8_native][height<=480]"
                  "/best[protocol=m3u8_native]"
                  "/best[height<=480]/best",
-                 "--no-playlist", "--quiet", "-g", youtube_url});
+                 "--no-playlist", "--quiet", "--js-runtimes", "node",
+                 "-g", youtube_url});
 }
 
 void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*status*/) {
