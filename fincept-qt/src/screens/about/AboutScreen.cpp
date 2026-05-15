@@ -19,8 +19,9 @@ namespace fincept::screens {
 // ── Style constants ───────────────────────────────────────────────────────────
 
 static QString SECTION_LABEL() {
+    // Qt QSS does not support text-transform; callers pass uppercase strings.
     return QString("color: %1; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; "
-                   "text-transform: uppercase; background: transparent; "
+                   "background: transparent; "
                    "font-family: 'Consolas','Courier New',monospace;")
         .arg(ui::colors::TEXT_SECONDARY());
 }

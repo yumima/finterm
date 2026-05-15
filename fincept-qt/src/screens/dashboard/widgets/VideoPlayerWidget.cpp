@@ -10,6 +10,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImage>
@@ -19,6 +20,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
+#include <QRadioButton>
 #include <QRect>
 #include <QTableWidget>
 
@@ -92,6 +94,7 @@ void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
 
 namespace {
 constexpr const char* kSettingsKey      = "video.channels";
+constexpr const char* kEngineKey        = "video.engine";   // "gl" | "web"
 constexpr const char* kSettingsCategory = "video";
 
 // Color palette assigned round-robin to channels. Users pick name/URL only;
@@ -170,6 +173,22 @@ void VideoPlayerWidget::save_channels(const QVector<ChannelDef>& channels) {
                   "failed to persist video.channels: " + QString::fromStdString(r.error()));
 }
 
+void VideoPlayerWidget::load_engine() {
+    auto r = fincept::SettingsRepository::instance().get(kEngineKey);
+    const QString raw = r.is_ok() ? r.value().trimmed().toLower() : QString();
+    // Default to GL when unset — the WebEngine path fails for several major
+    // news channels that block /embed/VIDEO_ID. GL works for any public stream.
+    use_web_engine_ = (raw == QStringLiteral("web"));
+}
+
+void VideoPlayerWidget::save_engine(bool web) {
+    auto r = fincept::SettingsRepository::instance().set(
+        kEngineKey, web ? "web" : "gl", kSettingsCategory);
+    if (r.is_err())
+        LOG_ERROR("VideoPlayer",
+                  "failed to persist video.engine: " + QString::fromStdString(r.error()));
+}
+
 static bool is_youtube_url(const QString& url) {
     return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.contains("youtube.com/live") ||
            url.contains("youtube.com/@");
@@ -192,6 +211,7 @@ static QString extract_youtube_id(const QString& url) {
 VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / STREAMS", parent, ui::colors::AMBER()) {
 
     load_channels(); // populates channels_ from SettingsRepository (or seeds defaults)
+    load_engine();   // GL by default; WEB persists across sessions if user picks it
 
     stack_ = new QStackedWidget;
     stack_->setStyleSheet("background: transparent;");
@@ -286,33 +306,6 @@ void VideoPlayerWidget::build_channel_list() {
     vl->addWidget(helper_label_);
 
     vl->addStretch();
-
-#ifdef HAS_QT_WEBENGINE
-    // Engine toggle at the bottom — placing it here keeps the player tile's
-    // title height constant across clicks (otherwise selecting a channel and
-    // returning would shift the visible content if the toggle were in a header).
-    {
-        auto* bottom_row = new QWidget;
-        bottom_row->setStyleSheet("background:transparent;");
-        auto* bl = new QHBoxLayout(bottom_row);
-        bl->setContentsMargins(0, 4, 0, 0);
-        bl->setSpacing(0);
-        bl->addStretch();
-        engine_toggle_btn_ = new QPushButton(use_web_engine_ ? "ENGINE: WEB ⇄ GL" : "ENGINE: GL ⇄ WEB");
-        engine_toggle_btn_->setFixedHeight(18);
-        engine_toggle_btn_->setCursor(Qt::PointingHandCursor);
-        engine_toggle_btn_->setToolTip(
-            "Click to switch streaming engine\n"
-            "GL  = yt-dlp + QPainter (HLS) — works for any public stream\n"
-            "WEB = YouTube iframe (Chromium) — smooth, but some channels block embedding");
-        connect(engine_toggle_btn_, &QPushButton::clicked, this, [this]() {
-            use_web_engine_ = !use_web_engine_;
-            engine_toggle_btn_->setText(use_web_engine_ ? "ENGINE: WEB ⇄ GL" : "ENGINE: GL ⇄ WEB");
-        });
-        bl->addWidget(engine_toggle_btn_);
-        vl->addWidget(bottom_row);
-    }
-#endif
 
     scroll_->setWidget(container);
 
@@ -892,16 +885,6 @@ void VideoPlayerWidget::apply_styles() {
     helper_label_->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
-#ifdef HAS_QT_WEBENGINE
-    if (engine_toggle_btn_)
-        engine_toggle_btn_->setStyleSheet(
-            QString("QPushButton { background: %1; color: %2; border: 1px solid %2; "
-                    "border-radius: 3px; font-size: 10px; font-weight: bold; "
-                    "padding: 0 8px; letter-spacing: 0.5px; }"
-                    "QPushButton:hover { background: %2; color: %3; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER(), ui::colors::TEXT_ON_ACCENT()));
-#endif
-
 #ifndef HAS_QT_MULTIMEDIA
     if (status_label_placeholder_)
         status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 12px; background: %2;")
@@ -938,8 +921,8 @@ void VideoPlayerWidget::on_theme_changed() {
 
 QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     auto* dlg = new QDialog(parent);
-    dlg->setWindowTitle("Configure — Live TV Channels");
-    dlg->resize(540, 360);
+    dlg->setWindowTitle("Configure — Live TV");
+    dlg->resize(560, 420);
 
     auto* root = new QVBoxLayout(dlg);
 
@@ -949,6 +932,22 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
         dlg);
     hint->setWordWrap(true);
     root->addWidget(hint);
+
+    // Engine selector. The choice is global to the widget; it applies to
+    // both preset channels and custom URLs and persists across sessions.
+#ifdef HAS_QT_WEBENGINE
+    auto* engine_group = new QGroupBox("Streaming engine", dlg);
+    auto* engine_h = new QHBoxLayout(engine_group);
+    auto* gl_radio  = new QRadioButton("GL — yt-dlp + QPainter (HLS)", engine_group);
+    auto* web_radio = new QRadioButton("WEB — YouTube iframe (Chromium)", engine_group);
+    gl_radio->setToolTip("Works for any public stream. Default — works for CNBC, Yahoo, etc.");
+    web_radio->setToolTip("Smoother for plain YouTube videos. Some news channels block embedding.");
+    (use_web_engine_ ? web_radio : gl_radio)->setChecked(true);
+    engine_h->addWidget(gl_radio);
+    engine_h->addWidget(web_radio);
+    engine_h->addStretch();
+    root->addWidget(engine_group);
+#endif
 
     auto* table = new QTableWidget(0, 2, dlg);
     table->setHorizontalHeaderLabels({"Name", "URL"});
@@ -1025,7 +1024,12 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
     root->addWidget(buttons);
 
-    connect(buttons, &QDialogButtonBox::accepted, dlg, [this, dlg, table]() {
+    connect(buttons, &QDialogButtonBox::accepted, dlg,
+            [this, dlg, table
+#ifdef HAS_QT_WEBENGINE
+             , web_radio
+#endif
+            ]() {
         // Commit any in-progress cell edit before we read the table.
         table->setCurrentCell(-1, -1);
 
@@ -1045,6 +1049,15 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
         channels_ = next;
         assign_colors(channels_);
         populate_channel_rows();
+
+#ifdef HAS_QT_WEBENGINE
+        const bool want_web = web_radio->isChecked();
+        if (want_web != use_web_engine_) {
+            use_web_engine_ = want_web;
+            save_engine(use_web_engine_);
+        }
+#endif
+
         apply_styles();
         dlg->accept();
     });

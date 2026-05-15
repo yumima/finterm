@@ -697,7 +697,7 @@ void MemberProfilePanel::build_stat_tiles(QWidget* parent, QVBoxLayout* vl) {
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED());
     const QString cap_style =
         QString("QLabel { color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;"
-                " background:transparent; text-transform:uppercase; }")
+                " background:transparent; }")
             .arg(ui::colors::TEXT_SECONDARY());
     const QString val_style =
         QString("QLabel { color:%1; font-size:18px; font-weight:700;"

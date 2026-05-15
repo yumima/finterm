@@ -115,6 +115,8 @@ class VideoPlayerWidget : public BaseWidget {
 
     void load_channels();                                     // pull from SettingsRepository (+ seed defaults)
     void save_channels(const QVector<ChannelDef>& channels);  // persist to SettingsRepository
+    void load_engine();                                       // pull video.engine ("gl"/"web", default gl)
+    void save_engine(bool web);                               // persist video.engine
     static QVector<ChannelDef> default_channels();            // first-run seed
     static void assign_colors(QVector<ChannelDef>& channels); // round-robin palette
 
@@ -132,9 +134,9 @@ class VideoPlayerWidget : public BaseWidget {
     void            stop_web();
     // GL (yt-dlp + QPainter) is the default — works for any public stream,
     // including channels that block YouTube iframe embedding (CNBC, Yahoo, …).
-    // WebEngine remains available via the toggle for custom YouTube videos.
+    // WebEngine remains available via the config dialog for custom YouTube
+    // videos. Loaded from SettingsRepository on construct.
     bool            use_web_engine_    = false;
-    QPushButton*    engine_toggle_btn_ = nullptr; // WEB ↔ GL toggle
 #endif
     QLineEdit*      url_input_    = nullptr;
     QLabel*         now_playing_  = nullptr;

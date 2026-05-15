@@ -384,7 +384,7 @@ QString ThemeManager::build_global_qss() const {
         }
         #sectionHeader {
             color: %10; font-size: 11px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 1px;
+            letter-spacing: 1px;
             background: transparent; border: none;
             border-bottom: 1px solid %6; padding-bottom: 4px;
         }

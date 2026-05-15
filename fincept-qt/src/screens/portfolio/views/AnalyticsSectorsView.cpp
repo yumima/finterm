@@ -122,7 +122,7 @@ void AnalyticsSectorsView::build_ui() {
         QString("QTabWidget::pane { border:0; background:%1; }"
                 "QTabBar::tab { background:%2; color:%3; padding:8px 18px; border:0;"
                 "  border-bottom:2px solid transparent; font-size:%6px; font-weight:700;"
-                "  letter-spacing:1px; text-transform:uppercase; }"
+                "  letter-spacing:1px; }"
                 "QTabBar::tab:selected { color:%4; border-bottom:2px solid %4;"
                 "  background:rgba(217,119,6,0.08); }"
                 "QTabBar::tab:hover:!selected { color:%5; }")

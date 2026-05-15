@@ -131,9 +131,14 @@ void BaseWidget::apply_title_bar_style() {
         title_bar_->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
                                       .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     if (title_label_)
+        // Qt's QSS subset doesn't support `text-transform`. Including it here
+        // produced one parse warning per BaseWidget at startup — the resulting
+        // file-IO from the logger delayed the first paint visibly. Titles are
+        // already passed uppercased by widget constructors so removing it is a
+        // no-op visually. (letter-spacing IS supported via QFont mapping.)
         title_label_->setStyleSheet(
             QString("color:%1;font-size:%2;font-weight:bold;letter-spacing:0.5px;"
-                    "background:transparent;text-transform:uppercase;")
+                    "background:transparent;")
                 .arg(accent_color_, ui::fonts::ui_px()));
     if (accent_bar_)
         accent_bar_->setStyleSheet(QString("background:%1;border-radius:1px;").arg(accent_color_));

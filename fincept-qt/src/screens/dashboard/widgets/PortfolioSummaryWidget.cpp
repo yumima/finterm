@@ -1,7 +1,6 @@
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
 
 #include "storage/repositories/PortfolioHoldingsRepository.h"
-#include "ui/charts/InlineSparkline.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -78,7 +77,6 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     make_hdr_lbl("VALUE",   Qt::AlignRight);
     make_hdr_lbl("P&L",     Qt::AlignRight);
     make_hdr_lbl("DAY CHG%", Qt::AlignRight);
-    make_hdr_lbl("TREND",   Qt::AlignLeft); // intraday sparkline column
     vl->addWidget(header_row_);
 
     // Scrollable holdings list
@@ -178,7 +176,6 @@ void PortfolioSummaryWidget::hub_resubscribe(const QVector<Holding>& holdings) {
     // re-register so we don't leave stale topic subs behind.
     hub.unsubscribe(this);
     row_cache_.clear();
-    sparkline_cache_.clear();
     for (const auto& h : holdings) {
         const QString sym = h.symbol;
         hub.subscribe(this, QStringLiteral("market:quote:") + sym, [this, sym](const QVariant& v) {
@@ -186,13 +183,6 @@ void PortfolioSummaryWidget::hub_resubscribe(const QVector<Holding>& holdings) {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
-            rebuild_from_cache();
-        });
-        // Intraday sparkline series for the TREND column.
-        hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {
-            if (!v.canConvert<QVector<double>>())
-                return;
-            sparkline_cache_.insert(sym, v.value<QVector<double>>());
             rebuild_from_cache();
         });
     }
@@ -284,15 +274,6 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             chg_pct_color = QString(ui::colors::TEXT_SECONDARY);
         }
         cell(chg_pct_str, 1, Qt::AlignRight, chg_pct_color);
-
-        // TREND — inline sparkline. set_points() is a no-op for empty data,
-        // so the cell stays blank until the hub delivers a series.
-        auto* spark = new ui::InlineSparkline(row);
-        spark->setMinimumHeight(16);
-        rl->addWidget(spark, 1);
-        const auto sit = sparkline_cache_.constFind(h.symbol);
-        if (sit != sparkline_cache_.constEnd())
-            spark->set_points(sit.value());
 
         list_layout_->addWidget(row);
         alt = !alt;

@@ -127,7 +127,7 @@ void EquityResearchScreen::build_ui() {
         QTabBar::tab {
             background:%2; color:%3; padding:8px 18px;
             border:0; border-bottom:2px solid transparent;
-            font-size:12px; text-transform:uppercase; letter-spacing:1px;
+            font-size:12px; letter-spacing:1px;
         }
         QTabBar::tab:selected { color:%4; border-bottom:2px solid %4; }
         QTabBar::tab:hover { color:%5; }

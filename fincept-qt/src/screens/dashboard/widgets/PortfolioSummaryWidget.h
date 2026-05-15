@@ -73,7 +73,6 @@ class PortfolioSummaryWidget : public BaseWidget {
     QVector<services::QuoteData> last_quotes_;
 
     QHash<QString, services::QuoteData> row_cache_;
-    QHash<QString, QVector<double>>     sparkline_cache_; // intraday tick history per symbol
     bool hub_active_ = false;
 };
 
