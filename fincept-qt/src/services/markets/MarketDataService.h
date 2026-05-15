@@ -32,6 +32,11 @@ struct QuoteData {
     double ask_size = 0;
 };
 
+struct OfficerInfo {
+    QString name;
+    QString title;
+};
+
 struct InfoData {
     QString symbol;
     QString name;
@@ -53,6 +58,12 @@ struct InfoData {
     double profit_margin = 0;
     double debt_to_equity = 0;
     double current_ratio = 0;
+    // Narrative + leadership — used by the IPO Watch detail rail to render
+    // a "who's behind this company" section beyond pure numbers.
+    QString description;     // longBusinessSummary
+    QString website;
+    int     employees = 0;
+    QVector<OfficerInfo> officers;
 };
 
 struct HistoryPoint {

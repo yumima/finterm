@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`811b5b42`](https://github.com/yumima/finterm/commit/811b5b42) **feat(ipo_watch):** FILED pipeline + 2-col detail rail + proper date sort
 - [`a68fc4e7`](https://github.com/yumima/finterm/commit/a68fc4e7) **feat(ipo_watch):** keyboard nav + Day-1/Week-1 returns + 52-week range bar
 - [`873d2fd8`](https://github.com/yumima/finterm/commit/873d2fd8) **feat(ipo_watch):** watchlist lens + price-since-IPO sparkline + stale-date filter
 - [`e1f5fee1`](https://github.com/yumima/finterm/commit/e1f5fee1) **feat(ipo_watch):** sector enrichment + clickable KPIs + richer research rail

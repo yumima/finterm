@@ -225,6 +225,14 @@ def get_info(symbol):
             "currency": info.get('currency', 'USD'),
             "exchange": info.get('exchange', 'N/A'),
             "employees": info.get('fullTimeEmployees'),
+            # Officer roster — CEO/CFO/etc. Each entry has {name, title, age,
+            # totalPay, ...}. We pass through name+title only; the detail rail
+            # turns these into a "LEADERSHIP" section.
+            "officers": [
+                {"name": o.get("name", ""), "title": o.get("title", "")}
+                for o in (info.get("companyOfficers") or [])
+                if o.get("name")
+            ],
             # Additional comprehensive metrics
             "current_price": info.get('currentPrice'),
             "target_high_price": info.get('targetHighPrice'),

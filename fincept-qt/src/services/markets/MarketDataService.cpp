@@ -626,6 +626,23 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              shared->info.week52_low = o["fifty_two_week_low"].toDouble();
                                              shared->info.avg_volume = o["average_volume"].toDouble();
                                              shared->info.eps = o["revenue_per_share"].toDouble();
+                                             shared->info.description = o["description"].toString();
+                                             // yfinance returns "N/A" sentinel
+                                             // for missing description — treat
+                                             // as empty so callers can branch.
+                                             if (shared->info.description == "N/A") shared->info.description.clear();
+                                             shared->info.website = o["website"].toString();
+                                             if (shared->info.website == "N/A") shared->info.website.clear();
+                                             shared->info.employees = o["employees"].toInt();
+                                             const QJsonArray off_arr = o["officers"].toArray();
+                                             for (const auto& v : off_arr) {
+                                                 const QJsonObject obj = v.toObject();
+                                                 OfficerInfo co;
+                                                 co.name  = obj["name"].toString();
+                                                 co.title = obj["title"].toString();
+                                                 if (!co.name.isEmpty())
+                                                     shared->info.officers.append(co);
+                                             }
                                              shared->info_ok = true;
                                              try_complete();
                                          },

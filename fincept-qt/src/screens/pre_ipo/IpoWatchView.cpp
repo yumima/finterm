@@ -1527,6 +1527,54 @@ void IpoWatchView::render_detail(const Entry* e) {
         }
     }
 
+    // ─── RIGHT: BUSINESS + LEADERSHIP (lazy from fetch_info) ───────────────
+    // For users researching an IPO, "who's running it" and "what do they do"
+    // are at least as important as the financial ratios. yfinance returns
+    // both via the same .info call we already make; just surface them.
+    if (have_info && (!info.description.isEmpty() || !info.officers.isEmpty() ||
+                      !info.website.isEmpty() || info.employees > 0)) {
+        sec("BUSINESS");
+        if (!info.description.isEmpty()) {
+            // Truncate to a paragraph so the rail doesn't run forever.
+            QString desc = info.description;
+            constexpr int kMaxChars = 600;
+            if (desc.size() > kMaxChars) {
+                // Trim at the last sentence boundary within the cap so we
+                // don't slice mid-word.
+                int cut = desc.lastIndexOf('.', kMaxChars);
+                if (cut < 200) cut = kMaxChars;
+                desc = desc.left(cut + 1) + " …";
+            }
+            *cur += "<div style='line-height:1.4;'>" + desc.toHtmlEscaped() + "</div>";
+        }
+        if (info.employees > 0 || !info.website.isEmpty()) {
+            *cur += "<table class='kv' style='margin-top:6px;'>";
+            if (info.employees > 0)
+                *cur += QString("<tr><td class='k'>Employees</td><td>%1</td></tr>")
+                            .arg(QString::number(info.employees));
+            if (!info.website.isEmpty()) {
+                const QString href = info.website.toHtmlEscaped();
+                *cur += "<tr><td class='k'>Website</td><td><a href='" + href +
+                        "'>" + href + "</a></td></tr>";
+            }
+            *cur += "</table>";
+        }
+        if (!info.officers.isEmpty()) {
+            sec("LEADERSHIP");
+            *cur += "<table class='grid'>";
+            constexpr int kMaxOfficers = 6;
+            for (int i = 0; i < info.officers.size() && i < kMaxOfficers; ++i) {
+                const auto& o = info.officers.at(i);
+                *cur += "<tr><td class='k'>" + o.title.toHtmlEscaped() + "</td><td>" +
+                        o.name.toHtmlEscaped() + "</td></tr>";
+            }
+            *cur += "</table>";
+            if (info.officers.size() > kMaxOfficers)
+                *cur += QString("<div class='muted'>+ %1 more</div>")
+                            .arg(info.officers.size() - kMaxOfficers);
+        }
+    }
+
     // ─── RIGHT: LOCK-UP COUNTDOWN (priced only) ────────────────────────────
     if (e->status == "priced" && e->date.isValid()) {
         const QDate lockup_end = e->date.addDays(180);
