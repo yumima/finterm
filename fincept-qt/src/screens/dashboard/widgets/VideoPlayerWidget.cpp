@@ -141,22 +141,32 @@ void VideoRenderWidget::paintGL() {
     const QImage img = current_frame_.toImage();
     if (img.isNull()) return;
 
-    // Recreate texture when dimensions OR pixel format change. Checking format
-    // prevents setData() uploading an incompatible QImage into an existing
-    // texture object (e.g. if the HLS stream switches quality mid-playback).
-    if (!texture_
-        || texture_->width()  != img.width()
-        || texture_->height() != img.height()
-        || last_img_format_   != img.format()) {
+    // Normalise to RGBA8888 before every texture operation.
+    //
+    // QVideoFrame::toImage() returns frames in varying QImage::Format values
+    // depending on the decoder output (NVDEC produces NV12/P010; Qt converts
+    // these inconsistently frame-by-frame). QOpenGLTexture::setData(QImage)
+    // internally calls setFormat() to match the image — but setFormat() is
+    // rejected once storage is allocated, printing:
+    //   "QOpenGLTexture::setFormat(): Cannot change format once storage has been allocated"
+    // and silently skipping the upload. The texture retains its first-frame
+    // content (usually a black pre-decode frame), making video appear absent.
+    //
+    // Pinning to RGBA8888 guarantees a single GL internal format (GL_RGBA8)
+    // for the full session. convertedTo() is O(w×h) — at 480p < 0.5 ms.
+    const QImage rgba = img.convertedTo(QImage::Format_RGBA8888);
+    if (rgba.isNull()) return;
+
+    if (!texture_ || texture_->width() != rgba.width() || texture_->height() != rgba.height()) {
         delete texture_;
         texture_ = nullptr;
-        texture_ = new QOpenGLTexture(img, QOpenGLTexture::DontGenerateMipMaps);
+        texture_ = new QOpenGLTexture(rgba, QOpenGLTexture::DontGenerateMipMaps);
         texture_->setMinificationFilter(QOpenGLTexture::Linear);
         texture_->setMagnificationFilter(QOpenGLTexture::Linear);
         texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
-        last_img_format_ = img.format();
+        last_img_format_ = QImage::Format_RGBA8888;
     } else {
-        texture_->setData(img); // glTexSubImage2D — no realloc
+        texture_->setData(rgba); // glTexSubImage2D, format always RGBA8 ✓
     }
 
     // Letter-box: restrict the GL viewport to maintain aspect ratio.
@@ -189,11 +199,13 @@ struct PresetChannel {
 // Channel /live URLs redirect to whatever is currently streaming, so they
 // never go stale the way specific watch?v= video IDs do.
 static const PresetChannel kPresets[] = {
-    {"Bloomberg TV",  "https://www.youtube.com/@BloombergTV/live",       "Global business & markets", "#9D4EDD"},
-    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",              "US market coverage",        "#2563eb"},
-    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",      "Market analysis",           "#16a34a"},
-    {"NDTV Profit",   "https://www.youtube.com/@NDTVProfit/live",        "India business & markets",  "#0891b2"},
-    {"Al Jazeera",    "https://www.youtube.com/@AlJazeeraEnglish/live",  "World news & finance",      "#d97706"},
+    // Bloomberg @BloombergTV/live requires a channel membership — use their
+    // free public live stream (Bloomberg Technology / Markets feed).
+    {"Bloomberg",     "https://www.youtube.com/@BloombergMarkets/live",   "Global business & markets", "#9D4EDD"},
+    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",               "US market coverage",        "#2563eb"},
+    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",       "Market analysis",           "#16a34a"},
+    {"NDTV Profit",   "https://www.youtube.com/@NDTVProfit/live",         "India business & markets",  "#0891b2"},
+    {"Al Jazeera",    "https://www.youtube.com/@AlJazeeraEnglish/live",   "World news & finance",      "#d97706"},
 };
 
 static constexpr int kPresetCount = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
