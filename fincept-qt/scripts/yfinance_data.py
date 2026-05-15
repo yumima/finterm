@@ -270,6 +270,46 @@ def get_info(symbol):
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
+def get_batch_info(symbols):
+    """Fetch a *minimal* company profile (sector / industry / longName /
+    market cap / website / country / employees) for many symbols in parallel.
+
+    Each yf.Ticker(sym).info is a separate web call — sequentially this
+    bottlenecks badly for the IPO Watch use case (50–100 priced tickers).
+    A ThreadPoolExecutor with 8 workers brings ~80 lookups from ~40s to ~6s.
+    Returns a flat list keyed on symbol; failures are recorded inline so the
+    caller can render "—" without re-trying."""
+    if not symbols:
+        return []
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _one(sym):
+        try:
+            info = yf.Ticker(sym).info or {}
+            return {
+                "symbol": sym,
+                "long_name": info.get("longName") or info.get("shortName") or "",
+                "sector":    info.get("sector") or "",
+                "industry":  info.get("industry") or "",
+                "market_cap": info.get("marketCap"),
+                "website":   info.get("website") or "",
+                "country":   info.get("country") or "",
+                "employees": info.get("fullTimeEmployees"),
+            }
+        except Exception as e:
+            return {"symbol": sym, "error": str(e)}
+
+    out = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = [ex.submit(_one, s) for s in symbols]
+        for f in as_completed(futures):
+            try:
+                out.append(f.result())
+            except Exception as e:
+                out.append({"symbol": "", "error": str(e)})
+    return out
+
+
 def get_financials(symbol):
     """Fetch financial statements for a symbol"""
     try:
@@ -1270,6 +1310,10 @@ def _daemon_dispatch_inner(action, payload):
         return get_orderbook((payload or {}).get("symbol"))
     if action == "info":
         return get_info((payload or {}).get("symbol"))
+    if action == "batch_info":
+        # Used by IPO Watch to enrich priced tickers with sector / industry /
+        # market cap in one round-trip. ThreadPoolExecutor parallelism inside.
+        return get_batch_info((payload or {}).get("symbols") or [])
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

@@ -52,6 +52,14 @@ class IpoWatchView : public QWidget {
   public slots:
     void refresh();
 
+  protected:
+    /// Click handler for KPI cells — wraps each cell as a left-click target
+    /// that switches the time-window filter (e.g. clicking "THIS WEEK"
+    /// selects TW_ThisWeek). Cells store the target window in property
+    /// "kpiTw"; the filter is also written through to window_chip_ so the
+    /// chip and KPI stay in sync.
+    bool eventFilter(QObject* obj, QEvent* ev) override;
+
   private:
     /// One IPO event. Mix of as-filed and as-priced fields.
     struct Entry {
@@ -70,15 +78,25 @@ class IpoWatchView : public QWidget {
         QString bookrunner;       // primary lead firm
         QStringList all_bookrunners;
         QString status;           // "upcoming" | "priced"
-        // Performance enrichment via yfinance batch_quotes — lazy.
+        // Performance enrichment via yfinance batch_quotes — pre-fetched on load.
         bool   perf_fetched = false;
         double last_price   = 0;
         double pop_pct      = 0;  // (last - final) / final * 100, priced only
+        // Company profile via yfinance batch_info — pre-fetched on load too.
+        // Used for SECTOR column and same-sector comps in the detail rail.
+        bool    profile_fetched = false;
+        QString sector;
+        QString industry;
+        QString website;
     };
 
     /// Filter state.
-    enum Lens { LensCalendar = 0, LensPerformance, LensBookrunners, LensCount };
-    enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_6Months, TW_12Months, TW_Past30Days };
+    /// BOOKRUNNERS lens removed — Nasdaq's public IPO calendar doesn't carry
+    /// `leadFirmName`. We keep the field on the Entry struct for a future
+    /// SEC EDGAR-driven source but the lens shipped only "Unknown" rows.
+    enum Lens { LensCalendar = 0, LensPerformance, LensCount };
+    enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
+                      TW_6Months, TW_12Months, TW_Past30Days };
 
     static const char* lens_label(Lens l);
 
@@ -94,13 +112,13 @@ class IpoWatchView : public QWidget {
     // ── Networking ──────────────────────────────────────────────────────────
     void fetch_month(const QString& yyyymm);
     void on_fetch_done();
-    void enrich_priced_with_quotes(); // lazy: triggered when PERFORMANCE lens is opened
+    void enrich_priced_with_quotes(); // single batch_quotes, populates pop_pct
+    void enrich_with_profiles();      // single batch_info, populates sector/industry
 
     // ── Rendering ───────────────────────────────────────────────────────────
     void render();                  // dispatch by active_lens_
     void render_calendar();
     void render_performance();
-    void render_bookrunners();
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     QVector<int> filtered_indices() const;     // applies filter chips + search
@@ -115,6 +133,11 @@ class IpoWatchView : public QWidget {
     // ── State ───────────────────────────────────────────────────────────────
     QVector<Entry> entries_;
     int pending_fetches_ = 0;
+    // Lazy per-symbol info cache for the detail rail. fetch_info returns
+    // P/E, margins, growth, beta, analyst targets, etc. — too expensive to
+    // pre-fetch for every entry but quick on a single row click.
+    QHash<QString, services::InfoData> info_cache_;
+    QString detail_symbol_; // currently shown in the detail rail
     Lens       active_lens_   = LensCalendar;
     TimeWindow time_window_   = TW_AllUpcoming;
     QString    status_filter_ = "all";     // all | upcoming | priced

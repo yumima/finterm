@@ -697,6 +697,104 @@ void MarketDataService::fetch_history(const QString& symbol, const QString& peri
     python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
+// ── Batch company-profile lookup (sector / industry / market cap / …) ───────
+
+void MarketDataService::fetch_company_profiles(const QStringList& symbols, ProfileCallback cb) {
+    if (symbols.isEmpty()) {
+        cb(true, {});
+        return;
+    }
+
+    // Cache strategy: profile fields change rarely (sector/industry/longName
+    // are essentially stable per-company), so we cache for 7 days under the
+    // "ipo_info:" prefix. Only un-cached symbols hit the Python daemon.
+    constexpr int kProfileCacheTtlSec = 7 * 24 * 60 * 60;
+    QStringList cache_keys;
+    cache_keys.reserve(symbols.size());
+    for (const auto& s : symbols)
+        cache_keys.append("ipo_info:" + s);
+    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(cache_keys);
+
+    auto parse_cached = [](const QString& raw, const QString& sym) -> CompanyProfile {
+        const QJsonObject o = QJsonDocument::fromJson(raw.toUtf8()).object();
+        CompanyProfile p;
+        p.symbol     = sym;
+        p.long_name  = o["long_name"].toString();
+        p.sector     = o["sector"].toString();
+        p.industry   = o["industry"].toString();
+        p.website    = o["website"].toString();
+        p.country    = o["country"].toString();
+        p.market_cap = o["market_cap"].toDouble();
+        p.employees  = o["employees"].toInt();
+        return p;
+    };
+
+    QVector<CompanyProfile> cached_out;
+    QStringList missing;
+    cached_out.reserve(symbols.size());
+    for (const auto& sym : symbols) {
+        const auto it = hits.constFind("ipo_info:" + sym);
+        if (it != hits.constEnd()) cached_out.append(parse_cached(it.value(), sym));
+        else                       missing.append(sym);
+    }
+    if (missing.isEmpty()) {
+        LOG_INFO("MarketData", QString("fetch_company_profiles: %1 cached, 0 fresh").arg(cached_out.size()));
+        cb(true, cached_out);
+        return;
+    }
+
+    QJsonArray syms_arr;
+    for (const auto& s : missing) syms_arr.append(s);
+    QJsonObject payload;
+    payload["symbols"] = syms_arr;
+
+    python::PythonWorker::instance().submit(
+        "batch_info", payload,
+        [cb, cached_out, missing](bool ok, QJsonObject result, QString err) {
+            QVector<CompanyProfile> out = cached_out;
+            if (!ok) {
+                LOG_WARN("MarketData", "batch_info failed: " + err);
+                cb(!out.isEmpty(), out);
+                return;
+            }
+            const QJsonArray rows = result.contains("_value")
+                                        ? result.value("_value").toArray()
+                                        : result.value("profiles").toArray();
+            for (const auto& v : rows) {
+                const QJsonObject o = v.toObject();
+                CompanyProfile p;
+                p.symbol     = o["symbol"].toString();
+                if (p.symbol.isEmpty() || o.contains("error")) continue;
+                p.long_name  = o["long_name"].toString();
+                p.sector     = o["sector"].toString();
+                p.industry   = o["industry"].toString();
+                p.website    = o["website"].toString();
+                p.country    = o["country"].toString();
+                p.market_cap = o["market_cap"].toDouble();
+                p.employees  = o["employees"].toInt();
+                out.append(p);
+
+                // Cache for 7 days — sector rarely changes.
+                QJsonObject co;
+                co["long_name"]  = p.long_name;
+                co["sector"]     = p.sector;
+                co["industry"]   = p.industry;
+                co["website"]    = p.website;
+                co["country"]    = p.country;
+                co["market_cap"] = p.market_cap;
+                co["employees"]  = p.employees;
+                fincept::CacheManager::instance().put(
+                    "ipo_info:" + p.symbol,
+                    QVariant(QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact))),
+                    kProfileCacheTtlSec, "ipo_info");
+            }
+            LOG_INFO("MarketData",
+                     QString("fetch_company_profiles: %1 cached, %2 fresh").arg(cached_out.size()).arg(missing.size()));
+            cb(true, out);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
 // ── Static symbol lists ─────────────────────────────────────────────────────
 
 QStringList MarketDataService::indices_symbols() {

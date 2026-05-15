@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`15ce44a8`](https://github.com/yumima/finterm/commit/15ce44a8) **feat(ipo_watch):** Bloomberg-style consolidated screen — lens tabs, KPI strip, rich detail rail
 - [`8a43f525`](https://github.com/yumima/finterm/commit/8a43f525) **fix(ipo_watch):** add refresh button + harden deal-size parser
 - [`0f6c6a6c`](https://github.com/yumima/finterm/commit/0f6c6a6c) **fix(staleness):** live updates for Portfolio + News + IPO Watch; wake-on-resume
 - [`ccd82959`](https://github.com/yumima/finterm/commit/ccd82959) **chore(hooks):** drop docs(readme) follow-up; pre-commit stages README inline

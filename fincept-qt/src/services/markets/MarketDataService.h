@@ -140,6 +140,23 @@ class MarketDataService : public QObject
     using InfoCallback = std::function<void(bool, InfoData)>;
     void fetch_info(const QString& symbol, InfoCallback cb);
 
+    /// Minimal-profile batch lookup: one daemon round-trip for many symbols,
+    /// returns sector / industry / longName / marketCap / website / country.
+    /// Used by IPO Watch to enrich priced tickers without N round-trips.
+    /// 7-day CacheManager TTL since these values change rarely.
+    struct CompanyProfile {
+        QString symbol;
+        QString long_name;
+        QString sector;
+        QString industry;
+        QString website;
+        QString country;
+        double  market_cap = 0;
+        int     employees  = 0;
+    };
+    using ProfileCallback = std::function<void(bool, QVector<CompanyProfile>)>;
+    void fetch_company_profiles(const QStringList& symbols, ProfileCallback cb);
+
     /// Fetch historical OHLCV data. period: "1mo","3mo","6mo","1y","2y","5y"
     /// interval: "1d","1wk","1mo"
     /// Phase 3+: prefer `DataHub::subscribe(this, "market:history:<sym>:<period>:<interval>", ...)`
