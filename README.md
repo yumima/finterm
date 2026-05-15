@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0f6c6a6c`](https://github.com/yumima/finterm/commit/0f6c6a6c) **fix(staleness):** live updates for Portfolio + News + IPO Watch; wake-on-resume
 - [`ccd82959`](https://github.com/yumima/finterm/commit/ccd82959) **chore(hooks):** drop docs(readme) follow-up; pre-commit stages README inline
 - [`338c1252`](https://github.com/yumima/finterm/commit/338c1252) **fix(dashboard):** COMPACT toggle restores pre-compact row height
 - [`651f91ee`](https://github.com/yumima/finterm/commit/651f91ee) **perf(startup):** strip unsupported QSS `text-transform`; UI: engine into config; drop portfolio TREND

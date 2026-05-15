@@ -26,6 +26,7 @@ class QFrame;
 class QHBoxLayout;
 class QLabel;
 class QLineEdit;
+class QPushButton;
 class QScrollArea;
 class QSplitter;
 class QTableWidget;
@@ -80,9 +81,10 @@ class IpoWatchView : public QWidget {
     static QString format_deal_size(const QString& price_range, const QString& shares);
 
     // Top filter row
-    QWidget*   filter_bar_  = nullptr;
-    QLineEdit* search_      = nullptr;
-    QLabel*    status_lbl_  = nullptr;
+    QWidget*     filter_bar_   = nullptr;
+    QLineEdit*   search_       = nullptr;
+    QPushButton* refresh_btn_  = nullptr;
+    QLabel*      status_lbl_   = nullptr;
 
     // Layout: splitter [scrollable bucket column | detail panel]
     QSplitter*   splitter_    = nullptr;

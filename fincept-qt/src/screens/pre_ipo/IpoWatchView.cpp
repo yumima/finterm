@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QTableWidget>
@@ -77,6 +78,15 @@ void IpoWatchView::build_ui() {
 
     status_lbl_ = new QLabel("Loading…");
     fl->addWidget(status_lbl_);
+
+    // Explicit refresh — needed because IpoWatchView fetches via HttpClient,
+    // not the DataHub, so the app-level wake-on-resume hook can't trigger it.
+    refresh_btn_ = new QPushButton(QStringLiteral("↻ Refresh"));
+    refresh_btn_->setFixedHeight(24);
+    refresh_btn_->setCursor(Qt::PointingHandCursor);
+    refresh_btn_->setToolTip("Re-fetch the Nasdaq IPO calendar");
+    connect(refresh_btn_, &QPushButton::clicked, this, &IpoWatchView::refresh);
+    fl->addWidget(refresh_btn_);
 
     root->addWidget(filter_bar_);
 
@@ -161,6 +171,12 @@ void IpoWatchView::apply_styles() {
     if (status_lbl_)
         status_lbl_->setStyleSheet(
             QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    if (refresh_btn_)
+        refresh_btn_->setStyleSheet(
+            QString("QPushButton{background:%1;color:%2;border:1px solid %2;border-radius:2px;"
+                    "padding:0 10px;font-weight:bold;}"
+                    "QPushButton:hover{background:%2;color:%3;}")
+                .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER(), ui::colors::BG_BASE()));
 
     const QString header_qss =
         QString("color:%1;font-weight:bold;letter-spacing:1px;background:%2;padding:2px 8px;border-radius:2px;")
@@ -391,17 +407,22 @@ QString IpoWatchView::format_deal_size(const QString& price_range, const QString
     if (price_range.isEmpty() || shares.isEmpty())
         return {};
     // Strip "$" and ","; parse the price midpoint from "lo-hi" or just "lo".
+    // Nasdaq returns both "$15.00-$17.00" and "$15.00 - $17.00" (with spaces)
+    // — trim each split fragment so QString::toDouble doesn't choke on the
+    // trailing space.
     QString pr = price_range;
     pr.remove('$');
     const QStringList parts = pr.split('-', Qt::SkipEmptyParts);
+    if (parts.isEmpty())
+        return {};
     bool ok_lo = false, ok_hi = false;
-    double lo = parts.value(0).toDouble(&ok_lo);
-    double hi = parts.value(parts.size() > 1 ? 1 : 0).toDouble(&ok_hi);
+    const double lo = parts.at(0).trimmed().toDouble(&ok_lo);
+    const double hi = parts.at(parts.size() > 1 ? 1 : 0).trimmed().toDouble(&ok_hi);
     if (!ok_lo) return {};
-    double mid = (ok_hi ? (lo + hi) / 2.0 : lo);
+    const double mid = (ok_hi && parts.size() > 1) ? (lo + hi) / 2.0 : lo;
     QString sh = shares; sh.remove(',');
     bool ok_sh = false;
-    const double n = sh.toDouble(&ok_sh);
+    const double n = sh.trimmed().toDouble(&ok_sh);
     if (!ok_sh || n <= 0) return {};
     const double dollars = mid * n;
     if (dollars >= 1e9) return QString("$%1B").arg(dollars / 1e9, 0, 'f', 2);
