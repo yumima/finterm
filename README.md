@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`e9ed7b6e`](https://github.com/yumima/finterm/commit/e9ed7b6e) **fix(video):** install yt-dlp, add node JS runtime, use channel live URLs
 - [`0cf7672a`](https://github.com/yumima/finterm/commit/0cf7672a) **fix(video/gl):** address all OpenGL review findings
 - [`19b53e30`](https://github.com/yumima/finterm/commit/19b53e30) **feat(video):** GPU rendering via QOpenGLWidget + RTX PRIME offload
 - [`a7c24e2a`](https://github.com/yumima/finterm/commit/a7c24e2a) **fix(calendar):** add re-entry guard to EconomicCalendarWidget::refresh_data()
