@@ -2,40 +2,17 @@
 #include "screens/pre_ipo/PreIpoScreen.h"
 
 #include "core/logging/Logger.h"
-#include "screens/pre_ipo/CompanyDetailPanel.h"
-#include "screens/pre_ipo/CompanyListPanel.h"
-#include "screens/pre_ipo/IpoPipelinePanel.h"
 #include "screens/pre_ipo/IpoWatchView.h"
-#include "screens/pre_ipo/views/PicksView.h"
-#include "screens/pre_ipo/views/PipelineView.h"
-#include "screens/pre_ipo/views/ScreenerView.h"
 #include "services/pre_ipo/PreIpoService.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QPushButton>
-#include <QSplitter>
-#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
 
 using namespace fincept::ui;
 using namespace fincept::pre_ipo;
-
-namespace {
-// IPO Watch is the default tab. The legacy "Picks / Screener / Markets /
-// Pipeline" tabs are kept available behind it because they still wire to
-// PreIpoService (SEC EDGAR + N-PORT marks); IPO Watch covers the more
-// common upcoming/priced research use case with Nasdaq's live calendar.
-constexpr int kTabIpoWatch = 0;
-constexpr int kTabPicks    = 1;
-constexpr int kTabScreener = 2;
-constexpr int kTabMarkets  = 3;
-constexpr int kTabPipeline = 4;
-} // namespace
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -45,17 +22,7 @@ PreIpoScreen::PreIpoScreen(QWidget* parent) : QWidget(parent) {
     auto& svc = services::PreIpoService::instance();
     connect(&svc, &services::PreIpoService::data_loaded, this, &PreIpoScreen::on_data_loaded);
     connect(&svc, &services::PreIpoService::error_occurred, this, &PreIpoScreen::on_error);
-    connect(&svc, &services::PreIpoService::progress, this, [this](const QString& msg) {
-        if (status_lbl_) status_lbl_->setText(msg);
-    });
-    connect(&svc, &services::PreIpoService::company_updated, this, [this](const QString& id) {
-        if (id == selected_company_id_) {
-            auto company = services::PreIpoService::instance().company(id);
-            detail_panel_->set_company(company);
-        }
-        list_panel_->set_companies(services::PreIpoService::instance().companies());
-    });
-
+    // company_updated wiring removed — the old detail/list panels are gone.
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed,
             this, [this](const ui::ThemeTokens&) { refresh_theme(); });
 
@@ -67,18 +34,17 @@ PreIpoScreen::PreIpoScreen(QWidget* parent) : QWidget(parent) {
 // ── IStatefulScreen ───────────────────────────────────────────────────────────
 
 void PreIpoScreen::restore_state(const QVariantMap& state) {
+    // Legacy state had {selected_company, active_tab}. The tab concept is
+    // gone (single IpoWatchView), so only the selection key still makes
+    // sense — it's currently unused by the consolidated view but kept here
+    // so a future per-deal-detail deep-link can resurrect it without
+    // breaking persistence.
     selected_company_id_ = state.value("selected_company", "").toString();
-    const int tab = state.value("active_tab", 0).toInt();
-    if (tab >= 0 && tab < tab_btns_.size()) {
-        active_tab_ = tab;
-        switch_tab(tab);
-    }
 }
 
 QVariantMap PreIpoScreen::save_state() const {
     return {
         {"selected_company", selected_company_id_},
-        {"active_tab",        active_tab_},
     };
 }
 
@@ -106,212 +72,35 @@ void PreIpoScreen::build_ui() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    root->addWidget(build_top_bar());
-
-    // ── Tab bar ───────────────────────────────────────────────────────────────
-    auto* tab_bar = new QWidget;
-    tab_bar->setFixedHeight(40);
-    tab_bar->setObjectName("preIpoTabs");
-    tab_bar->setStyleSheet(
-        QString("#preIpoTabs{background:%1;border-bottom:1px solid %2;}")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
-    auto* tabs_l = new QHBoxLayout(tab_bar);
-    tabs_l->setContentsMargins(16, 0, 16, 0);
-    tabs_l->setSpacing(4);
-
-    const QStringList tab_labels{"IPO Watch", "Picks", "Screener", "Markets", "Pipeline"};
-    const QStringList tab_subs{"Nasdaq calendar — upcoming + priced", "Pick", "Scan", "Research", "Scan / Pick"};
-    for (int i = 0; i < tab_labels.size(); ++i) {
-        auto* b = new QPushButton(tab_labels[i]);
-        b->setCheckable(true);
-        b->setCursor(Qt::PointingHandCursor);
-        b->setFixedHeight(28);
-        b->setToolTip(tab_subs[i]);
-        b->setStyleSheet(
-            QString("QPushButton{background:transparent;color:%1;border:none;"
-                    "  padding:0 14px;font-size:12px;font-weight:700;letter-spacing:1px;"
-                    "  border-bottom:2px solid transparent;}"
-                    "QPushButton:checked{color:%2;border-bottom-color:%2;}"
-                    "QPushButton:hover:!checked{color:%3;}")
-                .arg(colors::TEXT_SECONDARY(), colors::AMBER(), colors::TEXT_PRIMARY()));
-        const int idx = i;
-        connect(b, &QPushButton::clicked, this, [this, idx]() { switch_tab(idx); });
-        tab_btns_.append(b);
-        tabs_l->addWidget(b);
-    }
-    tabs_l->addStretch();
-    root->addWidget(tab_bar);
-
-    // ── Stack ─────────────────────────────────────────────────────────────────
-    stack_ = new QStackedWidget;
-
-    // IPO Watch — the new default tab. Uses Nasdaq's public calendar feed,
-    // bucketed into time windows for fast research scanning. Independent of
-    // the broken PreIpoService Python pipelines so it works even when the
-    // SEC EDGAR / N-PORT fetchers are returning nothing.
+    // The screen is now a single IpoWatchView — the legacy Picks/Screener/
+    // Markets/Pipeline tabs all surfaced the same Nasdaq pipeline data via
+    // inconsistent layouts; IpoWatchView consolidates that into one
+    // Bloomberg-style screen with lens tabs (Calendar/Performance/Bookrunners)
+    // for the same dataset cut different ways. The PreIpoService Python
+    // fetchers stay registered but unused — keeping them around lets us
+    // re-enable an EDGAR-driven PIPELINE lens later without re-plumbing.
     ipo_watch_view_ = new fincept::screens::widgets::IpoWatchView;
-    stack_->addWidget(ipo_watch_view_);
-
-    picks_view_ = new PicksView;
-    connect(picks_view_, &PicksView::company_selected, this, [this](const QString& id) {
-        on_company_selected(id);
-        switch_tab(kTabMarkets);
-    });
-    stack_->addWidget(picks_view_);
-
-    screener_view_ = new ScreenerView;
-    connect(screener_view_, &ScreenerView::company_selected, this, [this](const QString& id) {
-        on_company_selected(id);
-        switch_tab(kTabMarkets);
-    });
-    stack_->addWidget(screener_view_);
-
-    stack_->addWidget(build_markets_tab());
-
-    pipeline_view_ = new PipelineView;
-    connect(pipeline_view_, &PipelineView::company_selected, this, [this](const QString& id) {
-        on_company_selected(id);
-        switch_tab(kTabMarkets);
-    });
-    stack_->addWidget(pipeline_view_);
-
-    root->addWidget(stack_, 1);
-
-    // Initial tab — open onto IPO Watch (Nasdaq calendar) so users see
-    // working data immediately. The legacy Picks/Screener/Markets/Pipeline
-    // tabs remain available for SEC EDGAR + N-PORT research when those
-    // services produce data.
-    switch_tab(kTabIpoWatch);
-}
-
-QWidget* PreIpoScreen::build_markets_tab() {
-    auto* splitter = new QSplitter(Qt::Horizontal);
-    splitter->setHandleWidth(1);
-    splitter->setChildrenCollapsible(false);
-    splitter->setStyleSheet(
-        QString("QSplitter::handle{background:%1;}"
-                "QSplitter::handle:hover{background:%2;}")
-            .arg(colors::BORDER_DIM(), colors::BORDER_MED()));
-
-    list_panel_     = new CompanyListPanel;
-    detail_panel_   = new CompanyDetailPanel;
-    pipeline_panel_ = new IpoPipelinePanel;
-
-    splitter->addWidget(list_panel_);
-    splitter->addWidget(detail_panel_);
-    splitter->addWidget(pipeline_panel_);
-
-    splitter->setStretchFactor(0, 1);
-    splitter->setStretchFactor(1, 4);
-    splitter->setStretchFactor(2, 2);
-
-    connect(list_panel_, &CompanyListPanel::company_selected,
-            this, &PreIpoScreen::on_company_selected);
-    connect(detail_panel_, &CompanyDetailPanel::navigate_to_markets,
-            this, [](const QString& ticker) {
-                LOG_INFO("PreIpo", QString("Navigate to markets: %1").arg(ticker));
-            });
-    return splitter;
-}
-
-QWidget* PreIpoScreen::build_top_bar() {
-    auto* bar = new QWidget;
-    bar->setFixedHeight(44);
-    bar->setObjectName("preIpoTopBar");
-    bar->setStyleSheet(
-        QString("#preIpoTopBar{background:%1;border-bottom:2px solid %2;}")
-            .arg(colors::BG_SURFACE(), colors::AMBER()));
-
-    auto* hl = new QHBoxLayout(bar);
-    hl->setContentsMargins(16, 0, 16, 0);
-    hl->setSpacing(12);
-
-    auto* title = new QLabel("IPO WATCH");
-    title->setStyleSheet(
-        QString("color:%1;font-size:14px;font-weight:800;letter-spacing:2px;background:transparent;")
-            .arg(colors::AMBER()));
-    hl->addWidget(title);
-
-    auto* divider = new QWidget;
-    divider->setFixedSize(1, 20);
-    divider->setStyleSheet(QString("background:%1;").arg(colors::BORDER_MED()));
-    hl->addWidget(divider);
-
-    auto* subtitle = new QLabel("Calendar · Research · Picks — Nasdaq IPO feed + SEC EDGAR");
-    subtitle->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
-    hl->addWidget(subtitle);
-
-    hl->addStretch();
-
-    status_lbl_ = new QLabel("Loading…");
-    status_lbl_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
-    hl->addWidget(status_lbl_);
-
-    auto* badge = new QLabel("IPO RESEARCH");
-    badge->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:700;background:rgba(217,119,6,0.15);"
-                "  border:1px solid rgba(217,119,6,0.35);border-radius:3px;padding:2px 8px;")
-            .arg(colors::AMBER()));
-    hl->addWidget(badge);
-
-    return bar;
-}
-
-void PreIpoScreen::switch_tab(int idx) {
-    if (idx < 0 || idx >= tab_btns_.size()) return;
-    active_tab_ = idx;
-    for (int i = 0; i < tab_btns_.size(); ++i) tab_btns_[i]->setChecked(i == idx);
-    if (stack_) stack_->setCurrentIndex(idx);
+    root->addWidget(ipo_watch_view_, 1);
 }
 
 void PreIpoScreen::refresh_theme() {
     setStyleSheet(QString("#preIpoScreen{background:%1;}").arg(colors::BG_BASE()));
 }
 
-// ── Slots ─────────────────────────────────────────────────────────────────────
+// ── Legacy slots ─────────────────────────────────────────────────────────────
+// PreIpoService still emits signals from the legacy Form D / S-1 / N-PORT
+// fetchers, but the IpoWatchView consolidated screen no longer consumes them.
+// We keep the slot signatures wired (Q_OBJECT moc requires the declarations
+// stay in PreIpoScreen.h) but they're no-ops so future re-introduction of an
+// EDGAR-driven PIPELINE lens has somewhere to hook in.
 
 void PreIpoScreen::on_data_loaded(PreIpoSummary summary) {
-    data_loaded_ = true;
-    last_summary_ = summary;
-
-    list_panel_->set_companies(summary.companies);
-    pipeline_panel_->set_pipeline(summary.ipo_pipeline);
-    pipeline_panel_->set_form_d(summary.recent_form_d);
-    picks_view_->set_summary(summary);
-    screener_view_->set_companies(summary.companies);
-    pipeline_view_->set_pipeline(summary.ipo_pipeline, summary.companies);
-
-    status_lbl_->setText(
-        QString("%1 companies · %2 pipeline filers · %3 signals · Updated %4")
-            .arg(summary.companies.size())
-            .arg(summary.ipo_pipeline.size())
-            .arg(summary.signal_list.size())
-            .arg(summary.last_updated.toString("hh:mm")));
-
-    if (!selected_company_id_.isEmpty()) {
-        const auto company = services::PreIpoService::instance().company(selected_company_id_);
-        if (!company.id.isEmpty()) {
-            detail_panel_->set_company(company);
-            list_panel_->set_selected_id(selected_company_id_);
-        }
-    }
-
-    LOG_INFO("PreIpo",
-             QString("Data loaded: %1 companies, %2 pipeline").arg(summary.companies.size())
-                 .arg(summary.ipo_pipeline.size()));
+    Q_UNUSED(summary);
 }
-
 void PreIpoScreen::on_company_selected(const QString& id) {
     selected_company_id_ = id;
-    list_panel_->set_selected_id(id);
-    const auto company = services::PreIpoService::instance().company(id);
-    if (!company.id.isEmpty()) detail_panel_->set_company(company);
 }
-
 void PreIpoScreen::on_error(const QString& msg) {
-    status_lbl_->setText("Error: " + msg);
     LOG_WARN("PreIpo", msg);
 }
 
