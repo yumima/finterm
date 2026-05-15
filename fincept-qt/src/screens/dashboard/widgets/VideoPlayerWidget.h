@@ -11,10 +11,12 @@
 #ifdef HAS_QT_MULTIMEDIA
 #    include <QAudioOutput>
 #    include <QMediaPlayer>
+#    include <QImage>
 #    include <QOpenGLBuffer>
 #    include <QOpenGLFunctions>
 #    include <QOpenGLShaderProgram>
 #    include <QOpenGLTexture>
+#    include <QOpenGLVertexArrayObject>
 #    include <QOpenGLWidget>
 #    include <QVideoFrame>
 #    include <QVideoSink>
@@ -60,11 +62,15 @@ class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     void paintGL() override;
 
   private:
-    QVideoFrame          current_frame_;
-    QOpenGLTexture*      texture_ = nullptr;
-    QOpenGLShaderProgram program_;
-    QOpenGLBuffer        vbo_{QOpenGLBuffer::VertexBuffer};
-    bool                 gl_ready_ = false;
+    QVideoFrame               current_frame_;
+    QImage::Format            last_img_format_ = QImage::Format_Invalid;
+    QOpenGLTexture*           texture_ = nullptr;
+    QOpenGLShaderProgram      program_;
+    QOpenGLVertexArrayObject  vao_;
+    QOpenGLBuffer             vbo_{QOpenGLBuffer::VertexBuffer};
+    int                       pos_loc_ = -1;
+    int                       uv_loc_  = -1;
+    bool                      gl_ready_ = false;
 };
 #endif
 

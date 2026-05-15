@@ -14,8 +14,12 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLTexture>
+#include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
 #include <QRect>
+#include <QSurfaceFormat>
+
+#include <algorithm>
 #include <QScrollArea>
 #include <QStandardPaths>
 #include <QUrl>
@@ -30,17 +34,23 @@ namespace fincept::screens::widgets {
 
 #ifdef HAS_QT_MULTIMEDIA
 
-// ── GLSL shaders ─────────────────────────────────────────────────────────────
+// ── GLSL shaders (OpenGL 3.2 core / GLSL 1.50) ───────────────────────────────
+// Uses in/out instead of the deprecated attribute/varying/gl_FragColor syntax.
+// #version 150 core is the minimum that mandates VAO usage — keeping shaders
+// and context requirements in sync prevents silent failures on core profiles.
 static const char kVertSrc[] =
-    "attribute vec2 a_pos;\n"
-    "attribute vec2 a_uv;\n"
-    "varying   vec2 v_uv;\n"
+    "#version 150 core\n"
+    "in  vec2 a_pos;\n"
+    "in  vec2 a_uv;\n"
+    "out vec2 v_uv;\n"
     "void main() { gl_Position = vec4(a_pos, 0.0, 1.0); v_uv = a_uv; }\n";
 
 static const char kFragSrc[] =
+    "#version 150 core\n"
     "uniform sampler2D u_tex;\n"
-    "varying vec2 v_uv;\n"
-    "void main() { gl_FragColor = texture2D(u_tex, v_uv); }\n";
+    "in  vec2 v_uv;\n"
+    "out vec4 fragColor;\n"
+    "void main() { fragColor = texture(u_tex, v_uv); }\n";
 
 // Full-screen quad: 4 vertices × (x,y,u,v)
 static const float kQuad[] = {
@@ -55,12 +65,21 @@ static const float kQuad[] = {
 VideoRenderWidget::VideoRenderWidget(QWidget* parent)
     : QOpenGLWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    // Request OpenGL 3.2 core profile to match #version 150 core shaders.
+    // This also makes VAO usage mandatory (no implicit default VAO), which is
+    // enforced by our initializeGL() setup.
+    QSurfaceFormat fmt;
+    fmt.setVersion(3, 2);
+    fmt.setProfile(QSurfaceFormat::CoreProfile);
+    setFormat(fmt);
 }
 
 VideoRenderWidget::~VideoRenderWidget() {
     // GL resources must be destroyed with the context active.
     makeCurrent();
     delete texture_;
+    texture_ = nullptr;   // prevent double-free if makeCurrent() re-enters
+    vao_.destroy();
     vbo_.destroy();
     doneCurrent();
 }
@@ -73,14 +92,36 @@ void VideoRenderWidget::present(const QVideoFrame& frame) {
 void VideoRenderWidget::initializeGL() {
     initializeOpenGLFunctions();
 
-    program_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kVertSrc);
-    program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragSrc);
-    program_.link();
+    // Compile and link — check explicitly so a driver-side failure surfaces
+    // as a log error rather than silent black screen with gl_ready_ = true.
+    if (!program_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kVertSrc)
+     || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragSrc)
+     || !program_.link()) {
+        LOG_ERROR("VideoGL", "Shader compile/link failed:\n" + program_.log());
+        return; // gl_ready_ stays false; paintGL() is a safe no-op
+    }
+
+    pos_loc_ = program_.attributeLocation("a_pos");
+    uv_loc_  = program_.attributeLocation("a_uv");
+
+    // VAO records the vertex layout and VBO binding so paintGL() only needs
+    // to bind the VAO (required in OpenGL core profile; #version 150 core).
+    vao_.create();
+    vao_.bind();
 
     vbo_.create();
     vbo_.bind();
     vbo_.allocate(kQuad, sizeof(kQuad));
+
+    program_.bind();
+    program_.enableAttributeArray(pos_loc_);
+    program_.enableAttributeArray(uv_loc_);
+    program_.setAttributeBuffer(pos_loc_, GL_FLOAT, 0,                2, 4 * sizeof(float));
+    program_.setAttributeBuffer(uv_loc_,  GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
+    program_.release();
+
     vbo_.release();
+    vao_.release();
 
     gl_ready_ = true;
 }
@@ -100,14 +141,20 @@ void VideoRenderWidget::paintGL() {
     const QImage img = current_frame_.toImage();
     if (img.isNull()) return;
 
-    // Upload to GL texture. Reuse the existing texture object when dimensions
-    // match (avoids glTexImage2D reallocation on every frame).
-    if (!texture_ || texture_->width() != img.width() || texture_->height() != img.height()) {
+    // Recreate texture when dimensions OR pixel format change. Checking format
+    // prevents setData() uploading an incompatible QImage into an existing
+    // texture object (e.g. if the HLS stream switches quality mid-playback).
+    if (!texture_
+        || texture_->width()  != img.width()
+        || texture_->height() != img.height()
+        || last_img_format_   != img.format()) {
         delete texture_;
+        texture_ = nullptr;
         texture_ = new QOpenGLTexture(img, QOpenGLTexture::DontGenerateMipMaps);
         texture_->setMinificationFilter(QOpenGLTexture::Linear);
         texture_->setMagnificationFilter(QOpenGLTexture::Linear);
         texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
+        last_img_format_ = img.format();
     } else {
         texture_->setData(img); // glTexSubImage2D — no realloc
     }
@@ -119,22 +166,12 @@ void VideoRenderWidget::paintGL() {
     const int vh = static_cast<int>(fh * scale);
     glViewport((width() - vw) / 2, (height() - vh) / 2, vw, vh);
 
-    // Draw a full-screen quad; the viewport clipping does the letterboxing.
+    // VAO already has the vertex layout recorded from initializeGL().
     program_.bind();
     texture_->bind();
-    vbo_.bind();
-
-    const int posLoc = program_.attributeLocation("a_pos");
-    const int uvLoc  = program_.attributeLocation("a_uv");
-    program_.enableAttributeArray(posLoc);
-    program_.enableAttributeArray(uvLoc);
-    program_.setAttributeBuffer(posLoc, GL_FLOAT, 0,               2, 4 * sizeof(float));
-    program_.setAttributeBuffer(uvLoc,  GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
+    vao_.bind();
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    program_.disableAttributeArray(posLoc);
-    program_.disableAttributeArray(uvLoc);
-
-    vbo_.release();
+    vao_.release();
     texture_->release();
     program_.release();
 }
