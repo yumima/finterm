@@ -5,6 +5,7 @@
 #include "screens/pre_ipo/CompanyDetailPanel.h"
 #include "screens/pre_ipo/CompanyListPanel.h"
 #include "screens/pre_ipo/IpoPipelinePanel.h"
+#include "screens/pre_ipo/IpoWatchView.h"
 #include "screens/pre_ipo/views/PicksView.h"
 #include "screens/pre_ipo/views/PipelineView.h"
 #include "screens/pre_ipo/views/ScreenerView.h"
@@ -25,10 +26,15 @@ using namespace fincept::ui;
 using namespace fincept::pre_ipo;
 
 namespace {
-constexpr int kTabPicks    = 0;
-constexpr int kTabScreener = 1;
-constexpr int kTabMarkets  = 2;
-constexpr int kTabPipeline = 3;
+// IPO Watch is the default tab. The legacy "Picks / Screener / Markets /
+// Pipeline" tabs are kept available behind it because they still wire to
+// PreIpoService (SEC EDGAR + N-PORT marks); IPO Watch covers the more
+// common upcoming/priced research use case with Nasdaq's live calendar.
+constexpr int kTabIpoWatch = 0;
+constexpr int kTabPicks    = 1;
+constexpr int kTabScreener = 2;
+constexpr int kTabMarkets  = 3;
+constexpr int kTabPipeline = 4;
 } // namespace
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -113,8 +119,8 @@ void PreIpoScreen::build_ui() {
     tabs_l->setContentsMargins(16, 0, 16, 0);
     tabs_l->setSpacing(4);
 
-    const QStringList tab_labels{"Picks", "Screener", "Markets", "Pipeline"};
-    const QStringList tab_subs{"Pick", "Scan", "Research", "Scan / Pick"};
+    const QStringList tab_labels{"IPO Watch", "Picks", "Screener", "Markets", "Pipeline"};
+    const QStringList tab_subs{"Nasdaq calendar — upcoming + priced", "Pick", "Scan", "Research", "Scan / Pick"};
     for (int i = 0; i < tab_labels.size(); ++i) {
         auto* b = new QPushButton(tab_labels[i]);
         b->setCheckable(true);
@@ -138,6 +144,13 @@ void PreIpoScreen::build_ui() {
 
     // ── Stack ─────────────────────────────────────────────────────────────────
     stack_ = new QStackedWidget;
+
+    // IPO Watch — the new default tab. Uses Nasdaq's public calendar feed,
+    // bucketed into time windows for fast research scanning. Independent of
+    // the broken PreIpoService Python pipelines so it works even when the
+    // SEC EDGAR / N-PORT fetchers are returning nothing.
+    ipo_watch_view_ = new fincept::screens::widgets::IpoWatchView;
+    stack_->addWidget(ipo_watch_view_);
 
     picks_view_ = new PicksView;
     connect(picks_view_, &PicksView::company_selected, this, [this](const QString& id) {
@@ -164,8 +177,11 @@ void PreIpoScreen::build_ui() {
 
     root->addWidget(stack_, 1);
 
-    // Initial tab
-    switch_tab(kTabPicks);
+    // Initial tab — open onto IPO Watch (Nasdaq calendar) so users see
+    // working data immediately. The legacy Picks/Screener/Markets/Pipeline
+    // tabs remain available for SEC EDGAR + N-PORT research when those
+    // services produce data.
+    switch_tab(kTabIpoWatch);
 }
 
 QWidget* PreIpoScreen::build_markets_tab() {
@@ -210,7 +226,7 @@ QWidget* PreIpoScreen::build_top_bar() {
     hl->setContentsMargins(16, 0, 16, 0);
     hl->setSpacing(12);
 
-    auto* title = new QLabel("PRE-IPO TERMINAL");
+    auto* title = new QLabel("IPO WATCH");
     title->setStyleSheet(
         QString("color:%1;font-size:14px;font-weight:800;letter-spacing:2px;background:transparent;")
             .arg(colors::AMBER()));
@@ -221,7 +237,7 @@ QWidget* PreIpoScreen::build_top_bar() {
     divider->setStyleSheet(QString("background:%1;").arg(colors::BORDER_MED()));
     hl->addWidget(divider);
 
-    auto* subtitle = new QLabel("Scan · Research · Pick — SEC EDGAR + Mutual Fund N-PORT marks");
+    auto* subtitle = new QLabel("Calendar · Research · Picks — Nasdaq IPO feed + SEC EDGAR");
     subtitle->setStyleSheet(
         QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(subtitle);
@@ -233,7 +249,7 @@ QWidget* PreIpoScreen::build_top_bar() {
         QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(status_lbl_);
 
-    auto* badge = new QLabel("PRIVATE MARKETS");
+    auto* badge = new QLabel("IPO RESEARCH");
     badge->setStyleSheet(
         QString("color:%1;font-size:12px;font-weight:700;background:rgba(217,119,6,0.15);"
                 "  border:1px solid rgba(217,119,6,0.35);border-radius:3px;padding:2px 8px;")

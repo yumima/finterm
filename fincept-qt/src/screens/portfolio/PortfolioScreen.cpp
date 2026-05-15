@@ -17,6 +17,8 @@
 #include "screens/portfolio/PortfolioStatsRibbon.h"
 #include "screens/portfolio/PortfolioStatusBar.h"
 #include "screens/portfolio/PortfolioTxnPanel.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
@@ -129,6 +131,15 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     connect(refresh_timer_, &QTimer::timeout, this,
             [this]() { request_refresh(/*force_fresh=*/false); });
     command_bar_->set_refresh_interval(refresh_interval_ms_);
+
+    // DataHub debounce: collapses a burst of per-symbol quote arrivals
+    // (one per held symbol when the DataHub scheduler ticks) into a single
+    // aggregate rebuild + UI repaint pass.
+    hub_refresh_timer_ = new QTimer(this);
+    hub_refresh_timer_->setSingleShot(true);
+    hub_refresh_timer_->setInterval(200);
+    connect(hub_refresh_timer_, &QTimer::timeout, this,
+            &PortfolioScreen::rebuild_summary_aggregates_and_refresh);
 
     // Load portfolios
     svc.load_portfolios();
@@ -575,11 +586,16 @@ void PortfolioScreen::showEvent(QShowEvent* event) {
     // recent summary's top-weighted holding happens to be.
     if (!selected_id_.isEmpty())
         request_refresh(/*force_fresh=*/true);
+    // Resume the DataHub live-quote stream if we already have a summary
+    // (so the user sees live updates without waiting for the next 20s tick).
+    if (summary_loaded_)
+        hub_resubscribe_holdings();
 }
 
 void PortfolioScreen::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     refresh_timer_->stop();
+    hub_unsubscribe_all();
     status_bar_->stop_clock();
 }
 
@@ -656,6 +672,12 @@ void PortfolioScreen::on_summary_loaded(portfolio::PortfolioSummary summary) {
 
     update_main_view_data();
     update_content_state();
+
+    // (Re)subscribe to per-symbol quote topics if the symbol set changed —
+    // this is the live channel that keeps day-chg% / price fresh between
+    // PortfolioService::refresh_summary rebuilds.
+    if (isVisible())
+        hub_resubscribe_holdings();
 
     // No auto-selection. With an empty selection the chart/heatmap/blotter
     // stay on the portfolio-level (aggregate) view, which is the desired
@@ -852,6 +874,117 @@ void PortfolioScreen::request_refresh(bool force_fresh) {
     }
     command_bar_->set_refreshing(true);
     services::PortfolioService::instance().refresh_summary(selected_id_);
+}
+
+// ── DataHub live-quote integration ───────────────────────────────────────────
+//
+// The dashboard's PortfolioSummaryWidget gets fresh prices via DataHub
+// publishes; the top-level Portfolio screen used to rely solely on its
+// 20s QTimer + PortfolioService::refresh_summary, which means the headline
+// chg% can lag behind the dashboard. We subscribe to the same per-symbol
+// topics here and patch the in-memory summary on each delivery — the heavier
+// PortfolioService refresh still runs on its own cadence for sector /
+// correlation / snapshot work that DataHub doesn't carry.
+
+void PortfolioScreen::hub_resubscribe_holdings() {
+    if (current_summary_.holdings.isEmpty())
+        return;
+
+    // Compute the sorted symbol set; skip if it matches what we're already
+    // subscribed to. This avoids tearing down and re-establishing N subs
+    // every 20s when refresh_summary fires with the same holdings.
+    QStringList new_syms;
+    new_syms.reserve(current_summary_.holdings.size());
+    for (const auto& h : current_summary_.holdings)
+        new_syms.append(h.symbol);
+    new_syms.sort();
+    if (hub_active_ && new_syms == hub_subscribed_syms_)
+        return;
+
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub_subscribed_syms_ = new_syms;
+    hub_active_ = false;
+
+    QStringList topics;
+    topics.reserve(new_syms.size());
+    for (const QString& sym : new_syms) {
+        const QString topic = QStringLiteral("market:quote:") + sym;
+        topics.append(topic);
+        hub.subscribe(this, topic, [this, sym](const QVariant& v) {
+            if (!v.canConvert<services::QuoteData>())
+                return;
+            const auto q = v.value<services::QuoteData>();
+            for (auto& h : current_summary_.holdings) {
+                if (h.symbol != sym)
+                    continue;
+                h.current_price = q.price;
+                h.day_change = q.change;
+                h.day_change_percent = q.change_pct;
+                h.day_high = q.high;
+                h.day_low = q.low;
+                h.day_volume = q.volume;
+                h.bid = q.bid;
+                h.ask = q.ask;
+                h.bid_size = q.bid_size;
+                h.ask_size = q.ask_size;
+                h.market_value = h.quantity * h.current_price;
+                h.unrealized_pnl = h.market_value - h.cost_basis;
+                h.unrealized_pnl_percent = (h.cost_basis > 0)
+                    ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+                break;
+            }
+            if (!hub_refresh_timer_->isActive())
+                hub_refresh_timer_->start();
+        });
+    }
+    hub_active_ = true;
+    // Force the first publish: the DataHub min_interval gate could otherwise
+    // delay the cold-start paint by several seconds.
+    hub.request(topics, /*force=*/true);
+}
+
+void PortfolioScreen::hub_unsubscribe_all() {
+    if (!hub_active_)
+        return;
+    datahub::DataHub::instance().unsubscribe(this);
+    hub_active_ = false;
+}
+
+void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
+    if (!summary_loaded_ || current_summary_.holdings.isEmpty())
+        return;
+
+    double total_mv = 0;
+    double total_cost = 0;
+    double total_day = 0;
+    int gainers = 0;
+    int losers = 0;
+    for (const auto& h : current_summary_.holdings) {
+        total_mv += h.market_value;
+        total_cost += h.cost_basis;
+        total_day += h.day_change * h.quantity;
+        if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
+    }
+    for (auto& h : current_summary_.holdings)
+        h.weight = (total_mv > 0) ? (h.market_value / total_mv) * 100.0 : 0;
+
+    current_summary_.total_market_value = total_mv;
+    current_summary_.total_cost_basis = total_cost;
+    current_summary_.total_unrealized_pnl = total_mv - total_cost;
+    current_summary_.total_unrealized_pnl_percent = (total_cost > 0)
+        ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
+    current_summary_.total_day_change = total_day;
+    current_summary_.total_day_change_percent = (total_mv - total_day > 0)
+        ? (total_day / (total_mv - total_day)) * 100.0 : 0;
+    current_summary_.gainers = gainers;
+    current_summary_.losers = losers;
+    current_summary_.last_updated = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    command_bar_->set_summary(current_summary_);
+    stats_ribbon_->set_summary(current_summary_);
+    status_bar_->set_summary(current_summary_);
+    update_main_view_data();
 }
 
 // ── Phase 3: Main view construction ──────────────────────────────────────────

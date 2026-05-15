@@ -92,6 +92,21 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     void animate_order_panel_in();
     const portfolio::HoldingWithQuote* find_holding(const QString& symbol) const;
 
+    /// Live-quote subscription. Resubscribes to `market:quote:<sym>` for the
+    /// current holdings if the symbol set has changed since last call.
+    /// Brings the Portfolio screen onto the same DataHub stream the dashboard
+    /// uses, so today's chg% / price stay fresh between the slower 20s
+    /// PortfolioService refreshes — and stay fresh even when the user has
+    /// the Portfolio tab visible overnight (hideEvent never fires in that
+    /// case, so the showEvent-driven force refresh wouldn't run).
+    void hub_resubscribe_holdings();
+    void hub_unsubscribe_all();
+    /// Re-derive totals, gainers/losers and weights from the per-holding
+    /// fields, then push the patched summary to command/stats/status bars
+    /// and the main view. Called from a debounce timer so a burst of quote
+    /// publishes (one per held symbol) triggers exactly one UI pass.
+    void rebuild_summary_aggregates_and_refresh();
+
     // Sub-widgets
     PortfolioCommandBar* command_bar_ = nullptr;
     PortfolioStatsRibbon* stats_ribbon_ = nullptr;
@@ -137,6 +152,11 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     // Refresh timer (P3)
     QTimer* refresh_timer_ = nullptr;
     int refresh_interval_ms_ = 20000;
+
+    // DataHub live-quote subscription state.
+    QTimer* hub_refresh_timer_ = nullptr; // debounces aggregate rebuild
+    QStringList hub_subscribed_syms_;     // sorted; used to skip resub on no-op
+    bool hub_active_ = false;
 
     // Order panel slide-in animation
     QPropertyAnimation* order_panel_anim_ = nullptr;

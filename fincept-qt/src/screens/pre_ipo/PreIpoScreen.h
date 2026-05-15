@@ -13,6 +13,8 @@ class QStackedWidget;
 
 namespace fincept::screens {
 
+namespace widgets { class IpoWatchView; }
+
 class CompanyListPanel;
 class CompanyDetailPanel;
 class IpoPipelinePanel;
@@ -60,6 +62,7 @@ class PreIpoScreen : public QWidget, public IStatefulScreen {
     int                   active_tab_ = 0;
 
     // Views
+    widgets::IpoWatchView* ipo_watch_view_ = nullptr; // default tab
     PicksView*          picks_view_     = nullptr;
     ScreenerView*       screener_view_  = nullptr;
     PipelineView*       pipeline_view_  = nullptr;

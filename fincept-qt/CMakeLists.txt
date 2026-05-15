@@ -1281,6 +1281,7 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/CompanyDetailPanel.cpp
     src/screens/pre_ipo/IpoPipelinePanel.cpp
     src/screens/pre_ipo/PreIpoScreen.cpp
+    src/screens/pre_ipo/IpoWatchView.cpp
     src/screens/pre_ipo/views/PicksView.cpp
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
@@ -1414,6 +1415,7 @@ set_source_files_properties(
     src/screens/pre_ipo/CompanyDetailPanel.cpp
     src/screens/pre_ipo/IpoPipelinePanel.cpp
     src/screens/pre_ipo/PreIpoScreen.cpp
+    src/screens/pre_ipo/IpoWatchView.cpp
     src/screens/pre_ipo/views/PicksView.cpp
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp

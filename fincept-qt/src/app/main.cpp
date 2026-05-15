@@ -16,7 +16,9 @@
 #include "core/session/SessionManager.h"
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
+#include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "storage/cache/CacheManager.h"
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonSetupManager.h"
@@ -486,6 +488,51 @@ int main(int argc, char* argv[]) {
     // Initialize MCP tool system — registers all internal tools and starts
     // external MCP servers in the background (non-blocking).
     fincept::mcp::initialize_all_tools();
+
+    // ── App-focus refresh: invalidate stale data when the user returns ──────
+    //
+    // The DataHub scheduler keeps polling per TopicPolicy while the app is
+    // inactive (so e.g. the dashboard keeps running). But yfinance + Nasdaq
+    // also rate-limit, the daemon can drift after many hours, and the
+    // CacheManager TTLs (30s for quotes) hide stale data behind cache hits
+    // for direct fetch_quotes consumers. When the user comes back to the
+    // app after > kWakeThresholdMs idle, force-refresh every subscribed
+    // topic AND drop the quote-bucket cache so the next fetch path is also
+    // forced to refetch. This is the single "wake from overnight idle"
+    // signal that brings every screen back to fresh data on first
+    // interaction in the morning — no per-screen polling tuning needed.
+    {
+        constexpr qint64 kWakeThresholdMs = 5LL * 60LL * 1000LL;
+        static qint64 s_last_inactive_ms = 0;
+        QObject::connect(&app, &QApplication::applicationStateChanged, &app,
+                         [](Qt::ApplicationState state) {
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            if (state == Qt::ApplicationActive) {
+                if (s_last_inactive_ms == 0) return;     // never went inactive
+                const qint64 idle_ms = now - s_last_inactive_ms;
+                s_last_inactive_ms = 0;
+                if (idle_ms < kWakeThresholdMs) return;  // brief alt-tab, ignore
+                LOG_INFO("App", QString("Resumed after %1s idle — forcing refresh on subscribed topics")
+                                    .arg(idle_ms / 1000));
+                // Drop the per-symbol quote cache so PortfolioService /
+                // MarketDataService::fetch_quotes paths also re-hit the daemon
+                // instead of serving freshly-expired-but-still-30s-fresh data.
+                fincept::CacheManager::instance().remove_prefix("market:");
+                // Force-refresh every topic that still has subscribers; the
+                // DataHub min_interval gate is bypassed by force=true but
+                // per-producer max_requests_per_sec stays in effect so
+                // upstream yfinance isn't hammered.
+                QStringList topics;
+                for (const auto& s : fincept::datahub::DataHub::instance().stats())
+                    if (s.subscriber_count > 0) topics.append(s.topic);
+                if (!topics.isEmpty())
+                    fincept::datahub::DataHub::instance().request(topics, /*force=*/true);
+            } else if (state == Qt::ApplicationInactive || state == Qt::ApplicationSuspended) {
+                if (s_last_inactive_ms == 0)
+                    s_last_inactive_ms = now;
+            }
+        });
+    }
 
     // ── Python environment check ─────────────────────────────────────────────
     // check_status() fast path (sentinel + markers present) is synchronous and

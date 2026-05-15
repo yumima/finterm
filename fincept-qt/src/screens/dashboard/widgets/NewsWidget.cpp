@@ -1,15 +1,28 @@
 #include "screens/dashboard/widgets/NewsWidget.h"
 
+#include "core/logging/Logger.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 
 namespace fincept::screens::widgets {
 
+namespace {
+constexpr int kRefreshTimeoutMs = 25'000; // PythonWorker network timeout is similar; we want slightly larger
+} // namespace
+
 NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::colors::CYAN) {
+    // Status line above the scrollable feed — small, single-line, always
+    // present so the user has visible proof the refresh actually completed
+    // (matters when yfinance returns the same headlines after a long idle).
+    status_label_ = new QLabel(QStringLiteral("Loading…"));
+    status_label_->setFixedHeight(14);
+    content_layout()->addWidget(status_label_);
+
     scroll_area_ = new QScrollArea;
     scroll_area_->setWidgetResizable(true);
 
@@ -21,6 +34,18 @@ NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::
 
     scroll_area_->setWidget(container);
     content_layout()->addWidget(scroll_area_);
+
+    watchdog_ = new QTimer(this);
+    watchdog_->setSingleShot(true);
+    connect(watchdog_, &QTimer::timeout, this, [this]() {
+        // Daemon never returned — treat as failure so the spinner doesn't
+        // hang. The original request's callback may still fire later; the
+        // token check (below) silently discards it.
+        ++refresh_token_;
+        set_loading(false);
+        finalize_refresh(QStringLiteral("timeout"));
+        LOG_WARN("NewsWidget", "fetch_news watchdog fired — daemon did not respond");
+    });
 
     connect(this, &BaseWidget::refresh_requested, this, &NewsWidget::refresh_data);
 
@@ -35,6 +60,9 @@ void NewsWidget::apply_styles() {
                                         "QScrollBar::handle:vertical { background: %1; border-radius: 3px; }"
                                         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
                                     .arg(ui::colors::BORDER_MED()));
+    if (status_label_)
+        status_label_->setStyleSheet(
+            QString("color:%1;background:transparent;padding:0 6px;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void NewsWidget::on_theme_changed() {
@@ -45,18 +73,41 @@ void NewsWidget::on_theme_changed() {
 
 void NewsWidget::refresh_data() {
     set_loading(true);
+    status_label_->setText(QStringLiteral("Refreshing…"));
 
-    // Fetch news for SPY (broad market news)
-    services::MarketDataService::instance().fetch_news("SPY", 10, [this](bool ok, QJsonArray articles) {
+    // Token guards against the watchdog firing and a late real callback
+    // racing — the late callback will see a mismatched token and bail.
+    const qint64 token = ++refresh_token_;
+    watchdog_->start(kRefreshTimeoutMs);
+
+    services::MarketDataService::instance().fetch_news("SPY", 10, [this, token](bool ok, QJsonArray articles) {
+        if (token != refresh_token_)
+            return; // superseded by watchdog or a newer click
+        watchdog_->stop();
         set_loading(false);
-        if (!ok || articles.isEmpty()) {
-            if (news_layout_->count() <= 1) {
-                set_error("No news available. Check Python/yfinance.");
-            }
+
+        if (!ok) {
+            finalize_refresh(QStringLiteral("error"));
+            if (news_layout_->count() <= 1)
+                set_error("News fetch failed. Check Python/yfinance.");
+            LOG_WARN("NewsWidget", "fetch_news failed (ok=false)");
+            return;
+        }
+        if (articles.isEmpty()) {
+            // yfinance occasionally returns an empty list (rate limit, weekend,
+            // session reset). Keep prior articles, just acknowledge the click.
+            finalize_refresh(QStringLiteral("no new articles"));
+            LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
             return;
         }
         populate(articles);
+        finalize_refresh(QString::number(articles.size()) + " items");
     });
+}
+
+void NewsWidget::finalize_refresh(const QString& outcome) {
+    const QString time = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss"));
+    status_label_->setText(QStringLiteral("Last updated %1 · %2").arg(time, outcome));
 }
 
 void NewsWidget::populate(const QJsonArray& articles) {
