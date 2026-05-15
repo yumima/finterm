@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`7bae7fba`](https://github.com/yumima/finterm/commit/7bae7fba) **fix(ipo_watch):** wake-on-idle cache invalidation + scrub N/A sentinels
 - [`6345847d`](https://github.com/yumima/finterm/commit/6345847d) **feat(ipo_watch):** 3-pane Bloomberg-style detail rail
 - [`c73e6910`](https://github.com/yumima/finterm/commit/c73e6910) **feat(ipo_watch):** BUSINESS + LEADERSHIP section — officers, summary, website
 - [`811b5b42`](https://github.com/yumima/finterm/commit/811b5b42) **feat(ipo_watch):** FILED pipeline + 2-col detail rail + proper date sort

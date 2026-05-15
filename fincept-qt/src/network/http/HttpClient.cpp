@@ -94,6 +94,16 @@ void HttpClient::get(const QString& url, JsonCallback callback) {
     handle_reply(reply, std::move(callback));
 }
 
+void HttpClient::get(const QString& url, const QHash<QByteArray, QByteArray>& extra_headers,
+                     JsonCallback callback) {
+    LOG_DEBUG("HTTP", "GET " + url);
+    QNetworkRequest req = build_request(url);
+    for (auto it = extra_headers.constBegin(); it != extra_headers.constEnd(); ++it)
+        req.setRawHeader(it.key(), it.value());
+    auto* reply = nam_->get(req);
+    handle_reply(reply, std::move(callback));
+}
+
 void HttpClient::post(const QString& url, const QJsonObject& body, JsonCallback callback) {
     LOG_DEBUG("HTTP", "POST " + url);
     QJsonDocument doc(body);

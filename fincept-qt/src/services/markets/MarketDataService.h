@@ -168,6 +168,62 @@ class MarketDataService : public QObject
     using ProfileCallback = std::function<void(bool, QVector<CompanyProfile>)>;
     void fetch_company_profiles(const QStringList& symbols, ProfileCallback cb);
 
+    /// IPO Watch detail-rail aggregator. Single daemon round-trip returning
+    /// quarterly financials, institutional/major holders, and recent news.
+    /// Designed for lazy-fetch on row click — see IpoWatchView's NEWS /
+    /// FINANCIALS / HOLDERS tabs.
+    struct FinancialPoint  { QString date; double value = 0; };
+    struct InstitutionalHolder {
+        QString holder;
+        double  pct    = 0; // 0..1
+        double  shares = 0;
+        double  value  = 0; // dollars
+        QString date;
+    };
+    struct MajorHolderRow { QString label; double value = 0; };
+    struct NewsItem {
+        QString title;
+        QString link;
+        QString publisher;
+        QString ts;
+    };
+    struct IpoExtras {
+        QString symbol;
+        QVector<FinancialPoint>     quarterly_revenue;
+        QVector<FinancialPoint>     quarterly_net_income;
+        QVector<InstitutionalHolder> institutional_holders;
+        QVector<MajorHolderRow>     major_holders;
+        QVector<NewsItem>           news;
+    };
+    using IpoExtrasCallback = std::function<void(bool, IpoExtras)>;
+    void fetch_ipo_extras(const QString& symbol, IpoExtrasCallback cb);
+
+    /// SEC EDGAR filings (free public API — no key required, but the
+    /// `User-Agent: <name> <email>` header is mandated by SEC). Returns the
+    /// 25 most-recent filings for the ticker (S-1, 10-K, 8-K, Form 4, etc.).
+    struct SecFiling {
+        QString form;          // "S-1" | "10-K" | "8-K" | "4" | …
+        QString filing_date;   // "YYYY-MM-DD"
+        QString accession;     // "0000320193-25-000005"
+        QString primary_doc;   // filename within the accession folder
+        QString url;           // pre-built EDGAR document URL
+    };
+    using SecFilingsCallback = std::function<void(bool, QVector<SecFiling>)>;
+    void fetch_sec_filings(const QString& ticker, SecFilingsCallback cb);
+
+    /// Wikipedia summary lookup — used by IPO Watch as a description fallback
+    /// when yfinance's `longBusinessSummary` is empty (common for pre-IPO
+    /// filings and freshly-listed deals). The REST `summary` endpoint returns
+    /// the article's lead paragraph in plain text, no key needed.
+    struct WikipediaSummary {
+        QString title;
+        QString description;   // short tagline ("American technology company")
+        QString extract;       // first ~3 sentences of the article
+        QString url;
+    };
+    using WikipediaCallback = std::function<void(bool, WikipediaSummary)>;
+    void fetch_wikipedia_summary(const QString& title_query, WikipediaCallback cb);
+
     /// Fetch historical OHLCV data. period: "1mo","3mo","6mo","1y","2y","5y"
     /// interval: "1d","1wk","1mo"
     /// Phase 3+: prefer `DataHub::subscribe(this, "market:history:<sym>:<period>:<interval>", ...)`
@@ -224,6 +280,16 @@ class MarketDataService : public QObject
     //                          quote refresh runs in the background.
     static constexpr int kQuoteCacheTtlSec     = 30;
     static constexpr int kQuoteLastKnownTtlSec = 7 * 24 * 60 * 60;
+
+    // SEC EDGAR's submissions API is keyed by CIK (numeric, zero-padded to 10
+    // digits), not ticker. We resolve the ticker→CIK mapping by lazily
+    // fetching company_tickers.json (~700KB) on the first SEC request and
+    // caching it in memory for the rest of the session. SEC publishes the
+    // file weekly so a per-session cache is plenty.
+    QHash<QString, int>      sec_cik_map_;       // upper-case ticker → CIK
+    bool                     sec_cik_loaded_   = false;
+    bool                     sec_cik_loading_  = false;
+    QVector<std::function<void(bool)>> sec_cik_waiters_;
 };
 
 } // namespace fincept::services

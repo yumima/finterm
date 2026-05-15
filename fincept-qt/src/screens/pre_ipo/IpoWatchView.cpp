@@ -135,6 +135,13 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
                 info_cache_.clear();
                 history_cache_.clear();
                 history_inflight_.clear();
+                ipo_extras_.clear();
+                ipo_extras_inflight_.clear();
+                filings_cache_.clear();
+                filings_inflight_.clear();
+                wiki_cache_.clear();
+                wiki_inflight_.clear();
+                wiki_misses_.clear();
                 refresh();
             });
 }
@@ -396,10 +403,13 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     tabs_facts_ = new QTabWidget;
     tabs_facts_->setDocumentMode(true);
     tabs_facts_->setTabPosition(QTabWidget::North);
-    tabs_facts_->addTab(make_scroll_label(page_deal_),   "DEAL");
+    tabs_facts_->addTab(make_scroll_label(page_deal_),    "DEAL");
     tabs_facts_->addTab(make_scroll_label(page_business_),"BUSINESS");
-    tabs_facts_->addTab(make_scroll_label(page_leader_), "LEADERSHIP");
-    tabs_facts_->addTab(make_scroll_label(page_fund_),   "FUNDAMENTALS");
+    tabs_facts_->addTab(make_scroll_label(page_leader_),  "LEADERSHIP");
+    tabs_facts_->addTab(make_scroll_label(page_fund_),    "FUNDAMENTALS");
+    tabs_facts_->addTab(make_scroll_label(page_news_),    "NEWS");
+    tabs_facts_->addTab(make_scroll_label(page_holders_), "HOLDERS");
+    tabs_facts_->addTab(make_scroll_label(page_filings_), "FILINGS");
     tabs_facts_->addTab(make_scroll_label(page_pipeline_),"PIPELINE");
     mtv->addWidget(tabs_facts_, 1);
     middle_split->addWidget(middle_top_container);
@@ -418,9 +428,19 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     placeholder->setTextFormat(Qt::RichText);
     placeholder->setAlignment(Qt::AlignCenter);
     pch->addWidget(placeholder, 1);
-    tabs_charts_->addTab(page_price_chart_host_,         "PRICE");
-    tabs_charts_->addTab(make_scroll_label(page_range_), "RANGE");
-    tabs_charts_->addTab(make_scroll_label(page_lockup_),"LOCK-UP");
+    page_revenue_chart_host_ = new QWidget;
+    auto* rch = new QVBoxLayout(page_revenue_chart_host_);
+    rch->setContentsMargins(8, 8, 8, 8);
+    rch->setSpacing(0);
+    auto* rev_placeholder = new QLabel("<i style='color:#7a7a7a;'>Quarterly revenue appears for priced deals once yfinance data lands.</i>");
+    rev_placeholder->setTextFormat(Qt::RichText);
+    rev_placeholder->setAlignment(Qt::AlignCenter);
+    rch->addWidget(rev_placeholder, 1);
+
+    tabs_charts_->addTab(page_price_chart_host_,          "PRICE");
+    tabs_charts_->addTab(page_revenue_chart_host_,        "REVENUE");
+    tabs_charts_->addTab(make_scroll_label(page_range_),  "RANGE");
+    tabs_charts_->addTab(make_scroll_label(page_lockup_), "LOCK-UP");
     tabs_charts_->addTab(make_scroll_label(page_timeline_),"TIMELINE");
     middle_split->addWidget(tabs_charts_);
 
@@ -541,6 +561,7 @@ void IpoWatchView::apply_styles() {
     const QString body_qss =
         QString("QLabel{color:%1;background:%2;}").arg(TEXT_PRIMARY(), BG_SURFACE());
     for (QLabel* lbl : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                        page_news_, page_holders_, page_filings_,
                         page_range_, page_lockup_, page_timeline_,
                         right_top_, right_bottom_}) {
         if (lbl) lbl->setStyleSheet(body_qss);
@@ -773,6 +794,81 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
                         self->render_detail(&en);
                         return;
                     }
+                }
+            }
+        });
+}
+
+// ── Lazy fetchers for the new detail-rail tabs (NEWS / FINANCIALS / HOLDERS /
+//    FILINGS / Wikipedia fallback) ────────────────────────────────────────────
+// Each follows the same pattern as fetch_history_for_detail: gate on a
+// presence + inflight set so repeat clicks don't re-issue; re-render once
+// the data arrives if the same row is still selected.
+
+void IpoWatchView::fetch_ipo_extras_for_detail(const Entry& e) {
+    if (e.ticker.isEmpty()) return;
+    if (ipo_extras_.contains(e.ticker) || ipo_extras_inflight_.contains(e.ticker)) return;
+    ipo_extras_inflight_.insert(e.ticker);
+    QPointer<IpoWatchView> self = this;
+    const QString sym = e.ticker;
+    services::MarketDataService::instance().fetch_ipo_extras(
+        sym, [self, sym](bool ok, services::MarketDataService::IpoExtras data) {
+            if (!self) return;
+            self->ipo_extras_inflight_.remove(sym);
+            if (!ok) return;
+            self->ipo_extras_.insert(sym, data);
+            if (self->detail_symbol_ == sym) {
+                for (const auto& en : self->entries_) {
+                    if (en.ticker == sym) { self->render_detail(&en); return; }
+                }
+            }
+        });
+}
+
+void IpoWatchView::fetch_sec_filings_for_detail(const Entry& e) {
+    if (e.ticker.isEmpty()) return;
+    if (filings_cache_.contains(e.ticker) || filings_inflight_.contains(e.ticker)) return;
+    filings_inflight_.insert(e.ticker);
+    QPointer<IpoWatchView> self = this;
+    const QString sym = e.ticker;
+    services::MarketDataService::instance().fetch_sec_filings(
+        sym, [self, sym](bool ok, QVector<services::MarketDataService::SecFiling> filings) {
+            if (!self) return;
+            self->filings_inflight_.remove(sym);
+            // We insert even on failure (empty list) so we don't re-issue.
+            // The "no filings yet" placeholder shows in that case.
+            self->filings_cache_.insert(sym, ok ? filings : QVector<services::MarketDataService::SecFiling>{});
+            if (self->detail_symbol_ == sym) {
+                for (const auto& en : self->entries_) {
+                    if (en.ticker == sym) { self->render_detail(&en); return; }
+                }
+            }
+        });
+}
+
+void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
+    // Use the company name as the Wikipedia title — there's no ticker→title
+    // mapping that's reliable. False positives (e.g. matching a person, not
+    // a company) are filtered by the user reading the result; this is a
+    // fallback for when yfinance has no description anyway.
+    if (e.company.isEmpty()) return;
+    if (wiki_cache_.contains(e.company) || wiki_inflight_.contains(e.company)) return;
+    if (wiki_misses_.contains(e.company)) return;
+    wiki_inflight_.insert(e.company);
+    QPointer<IpoWatchView> self = this;
+    const QString name = e.company;
+    services::MarketDataService::instance().fetch_wikipedia_summary(
+        name, [self, name](bool ok, services::MarketDataService::WikipediaSummary s) {
+            if (!self) return;
+            self->wiki_inflight_.remove(name);
+            if (!ok) { self->wiki_misses_.insert(name); return; }
+            self->wiki_cache_.insert(name, s);
+            // Only re-render if the currently selected row still has this
+            // company name — we keyed on name (not ticker) so this differs
+            // from the other fetchers.
+            for (const auto& en : self->entries_) {
+                if (en.company == name && self->detail_symbol_ == en.ticker) {
+                    self->render_detail(&en); return;
                 }
             }
         });
@@ -1313,6 +1409,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     if (!e) {
         header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");
         for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                          page_news_, page_holders_, page_filings_,
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
             if (p) p->setText("");
         detail_symbol_.clear();
@@ -1322,6 +1419,11 @@ void IpoWatchView::render_detail(const Entry* e) {
 
     // Lazy fetch the price-since-IPO history (priced only, no-op otherwise).
     fetch_history_for_detail(*e);
+    // Fire the new lazy fetches — each is gated by its own cache + inflight
+    // set, so this is cheap on repeat row clicks.
+    fetch_ipo_extras_for_detail(*e);
+    fetch_sec_filings_for_detail(*e);
+    fetch_wikipedia_for_detail(*e);
     // Lazy fetch fundamentals.
     if (!e->ticker.isEmpty() && !info_cache_.contains(e->ticker)) {
         QPointer<IpoWatchView> self = this;
@@ -1360,30 +1462,40 @@ void IpoWatchView::render_detail(const Entry* e) {
     page_business_ ->setText(QString(kDetailCss) + build_business_html(*e, info, have_info));
     page_leader_   ->setText(QString(kDetailCss) + build_leadership_html(info, have_info));
     page_fund_     ->setText(QString(kDetailCss) + build_fundamentals_html(info, have_info, *e));
+    page_news_     ->setText(QString(kDetailCss) + build_news_html(*e));
+    page_holders_  ->setText(QString(kDetailCss) + build_holders_html(*e));
+    page_filings_  ->setText(QString(kDetailCss) + build_filings_html(*e));
     page_pipeline_ ->setText(QString(kDetailCss) + build_pipeline_html(*e));
 
-    // Hide tabs that have no data for this entry. The data-dependent ones
-    // (BUSINESS, LEADERSHIP, FUNDAMENTALS) stay visible while a ticker is
-    // resolvable so the builders' "Loading…" placeholders are actually seen;
-    // they only collapse when we know nothing will ever load (no ticker yet).
-    // Indexes match addTab order in build_detail_rail.
+    // Tab visibility. Indexes match addTab order in build_detail_rail:
+    //   0 DEAL · 1 BUSINESS · 2 LEADERSHIP · 3 FUNDAMENTALS · 4 NEWS · 5 HOLDERS · 6 FILINGS · 7 PIPELINE
+    // Data-dependent tabs stay visible while a ticker is resolvable so the
+    // builders' "Loading…" placeholders are seen; only the no-ticker case
+    // collapses them. PIPELINE only applies to upcoming/filed entries.
     const bool has_ticker = !e->ticker.isEmpty();
     tabs_facts_->setTabVisible(1, has_ticker || (have_info &&
         (!info.description.isEmpty() || info.employees > 0 || !info.website.isEmpty())));
     tabs_facts_->setTabVisible(2, has_ticker || (have_info && !info.officers.isEmpty()));
     tabs_facts_->setTabVisible(3, has_ticker);
-    tabs_facts_->setTabVisible(4, e->status != "priced"); // PIPELINE only for upcoming/filed
+    tabs_facts_->setTabVisible(4, has_ticker);           // NEWS
+    tabs_facts_->setTabVisible(5, has_ticker);           // HOLDERS (priced-only really, but builder gates)
+    tabs_facts_->setTabVisible(6, has_ticker);           // FILINGS
+    tabs_facts_->setTabVisible(7, e->status != "priced"); // PIPELINE
 
     // ── CHARTS TAB PAGES (middle-bottom) ────────────────────────────────────
     rebuild_price_chart(*e);
+    rebuild_revenue_chart(*e);
     page_range_   ->setText(QString(kDetailCss) + build_range_html(*e));
     page_lockup_  ->setText(QString(kDetailCss) + build_lockup_html(*e));
     page_timeline_->setText(QString(kDetailCss) + build_timeline_html(*e));
 
+    // Chart tab indexes:
+    //   0 PRICE · 1 REVENUE · 2 RANGE · 3 LOCK-UP · 4 TIMELINE
     tabs_charts_->setTabVisible(0, e->status == "priced");                          // PRICE
-    tabs_charts_->setTabVisible(1, have_info && info.week52_high > info.week52_low); // RANGE
-    tabs_charts_->setTabVisible(2, e->status == "priced");                          // LOCK-UP
-    tabs_charts_->setTabVisible(3, e->status != "priced");                          // TIMELINE
+    tabs_charts_->setTabVisible(1, has_ticker);                                     // REVENUE (lazy)
+    tabs_charts_->setTabVisible(2, has_ticker);                                     // RANGE
+    tabs_charts_->setTabVisible(3, e->status == "priced");                          // LOCK-UP
+    tabs_charts_->setTabVisible(4, e->status != "priced");                          // TIMELINE
     // If the currently-visible tab got hidden, jump to the first visible one.
     if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex())) {
         for (int i = 0; i < tabs_charts_->count(); ++i)
@@ -1442,15 +1554,19 @@ QString IpoWatchView::build_deal_html(const Entry& e) const {
 // ── BUSINESS tab ────────────────────────────────────────────────────────────
 QString IpoWatchView::build_business_html(const Entry& e, const services::InfoData& info, bool have_info) const {
     QString h;
-    if (!have_info) {
-        if (e.ticker.isEmpty())
-            h += "<div class='muted'>No ticker assigned yet — business profile will populate after pricing.</div>";
-        else
-            h += "<div class='muted'>Loading business profile…</div>";
-        return h;
+    // Surface a description from whichever source has one: prefer the richer
+    // yfinance `longBusinessSummary`; fall back to the Wikipedia extract for
+    // pre-IPO / freshly-listed companies that yfinance doesn't know yet.
+    QString desc = have_info ? info.description : QString();
+    QString desc_source;
+    if (desc.isEmpty()) {
+        const auto wit = wiki_cache_.constFind(e.company);
+        if (wit != wiki_cache_.constEnd() && !wit.value().extract.isEmpty()) {
+            desc = wit.value().extract;
+            desc_source = wit.value().url;
+        }
     }
-    if (!info.description.isEmpty()) {
-        QString desc = info.description;
+    if (!desc.isEmpty()) {
         constexpr int kMaxChars = 1200;
         if (desc.size() > kMaxChars) {
             int cut = desc.lastIndexOf('.', kMaxChars);
@@ -1458,14 +1574,26 @@ QString IpoWatchView::build_business_html(const Entry& e, const services::InfoDa
             desc = desc.left(cut + 1) + " …";
         }
         h += "<div style='line-height:1.5;'>" + desc.toHtmlEscaped() + "</div>";
+        if (!desc_source.isEmpty()) {
+            h += "<div class='muted' style='margin-top:4px;'>source: "
+                 "<a href='" + desc_source.toHtmlEscaped() + "'>Wikipedia</a></div>";
+        }
+    } else if (!have_info) {
+        h += e.ticker.isEmpty()
+            ? "<div class='muted'>No ticker assigned yet — business profile will populate after pricing.</div>"
+            : "<div class='muted'>Loading business profile…</div>";
+    } else {
+        h += "<div class='muted'>No business summary available from yfinance or Wikipedia.</div>";
     }
     h += "<table class='grid' style='margin-top:8px;'>";
-    if (info.employees > 0)        h += kvg_row("Employees", QString::number(info.employees));
-    if (!info.country.isEmpty())   h += kvg_row("Country",   info.country.toHtmlEscaped());
-    if (!info.currency.isEmpty())  h += kvg_row("Currency",  info.currency.toHtmlEscaped());
-    if (!info.website.isEmpty()) {
-        const QString href = info.website.toHtmlEscaped();
-        h += "<tr><td class='k'>Website</td><td><a href='" + href + "'>" + href + "</a></td></tr>";
+    if (have_info) {
+        if (info.employees > 0)        h += kvg_row("Employees", QString::number(info.employees));
+        if (!info.country.isEmpty())   h += kvg_row("Country",   info.country.toHtmlEscaped());
+        if (!info.currency.isEmpty())  h += kvg_row("Currency",  info.currency.toHtmlEscaped());
+        if (!info.website.isEmpty()) {
+            const QString href = info.website.toHtmlEscaped();
+            h += "<tr><td class='k'>Website</td><td><a href='" + href + "'>" + href + "</a></td></tr>";
+        }
     }
     h += "</table>";
     return h;
@@ -1614,6 +1742,115 @@ QString IpoWatchView::build_timeline_html(const Entry& e) const {
     return h;
 }
 
+// ── NEWS tab — recent headlines from yfinance via ipo_extras ────────────────
+QString IpoWatchView::build_news_html(const Entry& e) const {
+    if (e.ticker.isEmpty())
+        return "<div class='muted'>News appears once the ticker is assigned.</div>";
+    if (!ipo_extras_.contains(e.ticker))
+        return "<div class='muted'>Loading news…</div>";
+    const auto& ex = ipo_extras_.value(e.ticker);
+    if (ex.news.isEmpty())
+        return "<div class='muted'>No recent news for this ticker.</div>";
+
+    QString h = "<table class='kv'>";
+    for (const auto& n : ex.news) {
+        // ts is either an integer epoch seconds (older yfinance) or ISO 8601
+        // (newer). Try both; show "—" if neither parses.
+        QString when;
+        bool ok = false;
+        const qint64 epoch = n.ts.toLongLong(&ok);
+        if (ok && epoch > 1e9) {
+            when = QDateTime::fromSecsSinceEpoch(epoch).toString("MMM d");
+        } else {
+            const QDateTime iso = QDateTime::fromString(n.ts.left(10), "yyyy-MM-dd");
+            when = iso.isValid() ? iso.toString("MMM d") : QString();
+        }
+        h += "<tr><td colspan='2' style='padding-bottom:0;'>"
+             "<a href='" + n.link.toHtmlEscaped() + "'>" + n.title.toHtmlEscaped() + "</a>"
+             "</td></tr>";
+        h += "<tr><td colspan='2' class='muted' style='padding-top:0;padding-bottom:8px;'>"
+             + n.publisher.toHtmlEscaped();
+        if (!when.isEmpty()) h += " · " + when;
+        h += "</td></tr>";
+    }
+    h += "</table>";
+    return h;
+}
+
+// ── HOLDERS tab — institutional + major holders from ipo_extras ─────────────
+QString IpoWatchView::build_holders_html(const Entry& e) const {
+    if (e.ticker.isEmpty())
+        return "<div class='muted'>Holder data appears after the deal lists.</div>";
+    if (!ipo_extras_.contains(e.ticker))
+        return "<div class='muted'>Loading holders…</div>";
+    const auto& ex = ipo_extras_.value(e.ticker);
+    if (ex.institutional_holders.isEmpty() && ex.major_holders.isEmpty())
+        return "<div class='muted'>No holder data available for this ticker.</div>";
+
+    QString h;
+    if (!ex.major_holders.isEmpty()) {
+        h += "<span class='sec'>OWNERSHIP BREAKDOWN</span>";
+        h += "<table class='grid'>";
+        auto fmt_pct_or_count = [](const QString& label, double v) {
+            // yfinance's major_holders uses ratios for percent rows and a raw
+            // count for `institutionsCount`. Disambiguate by label.
+            if (label.contains("Count", Qt::CaseInsensitive))
+                return QString::number(int(v));
+            return QString("%1%").arg(v * 100.0, 0, 'f', 2);
+        };
+        for (const auto& m : ex.major_holders) {
+            // The labels yfinance returns are camelCase identifiers; tidy
+            // them to human-readable form for the rail.
+            QString pretty = m.label;
+            pretty.replace("insidersPercentHeld", "Insiders held");
+            pretty.replace("institutionsPercentHeld", "Institutions held");
+            pretty.replace("institutionsFloatPercentHeld", "Institutions (of float)");
+            pretty.replace("institutionsCount", "Institutional holders");
+            h += "<tr><td class='k'>" + pretty.toHtmlEscaped() + "</td><td>" +
+                 fmt_pct_or_count(m.label, m.value) + "</td></tr>";
+        }
+        h += "</table>";
+    }
+    if (!ex.institutional_holders.isEmpty()) {
+        h += "<span class='sec'>TOP INSTITUTIONAL HOLDERS</span>";
+        h += "<table class='grid'>";
+        h += "<tr><td class='k'>Holder</td><td class='k' style='width:auto;text-align:right;'>% Held · Value</td></tr>";
+        for (const auto& ih : ex.institutional_holders) {
+            const QString pct = QString("%1%").arg(ih.pct * 100.0, 0, 'f', 2);
+            h += "<tr><td>" + ih.holder.toHtmlEscaped() + "</td><td style='text-align:right;'>"
+                 + pct + " · " + format_money(ih.value) + "</td></tr>";
+        }
+        h += "</table>";
+    }
+    return h;
+}
+
+// ── FILINGS tab — recent SEC submissions ─────────────────────────────────────
+QString IpoWatchView::build_filings_html(const Entry& e) const {
+    if (e.ticker.isEmpty())
+        return "<div class='muted'>SEC filings appear once the ticker is assigned.</div>";
+    if (!filings_cache_.contains(e.ticker))
+        return "<div class='muted'>Loading SEC filings…</div>";
+    const auto& filings = filings_cache_.value(e.ticker);
+    if (filings.isEmpty())
+        return "<div class='muted'>No SEC filings indexed for this ticker yet.<br><br>"
+               "If this is a fresh IPO, the company's CIK may not appear in SEC's "
+               "company_tickers.json until ~24h after listing.</div>";
+
+    QString h = "<table class='grid'>";
+    h += "<tr><td class='k' style='width:18%;'>Form</td>"
+         "<td class='k' style='width:24%;'>Date</td>"
+         "<td class='k'>Document</td></tr>";
+    for (const auto& f : filings) {
+        h += "<tr><td><b>" + f.form.toHtmlEscaped() + "</b></td>"
+             "<td>" + f.filing_date.toHtmlEscaped() + "</td>"
+             "<td><a href='" + f.url.toHtmlEscaped() + "'>" +
+             f.primary_doc.toHtmlEscaped() + "</a></td></tr>";
+    }
+    h += "</table>";
+    return h;
+}
+
 // ── PRICE chart — real QChartView built from history_cache_ ─────────────────
 void IpoWatchView::rebuild_price_chart(const Entry& e) {
     if (!page_price_chart_host_) return;
@@ -1662,6 +1899,61 @@ void IpoWatchView::rebuild_price_chart(const Entry& e) {
                                         : QString(ui::colors::NEGATIVE());
     auto* view = ui::ChartFactory::line_chart(QString(), pts, color);
     price_chart_view_ = view;
+    host_layout->addWidget(view, 1);
+}
+
+// ── REVENUE chart — quarterly bars from ipo_extras ───────────────────────────
+void IpoWatchView::rebuild_revenue_chart(const Entry& e) {
+    if (!page_revenue_chart_host_) return;
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_revenue_chart_host_->layout());
+    if (!host_layout) return;
+    while (host_layout->count() > 0) {
+        QLayoutItem* item = host_layout->takeAt(0);
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    revenue_chart_view_ = nullptr;
+
+    auto add_placeholder = [&](const QString& html) {
+        auto* lbl = new QLabel(html);
+        lbl->setTextFormat(Qt::RichText);
+        lbl->setAlignment(Qt::AlignCenter);
+        lbl->setStyleSheet("color:#7a7a7a;");
+        host_layout->addWidget(lbl, 1);
+    };
+
+    if (e.ticker.isEmpty()) {
+        add_placeholder("<i>Revenue history appears after the deal lists.</i>");
+        return;
+    }
+    if (!ipo_extras_.contains(e.ticker)) {
+        add_placeholder("<i>Loading quarterly revenue…</i>");
+        return;
+    }
+    const auto& ex = ipo_extras_.value(e.ticker);
+    if (ex.quarterly_revenue.isEmpty()) {
+        add_placeholder("<i>No quarterly revenue history available.</i>");
+        return;
+    }
+    QStringList categories;
+    QVector<double> values;
+    categories.reserve(ex.quarterly_revenue.size());
+    values.reserve(ex.quarterly_revenue.size());
+    for (const auto& p : ex.quarterly_revenue) {
+        // Convert "2026-03-31" → "Q1 26" style for readability.
+        const QDate d = QDate::fromString(p.date, "yyyy-MM-dd");
+        QString label = p.date;
+        if (d.isValid()) {
+            const int q = (d.month() - 1) / 3 + 1;
+            label = QString("Q%1 %2").arg(q).arg(d.year() % 100, 2, 10, QChar('0'));
+        }
+        categories.append(label);
+        // Display in $M so the y-axis is readable.
+        values.append(p.value / 1e6);
+    }
+    auto* view = ui::ChartFactory::bar_chart(QStringLiteral("Quarterly revenue ($M)"),
+                                             categories, values, ui::colors::AMBER());
+    revenue_chart_view_ = view;
     host_layout->addWidget(view, 1);
 }
 

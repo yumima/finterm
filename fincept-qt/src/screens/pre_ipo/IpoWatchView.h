@@ -141,7 +141,16 @@ class IpoWatchView : public QWidget {
     QString build_timeline_html(const Entry& e) const;
     QString build_sector_comps_html(const Entry& e) const;
     QString build_links_html(const Entry& e, const services::InfoData& info, bool have_info) const;
-    void    rebuild_price_chart(const Entry& e);  // mutates price_chart_view_
+    QString build_news_html(const Entry& e) const;
+    QString build_holders_html(const Entry& e) const;
+    QString build_filings_html(const Entry& e) const;
+    void    rebuild_price_chart(const Entry& e);   // mutates price_chart_view_
+    void    rebuild_revenue_chart(const Entry& e); // mutates revenue_chart_view_
+
+    // Lazy fetchers fired from render_detail when their tab data is missing.
+    void fetch_ipo_extras_for_detail(const Entry& e);
+    void fetch_sec_filings_for_detail(const Entry& e);
+    void fetch_wikipedia_for_detail(const Entry& e);
     QVector<int> filtered_indices() const;     // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
     /// definition "priced only" and shouldn't be silently emptied when the
@@ -176,6 +185,19 @@ class IpoWatchView : public QWidget {
     // P/E, margins, growth, beta, analyst targets, etc. — too expensive to
     // pre-fetch for every entry but quick on a single row click.
     QHash<QString, services::InfoData> info_cache_;
+    // Heavier per-symbol enrichment caches — populated lazily on row click,
+    // not pre-fetched. NEWS / FINANCIALS / HOLDERS tabs share `ipo_extras_`;
+    // FILINGS uses `filings_cache_`; Wikipedia fallback for the BUSINESS
+    // tab lives in `wiki_cache_`.
+    QHash<QString, services::MarketDataService::IpoExtras> ipo_extras_;
+    QSet<QString>                                          ipo_extras_inflight_;
+    QHash<QString, QVector<services::MarketDataService::SecFiling>> filings_cache_;
+    QSet<QString>                                          filings_inflight_;
+    QHash<QString, services::MarketDataService::WikipediaSummary> wiki_cache_;
+    QSet<QString>                                          wiki_inflight_;
+    // "wiki tried but failed" set — keep so we don't repeatedly hit the
+    // REST API for pre-IPO companies that simply have no Wikipedia page.
+    QSet<QString>                                          wiki_misses_;
     // Lazy per-symbol price history cache for the detail rail's price-since-IPO
     // sparkline. Keyed by ticker. Presence in `history_cache_` means the fetch
     // returned (even if empty = "yfinance had nothing"); presence in
@@ -240,10 +262,15 @@ class IpoWatchView : public QWidget {
     QLabel*       page_leader_   = nullptr;
     QLabel*       page_fund_     = nullptr;
     QLabel*       page_pipeline_ = nullptr;
+    QLabel*       page_news_     = nullptr;
+    QLabel*       page_holders_  = nullptr;
+    QLabel*       page_filings_  = nullptr;
 
     QTabWidget*   tabs_charts_   = nullptr;
-    QWidget*      page_price_chart_host_ = nullptr; // QVBoxLayout host for the QChartView
-    QChartView*   price_chart_view_      = nullptr; // recreated each render
+    QWidget*      page_price_chart_host_   = nullptr; // QVBoxLayout host for the QChartView
+    QWidget*      page_revenue_chart_host_ = nullptr; // QVBoxLayout host for revenue bar chart
+    QChartView*   price_chart_view_        = nullptr; // recreated each render
+    QChartView*   revenue_chart_view_      = nullptr;
     QLabel*       page_range_    = nullptr;
     QLabel*       page_lockup_   = nullptr;
     QLabel*       page_timeline_ = nullptr;

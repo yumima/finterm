@@ -353,6 +353,119 @@ def get_financials(symbol):
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
+def get_ipo_extras(symbol):
+    """Single round-trip aggregator powering the IPO Watch detail rail's
+    NEWS / FINANCIALS / HOLDERS tabs. Each sub-fetch is wrapped in its own
+    try/except so a partial failure (e.g. yfinance returns no institutional
+    holders for a young IPO) still returns the other fields.
+
+    Output keys (all optional, omitted if yfinance returns nothing):
+      quarterly_revenue:   [{"date": "YYYY-MM-DD", "value": float}]   up to 8 quarters
+      quarterly_net_income: same shape
+      institutional_holders: [{"holder","pct","shares","value","date"}]  top 8
+      major_holders: [{"label","value"}]  the breakdown table
+      news: [{"title","publisher","link","ts"}]  up to 10 most-recent
+    """
+    out = {"symbol": symbol}
+    try:
+        t = yf.Ticker(symbol)
+    except Exception as e:
+        return {"symbol": symbol, "error": f"ticker init failed: {e}"}
+
+    def _series(df_row):
+        """Convert a single financials row to a [{date,value}] list sorted by date asc."""
+        items = []
+        for k, v in df_row.items():
+            try:
+                if v != v: continue  # NaN
+                items.append({"date": str(k)[:10], "value": float(v)})
+            except Exception:
+                pass
+        items.sort(key=lambda r: r["date"])
+        return items[-8:]
+
+    # ── Quarterly financials ───────────────────────────────────────────────
+    try:
+        qf = t.quarterly_income_stmt
+        if qf is not None and not qf.empty:
+            if "Total Revenue" in qf.index:
+                out["quarterly_revenue"] = _series(qf.loc["Total Revenue"])
+            # Try several aliases — yfinance row labels drift across versions.
+            for label in ("Net Income", "Net Income Common Stockholders",
+                          "Net Income From Continuing Operation Net Minority Interest"):
+                if label in qf.index:
+                    out["quarterly_net_income"] = _series(qf.loc[label])
+                    break
+    except Exception as e:
+        out["financials_error"] = str(e)
+
+    # ── Institutional holders (top 8) ──────────────────────────────────────
+    try:
+        ih = t.institutional_holders
+        if ih is not None and not ih.empty:
+            rows = []
+            for _, r in ih.head(8).iterrows():
+                rows.append({
+                    "holder": str(r.get("Holder", "")),
+                    "pct":    float(r.get("pctHeld") or 0),
+                    "shares": int(r.get("Shares") or 0),
+                    "value":  float(r.get("Value") or 0),
+                    "date":   str(r.get("Date Reported", ""))[:10],
+                })
+            out["institutional_holders"] = rows
+    except Exception as e:
+        out["holders_error"] = str(e)
+
+    # ── Major-holder breakdown (insider % / institution % / count) ────────
+    try:
+        mh = t.major_holders
+        if mh is not None and not mh.empty:
+            rows = []
+            # major_holders is a DataFrame with index = breakdown label,
+            # single 'Value' column.
+            for label, val in zip(mh.index, mh.iloc[:, 0].tolist()):
+                try:
+                    rows.append({"label": str(label), "value": float(val)})
+                except Exception:
+                    pass
+            out["major_holders"] = rows
+    except Exception as e:
+        out["major_error"] = str(e)
+
+    # ── News (up to 10 most recent headlines) ─────────────────────────────
+    try:
+        items = t.news or []
+        news_rows = []
+        for n in items[:10]:
+            # yfinance 0.2+ wraps the article in a "content" dict; older
+            # versions return the fields at top level. Handle both.
+            content = n.get("content") if isinstance(n.get("content"), dict) else n
+            title = content.get("title") or ""
+            if not title:
+                continue
+            link = ""
+            if isinstance(content.get("canonicalUrl"), dict):
+                link = content["canonicalUrl"].get("url", "")
+            link = link or content.get("link", "") or content.get("url", "")
+            publisher = ""
+            if isinstance(content.get("provider"), dict):
+                publisher = content["provider"].get("displayName", "")
+            publisher = publisher or content.get("publisher", "")
+            ts = content.get("pubDate") or content.get("providerPublishTime") or ""
+            news_rows.append({
+                "title": title,
+                "link": link,
+                "publisher": publisher,
+                "ts": str(ts),
+            })
+        if news_rows:
+            out["news"] = news_rows
+    except Exception as e:
+        out["news_error"] = str(e)
+
+    return out
+
+
 def get_batch_quotes(symbols):
     """Fetch quotes for multiple symbols at once using yfinance batch download"""
     try:
@@ -1322,6 +1435,10 @@ def _daemon_dispatch_inner(action, payload):
         # Used by IPO Watch to enrich priced tickers with sector / industry /
         # market cap in one round-trip. ThreadPoolExecutor parallelism inside.
         return get_batch_info((payload or {}).get("symbols") or [])
+    if action == "ipo_extras":
+        # IPO Watch detail-rail aggregator: quarterly financials, holders,
+        # news. One daemon round-trip on row click.
+        return get_ipo_extras((payload or {}).get("symbol"))
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

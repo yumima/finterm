@@ -1,6 +1,7 @@
 #include "services/markets/MarketDataService.h"
 
 #include "core/logging/Logger.h"
+#include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "storage/cache/CacheManager.h"
@@ -15,6 +16,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QUrl>
 
 #include <memory>
 
@@ -814,6 +816,266 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
             cb(true, out);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+// ── IPO Watch detail-rail enrichment ────────────────────────────────────────
+// fetch_ipo_extras: yfinance financials + holders + news in one round-trip.
+// fetch_sec_filings: SEC EDGAR submissions API (no key, free).
+// fetch_wikipedia_summary: Wikipedia REST summary (no key, free).
+// Each is keyed by ticker (or company name for Wikipedia) and is lazy-fetched
+// from IpoWatchView when a row is selected — see render_detail.
+
+namespace {
+constexpr int kIpoExtrasCacheTtlSec  = 15 * 60;        // 15 min — news + financials change slowly
+constexpr int kSecFilingsCacheTtlSec = 60 * 60;        // 1h — new SEC filings are infrequent
+constexpr int kSecCikMapTtlSec       = 7 * 24 * 60 * 60; // 7d — SEC publishes weekly
+constexpr int kWikipediaCacheTtlSec  = 7 * 24 * 60 * 60; // 7d — descriptions stable
+} // namespace
+
+void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallback cb) {
+    if (symbol.isEmpty()) { cb(false, {}); return; }
+
+    // 15-minute CacheManager TTL so flipping between rows doesn't re-hit the
+    // daemon on every click. The detail rail invalidates this cache on
+    // wake-on-resume by clearing IpoWatchView's own info_cache_, but the
+    // CacheManager entry stays so subsequent same-session opens are fast.
+    const QString cache_key = "ipo_extras:" + symbol;
+    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    auto parse  = [](const QJsonObject& o, const QString& sym) -> IpoExtras {
+        IpoExtras ex;
+        ex.symbol = sym;
+        auto parse_series = [](const QJsonArray& a) {
+            QVector<FinancialPoint> out;
+            for (const auto& v : a) {
+                const auto r = v.toObject();
+                FinancialPoint p;
+                p.date  = r["date"].toString();
+                p.value = r["value"].toDouble();
+                if (!p.date.isEmpty()) out.append(p);
+            }
+            return out;
+        };
+        ex.quarterly_revenue    = parse_series(o["quarterly_revenue"].toArray());
+        ex.quarterly_net_income = parse_series(o["quarterly_net_income"].toArray());
+        for (const auto& v : o["institutional_holders"].toArray()) {
+            const auto r = v.toObject();
+            InstitutionalHolder h;
+            h.holder = r["holder"].toString();
+            h.pct    = r["pct"].toDouble();
+            h.shares = r["shares"].toDouble();
+            h.value  = r["value"].toDouble();
+            h.date   = r["date"].toString();
+            if (!h.holder.isEmpty()) ex.institutional_holders.append(h);
+        }
+        for (const auto& v : o["major_holders"].toArray()) {
+            const auto r = v.toObject();
+            MajorHolderRow m;
+            m.label = r["label"].toString();
+            m.value = r["value"].toDouble();
+            if (!m.label.isEmpty()) ex.major_holders.append(m);
+        }
+        for (const auto& v : o["news"].toArray()) {
+            const auto r = v.toObject();
+            NewsItem n;
+            n.title     = r["title"].toString();
+            n.link      = r["link"].toString();
+            n.publisher = r["publisher"].toString();
+            n.ts        = r["ts"].toString();
+            if (!n.title.isEmpty()) ex.news.append(n);
+        }
+        return ex;
+    };
+    if (cached.has_value()) {
+        const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
+        cb(true, parse(obj, symbol));
+        return;
+    }
+
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    python::PythonWorker::instance().submit(
+        "ipo_extras", payload,
+        [cb, parse, symbol](bool ok, QJsonObject result, QString err) {
+            if (!ok || result.contains("error")) {
+                LOG_WARN("MarketData", "ipo_extras failed for " + symbol + ": " + err);
+                cb(false, {});
+                return;
+            }
+            const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put("ipo_extras:" + symbol, raw,
+                                                  kIpoExtrasCacheTtlSec, "ipo_extras");
+            cb(true, parse(result, symbol));
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+// ── SEC EDGAR ──────────────────────────────────────────────────────────────
+// SEC requires a `User-Agent: <organization> <email>` header. We send a
+// stable identifier so they can throttle us instead of blocking the IP.
+static const char* kSecUserAgent = "FinceptTerminal admin@hanlexon.com";
+
+void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallback cb) {
+    if (ticker.isEmpty()) { cb(false, {}); return; }
+    const QString tkr = ticker.toUpper();
+
+    // Inner closure runs once the CIK map is loaded — looks up the ticker,
+    // builds the submissions URL, returns the list of recent filings.
+    auto with_cik_map = [this, tkr, cb]() {
+        auto it = sec_cik_map_.constFind(tkr);
+        if (it == sec_cik_map_.constEnd()) {
+            LOG_INFO("MarketData", "SEC: no CIK for ticker " + tkr);
+            cb(true, {});
+            return;
+        }
+        const int cik = it.value();
+        const QString cik_padded = QString("%1").arg(cik, 10, 10, QChar('0'));
+        const QString cache_key  = "sec_filings:" + tkr;
+        auto cached = fincept::CacheManager::instance().try_get(cache_key);
+        auto parse  = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
+            QVector<SecFiling> out;
+            const auto recent = root["filings"].toObject()["recent"].toObject();
+            const auto forms       = recent["form"].toArray();
+            const auto dates       = recent["filingDate"].toArray();
+            const auto accessions  = recent["accessionNumber"].toArray();
+            const auto primary     = recent["primaryDocument"].toArray();
+            const int n = std::min({forms.size(), dates.size(), accessions.size(), primary.size()});
+            for (int i = 0; i < std::min(n, 25); ++i) {
+                SecFiling f;
+                f.form        = forms.at(i).toString();
+                f.filing_date = dates.at(i).toString();
+                f.accession   = accessions.at(i).toString();
+                f.primary_doc = primary.at(i).toString();
+                // EDGAR doc URL: https://www.sec.gov/Archives/edgar/data/{cik}/{accession-no-dashes}/{primary_doc}
+                QString acc_nd = f.accession; acc_nd.remove('-');
+                f.url = QString("https://www.sec.gov/Archives/edgar/data/%1/%2/%3")
+                            .arg(cik_padded.toInt()).arg(acc_nd, f.primary_doc);
+                out.append(f);
+            }
+            return out;
+        };
+        if (cached.has_value()) {
+            const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
+            cb(true, parse(obj));
+            return;
+        }
+
+        const QString url = QString("https://data.sec.gov/submissions/CIK%1.json").arg(cik_padded);
+        QPointer<MarketDataService> self_ptr = this;
+        QHash<QByteArray, QByteArray> headers;
+        headers["User-Agent"] = kSecUserAgent;
+        fincept::HttpClient::instance().get(url, headers,
+            [cb, parse, tkr, self_ptr](Result<QJsonDocument> res) {
+                if (!self_ptr) return;
+                if (!res.is_ok() || !res.value().isObject()) {
+                    LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr);
+                    cb(false, {});
+                    return;
+                }
+                const auto obj = res.value().object();
+                const QString raw = QString::fromUtf8(
+                    QJsonDocument(obj).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put("sec_filings:" + tkr, raw,
+                                                      kSecFilingsCacheTtlSec, "sec");
+                cb(true, parse(obj));
+            });
+    };
+
+    if (sec_cik_loaded_) { with_cik_map(); return; }
+    sec_cik_waiters_.append([with_cik_map](bool /*loaded*/) { with_cik_map(); });
+    if (sec_cik_loading_) return;
+    sec_cik_loading_ = true;
+
+    // Try CacheManager first — the company_tickers.json mapping has a 7-day
+    // TTL since SEC refreshes weekly. Falls through to a live fetch if missing.
+    auto fire_waiters = [this](bool ok) {
+        sec_cik_loaded_ = ok;
+        sec_cik_loading_ = false;
+        auto waiters = std::move(sec_cik_waiters_);
+        for (auto& w : waiters) w(ok);
+    };
+    auto populate_from_json = [this](const QJsonDocument& doc) {
+        // company_tickers.json is keyed by row index (strings "0","1",…); each
+        // value is {cik_str, ticker, title}.
+        const auto root = doc.object();
+        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+            const auto v = it.value().toObject();
+            const QString t = v["ticker"].toString().toUpper();
+            const int cik   = v["cik_str"].toInt();
+            if (!t.isEmpty() && cik > 0) sec_cik_map_.insert(t, cik);
+        }
+    };
+
+    auto cached_map = fincept::CacheManager::instance().try_get("sec_cik_map");
+    if (cached_map.has_value()) {
+        const auto doc = QJsonDocument::fromJson(cached_map->toUtf8());
+        if (doc.isObject()) {
+            populate_from_json(doc);
+            fire_waiters(true);
+            return;
+        }
+    }
+    QHash<QByteArray, QByteArray> headers;
+    headers["User-Agent"] = kSecUserAgent;
+    QPointer<MarketDataService> self_ptr = this;
+    fincept::HttpClient::instance().get(
+        "https://www.sec.gov/files/company_tickers.json", headers,
+        [self_ptr, populate_from_json, fire_waiters](Result<QJsonDocument> res) {
+            if (!self_ptr) return;
+            if (!res.is_ok() || !res.value().isObject()) {
+                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed");
+                fire_waiters(false);
+                return;
+            }
+            populate_from_json(res.value());
+            const QString raw = QString::fromUtf8(res.value().toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put("sec_cik_map", raw, kSecCikMapTtlSec, "sec");
+            fire_waiters(true);
+        });
+}
+
+// ── Wikipedia summary ──────────────────────────────────────────────────────
+void MarketDataService::fetch_wikipedia_summary(const QString& title_query, WikipediaCallback cb) {
+    if (title_query.isEmpty()) { cb(false, {}); return; }
+    // Wikipedia accepts underscored titles. We don't try to disambiguate —
+    // if the article doesn't exist verbatim the REST API returns a 404.
+    QString title = title_query;
+    title.replace(' ', '_');
+    const QString cache_key = "wiki:" + title;
+    auto parse = [title_query](const QJsonObject& o) -> WikipediaSummary {
+        WikipediaSummary s;
+        s.title       = o["title"].toString(title_query);
+        s.description = o["description"].toString();
+        s.extract     = o["extract"].toString();
+        s.url         = o["content_urls"].toObject()["desktop"].toObject()["page"].toString();
+        return s;
+    };
+    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    if (cached.has_value()) {
+        const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
+        cb(!obj.isEmpty(), parse(obj));
+        return;
+    }
+    const QString url = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+                        QUrl::toPercentEncoding(title);
+    QHash<QByteArray, QByteArray> headers;
+    headers["User-Agent"] = kSecUserAgent;  // Wikipedia also asks for a UA
+    fincept::HttpClient::instance().get(url, headers,
+        [cb, parse, cache_key](Result<QJsonDocument> res) {
+            if (!res.is_ok() || !res.value().isObject()) {
+                cb(false, {});
+                return;
+            }
+            const auto obj = res.value().object();
+            // The REST summary endpoint returns 404 with a `{type: "...not_found"}`
+            // body for missing pages — treat as a soft miss, not an error.
+            if (obj.contains("type") && obj["type"].toString().contains("not_found")) {
+                cb(false, {});
+                return;
+            }
+            const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put(cache_key, raw, kWikipediaCacheTtlSec, "wikipedia");
+            cb(true, parse(obj));
+        });
 }
 
 // ── Static symbol lists ─────────────────────────────────────────────────────
