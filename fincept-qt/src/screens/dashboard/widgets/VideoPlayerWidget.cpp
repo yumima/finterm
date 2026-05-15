@@ -158,6 +158,10 @@ void VideoPlayerWidget::build_player_view() {
 
 #ifdef HAS_QT_MULTIMEDIA
     video_widget_ = new QVideoWidget;
+    // Allow mouse events to pass through the native video surface to the tile's
+    // resize grip underneath. Without this, Wayland/X11 delivers all pointer
+    // events to the GStreamer video window and the grip is unreachable.
+    video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     vl->addWidget(video_widget_, 1);
 
     player_ = new QMediaPlayer(this);
@@ -165,6 +169,17 @@ void VideoPlayerWidget::build_player_view() {
     audio_output_->setVolume(0.5f);
     player_->setAudioOutput(audio_output_);
     player_->setVideoOutput(video_widget_);
+
+    // Clear the in-progress flag and current URL on any player error so that
+    // refresh_data() does not keep retrying and spawning new Wayland surfaces.
+    connect(player_, &QMediaPlayer::errorOccurred, this,
+            &VideoPlayerWidget::on_player_error);
+    // Clear the flag once we actually reach PlayingState.
+    connect(player_, &QMediaPlayer::playbackStateChanged, this,
+            [this](QMediaPlayer::PlaybackState s) {
+                if (s == QMediaPlayer::PlayingState)
+                    play_in_progress_ = false;
+            });
 #else
     status_label_placeholder_ =
         new QLabel("Qt Multimedia not available.\nBuild with Qt6 Multimedia for inline playback.");
@@ -223,6 +238,7 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     current_url_ = url;
     current_title_ = title;
     pending_title_ = title;
+    play_in_progress_ = true; // held until PlayingState or error/stop
     now_playing_->setText(QString(QChar(0x25B6)) + " " + title);
     set_title("LIVE TV — " + title.toUpper());
 
@@ -240,11 +256,14 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
 void VideoPlayerWidget::refresh_data() {
     if (current_url_.isEmpty())
         return;
+    // play_in_progress_: set from first play_url() call until the player
+    // reaches PlayingState (or errors). GStreamer takes time to transition;
+    // re-entering play_url() in that window spawns additional Wayland
+    // surfaces that appear as separate top-level finterm windows.
+    if (play_in_progress_)
+        return;
 #ifdef HAS_QT_MULTIMEDIA
-    // Live streams play continuously — there is nothing to "refresh".
-    // Re-calling play_url() on an active player re-creates the GStreamer
-    // pipeline without releasing the previous one's shmem frame buffers,
-    // which is the root cause of the OOM crash seen in practice.
+    // Live streams play continuously — nothing to refresh while playing.
     if (player_ && player_->playbackState() == QMediaPlayer::PlayingState)
         return;
 #endif
@@ -293,21 +312,36 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
         return;
     }
 
-    // Use yt-dlp to get the best direct stream URL (no downloading, just URL extraction)
+    // Tag the process with the requested URL so the finished callback can detect
+    // if the user stopped or switched channels before yt-dlp returned.
     auto* proc = new QProcess(this);
+    proc->setProperty("requested_url", youtube_url);
     connect(proc, &QProcess::finished, this, &VideoPlayerWidget::on_ytdlp_finished);
     connect(proc, &QProcess::finished, proc, &QProcess::deleteLater);
     connect(proc, &QProcess::errorOccurred, this, &VideoPlayerWidget::on_ytdlp_error);
 
-    // Cap at 480p: a financial news stream is perfectly readable at 480p and the
-    // smaller segment size dramatically reduces the GStreamer shmem frame buffers
-    // that accumulate during live HLS playback (root cause of prior OOM crash).
-    // -g: print URL only, no download. --no-playlist: single stream only.
+    // Force HLS (m3u8_native) protocol — critical for memory safety.
+    //
+    // The previous DASH format (bestvideo[ext=mp4]+bestaudio[ext=m4a]) returns
+    // two separate URLs (video-only + audio-only). We only use the first (video),
+    // which GStreamer's dashdemux then buffers into /dev/shm at full network
+    // speed with no cap — causing the 23 GB shmem / OOM kill seen in practice.
+    //
+    // HLS (m3u8_native) is a rolling-window protocol: GStreamer's hlsdemux keeps
+    // only 3-10 segments (a few MB) in memory at any time. A single URL contains
+    // both video and audio. Financial TV at 480p is perfectly readable.
+    //
+    // -g: print stream URL only (no download). --no-playlist: single stream.
+    // --quiet: suppress all progress/warning output from stdout so only the URL
+    //          reaches on_ytdlp_finished (warnings go to stderr separately).
     proc->start(ytdlp_program,
                 {"-f",
-                 "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]"
-                 "/best[height<=480][ext=mp4]/best[height<=480]/best",
-                 "--no-playlist", "-g", youtube_url});
+                 "bestvideo[protocol=m3u8_native][height<=480]"
+                 "+bestaudio[protocol=m3u8_native]"
+                 "/best[protocol=m3u8_native][height<=480]"
+                 "/best[protocol=m3u8_native]"
+                 "/best[height<=480]/best",
+                 "--no-playlist", "--quiet", "-g", youtube_url});
 }
 
 void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*status*/) {
@@ -315,8 +349,17 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     if (!proc)
         return;
 
+    // Discard if the user stopped or switched channels before yt-dlp returned.
+    const QString requested = proc->property("requested_url").toString();
+    if (requested != current_url_) {
+        play_in_progress_ = false;
+        return;
+    }
+
     if (exit_code != 0) {
         const QString err = proc->readAllStandardError().trimmed();
+        play_in_progress_ = false;
+        current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
         status_label_->setText("yt-dlp error: " + (err.isEmpty() ? QString("Unknown error") : err.left(120)));
         status_label_->show();
@@ -354,13 +397,14 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
-    // Stop and explicitly clear the current source before setting a new one.
-    // Without this, QMediaPlayer / GStreamer keeps the old pipeline alive and
-    // its shared-memory frame buffers stay allocated alongside the new ones.
-    // On a live HLS stream that means shmem can reach tens of gigabytes in
-    // minutes — the OOM killer terminates the process.
+    // stop() halts the current pipeline. Do NOT call setSource(QUrl()) between
+    // stop() and the new source: on Wayland, clearing the source destroys the
+    // GStreamer video sink's native surface, and the subsequent setSource(url)
+    // creates a NEW top-level Wayland window instead of reusing the embedded
+    // QVideoWidget — this is what produced the loop of "finterm windows" seen
+    // in practice. Going directly stop() → setSource(new_url) → play() keeps
+    // the pipeline and Wayland surface intact across channel switches.
     player_->stop();
-    player_->setSource(QUrl()); // empty URL tears down the GStreamer pipeline
     set_loading(false);
     status_label_->hide();
     player_->setSource(QUrl(stream_url));
@@ -374,14 +418,26 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 void VideoPlayerWidget::stop_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
-    player_->setSource(QUrl());
 #endif
+    play_in_progress_ = false;
     current_url_.clear();
     current_title_.clear();
     set_loading(false);
     status_label_->hide();
     set_title("LIVE TV / STREAMS");
     stack_->setCurrentIndex(0);
+}
+
+void VideoPlayerWidget::on_player_error() {
+#ifdef HAS_QT_MULTIMEDIA
+    const QString err = player_->errorString();
+    play_in_progress_ = false;
+    current_url_.clear(); // stops refresh_data() from retrying
+    set_loading(false);
+    status_label_->setText("Playback error: " + (err.isEmpty() ? "Unknown" : err.left(120)));
+    status_label_->show();
+    LOG_ERROR("VideoPlayer", "QMediaPlayer error: " + err.left(250));
+#endif
 }
 
 void VideoPlayerWidget::set_loading(bool loading) {

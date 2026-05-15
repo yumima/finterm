@@ -27,8 +27,8 @@ QVector<DashboardTemplate> all_dashboard_templates() {
          {
              gi("indices",         0,  0, 4, 4, 3, 4),
              gi("commodities",     4,  0, 4, 4, 2, 3),
-             gi("margin_usage",    8,  0, 2, 3, 2, 3),
-             gi("today_pnl",      10,  0, 2, 3, 2, 3),
+             gi("margin_usage",    8,  0, 2, 4, 2, 3),
+             gi("today_pnl",      10,  0, 2, 4, 2, 3),
              gi("sector_heatmap",  0,  4, 6, 4, 3, 4),
              gi("econ_calendar",   6,  4, 3, 4, 2, 3),
              gi("quick_trade",     9,  4, 3, 4, 2, 3),

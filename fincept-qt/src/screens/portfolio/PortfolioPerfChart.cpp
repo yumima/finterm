@@ -39,6 +39,7 @@ void filter_to_market_hours(QVector<qint64>& ts_ms, QVector<double>& vals) {
         const QDateTime dt = QDateTime::fromMSecsSinceEpoch(ts_ms[i], kET);
         if (dt.date().dayOfWeek() > 5) continue;
         const QTime t = dt.time();
+        // 09:30 ≤ t ≤ 16:00 — both boundaries inclusive (16:00 IS the closing bar)
         if (t < QTime(9, 30) || t > QTime(16, 0)) continue;
         ts_ms[out] = ts_ms[i];
         vals[out]  = vals[i];
@@ -58,10 +59,10 @@ QVector<QPair<double, QString>> daily_seq_labels(const QVector<QDate>& dates,
     const int n = dates.size();
     if (n == 0) return result;
 
+    QDate last_added;
     auto add = [&](int i, const QString& fmt) {
-        if (!result.isEmpty()
-            && dates[i] == dates[static_cast<int>(result.last().first)])
-            return; // de-duplicate consecutive identical dates
+        if (dates[i] == last_added) return; // de-duplicate consecutive identical dates
+        last_added = dates[i];
         result.append({static_cast<double>(i), dates[i].toString(fmt)});
     };
 
@@ -883,6 +884,14 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         QVector<qint64> mkt_ts   = intraday_ts_ms_;
         QVector<double>  mkt_vals = intraday_values_;
         filter_to_market_hours(mkt_ts, mkt_vals);
+        // Guard: filter may empty the vectors for holiday stubs or all-weekend
+        // data. Without this, pts.first() below would be undefined behaviour.
+        if (mkt_ts.isEmpty()) {
+            period_change_label_->setText(
+                QString("%1 unavailable (no market-hour bars)").arg(current_period_));
+            chart_view_->set_series_data({}, currency_);
+            return false;
+        }
         pts.reserve(mkt_ts.size());
         pts_ts_ms = mkt_ts;
 

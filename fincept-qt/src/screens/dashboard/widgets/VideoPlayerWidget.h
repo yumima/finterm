@@ -31,6 +31,7 @@ class VideoPlayerWidget : public BaseWidget {
     void stop_playback();
     void on_ytdlp_finished(int exit_code, QProcess::ExitStatus status);
     void on_ytdlp_error(QProcess::ProcessError error);
+    void on_player_error();
 
   protected:
     void on_theme_changed() override;
@@ -55,6 +56,11 @@ class VideoPlayerWidget : public BaseWidget {
     QString pending_title_; // title while yt-dlp is resolving
     QString current_url_;   // currently selected stream URL (original, may be YouTube)
     QString current_title_; // title of current stream for refresh
+    // Guard against the refresh-retry loop: set true from the first play_url()
+    // call until the player either reaches PlayingState or we stop/error.
+    // Prevents refresh_data() from re-entering play_url() while GStreamer is
+    // still transitioning — each re-entry on Wayland spawns a new toplevel window.
+    bool play_in_progress_ = false;
 
     // Widgets needing theme-aware restyling
     QScrollArea* scroll_ = nullptr;
