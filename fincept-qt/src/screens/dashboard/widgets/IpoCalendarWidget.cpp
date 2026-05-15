@@ -71,7 +71,7 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent)
 void IpoCalendarWidget::apply_styles() {
     header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
-        lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+        lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
                                .arg(ui::colors::TEXT_SECONDARY()));
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     scroll_area_->setStyleSheet(
@@ -81,7 +81,7 @@ void IpoCalendarWidget::apply_styles() {
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
             .arg(ui::colors::BORDER_MED()));
     status_label_->setStyleSheet(
-        QString("color: %1; font-size: 10px; padding: 16px; background: transparent;")
+        QString("color: %1; font-size: 12px; padding: 16px; background: transparent;")
             .arg(ui::colors::TEXT_SECONDARY()));
 }
 
@@ -113,9 +113,13 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
             const auto root  = res.value().object();
             const auto data  = root["data"].toObject();
 
-            // Helper to parse a date string like "2026/05/15" → QDate
+            // Nasdaq API returns M/d/yyyy (e.g. "5/27/2026"), not yyyy/MM/dd.
+            // Invalid parses leave entry.date invalid → sort falls apart.
             auto parse_date = [](const QString& s) -> QDate {
-                return QDate::fromString(s, "yyyy/MM/dd");
+                QDate d = QDate::fromString(s, "M/d/yyyy");
+                if (!d.isValid()) d = QDate::fromString(s, "MM/dd/yyyy");
+                if (!d.isValid()) d = QDate::fromString(s.left(10), "yyyy/MM/dd");
+                return d;
             };
 
             // ── Upcoming ──────────────────────────────────────────────────
@@ -129,9 +133,7 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
                 entry.ticker     = e["proposedTickerSymbol"].toString();
                 entry.exchange   = e["dealLocalExchange"].toString();
                 entry.date       = parse_date(date_raw);
-                entry.date_str   = entry.date.isValid()
-                                       ? entry.date.toString("MMM d")
-                                       : date_raw.left(10);
+                entry.date_str   = date_raw; // keep M/D/YYYY as returned by API
                 entry.price_range = e["proposedSharePrice"].toString();
                 entry.status     = "upcoming";
                 if (!entry.company.isEmpty())
@@ -213,7 +215,7 @@ void IpoCalendarWidget::populate() {
             const QString label = current_status == "upcoming" ? "── UPCOMING ──" : "── PRICED ──";
             auto* sec = new QLabel(label);
             sec->setStyleSheet(
-                QString("color: %1; font-size: 9px; font-weight: bold; "
+                QString("color: %1; font-size: 12px; font-weight: bold; "
                         "padding: 4px 8px; background: %2;")
                     .arg(current_status == "upcoming" ? ui::colors::AMBER() : ui::colors::POSITIVE(),
                          ui::colors::BG_RAISED()));
@@ -234,7 +236,7 @@ void IpoCalendarWidget::populate() {
         auto* co_lbl = new QLabel(company);
         co_lbl->setToolTip(entry.company);
         co_lbl->setStyleSheet(
-            QString("color: %1; font-size: 10px; background: transparent;")
+            QString("color: %1; font-size: 12px; background: transparent;")
                 .arg(ui::colors::TEXT_PRIMARY()));
         rl->addWidget(co_lbl, 4);
 
@@ -242,20 +244,20 @@ void IpoCalendarWidget::populate() {
         if (!entry.exchange.isEmpty())
             tk_lbl->setToolTip(entry.exchange); // exchange shown on hover
         tk_lbl->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+            QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
                 .arg(ui::colors::AMBER()));
         rl->addWidget(tk_lbl, 1);
 
         auto* dt_lbl = new QLabel(entry.date_str.isEmpty() ? "—" : entry.date_str);
         dt_lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;")
+            QString("color: %1; font-size: 12px; background: transparent;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(dt_lbl, 2);
 
         auto* pr_lbl = new QLabel(entry.price_range.isEmpty() ? "—" : entry.price_range);
         pr_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         pr_lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;")
+            QString("color: %1; font-size: 12px; background: transparent;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(pr_lbl, 2);
 

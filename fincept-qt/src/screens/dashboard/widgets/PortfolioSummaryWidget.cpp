@@ -24,27 +24,31 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     vl->setContentsMargins(8, 8, 8, 8);
     vl->setSpacing(6);
 
-    // ── Summary card ──
+    // ── Summary card — inline "LABEL  value" pairs, two per row ──
+    // 4-column grid: [label0][value0][label1][value1] per row.
     summary_card_ = new QWidget(this);
     auto* sl = new QGridLayout(summary_card_);
-    sl->setContentsMargins(10, 8, 10, 8);
-    sl->setHorizontalSpacing(16);
+    sl->setContentsMargins(10, 6, 10, 6);
+    sl->setHorizontalSpacing(6);
     sl->setVerticalSpacing(4);
+    sl->setColumnStretch(1, 1); // value0 stretches
+    sl->setColumnStretch(3, 1); // value1 stretches
 
-    auto make_metric = [&](const QString& label, QLabel*& value_out, int row, int col) {
+    // Each metric: label in even column, value in odd column, same row.
+    auto make_metric = [&](const QString& label, QLabel*& value_out, int row, int pair) {
         auto* lbl = new QLabel(label);
         metric_labels_.append(lbl);
-        sl->addWidget(lbl, row * 2, col);
+        sl->addWidget(lbl, row, pair * 2, Qt::AlignLeft | Qt::AlignVCenter);
 
         value_out = new QLabel("--");
         metric_values_.append(value_out);
-        sl->addWidget(value_out, row * 2 + 1, col);
+        sl->addWidget(value_out, row, pair * 2 + 1, Qt::AlignLeft | Qt::AlignVCenter);
     };
 
     make_metric("TOTAL VALUE", total_value_lbl_, 0, 0);
-    make_metric("DAY P&L", day_pnl_lbl_, 0, 1);
-    make_metric("TOTAL P&L", total_pnl_lbl_, 1, 0);
-    make_metric("HOLDINGS", num_holdings_lbl_, 1, 1);
+    make_metric("DAY P&L",     day_pnl_lbl_,    0, 1);
+    make_metric("TOTAL P&L",   total_pnl_lbl_,  1, 0);
+    make_metric("HOLDINGS",    num_holdings_lbl_, 1, 1);
 
     vl->addWidget(summary_card_);
 
@@ -103,14 +107,16 @@ void PortfolioSummaryWidget::apply_styles() {
     summary_card_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : metric_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; font-size: 12px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : metric_values_)
-        val->setStyleSheet(QString("color: %1; font-size: 13px; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_PRIMARY()));
+        val->setStyleSheet(
+            QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
+                .arg(ui::colors::TEXT_PRIMARY()));
     header_row_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
-        lbl->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(
+            QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
+                .arg(ui::colors::TEXT_SECONDARY()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
                 "QScrollBar:vertical { width: 4px; background: transparent; }"
@@ -235,7 +241,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         auto cell = [&](const QString& text, int stretch, Qt::Alignment align, const QString& color) {
             auto* lbl = new QLabel(text);
             lbl->setAlignment(align);
-            lbl->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;").arg(color));
+            lbl->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;").arg(color));
             rl->addWidget(lbl, stretch);
         };
 
