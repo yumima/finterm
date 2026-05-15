@@ -18,6 +18,7 @@
 #include <QOpenGLWidget>
 #include <QRect>
 #include <QSurfaceFormat>
+#include <QWindow>
 
 #include <algorithm>
 #include <QScrollArea>
@@ -65,13 +66,30 @@ static const float kQuad[] = {
 VideoRenderWidget::VideoRenderWidget(QWidget* parent)
     : QOpenGLWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    // Request OpenGL 3.2 core profile to match #version 150 core shaders.
-    // This also makes VAO usage mandatory (no implicit default VAO), which is
-    // enforced by our initializeGL() setup.
     QSurfaceFormat fmt;
     fmt.setVersion(3, 2);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     setFormat(fmt);
+
+    // ── Continuous render loop (Qt-documented Wayland pattern) ───────────────
+    // QOpenGLWidget renders to an offscreen FBO. The FBO is composited into
+    // the parent window's backing store only when the Wayland compositor sends
+    // a wl_surface_frame callback and Qt calls wl_surface_commit. Without an
+    // active frame-callback loop, paintGL() runs but its output stays in the
+    // FBO — invisible on screen, yet visible during resize (which Qt forces
+    // through its own resize path that calls requestUpdate() internally).
+    //
+    // Qt's documented fix for continuous QOpenGLWidget rendering:
+    //   connect(frameSwapped, update) — drives the next paint from the signal
+    //   emitted *after* the compositor has accepted and presented a frame.
+    // present() seeds the loop with window()->windowHandle()->requestUpdate()
+    // which registers the first wl_surface_frame callback. Every subsequent
+    // frame is self-driven by frameSwapped → update() → paintGL() → commit →
+    // frameSwapped → …, vsync-synchronised by the compositor.
+    connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
+        if (current_frame_.isValid())
+            update(); // keep the loop alive while frames are arriving
+    });
 }
 
 VideoRenderWidget::~VideoRenderWidget() {
@@ -86,14 +104,15 @@ VideoRenderWidget::~VideoRenderWidget() {
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     current_frame_ = frame;
-    // repaint() instead of update(): on Wayland, update() posts a repaint
-    // request that only fires when the compositor sends a frame callback.
-    // For an idle video widget (no user interaction) the compositor may
-    // suppress those callbacks, so paintGL() never runs despite new frames
-    // arriving — video appears black but flashes correctly during resize.
-    // repaint() forces an immediate synchronous paint and bypasses the
-    // frame-callback throttle, giving us one paintGL() per decoded frame.
-    repaint();
+    // Seed the frameSwapped→update() loop with a Wayland frame-callback
+    // request. QWindow::requestUpdate() registers a wl_surface_frame with
+    // the compositor; when the callback fires Qt calls paintEvent() on all
+    // dirty widgets, composites QOpenGLWidget FBOs into the backing store,
+    // and calls wl_surface_commit — making the rendered frame visible.
+    // frameSwapped() then fires and update() keeps the loop going.
+    update(); // mark widget dirty so paintGL() is called when the frame arrives
+    if (auto* wh = window()->windowHandle())
+        wh->requestUpdate(); // register wl_surface_frame callback to start loop
 }
 
 void VideoRenderWidget::initializeGL() {
