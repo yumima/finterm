@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`19b53e30`](https://github.com/yumima/finterm/commit/19b53e30) **feat(video):** GPU rendering via QOpenGLWidget + RTX PRIME offload
 - [`a7c24e2a`](https://github.com/yumima/finterm/commit/a7c24e2a) **fix(calendar):** add re-entry guard to EconomicCalendarWidget::refresh_data()
 - [`2585e4c9`](https://github.com/yumima/finterm/commit/2585e4c9) **fix:** address all review findings across calendar, video, and pre-IPO
 - [`96fecc6d`](https://github.com/yumima/finterm/commit/96fecc6d) **fix(video):** replace QVideoWidget with QVideoSink+QPainter — eliminates native surface
