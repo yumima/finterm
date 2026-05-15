@@ -2,47 +2,11 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-14)
+## Today's commits (2026-05-15)
 
 Latest first.
 
-- [`0cecef2e`](https://github.com/yumima/finterm/commit/0cecef2e) **feat:** video channels editor + portfolio sparklines + crash/flash fixes
-- [`15433d60`](https://github.com/yumima/finterm/commit/15433d60) **fix(video+unlock):** two root-cause fixes for flashing issues
-- [`1534fb02`](https://github.com/yumima/finterm/commit/1534fb02) **fix(video):** address three review findings on render loop lifecycle
-- [`ccd489fe`](https://github.com/yumima/finterm/commit/ccd489fe) **fix(video):** seed render loop once — eliminate strobing and window flash
-- [`5f8e9734`](https://github.com/yumima/finterm/commit/5f8e9734) **fix(video/gl):** isVisible() guard + restore OpenGL 3.2 profile comment
-- [`a63b2615`](https://github.com/yumima/finterm/commit/a63b2615) **fix(video):** root-cause fix — Wayland frame-callback loop via frameSwapped
-- [`e5e7d7f0`](https://github.com/yumima/finterm/commit/e5e7d7f0) **fix(dashboard):** IPO sort, portfolio inline layout, 12px font minimum
-- [`a16b4b51`](https://github.com/yumima/finterm/commit/a16b4b51) **fix(video+unlock):** three root-cause fixes
-- [`c440fcd0`](https://github.com/yumima/finterm/commit/c440fcd0) **fix(video):** curate verified channel presets; drop Al Jazeera + ET Now
-- [`619ee0bf`](https://github.com/yumima/finterm/commit/619ee0bf) **fix(video):** replace unavailable presets; expand to 6 verified channels
-- [`da6ced00`](https://github.com/yumima/finterm/commit/da6ced00) **fix(video):** normalise frames to RGBA8888 to fix texture update failure
-- [`df6c489c`](https://github.com/yumima/finterm/commit/df6c489c) **chore(setup):** update setup.sh to current dependency requirements
-- [`e9ed7b6e`](https://github.com/yumima/finterm/commit/e9ed7b6e) **fix(video):** install yt-dlp, add node JS runtime, use channel live URLs
-- [`0cf7672a`](https://github.com/yumima/finterm/commit/0cf7672a) **fix(video/gl):** address all OpenGL review findings
-- [`19b53e30`](https://github.com/yumima/finterm/commit/19b53e30) **feat(video):** GPU rendering via QOpenGLWidget + RTX PRIME offload
-- [`a7c24e2a`](https://github.com/yumima/finterm/commit/a7c24e2a) **fix(calendar):** add re-entry guard to EconomicCalendarWidget::refresh_data()
-- [`2585e4c9`](https://github.com/yumima/finterm/commit/2585e4c9) **fix:** address all review findings across calendar, video, and pre-IPO
-- [`96fecc6d`](https://github.com/yumima/finterm/commit/96fecc6d) **fix(video):** replace QVideoWidget with QVideoSink+QPainter — eliminates native surface
-- [`c4ce26ee`](https://github.com/yumima/finterm/commit/c4ce26ee) **fix(video):** stop()+setSource(QUrl()) released Wayland surface → rogue windows
-- [`a3d815c9`](https://github.com/yumima/finterm/commit/a3d815c9) **feat(dashboard):** Economic Calendar live data + new IPO Calendar widget
-- [`53f42b3a`](https://github.com/yumima/finterm/commit/53f42b3a) **fix(video+dashboard):** restore inline video, add portfolio_summary to template
-- [`3a5d0c84`](https://github.com/yumima/finterm/commit/3a5d0c84) **fix(video):** restore inline video — root cause was stack page ordering
-- [`5cbbc28a`](https://github.com/yumima/finterm/commit/5cbbc28a) **fix(video):** root-cause fix for Wayland window-spawn loop and shmem OOM
-- [`1c970ab9`](https://github.com/yumima/finterm/commit/1c970ab9) **fix(video+chart):** address all review findings
-- [`0322aaff`](https://github.com/yumima/finterm/commit/0322aaff) **fix(video+chart):** window-spawn loop, shmem OOM, chart bugs from review
-- [`dd7b5aba`](https://github.com/yumima/finterm/commit/dd7b5aba) **fix(dashboard):** OOM crash in VideoPlayerWidget + optimise portfolio template
-- [`55e7cb16`](https://github.com/yumima/finterm/commit/55e7cb16) **feat(portfolio):** gap-free chart x-axis via sequential bar indexing
-- [`6b773de7`](https://github.com/yumima/finterm/commit/6b773de7) **fix(portfolio):** review findings — target coverage guard and dead field
-- [`d6c8cad1`](https://github.com/yumima/finterm/commit/d6c8cad1) **fix(portfolio):** correct target NAV math; drop upside % from TGT MEAN
-- [`efec30ab`](https://github.com/yumima/finterm/commit/efec30ab) **fix(portfolio):** fundamentals guard set before MV data available
-- [`7928ff18`](https://github.com/yumima/finterm/commit/7928ff18) **fix(portfolio):** deadlock in load_summary emit-while-holding-mutex
-- [`a7a7d9c2`](https://github.com/yumima/finterm/commit/a7a7d9c2) **fix(portfolio):** three review findings on fundamentals panel
-- [`b98f4621`](https://github.com/yumima/finterm/commit/b98f4621) **feat(portfolio):** analyst-target panel in heatmap for portfolio-level view
-- [`9f42c23a`](https://github.com/yumima/finterm/commit/9f42c23a) **feat(markets):** replace India with Europe panel; add HKD/TWD/SGD forex pairs
-- [`499a4d7a`](https://github.com/yumima/finterm/commit/499a4d7a) **chore(hooks):** test post-commit docs follow-up
-- [`897f6ea9`](https://github.com/yumima/finterm/commit/897f6ea9) **chore(hooks):** post-commit creates docs(readme) follow-up for today's commits
-- [`349ecccb`](https://github.com/yumima/finterm/commit/349ecccb) **fix(portfolio-chart):** correct 1D aggregate, 1W focus, and session anchor
+- [`651f91ee`](https://github.com/yumima/finterm/commit/651f91ee) **perf(startup):** strip unsupported QSS `text-transform`; UI: engine into config; drop portfolio TREND
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
