@@ -252,19 +252,27 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     table_->setSortingEnabled(true);
     table_->setShowGrid(false);
     table_->horizontalHeader()->setStretchLastSection(false);
+    // cellClicked handles only the star-toggle action on column 0. Detail
+    // selection is driven entirely by currentCellChanged below, which fires
+    // on both mouse-click and keyboard arrow nav — so we avoid the double
+    // render that would happen if cellClicked also called render_detail.
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
+        if (col != 0) return;
         auto* it = table_->item(row, 0);
         if (!it) return;
         const int idx = it->data(Qt::UserRole).toInt();
         if (idx < 0 || idx >= entries_.size()) return;
-        // Column 0 is the ★/☆ star cell — click toggles starred state and
-        // re-renders the active lens without selecting the detail.
-        if (col == 0) {
-            toggle_star(entries_.at(idx));
-            return;
-        }
-        render_detail(&entries_.at(idx));
+        toggle_star(entries_.at(idx));
     });
+    connect(table_, &QTableWidget::currentCellChanged, this,
+            [this](int row, int /*col*/, int prev_row, int /*prev_col*/) {
+                if (row < 0 || row == prev_row) return;
+                auto* it = table_->item(row, 0);
+                if (!it) return;
+                const int idx = it->data(Qt::UserRole).toInt();
+                if (idx >= 0 && idx < entries_.size())
+                    render_detail(&entries_.at(idx));
+            });
     splitter_->addWidget(table_);
 
     // ── Detail rail ──
@@ -1009,14 +1017,33 @@ static QString position_bar(double pos, const QString& fill_color, int segments 
 // Sparkline from a small numeric series using Unicode block chars. Lightweight
 // alternative to embedding a QChart — fits in a RichText label. Used by the
 // detail rail's PRICE SINCE IPO section.
-static QString unicode_sparkline(const QVector<double>& pts) {
+//
+// `max_chars` clamps the visual width: with a 6mo daily series (~125 bars) a
+// 1:1 sparkline overruns the detail rail and wraps. We bucket-average down to
+// `max_chars` segments, which keeps the shape recognisable while fitting.
+static QString unicode_sparkline(const QVector<double>& pts, int max_chars = 60) {
     if (pts.size() < 2) return QStringLiteral("—");
+    QVector<double> series;
+    if (pts.size() <= max_chars) {
+        series = pts;
+    } else {
+        series.reserve(max_chars);
+        const double step = double(pts.size()) / max_chars;
+        for (int i = 0; i < max_chars; ++i) {
+            const int lo = int(i * step);
+            const int hi = std::min<int>(pts.size(), int((i + 1) * step));
+            if (hi <= lo) { series.append(pts.at(lo)); continue; }
+            double sum = 0;
+            for (int j = lo; j < hi; ++j) sum += pts.at(j);
+            series.append(sum / (hi - lo));
+        }
+    }
     const QString blocks = QString::fromUtf8("▁▂▃▄▅▆▇█");
-    double lo = pts.first(), hi = pts.first();
-    for (double v : pts) { lo = std::min(lo, v); hi = std::max(hi, v); }
+    double lo = series.first(), hi = series.first();
+    for (double v : series) { lo = std::min(lo, v); hi = std::max(hi, v); }
     const double span = std::max(1e-9, hi - lo);
     QString s;
-    for (double v : pts) {
+    for (double v : series) {
         const int idx = std::clamp(int(((v - lo) / span) * 7.0 + 0.5), 0, 7);
         s += blocks.at(idx);
     }
@@ -1088,17 +1115,6 @@ void IpoWatchView::render_detail(const Entry* e) {
         if (comp_top.size() < 6) comp_top.append(&other);
     }
 
-    // Range-position bar — for priced, show where final landed in the filed
-    // range (best-effort: Nasdaq's priced API only returns the final price,
-    // not the original range, so the bar collapses to "filled" most of the
-    // time). For upcoming, show the centered range.
-    auto build_range_bar = [&]() -> QString {
-        bool ok = false;
-        const double mid = parse_price_mid(e->price_range, &ok);
-        if (!ok || mid <= 0) return QString();
-        return position_bar(0.5, "#d97706"); // amber — center marker
-    };
-
     const services::InfoData info = info_cache_.value(e->ticker, {});
     const bool have_info = info_cache_.contains(e->ticker);
 
@@ -1164,10 +1180,9 @@ void IpoWatchView::render_detail(const Entry* e) {
     kvg("Shares offered", e->shares_raw.toHtmlEscaped());
     kvg("Deal size",      e->deal_size.toHtmlEscaped());
     h += "</table>";
-    QString rb = build_range_bar();
-    if (!rb.isEmpty()) {
-        h += "<div style='margin-top:6px;'><span class='k'>RANGE POSITION</span><br>" + rb + "</div>";
-    }
+    // (Range-position bar removed — Nasdaq's priced API returns only the
+    // final price, not the original filed range, so the visualization was
+    // always a fixed center marker that misled rather than informed.)
 
     // ── PRICE SINCE IPO (lazy from fetch_history) ──
     if (e->status == "priced" && !e->ticker.isEmpty()) {
@@ -1192,12 +1207,32 @@ void IpoWatchView::render_detail(const Entry* e) {
             h += QString("<div style='font-size:14px;letter-spacing:1px;color:%1;"
                          "font-family:Consolas,Menlo,monospace;'>%2</div>")
                      .arg(color, sline);
+            // Day-1 + Week-1 close annotations: bankers and IPO investors
+            // care whether the pop sustained (Day-1 close hits, Week-1 close
+            // holds) or faded — the headline pop alone hides that. yfinance
+            // returns daily bars, so closes[0] is the listing-day close and
+            // closes[4] is the end-of-week-1 close. We only emit the Week-1
+            // row when at least 5 bars exist; otherwise it would silently
+            // collapse to Day-1's value.
+            const double d1 = closes.first();
+            const double d1_pct = (e->final_price > 0) ? (d1 - e->final_price) / e->final_price * 100.0 : 0;
+            const double cur_pct = (e->final_price > 0 && last > 0) ? (last - e->final_price) / e->final_price * 100.0 : tot_pct;
+            auto signed_pct = [&](double v) {
+                return QString("<span class='%1'>%2%3%</span>")
+                    .arg(pct_cls(v)).arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 1);
+            };
             h += "<table class='grid'>";
-            kvg("From / To",
-                QString("$%1 → $%2 (<span class='%3'>%4%5%</span>)")
-                    .arg(first, 0, 'f', 2).arg(last, 0, 'f', 2)
-                    .arg(pct_cls(tot_pct), tot_pct >= 0 ? "+" : "")
-                    .arg(tot_pct, 0, 'f', 1));
+            kvg("Day 1 close",
+                QString("$%1 vs offer %2").arg(d1, 0, 'f', 2).arg(signed_pct(d1_pct)));
+            if (closes.size() >= 5) {
+                const double w1 = closes.at(4);
+                const double w1_pct = (e->final_price > 0)
+                    ? (w1 - e->final_price) / e->final_price * 100.0 : 0;
+                kvg("Week 1 close",
+                    QString("$%1 vs offer %2").arg(w1, 0, 'f', 2).arg(signed_pct(w1_pct)));
+            }
+            kvg("Current",
+                QString("$%1 vs offer %2").arg(last, 0, 'f', 2).arg(signed_pct(cur_pct)));
             kvg("Hi / Lo",
                 QString("$%1 / $%2").arg(hi, 0, 'f', 2).arg(lo, 0, 'f', 2));
             kvg("Bars", QString::number(closes.size()) + " trading days");
@@ -1217,9 +1252,26 @@ void IpoWatchView::render_detail(const Entry* e) {
         if (info.price_to_book > 0) kvg("Price / Book", QString::number(info.price_to_book, 'f', 2) + "x");
         if (info.dividend_yield > 0) kvg("Dividend yield", fmt_pct(info.dividend_yield, 2));
         if (info.beta > 0) kvg("Beta", fmt_num(info.beta));
-        if (info.week52_high > 0 || info.week52_low > 0)
+        if (info.week52_high > 0 && info.week52_low > 0 && info.week52_high > info.week52_low) {
+            // Show where the last price sits inside the 52-week band — the
+            // single most useful "is this near support / resistance" cue for
+            // an investor reading the rail at a glance. Only draw the bar
+            // when we have a real `last_price`; without it, position_bar at
+            // midpoint would be the same misleading placeholder we removed
+            // for the filed-range case.
+            QString cell = QString("$%1 – $%2")
+                .arg(info.week52_low, 0, 'f', 2)
+                .arg(info.week52_high, 0, 'f', 2);
+            if (e->last_price > 0) {
+                const double pos = (e->last_price - info.week52_low) /
+                                   (info.week52_high - info.week52_low);
+                cell += "<br>" + position_bar(pos, "#d97706");
+            }
+            kvg("52-week range", cell);
+        } else if (info.week52_high > 0 || info.week52_low > 0) {
             kvg("52-week range",
                 QString("$%1 – $%2").arg(info.week52_low, 0, 'f', 2).arg(info.week52_high, 0, 'f', 2));
+        }
         if (info.avg_volume > 0) kvg("Avg volume", format_money(info.avg_volume));
         if (info.profit_margin != 0)
             kvg("Profit margin",
