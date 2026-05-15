@@ -158,9 +158,10 @@ void VideoPlayerWidget::build_player_view() {
 
 #ifdef HAS_QT_MULTIMEDIA
     video_widget_ = new QVideoWidget;
-    // Allow mouse events to pass through the native video surface to the tile's
-    // resize grip underneath. Without this, Wayland/X11 delivers all pointer
-    // events to the GStreamer video window and the grip is unreachable.
+    // On X11, WA_TransparentForMouseEvents sets INPUT_ONLY on the native window
+    // so pointer events pass through to the tile's resize grip. On Wayland the
+    // compositor owns the surface and this attribute has no effect; the grip
+    // remains inaccessible while video is fullscreen on a Wayland session.
     video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     vl->addWidget(video_widget_, 1);
 
@@ -250,6 +251,9 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     }
 #else
     QDesktopServices::openUrl(QUrl(url));
+    // No player to signal PlayingState — clear immediately so refresh_data()
+    // doesn't stay blocked after the one-shot openUrl() call.
+    play_in_progress_ = false;
 #endif
 }
 
@@ -334,11 +338,13 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     // -g: print stream URL only (no download). --no-playlist: single stream.
     // --quiet: suppress all progress/warning output from stdout so only the URL
     //          reaches on_ytdlp_finished (warnings go to stderr separately).
+    // HLS live streams (YouTube formats 91-96) are combined video+audio; they
+    // are not accessible via bestvideo+bestaudio and have no separate tracks.
+    // We select directly with `best[protocol=m3u8_native]` which always returns
+    // a single muxed .m3u8 URL — no two-line DASH output to misparse.
     proc->start(ytdlp_program,
                 {"-f",
-                 "bestvideo[protocol=m3u8_native][height<=480]"
-                 "+bestaudio[protocol=m3u8_native]"
-                 "/best[protocol=m3u8_native][height<=480]"
+                 "best[protocol=m3u8_native][height<=480]"
                  "/best[protocol=m3u8_native]"
                  "/best[height<=480]/best",
                  "--no-playlist", "--quiet", "-g", youtube_url});
@@ -387,7 +393,17 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
     if (!proc)
         return;
 
+    // Discard if the user stopped or switched channels before yt-dlp failed.
+    const QString requested = proc->property("requested_url").toString();
+    if (requested != current_url_) {
+        play_in_progress_ = false;
+        proc->deleteLater();
+        return;
+    }
+
     const QString err = proc->errorString();
+    play_in_progress_ = false;
+    current_url_.clear(); // stop refresh_data() from retrying indefinitely
     set_loading(false);
     status_label_->setText("Failed to start yt-dlp: " + (err.isEmpty() ? QString("Unknown error") : err.left(90)));
     status_label_->show();
@@ -418,6 +434,13 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 void VideoPlayerWidget::stop_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
+    // Swap to channel-list page BEFORE clearing the source: switching away
+    // from the QVideoWidget first means the user sees the channel list
+    // immediately rather than a frozen last frame while the pipeline tears down.
+    stack_->setCurrentIndex(0);
+    player_->setSource(QUrl()); // blank the surface once the page is hidden
+#else
+    stack_->setCurrentIndex(0);
 #endif
     play_in_progress_ = false;
     current_url_.clear();
@@ -425,7 +448,6 @@ void VideoPlayerWidget::stop_playback() {
     set_loading(false);
     status_label_->hide();
     set_title("LIVE TV / STREAMS");
-    stack_->setCurrentIndex(0);
 }
 
 void VideoPlayerWidget::on_player_error() {

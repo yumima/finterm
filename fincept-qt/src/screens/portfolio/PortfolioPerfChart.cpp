@@ -886,6 +886,8 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         filter_to_market_hours(mkt_ts, mkt_vals);
         // Guard: filter may empty the vectors for holiday stubs or all-weekend
         // data. Without this, pts.first() below would be undefined behaviour.
+        // chart was already cleared at the top of this function; x is nullptr
+        // but never used past this point, so no axis leak.
         if (mkt_ts.isEmpty()) {
             period_change_label_->setText(
                 QString("%1 unavailable (no market-hour bars)").arg(current_period_));
