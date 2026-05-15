@@ -89,12 +89,16 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent)
     // frame is self-driven by frameSwapped → update() → paintGL() → commit →
     // frameSwapped → …, vsync-synchronised by the compositor.
     //
-    // isVisible() guard: prevents the loop from keeping a hidden widget (page 0
-    // of the QStackedWidget) alive if the compositor happens to send a callback
-    // while the page is off-screen (rare, but some compositors don't suppress).
+    // frameSwapped sustains the render loop at vsync rate.
+    // It must NOT call requestUpdate() — that's only for seeding in present().
+    // Calling requestUpdate() here would double the Wayland frame callbacks,
+    // causing 2× repaints per vsync and visible strobing/flickering.
     connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
-        if (current_frame_.isValid() && isVisible())
-            update(); // keep the loop alive while frames are arriving and visible
+        if (current_frame_.isValid() && isVisible()) {
+            update(); // schedule next paintGL() — one per compositor vsync
+        } else {
+            loop_active_ = false; // loop quiesced; needs re-seeding on next present()
+        }
     });
 }
 
@@ -108,17 +112,31 @@ VideoRenderWidget::~VideoRenderWidget() {
     doneCurrent();
 }
 
+void VideoRenderWidget::clear_frame() {
+    current_frame_ = QVideoFrame(); // invalidate → frameSwapped loop quiesces
+    loop_active_ = false;
+    update(); // repaint to black
+}
+
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     current_frame_ = frame;
-    // Seed the frameSwapped→update() loop with a Wayland frame-callback
-    // request. QWindow::requestUpdate() registers a wl_surface_frame with
-    // the compositor; when the callback fires Qt calls paintEvent() on all
-    // dirty widgets, composites QOpenGLWidget FBOs into the backing store,
-    // and calls wl_surface_commit — making the rendered frame visible.
-    // frameSwapped() then fires and update() keeps the loop going.
-    update(); // mark widget dirty so paintGL() is called when the frame arrives
-    if (auto* wh = window()->windowHandle())
-        wh->requestUpdate(); // register wl_surface_frame callback to start loop
+    // present() owns data only — it writes the frame and seeds the render
+    // loop exactly ONCE per play session. The loop is then sustained entirely
+    // by frameSwapped → update() at the compositor's vsync rate.
+    //
+    // Calling requestUpdate() on every present() (30fps) would register 30
+    // extra wl_surface_frame callbacks per second on top of the 60fps driven
+    // by frameSwapped, causing 90 paintGL() cycles/sec — the root cause of
+    // the visible strobing/flickering. Seeding once prevents that.
+    update(); // mark widget dirty for the next compositor-driven paint
+    if (!loop_active_) {
+        loop_active_ = true;
+        // Seed: register the first wl_surface_frame callback on the top-level
+        // window. After this commit the compositor fires frameSwapped, which
+        // calls update() → paintGL() → commit → frameSwapped → … indefinitely.
+        if (auto* wh = window()->windowHandle())
+            wh->requestUpdate();
+    }
 }
 
 void VideoRenderWidget::initializeGL() {
@@ -642,6 +660,11 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 void VideoPlayerWidget::stop_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
+    // Invalidate the render widget's frame so the frameSwapped loop quiesces
+    // and loop_active_ resets to false — ensuring the next channel start
+    // re-seeds the Wayland frame-callback loop cleanly.
+    if (video_widget_)
+        video_widget_->clear_frame();
 #endif
     stack_->setCurrentIndex(0);
 

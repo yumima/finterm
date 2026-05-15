@@ -55,6 +55,8 @@ class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
   public slots:
     /// Receive a decoded frame from the multimedia thread (queued → main thread).
     void present(const QVideoFrame& frame);
+    /// Invalidate the current frame so the render loop quiesces on next vsync.
+    void clear_frame();
 
   protected:
     void initializeGL() override;
@@ -67,9 +69,10 @@ class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     QOpenGLShaderProgram      program_;
     QOpenGLVertexArrayObject  vao_;
     QOpenGLBuffer             vbo_{QOpenGLBuffer::VertexBuffer};
-    int                       pos_loc_ = -1;
-    int                       uv_loc_  = -1;
-    bool                      gl_ready_ = false;
+    int                       pos_loc_      = -1;
+    int                       uv_loc_       = -1;
+    bool                      gl_ready_     = false;
+    bool                      loop_active_  = false; // true while frameSwapped loop is running
 };
 #endif
 
