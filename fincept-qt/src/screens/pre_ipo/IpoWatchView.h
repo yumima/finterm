@@ -24,6 +24,7 @@
 #include <QDate>
 #include <QHash>
 #include <QJsonDocument>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -94,7 +95,7 @@ class IpoWatchView : public QWidget {
     /// BOOKRUNNERS lens removed — Nasdaq's public IPO calendar doesn't carry
     /// `leadFirmName`. We keep the field on the Entry struct for a future
     /// SEC EDGAR-driven source but the lens shipped only "Unknown" rows.
-    enum Lens { LensCalendar = 0, LensPerformance, LensCount };
+    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensCount };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
                       TW_6Months, TW_12Months, TW_Past30Days };
 
@@ -119,10 +120,26 @@ class IpoWatchView : public QWidget {
     void render();                  // dispatch by active_lens_
     void render_calendar();
     void render_performance();
+    void render_watchlist();
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     QVector<int> filtered_indices() const;     // applies filter chips + search
     bool entry_passes_filters(const Entry& e) const;
+
+    // ── Detail-rail enrichment ──────────────────────────────────────────────
+    /// Kick off a one-shot fetch_history for the priced entry's ticker so the
+    /// detail rail can render an inline price-since-IPO sparkline. The fetch
+    /// is gated by history_cache_ so opening the same detail twice is free.
+    void fetch_history_for_detail(const Entry& e);
+
+    // ── Watchlist ───────────────────────────────────────────────────────────
+    /// Stable key for the starred set — prefer the ticker, fall back to
+    /// company name so upcoming deals with no ticker yet can still be saved.
+    static QString starred_key(const Entry& e);
+    void load_starred();
+    void save_starred();
+    void toggle_star(const Entry& e);
+    bool is_starred(const Entry& e) const { return starred_.contains(starred_key(e)); }
 
     // Helpers
     static QString format_money(double dollars);
@@ -137,7 +154,19 @@ class IpoWatchView : public QWidget {
     // P/E, margins, growth, beta, analyst targets, etc. — too expensive to
     // pre-fetch for every entry but quick on a single row click.
     QHash<QString, services::InfoData> info_cache_;
+    // Lazy per-symbol price history cache for the detail rail's price-since-IPO
+    // sparkline. Keyed by ticker. Presence in `history_cache_` means the fetch
+    // returned (even if empty = "yfinance had nothing"); presence in
+    // `history_inflight_` means the request is mid-flight and we shouldn't
+    // re-issue it. They are mutually exclusive: callback drops from inflight
+    // and writes to the cache atomically.
+    QHash<QString, QVector<double>> history_cache_;
+    QSet<QString>                   history_inflight_;
     QString detail_symbol_; // currently shown in the detail rail
+    // Starred-ticker set, persisted under SettingsRepository key
+    // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
+    // company name for upcoming deals with no ticker yet — see starred_key().
+    QSet<QString> starred_;
     Lens       active_lens_   = LensCalendar;
     TimeWindow time_window_   = TW_AllUpcoming;
     QString    status_filter_ = "all";     // all | upcoming | priced

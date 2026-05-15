@@ -3,6 +3,7 @@
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "services/markets/MarketDataService.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
@@ -53,6 +54,7 @@ const char* IpoWatchView::lens_label(Lens l) {
     switch (l) {
         case LensCalendar:    return "CALENDAR";
         case LensPerformance: return "PERFORMANCE";
+        case LensWatchlist:   return "WATCHLIST";
         default:              return "";
     }
 }
@@ -60,6 +62,7 @@ const char* IpoWatchView::lens_label(Lens l) {
 // ── Construction ─────────────────────────────────────────────────────────────
 
 IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
+    load_starred();
     build_ui();
     apply_styles();
     refresh();
@@ -249,12 +252,18 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     table_->setSortingEnabled(true);
     table_->setShowGrid(false);
     table_->horizontalHeader()->setStretchLastSection(false);
-    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int /*col*/) {
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
         auto* it = table_->item(row, 0);
         if (!it) return;
         const int idx = it->data(Qt::UserRole).toInt();
-        if (idx >= 0 && idx < entries_.size())
-            render_detail(&entries_.at(idx));
+        if (idx < 0 || idx >= entries_.size()) return;
+        // Column 0 is the ★/☆ star cell — click toggles starred state and
+        // re-renders the active lens without selecting the detail.
+        if (col == 0) {
+            toggle_star(entries_.at(idx));
+            return;
+        }
+        render_detail(&entries_.at(idx));
     });
     splitter_->addWidget(table_);
 
@@ -468,10 +477,33 @@ void IpoWatchView::on_fetch_done() {
     }
     entries_ = std::move(uniq);
 
-    if (status_lbl_)
+    if (status_lbl_) {
+        // Surface the data window so the user can see at a glance whether
+        // Nasdaq's feed has caught up to "today's" priced + upcoming dates
+        // (rare slow-update windows otherwise look like a UI bug).
+        QDate latest_priced, earliest_upcoming;
+        const QDate today = QDate::currentDate();
+        for (const auto& e : entries_) {
+            if (!e.date.isValid()) continue;
+            if (e.status == "priced") {
+                if (!latest_priced.isValid() || e.date > latest_priced) latest_priced = e.date;
+            } else if (e.status == "upcoming" && today.daysTo(e.date) >= 0) {
+                if (!earliest_upcoming.isValid() || e.date < earliest_upcoming) earliest_upcoming = e.date;
+            }
+        }
+        QString range;
+        if (latest_priced.isValid())
+            range += QString("priced→%1").arg(latest_priced.toString("MMM d"));
+        if (earliest_upcoming.isValid()) {
+            if (!range.isEmpty()) range += " · ";
+            range += QString("next %1").arg(earliest_upcoming.toString("MMM d"));
+        }
         status_lbl_->setText(
-            QString("%1 deals · %2").arg(entries_.size())
+            QString("%1 deals · %2%3")
+                .arg(entries_.size())
+                .arg(range.isEmpty() ? "" : range + " · ")
                 .arg(QDateTime::currentDateTime().toString("HH:mm")));
+    }
 
     render();
 
@@ -509,6 +541,39 @@ void IpoWatchView::enrich_with_profiles() {
                 e.profile_fetched = true;
             }
             self->render();
+        });
+}
+
+void IpoWatchView::fetch_history_for_detail(const Entry& e) {
+    if (e.status != "priced" || e.ticker.isEmpty()) return;
+    if (history_cache_.contains(e.ticker) || history_inflight_.contains(e.ticker))
+        return;
+    history_inflight_.insert(e.ticker);
+    QPointer<IpoWatchView> self = this;
+    const QString sym = e.ticker;
+    // Pick a window long enough to span most IPOs we care about. yfinance's
+    // 6mo window covers the typical research horizon for a recently priced
+    // deal; for older priced rows the curve will just clip to listing date.
+    services::MarketDataService::instance().fetch_history(
+        sym, "6mo", "1d",
+        [self, sym](bool ok, QVector<services::HistoryPoint> points) {
+            if (!self) return;
+            QVector<double> closes;
+            if (ok) {
+                closes.reserve(points.size());
+                for (const auto& p : points) closes.append(p.close);
+            }
+            self->history_inflight_.remove(sym);
+            self->history_cache_.insert(sym, closes);
+            // Only re-render if this ticker is still on screen.
+            if (self->detail_symbol_ == sym) {
+                for (const auto& en : self->entries_) {
+                    if (en.ticker == sym) {
+                        self->render_detail(&en);
+                        return;
+                    }
+                }
+            }
         });
 }
 
@@ -559,12 +624,19 @@ bool IpoWatchView::entry_passes_filters(const Entry& e) const {
     const QDate today = QDate::currentDate();
     if (e.status == "upcoming" && e.date.isValid()) {
         const qint64 d = today.daysTo(e.date);
+        // Always drop upcoming entries whose expectedPriceDate has already
+        // passed — Nasdaq leaves deals that got postponed but never re-dated
+        // in the upcoming bucket indefinitely. The dashboard widget only
+        // fetches ±1 month so it never sees these stragglers; the IPO Watch
+        // fetches 3 months back specifically to power the priced bucket, so
+        // we have to filter the stale upcoming side here.
+        if (d < 0) return false;
         switch (time_window_) {
-            case TW_ThisWeek:   if (!(d >= 0 && d <= kDaysWeek))   return false; break;
-            case TW_30Days:     if (!(d >= 0 && d <= kDays30))      return false; break;
-            case TW_3Months:    if (!(d >= 0 && d <= 30 * 3))        return false; break;
-            case TW_6Months:    if (!(d >= 0 && d <= kDays6Months)) return false; break;
-            case TW_12Months:   if (!(d >= 0 && d <= kDays12Mo))    return false; break;
+            case TW_ThisWeek:   if (!(d <= kDaysWeek))   return false; break;
+            case TW_30Days:     if (!(d <= kDays30))      return false; break;
+            case TW_3Months:    if (!(d <= 30 * 3))        return false; break;
+            case TW_6Months:    if (!(d <= kDays6Months)) return false; break;
+            case TW_12Months:   if (!(d <= kDays12Mo))    return false; break;
             case TW_Past30Days: return false; // upcoming row in "past 30d" filter
             case TW_AllUpcoming: default: break;
         }
@@ -599,6 +671,7 @@ void IpoWatchView::render() {
     switch (active_lens_) {
         case LensCalendar:    render_calendar(); break;
         case LensPerformance: render_performance(); break;
+        case LensWatchlist:   render_watchlist(); break;
         default: break;
     }
 }
@@ -676,7 +749,7 @@ void IpoWatchView::render_calendar() {
     using ui::colors::POSITIVE;
     using ui::colors::NEGATIVE;
 
-    const QStringList headers{"COMPANY", "TKR", "EXCH", "DATE", "STATUS",
+    const QStringList headers{"★", "COMPANY", "TKR", "EXCH", "DATE", "STATUS",
                               "PRICE / RANGE", "SHARES", "DEAL SIZE", "SECTOR"};
     table_->setSortingEnabled(false);
     table_->clear();
@@ -688,41 +761,50 @@ void IpoWatchView::render_calendar() {
     for (int i = 0; i < indices.size(); ++i) {
         const int gi = indices.at(i);
         const Entry& e = entries_.at(gi);
-        auto* co = new QTableWidgetItem(e.company);
-        co->setData(Qt::UserRole, gi);
-        co->setToolTip(e.company);
-        table_->setItem(i, 0, co);
-        table_->setItem(i, 1, new QTableWidgetItem(e.ticker.isEmpty() ? "—" : e.ticker));
-        table_->setItem(i, 2, new QTableWidgetItem(e.exchange.isEmpty() ? "—" : e.exchange));
-        table_->setItem(i, 3, new QTableWidgetItem(
+        // Column 0 — star cell. Carry the entry index in UserRole so the
+        // cellClicked handler can resolve back to the Entry without searching.
+        auto* star = new QTableWidgetItem(is_starred(e) ? QStringLiteral("★") : QStringLiteral("☆"));
+        star->setData(Qt::UserRole, gi);
+        star->setTextAlignment(Qt::AlignCenter);
+        star->setForeground(QBrush(QColor(is_starred(e) ? AMBER() : "#666")));
+        star->setToolTip(is_starred(e) ? "Remove from watchlist" : "Add to watchlist");
+        table_->setItem(i, 0, star);
+        table_->setItem(i, 1, new QTableWidgetItem(e.company));
+        table_->item(i, 1)->setToolTip(e.company);
+        table_->setItem(i, 2, new QTableWidgetItem(e.ticker.isEmpty() ? "—" : e.ticker));
+        table_->setItem(i, 3, new QTableWidgetItem(e.exchange.isEmpty() ? "—" : e.exchange));
+        table_->setItem(i, 4, new QTableWidgetItem(
             e.date.isValid() ? e.date.toString("MMM d, yyyy") : e.date_raw));
         auto* st = new QTableWidgetItem(e.status.toUpper());
         st->setForeground(QBrush(QColor(e.status == "priced" ? POSITIVE() : AMBER())));
-        table_->setItem(i, 4, st);
-        table_->setItem(i, 5, new QTableWidgetItem(e.price_range.isEmpty() ? "—" : e.price_range));
-        table_->setItem(i, 6, new QTableWidgetItem(e.shares_raw.isEmpty() ? "—" : e.shares_raw));
-        table_->setItem(i, 7, new QTableWidgetItem(e.deal_size.isEmpty() ? "—" : e.deal_size));
+        table_->setItem(i, 5, st);
+        table_->setItem(i, 6, new QTableWidgetItem(e.price_range.isEmpty() ? "—" : e.price_range));
+        table_->setItem(i, 7, new QTableWidgetItem(e.shares_raw.isEmpty() ? "—" : e.shares_raw));
+        table_->setItem(i, 8, new QTableWidgetItem(e.deal_size.isEmpty() ? "—" : e.deal_size));
         // SECTOR is populated lazily after the batch_info enrichment lands;
         // empty until then, "—" once we know the daemon couldn't resolve it.
         const QString sector_disp = e.sector.isEmpty()
             ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
             : e.sector;
-        table_->setItem(i, 8, new QTableWidgetItem(sector_disp));
+        table_->setItem(i, 9, new QTableWidgetItem(sector_disp));
     }
     table_->setSortingEnabled(true);
-    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int c = 1; c < table_->columnCount(); ++c)
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->setColumnWidth(0, 28);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    for (int c = 2; c < table_->columnCount(); ++c)
         table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
     // Default sort: ascending date — upcoming-soonest at top.
-    table_->sortItems(3, Qt::AscendingOrder);
+    table_->sortItems(4, Qt::AscendingOrder);
 }
 
 void IpoWatchView::render_performance() {
+    using ui::colors::AMBER;
     using ui::colors::POSITIVE;
     using ui::colors::NEGATIVE;
     using ui::colors::TEXT_SECONDARY;
 
-    const QStringList headers{"COMPANY", "TKR", "PRICED", "OFFER", "LAST", "POP %", "DEAL $", "SECTOR"};
+    const QStringList headers{"★", "COMPANY", "TKR", "PRICED", "OFFER", "LAST", "POP %", "DEAL $", "SECTOR"};
     table_->setSortingEnabled(false);
     table_->clear();
     table_->setColumnCount(headers.size());
@@ -740,16 +822,19 @@ void IpoWatchView::render_performance() {
     for (int r = 0; r < rows.size(); ++r) {
         const int gi = rows.at(r);
         const Entry& e = entries_.at(gi);
-        auto* co = new QTableWidgetItem(e.company);
-        co->setData(Qt::UserRole, gi);
-        co->setToolTip(e.company);
-        table_->setItem(r, 0, co);
-        table_->setItem(r, 1, new QTableWidgetItem(e.ticker.isEmpty() ? "—" : e.ticker));
-        table_->setItem(r, 2, new QTableWidgetItem(
-            e.date.isValid() ? e.date.toString("MMM d") : e.date_raw));
+        auto* star = new QTableWidgetItem(is_starred(e) ? QStringLiteral("★") : QStringLiteral("☆"));
+        star->setData(Qt::UserRole, gi);
+        star->setTextAlignment(Qt::AlignCenter);
+        star->setForeground(QBrush(QColor(is_starred(e) ? AMBER() : "#666")));
+        table_->setItem(r, 0, star);
+        table_->setItem(r, 1, new QTableWidgetItem(e.company));
+        table_->item(r, 1)->setToolTip(e.company);
+        table_->setItem(r, 2, new QTableWidgetItem(e.ticker.isEmpty() ? "—" : e.ticker));
         table_->setItem(r, 3, new QTableWidgetItem(
-            e.final_price > 0 ? QString("$%1").arg(e.final_price, 0, 'f', 2) : "—"));
+            e.date.isValid() ? e.date.toString("MMM d") : e.date_raw));
         table_->setItem(r, 4, new QTableWidgetItem(
+            e.final_price > 0 ? QString("$%1").arg(e.final_price, 0, 'f', 2) : "—"));
+        table_->setItem(r, 5, new QTableWidgetItem(
             e.perf_fetched && e.last_price > 0
                 ? QString("$%1").arg(e.last_price, 0, 'f', 2) : "—"));
         QString pop_str;
@@ -762,18 +847,142 @@ void IpoWatchView::render_performance() {
         }
         auto* pop = new QTableWidgetItem(pop_str);
         pop->setForeground(QBrush(pop_col));
-        table_->setItem(r, 5, pop);
-        table_->setItem(r, 6, new QTableWidgetItem(e.deal_size.isEmpty() ? "—" : e.deal_size));
+        table_->setItem(r, 6, pop);
+        table_->setItem(r, 7, new QTableWidgetItem(e.deal_size.isEmpty() ? "—" : e.deal_size));
         const QString sector_disp = e.sector.isEmpty()
             ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
             : e.sector;
-        table_->setItem(r, 7, new QTableWidgetItem(sector_disp));
+        table_->setItem(r, 8, new QTableWidgetItem(sector_disp));
     }
     table_->setSortingEnabled(true);
-    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int c = 1; c < table_->columnCount(); ++c)
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->setColumnWidth(0, 28);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    for (int c = 2; c < table_->columnCount(); ++c)
         table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
-    table_->sortItems(5, Qt::DescendingOrder); // pop desc
+    table_->sortItems(6, Qt::DescendingOrder); // pop desc
+}
+
+void IpoWatchView::render_watchlist() {
+    using ui::colors::AMBER;
+    using ui::colors::POSITIVE;
+    using ui::colors::NEGATIVE;
+    using ui::colors::TEXT_SECONDARY;
+
+    // Starred deals only. We intentionally ignore the status/window/size chips
+    // here — the watchlist is a curated set the user wants to track regardless
+    // of what filter the other lenses use. Search and exchange still apply.
+    const QStringList headers{"★", "COMPANY", "TKR", "EXCH", "DATE", "STATUS",
+                              "OFFER / RANGE", "LAST", "POP %", "DEAL $", "SECTOR"};
+    table_->setSortingEnabled(false);
+    table_->clear();
+    table_->setColumnCount(headers.size());
+    table_->setHorizontalHeaderLabels(headers);
+
+    QVector<int> rows;
+    for (int i = 0; i < entries_.size(); ++i) {
+        if (!is_starred(entries_.at(i))) continue;
+        const Entry& e = entries_.at(i);
+        if (exch_filter_ != "all" && !e.exchange.contains(exch_filter_, Qt::CaseInsensitive)) continue;
+        if (!search_query_.isEmpty() &&
+            !e.company.toLower().contains(search_query_) &&
+            !e.ticker.toLower().contains(search_query_)) continue;
+        rows.append(i);
+    }
+    table_->setRowCount(rows.size());
+    for (int r = 0; r < rows.size(); ++r) {
+        const int gi = rows.at(r);
+        const Entry& e = entries_.at(gi);
+        auto* star = new QTableWidgetItem(QStringLiteral("★"));
+        star->setData(Qt::UserRole, gi);
+        star->setTextAlignment(Qt::AlignCenter);
+        star->setForeground(QBrush(QColor(AMBER())));
+        star->setToolTip("Remove from watchlist");
+        table_->setItem(r, 0, star);
+        table_->setItem(r, 1, new QTableWidgetItem(e.company));
+        table_->item(r, 1)->setToolTip(e.company);
+        table_->setItem(r, 2, new QTableWidgetItem(e.ticker.isEmpty() ? "—" : e.ticker));
+        table_->setItem(r, 3, new QTableWidgetItem(e.exchange.isEmpty() ? "—" : e.exchange));
+        table_->setItem(r, 4, new QTableWidgetItem(
+            e.date.isValid() ? e.date.toString("MMM d, yyyy") : e.date_raw));
+        auto* st = new QTableWidgetItem(e.status.toUpper());
+        st->setForeground(QBrush(QColor(e.status == "priced" ? POSITIVE() : AMBER())));
+        table_->setItem(r, 5, st);
+        table_->setItem(r, 6, new QTableWidgetItem(e.price_range.isEmpty() ? "—" : e.price_range));
+        table_->setItem(r, 7, new QTableWidgetItem(
+            e.perf_fetched && e.last_price > 0
+                ? QString("$%1").arg(e.last_price, 0, 'f', 2) : "—"));
+        QString pop_str = "—";
+        QColor  pop_col(TEXT_SECONDARY());
+        if (e.status == "priced" && e.perf_fetched && e.final_price > 0) {
+            pop_str = QString("%1%2%").arg(e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1);
+            pop_col = QColor(e.pop_pct >= 0 ? POSITIVE() : NEGATIVE());
+        }
+        auto* pop = new QTableWidgetItem(pop_str);
+        pop->setForeground(QBrush(pop_col));
+        table_->setItem(r, 8, pop);
+        table_->setItem(r, 9, new QTableWidgetItem(e.deal_size.isEmpty() ? "—" : e.deal_size));
+        const QString sector_disp = e.sector.isEmpty()
+            ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
+            : e.sector;
+        table_->setItem(r, 10, new QTableWidgetItem(sector_disp));
+    }
+    table_->setSortingEnabled(true);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->setColumnWidth(0, 28);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    for (int c = 2; c < table_->columnCount(); ++c)
+        table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+    // Date desc — most recent priced + closest upcoming float to top, older
+    // priced deals fall to the bottom (consistent with how the CALENDAR lens
+    // surfaces the active research window first).
+    table_->sortItems(4, Qt::DescendingOrder);
+
+    if (rows.isEmpty() && detail_html_) {
+        detail_html_->setText("<i>Watchlist is empty — click the ☆ next to a deal on CALENDAR or PERFORMANCE to add it.</i>");
+        detail_symbol_.clear();
+    }
+}
+
+// ── Watchlist helpers ────────────────────────────────────────────────────────
+
+QString IpoWatchView::starred_key(const Entry& e) {
+    // Prefer ticker — stable once announced. Pre-pricing deals frequently have
+    // no ticker yet; fall back to company so they can still be starred.
+    return e.ticker.isEmpty() ? e.company : e.ticker;
+}
+
+void IpoWatchView::load_starred() {
+    auto r = fincept::SettingsRepository::instance().get("ipo_watch.starred");
+    if (r.is_err()) return;
+    const QString raw = r.value();
+    if (raw.isEmpty()) return;
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isArray()) return;
+    for (const auto& v : doc.array()) {
+        const QString s = v.toString().trimmed();
+        if (!s.isEmpty()) starred_.insert(s);
+    }
+}
+
+void IpoWatchView::save_starred() {
+    QJsonArray arr;
+    for (const auto& k : starred_) arr.append(k);
+    const QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    auto r = fincept::SettingsRepository::instance().set(
+        "ipo_watch.starred", json, "ipo_watch");
+    if (r.is_err())
+        LOG_WARN("IpoWatch", "failed to persist ipo_watch.starred");
+}
+
+void IpoWatchView::toggle_star(const Entry& e) {
+    const QString k = starred_key(e);
+    if (k.isEmpty()) return;
+    if (starred_.contains(k)) starred_.remove(k);
+    else                       starred_.insert(k);
+    save_starred();
+    render();
 }
 
 // (BOOKRUNNERS lens removed — Nasdaq's public IPO calendar API doesn't
@@ -798,9 +1007,9 @@ static QString position_bar(double pos, const QString& fill_color, int segments 
 }
 
 // Sparkline from a small numeric series using Unicode block chars. Lightweight
-// alternative to embedding a QChart — fits in a RichText label. Kept for the
-// follow-up "price-since-IPO" inline visualization; currently unused.
-[[maybe_unused]] static QString unicode_sparkline(const QVector<double>& pts) {
+// alternative to embedding a QChart — fits in a RichText label. Used by the
+// detail rail's PRICE SINCE IPO section.
+static QString unicode_sparkline(const QVector<double>& pts) {
     if (pts.size() < 2) return QStringLiteral("—");
     const QString blocks = QString::fromUtf8("▁▂▃▄▅▆▇█");
     double lo = pts.first(), hi = pts.first();
@@ -822,6 +1031,10 @@ void IpoWatchView::render_detail(const Entry* e) {
         return;
     }
     detail_symbol_ = e->ticker;
+
+    // Lazy fetch the price-since-IPO history so we can draw a sparkline.
+    // No-op for upcoming entries (no listing yet) and cached after first hit.
+    fetch_history_for_detail(*e);
 
     // Lazy fetch full-info (fundamentals, growth, margins, analyst targets)
     // on first detail open for this ticker. The callback re-renders if the
@@ -954,6 +1167,42 @@ void IpoWatchView::render_detail(const Entry* e) {
     QString rb = build_range_bar();
     if (!rb.isEmpty()) {
         h += "<div style='margin-top:6px;'><span class='k'>RANGE POSITION</span><br>" + rb + "</div>";
+    }
+
+    // ── PRICE SINCE IPO (lazy from fetch_history) ──
+    if (e->status == "priced" && !e->ticker.isEmpty()) {
+        h += "<span class='sec'>PRICE SINCE IPO</span>";
+        auto it = history_cache_.constFind(e->ticker);
+        if (history_inflight_.contains(e->ticker)) {
+            h += "<span class='muted'>loading…</span>";
+        } else if (it == history_cache_.constEnd()) {
+            h += "<span class='muted'>loading…</span>";
+        } else if (it.value().size() < 2) {
+            h += "<span class='muted'>No history available yet.</span>";
+        } else {
+            const auto& closes = it.value();
+            const double first = closes.first();
+            const double last  = closes.last();
+            const double hi    = *std::max_element(closes.begin(), closes.end());
+            const double lo    = *std::min_element(closes.begin(), closes.end());
+            const double tot_pct = first > 0 ? (last - first) / first * 100.0 : 0;
+            const QString sline = unicode_sparkline(closes);
+            const QString color = tot_pct >= 0 ? QString(ui::colors::POSITIVE())
+                                               : QString(ui::colors::NEGATIVE());
+            h += QString("<div style='font-size:14px;letter-spacing:1px;color:%1;"
+                         "font-family:Consolas,Menlo,monospace;'>%2</div>")
+                     .arg(color, sline);
+            h += "<table class='grid'>";
+            kvg("From / To",
+                QString("$%1 → $%2 (<span class='%3'>%4%5%</span>)")
+                    .arg(first, 0, 'f', 2).arg(last, 0, 'f', 2)
+                    .arg(pct_cls(tot_pct), tot_pct >= 0 ? "+" : "")
+                    .arg(tot_pct, 0, 'f', 1));
+            kvg("Hi / Lo",
+                QString("$%1 / $%2").arg(hi, 0, 'f', 2).arg(lo, 0, 'f', 2));
+            kvg("Bars", QString::number(closes.size()) + " trading days");
+            h += "</table>";
+        }
     }
 
     // ── FUNDAMENTALS (lazy from fetch_info) ──
