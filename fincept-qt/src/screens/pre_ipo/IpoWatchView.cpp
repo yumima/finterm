@@ -4,7 +4,11 @@
 #include "network/http/HttpClient.h"
 #include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
+#include "ui/charts/ChartFactory.h"
 #include "ui/theme/Theme.h"
+
+#include <QtCharts/QChartView>
+#include <QTabWidget>
 
 #include <QComboBox>
 #include <QDate>
@@ -281,9 +285,9 @@ void IpoWatchView::build_filter_row(QVBoxLayout* root) {
 void IpoWatchView::build_workspace(QVBoxLayout* root) {
     splitter_ = new QSplitter(Qt::Horizontal, this);
     splitter_->setHandleWidth(1);
-    splitter_->setChildrenCollapsible(true);  // user can drag the detail rail to 0
+    splitter_->setChildrenCollapsible(true);  // user can drag any pane to 0
 
-    // ── Table ──
+    // ── Table (left column — IPO list) ──
     table_ = new QTableWidget;
     table_->verticalHeader()->setVisible(false);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -293,10 +297,6 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     table_->setSortingEnabled(true);
     table_->setShowGrid(false);
     table_->horizontalHeader()->setStretchLastSection(false);
-    // cellClicked handles only the star-toggle action on column 0. Detail
-    // selection is driven entirely by currentCellChanged below, which fires
-    // on both mouse-click and keyboard arrow nav — so we avoid the double
-    // render that would happen if cellClicked also called render_detail.
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
         if (col != 0) return;
         auto* it = table_->item(row, 0);
@@ -316,35 +316,102 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
             });
     splitter_->addWidget(table_);
 
-    // ── Detail rail ──
+    // ── Detail rail (middle + right columns) ──
     build_detail_rail(splitter_);
 
-    splitter_->setStretchFactor(0, 3);
-    splitter_->setStretchFactor(1, 1);
-    splitter_->setSizes({900, 360});
+    // Stretch 2 : 4 : 2 → list ≈ 25%, middle ≈ 50%, right ≈ 25%. The user
+    // wanted the IPO list narrower (~1/3 max) so the company research area
+    // gets the bulk of the screen.
+    splitter_->setStretchFactor(0, 2);
+    splitter_->setStretchFactor(1, 4);
+    splitter_->setStretchFactor(2, 2);
+    splitter_->setSizes({420, 840, 420});
 
     root->addWidget(splitter_, 1);
 }
 
 void IpoWatchView::build_detail_rail(QSplitter* splitter) {
-    detail_pane_ = new QWidget;
-    auto* v = new QVBoxLayout(detail_pane_);
-    v->setContentsMargins(12, 12, 12, 12);
-    v->setSpacing(6);
+    // Helper: wrap a body QLabel in a QScrollArea so long content scrolls.
+    auto make_scroll_label = [](QLabel*& out, const QString& seed = "") -> QScrollArea* {
+        out = new QLabel(seed);
+        out->setTextFormat(Qt::RichText);
+        out->setWordWrap(true);
+        out->setAlignment(Qt::AlignTop);
+        out->setOpenExternalLinks(true);
+        out->setContentsMargins(12, 10, 12, 10);
+        auto* sc = new QScrollArea;
+        sc->setWidget(out);
+        sc->setWidgetResizable(true);
+        sc->setFrameShape(QFrame::NoFrame);
+        return sc;
+    };
 
-    detail_html_ = new QLabel("Select a row to see deal detail, research links and sector comps.");
-    detail_html_->setTextFormat(Qt::RichText);
-    detail_html_->setWordWrap(true);
-    detail_html_->setAlignment(Qt::AlignTop);
-    detail_html_->setOpenExternalLinks(true);
+    // ── MIDDLE PANE: vertical splitter — facts tabs on top, charts on bottom
+    auto* middle_split = new QSplitter(Qt::Vertical);
+    middle_split->setHandleWidth(1);
+    middle_split->setChildrenCollapsible(false);
+    middle_pane_ = middle_split;
 
-    auto* sc = new QScrollArea;
-    sc->setWidget(detail_html_);
-    sc->setWidgetResizable(true);
-    sc->setFrameShape(QFrame::NoFrame);
-    v->addWidget(sc, 1);
+    // Company header above the facts tabs (always visible — anchors the view
+    // to the currently selected company).
+    auto* middle_top_container = new QWidget;
+    auto* mtv = new QVBoxLayout(middle_top_container);
+    mtv->setContentsMargins(0, 0, 0, 0);
+    mtv->setSpacing(0);
+    header_lbl_ = new QLabel("<i>Select a deal</i>");
+    header_lbl_->setTextFormat(Qt::RichText);
+    header_lbl_->setWordWrap(true);
+    header_lbl_->setContentsMargins(12, 10, 12, 6);
+    mtv->addWidget(header_lbl_);
 
-    splitter->addWidget(detail_pane_);
+    tabs_facts_ = new QTabWidget;
+    tabs_facts_->setDocumentMode(true);
+    tabs_facts_->setTabPosition(QTabWidget::North);
+    tabs_facts_->addTab(make_scroll_label(page_deal_),   "DEAL");
+    tabs_facts_->addTab(make_scroll_label(page_business_),"BUSINESS");
+    tabs_facts_->addTab(make_scroll_label(page_leader_), "LEADERSHIP");
+    tabs_facts_->addTab(make_scroll_label(page_fund_),   "FUNDAMENTALS");
+    tabs_facts_->addTab(make_scroll_label(page_pipeline_),"PIPELINE");
+    mtv->addWidget(tabs_facts_, 1);
+    middle_split->addWidget(middle_top_container);
+
+    // Charts tabs — Price chart is a real QChartView, the others are HTML.
+    tabs_charts_ = new QTabWidget;
+    tabs_charts_->setDocumentMode(true);
+    tabs_charts_->setTabPosition(QTabWidget::North);
+
+    page_price_chart_host_ = new QWidget;
+    auto* pch = new QVBoxLayout(page_price_chart_host_);
+    pch->setContentsMargins(8, 8, 8, 8);
+    pch->setSpacing(0);
+    // price_chart_view_ replaced lazily in rebuild_price_chart().
+    auto* placeholder = new QLabel("<i style='color:#7a7a7a;'>Select a priced deal to see its price chart.</i>");
+    placeholder->setTextFormat(Qt::RichText);
+    placeholder->setAlignment(Qt::AlignCenter);
+    pch->addWidget(placeholder, 1);
+    tabs_charts_->addTab(page_price_chart_host_,         "PRICE");
+    tabs_charts_->addTab(make_scroll_label(page_range_), "RANGE");
+    tabs_charts_->addTab(make_scroll_label(page_lockup_),"LOCK-UP");
+    tabs_charts_->addTab(make_scroll_label(page_timeline_),"TIMELINE");
+    middle_split->addWidget(tabs_charts_);
+
+    middle_split->setStretchFactor(0, 3);
+    middle_split->setStretchFactor(1, 2);
+    splitter->addWidget(middle_split);
+
+    // ── RIGHT PANE: vertical splitter — sector heat + comps on top, links bottom
+    auto* right_split = new QSplitter(Qt::Vertical);
+    right_split->setHandleWidth(1);
+    right_split->setChildrenCollapsible(false);
+    right_pane_ = right_split;
+
+    right_split->addWidget(make_scroll_label(right_top_,
+        "<i style='color:#7a7a7a;'>Sector heat and peer comparables.</i>"));
+    right_split->addWidget(make_scroll_label(right_bottom_,
+        "<i style='color:#7a7a7a;'>Research links.</i>"));
+    right_split->setStretchFactor(0, 3);
+    right_split->setStretchFactor(1, 2);
+    splitter->addWidget(right_split);
 }
 
 void IpoWatchView::apply_styles() {
@@ -417,12 +484,38 @@ void IpoWatchView::apply_styles() {
                     "QTableWidget::item:selected{background:%7;color:%8;}")
                 .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), BG_RAISED(), BG_RAISED(),
                      TEXT_SECONDARY(), AMBER(), BG_BASE()));
-    if (detail_pane_)
-        detail_pane_->setStyleSheet(
-            QString("background:%1;border-left:1px solid %2;").arg(BG_SURFACE(), BORDER_DIM()));
-    if (detail_html_)
-        detail_html_->setStyleSheet(
-            QString("color:%1;background:%2;").arg(TEXT_PRIMARY(), BG_SURFACE()));
+    // Detail rail — middle + right panes share the surface background. The
+    // table on the left uses BG_BASE so the splitter handles read as faint
+    // 1px dividers; the panes step up to BG_SURFACE so the dark/lighter
+    // pairing reads as "list vs research" at a glance.
+    const QString pane_qss =
+        QString("background:%1;border-left:1px solid %2;").arg(BG_SURFACE(), BORDER_DIM());
+    if (middle_pane_) middle_pane_->setStyleSheet(pane_qss);
+    if (right_pane_)  right_pane_->setStyleSheet(pane_qss);
+    if (header_lbl_)
+        header_lbl_->setStyleSheet(
+            QString("color:%1;background:%2;border-bottom:1px solid %3;padding-bottom:6px;")
+                .arg(TEXT_PRIMARY(), BG_SURFACE(), BORDER_DIM()));
+
+    const QString tabs_qss =
+        QString("QTabWidget::pane{background:%1;border:none;border-top:1px solid %2;}"
+                "QTabBar::tab{background:transparent;color:%3;padding:4px 12px;"
+                "  border:none;border-bottom:2px solid transparent;"
+                "  font-size:11px;font-weight:600;letter-spacing:1px;}"
+                "QTabBar::tab:selected{color:%4;border-bottom-color:%4;}"
+                "QTabBar::tab:hover:!selected{color:%5;}"
+                "QTabBar::tab:disabled{color:#444;}")
+            .arg(BG_SURFACE(), BORDER_DIM(), TEXT_SECONDARY(), AMBER(), TEXT_PRIMARY());
+    if (tabs_facts_)  tabs_facts_->setStyleSheet(tabs_qss);
+    if (tabs_charts_) tabs_charts_->setStyleSheet(tabs_qss);
+
+    const QString body_qss =
+        QString("QLabel{color:%1;background:%2;}").arg(TEXT_PRIMARY(), BG_SURFACE());
+    for (QLabel* lbl : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                        page_range_, page_lockup_, page_timeline_,
+                        right_top_, right_bottom_}) {
+        if (lbl) lbl->setStyleSheet(body_qss);
+    }
 }
 
 // ── Networking ───────────────────────────────────────────────────────────────
@@ -1083,8 +1176,13 @@ void IpoWatchView::render_watchlist() {
     // from the Nasdaq fetch). Users who want a specific order click the
     // header; DateSortItem makes that a real date compare.
 
-    if (rows.isEmpty() && detail_html_) {
-        detail_html_->setText("<i>Watchlist is empty — click the ☆ next to a deal on CALENDAR or PERFORMANCE to add it.</i>");
+    if (rows.isEmpty() && header_lbl_) {
+        header_lbl_->setText(
+            "<i style='color:#7a7a7a;'>Watchlist is empty — click the ☆ next to a deal on CALENDAR or "
+            "PERFORMANCE to add it.</i>");
+        for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                          page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
+            if (p) p->setText("");
         detail_symbol_.clear();
     }
 }
@@ -1151,60 +1249,51 @@ static QString position_bar(double pos, const QString& fill_color, int segments 
     return s;
 }
 
-// Sparkline from a small numeric series using Unicode block chars. Lightweight
-// alternative to embedding a QChart — fits in a RichText label. Used by the
-// detail rail's PRICE SINCE IPO section.
-//
-// `max_chars` clamps the visual width: with a 6mo daily series (~125 bars) a
-// 1:1 sparkline overruns the detail rail and wraps. We bucket-average down to
-// `max_chars` segments, which keeps the shape recognisable while fitting.
-static QString unicode_sparkline(const QVector<double>& pts, int max_chars = 60) {
-    if (pts.size() < 2) return QStringLiteral("—");
-    QVector<double> series;
-    if (pts.size() <= max_chars) {
-        series = pts;
-    } else {
-        series.reserve(max_chars);
-        const double step = double(pts.size()) / max_chars;
-        for (int i = 0; i < max_chars; ++i) {
-            const int lo = int(i * step);
-            const int hi = std::min<int>(pts.size(), int((i + 1) * step));
-            if (hi <= lo) { series.append(pts.at(lo)); continue; }
-            double sum = 0;
-            for (int j = lo; j < hi; ++j) sum += pts.at(j);
-            series.append(sum / (hi - lo));
-        }
-    }
-    const QString blocks = QString::fromUtf8("▁▂▃▄▅▆▇█");
-    double lo = series.first(), hi = series.first();
-    for (double v : series) { lo = std::min(lo, v); hi = std::max(hi, v); }
-    const double span = std::max(1e-9, hi - lo);
-    QString s;
-    for (double v : series) {
-        const int idx = std::clamp(int(((v - lo) / span) * 7.0 + 0.5), 0, 7);
-        s += blocks.at(idx);
-    }
-    return s;
-}
+// (unicode_sparkline removed — the PRICE chart is now a real QChartView from
+// ChartFactory::line_chart, rendered inline in the middle-bottom tab.)
+
+// Shared CSS injected once into every detail-rail QLabel — same as before
+// but compacted into a static so each page renders consistently.
+static const char* kDetailCss =
+    "<style>"
+    "body{font-family:Consolas,Menlo,monospace;font-size:12px;color:#e5e5e5;}"
+    "h3{margin:0 0 4px 0;font-size:15px;color:#fff;}"
+    ".chip{display:inline-block;padding:2px 7px;background:#222;color:#d97706;"
+    "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:11px;}"
+    ".chip.priced{color:#10b981;border-color:#10b981;}"
+    ".chip.filed{color:#3b82f6;border-color:#3b82f6;}"
+    ".chip.upcoming{color:#d97706;border-color:#d97706;}"
+    "table.kv{border-collapse:collapse;width:100%;}"
+    "table.kv td{padding:3px 8px 3px 0;vertical-align:top;font-size:12px;}"
+    "table.grid{border-collapse:collapse;width:100%;margin-top:4px;}"
+    "table.grid td{padding:3px 6px;border-bottom:1px solid #2a2a2a;font-size:12px;}"
+    "table.grid td.k{color:#b8b8b8;font-size:11px;width:46%;letter-spacing:.3px;}"
+    ".k{color:#b8b8b8;font-size:11px;letter-spacing:.3px;}"
+    ".sec{color:#d97706;font-weight:bold;font-size:11px;letter-spacing:1.5px;"
+    "  margin:8px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:2px;}"
+    "a{color:#d97706;text-decoration:none;}"
+    "a:hover{text-decoration:underline;}"
+    ".pos{color:#10b981;}"
+    ".neg{color:#ef4444;}"
+    ".big{font-size:17px;font-weight:bold;}"
+    ".muted{color:#7a7a7a;}"
+    "</style>";
 
 void IpoWatchView::render_detail(const Entry* e) {
-    if (!detail_html_) return;
+    if (!header_lbl_) return;
     if (!e) {
-        detail_html_->setText(
-            "<div style='color:#b8b8b8;font-size:12px;font-family:Consolas,Menlo,monospace;'>"
-            "Select a deal to see profile, fundamentals, sector heat, research links and peers.</div>");
+        header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");
+        for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                          page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
+            if (p) p->setText("");
         detail_symbol_.clear();
         return;
     }
     detail_symbol_ = e->ticker;
 
-    // Lazy fetch the price-since-IPO history so we can draw a sparkline.
-    // No-op for upcoming entries (no listing yet) and cached after first hit.
+    // Lazy fetch the price-since-IPO history (priced only, no-op otherwise).
     fetch_history_for_detail(*e);
-
-    // Lazy fetch full-info (fundamentals, growth, margins, analyst targets)
-    // on first detail open for this ticker. The callback re-renders if the
-    // detail rail is still showing this ticker when the data arrives.
+    // Lazy fetch fundamentals.
     if (!e->ticker.isEmpty() && !info_cache_.contains(e->ticker)) {
         QPointer<IpoWatchView> self = this;
         const QString sym = e->ticker;
@@ -1213,434 +1302,434 @@ void IpoWatchView::render_detail(const Entry* e) {
                 if (!self || !ok) return;
                 self->info_cache_.insert(sym, info);
                 if (self->detail_symbol_ == sym) {
-                    // Find the entry and re-render the detail pane.
                     for (const auto& en : self->entries_) {
-                        if (en.ticker == sym) {
-                            self->render_detail(&en);
-                            return;
-                        }
+                        if (en.ticker == sym) { self->render_detail(&en); return; }
                     }
                 }
             });
     }
 
-    // Research links
-    const QString company_q = QUrl::toPercentEncoding(e->company);
-    const QString edgar_s1  = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=S-1&dateb=&owner=include&count=20";
-    const QString edgar_all = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=&dateb=&owner=include&count=40";
-    const QString edgar_144 = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=144&dateb=&owner=include&count=20";
-    const QString yahoo     = e->ticker.isEmpty() ? QString() : ("https://finance.yahoo.com/quote/" + e->ticker);
-    const QString gnews     = "https://news.google.com/search?q=" + company_q + "%20IPO";
-    const QString gsearch   = "https://www.google.com/search?q=" + QUrl::toPercentEncoding(e->company + " founders CEO");
-    const QString wiki      = "https://en.wikipedia.org/wiki/Special:Search?search=" + company_q;
-    const QString crunchbase= "https://www.crunchbase.com/textsearch?q=" + company_q;
-    const QString linkedin  = "https://www.linkedin.com/search/results/companies/?keywords=" + company_q;
+    const services::InfoData info = info_cache_.value(e->ticker, {});
+    const bool have_info = info_cache_.contains(e->ticker);
 
-    // Comps: prefer same sector when known, fall back to same exchange.
+    // ── HEADER (company name + chips, anchored above the facts tabs) ──
+    QString hdr = QString(kDetailCss);
+    hdr += "<h3>" + e->company.toHtmlEscaped() + "</h3>";
+    QStringList chips;
+    if (!e->ticker.isEmpty())   chips << "<span class='chip'><b>" + e->ticker.toHtmlEscaped() + "</b></span>";
+    if (!e->exchange.isEmpty()) chips << "<span class='chip'>" + e->exchange.toHtmlEscaped() + "</span>";
+    if (!e->sector.isEmpty())   chips << "<span class='chip'>" + e->sector.toHtmlEscaped() + "</span>";
+    if (!e->industry.isEmpty()) chips << "<span class='chip'>" + e->industry.toHtmlEscaped() + "</span>";
+    const QString status_cls   = e->status == "priced" ? "priced" : e->status == "filed" ? "filed" : "upcoming";
+    const QString status_label = e->status == "priced" ? "PRICED" : e->status == "filed" ? "FILED (S-1)" : "UPCOMING";
+    chips << QString("<span class='chip %1'><b>%2</b></span>").arg(status_cls, status_label);
+    hdr += chips.join(" ");
+    header_lbl_->setText(hdr);
+
+    // ── FACTS TAB PAGES (middle-top) ────────────────────────────────────────
+    page_deal_     ->setText(QString(kDetailCss) + build_deal_html(*e));
+    page_business_ ->setText(QString(kDetailCss) + build_business_html(*e, info, have_info));
+    page_leader_   ->setText(QString(kDetailCss) + build_leadership_html(info, have_info));
+    page_fund_     ->setText(QString(kDetailCss) + build_fundamentals_html(info, have_info, *e));
+    page_pipeline_ ->setText(QString(kDetailCss) + build_pipeline_html(*e));
+
+    // Hide tabs that have no data for this entry. The data-dependent ones
+    // (BUSINESS, LEADERSHIP, FUNDAMENTALS) stay visible while a ticker is
+    // resolvable so the builders' "Loading…" placeholders are actually seen;
+    // they only collapse when we know nothing will ever load (no ticker yet).
+    // Indexes match addTab order in build_detail_rail.
+    const bool has_ticker = !e->ticker.isEmpty();
+    tabs_facts_->setTabVisible(1, has_ticker || (have_info &&
+        (!info.description.isEmpty() || info.employees > 0 || !info.website.isEmpty())));
+    tabs_facts_->setTabVisible(2, has_ticker || (have_info && !info.officers.isEmpty()));
+    tabs_facts_->setTabVisible(3, has_ticker);
+    tabs_facts_->setTabVisible(4, e->status != "priced"); // PIPELINE only for upcoming/filed
+
+    // ── CHARTS TAB PAGES (middle-bottom) ────────────────────────────────────
+    rebuild_price_chart(*e);
+    page_range_   ->setText(QString(kDetailCss) + build_range_html(*e));
+    page_lockup_  ->setText(QString(kDetailCss) + build_lockup_html(*e));
+    page_timeline_->setText(QString(kDetailCss) + build_timeline_html(*e));
+
+    tabs_charts_->setTabVisible(0, e->status == "priced");                          // PRICE
+    tabs_charts_->setTabVisible(1, have_info && info.week52_high > info.week52_low); // RANGE
+    tabs_charts_->setTabVisible(2, e->status == "priced");                          // LOCK-UP
+    tabs_charts_->setTabVisible(3, e->status != "priced");                          // TIMELINE
+    // If the currently-visible tab got hidden, jump to the first visible one.
+    if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex())) {
+        for (int i = 0; i < tabs_charts_->count(); ++i)
+            if (tabs_charts_->isTabVisible(i)) { tabs_charts_->setCurrentIndex(i); break; }
+    }
+    if (!tabs_facts_->isTabVisible(tabs_facts_->currentIndex())) {
+        for (int i = 0; i < tabs_facts_->count(); ++i)
+            if (tabs_facts_->isTabVisible(i)) { tabs_facts_->setCurrentIndex(i); break; }
+    }
+
+    // ── RIGHT PANE: sector heat + comps (top), research links (bottom) ─────
+    right_top_   ->setText(QString(kDetailCss) + build_sector_comps_html(*e));
+    right_bottom_->setText(QString(kDetailCss) + build_links_html(*e, info, have_info));
+}
+
+// ── Small format helpers shared by the per-tab builders ─────────────────────
+namespace {
+const char* pct_cls(double v) { return v >= 0 ? "pos" : "neg"; }
+QString fmt_pct(double v, int prec = 1) {
+    if (std::abs(v) < 1e-9) return QStringLiteral("—");
+    const double pct = v * 100.0;
+    return QString("%1%2%").arg(pct >= 0 ? "+" : "").arg(pct, 0, 'f', prec);
+}
+QString fmt_num(double v, int prec = 2) {
+    if (std::abs(v) < 1e-9) return QStringLiteral("—");
+    return QString::number(v, 'f', prec);
+}
+QString kvg_row(const QString& k, const QString& v) {
+    return "<tr><td class='k'>" + k + "</td><td>" + (v.isEmpty() ? "—" : v) + "</td></tr>";
+}
+} // namespace
+
+// ── DEAL tab ────────────────────────────────────────────────────────────────
+QString IpoWatchView::build_deal_html(const Entry& e) const {
+    QString h = "<table class='grid'>";
+    const QString date_label = e.status == "priced" ? "Priced on"
+                              : e.status == "filed" ? "S-1 filed"
+                                                    : "Expected price date";
+    h += kvg_row(date_label, e.date.isValid() ? e.date.toString("MMMM d, yyyy") : e.date_raw.toHtmlEscaped());
+    if (!e.price_range.isEmpty())
+        h += kvg_row(e.status == "priced" ? "Final price" : "Filed range", e.price_range.toHtmlEscaped());
+    if (e.status == "priced" && e.perf_fetched && e.final_price > 0) {
+        h += kvg_row("Last price", QString("<span class='big'>$%1</span>").arg(e.last_price, 0, 'f', 2));
+        h += kvg_row("Pop since IPO",
+                     QString("<span class='%1 big'>%2%3%</span>")
+                         .arg(pct_cls(e.pop_pct), e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1));
+    }
+    if (!e.shares_raw.isEmpty()) h += kvg_row("Shares offered", e.shares_raw.toHtmlEscaped());
+    if (!e.deal_size.isEmpty())  h += kvg_row("Deal size",      e.deal_size.toHtmlEscaped());
+    if (!e.exchange.isEmpty())   h += kvg_row("Exchange",       e.exchange.toHtmlEscaped());
+    if (!e.bookrunner.isEmpty()) h += kvg_row("Lead bookrunner", e.bookrunner.toHtmlEscaped());
+    h += "</table>";
+    return h;
+}
+
+// ── BUSINESS tab ────────────────────────────────────────────────────────────
+QString IpoWatchView::build_business_html(const Entry& e, const services::InfoData& info, bool have_info) const {
+    QString h;
+    if (!have_info) {
+        if (e.ticker.isEmpty())
+            h += "<div class='muted'>No ticker assigned yet — business profile will populate after pricing.</div>";
+        else
+            h += "<div class='muted'>Loading business profile…</div>";
+        return h;
+    }
+    if (!info.description.isEmpty()) {
+        QString desc = info.description;
+        constexpr int kMaxChars = 1200;
+        if (desc.size() > kMaxChars) {
+            int cut = desc.lastIndexOf('.', kMaxChars);
+            if (cut < 400) cut = kMaxChars;
+            desc = desc.left(cut + 1) + " …";
+        }
+        h += "<div style='line-height:1.5;'>" + desc.toHtmlEscaped() + "</div>";
+    }
+    h += "<table class='grid' style='margin-top:8px;'>";
+    if (info.employees > 0)        h += kvg_row("Employees", QString::number(info.employees));
+    if (!info.country.isEmpty())   h += kvg_row("Country",   info.country.toHtmlEscaped());
+    if (!info.currency.isEmpty())  h += kvg_row("Currency",  info.currency.toHtmlEscaped());
+    if (!info.website.isEmpty()) {
+        const QString href = info.website.toHtmlEscaped();
+        h += "<tr><td class='k'>Website</td><td><a href='" + href + "'>" + href + "</a></td></tr>";
+    }
+    h += "</table>";
+    return h;
+}
+
+// ── LEADERSHIP tab ──────────────────────────────────────────────────────────
+QString IpoWatchView::build_leadership_html(const services::InfoData& info, bool have_info) const {
+    if (!have_info) return "<div class='muted'>Loading leadership data…</div>";
+    if (info.officers.isEmpty())
+        return "<div class='muted'>No officer data available for this ticker.</div>";
+    QString h = "<table class='grid'>";
+    for (const auto& o : info.officers) {
+        h += "<tr><td class='k' style='width:40%;'>" + o.title.toHtmlEscaped() + "</td><td>" +
+             o.name.toHtmlEscaped() + "</td></tr>";
+    }
+    h += "</table>";
+    return h;
+}
+
+// ── FUNDAMENTALS tab ────────────────────────────────────────────────────────
+QString IpoWatchView::build_fundamentals_html(const services::InfoData& info, bool have_info, const Entry& e) const {
+    if (!have_info) {
+        if (e.ticker.isEmpty())
+            return "<div class='muted'>No ticker — fundamentals unavailable until pricing.</div>";
+        return "<div class='muted'>Loading fundamentals…</div>";
+    }
+    QString h = "<table class='grid'>";
+    if (info.market_cap > 0)       h += kvg_row("Market cap",     format_money(info.market_cap));
+    if (info.pe_ratio   > 0)       h += kvg_row("P/E (trailing)", QString::number(info.pe_ratio, 'f', 1) + "x");
+    if (info.forward_pe > 0)       h += kvg_row("P/E (forward)",  QString::number(info.forward_pe, 'f', 1) + "x");
+    if (info.price_to_book > 0)    h += kvg_row("Price / Book",   QString::number(info.price_to_book, 'f', 2) + "x");
+    if (info.dividend_yield > 0)   h += kvg_row("Dividend yield", fmt_pct(info.dividend_yield, 2));
+    if (info.beta > 0)             h += kvg_row("Beta",           fmt_num(info.beta));
+    if (info.avg_volume > 0)       h += kvg_row("Avg volume",     format_money(info.avg_volume));
+    if (info.profit_margin != 0)
+        h += kvg_row("Profit margin",
+                     QString("<span class='%1'>%2</span>").arg(pct_cls(info.profit_margin), fmt_pct(info.profit_margin)));
+    if (info.roe != 0)
+        h += kvg_row("Return on equity",
+                     QString("<span class='%1'>%2</span>").arg(pct_cls(info.roe), fmt_pct(info.roe)));
+    if (info.debt_to_equity > 0)   h += kvg_row("Debt / Equity",  fmt_num(info.debt_to_equity));
+    if (info.current_ratio > 0)    h += kvg_row("Current ratio",  fmt_num(info.current_ratio));
+    h += "</table>";
+    return h;
+}
+
+// ── PIPELINE tab (upcoming/filed only) ──────────────────────────────────────
+QString IpoWatchView::build_pipeline_html(const Entry& e) const {
+    QString h;
+    if (e.status == "upcoming" && e.date.isValid()) {
+        const QDate today = QDate::currentDate();
+        const qint64 days_to = today.daysTo(e.date);
+        h += QString("<div class='big' style='color:#d97706;'>%1 day%2</div>")
+                 .arg(days_to).arg(days_to == 1 ? "" : "s");
+        h += QString("<div class='muted'>until expected pricing on %1</div>")
+                 .arg(e.date.toString("MMM d, yyyy"));
+        const double frac = std::clamp(1.0 - double(days_to) / 14.0, 0.0, 1.0);
+        h += "<div style='margin-top:8px;'>" + position_bar(frac, "#d97706") + "</div>";
+        h += "<div class='muted' style='margin-top:6px;'>Nasdaq's UPCOMING bucket carries the next ~2 weeks of scheduled deals. "
+             "Earlier-stage pipeline candidates show up under FILED (S-1).</div>";
+    } else if (e.status == "filed" && e.date.isValid()) {
+        const QDate today = QDate::currentDate();
+        const qint64 days_since = e.date.daysTo(today);
+        h += QString("<div class='big' style='color:#3b82f6;'>S-1 filed %1 day%2 ago</div>")
+                 .arg(days_since).arg(days_since == 1 ? "" : "s");
+        const QString stage =
+            days_since < 30  ? "Typical pricing window starts ~30d after filing."
+            : days_since < 90 ? "In typical pricing window (30-90d post-filing)."
+            : days_since < 180 ? "Beyond typical window — may need an updated filing."
+                              : "Stale filing — deal may have been quietly withdrawn.";
+        h += "<div class='muted' style='margin-top:4px;'>" + stage + "</div>";
+        const double frac = std::clamp(double(days_since) / 180.0, 0.0, 1.0);
+        const QString col = days_since < 30 ? "#10b981" : days_since < 90 ? "#d97706" : "#ef4444";
+        h += "<div style='margin-top:8px;'>" + position_bar(frac, col) + "</div>";
+    } else {
+        h += "<div class='muted'>Pipeline data unavailable for this entry.</div>";
+    }
+    return h;
+}
+
+// ── RANGE tab (FUNDAMENTALS 52-week range, visualized) ──────────────────────
+QString IpoWatchView::build_range_html(const Entry& e) const {
+    const services::InfoData info = info_cache_.value(e.ticker, {});
+    const bool have_info = info_cache_.contains(e.ticker);
+    if (!have_info || info.week52_high <= info.week52_low || info.week52_low <= 0)
+        return "<div class='muted'>52-week range data not yet available.</div>";
+    QString h = QString("<div class='big'>$%1 <span class='muted'>–</span> $%2</div>")
+                    .arg(info.week52_low, 0, 'f', 2).arg(info.week52_high, 0, 'f', 2);
+    if (e.last_price > 0) {
+        const double pos = (e.last_price - info.week52_low) /
+                           (info.week52_high - info.week52_low);
+        h += QString("<div class='muted' style='margin-top:6px;'>Current $%1 sits at %2% of the band</div>")
+                 .arg(e.last_price, 0, 'f', 2).arg(int(pos * 100));
+        h += "<div style='margin-top:6px;'>" + position_bar(pos, "#d97706") + "</div>";
+    } else {
+        h += "<div class='muted' style='margin-top:6px;'>Current price unavailable.</div>";
+    }
+    return h;
+}
+
+// ── LOCK-UP tab (priced only) ───────────────────────────────────────────────
+QString IpoWatchView::build_lockup_html(const Entry& e) const {
+    if (e.status != "priced" || !e.date.isValid())
+        return "<div class='muted'>Lock-up applies only to priced deals.</div>";
+    const QDate lockup_end = e.date.addDays(180);
+    const QDate today = QDate::currentDate();
+    const qint64 days_left = today.daysTo(lockup_end);
+    const qint64 days_elapsed = e.date.daysTo(today);
+    const double progress = std::clamp(double(days_elapsed) / 180.0, 0.0, 1.0);
+    QString h;
+    h += "<div class='muted'>Insider/early-investor lock-up window (180d est.)</div>";
+    if (days_left > 0)
+        h += QString("<div class='big' style='margin-top:6px;'>%1 days left</div>"
+                     "<div class='muted'>expires ~%2</div>")
+                 .arg(days_left).arg(lockup_end.toString("MMM d, yyyy"));
+    else
+        h += QString("<div class='muted' style='margin-top:6px;'>Expired %1</div>")
+                 .arg(lockup_end.toString("MMM d, yyyy"));
+    h += "<div style='margin-top:8px;'>" + position_bar(progress, days_left > 0 ? "#10b981" : "#666") + "</div>";
+    return h;
+}
+
+// ── TIMELINE tab (upcoming/filed only — alternate visualization of pipeline) ─
+QString IpoWatchView::build_timeline_html(const Entry& e) const {
+    if (e.status == "priced") return "<div class='muted'>—</div>";
+    QString h;
+    h += "<div class='muted'>S-1 filed &rarr; pricing window &rarr; listing</div>";
+    if (e.status == "upcoming" && e.date.isValid()) {
+        const qint64 days_to = QDate::currentDate().daysTo(e.date);
+        h += QString("<div class='big' style='margin-top:6px;color:#d97706;'>T-%1 days</div>")
+                 .arg(days_to);
+        // Visualize progress through the 90-day pricing window.
+        const double frac = std::clamp(1.0 - double(days_to) / 90.0, 0.0, 1.0);
+        h += "<div style='margin-top:8px;'>" + position_bar(frac, "#d97706") + "</div>";
+        h += QString("<div class='muted' style='margin-top:6px;'>Expected price date: %1</div>")
+                 .arg(e.date.toString("MMM d, yyyy"));
+    } else if (e.status == "filed" && e.date.isValid()) {
+        const qint64 days_since = e.date.daysTo(QDate::currentDate());
+        h += QString("<div class='big' style='margin-top:6px;color:#3b82f6;'>Day %1</div>")
+                 .arg(days_since);
+        const double frac = std::clamp(double(days_since) / 180.0, 0.0, 1.0);
+        h += "<div style='margin-top:8px;'>" + position_bar(frac, "#3b82f6") + "</div>";
+        h += QString("<div class='muted' style='margin-top:6px;'>S-1 filing date: %1</div>")
+                 .arg(e.date.toString("MMM d, yyyy"));
+    }
+    return h;
+}
+
+// ── PRICE chart — real QChartView built from history_cache_ ─────────────────
+void IpoWatchView::rebuild_price_chart(const Entry& e) {
+    if (!page_price_chart_host_) return;
+    // The host layout is the QVBoxLayout we installed in build_detail_rail.
+    // Cast to access the stretch-aware addWidget overload.
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_price_chart_host_->layout());
+    if (!host_layout) return;
+    // Wipe old chart contents.
+    while (host_layout->count() > 0) {
+        QLayoutItem* item = host_layout->takeAt(0);
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+    price_chart_view_ = nullptr;
+
+    auto add_placeholder = [&](const QString& html) {
+        auto* lbl = new QLabel(html);
+        lbl->setTextFormat(Qt::RichText);
+        lbl->setAlignment(Qt::AlignCenter);
+        lbl->setStyleSheet("color:#7a7a7a;");
+        host_layout->addWidget(lbl, 1);
+    };
+
+    if (e.status != "priced" || e.ticker.isEmpty()) {
+        add_placeholder("<i>Price chart appears once the deal lists.</i>");
+        return;
+    }
+    if (history_inflight_.contains(e.ticker)) {
+        add_placeholder("<i>Loading price history…</i>");
+        return;
+    }
+    auto it = history_cache_.constFind(e.ticker);
+    if (it == history_cache_.constEnd() || it.value().size() < 2) {
+        add_placeholder("<i>No price history available yet.</i>");
+        return;
+    }
+    const auto& closes = it.value();
+    QVector<ui::ChartFactory::DataPoint> pts;
+    pts.reserve(closes.size());
+    for (int i = 0; i < closes.size(); ++i)
+        pts.append({double(i), closes.at(i)});
+
+    const double first = closes.first();
+    const double last  = closes.last();
+    const QString color = last >= first ? QString(ui::colors::POSITIVE())
+                                        : QString(ui::colors::NEGATIVE());
+    auto* view = ui::ChartFactory::line_chart(QString(), pts, color);
+    price_chart_view_ = view;
+    host_layout->addWidget(view, 1);
+}
+
+// ── RIGHT-TOP: sector heat + comps ──────────────────────────────────────────
+QString IpoWatchView::build_sector_comps_html(const Entry& e) const {
     auto comp_match = [&](const Entry& other) -> bool {
-        if (&other == e || other.status != "priced") return false;
-        if (!e->sector.isEmpty() && !other.sector.isEmpty()) return other.sector == e->sector;
-        if (!e->exchange.isEmpty() && !other.exchange.isEmpty()) return other.exchange == e->exchange;
+        if (&other == &e || other.status != "priced") return false;
+        if (!e.sector.isEmpty() && !other.sector.isEmpty()) return other.sector == e.sector;
+        if (!e.exchange.isEmpty() && !other.exchange.isEmpty()) return other.exchange == e.exchange;
         return false;
     };
     int comp_count = 0; double comp_pop_sum = 0; int comp_pop_n = 0;
     QVector<const Entry*> comp_top;
     for (const auto& other : entries_) {
         if (!comp_match(other)) continue;
-        if (e->date.isValid() && other.date.isValid() &&
-            std::abs(e->date.daysTo(other.date)) > 180) continue;
+        if (e.date.isValid() && other.date.isValid() &&
+            std::abs(e.date.daysTo(other.date)) > 180) continue;
         ++comp_count;
         if (other.perf_fetched) { comp_pop_sum += other.pop_pct; ++comp_pop_n; }
-        if (comp_top.size() < 6) comp_top.append(&other);
+        if (comp_top.size() < 8) comp_top.append(&other);
     }
 
-    const services::InfoData info = info_cache_.value(e->ticker, {});
-    const bool have_info = info_cache_.contains(e->ticker);
+    const QString basis = !e.sector.isEmpty() ? "same sector" : "same exchange";
 
-    auto fmt_pct = [](double v, int prec = 1) {
-        if (std::abs(v) < 1e-9) return QStringLiteral("—");
-        // yfinance returns ratios (0.42 = 42%) — multiply by 100.
-        const double pct = v * 100.0;
-        return QString("%1%2%").arg(pct >= 0 ? "+" : "").arg(pct, 0, 'f', prec);
-    };
-    auto fmt_num = [](double v, int prec = 2) {
-        if (std::abs(v) < 1e-9) return QStringLiteral("—");
-        return QString::number(v, 'f', prec);
-    };
-    auto pct_cls = [](double v) { return v >= 0 ? "pos" : "neg"; };
-
-    // CSS — font bumped to 12px to match dashboard widget standard
-    // (BaseWidget/OpenPositionsWidget/TickerBar all use 12px). Secondary
-    // text colors brightened from #888/#999/#666 to #b8b8b8/#7a7a7a so the
-    // labels are readable on the dark BG_SURFACE. Section accent uses 11px
-    // so it stays clearly subordinate to body text.
     QString h;
-    h += "<style>"
-         "body{font-family:Consolas,Menlo,monospace;font-size:12px;color:#e5e5e5;}"
-         "h3{margin:0 0 4px 0;font-size:15px;color:#fff;}"
-         ".chip{display:inline-block;padding:2px 7px;background:#222;color:#d97706;"
-         "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:11px;}"
-         ".chip.priced{color:#10b981;border-color:#10b981;}"
-         ".chip.filed{color:#3b82f6;border-color:#3b82f6;}"
-         ".chip.upcoming{color:#d97706;border-color:#d97706;}"
-         "table.kv{border-collapse:collapse;width:100%;}"
-         "table.kv td{padding:3px 8px 3px 0;vertical-align:top;font-size:12px;}"
-         "table.grid{border-collapse:collapse;width:100%;margin-top:4px;}"
-         "table.grid td{padding:3px 6px;border-bottom:1px solid #2a2a2a;font-size:12px;}"
-         "table.grid td.k{color:#b8b8b8;font-size:11px;width:48%;letter-spacing:.3px;}"
-         ".k{color:#b8b8b8;font-size:11px;letter-spacing:.3px;}"
-         ".sec{color:#d97706;font-weight:bold;font-size:11px;letter-spacing:1.5px;"
-         "  margin:10px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:2px;}"
-         "a{color:#d97706;text-decoration:none;}"
-         "a:hover{text-decoration:underline;}"
-         ".pos{color:#10b981;}"
-         ".neg{color:#ef4444;}"
-         ".big{font-size:17px;font-weight:bold;}"
-         ".muted{color:#7a7a7a;}"
-         "td.colL{width:50%;vertical-align:top;padding-right:14px;}"
-         "td.colR{width:50%;vertical-align:top;padding-left:14px;border-left:1px solid #2a2a2a;}"
-         "</style>";
-
-    // ── HEADER (full width) ──
-    h += "<h3>" + e->company.toHtmlEscaped() + "</h3>";
-    QStringList chips;
-    if (!e->ticker.isEmpty())   chips << "<span class='chip'><b>" + e->ticker.toHtmlEscaped() + "</b></span>";
-    if (!e->exchange.isEmpty()) chips << "<span class='chip'>" + e->exchange.toHtmlEscaped() + "</span>";
-    if (!e->sector.isEmpty())   chips << "<span class='chip'>" + e->sector.toHtmlEscaped() + "</span>";
-    if (!e->industry.isEmpty()) chips << "<span class='chip'>" + e->industry.toHtmlEscaped() + "</span>";
-    const QString status_chip_cls =
-        e->status == "priced"   ? "priced"
-        : e->status == "filed"  ? "filed"
-                                : "upcoming";
-    const QString status_label =
-        e->status == "priced"   ? "PRICED"
-        : e->status == "filed"  ? "FILED (S-1)"
-                                : "UPCOMING";
-    chips << QString("<span class='chip %1'><b>%2</b></span>").arg(status_chip_cls, status_label);
-    h += chips.join(" ");
-
-    // ── 2-COLUMN LAYOUT ──
-    // Sections distribute across left (data-heavy) and right (research+context)
-    // so the rail uses the full width instead of leaving the right side empty.
-    // Each side accumulates into its own buffer so we can keep the existing
-    // kvg() pattern by swapping which buffer it writes into.
-    QString L, R;
-    QString* cur = &L;
-    auto kvg = [&](const QString& k, const QString& v) {
-        *cur += "<tr><td class='k'>" + k + "</td><td>" + (v.isEmpty() ? "—" : v) + "</td></tr>";
-    };
-    auto sec = [&](const QString& title) { *cur += "<span class='sec'>" + title + "</span>"; };
-
-    // ─── LEFT: DEAL FACTS ──────────────────────────────────────────────────
-    cur = &L;
-    sec("DEAL FACTS");
-    *cur += "<table class='grid'>";
-    const QString date_label =
-        e->status == "priced"   ? "Priced on"
-        : e->status == "filed"  ? "S-1 filed"
-                                : "Expected price date";
-    kvg(date_label, e->date.isValid() ? e->date.toString("MMMM d, yyyy") : e->date_raw.toHtmlEscaped());
-    if (!e->price_range.isEmpty()) {
-        kvg(e->status == "priced" ? "Final price" : "Filed range", e->price_range.toHtmlEscaped());
-    }
-    if (e->status == "priced" && e->perf_fetched && e->final_price > 0) {
-        kvg("Last price", QString("<span class='big'>$%1</span>").arg(e->last_price, 0, 'f', 2));
-        kvg("Pop since IPO",
-            QString("<span class='%1 big'>%2%3%</span>")
-                .arg(pct_cls(e->pop_pct), e->pop_pct >= 0 ? "+" : "")
-                .arg(e->pop_pct, 0, 'f', 1));
-    }
-    if (!e->shares_raw.isEmpty()) kvg("Shares offered", e->shares_raw.toHtmlEscaped());
-    if (!e->deal_size.isEmpty())  kvg("Deal size",      e->deal_size.toHtmlEscaped());
-    *cur += "</table>";
-
-    // ─── LEFT: PIPELINE TIMELINE / COUNTDOWN ───────────────────────────────
-    // For UPCOMING: days-to-IPO countdown bar (visual urgency cue).
-    // For FILED:    days-since-S-1 (with the typical 30-90d pricing window
-    //               as context, so the user can judge whether this filing
-    //               is fresh enough to pay attention to or stale).
-    // For PRICED:   lock-up countdown (kept on the right column where it
-    //               historically lived — see right-column block below).
-    if (e->status == "upcoming" && e->date.isValid()) {
-        const QDate today = QDate::currentDate();
-        const qint64 days_to = today.daysTo(e->date);
-        sec("DAYS TO IPO");
-        *cur += QString("<b style='font-size:16px;color:#d97706;'>%1 day%2</b>").arg(days_to).arg(days_to == 1 ? "" : "s");
-        *cur += QString(" <span class='muted'>until expected price on %1</span>")
-                    .arg(e->date.toString("MMM d, yyyy"));
-        // Visualize the typical 0–14 day Nasdaq upcoming window.
-        const double frac = std::clamp(1.0 - double(days_to) / 14.0, 0.0, 1.0);
-        *cur += "<br>" + position_bar(frac, "#d97706");
-    } else if (e->status == "filed" && e->date.isValid()) {
-        const QDate today = QDate::currentDate();
-        const qint64 days_since = e->date.daysTo(today);
-        sec("PIPELINE STATUS");
-        *cur += QString("<b style='color:#3b82f6;'>S-1 filed %1 day%2 ago</b>")
-                    .arg(days_since).arg(days_since == 1 ? "" : "s");
-        const QString stage =
-            days_since < 30  ? "<span class='muted'>· typical pricing window starts ~30d after filing</span>"
-            : days_since < 90 ? "<span class='muted'>· in typical pricing window (30-90d post-filing)</span>"
-            : days_since < 180 ? "<span class='muted'>· beyond typical window — may need updated filing</span>"
-                              : "<span class='muted'>· stale filing — deal may have been quietly withdrawn</span>";
-        *cur += " " + stage;
-        // 0..180-day position bar — green if fresh, amber if in window, red if stale.
-        const double frac = std::clamp(double(days_since) / 180.0, 0.0, 1.0);
-        const QString col = days_since < 30 ? "#10b981" : days_since < 90 ? "#d97706" : "#ef4444";
-        *cur += "<br>" + position_bar(frac, col);
+    h += QString("<span class='sec'>SECTOR HEAT · %1</span>").arg(basis);
+    if (comp_pop_n == 0) {
+        h += "<span class='muted'>No priced comparables in window.</span>";
+    } else {
+        const double avg = comp_pop_sum / comp_pop_n;
+        const QString verdict =
+            avg >  15 ? "<span class='pos'>🔥 HOT</span>"
+            : avg >   5 ? "<span class='pos'>WARM</span>"
+            : avg >  -5 ? "<span class='muted'>NEUTRAL</span>"
+            : avg > -15 ? "<span class='neg'>COOL</span>"
+                        : "<span class='neg'>❄ COLD</span>";
+        h += QString("<div>%1 · <span class='big %2'>%3%4%</span> "
+                     "<span class='muted'>avg pop · %5 peer%6</span></div>")
+                 .arg(verdict, pct_cls(avg))
+                 .arg(avg >= 0 ? "+" : "").arg(avg, 0, 'f', 1)
+                 .arg(comp_pop_n).arg(comp_pop_n == 1 ? "" : "s");
+        const double frac = std::clamp((avg + 50.0) / 100.0, 0.0, 1.0);
+        const QString col = avg > 5 ? "#10b981" : avg < -5 ? "#ef4444" : "#7a7a7a";
+        h += "<div style='margin-top:6px;'>" + position_bar(frac, col) + "</div>";
     }
 
-    // ─── LEFT: PRICE SINCE IPO (priced only, lazy fetch_history) ───────────
-    if (e->status == "priced" && !e->ticker.isEmpty()) {
-        sec("PRICE SINCE IPO");
-        auto it = history_cache_.constFind(e->ticker);
-        if (history_inflight_.contains(e->ticker)) {
-            *cur += "<span class='muted'>loading…</span>";
-        } else if (it == history_cache_.constEnd()) {
-            *cur += "<span class='muted'>loading…</span>";
-        } else if (it.value().size() < 2) {
-            *cur += "<span class='muted'>No history available yet.</span>";
-        } else {
-            const auto& closes = it.value();
-            const double first = closes.first();
-            const double last  = closes.last();
-            const double hi    = *std::max_element(closes.begin(), closes.end());
-            const double lo    = *std::min_element(closes.begin(), closes.end());
-            const double tot_pct = first > 0 ? (last - first) / first * 100.0 : 0;
-            const QString sline = unicode_sparkline(closes);
-            const QString color = tot_pct >= 0 ? QString(ui::colors::POSITIVE())
-                                               : QString(ui::colors::NEGATIVE());
-            *cur += QString("<div style='font-size:14px;letter-spacing:1px;color:%1;"
-                         "font-family:Consolas,Menlo,monospace;'>%2</div>")
-                     .arg(color, sline);
-            // Day-1 + Week-1 close annotations: bankers and IPO investors
-            // care whether the pop sustained (Day-1 close hits, Week-1 close
-            // holds) or faded — the headline pop alone hides that. yfinance
-            // returns daily bars, so closes[0] is the listing-day close and
-            // closes[4] is the end-of-week-1 close. We only emit the Week-1
-            // row when at least 5 bars exist; otherwise it would silently
-            // collapse to Day-1's value.
-            const double d1 = closes.first();
-            const double d1_pct = (e->final_price > 0) ? (d1 - e->final_price) / e->final_price * 100.0 : 0;
-            const double cur_pct = (e->final_price > 0 && last > 0) ? (last - e->final_price) / e->final_price * 100.0 : tot_pct;
-            auto signed_pct = [&](double v) {
-                return QString("<span class='%1'>%2%3%</span>")
-                    .arg(pct_cls(v)).arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 1);
-            };
-            *cur += "<table class='grid'>";
-            kvg("Day 1 close",
-                QString("$%1 vs offer %2").arg(d1, 0, 'f', 2).arg(signed_pct(d1_pct)));
-            if (closes.size() >= 5) {
-                const double w1 = closes.at(4);
-                const double w1_pct = (e->final_price > 0)
-                    ? (w1 - e->final_price) / e->final_price * 100.0 : 0;
-                kvg("Week 1 close",
-                    QString("$%1 vs offer %2").arg(w1, 0, 'f', 2).arg(signed_pct(w1_pct)));
+    h += QString("<span class='sec'>COMPS · %1 · ±180d priced</span>").arg(basis);
+    if (comp_count == 0) {
+        h += "<span class='muted'>No comparable priced deals in the current dataset.</span>";
+    } else {
+        h += QString("<b>%1 deals</b>").arg(comp_count);
+        h += "<table class='grid' style='margin-top:4px;'>";
+        for (const auto* c : comp_top) {
+            QString pop;
+            if (c->perf_fetched && c->final_price > 0) {
+                pop = QString("<span class='%1'>%2%3%</span>")
+                          .arg(pct_cls(c->pop_pct), c->pop_pct >= 0 ? "+" : "")
+                          .arg(c->pop_pct, 0, 'f', 1);
+            } else {
+                pop = "<span class='muted'>…</span>";
             }
-            kvg("Current",
-                QString("$%1 vs offer %2").arg(last, 0, 'f', 2).arg(signed_pct(cur_pct)));
-            kvg("Hi / Lo",
-                QString("$%1 / $%2").arg(hi, 0, 'f', 2).arg(lo, 0, 'f', 2));
-            kvg("Bars", QString::number(closes.size()) + " trading days");
-            *cur += "</table>";
+            h += "<tr><td>" + c->company.toHtmlEscaped() + " <span class='muted'>(" +
+                 c->ticker.toHtmlEscaped() + ")</span></td><td>" + pop + "</td></tr>";
         }
+        h += "</table>";
     }
-
-    // ─── LEFT: FUNDAMENTALS (lazy from fetch_info) ─────────────────────────
-    sec(have_info ? "FUNDAMENTALS"
-        : !e->ticker.isEmpty() ? "FUNDAMENTALS · loading…"
-                               : "FUNDAMENTALS");
-    if (have_info) {
-        *cur += "<table class='grid'>";
-        if (info.market_cap > 0) kvg("Market cap", format_money(info.market_cap));
-        if (info.pe_ratio   > 0) kvg("P/E (trailing)", QString::number(info.pe_ratio, 'f', 1) + "x");
-        if (info.forward_pe > 0) kvg("P/E (forward)",  QString::number(info.forward_pe, 'f', 1) + "x");
-        if (info.price_to_book > 0) kvg("Price / Book", QString::number(info.price_to_book, 'f', 2) + "x");
-        if (info.dividend_yield > 0) kvg("Dividend yield", fmt_pct(info.dividend_yield, 2));
-        if (info.beta > 0) kvg("Beta", fmt_num(info.beta));
-        if (info.week52_high > 0 && info.week52_low > 0 && info.week52_high > info.week52_low) {
-            // Show where the last price sits inside the 52-week band — the
-            // single most useful "is this near support / resistance" cue for
-            // an investor reading the rail at a glance. Only draw the bar
-            // when we have a real `last_price`; without it, position_bar at
-            // midpoint would be the same misleading placeholder we removed
-            // for the filed-range case.
-            QString cell = QString("$%1 – $%2")
-                .arg(info.week52_low, 0, 'f', 2)
-                .arg(info.week52_high, 0, 'f', 2);
-            if (e->last_price > 0) {
-                const double pos = (e->last_price - info.week52_low) /
-                                   (info.week52_high - info.week52_low);
-                cell += "<br>" + position_bar(pos, "#d97706");
-            }
-            kvg("52-week range", cell);
-        } else if (info.week52_high > 0 || info.week52_low > 0) {
-            kvg("52-week range",
-                QString("$%1 – $%2").arg(info.week52_low, 0, 'f', 2).arg(info.week52_high, 0, 'f', 2));
-        }
-        if (info.avg_volume > 0) kvg("Avg volume", format_money(info.avg_volume));
-        if (info.profit_margin != 0)
-            kvg("Profit margin",
-                QString("<span class='%1'>%2</span>").arg(pct_cls(info.profit_margin), fmt_pct(info.profit_margin)));
-        if (info.roe != 0)
-            kvg("Return on equity",
-                QString("<span class='%1'>%2</span>").arg(pct_cls(info.roe), fmt_pct(info.roe)));
-        if (info.debt_to_equity > 0) kvg("Debt / Equity", fmt_num(info.debt_to_equity));
-        if (info.current_ratio > 0)  kvg("Current ratio", fmt_num(info.current_ratio));
-        if (!info.country.isEmpty()) kvg("Country", info.country.toHtmlEscaped());
-        *cur += "</table>";
-    } else if (e->ticker.isEmpty()) {
-        *cur += "<div class='muted'>No ticker assigned yet — fundamentals will populate after pricing.</div>";
-    }
-
-    // ─── RIGHT: switch buffer ──────────────────────────────────────────────
-    cur = &R;
-
-    // ─── RIGHT: SECTOR HEAT ────────────────────────────────────────────────
-    // For ALL statuses — a visual "is this sector hot or cold" headline, so
-    // the user can read the rail and form an opinion at a glance instead of
-    // having to scan the COMPS list and do mental math. Reuses the comp
-    // aggregates we already computed above.
-    {
-        const QString basis = !e->sector.isEmpty() ? "same sector" : "same exchange";
-        sec(QString("SECTOR HEAT · %1").arg(basis));
-        if (comp_pop_n == 0) {
-            *cur += "<span class='muted'>No priced comparables in window.</span>";
-        } else {
-            const double avg = comp_pop_sum / comp_pop_n;
-            const QString verdict =
-                avg >  15 ? "<span class='pos'>🔥 HOT</span>"
-                : avg >   5 ? "<span class='pos'>WARM</span>"
-                : avg >  -5 ? "<span class='muted'>NEUTRAL</span>"
-                : avg > -15 ? "<span class='neg'>COOL</span>"
-                            : "<span class='neg'>❄ COLD</span>";
-            *cur += QString("<div style='font-size:14px;'>%1 · "
-                            "<span class='big %2'>%3%4%</span> "
-                            "<span class='muted'>avg pop across %5 priced peer%6</span></div>")
-                       .arg(verdict, pct_cls(avg))
-                       .arg(avg >= 0 ? "+" : "").arg(avg, 0, 'f', 1)
-                       .arg(comp_pop_n).arg(comp_pop_n == 1 ? "" : "s");
-            // Heat bar: map avg in [-50%, +50%] to 0..1. Color follows the
-            // verdict so the bar visually reinforces the headline.
-            const double frac = std::clamp((avg + 50.0) / 100.0, 0.0, 1.0);
-            const QString col = avg > 5 ? "#10b981" : avg < -5 ? "#ef4444" : "#7a7a7a";
-            *cur += "<br>" + position_bar(frac, col);
-        }
-    }
-
-    // ─── RIGHT: BUSINESS + LEADERSHIP (lazy from fetch_info) ───────────────
-    // For users researching an IPO, "who's running it" and "what do they do"
-    // are at least as important as the financial ratios. yfinance returns
-    // both via the same .info call we already make; just surface them.
-    if (have_info && (!info.description.isEmpty() || !info.officers.isEmpty() ||
-                      !info.website.isEmpty() || info.employees > 0)) {
-        sec("BUSINESS");
-        if (!info.description.isEmpty()) {
-            // Truncate to a paragraph so the rail doesn't run forever.
-            QString desc = info.description;
-            constexpr int kMaxChars = 600;
-            if (desc.size() > kMaxChars) {
-                // Trim at the last sentence boundary within the cap so we
-                // don't slice mid-word.
-                int cut = desc.lastIndexOf('.', kMaxChars);
-                if (cut < 200) cut = kMaxChars;
-                desc = desc.left(cut + 1) + " …";
-            }
-            *cur += "<div style='line-height:1.4;'>" + desc.toHtmlEscaped() + "</div>";
-        }
-        if (info.employees > 0 || !info.website.isEmpty()) {
-            *cur += "<table class='kv' style='margin-top:6px;'>";
-            if (info.employees > 0)
-                *cur += QString("<tr><td class='k'>Employees</td><td>%1</td></tr>")
-                            .arg(QString::number(info.employees));
-            if (!info.website.isEmpty()) {
-                const QString href = info.website.toHtmlEscaped();
-                *cur += "<tr><td class='k'>Website</td><td><a href='" + href +
-                        "'>" + href + "</a></td></tr>";
-            }
-            *cur += "</table>";
-        }
-        if (!info.officers.isEmpty()) {
-            sec("LEADERSHIP");
-            *cur += "<table class='grid'>";
-            constexpr int kMaxOfficers = 6;
-            for (int i = 0; i < info.officers.size() && i < kMaxOfficers; ++i) {
-                const auto& o = info.officers.at(i);
-                *cur += "<tr><td class='k'>" + o.title.toHtmlEscaped() + "</td><td>" +
-                        o.name.toHtmlEscaped() + "</td></tr>";
-            }
-            *cur += "</table>";
-            if (info.officers.size() > kMaxOfficers)
-                *cur += QString("<div class='muted'>+ %1 more</div>")
-                            .arg(info.officers.size() - kMaxOfficers);
-        }
-    }
-
-    // ─── RIGHT: LOCK-UP COUNTDOWN (priced only) ────────────────────────────
-    if (e->status == "priced" && e->date.isValid()) {
-        const QDate lockup_end = e->date.addDays(180);
-        const QDate today = QDate::currentDate();
-        const qint64 days_left = today.daysTo(lockup_end);
-        const qint64 days_elapsed = e->date.daysTo(today);
-        const double progress = std::clamp(double(days_elapsed) / 180.0, 0.0, 1.0);
-        sec("LOCK-UP COUNTDOWN (180d est.)");
-        if (days_left > 0)
-            *cur += QString("Expires ~%1 · <b>%2 days left</b><br>")
-                       .arg(lockup_end.toString("MMM d, yyyy")).arg(days_left);
-        else
-            *cur += QString("<span class='muted'>Expired %1</span><br>").arg(lockup_end.toString("MMM d, yyyy"));
-        *cur += position_bar(progress, days_left > 0 ? "#10b981" : "#666");
-    }
-
-    // ─── RIGHT: COMPS (detailed list) ──────────────────────────────────────
-    {
-        const QString basis = !e->sector.isEmpty() ? "same sector" : "same exchange";
-        sec(QString("COMPS · %1 · ±180d priced").arg(basis));
-        if (comp_count == 0) {
-            *cur += "<span class='muted'>No comparable priced deals in the current dataset.</span>";
-        } else {
-            *cur += QString("<b>%1 deals</b>").arg(comp_count);
-            *cur += "<table class='grid' style='margin-top:4px;'>";
-            for (const auto* c : comp_top) {
-                QString pop;
-                if (c->perf_fetched && c->final_price > 0) {
-                    pop = QString("<span class='%1'>%2%3%</span>")
-                              .arg(pct_cls(c->pop_pct), c->pop_pct >= 0 ? "+" : "")
-                              .arg(c->pop_pct, 0, 'f', 1);
-                } else {
-                    pop = "<span class='muted'>…</span>";
-                }
-                *cur += "<tr><td>" + c->company.toHtmlEscaped() + " <span class='muted'>(" +
-                        c->ticker.toHtmlEscaped() + ")</span></td><td>" + pop + "</td></tr>";
-            }
-            *cur += "</table>";
-        }
-    }
-
-    // ─── RIGHT: RESEARCH LINKS ─────────────────────────────────────────────
-    sec("RESEARCH LINKS");
-    *cur += "<table class='kv'>";
-    *cur += "<tr><td><a href='" + edgar_s1  + "'>SEC: S-1 / 424B</a></td>"
-            "<td><a href='" + edgar_all + "'>SEC: all filings</a></td></tr>";
-    *cur += "<tr><td><a href='" + edgar_144 + "'>SEC: Form 144</a></td>";
-    *cur += "<td>" + (yahoo.isEmpty() ? QStringLiteral("—") : "<a href='" + yahoo + "'>Yahoo quote</a>") + "</td></tr>";
-    *cur += "<tr><td><a href='" + gnews + "'>Google News</a></td>"
-            "<td><a href='" + wiki + "'>Wikipedia</a></td></tr>";
-    *cur += "<tr><td><a href='" + linkedin + "'>LinkedIn</a></td>"
-            "<td><a href='" + crunchbase + "'>Crunchbase</a></td></tr>";
-    *cur += "<tr><td colspan='2'><a href='" + gsearch + "'>Google: founders &amp; CEO</a></td></tr>";
-    if (have_info && !info.country.isEmpty())
-        *cur += "<tr><td colspan='2' class='muted'>HQ: " + info.country.toHtmlEscaped() + "</td></tr>";
-    *cur += "</table>";
-
-    // ── Compose 2-column outer table ──
-    h += "<table style='width:100%;border-collapse:collapse;margin-top:6px;'><tr>";
-    h += "<td class='colL'>" + L + "</td>";
-    h += "<td class='colR'>" + R + "</td>";
-    h += "</tr></table>";
-
-    detail_html_->setText(h);
+    return h;
 }
 
+// ── RIGHT-BOTTOM: research links ────────────────────────────────────────────
+QString IpoWatchView::build_links_html(const Entry& e, const services::InfoData& info, bool have_info) const {
+    const QString company_q = QUrl::toPercentEncoding(e.company);
+    const QString edgar_s1   = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=S-1&dateb=&owner=include&count=20";
+    const QString edgar_all  = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=&dateb=&owner=include&count=40";
+    const QString edgar_144  = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=" + company_q + "&type=144&dateb=&owner=include&count=20";
+    const QString yahoo      = e.ticker.isEmpty() ? QString() : ("https://finance.yahoo.com/quote/" + e.ticker);
+    const QString gnews      = "https://news.google.com/search?q=" + company_q + "%20IPO";
+    const QString gsearch    = "https://www.google.com/search?q=" + QUrl::toPercentEncoding(e.company + " founders CEO");
+    const QString wiki       = "https://en.wikipedia.org/wiki/Special:Search?search=" + company_q;
+    const QString crunchbase = "https://www.crunchbase.com/textsearch?q=" + company_q;
+    const QString linkedin   = "https://www.linkedin.com/search/results/companies/?keywords=" + company_q;
+
+    QString h = "<table class='kv'>";
+    h += "<tr><td><a href='" + edgar_s1   + "'>SEC: S-1 / 424B</a></td>"
+         "<td><a href='" + edgar_all  + "'>SEC: all filings</a></td></tr>";
+    h += "<tr><td><a href='" + edgar_144 + "'>SEC: Form 144</a></td>"
+         "<td>" + (yahoo.isEmpty() ? QStringLiteral("—") : "<a href='" + yahoo + "'>Yahoo quote</a>") + "</td></tr>";
+    h += "<tr><td><a href='" + gnews    + "'>Google News</a></td>"
+         "<td><a href='" + wiki     + "'>Wikipedia</a></td></tr>";
+    h += "<tr><td><a href='" + linkedin + "'>LinkedIn</a></td>"
+         "<td><a href='" + crunchbase + "'>Crunchbase</a></td></tr>";
+    h += "<tr><td colspan='2'><a href='" + gsearch + "'>Google: founders &amp; CEO</a></td></tr>";
+    if (have_info && !info.country.isEmpty())
+        h += "<tr><td colspan='2' class='muted'>HQ: " + info.country.toHtmlEscaped() + "</td></tr>";
+    h += "</table>";
+    return h;
+}
 // ── Parsing helpers ──────────────────────────────────────────────────────────
 
 QString IpoWatchView::format_money(double dollars) {

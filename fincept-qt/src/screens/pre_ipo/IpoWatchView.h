@@ -41,7 +41,9 @@ class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTableWidgetItem;
+class QTabWidget;
 class QVBoxLayout;
+QT_FORWARD_DECLARE_CLASS(QChartView)
 
 namespace fincept::screens::widgets {
 
@@ -126,6 +128,20 @@ class IpoWatchView : public QWidget {
     void render_watchlist();
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
+    // Per-section detail rail builders — each populates one tab page or pane.
+    // Split out so render_detail isn't a 200-line monolith and so individual
+    // sections can be unit-tested or reused later.
+    QString build_deal_html(const Entry& e) const;
+    QString build_business_html(const Entry& e, const services::InfoData& info, bool have_info) const;
+    QString build_leadership_html(const services::InfoData& info, bool have_info) const;
+    QString build_fundamentals_html(const services::InfoData& info, bool have_info, const Entry& e) const;
+    QString build_pipeline_html(const Entry& e) const;
+    QString build_range_html(const Entry& e) const;
+    QString build_lockup_html(const Entry& e) const;
+    QString build_timeline_html(const Entry& e) const;
+    QString build_sector_comps_html(const Entry& e) const;
+    QString build_links_html(const Entry& e, const services::InfoData& info, bool have_info) const;
+    void    rebuild_price_chart(const Entry& e);  // mutates price_chart_view_
     QVector<int> filtered_indices() const;     // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
     /// definition "priced only" and shouldn't be silently emptied when the
@@ -209,8 +225,31 @@ class IpoWatchView : public QWidget {
     // Workspace + detail
     QSplitter*    splitter_      = nullptr;
     QTableWidget* table_         = nullptr;  // single table; columns/rows change per lens
-    QWidget*      detail_pane_   = nullptr;
-    QLabel*       detail_html_   = nullptr;  // RichText label with all sections
+
+    // ── Detail rail (3-pane Bloomberg-style) ────────────────────────────────
+    // Outer splitter children: [table_, middle_pane_, right_pane_]
+    // middle_pane_ vertical: [tabs_facts_, tabs_charts_]
+    // right_pane_  vertical: [right_top_, right_bottom_]
+    QWidget*      middle_pane_   = nullptr;
+    QWidget*      right_pane_    = nullptr;
+    QLabel*       header_lbl_    = nullptr;  // company name + chips above the tabs
+
+    QTabWidget*   tabs_facts_    = nullptr;
+    QLabel*       page_deal_     = nullptr;
+    QLabel*       page_business_ = nullptr;
+    QLabel*       page_leader_   = nullptr;
+    QLabel*       page_fund_     = nullptr;
+    QLabel*       page_pipeline_ = nullptr;
+
+    QTabWidget*   tabs_charts_   = nullptr;
+    QWidget*      page_price_chart_host_ = nullptr; // QVBoxLayout host for the QChartView
+    QChartView*   price_chart_view_      = nullptr; // recreated each render
+    QLabel*       page_range_    = nullptr;
+    QLabel*       page_lockup_   = nullptr;
+    QLabel*       page_timeline_ = nullptr;
+
+    QLabel*       right_top_     = nullptr;  // sector heat + comps
+    QLabel*       right_bottom_  = nullptr;  // research links
 };
 
 } // namespace fincept::screens::widgets
