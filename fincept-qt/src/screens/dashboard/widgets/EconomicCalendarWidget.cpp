@@ -92,6 +92,8 @@ void EconomicCalendarWidget::on_theme_changed() {
 }
 
 void EconomicCalendarWidget::refresh_data() {
+    if (pending_fetches_ > 0) return; // prior fetch still in flight — callbacks will populate
+
     // ForexFactory public JSON calendar — no API key required.
     // Two requests: this week + next week, merged and sorted before display.
     static const char* kUrls[] = {
