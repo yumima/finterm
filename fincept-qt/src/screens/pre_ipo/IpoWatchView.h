@@ -78,7 +78,10 @@ class IpoWatchView : public QWidget {
         double  deal_size_dollars = 0;
         QString bookrunner;       // primary lead firm
         QStringList all_bookrunners;
-        QString status;           // "upcoming" | "priced"
+        QString status;           // "upcoming" | "filed" | "priced"
+        // For filed entries, `date` carries the filedDate. We expose both
+        // semantic names so the detail rail can label the field correctly.
+        QDate   filed_date;       // mirror of date when status == "filed"
         // Performance enrichment via yfinance batch_quotes — pre-fetched on load.
         bool   perf_fetched = false;
         double last_price   = 0;
@@ -124,7 +127,10 @@ class IpoWatchView : public QWidget {
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     QVector<int> filtered_indices() const;     // applies filter chips + search
-    bool entry_passes_filters(const Entry& e) const;
+    /// `apply_status` — set false from the PERFORMANCE lens, which is by
+    /// definition "priced only" and shouldn't be silently emptied when the
+    /// default status chip is UPCOMING.
+    bool entry_passes_filters(const Entry& e, bool apply_status = true) const;
 
     // ── Detail-rail enrichment ──────────────────────────────────────────────
     /// Kick off a one-shot fetch_history for the priced entry's ticker so the
@@ -169,7 +175,10 @@ class IpoWatchView : public QWidget {
     QSet<QString> starred_;
     Lens       active_lens_   = LensCalendar;
     TimeWindow time_window_   = TW_AllUpcoming;
-    QString    status_filter_ = "all";     // all | upcoming | priced
+    // Default to UPCOMING because the screen's primary value is forward
+    // pipeline research — past priced deals are the COMPS context, not the
+    // headline. User can flip to ALL / PRICED via the status chip.
+    QString    status_filter_ = "upcoming"; // all | upcoming | priced
     QString    exch_filter_   = "all";     // all | NYSE | NASDAQ | …
     QString    size_filter_   = "all";     // all | <100M | 100-500M | 500M+
     QString    search_query_;
