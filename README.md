@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`a16b4b51`](https://github.com/yumima/finterm/commit/a16b4b51) **fix(video+unlock):** three root-cause fixes
 - [`c440fcd0`](https://github.com/yumima/finterm/commit/c440fcd0) **fix(video):** curate verified channel presets; drop Al Jazeera + ET Now
 - [`619ee0bf`](https://github.com/yumima/finterm/commit/619ee0bf) **fix(video):** replace unavailable presets; expand to 6 verified channels
 - [`da6ced00`](https://github.com/yumima/finterm/commit/da6ced00) **fix(video):** normalise frames to RGBA8888 to fix texture update failure
