@@ -157,19 +157,38 @@ void VideoPlayerWidget::build_player_view() {
     vl->setSpacing(0);
 
 #ifdef HAS_QT_MULTIMEDIA
-    video_widget_ = new QVideoWidget;
-    // On X11, WA_TransparentForMouseEvents sets INPUT_ONLY on the native window
-    // so pointer events pass through to the tile's resize grip. On Wayland the
-    // compositor owns the surface and this attribute has no effect; the grip
-    // remains inaccessible while video is fullscreen on a Wayland session.
-    video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    vl->addWidget(video_widget_, 1);
+    // Inline video requires qt6glvideosink (gst-plugins-qt6). Without it,
+    // GStreamer falls back to waylandsink on Wayland, which creates a new
+    // top-level window per pipeline (see GST_PLUGIN_FEATURE_RANK in main.cpp).
+    // We detect this at runtime: if on Wayland, suppress video output entirely
+    // so GStreamer uses fakevideosink (audio-only, no windows, no shmem OOM).
+    // On X11 or when qt6glvideosink is present the video widget is shown normally.
+    const bool on_wayland =
+        QGuiApplication::platformName().contains("wayland", Qt::CaseInsensitive);
+
+    if (!on_wayland) {
+        video_widget_ = new QVideoWidget;
+        // WA_TransparentForMouseEvents: on X11, sets INPUT_ONLY so pointer
+        // events pass through to the tile's resize grip underneath.
+        video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        vl->addWidget(video_widget_, 1);
+    } else {
+        audio_only_label_ = new QLabel(
+            "♪  Audio only\n\n"
+            "Inline video requires gst-plugins-qt6.\n"
+            "Install it and restart for video playback.");
+        audio_only_label_->setAlignment(Qt::AlignCenter);
+        vl->addWidget(audio_only_label_, 1);
+    }
 
     player_ = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
     player_->setAudioOutput(audio_output_);
-    player_->setVideoOutput(video_widget_);
+    if (video_widget_)
+        player_->setVideoOutput(video_widget_);
+    // On Wayland: no setVideoOutput → GStreamer uses fakevideosink (from the
+    // GST_PLUGIN_FEATURE_RANK env var set in main.cpp). Audio plays normally.
 
     // Clear the in-progress flag and current URL on any player error so that
     // refresh_data() does not keep retrying and spawning new Wayland surfaces.
@@ -522,7 +541,12 @@ void VideoPlayerWidget::apply_styles() {
 
     // Player page
 #ifdef HAS_QT_MULTIMEDIA
-    video_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_BASE()));
+    if (video_widget_)
+        video_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_BASE()));
+    if (audio_only_label_)
+        audio_only_label_->setStyleSheet(
+            QString("color: %1; font-size: 11px; background: %2;")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE()));
 #else
     if (status_label_placeholder_)
         status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 11px; background: %2;")
