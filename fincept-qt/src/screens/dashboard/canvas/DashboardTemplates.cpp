@@ -15,28 +15,27 @@ QVector<DashboardTemplate> all_dashboard_templates() {
 
         // ── Portfolio Manager ────────────────────────────────────────────────
         // Layout (12-col, 15 rows, ~1038 px at 60 px/row — fits 1080p+):
-        //   Row  0–4 : Indices [4] | Commodities [4] | Margin [2,3r] | Today P&L [2,3r]
+        //   Row  0–4 : Indices [4] | Commodities [4] | Margin [2] | Today P&L [2]
         //   Row  4–8 : Sector Heatmap [6] | Econ Calendar [3] | Quick Trade [3]
-        //   Row  8–11: Watchlist [4] | Open Positions [4] | Working Orders [4]
-        //   Row 11–15: News [6] | Live TV [6]
-        // Sidebar (MarketPulsePanel) already shows Fear/Greed, Top Movers and VIX
-        // so those canvas widgets are intentionally omitted.
+        //   Row  8–12: Portfolio Summary [8] | Watchlist [4]
+        //   Row 12–16: News [6] | Live TV [6]
+        // open_positions/working_orders omitted — require broker account (none configured).
+        // Sidebar already shows Fear/Greed, Top Movers and VIX.
         {"portfolio_manager",
          "Portfolio Manager",
-         "Markets, trading, watchlist and live news",
+         "Markets, portfolio holdings, watchlist and live news",
          {
-             gi("indices",         0,  0, 4, 4, 3, 4),
-             gi("commodities",     4,  0, 4, 4, 2, 3),
-             gi("margin_usage",    8,  0, 2, 4, 2, 3),
-             gi("today_pnl",      10,  0, 2, 4, 2, 3),
-             gi("sector_heatmap",  0,  4, 6, 4, 3, 4),
-             gi("econ_calendar",   6,  4, 3, 4, 2, 3),
-             gi("quick_trade",     9,  4, 3, 4, 2, 3),
-             gi("watchlist",       0,  8, 4, 3, 2, 3),
-             gi("open_positions",  4,  8, 4, 3, 3, 3),
-             gi("working_orders",  8,  8, 4, 3, 3, 3),
-             gi("news",            0, 11, 6, 4, 3, 3),
-             gi("video_player",    6, 11, 6, 4, 3, 4),
+             gi("indices",           0,  0, 4, 4, 3, 4),
+             gi("commodities",       4,  0, 4, 4, 2, 3),
+             gi("margin_usage",      8,  0, 2, 4, 2, 3),
+             gi("today_pnl",        10,  0, 2, 4, 2, 3),
+             gi("sector_heatmap",    0,  4, 6, 4, 3, 4),
+             gi("econ_calendar",     6,  4, 3, 4, 2, 3),
+             gi("quick_trade",       9,  4, 3, 4, 2, 3),
+             gi("portfolio_summary", 0,  8, 8, 4, 3, 3),
+             gi("watchlist",         8,  8, 4, 4, 2, 3),
+             gi("news",              0, 12, 6, 4, 3, 3),
+             gi("video_player",      6, 12, 6, 4, 3, 4),
          }},
 
         // ── Hedge Fund ────────────────────────────────────────────────────────
