@@ -616,23 +616,27 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              }
                                              shared->info.symbol = o["symbol"].toString(symbol);
                                              shared->info.name = o["company_name"].toString();
-                                             shared->info.sector = o["sector"].toString();
-                                             shared->info.industry = o["industry"].toString();
-                                             shared->info.country = o["country"].toString();
-                                             shared->info.currency = o["currency"].toString("USD");
+                                             // The daemon's get_info defaults missing string fields to "N/A"
+                                             // for human display. The C++ side prefers an empty QString so
+                                             // callers can branch on `.isEmpty()` instead of doing the
+                                             // sentinel check at every consumer.
+                                             auto scrub = [](const QJsonValue& v) {
+                                                 QString s = v.toString();
+                                                 return s == "N/A" ? QString() : s;
+                                             };
+                                             shared->info.sector = scrub(o["sector"]);
+                                             shared->info.industry = scrub(o["industry"]);
+                                             shared->info.country = scrub(o["country"]);
+                                             shared->info.currency = scrub(o["currency"]);
+                                             if (shared->info.currency.isEmpty()) shared->info.currency = "USD";
                                              shared->info.market_cap = o["market_cap"].toDouble();
                                              shared->info.beta = o["beta"].toDouble();
                                              shared->info.week52_high = o["fifty_two_week_high"].toDouble();
                                              shared->info.week52_low = o["fifty_two_week_low"].toDouble();
                                              shared->info.avg_volume = o["average_volume"].toDouble();
                                              shared->info.eps = o["revenue_per_share"].toDouble();
-                                             shared->info.description = o["description"].toString();
-                                             // yfinance returns "N/A" sentinel
-                                             // for missing description — treat
-                                             // as empty so callers can branch.
-                                             if (shared->info.description == "N/A") shared->info.description.clear();
-                                             shared->info.website = o["website"].toString();
-                                             if (shared->info.website == "N/A") shared->info.website.clear();
+                                             shared->info.description = scrub(o["description"]);
+                                             shared->info.website = scrub(o["website"]);
                                              shared->info.employees = o["employees"].toInt();
                                              const QJsonArray off_arr = o["officers"].toArray();
                                              for (const auto& v : off_arr) {

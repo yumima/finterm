@@ -10,6 +10,7 @@
 #include <QtCharts/QChartView>
 #include <QTabWidget>
 
+#include <QApplication>
 #include <QComboBox>
 #include <QDate>
 #include <QDateTime>
@@ -108,6 +109,34 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     build_ui();
     apply_styles();
     refresh();
+
+    // Wake-on-resume — when the user returns to the app after a long idle
+    // (overnight, long lunch), our per-Entry perf_fetched/profile_fetched
+    // flags plus info_cache_/history_cache_ would otherwise serve up
+    // yesterday's prices indefinitely. main.cpp's global hook clears the
+    // CacheManager "market:" prefix but doesn't reach into this screen's
+    // private state; do the equivalent here on the same signal.
+    connect(qApp, &QApplication::applicationStateChanged, this,
+            [this](Qt::ApplicationState state) {
+                static qint64 s_last_inactive_ms = 0;
+                constexpr qint64 kWakeThresholdMs = 5LL * 60LL * 1000LL;
+                const qint64 now = QDateTime::currentMSecsSinceEpoch();
+                if (state == Qt::ApplicationInactive || state == Qt::ApplicationSuspended) {
+                    s_last_inactive_ms = now;
+                    return;
+                }
+                if (state != Qt::ApplicationActive) return;
+                if (s_last_inactive_ms == 0) return;
+                if (now - s_last_inactive_ms < kWakeThresholdMs) return;
+                s_last_inactive_ms = 0;
+                // Drop per-symbol caches so the next enrichment pass re-hits
+                // the daemon. entries_.clear() inside refresh() resets the
+                // perf_fetched/profile_fetched flags.
+                info_cache_.clear();
+                history_cache_.clear();
+                history_inflight_.clear();
+                refresh();
+            });
 }
 
 void IpoWatchView::build_ui() {
