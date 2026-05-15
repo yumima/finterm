@@ -42,20 +42,22 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
     header_sep_->setFixedHeight(1);
     vl->addWidget(header_sep_);
 
+    // Status label lives OUTSIDE the scrollable list — never deleted by populate().
+    status_label_ = new QLabel("Loading…");
+    status_label_->setAlignment(Qt::AlignCenter);
+    vl->addWidget(status_label_);
+
     // Scrollable list
     scroll_area_ = new QScrollArea;
     scroll_area_->setWidgetResizable(true);
+    scroll_area_->hide();
 
     auto* list_widget = new QWidget(this);
     list_widget->setStyleSheet("background: transparent;");
     list_layout_ = new QVBoxLayout(list_widget);
     list_layout_->setContentsMargins(0, 0, 0, 0);
     list_layout_->setSpacing(0);
-
-    status_label_ = new QLabel("Loading...");
-    status_label_->setAlignment(Qt::AlignCenter);
-    list_layout_->addWidget(status_label_);
-    list_layout_->addStretch();
+    list_layout_->addStretch(); // rows added by populate()
 
     scroll_area_->setWidget(list_widget);
     vl->addWidget(scroll_area_, 1);
@@ -170,13 +172,24 @@ void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
 void EconomicCalendarWidget::populate(const QJsonArray& events) {
     last_events_ = events;
 
-    // Clear list
+    // Clear data rows — status_label_ is in the parent layout, never touched here.
     while (list_layout_->count() > 0) {
         auto* item = list_layout_->takeAt(0);
         if (item->widget())
             item->widget()->deleteLater();
         delete item;
     }
+
+    if (events.isEmpty()) {
+        status_label_->setText("No events available");
+        status_label_->setVisible(true);
+        scroll_area_->setVisible(false);
+        list_layout_->addStretch();
+        return;
+    }
+
+    status_label_->setVisible(false);
+    scroll_area_->setVisible(true);
 
     bool alt = false;
     int count = 0;

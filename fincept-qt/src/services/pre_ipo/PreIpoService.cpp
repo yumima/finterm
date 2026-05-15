@@ -315,17 +315,35 @@ void PreIpoService::run_nasdaq_ipo_fetch(const QString& yyyymm) {
             return QDate::fromString(s.left(10), "yyyy/MM/dd");
         };
 
+        // Strip common legal suffixes and punctuation for fuzzy name matching.
+        // Plain toLower() misses "Cerebras Systems Inc" ↔ "Cerebras Systems, Inc."
+        auto normalise = [](const QString& s) -> QString {
+            QString r = s.toLower().trimmed();
+            static const QStringList kSuffix = {
+                ", inc.", " inc.", ", inc",  " inc",
+                ", corp.", " corp.", ", corp", " corp",
+                ", ltd.", " ltd.",  ", ltd",  " ltd",
+                ", llc.", " llc.",  ", llc",
+                ", co.", " co.",    ", co",
+                ", plc", " plc",
+            };
+            for (const auto& suf : kSuffix) {
+                if (r.endsWith(suf, Qt::CaseInsensitive)) { r.chop(suf.size()); break; }
+            }
+            r.remove(u','); r.remove(u'.'); r.remove(u'('); r.remove(u')');
+            return r.simplified();
+        };
+
         // Build a lookup: normalised company name → index in pipeline_
         QHash<QString, int> name_index;
         for (int i = 0; i < self->pipeline_.size(); ++i) {
-            const QString key = self->pipeline_[i].company_name.toLower().trimmed();
-            name_index[key] = i;
+            name_index[normalise(self->pipeline_[i].company_name)] = i;
         }
 
         auto merge_or_add = [&](const QString& company, const QString& ticker,
                                  const QDate& date, const QString& price_range) {
             if (company.isEmpty() || !date.isValid()) return;
-            const QString key = company.toLower().trimmed();
+            const QString key = normalise(company);
             if (name_index.contains(key)) {
                 // Enrich existing EDGAR entry with confirmed date
                 auto& entry = self->pipeline_[name_index[key]];

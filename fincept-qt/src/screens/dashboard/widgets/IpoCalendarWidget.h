@@ -32,6 +32,7 @@ class IpoCalendarWidget : public BaseWidget {
     struct IpoEntry {
         QString company;
         QString ticker;
+        QString exchange;  // listing exchange (tooltip on ticker)
         QString date_str;
         QDate   date;
         QString price_range;

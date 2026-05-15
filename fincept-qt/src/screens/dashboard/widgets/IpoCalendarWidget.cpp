@@ -39,19 +39,24 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent)
     header_sep_->setFixedHeight(1);
     vl->addWidget(header_sep_);
 
+    // Status label lives OUTSIDE the scrollable list so that populate()'s
+    // clear loop can never delete it — eliminating the dangling-pointer crash
+    // that occurred when apply_styles() was called after the first populate().
+    // Show it (loading/empty state) or hide it (data populated) via setVisible.
+    status_label_ = new QLabel("Loading…");
+    status_label_->setAlignment(Qt::AlignCenter);
+    vl->addWidget(status_label_);
+
     scroll_area_ = new QScrollArea;
     scroll_area_->setWidgetResizable(true);
+    scroll_area_->hide(); // hidden until first successful populate()
 
     auto* list_widget = new QWidget(this);
     list_widget->setStyleSheet("background: transparent;");
     list_layout_ = new QVBoxLayout(list_widget);
     list_layout_->setContentsMargins(0, 0, 0, 0);
     list_layout_->setSpacing(0);
-
-    status_label_ = new QLabel("Loading...");
-    status_label_->setAlignment(Qt::AlignCenter);
-    list_layout_->addWidget(status_label_);
-    list_layout_->addStretch();
+    list_layout_->addStretch(); // only a stretch initially; rows added by populate()
 
     scroll_area_->setWidget(list_widget);
     vl->addWidget(scroll_area_, 1);
@@ -87,6 +92,7 @@ void IpoCalendarWidget::on_theme_changed() {
 }
 
 void IpoCalendarWidget::refresh_data() {
+    if (pending_fetches_ > 0) return; // prior fetch still in flight — callbacks will populate
     set_loading(true);
     entries_.clear();
     pending_fetches_ = 2;
@@ -121,6 +127,7 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
                 IpoEntry entry;
                 entry.company    = e["companyName"].toString();
                 entry.ticker     = e["proposedTickerSymbol"].toString();
+                entry.exchange   = e["dealLocalExchange"].toString();
                 entry.date       = parse_date(date_raw);
                 entry.date_str   = entry.date.isValid()
                                        ? entry.date.toString("MMM d")
@@ -140,6 +147,7 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
                 IpoEntry entry;
                 entry.company    = e["companyName"].toString();
                 entry.ticker     = e["proposedTickerSymbol"].toString();
+                entry.exchange   = e["dealLocalExchange"].toString();
                 entry.date       = parse_date(date_raw);
                 entry.date_str   = entry.date.isValid()
                                        ? entry.date.toString("MMM d")
@@ -174,7 +182,7 @@ void IpoCalendarWidget::on_fetch_done() {
 }
 
 void IpoCalendarWidget::populate() {
-    // Clear list (keep the trailing stretch)
+    // Clear data rows. status_label_ lives in the parent layout — never touched here.
     while (list_layout_->count() > 0) {
         auto* item = list_layout_->takeAt(0);
         if (item->widget()) item->widget()->deleteLater();
@@ -182,15 +190,15 @@ void IpoCalendarWidget::populate() {
     }
 
     if (entries_.isEmpty()) {
-        status_label_ = new QLabel("No IPO data available");
-        status_label_->setAlignment(Qt::AlignCenter);
-        status_label_->setStyleSheet(
-            QString("color: %1; font-size: 10px; padding: 16px; background: transparent;")
-                .arg(ui::colors::TEXT_SECONDARY()));
-        list_layout_->addWidget(status_label_);
+        status_label_->setText("No IPO data available");
+        status_label_->setVisible(true);
+        scroll_area_->setVisible(false);
         list_layout_->addStretch();
         return;
     }
+
+    status_label_->setVisible(false);
+    scroll_area_->setVisible(true);
 
     QString current_status;
     bool alt = false;
@@ -231,6 +239,8 @@ void IpoCalendarWidget::populate() {
         rl->addWidget(co_lbl, 4);
 
         auto* tk_lbl = new QLabel(entry.ticker.isEmpty() ? "—" : entry.ticker);
+        if (!entry.exchange.isEmpty())
+            tk_lbl->setToolTip(entry.exchange); // exchange shown on hover
         tk_lbl->setStyleSheet(
             QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
                 .arg(ui::colors::AMBER()));

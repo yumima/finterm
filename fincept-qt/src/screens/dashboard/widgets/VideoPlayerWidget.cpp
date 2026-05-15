@@ -299,9 +299,9 @@ void VideoPlayerWidget::refresh_data() {
     if (current_url_.isEmpty())
         return;
     // play_in_progress_: set from first play_url() call until the player
-    // reaches PlayingState (or errors). GStreamer takes time to transition;
-    // re-entering play_url() in that window spawns additional Wayland
-    // surfaces that appear as separate top-level finterm windows.
+    // reaches PlayingState (or errors). The multimedia engine takes time to
+    // open a stream; re-entering play_url() before the pipeline is stable
+    // would call setSource() on a mid-transition player.
     if (play_in_progress_)
         return;
 #ifdef HAS_QT_MULTIMEDIA
