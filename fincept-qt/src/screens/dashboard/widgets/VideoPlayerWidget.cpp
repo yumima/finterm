@@ -66,6 +66,8 @@ static const float kQuad[] = {
 VideoRenderWidget::VideoRenderWidget(QWidget* parent)
     : QOpenGLWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    // OpenGL 3.2 core profile — matches #version 150 core shaders and makes
+    // VAO usage mandatory (no implicit default VAO), enforced in initializeGL().
     QSurfaceFormat fmt;
     fmt.setVersion(3, 2);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
@@ -86,9 +88,13 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent)
     // which registers the first wl_surface_frame callback. Every subsequent
     // frame is self-driven by frameSwapped → update() → paintGL() → commit →
     // frameSwapped → …, vsync-synchronised by the compositor.
+    //
+    // isVisible() guard: prevents the loop from keeping a hidden widget (page 0
+    // of the QStackedWidget) alive if the compositor happens to send a callback
+    // while the page is off-screen (rare, but some compositors don't suppress).
     connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
-        if (current_frame_.isValid())
-            update(); // keep the loop alive while frames are arriving
+        if (current_frame_.isValid() && isVisible())
+            update(); // keep the loop alive while frames are arriving and visible
     });
 }
 
