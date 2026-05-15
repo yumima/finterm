@@ -159,10 +159,13 @@ void IpoCalendarWidget::on_fetch_done() {
     if (--pending_fetches_ > 0)
         return;
 
-    // Sort: upcoming first (by date asc), then priced (by date desc)
+    // Sort: upcoming closest-date first (e.g. May 14 before May 15),
+    // then priced by date descending (most recently priced at top of its section).
     std::stable_sort(entries_.begin(), entries_.end(), [](const IpoEntry& a, const IpoEntry& b) {
         if (a.status != b.status)
-            return a.status == "upcoming"; // upcoming before priced
+            return a.status == "upcoming"; // upcoming section before priced
+        if (!a.date.isValid()) return false;
+        if (!b.date.isValid()) return true;
         return a.status == "upcoming" ? a.date < b.date : a.date > b.date;
     });
 

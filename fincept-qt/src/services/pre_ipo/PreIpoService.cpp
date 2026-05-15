@@ -2,6 +2,7 @@
 #include "services/pre_ipo/PreIpoService.h"
 
 #include "core/logging/Logger.h"
+#include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 
 #include <QDate>
@@ -160,6 +161,12 @@ void PreIpoService::refresh() {
     run_form_d_fetch();
     run_nport_marks_fetch();
     run_s1_pipeline_fetch();
+
+    // Nasdaq IPO calendar runs independently — no auth, fast, enriches the
+    // pipeline with confirmed dates and catches companies not yet in EDGAR.
+    const QDate today = QDate::currentDate();
+    run_nasdaq_ipo_fetch(today.toString("yyyy-MM"));
+    run_nasdaq_ipo_fetch(today.addMonths(1).toString("yyyy-MM"));
 }
 
 QVector<PrivateCompany> PreIpoService::companies() const { return companies_; }
@@ -287,6 +294,82 @@ void PreIpoService::run_s1_pipeline_fetch() {
             if (self->pending_bits_ == 0) self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
+}
+
+// ── Nasdaq IPO calendar ───────────────────────────────────────────────────────
+
+void PreIpoService::run_nasdaq_ipo_fetch(const QString& yyyymm) {
+    const QString url =
+        QString("https://api.nasdaq.com/api/ipo/calendar?date=%1").arg(yyyymm);
+
+    QPointer<PreIpoService> self = this;
+    HttpClient::instance().get(url, [self](Result<QJsonDocument> res) {
+        if (!self || !res.is_ok() || !res.value().isObject())
+            return;
+
+        const auto data = res.value().object()["data"].toObject();
+        const QDate today = QDate::currentDate();
+
+        // Returns "2026/05/15" format
+        auto parse_nasdaq_date = [](const QString& s) -> QDate {
+            return QDate::fromString(s.left(10), "yyyy/MM/dd");
+        };
+
+        // Build a lookup: normalised company name → index in pipeline_
+        QHash<QString, int> name_index;
+        for (int i = 0; i < self->pipeline_.size(); ++i) {
+            const QString key = self->pipeline_[i].company_name.toLower().trimmed();
+            name_index[key] = i;
+        }
+
+        auto merge_or_add = [&](const QString& company, const QString& ticker,
+                                 const QDate& date, const QString& price_range) {
+            if (company.isEmpty() || !date.isValid()) return;
+            const QString key = company.toLower().trimmed();
+            if (name_index.contains(key)) {
+                // Enrich existing EDGAR entry with confirmed date
+                auto& entry = self->pipeline_[name_index[key]];
+                entry.actual_ipo_date = date;
+                entry.has_actual_date = true;
+                if (!ticker.isEmpty()) entry.ticker = ticker;
+                if (!price_range.isEmpty()) entry.price_range = price_range;
+            } else {
+                // Company not in EDGAR pipeline — add as a Nasdaq-sourced entry
+                S1Filing f;
+                f.company_name    = company;
+                f.ticker          = ticker;
+                f.filed_date      = today;     // use today as proxy for sorting
+                f.amendment_count = 0;
+                f.actual_ipo_date = date;
+                f.has_actual_date = true;
+                f.price_range     = price_range;
+                self->pipeline_.append(f);
+            }
+        };
+
+        // Upcoming
+        for (const auto& v :
+             data["upcoming"].toObject()["upcomingTable"].toObject()["rows"].toArray()) {
+            const auto e = v.toObject();
+            merge_or_add(e["companyName"].toString(),
+                         e["proposedTickerSymbol"].toString(),
+                         parse_nasdaq_date(e["expectedPriceDate"].toString()),
+                         e["proposedSharePrice"].toString());
+        }
+
+        // Priced (recently listed — still useful for the record)
+        for (const auto& v :
+             data["priced"].toObject()["pricedTable"].toObject()["rows"].toArray()) {
+            const auto e = v.toObject();
+            merge_or_add(e["companyName"].toString(),
+                         e["proposedTickerSymbol"].toString(),
+                         parse_nasdaq_date(e["ipoDate"].toString()),
+                         e["dealPrice"].toString());
+        }
+
+        LOG_INFO("PreIpo", "Nasdaq IPO calendar merged into pipeline");
+        self->emit_summary();
+    });
 }
 
 // ── Parsers ──────────────────────────────────────────────────────────────────

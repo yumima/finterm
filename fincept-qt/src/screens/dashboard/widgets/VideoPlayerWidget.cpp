@@ -412,16 +412,22 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
-    player_->stop();
     set_loading(false);
     status_label_->hide();
-    // Switch to the player page BEFORE setSource/play. Qt's FFmpeg renderer
-    // pushes the first decoded frame on play(); if QVideoWidget is still in a
-    // hidden stack page at that moment, the compositor has no parent Wayland
-    // surface to attach to and creates a new xdg-toplevel — appearing as a
-    // separate "finterm" window in the taskbar. Making the widget visible first
-    // gives it a valid surface that the renderer writes into directly.
+    // Show the player page FIRST so QVideoWidget has a visible, mapped
+    // Wayland surface before any pipeline activity.
     stack_->setCurrentIndex(1);
+    // Force immediate native window handle creation. Without this, the
+    // Wayland compositor may not yet have associated a wl_surface with
+    // the QVideoWidget, and Qt's FFmpeg backend creates a new xdg-toplevel
+    // (a rogue "finterm" window) for the orphaned video output surface.
+    video_widget_->setAttribute(Qt::WA_NativeWindow, true);
+    (void)video_widget_->winId(); // materialises the wl_surface synchronously
+    // Do NOT call player_->stop() here. stop() internally releases the video
+    // output surface handle; subsequent play() then re-allocates it as a new
+    // xdg-toplevel instead of reusing the existing QVideoWidget surface.
+    // setSource() alone handles the pipeline transition cleanly (Qt stops
+    // the current stream implicitly before opening the new one).
     player_->setSource(QUrl(stream_url));
     player_->play();
 #else
@@ -432,11 +438,11 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 void VideoPlayerWidget::stop_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
-    // Swap to channel-list page BEFORE clearing the source: switching away
-    // from the QVideoWidget first means the user sees the channel list
-    // immediately rather than a frozen last frame while the pipeline tears down.
     stack_->setCurrentIndex(0);
-    player_->setSource(QUrl()); // blank the surface once the page is hidden
+    // Do NOT call player_->setSource(QUrl()) here. Calling setSource while
+    // QVideoWidget is hidden (page 0 active) causes Qt to allocate a new
+    // Wayland surface for teardown — manifesting as another rogue window.
+    // player_->stop() is sufficient to halt the pipeline.
 #else
     stack_->setCurrentIndex(0);
 #endif

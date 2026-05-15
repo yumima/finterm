@@ -180,6 +180,11 @@ struct S1Filing {
     QStringList underwriters;
     QString edgar_url;
     bool    is_amendment = false;
+    // Confirmed IPO date from Nasdaq calendar (overrides the 90-day estimate).
+    QDate   actual_ipo_date;
+    bool    has_actual_date = false;
+    QString ticker;         // proposed ticker symbol (from Nasdaq when available)
+    QString price_range;    // proposed price range (from Nasdaq when available)
 };
 
 /// Computed market-level signal for the right-rail "Signals" pane.

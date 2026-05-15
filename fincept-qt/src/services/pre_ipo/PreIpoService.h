@@ -59,6 +59,11 @@ class PreIpoService : public QObject {
     void run_form_d_fetch();
     void run_nport_marks_fetch();
     void run_s1_pipeline_fetch();
+    /// Fetch upcoming + recently priced IPOs from the Nasdaq public calendar
+    /// API (no auth). Enriches pipeline_ with confirmed IPO dates and adds
+    /// any companies not already in the EDGAR pipeline. Independent of the
+    /// 3-bit finalize_load flow — emits when done regardless of other fetches.
+    void run_nasdaq_ipo_fetch(const QString& yyyymm);
 
     /// Arm a one-shot timer that fires at the next 05:00 America/New_York
     /// to pre-warm the cache before the user opens the screen. Re-arms

@@ -114,44 +114,50 @@ void PipelineView::rebuild_grid() {
     // sort to the very top. Filings without a valid date fall to the
     // bottom.
     const QDate today = QDate::currentDate();
-    auto est_ipo_date = [&](const S1Filing& s) -> QDate {
-        if (!s.filed_date.isValid()) return QDate();
-        return s.filed_date.addDays(90);
+
+    // Priority: use actual_ipo_date (from Nasdaq) when available; fall back
+    // to filed_date + 90-day sector-median estimate for EDGAR-only filers.
+    auto days_to_price = [&](const S1Filing& s) -> qint64 {
+        if (s.has_actual_date && s.actual_ipo_date.isValid())
+            return today.daysTo(s.actual_ipo_date); // signed: negative = already pricing
+        if (!s.filed_date.isValid())
+            return std::numeric_limits<qint64>::max();
+        // Estimated: filed + 90 days. Returning the signed value means overdue
+        // items (est in the past) get negative values and sort to the very top —
+        // the previous code returned -d for negative d, which inverted the order
+        // and pushed the most-overdue items DOWN instead of up.
+        return today.daysTo(s.filed_date.addDays(90));
     };
-    auto days_to_est = [&](const S1Filing& s) -> qint64 {
-        const QDate est = est_ipo_date(s);
-        if (!est.isValid()) return std::numeric_limits<qint64>::max();
-        const qint64 d = today.daysTo(est);
-        // Overdue contracts (est in the past) get clamped to 0 so they
-        // sit at the top with imminent ones, ordered by how recently the
-        // 90-day window expired (smallest negative magnitude → most
-        // recently overdue, closest to "actually pricing now").
-        return d < 0 ? -d : d;
-    };
+
     QVector<S1Filing> sorted = pipeline_;
     std::sort(sorted.begin(), sorted.end(),
               [&](const S1Filing& a, const S1Filing& b) {
-                  const qint64 da = days_to_est(a);
-                  const qint64 db = days_to_est(b);
-                  if (da != db) return da < db;
-                  // Tiebreak: more amendments first (= further along the
-                  // pricing process), then most recent filing.
+                  const qint64 da = days_to_price(a);
+                  const qint64 db = days_to_price(b);
+                  if (da != db) return da < db; // soonest (most negative) first
+                  // Tiebreak: more amendments = further in pricing process
                   if (a.amendment_count != b.amendment_count)
                       return a.amendment_count > b.amendment_count;
                   return a.filed_date > b.filed_date;
               });
 
+    // Column-major layout: fill column 0 top→bottom, then column 1, then column 2.
+    // The user reads down each column, so the closest IPOs occupy the left column.
+    const int total        = sorted.size();
+    const int rows_per_col = (total + kColumns - 1) / kColumns;
+
     int idx = 0;
     for (const auto& s : sorted) {
         auto* card = make_card(s, cik_to_id.value(s.cik));
-        const int row = idx / kColumns;
-        const int col = idx % kColumns;
+        const int col = idx / rows_per_col;
+        const int row = idx % rows_per_col;
         grid_->addWidget(card, row, col);
         ++idx;
     }
-    // Push remaining empty cells down (single trailing stretch row).
-    grid_->setRowStretch(idx / kColumns + 1, 1);
-    count_lbl_->setText(QString::number(sorted.size()) + " filers");
+    grid_->setRowStretch(rows_per_col + 1, 1);
+    const QString src_note = sorted.isEmpty() ? "" :
+        (sorted.first().has_actual_date ? " (incl. Nasdaq)" : " (EDGAR S-1/F-1)");
+    count_lbl_->setText(QString::number(total) + " filers" + src_note);
 }
 
 QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) const {
@@ -227,22 +233,30 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     row3->addWidget(win_chip);
     vl->addLayout(row3);
 
-    // Row 4: estimated IPO date — today + sector-median lag from first filing
-    // to pricing. The S-1 itself doesn't disclose an IPO date, so we surface
-    // a "~MMM d" estimate that the user can read as a sanity check, not an
-    // announced date. Median 90 days from first S-1 to pricing for tech.
-    if (s.filed_date.isValid() && days >= 0) {
-        const int est_days = std::max(0, 90 - days);
-        const QDate est_date = today.addDays(est_days);
-        const QString est_text = est_days == 0
-            ? QStringLiteral("Est. IPO: overdue (pricing imminent)")
-            : QString("Est. IPO: ~%1").arg(est_date.toString("MMM d, yyyy"));
-        auto* est_lbl = new QLabel(est_text);
-        est_lbl->setStyleSheet(
-            QString("color:%1;font-size:12px;font-family:Consolas,monospace;"
-                    "background:transparent;")
-                .arg(est_days < 30 ? colors::AMBER() : colors::TEXT_SECONDARY()));
-        vl->addWidget(est_lbl);
+    // Row 4: IPO date — confirmed (from Nasdaq) or estimated (filed + 90d).
+    {
+        QString date_text;
+        QString date_color = colors::TEXT_SECONDARY();
+        if (s.has_actual_date && s.actual_ipo_date.isValid()) {
+            const int d = today.daysTo(s.actual_ipo_date);
+            date_text  = d <= 0 ? "IPO: TODAY / PRICING"
+                                : QString("IPO: %1").arg(s.actual_ipo_date.toString("MMM d, yyyy"));
+            date_color = d <= 0 ? colors::POSITIVE() : colors::AMBER();
+        } else if (s.filed_date.isValid() && days >= 0) {
+            const int est_days = std::max(0, 90 - days);
+            const QDate est_date = today.addDays(est_days);
+            date_text  = est_days == 0
+                ? QStringLiteral("Est. IPO: overdue (pricing imminent)")
+                : QString("Est. IPO: ~%1").arg(est_date.toString("MMM d, yyyy"));
+            date_color = est_days < 30 ? colors::AMBER() : colors::TEXT_SECONDARY();
+        }
+        if (!date_text.isEmpty()) {
+            auto* est_lbl = new QLabel(date_text);
+            est_lbl->setStyleSheet(
+                QString("color:%1;font-size:12px;font-family:Consolas,monospace;"
+                        "background:transparent;").arg(date_color));
+            vl->addWidget(est_lbl);
+        }
     }
 
     vl->addStretch();
