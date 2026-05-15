@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`96fecc6d`](https://github.com/yumima/finterm/commit/96fecc6d) **fix(video):** replace QVideoWidget with QVideoSink+QPainter — eliminates native surface
 - [`c4ce26ee`](https://github.com/yumima/finterm/commit/c4ce26ee) **fix(video):** stop()+setSource(QUrl()) released Wayland surface → rogue windows
 - [`a3d815c9`](https://github.com/yumima/finterm/commit/a3d815c9) **feat(dashboard):** Economic Calendar live data + new IPO Calendar widget
 - [`53f42b3a`](https://github.com/yumima/finterm/commit/53f42b3a) **fix(video+dashboard):** restore inline video, add portfolio_summary to template
