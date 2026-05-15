@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`1c970ab9`](https://github.com/yumima/finterm/commit/1c970ab9) **fix(video+chart):** address all review findings
 - [`0322aaff`](https://github.com/yumima/finterm/commit/0322aaff) **fix(video+chart):** window-spawn loop, shmem OOM, chart bugs from review
 - [`dd7b5aba`](https://github.com/yumima/finterm/commit/dd7b5aba) **fix(dashboard):** OOM crash in VideoPlayerWidget + optimise portfolio template
 - [`55e7cb16`](https://github.com/yumima/finterm/commit/55e7cb16) **feat(portfolio):** gap-free chart x-axis via sequential bar indexing
