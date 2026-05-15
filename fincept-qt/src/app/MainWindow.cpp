@@ -1432,10 +1432,18 @@ void MainWindow::on_terminal_unlocked() {
     // Reset PIN lockout on successful unlock
     auth::PinManager::instance().reset_lockout();
 
+    // Suppress intermediate repaints during unlock. setUpdatesEnabled(false)
+    // prevents Qt from processing expose events or painting while we switch
+    // pages, restore dock layout, and navigate screens. Without this, the
+    // dock navigation (routers_->navigate) triggers an ADS layout change that
+    // sends a Wayland configure request, causing a brief window un-map/re-map
+    // visible as a ~0.5s flash. When updates are re-enabled Qt draws the
+    // fully-assembled shell in one atomic repaint — no flash.
+    setUpdatesEnabled(false);
+
     if (auth.session().has_paid_plan()) {
         set_shell_visible(true);
         stack_->setCurrentIndex(1);
-        // Restore chat bubble based on setting
         if (chat_bubble_) {
             auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
             bool show = !r.is_ok() || r.value() != "false";
@@ -1446,18 +1454,17 @@ void MainWindow::on_terminal_unlocked() {
             }
         }
         WorkspaceManager::instance().load_last_workspace();
-        // Silent update check — UpdateService de-dupes across call sites so
-        // the login path + this post-unlock path won't fire two requests.
         QTimer::singleShot(3000, this, [this]() {
             services::UpdateService::instance().set_dialog_parent(this);
             services::UpdateService::instance().check_for_updates(true);
         });
     } else {
-        // Localhost-only fork: no pricing gate. Drop straight into the shell.
         set_shell_visible(true);
         stack_->setCurrentIndex(1);
         WorkspaceManager::instance().load_last_workspace();
     }
+
+    setUpdatesEnabled(true); // draw fully-assembled shell in one shot
 
     emit auth.terminal_unlocked();
 }

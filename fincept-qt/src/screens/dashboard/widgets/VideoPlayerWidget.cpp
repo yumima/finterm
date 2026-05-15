@@ -120,22 +120,17 @@ void VideoRenderWidget::clear_frame() {
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     current_frame_ = frame;
-    // present() owns data only — it writes the frame and seeds the render
-    // loop exactly ONCE per play session. The loop is then sustained entirely
-    // by frameSwapped → update() at the compositor's vsync rate.
-    //
-    // Calling requestUpdate() on every present() (30fps) would register 30
-    // extra wl_surface_frame callbacks per second on top of the 60fps driven
-    // by frameSwapped, causing 90 paintGL() cycles/sec — the root cause of
-    // the visible strobing/flickering. Seeding once prevents that.
-    update(); // mark widget dirty for the next compositor-driven paint
+    // present() is data-only after the loop is seeded. Calling update() on
+    // every frame (30fps) causes a second paintGL() + wl_surface_commit
+    // between vsync callbacks (every 16ms), producing torn frames / flicker.
+    // update() is called exactly once — during the seed — to mark the widget
+    // dirty for the first render. All subsequent renders are driven solely by
+    // frameSwapped → update() at the compositor's vsync rate (60fps).
     if (!loop_active_) {
         loop_active_ = true;
-        // Seed: register the first wl_surface_frame callback on the top-level
-        // window. After this commit the compositor fires frameSwapped, which
-        // calls update() → paintGL() → commit → frameSwapped → … indefinitely.
+        update(); // first-time dirty mark so paintGL() fires on callback
         if (auto* wh = window()->windowHandle())
-            wh->requestUpdate();
+            wh->requestUpdate(); // register first wl_surface_frame callback
     }
 }
 
