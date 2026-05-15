@@ -658,15 +658,15 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 }
 
 void VideoPlayerWidget::stop_playback() {
+    // Hide the player page BEFORE clearing the frame so that any queued
+    // present() calls arriving after clear_frame() land on a hidden widget
+    // (isVisible() = false) and cannot re-seed the render loop.
+    stack_->setCurrentIndex(0);
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
-    // Invalidate the render widget's frame so the frameSwapped loop quiesces
-    // and loop_active_ resets to false — ensuring the next channel start
-    // re-seeds the Wayland frame-callback loop cleanly.
     if (video_widget_)
         video_widget_->clear_frame();
 #endif
-    stack_->setCurrentIndex(0);
 
     play_in_progress_ = false;
     current_url_.clear();
@@ -681,6 +681,10 @@ void VideoPlayerWidget::on_player_error() {
     const QString err = player_->errorString();
     play_in_progress_ = false;
     current_url_.clear(); // stops refresh_data() from retrying
+    // Stop the render loop — without this, frameSwapped keeps firing 60fps
+    // rendering the last frozen frame behind the error label indefinitely.
+    if (video_widget_)
+        video_widget_->clear_frame();
     set_loading(false);
     status_label_->setText("Playback error: " + (err.isEmpty() ? "Unknown" : err.left(120)));
     status_label_->show();

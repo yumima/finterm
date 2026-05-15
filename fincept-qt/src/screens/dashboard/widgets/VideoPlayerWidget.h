@@ -55,6 +55,8 @@ class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
   public slots:
     /// Receive a decoded frame from the multimedia thread (queued → main thread).
     void present(const QVideoFrame& frame);
+
+  public:
     /// Invalidate the current frame so the render loop quiesces on next vsync.
     void clear_frame();
 
