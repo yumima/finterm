@@ -127,14 +127,14 @@ RiskMetricsWidget::RiskMetricsWidget(QWidget* parent) : BaseWidget("RISK METRICS
 
 void RiskMetricsWidget::apply_styles() {
     vix_card_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
-    vix_header_lbl_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    vix_header_lbl_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                        .arg(ui::colors::TEXT_SECONDARY()));
-    vix_regime_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    vix_regime_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                    .arg(ui::colors::TEXT_SECONDARY()));
     vix_value_->setStyleSheet(QString("color: %1; font-size: 22px; font-weight: bold; background: transparent;")
                                   .arg(ui::colors::TEXT_SECONDARY()));
     vix_bar_fill_->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     // VIX gradient bar: green → yellow-green → amber → orange → red (theme-aware)
     if (vix_bar_segments_.size() == 5) {
@@ -153,29 +153,29 @@ void RiskMetricsWidget::apply_styles() {
     sep1_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     sep2_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
-    stocks_hdr_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    stocks_hdr_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                    .arg(ui::colors::TEXT_SECONDARY()));
-    corr_hdr_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    corr_hdr_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                  .arg(ui::colors::TEXT_SECONDARY()));
 
     for (const auto& sr : stock_rows_) {
-        sr.symbol->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+        sr.symbol->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                      .arg(ui::colors::TEXT_PRIMARY()));
-        sr.chg_pct->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+        sr.chg_pct->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                       .arg(ui::colors::TEXT_SECONDARY()));
         sr.hi_lo->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     }
 
     for (auto* lbl : spread_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
-    spy_qqq_spread_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    spy_qqq_spread_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                        .arg(ui::colors::TEXT_PRIMARY()));
-    spy_iwm_spread_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    spy_iwm_spread_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                        .arg(ui::colors::TEXT_PRIMARY()));
-    equity_bond_lbl_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    equity_bond_lbl_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                         .arg(ui::colors::TEXT_PRIMARY()));
 }
 
@@ -268,12 +268,12 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
             QString("color: %1; font-size: 22px; font-weight: bold; background: transparent;").arg(color));
         vix_regime_->setText(regime);
         vix_regime_->setStyleSheet(
-            QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;").arg(color));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(color));
 
         // Position indicator on 5-segment bar (0-40 range, 8 per segment)
         double pct = qBound(0.0, vix / 40.0, 1.0);
         int margin_left = static_cast<int>(pct * 140); // approx bar width
-        vix_bar_fill_->setStyleSheet(QString("color: %1; font-size: 8px; background: transparent; margin-left: %2px;")
+        vix_bar_fill_->setStyleSheet(QString("color: %1; background: transparent; margin-left: %2px;")
                                          .arg(color)
                                          .arg(margin_left));
     }
@@ -293,7 +293,7 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
                                     : ui::colors::TEXT_PRIMARY();
         stock_rows_[i].chg_pct->setText(chg_str);
         stock_rows_[i].chg_pct->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(chg_col));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(chg_col));
 
         // Hi/Lo as range: H/L
         if (q.high > 0 && q.low > 0) {
@@ -315,20 +315,20 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
         double d = map["SPY"]->change_pct - map["QQQ"]->change_pct;
         spy_qqq_spread_->setText(spread_str(map["SPY"]->change_pct, map["QQQ"]->change_pct));
         spy_qqq_spread_->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+            QString("color: %1; font-weight: bold; background: transparent;")
                 .arg(spread_color(map["SPY"]->change_pct, map["QQQ"]->change_pct)));
         (void)d;
     }
     if (map.contains("SPY") && map.contains("IWM")) {
         spy_iwm_spread_->setText(spread_str(map["SPY"]->change_pct, map["IWM"]->change_pct));
         spy_iwm_spread_->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+            QString("color: %1; font-weight: bold; background: transparent;")
                 .arg(spread_color(map["SPY"]->change_pct, map["IWM"]->change_pct)));
     }
     if (map.contains("SPY") && map.contains("TLT")) {
         equity_bond_lbl_->setText(spread_str(map["SPY"]->change_pct, map["TLT"]->change_pct));
         equity_bond_lbl_->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+            QString("color: %1; font-weight: bold; background: transparent;")
                 .arg(spread_color(map["SPY"]->change_pct, map["TLT"]->change_pct)));
     }
 }

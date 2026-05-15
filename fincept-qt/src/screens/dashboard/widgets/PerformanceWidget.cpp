@@ -56,10 +56,10 @@ void PerformanceWidget::apply_styles() {
     for (const auto& mr : rows_) {
         mr.row_widget->setStyleSheet(QString("border-bottom: 1px solid %1;").arg(ui::colors::BORDER_DIM()));
         mr.label->setStyleSheet(
-            QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         mr.period->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        mr.value->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;")
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        mr.value->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     }
 }
@@ -138,7 +138,7 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
                         : val < 0 ? ui::colors::NEGATIVE()
                                   : ui::colors::TEXT_PRIMARY();
         rows_[idx].value->setStyleSheet(
-            QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;").arg(color));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(color));
     };
 
     // S&P 500 daily
@@ -169,7 +169,7 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
                             : vix > 18 ? ui::colors::WARNING()
                                        : ui::colors::POSITIVE();
             rows_[6].value->setStyleSheet(
-                QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;").arg(color));
+                QString("color: %1; font-weight: bold; background: transparent;").arg(color));
         }
     }
 

@@ -71,7 +71,7 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent)
 void IpoCalendarWidget::apply_styles() {
     header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
-        lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
+        lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                .arg(ui::colors::TEXT_SECONDARY()));
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     scroll_area_->setStyleSheet(
@@ -81,7 +81,7 @@ void IpoCalendarWidget::apply_styles() {
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
             .arg(ui::colors::BORDER_MED()));
     status_label_->setStyleSheet(
-        QString("color: %1; font-size: 12px; padding: 16px; background: transparent;")
+        QString("color: %1; padding: 16px; background: transparent;")
             .arg(ui::colors::TEXT_SECONDARY()));
 }
 
@@ -131,7 +131,7 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
                 IpoEntry entry;
                 entry.company    = e["companyName"].toString();
                 entry.ticker     = e["proposedTickerSymbol"].toString();
-                entry.exchange   = e["dealLocalExchange"].toString();
+                entry.exchange   = e["proposedExchange"].toString();
                 entry.date       = parse_date(date_raw);
                 entry.date_str   = date_raw; // keep M/D/YYYY as returned by API
                 entry.price_range = e["proposedSharePrice"].toString();
@@ -141,20 +141,23 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
             }
 
             // ── Priced ────────────────────────────────────────────────────
-            const auto priced_rows =
-                data["priced"].toObject()["pricedTable"].toObject()["rows"].toArray();
+            // Nasdaq API returns priced rows directly under data.priced.rows
+            // (NOT under a nested "pricedTable" object — that was a parser bug
+            // that hid every priced IPO including today's). Fields also differ
+            // from the upcoming table: pricedDate / proposedSharePrice / proposedExchange.
+            const auto priced_rows = data["priced"].toObject()["rows"].toArray();
             for (const auto& v : priced_rows) {
                 const auto e = v.toObject();
-                const QString date_raw = e["ipoDate"].toString();
+                const QString date_raw = e["pricedDate"].toString();
                 IpoEntry entry;
                 entry.company    = e["companyName"].toString();
                 entry.ticker     = e["proposedTickerSymbol"].toString();
-                entry.exchange   = e["dealLocalExchange"].toString();
+                entry.exchange   = e["proposedExchange"].toString();
                 entry.date       = parse_date(date_raw);
                 entry.date_str   = entry.date.isValid()
                                        ? entry.date.toString("MMM d")
                                        : date_raw.left(10);
-                entry.price_range = e["dealPrice"].toString();
+                entry.price_range = e["proposedSharePrice"].toString();
                 entry.status     = "priced";
                 if (!entry.company.isEmpty())
                     self->entries_.append(entry);
@@ -202,23 +205,35 @@ void IpoCalendarWidget::populate() {
     status_label_->setVisible(false);
     scroll_area_->setVisible(true);
 
+    // Per-section caps: upcoming entries can flood the list when the calendar
+    // has 30+ pending deals, which previously pushed today's priced IPOs off
+    // the bottom. Cap each section independently so both stay visible.
+    constexpr int kMaxUpcoming = 25;
+    constexpr int kMaxPriced   = 25;
+    int upcoming_shown = 0;
+    int priced_shown   = 0;
+
     QString current_status;
     bool alt = false;
-    int count = 0;
 
     for (const auto& entry : std::as_const(entries_)) {
-        if (count >= 30) break;
+        // Section caps
+        if (entry.status == "upcoming") {
+            if (upcoming_shown >= kMaxUpcoming) continue;
+        } else if (entry.status == "priced") {
+            if (priced_shown >= kMaxPriced) continue;
+        }
 
-        // Section header when status changes
+        // Section header when status changes — UPCOMING above future-dated rows,
+        // PRICED above the recently-priced group below it.
         if (entry.status != current_status) {
             current_status = entry.status;
             const QString label = current_status == "upcoming" ? "── UPCOMING ──" : "── PRICED ──";
             auto* sec = new QLabel(label);
-            sec->setStyleSheet(
-                QString("color: %1; font-size: 12px; font-weight: bold; "
-                        "padding: 4px 8px; background: %2;")
-                    .arg(current_status == "upcoming" ? ui::colors::AMBER() : ui::colors::POSITIVE(),
-                         ui::colors::BG_RAISED()));
+            sec->setStyleSheet(QString("color: %1; font-weight: bold; "
+                                        "padding: 4px 8px; background: %2;")
+                                   .arg(current_status == "upcoming" ? ui::colors::AMBER() : ui::colors::POSITIVE(),
+                                        ui::colors::BG_RAISED()));
             list_layout_->addWidget(sec);
             alt = false;
         }
@@ -236,7 +251,7 @@ void IpoCalendarWidget::populate() {
         auto* co_lbl = new QLabel(company);
         co_lbl->setToolTip(entry.company);
         co_lbl->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;")
+            QString("color: %1; background: transparent;")
                 .arg(ui::colors::TEXT_PRIMARY()));
         rl->addWidget(co_lbl, 4);
 
@@ -244,26 +259,27 @@ void IpoCalendarWidget::populate() {
         if (!entry.exchange.isEmpty())
             tk_lbl->setToolTip(entry.exchange); // exchange shown on hover
         tk_lbl->setStyleSheet(
-            QString("color: %1; font-size: 12px; font-weight: bold; background: transparent;")
+            QString("color: %1; font-weight: bold; background: transparent;")
                 .arg(ui::colors::AMBER()));
         rl->addWidget(tk_lbl, 1);
 
         auto* dt_lbl = new QLabel(entry.date_str.isEmpty() ? "—" : entry.date_str);
         dt_lbl->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;")
+            QString("color: %1; background: transparent;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(dt_lbl, 2);
 
         auto* pr_lbl = new QLabel(entry.price_range.isEmpty() ? "—" : entry.price_range);
         pr_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         pr_lbl->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent;")
+            QString("color: %1; background: transparent;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(pr_lbl, 2);
 
         list_layout_->addWidget(row);
         alt = !alt;
-        ++count;
+        if (entry.status == "upcoming")    ++upcoming_shown;
+        else if (entry.status == "priced") ++priced_shown;
     }
 
     list_layout_->addStretch();

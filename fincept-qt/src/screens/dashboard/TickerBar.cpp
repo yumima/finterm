@@ -12,7 +12,6 @@
 #include <QPainter>
 #include <QPointer>
 #include <QResizeEvent>
-#include <QtConcurrent>
 
 namespace fincept::screens {
 
@@ -102,38 +101,24 @@ TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void TickerBar::load_symbols() {
-    // Build default list: indices + movers
     const QStringList defaults = services::MarketDataService::indices_symbols()
                                  + services::MarketDataService::mover_symbols();
 
-    // Attempt to load from settings on a background thread; fall back to defaults
-    // immediately so the ticker isn't blank while the DB read is in flight.
-    symbols_ = defaults;
-
-    QPointer<TickerBar> self = this;
-    (void)QtConcurrent::run([self, defaults]() {
-        auto result = fincept::SettingsRepository::instance().get(kSettingsKey);
-        QStringList loaded;
-        if (result.is_ok() && !result.value().isEmpty()) {
-            for (const QString& s : result.value().split(',')) {
-                const QString t = s.trimmed().toUpper();
-                if (!t.isEmpty())
-                    loaded << t;
-            }
+    auto result = fincept::SettingsRepository::instance().get(kSettingsKey);
+    QStringList loaded;
+    if (result.is_ok() && !result.value().isEmpty()) {
+        for (const QString& s : result.value().split(',')) {
+            const QString t = s.trimmed().toUpper();
+            if (!t.isEmpty())
+                loaded << t;
         }
-        QMetaObject::invokeMethod(self, [self, loaded, defaults]() {
-            if (!self) return;
-            self->symbols_ = loaded.isEmpty() ? defaults : loaded;
-            emit self->symbols_changed(self->symbols_);
-        }, Qt::QueuedConnection);
-    });
+    }
+    symbols_ = loaded.isEmpty() ? defaults : loaded;
+    emit symbols_changed(symbols_);
 }
 
 void TickerBar::save_symbols() {
-    const QString value = symbols_.join(",");
-    (void)QtConcurrent::run([value]() {
-        fincept::SettingsRepository::instance().set(kSettingsKey, value, kSettingsCategory);
-    });
+    fincept::SettingsRepository::instance().set(kSettingsKey, symbols_.join(","), kSettingsCategory);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -41,6 +41,7 @@ class WatchlistWidget : public BaseWidget {
     QStringList symbols_;
 
     QHash<QString, fincept::services::QuoteData> row_cache_;
+    QHash<QString, QVector<double>>              sparkline_cache_;
     bool hub_active_ = false;
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "core/result/Result.h"
 
+#include <QMutex>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -39,6 +40,13 @@ class Database {
     Result<void> apply_pragmas();
 
     QSqlDatabase db_;
+    // Serialises access to db_ across threads.
+    // Qt's rule: a QSqlDatabase connection may only be used from the thread
+    // that created it. In practice the SQLite driver is compiled with
+    // SQLITE_THREADSAFE=1 (serialised mode), so the C-level access is safe,
+    // but the Qt C++ wrappers (QSqlQuery, QSqlDatabase) are not. This mutex
+    // ensures we never touch db_ concurrently from two threads.
+    mutable QMutex mutex_;
 };
 
 } // namespace fincept

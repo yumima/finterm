@@ -134,13 +134,13 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
         cl->setSpacing(0);
 
         auto* name = new QLabel(labels.value(q.symbol, q.symbol));
-        name->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+        name->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                 .arg(ui::colors::TEXT_PRIMARY()));
         name->setAlignment(Qt::AlignCenter);
         cl->addWidget(name);
 
         auto* chg = new QLabel(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
-        chg->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;")
+        chg->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                .arg(q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
         chg->setAlignment(Qt::AlignCenter);
         cl->addWidget(chg);

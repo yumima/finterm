@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 
+#include "ui/charts/InlineSparkline.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -48,8 +49,8 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
 
     // Table
     table_ = new ui::DataTable;
-    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
-    table_->set_column_widths({100, 90, 80, 70});
+    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "TREND"});
+    table_->set_column_widths({100, 90, 80, 70, 90});
     vl->addWidget(table_);
 
     connect(this, &BaseWidget::refresh_requested, this, &WatchlistWidget::refresh_data);
@@ -60,7 +61,7 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
 }
 
 void WatchlistWidget::apply_styles() {
-    symbols_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    symbols_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                       .arg(ui::colors::TEXT_SECONDARY()));
     symbols_input_->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
@@ -68,7 +69,7 @@ void WatchlistWidget::apply_styles() {
                 "QLineEdit:focus { border-color: %4; }")
             .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     go_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: none; "
-                                   "font-size: 9px; font-weight: bold; padding: 3px; }"
+                                   "font-weight: bold; padding: 3px; }"
                                    "QPushButton:hover { background: %1; }")
                                .arg(ui::colors::AMBER(), ui::colors::BG_BASE()));
 }
@@ -106,13 +107,19 @@ void WatchlistWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
     // Drop old subscriptions wholesale — symbol set may have changed.
     hub.unsubscribe(this);
+    sparkline_cache_.clear();
     for (const auto& sym : symbols_) {
-        const QString topic = QStringLiteral("market:quote:") + sym;
-        hub.subscribe(this, topic, [this, sym](const QVariant& v) {
+        hub.subscribe(this, QStringLiteral("market:quote:") + sym, [this, sym](const QVariant& v) {
             if (!v.canConvert<services::QuoteData>())
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            render_from_cache();
+        });
+        hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {
+            if (!v.canConvert<QVector<double>>())
+                return;
+            sparkline_cache_.insert(sym, v.value<QVector<double>>());
             render_from_cache();
         });
     }
@@ -133,10 +140,17 @@ void WatchlistWidget::render_from_cache() {
         const auto& q = it.value();
         table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
                          QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2)});
+                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
+                         QString{}}); // TREND cell stays empty text-wise; sparkline widget overrides it
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
+
+        auto* spark = new ui::InlineSparkline(table_);
+        const auto sit = sparkline_cache_.constFind(q.symbol);
+        if (sit != sparkline_cache_.constEnd())
+            spark->set_points(sit.value());
+        table_->setCellWidget(row, 4, spark);
     }
 }
 
@@ -147,10 +161,17 @@ void WatchlistWidget::populate(const QVector<services::QuoteData>& quotes) {
     for (const auto& q : quotes) {
         table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
                          QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2)});
+                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
+                         QString{}});
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
+
+        auto* spark = new ui::InlineSparkline(table_);
+        const auto sit = sparkline_cache_.constFind(q.symbol);
+        if (sit != sparkline_cache_.constEnd())
+            spark->set_points(sit.value());
+        table_->setCellWidget(row, 4, spark);
     }
 }
 

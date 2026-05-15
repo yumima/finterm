@@ -14,7 +14,7 @@ namespace fincept::screens::widgets {
 static QString input_style(const QString& border_color = "") {
     QString bc = border_color.isEmpty() ? ui::colors::BORDER_MED() : border_color;
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
-                   "font-size: 11px; padding: 4px 6px; }"
+                   "padding: 4px 6px; }"
                    "QLineEdit:focus { border-color: %4; }")
         .arg(ui::colors::BG_BASE())
         .arg(ui::colors::TEXT_PRIMARY())
@@ -24,7 +24,7 @@ static QString input_style(const QString& border_color = "") {
 
 static QString combo_style() {
     return QString("QComboBox { background: %1; color: %2; border: 1px solid %3; "
-                   "font-size: 11px; padding: 4px 6px; }"
+                   "padding: 4px 6px; }"
                    "QComboBox::drop-down { border: none; width: 16px; }"
                    "QComboBox QAbstractItemView { background: %1; color: %2; border: 1px solid %3; }")
         .arg(ui::colors::BG_BASE())
@@ -171,7 +171,7 @@ void QuickTradeWidget::hideEvent(QHideEvent* e) {
 void QuickTradeWidget::apply_styles() {
     symbol_input_->setStyleSheet(input_style());
     lookup_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3; "
-                                       "font-size: 10px; font-weight: bold; padding: 4px 10px; }"
+                                       "font-weight: bold; padding: 4px 10px; }"
                                        "QPushButton:hover { background: %4; }")
                                    .arg(ui::colors::BG_RAISED())
                                    .arg(ui::colors::AMBER())
@@ -186,9 +186,9 @@ void QuickTradeWidget::apply_styles() {
     price_label_->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     bid_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::POSITIVE()));
+        QString("color: %1; background: transparent;").arg(ui::colors::POSITIVE()));
     ask_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::NEGATIVE()));
+        QString("color: %1; background: transparent;").arg(ui::colors::NEGATIVE()));
 
     separator_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
@@ -196,10 +196,10 @@ void QuickTradeWidget::apply_styles() {
     order_type_->setStyleSheet(combo_style());
 
     qty_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     qty_input_->setStyleSheet(input_style());
     price_lbl_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     price_input_->setStyleSheet(input_style(ui::colors::BORDER_DIM()));
 
     est_total_->setStyleSheet(
@@ -274,7 +274,7 @@ void QuickTradeWidget::on_side_changed(int idx) {
     QString color = (idx == 0) ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
     submit_btn_->setText(idx == 0 ? "PLACE BUY ORDER" : idx == 1 ? "PLACE SELL ORDER" : "PLACE SHORT ORDER");
     submit_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %3; border: none; "
-                                       "font-size: 11px; font-weight: bold; }"
+                                       "font-weight: bold; }"
                                        "QPushButton:hover { background: %2; }")
                                    .arg(color, color, ui::colors::TEXT_PRIMARY()));
 }

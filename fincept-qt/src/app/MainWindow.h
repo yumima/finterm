@@ -112,6 +112,8 @@ class MainWindow : public QMainWindow {
     void on_auth_state_changed();
     void toggle_chat_mode();
     void show_lock_screen();
+    void show_lock_overlay(); // show lock screen as overlay; shell stays at index 1
+    void hide_lock_overlay(); // hide overlay; no page switch needed
     void on_terminal_unlocked();
     void update_window_title();
     /// Show or hide the toolbar/status bar shell (hidden during auth screens).

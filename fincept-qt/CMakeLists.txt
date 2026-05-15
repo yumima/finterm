@@ -968,6 +968,7 @@ set(UI_SOURCES
     src/ui/widgets/SpeedSparkline.cpp
     src/ui/tables/DataTable.cpp
     src/ui/charts/ChartFactory.cpp
+    src/ui/charts/InlineSparkline.cpp
     src/ui/navigation/NavigationBar.cpp
     src/ui/navigation/FKeyBar.cpp
     src/ui/navigation/StatusBar.cpp
@@ -2114,6 +2115,36 @@ target_include_directories(FinceptTerminal PRIVATE
     "${OPENSSL_INCLUDE_DIR}"
     "${md4c_SOURCE_DIR}/src"
 )
+# WebEngineWidgets: try find_package first; fall back to direct lib probe
+# because the CMake dependency chain for WebEngine is fragile when modules
+# like QtQuick are installed as part of the base Qt rather than as extras.
+find_package(Qt6 QUIET COMPONENTS WebEngineWidgets)
+if(NOT Qt6WebEngineWidgets_FOUND)
+    set(_we_lib "${CMAKE_PREFIX_PATH}/lib/libQt6WebEngineWidgets.so")
+    set(_we_inc "${CMAKE_PREFIX_PATH}/include/QtWebEngineWidgets")
+    if(EXISTS "${_we_lib}" AND EXISTS "${_we_inc}")
+        # Direct approach: add include paths and link all Qt deps of WebEngine.
+        # Creating IMPORTED targets without their full transitive dep chain
+        # causes linker errors; listing the .so files directly avoids that.
+        target_include_directories(FinceptTerminal PRIVATE
+            "${CMAKE_PREFIX_PATH}/include/QtWebEngineWidgets"
+            "${CMAKE_PREFIX_PATH}/include/QtWebEngineCore")
+        foreach(_lib WebEngineWidgets WebEngineCore Positioning WebChannel
+                     Qml QmlMeta QmlModels QmlWorkerScript Quick)
+            set(_so "${CMAKE_PREFIX_PATH}/lib/libQt6${_lib}.so")
+            if(EXISTS "${_so}")
+                target_link_libraries(FinceptTerminal PRIVATE "${_so}")
+            endif()
+        endforeach()
+        set(Qt6WebEngineWidgets_FOUND TRUE)
+        message(STATUS "Qt6 WebEngineWidgets found via direct probe — enabling WebEngine video path")
+    else()
+        message(STATUS "Qt6 WebEngineWidgets not found — WebEngine video path disabled")
+    endif()
+else()
+    message(STATUS "Qt6 WebEngineWidgets found — enabling WebEngine video path")
+endif()
+
 target_link_libraries(FinceptTerminal PRIVATE
     Qt6::Widgets
     Qt6::Charts
@@ -2240,6 +2271,15 @@ endif()
 if(HAS_TTS)
     target_link_libraries(FinceptTerminal PRIVATE Qt6::TextToSpeech)
     target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_TTS)
+endif()
+
+if(Qt6WebEngineWidgets_FOUND)
+    # When found via find_package, link the imported targets.
+    # The probe fallback already linked raw .so paths, so guard with TARGET check.
+    if(TARGET Qt6::WebEngineWidgets)
+        target_link_libraries(FinceptTerminal PRIVATE Qt6::WebEngineWidgets Qt6::WebEngineCore)
+    endif()
+    target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_WEBENGINE)
 endif()
 
 # ── Copy qgeoview DLL next to the exe so it's found at runtime ────────────────

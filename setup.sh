@@ -190,8 +190,10 @@ else
     else
         AQT_HOST="mac"   ; AQT_TARGET="desktop" ; AQT_ARCH="clang_64"
     fi
-    # Modules: charts, websockets, multimedia (video+audio), speech, opengl widgets
-    AQT_MODULES="qtcharts qtwebsockets qtmultimedia qtspeech"
+    # Modules: charts, websockets, multimedia (video+audio), speech, opengl widgets,
+    # webengine (Chromium-based iframe player for YouTube live streams — ~500 MB,
+    # eliminates yt-dlp dependency and all GL/Wayland rendering complexity).
+    AQT_MODULES="qtcharts qtwebsockets qtmultimedia qtspeech qtpositioning qtwebchannel qtwebengine"
     "$AQT" install-qt "$AQT_HOST" "$AQT_TARGET" "$QT_VERSION" "$AQT_ARCH" \
         --outputdir "$QT_INSTALL_ROOT" \
         --modules $AQT_MODULES \

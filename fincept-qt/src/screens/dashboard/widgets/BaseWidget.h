@@ -60,6 +60,7 @@ class BaseWidget : public QFrame {
     void set_configurable(bool configurable);
 
   private:
+    void apply_title_bar_style(); // single source of truth for title-bar fonts/colours
     void refresh_base_theme();
     void on_config_clicked();
 

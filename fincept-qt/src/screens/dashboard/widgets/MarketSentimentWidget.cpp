@@ -126,7 +126,7 @@ void MarketSentimentWidget::apply_styles() {
         QString("font-size: 18px; background: transparent; color: %1;").arg(ui::colors::TEXT_SECONDARY()));
     score_label_->setStyleSheet(QString("color: %1; font-size: 24px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_SECONDARY()));
-    verdict_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    verdict_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                       .arg(ui::colors::TEXT_SECONDARY()));
 
     bull_bar_->setStyleSheet(QString("background: %1; border-radius: 0;").arg(ui::colors::POSITIVE()));
@@ -134,22 +134,22 @@ void MarketSentimentWidget::apply_styles() {
     bear_bar_->setStyleSheet(QString("background: %1; border-radius: 0;").arg(ui::colors::NEGATIVE()));
 
     bull_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::POSITIVE()));
+        QString("color: %1; background: transparent;").arg(ui::colors::POSITIVE()));
     neutral_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     bear_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::NEGATIVE()));
+        QString("color: %1; background: transparent;").arg(ui::colors::NEGATIVE()));
 
     separator_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
-    vix_title_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+    vix_title_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                         .arg(ui::colors::TEXT_SECONDARY()));
     breadth_title_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;")
+        QString("color: %1; font-weight: bold; background: transparent;")
             .arg(ui::colors::TEXT_SECONDARY()));
-    vix_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    vix_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                   .arg(ui::colors::TEXT_PRIMARY()));
-    breadth_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    breadth_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                       .arg(ui::colors::TEXT_PRIMARY()));
 }
 
@@ -264,7 +264,7 @@ void MarketSentimentWidget::populate(const QVector<services::QuoteData>& quotes)
 
     verdict_label_->setText(verdict);
     verdict_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;").arg(score_color));
+        QString("color: %1; font-weight: bold; background: transparent;").arg(score_color));
 
     // Update bar proportions
     auto* bar_layout = qobject_cast<QHBoxLayout*>(bull_bar_->parentWidget()->layout());
@@ -285,12 +285,12 @@ void MarketSentimentWidget::populate(const QVector<services::QuoteData>& quotes)
                             : vix_price > 18 ? ui::colors::WARNING()
                                              : ui::colors::POSITIVE();
         vix_label_->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(vix_color));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(vix_color));
     }
 
     // Breadth
     breadth_label_->setText(QString("%1A / %2D").arg(bullish).arg(bearish));
-    breadth_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+    breadth_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                       .arg(bullish > bearish ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 

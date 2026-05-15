@@ -49,6 +49,7 @@ bool Database::is_open() const {
 }
 
 Result<QSqlQuery> Database::execute(const QString& sql, const QVariantList& params) {
+    QMutexLocker lock(&mutex_);
     QSqlQuery query(db_);
     query.prepare(sql);
     for (int i = 0; i < params.size(); ++i) {
@@ -61,6 +62,7 @@ Result<QSqlQuery> Database::execute(const QString& sql, const QVariantList& para
 }
 
 Result<void> Database::exec(const QString& sql) {
+    QMutexLocker lock(&mutex_);
     QSqlQuery query(db_);
     if (!query.exec(sql)) {
         return Result<void>::err(query.lastError().text().toStdString());

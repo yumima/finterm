@@ -42,6 +42,7 @@ class TopMoversWidget : public BaseWidget {
     bool showing_gainers_ = true;
 
     QHash<QString, services::QuoteData> row_cache_;
+    QHash<QString, QVector<double>>     sparkline_cache_;
     QStringList symbols_;
     bool hub_active_ = false;
 };

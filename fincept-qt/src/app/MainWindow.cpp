@@ -247,15 +247,30 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // ── Chat Mode ─────────────────────────────────────────────────────────────
     chat_mode_screen_ = new chat_mode::ChatModeScreen;
 
-    // ── Lock Screen ─────────────────────────────────────────────────────────
-    lock_screen_ = new screens::LockScreen;
-
     // ── ADS Docking mode ─────────────────────────────────────────────────────
     setup_docking_mode();
     master_stack->addWidget(dock_manager_->parentWidget()); // index 1 — dock_wrapper
     master_stack->addWidget(chat_mode_screen_);             // index 2
-    master_stack->addWidget(lock_screen_);                  // index 3 — lock/PIN screen
     connect(chat_mode_screen_, &chat_mode::ChatModeScreen::exit_requested, this, &MainWindow::toggle_chat_mode);
+
+    // ── Lock Screen ─────────────────────────────────────────────────────────
+    // The lock screen and master_stack share cell (0,0) in a zero-margin
+    // QGridLayout. Qt's layout manager keeps both widgets sized to the
+    // central widget at all times — no eventFilter, no manual setGeometry.
+    // The lock screen starts hidden; showing/hiding it is a single call with
+    // no page switch, so the dock underneath is always fully rendered.
+    // This eliminates the Wayland blank-frame commit that caused the ~0.5s
+    // "disappear" flash after entering the PIN.
+    lock_screen_ = new screens::LockScreen;
+    lock_screen_->hide();
+
+    auto* central = new QWidget;
+    auto* overlay_layout = new QGridLayout(central);
+    overlay_layout->setContentsMargins(0, 0, 0, 0);
+    overlay_layout->setSpacing(0);
+    overlay_layout->addWidget(master_stack, 0, 0);  // bottom layer
+    overlay_layout->addWidget(lock_screen_,  0, 0);  // top layer (same cell)
+    setCentralWidget(central);
 
     // Lock screen signals
     connect(lock_screen_, &screens::LockScreen::unlocked, this, &MainWindow::on_terminal_unlocked);
@@ -267,8 +282,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // Inactivity guard → lock screen
     connect(&auth::InactivityGuard::instance(), &auth::InactivityGuard::lock_requested, this,
             &MainWindow::show_lock_screen);
-
-    setCentralWidget(master_stack);
 
     dock_toolbar_ = new ui::DockToolBar(this);
     addToolBar(Qt::TopToolBarArea, dock_toolbar_);
@@ -865,7 +878,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             lock_screen_->show_unlock();
             locked_ = true;
             set_shell_visible(false);
-            stack_->setCurrentIndex(3);
+            show_lock_overlay();
         } else if (auth_mgr.is_authenticated()) {
             // Authenticated but no PIN yet — will be caught by on_auth_state_changed
             on_auth_state_changed();
@@ -1194,7 +1207,7 @@ void MainWindow::on_auth_state_changed() {
                     lock_screen_->show_setup();
                     locked_ = true;
                     set_shell_visible(false);
-                    stack_->setCurrentIndex(3);
+                    show_lock_overlay();
                     return;
                 }
                 if (auth::PinManager::instance().has_pin()) {
@@ -1202,7 +1215,7 @@ void MainWindow::on_auth_state_changed() {
                     lock_screen_->show_unlock();
                     locked_ = true;
                     set_shell_visible(false);
-                    stack_->setCurrentIndex(3);
+                    show_lock_overlay();
                     return;
                 }
             }
@@ -1220,13 +1233,13 @@ void MainWindow::on_auth_state_changed() {
         // On first login (no PIN configured): show mandatory PIN setup.
         // On subsequent launches (PIN exists): show PIN unlock.
         // Skip if user is already on the lock screen (index 3).
-        if (stack_->currentIndex() != 3) {
+        if (!lock_screen_->isVisible()) {
             if (auth.needs_pin_setup()) {
                 LOG_INFO("MainWindow", "Authenticated but no PIN — showing PIN setup");
                 lock_screen_->show_setup();
                 locked_ = true;
                 set_shell_visible(false);
-                stack_->setCurrentIndex(3);
+                show_lock_overlay();
                 return;
             }
             if (auth::PinManager::instance().has_pin()) {
@@ -1234,7 +1247,7 @@ void MainWindow::on_auth_state_changed() {
                 lock_screen_->show_unlock();
                 locked_ = true;
                 set_shell_visible(false);
-                stack_->setCurrentIndex(3);
+                show_lock_overlay();
                 return;
             }
         }
@@ -1256,7 +1269,7 @@ void MainWindow::on_auth_state_changed() {
                     lock_screen_->show_setup();
                 locked_ = true;
                 set_shell_visible(false);
-                stack_->setCurrentIndex(3);
+                show_lock_overlay();
                 return;
             }
 
@@ -1292,7 +1305,7 @@ void MainWindow::on_auth_state_changed() {
                     lock_screen_->show_setup();
                 locked_ = true;
                 set_shell_visible(false);
-                stack_->setCurrentIndex(3);
+                show_lock_overlay();
                 return;
             }
             set_shell_visible(true);
@@ -1365,9 +1378,8 @@ void MainWindow::show_lock_screen() {
         return;
     }
 
-    // Don't lock if already on lock screen or login screen — traced so
-    // spurious inactivity ticks during auth transitions are visible in logs.
-    if (stack_->currentIndex() == 3) {
+    // Don't lock if already locked or on the login screen.
+    if (lock_screen_->isVisible()) {
         LOG_DEBUG("MainWindow", "show_lock_screen: ignored — already on lock screen");
         return;
     }
@@ -1381,7 +1393,7 @@ void MainWindow::show_lock_screen() {
     locked_ = true;
     pin_gate_cleared_ = false;
     set_shell_visible(false);
-    stack_->setCurrentIndex(3);
+    show_lock_overlay();
     if (chat_bubble_)
         chat_bubble_->setVisible(false);
 
@@ -1401,6 +1413,20 @@ void MainWindow::show_lock_screen() {
     // other background navigator) refuses to mutate panel state.
     auth::InactivityGuard::instance().set_terminal_locked(true);
     auth::InactivityGuard::instance().set_enabled(false);
+}
+
+void MainWindow::show_lock_overlay() {
+    // Ensure the dock page is active so the shell renders underneath.
+    if (stack_->currentIndex() != 1)
+        stack_->setCurrentIndex(1);
+    // Layout manager sizes lock_screen_ automatically (same grid cell as stack_).
+    lock_screen_->show();
+    lock_screen_->raise();
+    lock_screen_->setFocus();
+}
+
+void MainWindow::hide_lock_overlay() {
+    lock_screen_->hide();
 }
 
 void MainWindow::on_terminal_unlocked() {
@@ -1432,18 +1458,9 @@ void MainWindow::on_terminal_unlocked() {
     // Reset PIN lockout on successful unlock
     auth::PinManager::instance().reset_lockout();
 
-    // Suppress intermediate repaints during unlock. setUpdatesEnabled(false)
-    // prevents Qt from processing expose events or painting while we switch
-    // pages, restore dock layout, and navigate screens. Without this, the
-    // dock navigation (routers_->navigate) triggers an ADS layout change that
-    // sends a Wayland configure request, causing a brief window un-map/re-map
-    // visible as a ~0.5s flash. When updates are re-enabled Qt draws the
-    // fully-assembled shell in one atomic repaint — no flash.
-    setUpdatesEnabled(false);
-
     if (auth.session().has_paid_plan()) {
         set_shell_visible(true);
-        stack_->setCurrentIndex(1);
+        hide_lock_overlay();
         if (chat_bubble_) {
             auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
             bool show = !r.is_ok() || r.value() != "false";
@@ -1460,11 +1477,9 @@ void MainWindow::on_terminal_unlocked() {
         });
     } else {
         set_shell_visible(true);
-        stack_->setCurrentIndex(1);
+        hide_lock_overlay();
         WorkspaceManager::instance().load_last_workspace();
     }
-
-    setUpdatesEnabled(true); // draw fully-assembled shell in one shot
 
     emit auth.terminal_unlocked();
 }

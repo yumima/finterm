@@ -50,10 +50,12 @@ class PortfolioSummaryWidget : public BaseWidget {
     void rebuild_from_cache();
 
     // Summary labels
-    QLabel* total_value_lbl_ = nullptr;
-    QLabel* day_pnl_lbl_ = nullptr;
-    QLabel* total_pnl_lbl_ = nullptr;
-    QLabel* num_holdings_lbl_ = nullptr;
+    QLabel* total_value_lbl_   = nullptr;
+    QLabel* day_pnl_lbl_       = nullptr;
+    QLabel* day_chg_pct_lbl_   = nullptr;
+    QLabel* total_pnl_lbl_     = nullptr;
+    QLabel* total_chg_pct_lbl_ = nullptr;
+    QLabel* num_holdings_lbl_  = nullptr;
 
     // Holdings list layout
     QVBoxLayout* list_layout_ = nullptr;
@@ -71,6 +73,7 @@ class PortfolioSummaryWidget : public BaseWidget {
     QVector<services::QuoteData> last_quotes_;
 
     QHash<QString, services::QuoteData> row_cache_;
+    QHash<QString, QVector<double>>     sparkline_cache_; // intraday tick history per symbol
     bool hub_active_ = false;
 };
 

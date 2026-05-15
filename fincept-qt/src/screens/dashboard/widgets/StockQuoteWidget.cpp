@@ -91,8 +91,8 @@ StockQuoteWidget::StockQuoteWidget(const QString& symbol, QWidget* parent)
 void StockQuoteWidget::apply_styles() {
     price_label_->setStyleSheet(QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
-    arrow_label_->setStyleSheet("font-size: 12px; background: transparent;");
-    change_label_->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;")
+    arrow_label_->setStyleSheet("background: transparent;");
+    change_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                      .arg(ui::colors::TEXT_SECONDARY()));
     ticker_label_->setStyleSheet(
         QString("color: %1; font-size: 14px; font-weight: bold; background: transparent;").arg(ui::colors::AMBER()));
@@ -102,9 +102,9 @@ void StockQuoteWidget::apply_styles() {
         cell->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : stat_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : stat_values_)
-        val->setStyleSheet(QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;")
+        val->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                .arg(ui::colors::TEXT_PRIMARY()));
 }
 
@@ -164,7 +164,7 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
     QString color = positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
 
     arrow_label_->setText(positive ? QString(QChar(0x25B2)) : QString(QChar(0x25BC)));
-    arrow_label_->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent;").arg(color));
+    arrow_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
 
     change_label_->setText(QString("%1%2 (%3%4%)")
                                .arg(positive ? "+" : "")
@@ -172,7 +172,7 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
                                .arg(positive ? "+" : "")
                                .arg(q.change_pct, 0, 'f', 2));
     change_label_->setStyleSheet(
-        QString("color: %1; font-size: 11px; font-weight: bold; background: transparent;").arg(color));
+        QString("color: %1; font-weight: bold; background: transparent;").arg(color));
 
     price_label_->setStyleSheet(
         QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;").arg(color));

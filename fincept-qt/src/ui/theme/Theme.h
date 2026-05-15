@@ -105,12 +105,26 @@ constexpr int SMALL = 13;
 constexpr int TINY = 12;
 
 /// Runtime font size relative to the user-configured base size.
-/// offset=0 → base (e.g. 14px), offset=-2 → 12px, offset=+2 → 16px.
-/// Minimum clamped to 7px.
+/// offset=0 → base (e.g. 14px), offset=+2 → 16px, offset=-2 → 12px.
+/// Hard floor of 12px — nothing in the UI is ever rendered smaller than this.
 inline int font_px(int offset = 0) {
     int v = ThemeManager::instance().tokens().font_size_base + offset;
-    return v < 7 ? 7 : v;
+    return v < 12 ? 12 : v;
 }
+
+/// CSS-ready string helpers — use these in setStyleSheet() so all font sizes
+/// scale consistently when the user adjusts the base font size setting.
+///
+///   ui_px()      — widget title bars, section headers    (base-2, min 12)
+///   content_px() — data labels, row text                 (base-2, min 12)
+///   hint_px()    — secondary / helper text               (base-2, min 12)
+///
+/// At the default base (14px) all three return 12px — the app-wide minimum.
+/// At a larger base (e.g. 16px) they return 14px / 14px / 12px respectively,
+/// creating a readable hierarchy while still respecting the floor.
+inline QString ui_px()      { return QString::number(font_px(-2)) + "px"; }
+inline QString content_px() { return QString::number(font_px(-2)) + "px"; }
+inline QString hint_px()    { return QString::number(font_px(-2)) + "px"; }
 
 } // namespace fonts
 

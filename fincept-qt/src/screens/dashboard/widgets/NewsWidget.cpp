@@ -95,20 +95,20 @@ void NewsWidget::populate(const QJsonArray& articles) {
             auto* time_lbl = new QLabel(time_str);
             time_lbl->setFixedWidth(36);
             time_lbl->setStyleSheet(
-                QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::CYAN()));
+                QString("color: %1; background: transparent;").arg(ui::colors::CYAN()));
             rl->addWidget(time_lbl);
         }
 
         auto* headline = new QLabel(title);
         headline->setWordWrap(true);
         headline->setStyleSheet(
-            QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
+            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
         rl->addWidget(headline, 1);
 
         if (!publisher.isEmpty()) {
             auto* src = new QLabel(publisher);
             src->setStyleSheet(
-                QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+                QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
             rl->addWidget(src);
         }
 

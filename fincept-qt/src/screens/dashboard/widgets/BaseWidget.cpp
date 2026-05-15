@@ -44,15 +44,10 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
     hl->addWidget(accent_bar_);
 
     title_label_ = new QLabel(title);
-    title_label_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; "
-                                        "background: transparent; text-transform: uppercase;")
-                                    .arg(accent_color_));
     hl->addWidget(title_label_);
 
     // Loading indicator
     loading_label_ = new QLabel("...");
-    loading_label_->setStyleSheet(
-        QString("color: %1; font-size: 9px; background: transparent;").arg(ui::colors::AMBER()));
     loading_label_->setVisible(false);
     hl->addWidget(loading_label_);
 
@@ -112,7 +107,10 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
 
     vl->addWidget(title_bar_);
 
-    // Auto-refresh styles on theme/font change — subclasses get this for free
+    // Apply title-bar styles once here; refresh_base_theme() re-uses the same
+    // method on theme changes so there is only one place to update font/colours.
+    apply_title_bar_style();
+
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this, [this](const ui::ThemeTokens&) {
         refresh_base_theme();
         on_theme_changed();
@@ -128,6 +126,29 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
     vl->addWidget(content_, 1);
 }
 
+void BaseWidget::apply_title_bar_style() {
+    if (title_bar_)
+        title_bar_->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
+                                      .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    if (title_label_)
+        title_label_->setStyleSheet(
+            QString("color:%1;font-size:%2;font-weight:bold;letter-spacing:0.5px;"
+                    "background:transparent;text-transform:uppercase;")
+                .arg(accent_color_, ui::fonts::ui_px()));
+    if (accent_bar_)
+        accent_bar_->setStyleSheet(QString("background:%1;border-radius:1px;").arg(accent_color_));
+    if (loading_label_)
+        loading_label_->setStyleSheet(
+            QString("color:%1;font-size:%2;background:transparent;")
+                .arg(ui::colors::AMBER(), ui::fonts::ui_px()));
+    if (refresh_btn_)
+        refresh_btn_->setStyleSheet(
+            QString("QPushButton{color:%1;background:%2;border:1px solid %3;border-radius:2px;padding:0;}"
+                    "QPushButton:hover{color:%4;border-color:%4;background:%5;}")
+                .arg(accent_color_, ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
+                     ui::colors::BG_HOVER()));
+}
+
 void BaseWidget::refresh_base_theme() {
     QPalette pal = palette();
     pal.setColor(QPalette::Window, QColor(ui::colors::BG_SURFACE()));
@@ -135,24 +156,7 @@ void BaseWidget::refresh_base_theme() {
 
     setStyleSheet(QString("#dashboardBaseWidget{background:%1;border:1px solid %2;border-radius:2px;}")
                       .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_BRIGHT()));
-    if (title_bar_)
-        title_bar_->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
-                                      .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
-    if (title_label_)
-        title_label_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:bold;letter-spacing:0.5px;"
-                                            "background:transparent;text-transform:uppercase;")
-                                        .arg(accent_color_));
-    if (accent_bar_)
-        accent_bar_->setStyleSheet(QString("background:%1;border-radius:1px;").arg(accent_color_));
-    if (loading_label_)
-        loading_label_->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::AMBER()));
-    if (refresh_btn_)
-        refresh_btn_->setStyleSheet(
-            QString("QPushButton{color:%1;background:%2;border:1px solid %3;border-radius:2px;padding:0;}"
-                    "QPushButton:hover{color:%4;border-color:%4;background:%5;}")
-                .arg(accent_color_, ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
-                     ui::colors::BG_HOVER()));
+    apply_title_bar_style(); // single source of truth — no duplication
 }
 
 void BaseWidget::set_loading(bool loading) {

@@ -21,7 +21,6 @@
 #include <QPointer>
 #include <QShowEvent>
 #include <QVBoxLayout>
-#include <QtConcurrent/QtConcurrent>
 
 namespace {
 
@@ -136,7 +135,7 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
         auto* dlg = new TemplatePicker(this);
         connect(dlg, &TemplatePicker::template_selected, this, [this](const QString& tid) {
             // Clear saved state so fresh template is used
-            (void)QtConcurrent::run([]() { fincept::SettingsRepository::instance().remove("dashboard_canvas_layout"); });
+            fincept::SettingsRepository::instance().remove("dashboard_canvas_layout");
             canvas_->apply_template(tid);
         });
         dlg->exec();
@@ -325,7 +324,6 @@ void DashboardScreen::save_layout() {
 
     GridLayout layout = canvas_->current_layout();
 
-    // Serialize: cols, row_h, margin, item count, then each item
     QByteArray buf;
     QDataStream stream(&buf, QIODevice::WriteOnly);
     stream << layout.cols << layout.row_h << layout.margin;
@@ -336,52 +334,38 @@ void DashboardScreen::save_layout() {
         stream << item.cell.min_w << item.cell.min_h;
     }
 
-    QString encoded = buf.toBase64();
-    QPointer<DashboardScreen> self = this;
-    (void)QtConcurrent::run(
-        [encoded]() { fincept::SettingsRepository::instance().set("dashboard_canvas_layout", encoded, "dashboard"); });
+    fincept::SettingsRepository::instance().set("dashboard_canvas_layout", buf.toBase64(), "dashboard");
 }
 
 void DashboardScreen::restore_layout() {
-    QPointer<DashboardScreen> self = this;
-    (void)QtConcurrent::run([self]() {
-        auto result = fincept::SettingsRepository::instance().get("dashboard_canvas_layout");
+    auto result = fincept::SettingsRepository::instance().get("dashboard_canvas_layout");
 
-        QMetaObject::invokeMethod(
-            self,
-            [self, result]() {
-                if (!self)
-                    return;
+    if (result.is_err() || result.value().isEmpty()) {
+        build_default_layout();
+        return;
+    }
 
-                if (result.is_err() || result.value().isEmpty()) {
-                    self->build_default_layout();
-                    return;
-                }
+    QByteArray data = QByteArray::fromBase64(result.value().toUtf8());
+    QDataStream stream(&data, QIODevice::ReadOnly);
 
-                QByteArray data = QByteArray::fromBase64(result.value().toUtf8());
-                QDataStream stream(&data, QIODevice::ReadOnly);
+    GridLayout layout;
+    int count = 0;
+    stream >> layout.cols >> layout.row_h >> layout.margin >> count;
 
-                GridLayout layout;
-                int count = 0;
-                stream >> layout.cols >> layout.row_h >> layout.margin >> count;
+    if (count <= 0 || count > 100) {
+        build_default_layout();
+        return;
+    }
 
-                if (count <= 0 || count > 100) {
-                    self->build_default_layout();
-                    return;
-                }
+    for (int i = 0; i < count; ++i) {
+        GridItem item;
+        stream >> item.id >> item.instance_id;
+        stream >> item.cell.x >> item.cell.y >> item.cell.w >> item.cell.h;
+        stream >> item.cell.min_w >> item.cell.min_h;
+        layout.items.append(item);
+    }
 
-                for (int i = 0; i < count; ++i) {
-                    GridItem item;
-                    stream >> item.id >> item.instance_id;
-                    stream >> item.cell.x >> item.cell.y >> item.cell.w >> item.cell.h;
-                    stream >> item.cell.min_w >> item.cell.min_h;
-                    layout.items.append(item);
-                }
-
-                self->canvas_->load_layout(layout);
-            },
-            Qt::QueuedConnection);
-    });
+    canvas_->load_layout(layout);
 }
 
 void DashboardScreen::build_default_layout() {

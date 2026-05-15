@@ -1,274 +1,229 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 
 #include "core/logging/Logger.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
-#include <QOpenGLBuffer>
-#include <QOpenGLFunctions>
-#include <QOpenGLShaderProgram>
-#include <QOpenGLTexture>
-#include <QOpenGLVertexArrayObject>
-#include <QOpenGLWidget>
+#include <QMessageBox>
+#include <QPainter>
 #include <QRect>
-#include <QSurfaceFormat>
-#include <QWindow>
+#include <QTableWidget>
 
 #include <algorithm>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QVBoxLayout>
 
 namespace fincept::screens::widgets {
 
 // ── VideoRenderWidget ─────────────────────────────────────────────────────────
-// QOpenGLWidget — rendering runs on the RTX card via PRIME render offload.
-// Frames decoded by NVDEC arrive via QueuedConnection, are uploaded as a GL
-// texture, and rendered by a minimal fragment shader. No CPU rasterisation.
+// Plain QWidget + QPainter. Decoded frames arrive from QVideoSink and are
+// stored as QImage; paintEvent() draws the cached image letter-boxed in the
+// widget. Transient toImage() failures simply skip the present() call and
+// the previous image stays on screen — no black flash, no flicker.
 
 #ifdef HAS_QT_MULTIMEDIA
 
-// ── GLSL shaders (OpenGL 3.2 core / GLSL 1.50) ───────────────────────────────
-// Uses in/out instead of the deprecated attribute/varying/gl_FragColor syntax.
-// #version 150 core is the minimum that mandates VAO usage — keeping shaders
-// and context requirements in sync prevents silent failures on core profiles.
-static const char kVertSrc[] =
-    "#version 150 core\n"
-    "in  vec2 a_pos;\n"
-    "in  vec2 a_uv;\n"
-    "out vec2 v_uv;\n"
-    "void main() { gl_Position = vec4(a_pos, 0.0, 1.0); v_uv = a_uv; }\n";
-
-static const char kFragSrc[] =
-    "#version 150 core\n"
-    "uniform sampler2D u_tex;\n"
-    "in  vec2 v_uv;\n"
-    "out vec4 fragColor;\n"
-    "void main() { fragColor = texture(u_tex, v_uv); }\n";
-
-// Full-screen quad: 4 vertices × (x,y,u,v)
-static const float kQuad[] = {
-    -1.f, -1.f,  0.f, 1.f,   // bottom-left  (GL y-up → UV y-down)
-     1.f, -1.f,  1.f, 1.f,   // bottom-right
-    -1.f,  1.f,  0.f, 0.f,   // top-left
-     1.f,  1.f,  1.f, 0.f,   // top-right
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-VideoRenderWidget::VideoRenderWidget(QWidget* parent)
-    : QOpenGLWidget(parent) {
+VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    // OpenGL 3.2 core profile — matches #version 150 core shaders and makes
-    // VAO usage mandatory (no implicit default VAO), enforced in initializeGL().
-    QSurfaceFormat fmt;
-    fmt.setVersion(3, 2);
-    fmt.setProfile(QSurfaceFormat::CoreProfile);
-    setFormat(fmt);
-
-    // ── Continuous render loop (Qt-documented Wayland pattern) ───────────────
-    // QOpenGLWidget renders to an offscreen FBO. The FBO is composited into
-    // the parent window's backing store only when the Wayland compositor sends
-    // a wl_surface_frame callback and Qt calls wl_surface_commit. Without an
-    // active frame-callback loop, paintGL() runs but its output stays in the
-    // FBO — invisible on screen, yet visible during resize (which Qt forces
-    // through its own resize path that calls requestUpdate() internally).
-    //
-    // Qt's documented fix for continuous QOpenGLWidget rendering:
-    //   connect(frameSwapped, update) — drives the next paint from the signal
-    //   emitted *after* the compositor has accepted and presented a frame.
-    // present() seeds the loop with window()->windowHandle()->requestUpdate()
-    // which registers the first wl_surface_frame callback. Every subsequent
-    // frame is self-driven by frameSwapped → update() → paintGL() → commit →
-    // frameSwapped → …, vsync-synchronised by the compositor.
-    //
-    // frameSwapped sustains the render loop at vsync rate.
-    // It must NOT call requestUpdate() — that's only for seeding in present().
-    // Calling requestUpdate() here would double the Wayland frame callbacks,
-    // causing 2× repaints per vsync and visible strobing/flickering.
-    connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
-        if (current_frame_.isValid() && isVisible()) {
-            update(); // schedule next paintGL() — one per compositor vsync
-        } else {
-            loop_active_ = false; // loop quiesced; needs re-seeding on next present()
-        }
-    });
-}
-
-VideoRenderWidget::~VideoRenderWidget() {
-    // GL resources must be destroyed with the context active.
-    makeCurrent();
-    delete texture_;
-    texture_ = nullptr;   // prevent double-free if makeCurrent() re-enters
-    vao_.destroy();
-    vbo_.destroy();
-    doneCurrent();
+    setAttribute(Qt::WA_OpaquePaintEvent); // we paint the entire surface ourselves
+    setAutoFillBackground(false);
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, Qt::black);
+    setPalette(pal);
 }
 
 void VideoRenderWidget::clear_frame() {
-    current_frame_ = QVideoFrame(); // invalidate → frameSwapped loop quiesces
-    loop_active_ = false;
-    update(); // repaint to black
+    last_image_ = QImage();
+    update();
 }
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
-    current_frame_ = frame;
-    // present() is data-only after the loop is seeded. Calling update() on
-    // every frame (30fps) causes a second paintGL() + wl_surface_commit
-    // between vsync callbacks (every 16ms), producing torn frames / flicker.
-    // update() is called exactly once — during the seed — to mark the widget
-    // dirty for the first render. All subsequent renders are driven solely by
-    // frameSwapped → update() at the compositor's vsync rate (60fps).
-    if (!loop_active_) {
-        loop_active_ = true;
-        update(); // first-time dirty mark so paintGL() fires on callback
-        if (auto* wh = window()->windowHandle())
-            wh->requestUpdate(); // register first wl_surface_frame callback
-    }
+    if (!frame.isValid())
+        return;
+    QImage img = frame.toImage();
+    if (img.isNull())
+        return; // Keep showing the previous frame — no flash.
+    last_image_ = std::move(img);
+    update();   // schedule a repaint only when we have a new valid frame
 }
 
-void VideoRenderWidget::initializeGL() {
-    initializeOpenGLFunctions();
+void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
+    QPainter p(this);
+    p.fillRect(rect(), Qt::black);
+    if (last_image_.isNull())
+        return;
 
-    // Compile and link — check explicitly so a driver-side failure surfaces
-    // as a log error rather than silent black screen with gl_ready_ = true.
-    if (!program_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kVertSrc)
-     || !program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragSrc)
-     || !program_.link()) {
-        LOG_ERROR("VideoGL", "Shader compile/link failed:\n" + program_.log());
-        return; // gl_ready_ stays false; paintGL() is a safe no-op
-    }
-
-    pos_loc_ = program_.attributeLocation("a_pos");
-    uv_loc_  = program_.attributeLocation("a_uv");
-
-    // VAO records the vertex layout and VBO binding so paintGL() only needs
-    // to bind the VAO (required in OpenGL core profile; #version 150 core).
-    vao_.create();
-    vao_.bind();
-
-    vbo_.create();
-    vbo_.bind();
-    vbo_.allocate(kQuad, sizeof(kQuad));
-
-    program_.bind();
-    program_.enableAttributeArray(pos_loc_);
-    program_.enableAttributeArray(uv_loc_);
-    program_.setAttributeBuffer(pos_loc_, GL_FLOAT, 0,                2, 4 * sizeof(float));
-    program_.setAttributeBuffer(uv_loc_,  GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
-    program_.release();
-
-    vbo_.release();
-    vao_.release();
-
-    gl_ready_ = true;
-}
-
-void VideoRenderWidget::resizeGL(int /*w*/, int /*h*/) {
-    // Viewport recalculated per-frame in paintGL() to maintain aspect ratio.
-}
-
-void VideoRenderWidget::paintGL() {
-    glClearColor(0.f, 0.f, 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    if (!gl_ready_ || !current_frame_.isValid()) return;
-
-    // Convert frame to QImage — handles NVDEC CUDA→CPU transfer internally.
-    // At 480p this is ~400 KB/frame; negligible on the PCIe bus.
-    const QImage img = current_frame_.toImage();
-    if (img.isNull()) return;
-
-    // Normalise every frame to RGBA8888 so the GL upload is always the same
-    // format. convertedTo() is O(w×h) — at 480p < 0.5 ms per frame.
-    const QImage rgba = img.convertedTo(QImage::Format_RGBA8888);
-    if (rgba.isNull()) return;
-
-    // Create or recreate texture when dimensions change using explicit
-    // format+size+allocateStorage.  We must NOT use the QImage constructor
-    // or setData(QImage) overload: they call setFormat()/setSize()/
-    // setMipLevels() on every invocation, which are all no-ops (with
-    // warnings) once storage is allocated — so no pixels ever get uploaded
-    // and the screen stays black while audio plays.
-    if (!texture_ || texture_->width() != rgba.width() || texture_->height() != rgba.height()) {
-        delete texture_;
-        texture_ = nullptr;
-        texture_ = new QOpenGLTexture(QOpenGLTexture::Target2D);
-        texture_->setFormat(QOpenGLTexture::RGBA8_UNorm);
-        texture_->setSize(rgba.width(), rgba.height());
-        texture_->setMipLevels(1);
-        texture_->allocateStorage(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8);
-        texture_->setMinificationFilter(QOpenGLTexture::Linear);
-        texture_->setMagnificationFilter(QOpenGLTexture::Linear);
-        texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
-    }
-
-    // Raw-pixel overload → glTexSubImage2D only; never touches format/size.
-    texture_->setData(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8,
-                      static_cast<const void*>(rgba.constBits()));
-
-    // Letter-box: restrict the GL viewport to maintain aspect ratio.
-    const float fw = img.width(), fh = img.height();
-    const float scale = std::min(width() / fw, height() / fh);
-    const int vw = static_cast<int>(fw * scale);
-    const int vh = static_cast<int>(fh * scale);
-    glViewport((width() - vw) / 2, (height() - vh) / 2, vw, vh);
-
-    // VAO already has the vertex layout recorded from initializeGL().
-    program_.bind();
-    texture_->bind();
-    vao_.bind();
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    vao_.release();
-    texture_->release();
-    program_.release();
+    // Letterbox: scale to fit while preserving aspect ratio.
+    const QSize target = last_image_.size().scaled(size(), Qt::KeepAspectRatio);
+    const QRect dst((width()  - target.width())  / 2,
+                    (height() - target.height()) / 2,
+                    target.width(), target.height());
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    p.drawImage(dst, last_image_);
 }
 #endif
 
-// ── Preset channels ─────────────────────────────────────────────────────────
+// ── Channel storage ─────────────────────────────────────────────────────────
+//
+// Channels live in SettingsRepository as a JSON array of {name, url} objects
+// under key "video.channels" (category "video"). On first launch the key is
+// absent: we write the small default seed below so the widget is useful out of
+// the box, then immediately treat the persisted copy as authoritative. Once
+// the user edits the list, the seed never reasserts itself — including when
+// the user has deliberately deleted every channel (an empty array is still a
+// valid user choice).
 
-struct PresetChannel {
-    const char* name;
-    const char* stream_url;
-    const char* description;
-    const char* accent;
+namespace {
+constexpr const char* kSettingsKey      = "video.channels";
+constexpr const char* kSettingsCategory = "video";
+
+// Color palette assigned round-robin to channels. Users pick name/URL only;
+// we own the accent so the list stays visually coherent regardless of order.
+const QStringList kAccentPalette = {
+    "#2563eb", // blue
+    "#16a34a", // green
+    "#9D4EDD", // purple
+    "#f59e0b", // amber
+    "#0891b2", // cyan
+    "#dc2626", // red
 };
+} // namespace
 
-// Channel /live URLs redirect to whatever is currently streaming, so they
-// never go stale the way specific watch?v= video IDs do.
-// All presets verified live and free via yt-dlp --js-runtimes node.
-static const PresetChannel kPresets[] = {
-    {"CNBC Live",     "https://www.youtube.com/@CNBC/live",         "US markets & business",           "#2563eb"},
-    {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live", "Markets & analysis",              "#16a34a"},
-    {"CNA",           "https://www.youtube.com/@CNAInsider/live",   "Asia-Pacific & China markets",    "#f59e0b"},
-    {"Euronews",      "https://www.youtube.com/@euronews/live",     "Europe business & finance",       "#9D4EDD"},
-    {"DW News",       "https://www.youtube.com/@dwnews/live",       "International business",          "#0891b2"},
-};
+QVector<VideoPlayerWidget::ChannelDef> VideoPlayerWidget::default_channels() {
+    return {
+        {"CNBC Live",     "https://www.youtube.com/@CNBC/live",         {}},
+        {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live", {}},
+        {"Euronews",      "https://www.youtube.com/@euronews/live",     {}},
+    };
+}
 
-static constexpr int kPresetCount = static_cast<int>(sizeof(kPresets) / sizeof(kPresets[0]));
+void VideoPlayerWidget::assign_colors(QVector<ChannelDef>& channels) {
+    for (int i = 0; i < channels.size(); ++i)
+        channels[i].color = kAccentPalette[i % kAccentPalette.size()];
+}
+
+void VideoPlayerWidget::load_channels() {
+    auto& repo = fincept::SettingsRepository::instance();
+    auto r = repo.get(kSettingsKey);
+    QString raw = r.is_ok() ? r.value() : QString();
+
+    if (raw.isEmpty()) {
+        // First launch — seed defaults and persist so subsequent boots take
+        // the user-owned path even if they never open the editor.
+        channels_ = default_channels();
+        save_channels(channels_);
+        assign_colors(channels_);
+        return;
+    }
+
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isArray()) {
+        LOG_ERROR("VideoPlayer",
+                  "video.channels JSON unparseable, falling back to defaults: " + err.errorString());
+        channels_ = default_channels();
+        assign_colors(channels_);
+        return;
+    }
+
+    channels_.clear();
+    for (const auto& v : doc.array()) {
+        const QJsonObject o = v.toObject();
+        const QString name = o.value("name").toString().trimmed();
+        const QString url  = o.value("url").toString().trimmed();
+        if (name.isEmpty() || url.isEmpty())
+            continue; // skip malformed entries silently — the editor enforces this on save
+        channels_.append({name, url, {}});
+    }
+    assign_colors(channels_);
+}
+
+void VideoPlayerWidget::save_channels(const QVector<ChannelDef>& channels) {
+    QJsonArray arr;
+    for (const auto& ch : channels) {
+        QJsonObject o;
+        o.insert("name", ch.name);
+        o.insert("url",  ch.url);
+        arr.append(o);
+    }
+    const QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
+    auto r = fincept::SettingsRepository::instance().set(kSettingsKey, json, kSettingsCategory);
+    if (r.is_err())
+        LOG_ERROR("VideoPlayer",
+                  "failed to persist video.channels: " + QString::fromStdString(r.error()));
+}
 
 static bool is_youtube_url(const QString& url) {
     return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.contains("youtube.com/live") ||
            url.contains("youtube.com/@");
 }
 
+// Extract YouTube video ID from any standard YouTube URL format.
+static QString extract_youtube_id(const QString& url) {
+    QUrl u(url);
+    if (u.host().contains("youtu.be"))
+        return u.path().mid(1).section('?', 0, 0);
+    QString v = QUrlQuery(u).queryItemValue("v");
+    if (!v.isEmpty()) return v;
+    QRegularExpression re(R"(/(?:embed|live|shorts)/([A-Za-z0-9_-]{11}))");
+    auto m = re.match(u.path());
+    return m.hasMatch() ? m.captured(1) : QString();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / STREAMS", parent, ui::colors::AMBER()) {
+
+    load_channels(); // populates channels_ from SettingsRepository (or seeds defaults)
 
     stack_ = new QStackedWidget;
     stack_->setStyleSheet("background: transparent;");
     content_layout()->addWidget(stack_, 1);
 
-    build_channel_list();
-    build_player_view();
+    build_channel_list(); // page 0
+    build_player_view();  // page 1
+
+    set_configurable(true); // enable the gear icon in the title bar
+
+    // Controls bar lives outside the QStackedWidget so it remains visible
+    // regardless of whether page 1 (GL) or page 2 (WebEngine) is shown.
+    // Hidden while on the channel list (page 0); shown when any player is active.
+    {
+        controls_ = new QWidget(this);
+        controls_->setFixedHeight(28);
+        auto* cl = new QHBoxLayout(controls_);
+        cl->setContentsMargins(8, 0, 8, 0);
+        cl->setSpacing(8);
+
+        now_playing_ = new QLabel("—");
+        cl->addWidget(now_playing_, 1);
+
+        stop_btn_ = new QPushButton(QString(QChar(0x25A0)) + " BACK");
+        stop_btn_->setCursor(Qt::PointingHandCursor);
+        stop_btn_->setFixedHeight(20);
+        connect(stop_btn_, &QPushButton::clicked, this, &VideoPlayerWidget::stop_playback);
+        cl->addWidget(stop_btn_);
+
+        content_layout()->addWidget(controls_);
+        controls_->hide();
+    }
 
     connect(this, &BaseWidget::refresh_requested, this, &VideoPlayerWidget::refresh_data);
 
@@ -288,41 +243,14 @@ void VideoPlayerWidget::build_channel_list() {
     vl->setContentsMargins(6, 6, 6, 6);
     vl->setSpacing(3);
 
-    channel_header_ = new QLabel("FINANCIAL TV");
-    vl->addWidget(channel_header_);
+    // Sub-layout for just the preset rows so the config dialog can rebuild
+    // them without disturbing the custom-URL section / engine toggle below.
+    channel_rows_layout_ = new QVBoxLayout();
+    channel_rows_layout_->setContentsMargins(0, 0, 0, 0);
+    channel_rows_layout_->setSpacing(3);
+    vl->addLayout(channel_rows_layout_);
 
-    for (int i = 0; i < kPresetCount; ++i) {
-        const auto& ch = kPresets[i];
-
-        auto* row = new QPushButton;
-        row->setCursor(Qt::PointingHandCursor);
-        row->setFixedHeight(32);
-        channel_rows_.append(row);
-
-        auto* rl = new QHBoxLayout(row);
-        rl->setContentsMargins(8, 0, 8, 0);
-        rl->setSpacing(8);
-
-        auto* dot = new QLabel;
-        dot->setFixedSize(6, 6);
-        dot->setStyleSheet(QString("background: %1; border-radius: 3px;").arg(ch.accent));
-        rl->addWidget(dot);
-
-        auto* play = new QLabel(QChar(0x25B6));
-        play->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;").arg(ch.accent));
-        rl->addWidget(play);
-
-        auto* name = new QLabel(ch.name);
-        channel_name_labels_.append(name);
-        rl->addWidget(name);
-
-        auto* desc = new QLabel(ch.description);
-        channel_desc_labels_.append(desc);
-        rl->addWidget(desc, 1);
-
-        connect(row, &QPushButton::clicked, this, [this, i]() { play_preset(i); });
-        vl->addWidget(row);
-    }
+    populate_channel_rows();
 
     // Separator
     channel_sep_ = new QLabel;
@@ -358,6 +286,34 @@ void VideoPlayerWidget::build_channel_list() {
     vl->addWidget(helper_label_);
 
     vl->addStretch();
+
+#ifdef HAS_QT_WEBENGINE
+    // Engine toggle at the bottom — placing it here keeps the player tile's
+    // title height constant across clicks (otherwise selecting a channel and
+    // returning would shift the visible content if the toggle were in a header).
+    {
+        auto* bottom_row = new QWidget;
+        bottom_row->setStyleSheet("background:transparent;");
+        auto* bl = new QHBoxLayout(bottom_row);
+        bl->setContentsMargins(0, 4, 0, 0);
+        bl->setSpacing(0);
+        bl->addStretch();
+        engine_toggle_btn_ = new QPushButton(use_web_engine_ ? "ENGINE: WEB ⇄ GL" : "ENGINE: GL ⇄ WEB");
+        engine_toggle_btn_->setFixedHeight(18);
+        engine_toggle_btn_->setCursor(Qt::PointingHandCursor);
+        engine_toggle_btn_->setToolTip(
+            "Click to switch streaming engine\n"
+            "GL  = yt-dlp + QPainter (HLS) — works for any public stream\n"
+            "WEB = YouTube iframe (Chromium) — smooth, but some channels block embedding");
+        connect(engine_toggle_btn_, &QPushButton::clicked, this, [this]() {
+            use_web_engine_ = !use_web_engine_;
+            engine_toggle_btn_->setText(use_web_engine_ ? "ENGINE: WEB ⇄ GL" : "ENGINE: GL ⇄ WEB");
+        });
+        bl->addWidget(engine_toggle_btn_);
+        vl->addWidget(bottom_row);
+    }
+#endif
+
     scroll_->setWidget(container);
 
     auto* page_layout = new QVBoxLayout(list_page_);
@@ -365,6 +321,59 @@ void VideoPlayerWidget::build_channel_list() {
     page_layout->addWidget(scroll_);
 
     stack_->addWidget(list_page_);
+}
+
+// Build (or rebuild) one QPushButton row per entry in channels_. Called once
+// during construction and again whenever the config dialog accepts a change.
+// Clears channel_rows_layout_ first; widget pointers held in
+// channel_rows_/channel_name_labels_/channel_desc_labels_ are owned by the
+// layout, so deleteLater() runs through the layout teardown.
+void VideoPlayerWidget::populate_channel_rows() {
+    // Tear down previous row widgets. The buttons own their children (dot/play
+    // glyph/name/desc) so deleting the button drops the whole row.
+    while (QLayoutItem* it = channel_rows_layout_->takeAt(0)) {
+        if (auto* w = it->widget())
+            w->deleteLater();
+        delete it;
+    }
+    channel_rows_.clear();
+    channel_name_labels_.clear();
+    channel_desc_labels_.clear();
+
+    for (int i = 0; i < channels_.size(); ++i) {
+        const auto& ch = channels_[i];
+
+        auto* row = new QPushButton;
+        row->setCursor(Qt::PointingHandCursor);
+        row->setFixedHeight(32);
+        channel_rows_.append(row);
+
+        auto* rl = new QHBoxLayout(row);
+        rl->setContentsMargins(8, 0, 8, 0);
+        rl->setSpacing(8);
+
+        auto* dot = new QLabel;
+        dot->setFixedSize(6, 6);
+        dot->setStyleSheet(QString("background: %1; border-radius: 3px;").arg(ch.color));
+        rl->addWidget(dot);
+
+        auto* play = new QLabel(QChar(0x25B6));
+        play->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;").arg(ch.color));
+        rl->addWidget(play);
+
+        auto* name = new QLabel(ch.name);
+        channel_name_labels_.append(name);
+        rl->addWidget(name);
+
+        // Description column is now derived from the URL host — keeps the
+        // row visually balanced without forcing the user to author copy.
+        auto* desc = new QLabel(QUrl(ch.url).host());
+        channel_desc_labels_.append(desc);
+        rl->addWidget(desc, 1);
+
+        connect(row, &QPushButton::clicked, this, [this, i]() { play_preset(i); });
+        channel_rows_layout_->addWidget(row);
+    }
 }
 
 // ── Page 1: Player view ──────────────────────────────────────────────────────
@@ -416,35 +425,174 @@ void VideoPlayerWidget::build_player_view() {
     status_label_->hide();
     vl->addWidget(status_label_);
 
-    // Control bar
-    controls_ = new QWidget(this);
-    controls_->setFixedHeight(28);
-
-    auto* cl = new QHBoxLayout(controls_);
-    cl->setContentsMargins(8, 0, 8, 0);
-    cl->setSpacing(8);
-
-    now_playing_ = new QLabel("—");
-    cl->addWidget(now_playing_, 1);
-
-    stop_btn_ = new QPushButton(QString(QChar(0x25A0)) + " STOP");
-    stop_btn_->setCursor(Qt::PointingHandCursor);
-    stop_btn_->setFixedHeight(20);
-    connect(stop_btn_, &QPushButton::clicked, this, &VideoPlayerWidget::stop_playback);
-    cl->addWidget(stop_btn_);
-
-    vl->addWidget(controls_);
-
-    stack_->addWidget(player_page_);
+    stack_->addWidget(player_page_); // page 1
 }
+
+// ── Page 2: WebEngine player ─────────────────────────────────────────────────
+#ifdef HAS_QT_WEBENGINE
+void VideoPlayerWidget::build_web_view() {
+    auto* profile = new QWebEngineProfile(QStringLiteral("finterm_tv"), this);
+    profile->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
+    profile->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled,   true);
+    profile->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled,          true);
+
+    // Override the default Qt UA ("QtWebEngine/x.y.z") — YouTube detects this
+    // string as an automated browser and returns "An error occurred" with a
+    // Playback ID instead of playing the stream. A standard Chrome UA bypasses
+    // the check while still being honest about the Chromium engine version.
+    profile->setHttpUserAgent(
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+
+    web_view_ = new QWebEngineView(profile, this);
+    web_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
+    // Auto-grant media permissions (Qt 6.8+ API).
+    connect(web_view_->page(), &QWebEnginePage::permissionRequested,
+            this, [](QWebEnginePermission permission) {
+                using PT = QWebEnginePermission::PermissionType;
+                const auto t = permission.permissionType();
+                if (t == PT::MediaAudioCapture        ||
+                    t == PT::MediaVideoCapture        ||
+                    t == PT::MediaAudioVideoCapture   ||
+                    t == PT::DesktopVideoCapture      ||
+                    t == PT::DesktopAudioVideoCapture)
+                    permission.grant();
+            });
+
+    stack_->addWidget(web_view_); // page 2
+}
+
+// Embed a YouTube video by ID — the path that already works smoothly for
+// custom URLs. Channel-level embed restrictions (CNBC error 152) DO NOT apply
+// at the individual video level, only at the `live_stream?channel=` endpoint.
+void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString& title,
+                                          const QString& source_url) {
+    if (!web_view_) build_web_view();
+
+    const QString embed_url = QString("https://www.youtube-nocookie.com/embed/%1"
+                                      "?autoplay=1&controls=1&rel=0"
+                                      "&origin=https://www.youtube-nocookie.com")
+                                  .arg(video_id);
+
+    const QString html = QStringLiteral(
+        "<!DOCTYPE html><html><head><style>"
+        "*{margin:0;padding:0;box-sizing:border-box;background:#000}"
+        "iframe{border:none;width:100vw;height:100vh}"
+        "</style></head><body>"
+        "<iframe src='%1' allow='autoplay;fullscreen;encrypted-media' allowfullscreen></iframe>"
+        "</body></html>").arg(embed_url);
+
+    web_view_->setHtml(html, QUrl("https://www.youtube-nocookie.com"));
+
+    play_in_progress_ = false;
+    current_url_   = source_url;
+    current_title_ = title;
+    now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
+    set_title("LIVE TV — " + title.toUpper());
+    status_label_->hide();
+    controls_->show();
+    stack_->setCurrentIndex(2);
+}
+
+// Run yt-dlp to extract the *current* live video ID from a channel URL,
+// then embed that single video — same code path as custom URLs. Fast because
+// we only ask for the ID, not the HLS manifest.
+void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url, const QString& title) {
+    const QString ytdlp = resolve_ytdlp_program();
+    if (ytdlp.isEmpty()) {
+        // No yt-dlp available — show an error directly in the web view.
+        if (!web_view_) build_web_view();
+        web_view_->setHtml(QStringLiteral(
+            "<html><body style='background:#000;color:#999;font:14px sans-serif;"
+            "display:flex;align-items:center;justify-content:center;height:100vh'>"
+            "<div>yt-dlp not found — cannot resolve live stream ID for WEB mode.<br>"
+            "Switch engine to GL.</div></body></html>"));
+        controls_->show();
+        stack_->setCurrentIndex(2);
+        return;
+    }
+
+    // Loading placeholder while yt-dlp runs (~2-3 s).
+    if (!web_view_) build_web_view();
+    web_view_->setHtml(QStringLiteral(
+        "<html><body style='background:#000;color:#888;font:14px sans-serif;"
+        "display:flex;align-items:center;justify-content:center;height:100vh'>"
+        "Resolving live stream…</body></html>"));
+    current_url_   = channel_url;
+    current_title_ = title;
+    now_playing_->setText(QChar(0x25B6) + QString(" ") + title + " (resolving…)");
+    set_title("LIVE TV — " + title.toUpper());
+    controls_->show();
+    stack_->setCurrentIndex(2);
+
+    auto* proc = new QProcess(this);
+    proc->setProperty("requested_url", channel_url);
+    proc->setProperty("requested_title", title);
+    connect(proc, &QProcess::finished, this,
+            [this, proc](int code, QProcess::ExitStatus) {
+                const QString req_url = proc->property("requested_url").toString();
+                const QString req_title = proc->property("requested_title").toString();
+                proc->deleteLater();
+
+                // Drop result if the user switched channels in the meantime.
+                if (req_url != current_url_)
+                    return;
+
+                if (code != 0) {
+                    LOG_ERROR("VideoPlayer",
+                              "yt-dlp --print id failed: " + proc->readAllStandardError().left(250));
+                    return;
+                }
+                const QString video_id =
+                    QString::fromLatin1(proc->readAllStandardOutput()).trimmed().section('\n', 0, 0);
+                if (video_id.size() != 11) {
+                    LOG_ERROR("VideoPlayer", "yt-dlp returned unexpected ID: " + video_id);
+                    return;
+                }
+                play_web_video_id(video_id, req_title, req_url);
+            });
+
+    // --print id alone is fast: yt-dlp resolves the channel's current live video
+    // ID without touching the HLS manifest. --js-runtimes node bypasses yt-dlp's
+    // PoToken / signature deciphering issues on recent YouTube changes.
+    proc->start(ytdlp,
+                {"--print", "id", "--no-download", "--no-playlist", "--quiet", "--no-warnings",
+                 "--js-runtimes", "node", channel_url});
+}
+
+void VideoPlayerWidget::play_web(const QString& channel_url, const QString& title) {
+    // Direct video ID (custom URL): embed immediately. No network round-trip.
+    const QString vid = extract_youtube_id(channel_url);
+    if (!vid.isEmpty()) {
+        play_web_video_id(vid, title, channel_url);
+        return;
+    }
+    // Channel /live URL (preset): yt-dlp resolves the current live video ID,
+    // then embeds that specific video. Bypasses channel-level embed restriction
+    // (error 152) because the restriction applies to live_stream?channel=, not
+    // to /embed/VIDEO_ID itself.
+    resolve_live_id_and_play_web(channel_url, title);
+}
+
+void VideoPlayerWidget::stop_web() {
+    if (web_view_) web_view_->setUrl(QUrl("about:blank"));
+}
+#endif
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 
 void VideoPlayerWidget::play_preset(int index) {
-    if (index < 0 || index >= kPresetCount)
+    if (index < 0 || index >= channels_.size())
         return;
-    const auto& ch = kPresets[index];
-    play_url(QString(ch.stream_url), QString(ch.name));
+    const auto& ch = channels_[index];
+#ifdef HAS_QT_WEBENGINE
+    if (use_web_engine_) {
+        play_web(ch.url, ch.name);
+        return;
+    }
+#endif
+    play_url(ch.url, ch.name);
 }
 
 void VideoPlayerWidget::play_custom_url() {
@@ -453,6 +601,18 @@ void VideoPlayerWidget::play_custom_url() {
         return;
     if (!url.startsWith("http://") && !url.startsWith("https://"))
         url.prepend("https://");
+
+#ifdef HAS_QT_WEBENGINE
+    // For YouTube URLs, extract the video ID and embed via WebEngine iframe.
+    // This avoids the GL render-loop flashing and works for any public video.
+    if (use_web_engine_ && is_youtube_url(url)) {
+        const QString vid = extract_youtube_id(url);
+        if (!vid.isEmpty()) {
+            play_web(url, "Custom: " + vid);
+            return;
+        }
+    }
+#endif
     play_url(url, "Custom Stream");
 }
 
@@ -526,6 +686,7 @@ QString VideoPlayerWidget::resolve_ytdlp_program() const {
 void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, const QString& title) {
     Q_UNUSED(title)
     set_loading(true);
+    controls_->show();
     stack_->setCurrentIndex(1);
 
     const QString ytdlp_program = resolve_ytdlp_program();
@@ -547,30 +708,19 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
 
     // Force HLS (m3u8_native) protocol — critical for memory safety.
     //
-    // The previous DASH format (bestvideo[ext=mp4]+bestaudio[ext=m4a]) returns
-    // two separate URLs (video-only + audio-only). We only use the first (video),
-    // which GStreamer's dashdemux then buffers into /dev/shm at full network
-    // speed with no cap — causing the 23 GB shmem / OOM kill seen in practice.
+    // HLS rolling-window buffering keeps only 3-10 segments (a few MB) resident
+    // regardless of resolution, so we can target 1080p without the DASH-style
+    // OOM that the previous bestvideo+bestaudio formats triggered.
     //
-    // HLS (m3u8_native) is a rolling-window protocol: GStreamer's hlsdemux keeps
-    // only 3-10 segments (a few MB) in memory at any time. A single URL contains
-    // both video and audio. Financial TV at 480p is perfectly readable.
-    //
-    // -g: print stream URL only (no download). --no-playlist: single stream.
-    // --quiet: suppress all progress/warning output from stdout so only the URL
-    //          reaches on_ytdlp_finished (warnings go to stderr separately).
-    // HLS live streams (YouTube formats 91-96) are combined video+audio; they
-    // are not accessible via bestvideo+bestaudio and have no separate tracks.
-    // We select directly with `best[protocol=m3u8_native]` which always returns
-    // a single muxed .m3u8 URL — no two-line DASH output to misparse.
-    // --js-runtimes node: yt-dlp 2025+ requires a JS runtime for YouTube
-    // extraction. Node.js v22 is installed on this system; without this flag
-    // newer yt-dlp versions may miss certain HLS formats.
+    // Prefer 1080p HLS; fall back through 720p / any HLS / any best.
+    // YouTube live formats: 91(144p) 92(240p) 93(360p) 94(480p) 95(720p) 96(1080p).
+    // --js-runtimes node: yt-dlp 2025+ needs a JS runtime for YouTube extraction.
     proc->start(ytdlp_program,
                 {"-f",
-                 "best[protocol=m3u8_native][height<=480]"
+                 "best[protocol=m3u8_native][height<=1080]"
+                 "/best[protocol=m3u8_native][height<=720]"
                  "/best[protocol=m3u8_native]"
-                 "/best[height<=480]/best",
+                 "/best[height<=1080]/best",
                  "--no-playlist", "--quiet", "--js-runtimes", "node",
                  "-g", youtube_url});
 }
@@ -638,12 +788,9 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
-    // Clean, unconditional: show the player page, set source, play.
-    // No stop(), no winId(), no WA_NativeWindow, no ordering hacks.
-    // VideoRenderWidget has no native surface so none of those tricks
-    // are needed or meaningful — the pipeline is pure data flow.
     set_loading(false);
     status_label_->hide();
+    controls_->show();
     stack_->setCurrentIndex(1);
     player_->setSource(QUrl(stream_url));
     player_->play();
@@ -653,19 +800,23 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 }
 
 void VideoPlayerWidget::stop_playback() {
-    // Hide the player page BEFORE clearing the frame so that any queued
-    // present() calls arriving after clear_frame() land on a hidden widget
-    // (isVisible() = false) and cannot re-seed the render loop.
+    // Clear current_url_ FIRST so any in-flight yt-dlp resolver (web ID lookup
+    // or HLS extraction) sees the mismatch in its finished callback and bails
+    // out before it can re-show the player after the user clicked BACK.
+    current_url_.clear();
+    current_title_.clear();
+    play_in_progress_ = false;
+
+    controls_->hide();
     stack_->setCurrentIndex(0);
+#ifdef HAS_QT_WEBENGINE
+    stop_web();
+#endif
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
     if (video_widget_)
         video_widget_->clear_frame();
 #endif
-
-    play_in_progress_ = false;
-    current_url_.clear();
-    current_title_.clear();
     set_loading(false);
     status_label_->hide();
     set_title("LIVE TV / STREAMS");
@@ -704,17 +855,13 @@ void VideoPlayerWidget::apply_styles() {
                                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
                                .arg(ui::colors::BORDER_MED()));
 
-    channel_header_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; "
-                                           "background: transparent; padding: 2px 0;")
-                                       .arg(ui::colors::TEXT_SECONDARY()));
-
-    for (int i = 0; i < channel_rows_.size() && i < kPresetCount; ++i) {
-        const auto& ch = kPresets[i];
+    for (int i = 0; i < channel_rows_.size() && i < channels_.size(); ++i) {
+        const auto& ch = channels_[i];
         channel_rows_[i]->setStyleSheet(
             QString("QPushButton { background: %1; border: 1px solid %2; border-radius: 2px; "
                     "text-align: left; padding: 0 8px; }"
                     "QPushButton:hover { background: %3; border-color: %4; }")
-                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(), ui::colors::BG_HOVER(), ch.accent));
+                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(), ui::colors::BG_HOVER(), ch.color));
     }
     for (auto* lbl : channel_name_labels_) {
         lbl->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
@@ -745,11 +892,19 @@ void VideoPlayerWidget::apply_styles() {
     helper_label_->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
-    // Player page — VideoRenderWidget fills its background in paintEvent(); no stylesheet needed.
-#ifdef HAS_QT_MULTIMEDIA
-#else
+#ifdef HAS_QT_WEBENGINE
+    if (engine_toggle_btn_)
+        engine_toggle_btn_->setStyleSheet(
+            QString("QPushButton { background: %1; color: %2; border: 1px solid %2; "
+                    "border-radius: 3px; font-size: 10px; font-weight: bold; "
+                    "padding: 0 8px; letter-spacing: 0.5px; }"
+                    "QPushButton:hover { background: %2; color: %3; }")
+                .arg(ui::colors::BG_SURFACE(), ui::colors::AMBER(), ui::colors::TEXT_ON_ACCENT()));
+#endif
+
+#ifndef HAS_QT_MULTIMEDIA
     if (status_label_placeholder_)
-        status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 11px; background: %2;")
+        status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 12px; background: %2;")
                                                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE()));
 #endif
 
@@ -771,6 +926,131 @@ void VideoPlayerWidget::apply_styles() {
 
 void VideoPlayerWidget::on_theme_changed() {
     apply_styles();
+}
+
+// ── Config dialog ────────────────────────────────────────────────────────────
+//
+// Modal editor for the channel list. Two columns (Name, URL) over a
+// QTableWidget; row-level toolbar for Add / Remove / Move Up / Move Down /
+// Reset. The dialog returns its changes via the standard QDialog accept/reject
+// flow: on OK we persist via SettingsRepository, reload the in-memory list,
+// and repopulate the channel rows. Rejection leaves channels_ untouched.
+
+QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
+    auto* dlg = new QDialog(parent);
+    dlg->setWindowTitle("Configure — Live TV Channels");
+    dlg->resize(540, 360);
+
+    auto* root = new QVBoxLayout(dlg);
+
+    auto* hint = new QLabel(
+        "Channels appear on the LIVE TV tile in the order shown. "
+        "YouTube channel /live URLs, HLS .m3u8, or any direct stream URL.",
+        dlg);
+    hint->setWordWrap(true);
+    root->addWidget(hint);
+
+    auto* table = new QTableWidget(0, 2, dlg);
+    table->setHorizontalHeaderLabels({"Name", "URL"});
+    table->verticalHeader()->setVisible(false);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    root->addWidget(table, 1);
+
+    auto fill_table = [table](const QVector<ChannelDef>& src) {
+        table->setRowCount(src.size());
+        for (int i = 0; i < src.size(); ++i) {
+            table->setItem(i, 0, new QTableWidgetItem(src[i].name));
+            table->setItem(i, 1, new QTableWidgetItem(src[i].url));
+        }
+    };
+    fill_table(channels_);
+
+    // Row controls
+    auto* row_bar = new QHBoxLayout();
+    auto* add_btn   = new QPushButton("Add", dlg);
+    auto* remove_btn= new QPushButton("Remove", dlg);
+    auto* up_btn    = new QPushButton(QChar(0x2191), dlg); // ↑
+    auto* down_btn  = new QPushButton(QChar(0x2193), dlg); // ↓
+    auto* reset_btn = new QPushButton("Reset to Defaults", dlg);
+    row_bar->addWidget(add_btn);
+    row_bar->addWidget(remove_btn);
+    row_bar->addWidget(up_btn);
+    row_bar->addWidget(down_btn);
+    row_bar->addStretch();
+    row_bar->addWidget(reset_btn);
+    root->addLayout(row_bar);
+
+    connect(add_btn, &QPushButton::clicked, dlg, [table]() {
+        const int r = table->rowCount();
+        table->insertRow(r);
+        table->setItem(r, 0, new QTableWidgetItem(""));
+        table->setItem(r, 1, new QTableWidgetItem(""));
+        table->setCurrentCell(r, 0);
+        table->editItem(table->item(r, 0));
+    });
+
+    connect(remove_btn, &QPushButton::clicked, dlg, [table]() {
+        const int r = table->currentRow();
+        if (r >= 0)
+            table->removeRow(r);
+    });
+
+    auto move_row = [table](int delta) {
+        const int r = table->currentRow();
+        const int target = r + delta;
+        if (r < 0 || target < 0 || target >= table->rowCount())
+            return;
+        // Swap the two rows item-by-item; QTableWidget has no native move.
+        for (int c = 0; c < table->columnCount(); ++c) {
+            QTableWidgetItem* a = table->takeItem(r, c);
+            QTableWidgetItem* b = table->takeItem(target, c);
+            table->setItem(r, c, b);
+            table->setItem(target, c, a);
+        }
+        table->setCurrentCell(target, table->currentColumn());
+    };
+    connect(up_btn,   &QPushButton::clicked, dlg, [move_row]() { move_row(-1); });
+    connect(down_btn, &QPushButton::clicked, dlg, [move_row]() { move_row(+1); });
+
+    connect(reset_btn, &QPushButton::clicked, dlg, [dlg, fill_table]() {
+        const auto ok = QMessageBox::question(dlg, "Reset Channels",
+                                              "Replace the current list with the default CNBC / Yahoo / Euronews seed?");
+        if (ok == QMessageBox::Yes)
+            fill_table(default_channels());
+    });
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dlg);
+    root->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, dlg, [this, dlg, table]() {
+        // Commit any in-progress cell edit before we read the table.
+        table->setCurrentCell(-1, -1);
+
+        QVector<ChannelDef> next;
+        next.reserve(table->rowCount());
+        for (int i = 0; i < table->rowCount(); ++i) {
+            const auto* name_item = table->item(i, 0);
+            const auto* url_item  = table->item(i, 1);
+            const QString name = name_item ? name_item->text().trimmed() : QString();
+            const QString url  = url_item  ? url_item->text().trimmed()  : QString();
+            if (name.isEmpty() || url.isEmpty())
+                continue; // drop blank rows silently
+            next.append({name, url, {}});
+        }
+
+        save_channels(next);
+        channels_ = next;
+        assign_colors(channels_);
+        populate_channel_rows();
+        apply_styles();
+        dlg->accept();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
+
+    return dlg;
 }
 
 } // namespace fincept::screens::widgets

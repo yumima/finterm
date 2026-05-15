@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/TopMoversWidget.h"
 
+#include "ui/charts/InlineSparkline.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -28,8 +29,8 @@ TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", par
 
     // Table
     table_ = new ui::DataTable;
-    table_->set_headers({"SYMBOL", "PRICE", "CHG%"});
-    table_->set_column_widths({100, 90, 80});
+    table_->set_headers({"SYMBOL", "PRICE", "CHG%", "TREND"});
+    table_->set_column_widths({100, 90, 80, 90});
     content_layout()->addWidget(table_);
 
     connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
@@ -74,12 +75,17 @@ void TopMoversWidget::refresh_data() {
 void TopMoversWidget::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
     for (const auto& sym : symbols_) {
-        const QString topic = QStringLiteral("market:quote:") + sym;
-        hub.subscribe(this, topic, [this, sym](const QVariant& v) {
+        hub.subscribe(this, QStringLiteral("market:quote:") + sym, [this, sym](const QVariant& v) {
             if (!v.canConvert<services::QuoteData>())
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            rebuild_from_cache();
+        });
+        hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {
+            if (!v.canConvert<QVector<double>>())
+                return;
+            sparkline_cache_.insert(sym, v.value<QVector<double>>());
             rebuild_from_cache();
         });
     }
@@ -109,13 +115,13 @@ void TopMoversWidget::show_tab(bool gainers) {
     showing_gainers_ = gainers;
 
     auto active_g = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-size: 9px; font-weight: bold; padding: 4px; }")
+                            "font-weight: bold; padding: 4px; }")
                         .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE());
     auto active_l = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-size: 9px; font-weight: bold; padding: 4px; }")
+                            "font-weight: bold; padding: 4px; }")
                         .arg(ui::colors::NEGATIVE(), ui::colors::BG_BASE());
     auto inactive = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-size: 9px; font-weight: bold; padding: 4px; }")
+                            "font-weight: bold; padding: 4px; }")
                         .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY());
 
     gainers_btn_->setStyleSheet(gainers ? active_g : inactive);
@@ -136,9 +142,16 @@ void TopMoversWidget::show_tab(bool gainers) {
     for (int i = 0; i < count; ++i) {
         const auto& q = gainers ? filtered[i] : filtered[filtered.size() - 1 - i];
         table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2)});
+                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
+                         QString{}});
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
+
+        auto* spark = new ui::InlineSparkline(table_);
+        const auto sit = sparkline_cache_.constFind(q.symbol);
+        if (sit != sparkline_cache_.constEnd())
+            spark->set_points(sit.value());
+        table_->setCellWidget(row, 3, spark);
     }
 }
 
