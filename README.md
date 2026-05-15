@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`1534fb02`](https://github.com/yumima/finterm/commit/1534fb02) **fix(video):** address three review findings on render loop lifecycle
 - [`ccd489fe`](https://github.com/yumima/finterm/commit/ccd489fe) **fix(video):** seed render loop once — eliminate strobing and window flash
 - [`5f8e9734`](https://github.com/yumima/finterm/commit/5f8e9734) **fix(video/gl):** isVisible() guard + restore OpenGL 3.2 profile comment
 - [`a63b2615`](https://github.com/yumima/finterm/commit/a63b2615) **fix(video):** root-cause fix — Wayland frame-callback loop via frameSwapped
