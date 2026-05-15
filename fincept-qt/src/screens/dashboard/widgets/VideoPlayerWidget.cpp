@@ -10,7 +10,11 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QLabel>
-#include <QPainter>
+#include <QOpenGLBuffer>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
+#include <QOpenGLWidget>
 #include <QRect>
 #include <QScrollArea>
 #include <QStandardPaths>
@@ -20,35 +24,119 @@
 namespace fincept::screens::widgets {
 
 // ── VideoRenderWidget ─────────────────────────────────────────────────────────
-// Plain QWidget — no native Wayland surface, no platform-specific lifecycle.
-// Frames arrive via a Qt::QueuedConnection from the multimedia decode thread
-// and are painted synchronously in paintEvent() on the main thread.
+// QOpenGLWidget — rendering runs on the RTX card via PRIME render offload.
+// Frames decoded by NVDEC arrive via QueuedConnection, are uploaded as a GL
+// texture, and rendered by a minimal fragment shader. No CPU rasterisation.
 
 #ifdef HAS_QT_MULTIMEDIA
-VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
-    setAttribute(Qt::WA_OpaquePaintEvent); // skip background erase; we fill entirely
+
+// ── GLSL shaders ─────────────────────────────────────────────────────────────
+static const char kVertSrc[] =
+    "attribute vec2 a_pos;\n"
+    "attribute vec2 a_uv;\n"
+    "varying   vec2 v_uv;\n"
+    "void main() { gl_Position = vec4(a_pos, 0.0, 1.0); v_uv = a_uv; }\n";
+
+static const char kFragSrc[] =
+    "uniform sampler2D u_tex;\n"
+    "varying vec2 v_uv;\n"
+    "void main() { gl_FragColor = texture2D(u_tex, v_uv); }\n";
+
+// Full-screen quad: 4 vertices × (x,y,u,v)
+static const float kQuad[] = {
+    -1.f, -1.f,  0.f, 1.f,   // bottom-left  (GL y-up → UV y-down)
+     1.f, -1.f,  1.f, 1.f,   // bottom-right
+    -1.f,  1.f,  0.f, 0.f,   // top-left
+     1.f,  1.f,  1.f, 0.f,   // top-right
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+VideoRenderWidget::VideoRenderWidget(QWidget* parent)
+    : QOpenGLWidget(parent) {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+}
+
+VideoRenderWidget::~VideoRenderWidget() {
+    // GL resources must be destroyed with the context active.
+    makeCurrent();
+    delete texture_;
+    vbo_.destroy();
+    doneCurrent();
 }
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     current_frame_ = frame;
-    update(); // schedule repaint on the main thread
+    update(); // schedule paintGL() on the main thread
 }
 
-void VideoRenderWidget::paintEvent(QPaintEvent*) {
-    QPainter p(this);
-    p.fillRect(rect(), Qt::black);
-    if (!current_frame_.isValid())
-        return;
+void VideoRenderWidget::initializeGL() {
+    initializeOpenGLFunctions();
+
+    program_.addShaderFromSourceCode(QOpenGLShader::Vertex,   kVertSrc);
+    program_.addShaderFromSourceCode(QOpenGLShader::Fragment, kFragSrc);
+    program_.link();
+
+    vbo_.create();
+    vbo_.bind();
+    vbo_.allocate(kQuad, sizeof(kQuad));
+    vbo_.release();
+
+    gl_ready_ = true;
+}
+
+void VideoRenderWidget::resizeGL(int /*w*/, int /*h*/) {
+    // Viewport recalculated per-frame in paintGL() to maintain aspect ratio.
+}
+
+void VideoRenderWidget::paintGL() {
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!gl_ready_ || !current_frame_.isValid()) return;
+
+    // Convert frame to QImage — handles NVDEC CUDA→CPU transfer internally.
+    // At 480p this is ~400 KB/frame; negligible on the PCIe bus.
     const QImage img = current_frame_.toImage();
-    if (img.isNull())
-        return;
-    // Letter-box: scale to fit while preserving aspect ratio
-    const QSize scaled = img.size().scaled(size(), Qt::KeepAspectRatio);
-    const QRect dst((width()  - scaled.width())  / 2,
-                    (height() - scaled.height()) / 2,
-                    scaled.width(), scaled.height());
-    p.drawImage(dst, img);
+    if (img.isNull()) return;
+
+    // Upload to GL texture. Reuse the existing texture object when dimensions
+    // match (avoids glTexImage2D reallocation on every frame).
+    if (!texture_ || texture_->width() != img.width() || texture_->height() != img.height()) {
+        delete texture_;
+        texture_ = new QOpenGLTexture(img, QOpenGLTexture::DontGenerateMipMaps);
+        texture_->setMinificationFilter(QOpenGLTexture::Linear);
+        texture_->setMagnificationFilter(QOpenGLTexture::Linear);
+        texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
+    } else {
+        texture_->setData(img); // glTexSubImage2D — no realloc
+    }
+
+    // Letter-box: restrict the GL viewport to maintain aspect ratio.
+    const float fw = img.width(), fh = img.height();
+    const float scale = std::min(width() / fw, height() / fh);
+    const int vw = static_cast<int>(fw * scale);
+    const int vh = static_cast<int>(fh * scale);
+    glViewport((width() - vw) / 2, (height() - vh) / 2, vw, vh);
+
+    // Draw a full-screen quad; the viewport clipping does the letterboxing.
+    program_.bind();
+    texture_->bind();
+    vbo_.bind();
+
+    const int posLoc = program_.attributeLocation("a_pos");
+    const int uvLoc  = program_.attributeLocation("a_uv");
+    program_.enableAttributeArray(posLoc);
+    program_.enableAttributeArray(uvLoc);
+    program_.setAttributeBuffer(posLoc, GL_FLOAT, 0,               2, 4 * sizeof(float));
+    program_.setAttributeBuffer(uvLoc,  GL_FLOAT, 2 * sizeof(float), 2, 4 * sizeof(float));
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    program_.disableAttributeArray(posLoc);
+    program_.disableAttributeArray(uvLoc);
+
+    vbo_.release();
+    texture_->release();
+    program_.release();
 }
 #endif
 

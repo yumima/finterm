@@ -11,6 +11,11 @@
 #ifdef HAS_QT_MULTIMEDIA
 #    include <QAudioOutput>
 #    include <QMediaPlayer>
+#    include <QOpenGLBuffer>
+#    include <QOpenGLFunctions>
+#    include <QOpenGLShaderProgram>
+#    include <QOpenGLTexture>
+#    include <QOpenGLWidget>
 #    include <QVideoFrame>
 #    include <QVideoSink>
 #endif
@@ -18,32 +23,48 @@
 namespace fincept::screens::widgets {
 
 #ifdef HAS_QT_MULTIMEDIA
-/// Software-rendered video surface.
+/// GPU-rendered video surface.
 ///
-/// Receives QVideoFrame objects from QVideoSink via a queued signal and
-/// paints them in paintEvent() using QPainter. Because this is an ordinary
-/// QWidget there is no native Wayland wl_surface involved — no xdg-toplevel
-/// is ever allocated for video output, eliminating the rogue-window bug that
-/// QVideoWidget caused on stop()/play()/setSource() cycles.
+/// Inherits QOpenGLWidget so the GL context is created on the NVIDIA RTX card
+/// via PRIME render offload (__NV_PRIME_RENDER_OFFLOAD=1 in /etc/environment).
+/// Each decoded QVideoFrame is uploaded as an OpenGL texture and rendered by
+/// a trivial fragment shader — the GPU handles both texture sampling and
+/// rasterisation, not the CPU.
 ///
-/// The data path is purely logical:
-///   QMediaPlayer → QVideoSink → (Qt::QueuedConnection) → present() → update()
-/// Pipeline lifecycle changes (stop, setSource, play) are invisible to this
-/// widget; it simply paints whatever frame was last delivered.
-class VideoRenderWidget : public QWidget {
+/// Qt's FFmpeg backend automatically selects NVDEC (libnvcuvid.so) for
+/// hardware-accelerated decode when CUDA is available on the system. The
+/// resulting QVideoFrame may be CUDA-resident; QVideoFrame::toImage() handles
+/// the CUDA→CPU transfer for the GL upload. At 480p this transfer is ~12 MB/s,
+/// negligible on a modern PCIe bus.
+///
+/// No native Wayland wl_surface is created by this widget (QOpenGLWidget
+/// embeds properly as a Wayland subsurface), so the xdg-toplevel rogue-window
+/// bug that QVideoWidget caused does not apply here.
+///
+/// Data path:
+///   NVDEC → QVideoFrame → (QueuedConnection) → present() → update()
+///        → paintGL() → glTexSubImage2D → fragment shader → RTX → display
+class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
   public:
     explicit VideoRenderWidget(QWidget* parent = nullptr);
+    ~VideoRenderWidget() override;
 
   public slots:
     /// Receive a decoded frame from the multimedia thread (queued → main thread).
     void present(const QVideoFrame& frame);
 
   protected:
-    void paintEvent(QPaintEvent* e) override;
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
 
   private:
-    QVideoFrame current_frame_;
+    QVideoFrame          current_frame_;
+    QOpenGLTexture*      texture_ = nullptr;
+    QOpenGLShaderProgram program_;
+    QOpenGLBuffer        vbo_{QOpenGLBuffer::VertexBuffer};
+    bool                 gl_ready_ = false;
 };
 #endif
 

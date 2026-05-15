@@ -2117,6 +2117,7 @@ target_include_directories(FinceptTerminal PRIVATE
 target_link_libraries(FinceptTerminal PRIVATE
     Qt6::Widgets
     Qt6::Charts
+    Qt6::OpenGLWidgets
     Qt6::PrintSupport
     Qt6::Network
     Qt6::Sql
