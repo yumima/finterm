@@ -145,9 +145,19 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     connect(toolbar_, &DashboardToolBar::save_layout_clicked, this, &DashboardScreen::save_layout);
 
     connect(toolbar_, &DashboardToolBar::toggle_compact_clicked, this, [this]() {
-        static bool compact = false;
-        compact = !compact;
-        canvas_->set_row_height(compact ? 40 : 60);
+        // Remember the row height before going compact so the toggle restores
+        // exactly what the user was looking at — fit_rows_to_viewport may have
+        // expanded rows past the default 60 to fill a tall window, and a fixed
+        // 60 fallback would feel like the second click didn't restore the
+        // previous view.
+        static int saved_row_h = 0; // 0 = not currently compact
+        if (saved_row_h == 0) {
+            saved_row_h = canvas_->current_layout().row_h;
+            canvas_->set_row_height(40);
+        } else {
+            canvas_->set_row_height(saved_row_h);
+            saved_row_h = 0;
+        }
     });
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
