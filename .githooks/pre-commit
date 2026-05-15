@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
-# Pre-commit hook.
+# Pre-commit hook: regenerate README "Today's commits" and stage it so the
+# README diff rides into the user's current commit. No follow-up docs commit.
 #
-# README "Today's commits" is maintained by .githooks/post-commit, which
-# runs after each commit and creates a follow-up docs(readme) commit so
-# every user commit appears with its real SHA + GitHub link.
+# Trade-off: the commit currently being made isn't in `git log` yet, so its
+# own entry appears in the NEXT commit's README (one-commit lag). The script
+# documents this as its intended semantic — see tools/update_todays_commits.py.
 
 set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+SCRIPT="$REPO_ROOT/tools/update_todays_commits.py"
+
+if [ ! -x "$SCRIPT" ]; then
+    exit 0
+fi
+
+if ! python3 "$SCRIPT"; then
+    echo "pre-commit: update_todays_commits.py failed" >&2
+    exit 1
+fi
+
+# Stage the README only if it actually changed. If the user staged an
+# unrelated README edit themselves we leave that alone — `git add` of an
+# unmodified path is a no-op.
+if ! git diff --quiet -- "$REPO_ROOT/README.md"; then
+    git add "$REPO_ROOT/README.md"
+fi
 
 exit 0
