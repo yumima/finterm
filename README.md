@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0cecef2e`](https://github.com/yumima/finterm/commit/0cecef2e) **feat:** video channels editor + portfolio sparklines + crash/flash fixes
 - [`15433d60`](https://github.com/yumima/finterm/commit/15433d60) **fix(video+unlock):** two root-cause fixes for flashing issues
 - [`1534fb02`](https://github.com/yumima/finterm/commit/1534fb02) **fix(video):** address three review findings on render loop lifecycle
 - [`ccd489fe`](https://github.com/yumima/finterm/commit/ccd489fe) **fix(video):** seed render loop once — eliminate strobing and window flash
