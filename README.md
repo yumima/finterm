@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`5f8e9734`](https://github.com/yumima/finterm/commit/5f8e9734) **fix(video/gl):** isVisible() guard + restore OpenGL 3.2 profile comment
 - [`a63b2615`](https://github.com/yumima/finterm/commit/a63b2615) **fix(video):** root-cause fix — Wayland frame-callback loop via frameSwapped
 - [`e5e7d7f0`](https://github.com/yumima/finterm/commit/e5e7d7f0) **fix(dashboard):** IPO sort, portfolio inline layout, 12px font minimum
 - [`a16b4b51`](https://github.com/yumima/finterm/commit/a16b4b51) **fix(video+unlock):** three root-cause fixes
