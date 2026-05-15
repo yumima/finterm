@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`a3d815c9`](https://github.com/yumima/finterm/commit/a3d815c9) **feat(dashboard):** Economic Calendar live data + new IPO Calendar widget
 - [`53f42b3a`](https://github.com/yumima/finterm/commit/53f42b3a) **fix(video+dashboard):** restore inline video, add portfolio_summary to template
 - [`3a5d0c84`](https://github.com/yumima/finterm/commit/3a5d0c84) **fix(video):** restore inline video — root cause was stack page ordering
 - [`5cbbc28a`](https://github.com/yumima/finterm/commit/5cbbc28a) **fix(video):** root-cause fix for Wayland window-spawn loop and shmem OOM
