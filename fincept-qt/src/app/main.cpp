@@ -73,35 +73,6 @@
 #endif
 
 int main(int argc, char* argv[]) {
-    // ── GStreamer video-sink pre-configuration ────────────────────────────────
-    // MUST be set before the first QMediaPlayer is constructed, which is when
-    // GStreamer initialises its element registry. Setting it here — before any
-    // Qt or GStreamer object is alive — is the only reliable place.
-    //
-    // Root cause (observed on Wayland without gst-plugins-qt6):
-    //   QMediaPlayer::setVideoOutput(widget) cannot find qt6glvideosink (the
-    //   proper Qt-embedded GStreamer sink). It falls back to autovideosink,
-    //   which selects waylandsink (the highest-ranked Wayland sink present).
-    //   waylandsink creates its own xdg-toplevel Wayland surface per pipeline
-    //   — it cannot embed inside QVideoWidget. Each pipeline start/retry
-    //   spawns a new top-level "finterm" window, and waylandsink allocates
-    //   video frame buffers in /dev/shm without a cap, causing 23 GB shmem
-    //   and an OOM kill within ~90 seconds.
-    //
-    // Fix: rank all display sinks to NONE so autovideosink falls back to
-    //   fakevideosink, which silently discards video frames with zero shmem
-    //   allocation. Audio continues via the separate pulsesink/alsasink path.
-    //
-    // If gst-plugins-qt6 is later installed, qt6glvideosink (rank PRIMARY=256)
-    // outranks everything and inline video works automatically — no code change.
-    qputenv("GST_PLUGIN_FEATURE_RANK",
-            "waylandsink:NONE,"
-            "glimagesink:NONE,"
-            "ximagesink:NONE,"
-            "xvimagesink:NONE,"
-            "gtkglsink:NONE,"
-            "gtksink:NONE");
-
     // ── Parse --profile <name> from argv before Qt initialises ───────────────
     // This must happen first so that:
     //   1. AppPaths returns the correct per-profile directories

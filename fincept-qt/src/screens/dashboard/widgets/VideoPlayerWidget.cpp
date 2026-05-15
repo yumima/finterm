@@ -157,38 +157,18 @@ void VideoPlayerWidget::build_player_view() {
     vl->setSpacing(0);
 
 #ifdef HAS_QT_MULTIMEDIA
-    // Inline video requires qt6glvideosink (gst-plugins-qt6). Without it,
-    // GStreamer falls back to waylandsink on Wayland, which creates a new
-    // top-level window per pipeline (see GST_PLUGIN_FEATURE_RANK in main.cpp).
-    // We detect this at runtime: if on Wayland, suppress video output entirely
-    // so GStreamer uses fakevideosink (audio-only, no windows, no shmem OOM).
-    // On X11 or when qt6glvideosink is present the video widget is shown normally.
-    const bool on_wayland =
-        QGuiApplication::platformName().contains("wayland", Qt::CaseInsensitive);
-
-    if (!on_wayland) {
-        video_widget_ = new QVideoWidget;
-        // WA_TransparentForMouseEvents: on X11, sets INPUT_ONLY so pointer
-        // events pass through to the tile's resize grip underneath.
-        video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-        vl->addWidget(video_widget_, 1);
-    } else {
-        audio_only_label_ = new QLabel(
-            "♪  Audio only\n\n"
-            "Inline video requires gst-plugins-qt6.\n"
-            "Install it and restart for video playback.");
-        audio_only_label_->setAlignment(Qt::AlignCenter);
-        vl->addWidget(audio_only_label_, 1);
-    }
+    video_widget_ = new QVideoWidget;
+    // WA_TransparentForMouseEvents: lets mouse events pass through the video
+    // surface to the tile's resize grip. Effective on X11; on Wayland the
+    // compositor routes events, so the grip may still be blocked there.
+    video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    vl->addWidget(video_widget_, 1);
 
     player_ = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
     player_->setAudioOutput(audio_output_);
-    if (video_widget_)
-        player_->setVideoOutput(video_widget_);
-    // On Wayland: no setVideoOutput → GStreamer uses fakevideosink (from the
-    // GST_PLUGIN_FEATURE_RANK env var set in main.cpp). Audio plays normally.
+    player_->setVideoOutput(video_widget_);
 
     // Clear the in-progress flag and current URL on any player error so that
     // refresh_data() does not keep retrying and spawning new Wayland surfaces.
@@ -432,19 +412,18 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
-    // stop() halts the current pipeline. Do NOT call setSource(QUrl()) between
-    // stop() and the new source: on Wayland, clearing the source destroys the
-    // GStreamer video sink's native surface, and the subsequent setSource(url)
-    // creates a NEW top-level Wayland window instead of reusing the embedded
-    // QVideoWidget — this is what produced the loop of "finterm windows" seen
-    // in practice. Going directly stop() → setSource(new_url) → play() keeps
-    // the pipeline and Wayland surface intact across channel switches.
     player_->stop();
     set_loading(false);
     status_label_->hide();
+    // Switch to the player page BEFORE setSource/play. Qt's FFmpeg renderer
+    // pushes the first decoded frame on play(); if QVideoWidget is still in a
+    // hidden stack page at that moment, the compositor has no parent Wayland
+    // surface to attach to and creates a new xdg-toplevel — appearing as a
+    // separate "finterm" window in the taskbar. Making the widget visible first
+    // gives it a valid surface that the renderer writes into directly.
+    stack_->setCurrentIndex(1);
     player_->setSource(QUrl(stream_url));
     player_->play();
-    stack_->setCurrentIndex(1);
 #else
     Q_UNUSED(stream_url)
 #endif
@@ -541,12 +520,7 @@ void VideoPlayerWidget::apply_styles() {
 
     // Player page
 #ifdef HAS_QT_MULTIMEDIA
-    if (video_widget_)
-        video_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_BASE()));
-    if (audio_only_label_)
-        audio_only_label_->setStyleSheet(
-            QString("color: %1; font-size: 11px; background: %2;")
-                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE()));
+    video_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_BASE()));
 #else
     if (status_label_placeholder_)
         status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 11px; background: %2;")

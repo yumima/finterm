@@ -77,10 +77,9 @@ class VideoPlayerWidget : public BaseWidget {
     QPushButton* stop_btn_ = nullptr;
 
 #ifdef HAS_QT_MULTIMEDIA
-    QMediaPlayer*  player_           = nullptr;
-    QVideoWidget*  video_widget_     = nullptr; // null on Wayland (audio-only mode)
-    QAudioOutput*  audio_output_     = nullptr;
-    QLabel*        audio_only_label_ = nullptr; // shown instead of video on Wayland
+    QMediaPlayer* player_       = nullptr;
+    QVideoWidget* video_widget_ = nullptr;
+    QAudioOutput* audio_output_ = nullptr;
 #endif
 };
 
