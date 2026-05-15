@@ -8,13 +8,49 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
+#include <QPainter>
+#include <QRect>
 #include <QScrollArea>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QVBoxLayout>
 
 namespace fincept::screens::widgets {
+
+// ── VideoRenderWidget ─────────────────────────────────────────────────────────
+// Plain QWidget — no native Wayland surface, no platform-specific lifecycle.
+// Frames arrive via a Qt::QueuedConnection from the multimedia decode thread
+// and are painted synchronously in paintEvent() on the main thread.
+
+#ifdef HAS_QT_MULTIMEDIA
+VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
+    setAttribute(Qt::WA_OpaquePaintEvent); // skip background erase; we fill entirely
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+}
+
+void VideoRenderWidget::present(const QVideoFrame& frame) {
+    current_frame_ = frame;
+    update(); // schedule repaint on the main thread
+}
+
+void VideoRenderWidget::paintEvent(QPaintEvent*) {
+    QPainter p(this);
+    p.fillRect(rect(), Qt::black);
+    if (!current_frame_.isValid())
+        return;
+    const QImage img = current_frame_.toImage();
+    if (img.isNull())
+        return;
+    // Letter-box: scale to fit while preserving aspect ratio
+    const QSize scaled = img.size().scaled(size(), Qt::KeepAspectRatio);
+    const QRect dst((width()  - scaled.width())  / 2,
+                    (height() - scaled.height()) / 2,
+                    scaled.width(), scaled.height());
+    p.drawImage(dst, img);
+}
+#endif
 
 // ── Preset channels ─────────────────────────────────────────────────────────
 
@@ -157,24 +193,27 @@ void VideoPlayerWidget::build_player_view() {
     vl->setSpacing(0);
 
 #ifdef HAS_QT_MULTIMEDIA
-    video_widget_ = new QVideoWidget;
-    // WA_TransparentForMouseEvents: lets mouse events pass through the video
-    // surface to the tile's resize grip. Effective on X11; on Wayland the
-    // compositor routes events, so the grip may still be blocked there.
-    video_widget_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    // VideoRenderWidget is a plain QWidget — no native Wayland surface.
+    // Mouse events reach the tile's resize grip without any platform tricks.
+    video_widget_ = new VideoRenderWidget(this);
     vl->addWidget(video_widget_, 1);
 
-    player_ = new QMediaPlayer(this);
+    player_       = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
     player_->setAudioOutput(audio_output_);
-    player_->setVideoOutput(video_widget_);
 
-    // Clear the in-progress flag and current URL on any player error so that
-    // refresh_data() does not keep retrying and spawning new Wayland surfaces.
+    // QVideoSink is the frame delivery pipe: it receives decoded frames from
+    // the multimedia engine and emits videoFrameChanged. The queued connection
+    // crosses from the decode thread to the main thread cleanly.
+    video_sink_ = new QVideoSink(this);
+    player_->setVideoOutput(video_sink_);
+    connect(video_sink_, &QVideoSink::videoFrameChanged,
+            video_widget_, &VideoRenderWidget::present,
+            Qt::QueuedConnection);
+
     connect(player_, &QMediaPlayer::errorOccurred, this,
             &VideoPlayerWidget::on_player_error);
-    // Clear the flag once we actually reach PlayingState.
     connect(player_, &QMediaPlayer::playbackStateChanged, this,
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::PlayingState)
@@ -412,22 +451,13 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
+    // Clean, unconditional: show the player page, set source, play.
+    // No stop(), no winId(), no WA_NativeWindow, no ordering hacks.
+    // VideoRenderWidget has no native surface so none of those tricks
+    // are needed or meaningful — the pipeline is pure data flow.
     set_loading(false);
     status_label_->hide();
-    // Show the player page FIRST so QVideoWidget has a visible, mapped
-    // Wayland surface before any pipeline activity.
     stack_->setCurrentIndex(1);
-    // Force immediate native window handle creation. Without this, the
-    // Wayland compositor may not yet have associated a wl_surface with
-    // the QVideoWidget, and Qt's FFmpeg backend creates a new xdg-toplevel
-    // (a rogue "finterm" window) for the orphaned video output surface.
-    video_widget_->setAttribute(Qt::WA_NativeWindow, true);
-    (void)video_widget_->winId(); // materialises the wl_surface synchronously
-    // Do NOT call player_->stop() here. stop() internally releases the video
-    // output surface handle; subsequent play() then re-allocates it as a new
-    // xdg-toplevel instead of reusing the existing QVideoWidget surface.
-    // setSource() alone handles the pipeline transition cleanly (Qt stops
-    // the current stream implicitly before opening the new one).
     player_->setSource(QUrl(stream_url));
     player_->play();
 #else
@@ -438,14 +468,9 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
 void VideoPlayerWidget::stop_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
-    stack_->setCurrentIndex(0);
-    // Do NOT call player_->setSource(QUrl()) here. Calling setSource while
-    // QVideoWidget is hidden (page 0 active) causes Qt to allocate a new
-    // Wayland surface for teardown — manifesting as another rogue window.
-    // player_->stop() is sufficient to halt the pipeline.
-#else
-    stack_->setCurrentIndex(0);
 #endif
+    stack_->setCurrentIndex(0);
+
     play_in_progress_ = false;
     current_url_.clear();
     current_title_.clear();
@@ -524,9 +549,8 @@ void VideoPlayerWidget::apply_styles() {
     helper_label_->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
-    // Player page
+    // Player page — VideoRenderWidget fills its background in paintEvent(); no stylesheet needed.
 #ifdef HAS_QT_MULTIMEDIA
-    video_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_BASE()));
 #else
     if (status_label_placeholder_)
         status_label_placeholder_->setStyleSheet(QString("color: %1; font-size: 11px; background: %2;")
