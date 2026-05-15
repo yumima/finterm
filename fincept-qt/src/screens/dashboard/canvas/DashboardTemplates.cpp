@@ -14,9 +14,9 @@ QVector<DashboardTemplate> all_dashboard_templates() {
     return {
 
         // ── Portfolio Manager ────────────────────────────────────────────────
-        // Layout (12-col, 15 rows, ~1038 px at 60 px/row — fits 1080p+):
+        // Layout (12-col, 16 rows, ~1038 px at 60 px/row — fits 1080p+):
         //   Row  0–4 : Indices [4] | Commodities [4] | Margin [2] | Today P&L [2]
-        //   Row  4–8 : Sector Heatmap [6] | Econ Calendar [3] | Quick Trade [3]
+        //   Row  4–8 : Sector Heatmap [5] | Econ Calendar [4] | IPO Calendar [3]
         //   Row  8–12: Portfolio Summary [8] | Watchlist [4]
         //   Row 12–16: News [6] | Live TV [6]
         // open_positions/working_orders omitted — require broker account (none configured).
@@ -29,9 +29,9 @@ QVector<DashboardTemplate> all_dashboard_templates() {
              gi("commodities",       4,  0, 4, 4, 2, 3),
              gi("margin_usage",      8,  0, 2, 4, 2, 3),
              gi("today_pnl",        10,  0, 2, 4, 2, 3),
-             gi("sector_heatmap",    0,  4, 6, 4, 3, 4),
-             gi("econ_calendar",     6,  4, 3, 4, 2, 3),
-             gi("quick_trade",       9,  4, 3, 4, 2, 3),
+             gi("sector_heatmap",    0,  4, 5, 4, 3, 4),
+             gi("econ_calendar",     5,  4, 4, 4, 2, 3),
+             gi("ipo_calendar",      9,  4, 3, 4, 2, 3),
              gi("portfolio_summary", 0,  8, 8, 4, 3, 3),
              gi("watchlist",         8,  8, 4, 4, 2, 3),
              gi("news",              0, 12, 6, 4, 3, 3),

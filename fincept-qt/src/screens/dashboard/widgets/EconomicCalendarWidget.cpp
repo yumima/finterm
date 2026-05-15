@@ -3,9 +3,13 @@
 #include "network/http/HttpClient.h"
 #include "ui/theme/Theme.h"
 
+#include <QDate>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
 
 namespace fincept::screens::widgets {
 
@@ -86,11 +90,81 @@ void EconomicCalendarWidget::on_theme_changed() {
 }
 
 void EconomicCalendarWidget::refresh_data() {
-    // Economic calendar endpoint was served by the external stub server which
-    // has been removed. Wire up a direct data provider here when available.
+    // ForexFactory public JSON calendar — no API key required.
+    // Two requests: this week + next week, merged and sorted before display.
+    static const char* kUrls[] = {
+        "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+        "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
+    };
+
+    set_loading(true);
+    pending_merge_ = QJsonArray{};
+    pending_fetches_ = 2;
+
+    QPointer<EconomicCalendarWidget> self = this;
+    for (const auto* url : kUrls) {
+        HttpClient::instance().get(QString(url), [self](Result<QJsonDocument> res) {
+            if (!self) return;
+            if (res.is_ok() && res.value().isArray())
+                self->on_fetch_done(res.value().array());
+            else
+                self->on_fetch_done({});
+        });
+    }
+}
+
+void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
+    for (const auto& v : week_events)
+        pending_merge_.append(v);
+
+    if (--pending_fetches_ > 0)
+        return; // still waiting for the other week
+
+    // Parse "MMM d yyyy" dates so we can sort chronologically.
+    // ForexFactory date examples: "May 14 2026", "Jun 2 2026"
+    static const char* kMonths[] = {
+        "", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+
+    auto parse_ff_date = [&](const QString& s) -> QDate {
+        const QStringList parts = s.split(' ', Qt::SkipEmptyParts);
+        if (parts.size() < 3) return {};
+        int mon = 0;
+        for (int i = 1; i <= 12; ++i)
+            if (parts[0].startsWith(kMonths[i], Qt::CaseInsensitive)) { mon = i; break; }
+        return QDate(parts[2].toInt(), mon, parts[1].toInt());
+    };
+
+    // Sort by date, then convert to the format populate() expects.
+    QVector<QJsonObject> sorted;
+    sorted.reserve(pending_merge_.size());
+    for (const auto& v : std::as_const(pending_merge_))
+        sorted.append(v.toObject());
+    std::stable_sort(sorted.begin(), sorted.end(), [&](const QJsonObject& a, const QJsonObject& b) {
+        return parse_ff_date(a["date"].toString()) < parse_ff_date(b["date"].toString());
+    });
+
+    // Map ForexFactory fields → populate() schema.
+    QJsonArray out;
+    for (const auto& e : sorted) {
+        const QDate d = parse_ff_date(e["date"].toString());
+        const QString impact = e["impact"].toString();
+        int imp = impact.startsWith("H", Qt::CaseInsensitive) ? 3
+                : impact.startsWith("M", Qt::CaseInsensitive) ? 2
+                : impact.startsWith("L", Qt::CaseInsensitive) ? 1 : 0;
+        QJsonObject mapped;
+        mapped["event"]      = e["title"].toString();
+        mapped["country"]    = e["country"].toString();
+        mapped["date"]       = d.isValid() ? d.toString(Qt::ISODate) : e["date"].toString();
+        mapped["time"]       = e["time"].toString();
+        mapped["importance"] = imp;
+        mapped["actual"]     = e["actual"].toString();
+        mapped["forecast"]   = e["forecast"].toString();
+        mapped["previous"]   = e["previous"].toString();
+        out.append(mapped);
+    }
+
     set_loading(false);
-    status_label_->setVisible(true);
-    status_label_->setText("No events available");
+    populate(out);
 }
 
 void EconomicCalendarWidget::populate(const QJsonArray& events) {

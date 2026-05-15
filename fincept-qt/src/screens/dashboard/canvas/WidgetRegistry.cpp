@@ -7,6 +7,7 @@
 #include "screens/dashboard/widgets/CryptoWidget.h"
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 #include "screens/dashboard/widgets/ForexWidget.h"
+#include "screens/dashboard/widgets/IpoCalendarWidget.h"
 #include "screens/dashboard/widgets/IndicesWidget.h"
 #include "screens/dashboard/widgets/MarginUsageWidget.h"
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
@@ -81,6 +82,10 @@ WidgetRegistry::WidgetRegistry() {
 
     register_widget({"econ_calendar", "Economic Calendar", "Research", "Upcoming macro events and releases", 4, 4, 2, 3,
                      [](const QJsonObject&) { return new widgets::EconomicCalendarWidget; }});
+
+    register_widget({"ipo_calendar", "IPO Calendar", "Research",
+                     "Upcoming and recently priced IPOs — this month and next", 4, 5, 2, 3,
+                     [](const QJsonObject&) { return new widgets::IpoCalendarWidget; }});
 
     // ── Portfolio ─────────────────────────────────────────────────────────────
     register_widget({"watchlist", "Watchlist", "Portfolio", "Your saved symbols with live prices", 6, 4, 2, 3,
