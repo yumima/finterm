@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`a63b2615`](https://github.com/yumima/finterm/commit/a63b2615) **fix(video):** root-cause fix — Wayland frame-callback loop via frameSwapped
 - [`e5e7d7f0`](https://github.com/yumima/finterm/commit/e5e7d7f0) **fix(dashboard):** IPO sort, portfolio inline layout, 12px font minimum
 - [`a16b4b51`](https://github.com/yumima/finterm/commit/a16b4b51) **fix(video+unlock):** three root-cause fixes
 - [`c440fcd0`](https://github.com/yumima/finterm/commit/c440fcd0) **fix(video):** curate verified channel presets; drop Al Jazeera + ET Now
