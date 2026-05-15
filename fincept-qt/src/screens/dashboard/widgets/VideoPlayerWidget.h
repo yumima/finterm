@@ -63,7 +63,6 @@ class VideoRenderWidget : public QOpenGLWidget, protected QOpenGLFunctions {
 
   private:
     QVideoFrame               current_frame_;
-    QImage::Format            last_img_format_ = QImage::Format_Invalid;
     QOpenGLTexture*           texture_ = nullptr;
     QOpenGLShaderProgram      program_;
     QOpenGLVertexArrayObject  vao_;

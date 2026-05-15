@@ -350,17 +350,28 @@ void WorkspaceManager::apply_to_ui() {
         }
     }
 
-    // Restore window geometry — apply to primary window, but never clobber
-    // the user's current maximized/fullscreen state. Workspace load is
-    // triggered after PIN unlock and on every auth refresh; if the user
-    // maximized the window before entering their PIN, blindly restoring a
-    // stale saved geometry would unexpectedly shrink the window back down.
+    // Restore window geometry — with two guards:
+    //
+    // 1. Never clobber maximized/fullscreen state (existing guard).
+    //
+    // 2. Skip if the current geometry already matches the saved one.
+    //    apply_to_ui() is called on PIN unlock as well as on initial load.
+    //    On unlock the workspace saved the geometry moments before locking,
+    //    so the window is still at the exact saved position. Calling
+    //    restoreGeometry() anyway sends a configure request to the window
+    //    manager which briefly un-maps and re-maps the window — the ~1 s
+    //    flash/disappear the user sees after entering the passcode.
+    //    Comparing saveGeometry() to the stored bytes is O(1) and avoids
+    //    the superfluous WM round-trip when nothing has changed.
     if (!windows_.isEmpty() && !ws.window_geometry_base64.isEmpty()) {
         auto* win = windows_.first();
         const Qt::WindowStates st = win->windowState();
         const bool preserve_size = st.testFlag(Qt::WindowMaximized) || st.testFlag(Qt::WindowFullScreen);
-        if (!preserve_size)
-            win->restoreGeometry(QByteArray::fromBase64(ws.window_geometry_base64.toLatin1()));
+        if (!preserve_size) {
+            const QByteArray saved = QByteArray::fromBase64(ws.window_geometry_base64.toLatin1());
+            if (win->saveGeometry() != saved)
+                win->restoreGeometry(saved);
+        }
     }
 
     // Navigate to active screen — apply to primary router

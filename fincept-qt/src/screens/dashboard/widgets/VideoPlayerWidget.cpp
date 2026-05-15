@@ -86,7 +86,14 @@ VideoRenderWidget::~VideoRenderWidget() {
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     current_frame_ = frame;
-    update(); // schedule paintGL() on the main thread
+    // repaint() instead of update(): on Wayland, update() posts a repaint
+    // request that only fires when the compositor sends a frame callback.
+    // For an idle video widget (no user interaction) the compositor may
+    // suppress those callbacks, so paintGL() never runs despite new frames
+    // arriving — video appears black but flashes correctly during resize.
+    // repaint() forces an immediate synchronous paint and bypasses the
+    // frame-callback throttle, giving us one paintGL() per decoded frame.
+    repaint();
 }
 
 void VideoRenderWidget::initializeGL() {
@@ -141,33 +148,33 @@ void VideoRenderWidget::paintGL() {
     const QImage img = current_frame_.toImage();
     if (img.isNull()) return;
 
-    // Normalise to RGBA8888 before every texture operation.
-    //
-    // QVideoFrame::toImage() returns frames in varying QImage::Format values
-    // depending on the decoder output (NVDEC produces NV12/P010; Qt converts
-    // these inconsistently frame-by-frame). QOpenGLTexture::setData(QImage)
-    // internally calls setFormat() to match the image — but setFormat() is
-    // rejected once storage is allocated, printing:
-    //   "QOpenGLTexture::setFormat(): Cannot change format once storage has been allocated"
-    // and silently skipping the upload. The texture retains its first-frame
-    // content (usually a black pre-decode frame), making video appear absent.
-    //
-    // Pinning to RGBA8888 guarantees a single GL internal format (GL_RGBA8)
-    // for the full session. convertedTo() is O(w×h) — at 480p < 0.5 ms.
+    // Normalise every frame to RGBA8888 so the GL upload is always the same
+    // format. convertedTo() is O(w×h) — at 480p < 0.5 ms per frame.
     const QImage rgba = img.convertedTo(QImage::Format_RGBA8888);
     if (rgba.isNull()) return;
 
+    // Create or recreate texture when dimensions change using explicit
+    // format+size+allocateStorage.  We must NOT use the QImage constructor
+    // or setData(QImage) overload: they call setFormat()/setSize()/
+    // setMipLevels() on every invocation, which are all no-ops (with
+    // warnings) once storage is allocated — so no pixels ever get uploaded
+    // and the screen stays black while audio plays.
     if (!texture_ || texture_->width() != rgba.width() || texture_->height() != rgba.height()) {
         delete texture_;
         texture_ = nullptr;
-        texture_ = new QOpenGLTexture(rgba, QOpenGLTexture::DontGenerateMipMaps);
+        texture_ = new QOpenGLTexture(QOpenGLTexture::Target2D);
+        texture_->setFormat(QOpenGLTexture::RGBA8_UNorm);
+        texture_->setSize(rgba.width(), rgba.height());
+        texture_->setMipLevels(1);
+        texture_->allocateStorage(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8);
         texture_->setMinificationFilter(QOpenGLTexture::Linear);
         texture_->setMagnificationFilter(QOpenGLTexture::Linear);
         texture_->setWrapMode(QOpenGLTexture::ClampToEdge);
-        last_img_format_ = QImage::Format_RGBA8888;
-    } else {
-        texture_->setData(rgba); // glTexSubImage2D, format always RGBA8 ✓
     }
+
+    // Raw-pixel overload → glTexSubImage2D only; never touches format/size.
+    texture_->setData(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8,
+                      static_cast<const void*>(rgba.constBits()));
 
     // Letter-box: restrict the GL viewport to maintain aspect ratio.
     const float fw = img.width(), fh = img.height();
