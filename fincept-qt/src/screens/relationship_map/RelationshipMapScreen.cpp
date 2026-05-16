@@ -503,6 +503,11 @@ void RelationshipMapScreen::on_search() {
     legend_widget_->hide();
     has_data_ = false;
 
+    // Track what we asked for so on_data_ready can discard signals fired for
+    // a different ticker (the service is a singleton and broadcasts to every
+    // RelationshipMapScreen instance — without this guard a stale AAPL fetch
+    // from a different screen would paint AAPL into our graph).
+    pending_ticker_ = ticker;
     services::RelationshipMapService::instance().fetch(ticker);
     ScreenStateManager::instance().notify_changed(this);
 }
@@ -654,6 +659,16 @@ void RelationshipMapScreen::on_progress(int percent, const QString& message) {
 }
 
 void RelationshipMapScreen::on_data_ready(const RelationshipData& payload) {
+    // Discard emissions for a ticker we didn't ask for. The service is a
+    // singleton — every RelationshipMapScreen subscribes to the same signal —
+    // so a cached/in-flight fetch initiated by a sibling screen would
+    // otherwise repaint our graph with the wrong company. pending_ticker_
+    // empty means we have no outstanding request (initial state, or after
+    // load), so we still accept the first payload in that case.
+    if (!pending_ticker_.isEmpty()
+        && payload.company.ticker.toUpper() != pending_ticker_.toUpper())
+        return;
+
     current_data_ = payload;
     has_data_ = true;
     loaded_ticker_ = payload.company.ticker;

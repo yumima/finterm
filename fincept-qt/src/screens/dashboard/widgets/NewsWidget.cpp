@@ -172,24 +172,29 @@ void NewsWidget::populate(const QJsonArray& articles) {
         rl->setContentsMargins(4, 4, 4, 4);
         rl->setSpacing(8);
 
+        // Explicit font-size on every row label — without it the labels inherit
+        // from the qApp font, which renders visibly smaller than DataTable rows
+        // in adjacent widgets (Indices, Commodities). Pinning to font_px(0) keeps
+        // News in the same visual tier as the data tables on the dashboard.
+        const QString fs = QString("font-size:%1px;").arg(ui::fonts::font_px(0));
         if (!time_str.isEmpty()) {
             auto* time_lbl = new QLabel(time_str);
             time_lbl->setFixedWidth(36);
             time_lbl->setStyleSheet(
-                QString("color: %1; background: transparent;").arg(ui::colors::CYAN()));
+                QString("color: %1; background: transparent; %2").arg(ui::colors::CYAN(), fs));
             rl->addWidget(time_lbl);
         }
 
         auto* headline = new QLabel(title);
         headline->setWordWrap(true);
         headline->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
+            QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_PRIMARY(), fs));
         rl->addWidget(headline, 1);
 
         if (!publisher.isEmpty()) {
             auto* src = new QLabel(publisher);
             src->setStyleSheet(
-                QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+                QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
             rl->addWidget(src);
         }
 

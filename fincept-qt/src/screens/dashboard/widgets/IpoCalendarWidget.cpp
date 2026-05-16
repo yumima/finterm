@@ -71,8 +71,10 @@ IpoCalendarWidget::IpoCalendarWidget(QWidget* parent)
 void IpoCalendarWidget::apply_styles() {
     header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
-        lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;"
+                                   " font-size: %2px;")
+                               .arg(ui::colors::TEXT_SECONDARY())
+                               .arg(ui::fonts::font_px(0)));
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
@@ -224,6 +226,12 @@ void IpoCalendarWidget::populate() {
             if (priced_shown >= kMaxPriced) continue;
         }
 
+        // Explicit font-size on every row label — without it the labels inherit
+        // from the qApp font, which renders smaller than DataTable rows in
+        // adjacent widgets. Pin to font_px(0) so IPO rows line up visually with
+        // the rest of the dashboard.
+        const QString fs = QString("font-size:%1px;").arg(ui::fonts::font_px(0));
+
         // Section header when status changes — UPCOMING above future-dated rows,
         // PRICED above the recently-priced group below it.
         if (entry.status != current_status) {
@@ -231,9 +239,9 @@ void IpoCalendarWidget::populate() {
             const QString label = current_status == "upcoming" ? "── UPCOMING ──" : "── PRICED ──";
             auto* sec = new QLabel(label);
             sec->setStyleSheet(QString("color: %1; font-weight: bold; "
-                                        "padding: 4px 8px; background: %2;")
+                                        "padding: 4px 8px; background: %2; %3")
                                    .arg(current_status == "upcoming" ? ui::colors::AMBER() : ui::colors::POSITIVE(),
-                                        ui::colors::BG_RAISED()));
+                                        ui::colors::BG_RAISED(), fs));
             list_layout_->addWidget(sec);
             alt = false;
         }
@@ -251,29 +259,29 @@ void IpoCalendarWidget::populate() {
         auto* co_lbl = new QLabel(company);
         co_lbl->setToolTip(entry.company);
         co_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(ui::colors::TEXT_PRIMARY()));
+            QString("color: %1; background: transparent; %2")
+                .arg(ui::colors::TEXT_PRIMARY(), fs));
         rl->addWidget(co_lbl, 4);
 
         auto* tk_lbl = new QLabel(entry.ticker.isEmpty() ? "—" : entry.ticker);
         if (!entry.exchange.isEmpty())
             tk_lbl->setToolTip(entry.exchange); // exchange shown on hover
         tk_lbl->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;")
-                .arg(ui::colors::AMBER()));
+            QString("color: %1; font-weight: bold; background: transparent; %2")
+                .arg(ui::colors::AMBER(), fs));
         rl->addWidget(tk_lbl, 1);
 
         auto* dt_lbl = new QLabel(entry.date_str.isEmpty() ? "—" : entry.date_str);
         dt_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent; %2")
+                .arg(ui::colors::TEXT_SECONDARY(), fs));
         rl->addWidget(dt_lbl, 2);
 
         auto* pr_lbl = new QLabel(entry.price_range.isEmpty() ? "—" : entry.price_range);
         pr_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         pr_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;")
-                .arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent; %2")
+                .arg(ui::colors::TEXT_SECONDARY(), fs));
         rl->addWidget(pr_lbl, 2);
 
         list_layout_->addWidget(row);

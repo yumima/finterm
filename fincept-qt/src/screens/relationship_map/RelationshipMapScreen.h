@@ -103,6 +103,14 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     relmap::RelationshipData current_data_;
     bool has_data_ = false;
     QString loaded_ticker_;       // ticker currently shown in the graph
+    // The ticker we most recently asked the service to fetch. Used to filter
+    // data_ready emissions: RelationshipMapService is a singleton with a
+    // single shared signal, so when ER embeds a RelationshipMapScreen the
+    // embedded instance sees data_ready for *any* ticker the service emits —
+    // including a stale AAPL fetch that races our IONQ request. Comparing
+    // payload.company.ticker against this lets us discard the stale emission
+    // instead of repainting the graph with the wrong company.
+    QString pending_ticker_;
     bool search_input_focused_ = false; // only show dropdown when user is actively typing
 };
 

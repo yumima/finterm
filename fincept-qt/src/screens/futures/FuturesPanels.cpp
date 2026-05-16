@@ -846,15 +846,18 @@ void FuturesHeatmapPanel::render_from_cache() {
         if (!groups.contains(cls)) continue;
         auto* row_label = new QLabel(cls);
         row_label->setFixedWidth(70);
-        row_label->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(0)));
+        row_label->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(-2)));
         grid_->addWidget(row_label, row, 0);
 
         const auto& cells = groups.value(cls);
         for (int i = 0; i < cells.size(); ++i) {
             const auto& q = cells[i];
-            auto* tile = new QLabel(QString("%1\n%2%").arg(q.symbol, fmt_signed(q.change_pct, 1)));
+            // Single-line tile: "ES : +1.23%". Reads left-to-right like a
+            // ticker, which keeps the row compact and removes the previous
+            // 36px two-line height that made the panel dominate vertically.
+            auto* tile = new QLabel(QString("%1 : %2%").arg(q.symbol, fmt_signed(q.change_pct, 1)));
             tile->setAlignment(Qt::AlignCenter);
-            tile->setMinimumSize(56, 36);
+            tile->setMinimumSize(72, 20);
             tile->setToolTip(QString("%1\nLast %2  ·  %3").arg(q.name, fmt_num(q.last, 4),
                                                                 fmt_signed(q.change_pct, 2) + "%"));
             // Use the standard POSITIVE/NEGATIVE accent colors (the same green
@@ -866,14 +869,18 @@ void FuturesHeatmapPanel::render_from_cache() {
             const int alpha = static_cast<int>(70 + std::abs(pct) * 160); // 70..230
             QColor bg = pct >= 0 ? QColor(colors::POSITIVE()) : QColor(colors::NEGATIVE());
             bg.setAlpha(alpha);
+            // 12px tile font (font_px(-2)) — keeps the row narrow vertically so
+            // 10 asset-class rows fit without dominating the panel. Padding is
+            // 1px vertical, 4px horizontal so "ESM5 : +12.34%" doesn't kiss
+            // the edge but the row stays short.
             tile->setStyleSheet(QString("QLabel { background:rgba(%1,%2,%3,%4); color:%5;"
                                         " border:1px solid %6; font-family:'%7';"
-                                        " font-size:%8px; font-weight:600; padding:2px; }")
+                                        " font-size:%8px; font-weight:600; padding:1px 4px; }")
                                     .arg(bg.red()).arg(bg.green()).arg(bg.blue()).arg(bg.alpha())
                                     .arg(colors::TEXT_PRIMARY())
                                     .arg(colors::BORDER_DIM())
                                     .arg(fonts::DATA_FAMILY())
-                                    .arg(fonts::font_px(-1)));
+                                    .arg(fonts::font_px(-2)));
             grid_->addWidget(tile, row, i + 1);
         }
         ++row;

@@ -15,11 +15,17 @@ DataTable::DataTable(QWidget* parent) : QTableWidget(parent) {
     verticalHeader()->setVisible(false);
     horizontalHeader()->setStretchLastSection(true);
     horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    // Explicit font-size on items so DataTable renders at the same size across
+    // every dashboard widget that uses it (Indices, Commodities, Forex, Crypto).
+    // Without this, items inherit from the qApp font which can drift if a child
+    // QSS context strips inheritance — Commodities and Indices were rendering at
+    // visibly different sizes when nested under different parent stylesheets.
     setStyleSheet(QString("QTableWidget { background: %1; alternate-background-color: %2; "
-                          "gridline-color: %3; border: none; }"
-                          "QTableWidget::item { padding: 4px 8px; height: 26px; }"
+                          "gridline-color: %3; border: none; font-size: %4px; }"
+                          "QTableWidget::item { padding: 4px 8px; height: 26px; font-size: %4px; }"
                           "QTableWidget::item:selected { background: #111111; }")
-                      .arg(colors::DARK(), colors::ROW_ALT(), colors::BORDER()));
+                      .arg(colors::DARK(), colors::ROW_ALT(), colors::BORDER())
+                      .arg(fonts::font_px(0)));
 }
 
 void DataTable::set_headers(const QStringList& headers) {
