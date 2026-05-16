@@ -100,7 +100,17 @@ class GovDataProviderPanel : public QWidget {
 
 // Shared utilities — available to all gov_data panels
 void configure_table(QTableWidget* table);
-void export_table_to_csv(QTableWidget* table, const QString& default_name, QWidget* parent);
+
+/// Write `table` as CSV at `path` (UTF-8 BOM, CRLF, RFC 4180 quoting).
+/// Returns true on full success, false on any I/O failure. Used by callers
+/// that want to handle the file dialog themselves (e.g. so they can tell
+/// "user cancelled" apart from "write failed").
+bool write_table_to_csv(QTableWidget* table, const QString& path);
+
+/// Prompts for a save path, then writes the table via write_table_to_csv.
+/// Returns true on full success, false on dialog-cancel OR write failure
+/// — sibling panels treat both the same.
+bool export_table_to_csv(QTableWidget* table, const QString& default_name, QWidget* parent);
 
 // Shared panel stylesheet builder.
 // Pass the provider accent color (hex string, e.g. "#2563EB").

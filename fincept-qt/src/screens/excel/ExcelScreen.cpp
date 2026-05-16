@@ -5,6 +5,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "screens/excel/SpreadsheetWidget.h"
 #include "services/file_manager/FileManagerService.h"
+#include "ui/formatting/CsvWriter.h"
 #include "ui/theme/Theme.h"
 
 #include <QFileDialog>
@@ -331,12 +332,14 @@ void ExcelScreen::on_export_csv() {
     if (path.isEmpty())
         return;
 
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    ui::formatting::CsvWriter writer(path);
+    if (!writer.ok()) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Could not open file for writing:\n%1\n\n%2").arg(path).arg(writer.error()));
         return;
+    }
 
-    QTextStream out(&file);
-    auto cells = sheet->get_data();
+    const auto cells = sheet->get_data();
 
     // Find the last row/col with data to avoid huge trailing empty rows
     int last_row = 0;
@@ -352,13 +355,16 @@ void ExcelScreen::on_export_csv() {
 
     for (int r = 0; r <= last_row; ++r) {
         QStringList row;
-        for (int c = 0; c <= last_col; ++c) {
-            QString val = (c < cells[r].size()) ? cells[r][c] : "";
-            if (val.contains(',') || val.contains('"') || val.contains('\n'))
-                val = "\"" + val.replace("\"", "\"\"") + "\"";
-            row << val;
-        }
-        out << row.join(",") << "\n";
+        row.reserve(last_col + 1);
+        for (int c = 0; c <= last_col; ++c)
+            row << ((c < cells[r].size()) ? cells[r][c] : QString());
+        writer.write_row(row);
+    }
+
+    if (!writer.finalize()) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Failed while writing CSV:\n%1\n\n%2").arg(path).arg(writer.error()));
+        return;
     }
 
     LOG_INFO("ExcelScreen", QString("Exported CSV to %1").arg(path));

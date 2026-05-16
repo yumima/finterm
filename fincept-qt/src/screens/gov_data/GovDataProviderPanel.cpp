@@ -3,11 +3,11 @@
 
 #include "core/logging/Logger.h"
 #include "services/gov_data/GovDataService.h"
+#include "ui/formatting/CsvWriter.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
 #include <QDesktopServices>
-#include <QFile>
 #include <QFileDialog>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -16,7 +16,6 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QScrollArea>
-#include <QTextStream>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -755,74 +754,56 @@ void GovDataProviderPanel::on_export_csv() {
     if (!table)
         return;
 
-    QString path = QFileDialog::getSaveFileName(this, "Export CSV", def_name, "CSV Files (*.csv)");
+    const QString path = QFileDialog::getSaveFileName(this, "Export CSV", def_name, "CSV Files (*.csv)");
     if (path.isEmpty())
-        return;
+        return; // user cancelled — leave the badge alone
 
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        export_btn_->setText("✗ FAILED");
-        QTimer::singleShot(2000, this, [this]() { export_btn_->setText("CSV"); });
-        return;
-    }
-    QTextStream out(&file);
-
-    QStringList headers;
-    for (int c = 0; c < table->columnCount(); ++c) {
-        auto* h = table->horizontalHeaderItem(c);
-        headers << (h ? h->text() : QString::number(c));
-    }
-    out << headers.join(",") << "\n";
-
-    for (int r = 0; r < table->rowCount(); ++r) {
-        QStringList row;
-        for (int c = 0; c < table->columnCount(); ++c) {
-            auto* item = table->item(r, c);
-            QString val = item ? item->text() : "";
-            if (val.contains(',') || val.contains('"'))
-                val = "\"" + val.replace("\"", "\"\"") + "\"";
-            row << val;
-        }
-        out << row.join(",") << "\n";
-    }
-
-    export_btn_->setText("✓ SAVED");
-    QTimer::singleShot(1500, this, [this]() { export_btn_->setText("CSV"); });
+    const bool saved = write_table_to_csv(table, path);
+    export_btn_->setText(saved ? "✓ SAVED" : "✗ FAILED");
+    QTimer::singleShot(saved ? 1500 : 2000, this, [this]() { export_btn_->setText("CSV"); });
 }
 
 // ── Shared CSV export utility (used by all gov_data panels) ─────────────────
 
-void export_table_to_csv(QTableWidget* table, const QString& default_name, QWidget* parent) {
+bool write_table_to_csv(QTableWidget* table, const QString& path) {
     if (!table || table->rowCount() == 0)
-        return;
+        return false;
 
-    const QString path = QFileDialog::getSaveFileName(parent, "Export CSV", default_name, "CSV Files (*.csv)");
-    if (path.isEmpty())
-        return;
-
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-        return;
-    QTextStream out(&file);
+    ui::formatting::CsvWriter writer(path);
+    if (!writer.ok())
+        return false;
 
     QStringList headers;
+    headers.reserve(table->columnCount());
     for (int c = 0; c < table->columnCount(); ++c) {
         auto* h = table->horizontalHeaderItem(c);
         headers << (h ? h->text() : QString::number(c));
     }
-    out << headers.join(",") << "\n";
+    writer.write_row(headers);
 
+    QStringList row;
+    row.reserve(table->columnCount());
     for (int r = 0; r < table->rowCount(); ++r) {
-        QStringList row;
+        row.clear();
         for (int c = 0; c < table->columnCount(); ++c) {
             auto* item = table->item(r, c);
-            QString val = item ? item->text() : "";
-            if (val.contains(',') || val.contains('"'))
-                val = "\"" + val.replace("\"", "\"\"") + "\"";
-            row << val;
+            row << (item ? item->text() : QString());
         }
-        out << row.join(",") << "\n";
+        writer.write_row(row);
     }
+
+    return writer.finalize();
+}
+
+bool export_table_to_csv(QTableWidget* table, const QString& default_name, QWidget* parent) {
+    if (!table || table->rowCount() == 0)
+        return false;
+
+    const QString path = QFileDialog::getSaveFileName(parent, "Export CSV", default_name, "CSV Files (*.csv)");
+    if (path.isEmpty())
+        return false;
+
+    return write_table_to_csv(table, path);
 }
 
 void configure_table(QTableWidget* table) {
