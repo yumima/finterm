@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9f7ff5da`](https://github.com/yumima/finterm/commit/9f7ff5da) mcp(tools): fix Tier 3 cherry-pick build errors
 - [`65538d45`](https://github.com/yumima/finterm/commit/65538d45) **fix(trading):** load broker credentials on calling thread, not in worker
 - [`9762d0da`](https://github.com/yumima/finterm/commit/9762d0da) **fix(broker/angelone):** refactor onto BrokerEnumMap + bug fixes
 - [`0ae5bcb5`](https://github.com/yumima/finterm/commit/0ae5bcb5) **fix(broker/groww):** refactor onto BrokerEnumMap + bug fixes

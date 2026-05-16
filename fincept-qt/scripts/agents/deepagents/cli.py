@@ -221,11 +221,9 @@ def cmd_create_plan(params: dict[str, Any]) -> dict[str, Any]:
 
         except Exception as exc:
             logger.warning("Tool-calling create_plan failed: %s", exc)
+            return _error(f"create_plan failed: {exc}")
 
-    from orchestrator import FinceptOrchestrator
-    subagent_names = [s["name"] for s in get_subagents_for_type(agent_type)]
-    orch = FinceptOrchestrator(api_key=config.get("llm_api_key"))
-    return orch.create_plan(task, agent_type, subagent_names)
+    return _error(_NO_TOOL_CALLING_ERROR)
 
 
 def cmd_execute_step(params: dict[str, Any]) -> dict[str, Any]:
@@ -268,11 +266,10 @@ def cmd_execute_step(params: dict[str, Any]) -> dict[str, Any]:
             return {"success": True, "result": extract_text(response.content), "error": None}
 
         except Exception as exc:
-            logger.warning("Tool-calling step failed, falling back to orchestrator: %s", exc)
+            logger.warning("Tool-calling step failed: %s", exc)
+            return _error(f"execute_step failed: {exc}")
 
-    from orchestrator import FinceptOrchestrator
-    orch = FinceptOrchestrator(api_key=config.get("llm_api_key"))
-    return orch.execute_step(task, step_prompt, specialist, previous_results)
+    return _error(_NO_TOOL_CALLING_ERROR)
 
 
 def cmd_synthesize(params: dict[str, Any]) -> dict[str, Any]:
@@ -302,11 +299,10 @@ def cmd_synthesize(params: dict[str, Any]) -> dict[str, Any]:
             return {"success": True, "result": extract_text(response.content), "error": None}
 
         except Exception as exc:
-            logger.warning("Tool-calling synthesize failed, falling back to orchestrator: %s", exc)
+            logger.warning("Tool-calling synthesize failed: %s", exc)
+            return _error(f"synthesize failed: {exc}")
 
-    from orchestrator import FinceptOrchestrator
-    orch = FinceptOrchestrator(api_key=config.get("llm_api_key"))
-    return orch.synthesize(task, step_results)
+    return _error(_NO_TOOL_CALLING_ERROR)
 
 
 def cmd_resume_thread(params: dict[str, Any]) -> dict[str, Any]:
@@ -379,17 +375,27 @@ def _execute_with_deepagents(
         return _error(str(exc))
 
 
+_NO_TOOL_CALLING_ERROR = (
+    "The configured LLM provider does not support tool calling. "
+    "Configure a tool-calling provider (OpenRouter, Anthropic, OpenAI, "
+    "Google, DeepSeek, Groq, Mistral, Cohere) in Settings to run agents."
+)
+
+
 def _execute_with_orchestrator(
     task: str,
     agent_type: str,
     config: dict[str, Any],
     thread_id: str,
 ) -> dict[str, Any]:
-    """Execute via FinceptOrchestrator (non-tool-calling LLM fallback)."""
-    from orchestrator import FinceptOrchestrator
-    subagent_names = [s["name"] for s in get_subagents_for_type(agent_type)]
-    orch = FinceptOrchestrator(api_key=config.get("llm_api_key"))
-    result = orch.execute(task, agent_type, subagent_names)
+    """Stub returned when the configured LLM cannot call tools.
+
+    The hosted-LLM prompt-loop fallback that used to live here was removed
+    in the localhost-only stance: finterm doesn't reach any cloud LLM owned
+    by the project. Surface a clear error so the caller can prompt the user
+    to switch provider rather than silently timing out on a dead URL.
+    """
+    result = _error(_NO_TOOL_CALLING_ERROR)
     result["thread_id"] = thread_id
     return result
 

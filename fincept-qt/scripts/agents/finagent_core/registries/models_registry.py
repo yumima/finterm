@@ -267,14 +267,6 @@ class ModelsRegistry:
             "default_model": None,
         },
 
-        # Fincept (Built-in custom endpoint)
-        "fincept": {
-            "class": "finagent_core.registries.fincept_model.FinceptChat",
-            "models": ["fincept-llm"],
-            "api_key_env": "FINCEPT_API_KEY",
-            "default_model": "fincept-llm",
-            "base_url": "https://api.fincept.in/research/llm",
-        },
     }
 
     _loaded_models: Dict[str, Any] = {}

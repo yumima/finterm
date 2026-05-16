@@ -28,7 +28,7 @@ struct QuantModule {
 /// Modules: Core, Analysis, Curves, Economics, Instruments, ML, Models,
 /// Numerical, Physics, Portfolio, Pricing, Regulatory, Risk, Scheduling,
 /// Solver, Statistics, Stochastic, Volatility.
-/// All computations via api.fincept.in REST API.
+/// All computations via the localhost-stub REST API.
 class QuantLibScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:

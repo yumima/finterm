@@ -11,7 +11,7 @@
 
 namespace fincept::chat_mode {
 
-/// Singleton service for all api.fincept.in/chat/* calls.
+/// Singleton service for /chat/* HTTP calls (routed via the localhost stub).
 /// All callbacks are delivered on the Qt event loop (main thread).
 /// SSE streaming uses a dedicated QNetworkAccessManager to avoid
 /// blocking the shared HttpClient instance.

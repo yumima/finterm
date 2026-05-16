@@ -519,10 +519,10 @@ QWidget* ProfileScreen::build_support() {
         wl->addWidget(em);
         cg->addWidget(w, r, c2);
     };
-    add_c("GENERAL SUPPORT", "support@fincept.in", 0, 0);
-    add_c("COMMERCIAL", "support@fincept.in", 0, 1);
-    add_c("SECURITY", "support@fincept.in", 1, 0);
-    add_c("LEGAL", "support@fincept.in", 1, 1);
+    add_c("GENERAL SUPPORT", "admin@hanlexon.com", 0, 0);
+    add_c("COMMERCIAL", "admin@hanlexon.com", 0, 1);
+    add_c("SECURITY", "admin@hanlexon.com", 1, 0);
+    add_c("LEGAL", "admin@hanlexon.com", 1, 1);
     cvl2->addLayout(cg);
     vl->addWidget(cp);
     auto* lp = make_panel("RESOURCES");
@@ -891,7 +891,7 @@ void ProfileScreen::show_delete_account_dialog() {
             } else {
                 LOG_ERROR("Profile", "Account deletion failed: " + r.error);
                 QMessageBox::critical(self, "Delete Failed",
-                                      "Account deletion failed: " + r.error + "\n\nPlease contact support@fincept.in");
+                                      "Account deletion failed: " + r.error);
             }
         });
     });

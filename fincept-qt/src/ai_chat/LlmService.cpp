@@ -435,11 +435,9 @@ QMap<QString, QString> LlmService::get_headers() const {
         // OpenAI-compatible
         if (!api_key_.isEmpty())
             h["Authorization"] = "Bearer " + api_key_;
-        if (p == "openrouter") {
-            // Optional attribution — appears on openrouter.ai/rankings leaderboard
-            h["HTTP-Referer"] = "https://fincept.in";
-            h["X-Title"] = "Fincept Terminal";
-        }
+        // OpenRouter optional attribution headers (HTTP-Referer/X-Title)
+        // intentionally omitted — finterm is a localhost-only app and does not
+        // self-identify on any third-party leaderboard.
     }
     return h;
 }
@@ -641,15 +639,16 @@ LlmService::HttpResult LlmService::blocking_get(const QString& url, const QMap<Q
 }
 
 // ============================================================================
-// Fincept async path — POST /research/llm/async → poll /research/llm/status/{id}
-// Used for the primary LLM response (sync /research/chat for follow-ups)
+// Localhost-stub async LLM path — POST /research/llm/async → poll
+// /research/llm/status/{id}. Used for the primary LLM response;
+// /research/chat is the sync path for follow-ups.
 // ============================================================================
 
 // Helper: synchronous POST/GET using QEventLoop on a background thread.
-// This is required for endpoints behind Cloudflare (like api.fincept.in)
-// because QNetworkAccessManager needs an event loop to process TLS/SSL
-// negotiation and HTTP redirects. The waitForReadyRead() approach used by
-// blocking_post() works for some servers but fails for Cloudflare-protected ones.
+// QNetworkAccessManager needs a running event loop to process TLS handshakes
+// and HTTP redirects for some hosts (notably anything behind Cloudflare). The
+// waitForReadyRead() approach used by blocking_post() works for plain HTTP
+// servers but stalls against those.
 LlmService::HttpResult LlmService::eventloop_request(const QString& method, const QString& url, const QByteArray& body,
                                                      const QMap<QString, QString>& headers, int timeout_ms) {
     HttpResult result;

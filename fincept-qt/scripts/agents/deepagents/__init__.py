@@ -9,7 +9,6 @@ from models import create_model, extract_text, supports_tool_calling, TOOL_CALLI
 from backends import get_backend
 from subagents import get_subagents_for_type, list_agent_types, list_subagent_names
 from agent import create_agent, build_fincept_context, FinceptContext
-from orchestrator import FinceptOrchestrator
 
 __all__ = [
     "create_model",
@@ -23,5 +22,4 @@ __all__ = [
     "create_agent",
     "build_fincept_context",
     "FinceptContext",
-    "FinceptOrchestrator",
 ]

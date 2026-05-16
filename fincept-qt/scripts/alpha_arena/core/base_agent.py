@@ -502,11 +502,6 @@ class LLMTradingAgent(BaseTradingAgent):
                     api_key=self.api_key,
                     base_url="https://openrouter.ai/api/v1",
                 )
-            elif self.provider == "fincept":
-                # Fincept uses a custom API, not OpenAI-compatible
-                # We'll handle this specially in make_decision
-                logger.info("Fincept provider will use custom API handler")
-                return "fincept_custom"  # Special marker
             elif self.provider == "ollama":
                 # Local Ollama instance
                 model = OpenAIChat(
@@ -679,10 +674,6 @@ class LLMTradingAgent(BaseTradingAgent):
                 f"Agent '{self.name}' has no LLM configured and cannot make real trading decisions. "
                 f"Reason: {init_error}. Configure a valid API key and LLM provider."
             )
-
-        # Handle Fincept custom API
-        if self._llm == "fincept_custom":
-            return await self._fincept_decision(prompt, market_data, cycle_number)
 
         try:
             logger.info(f"Agent '{self.name}' requesting decision from {self.provider}:{self.model_id}...")
@@ -1079,88 +1070,6 @@ Respond ONLY with the JSON object, nothing else.
             result["reasoning"] = reason_match.group(1)
 
         return result
-
-    async def _fincept_decision(
-        self,
-        prompt: str,
-        market_data: MarketData,
-        cycle_number: int,
-    ) -> ModelDecision:
-        """Make a decision using Fincept's custom LLM API."""
-        import httpx
-        import json
-
-        FINCEPT_URL = "https://api.fincept.in/research/llm"
-
-        try:
-            logger.info(f"Agent '{self.name}' calling Fincept LLM API...")
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    FINCEPT_URL,
-                    json={
-                        "prompt": prompt,
-                        "max_tokens": 1024,
-                        "temperature": self.temperature,
-                    },
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-API-Key": self.api_key or "",  # Fincept uses X-API-Key header
-                    },
-                )
-
-                if response.status_code != 200:
-                    error_msg = f"Fincept API error: {response.status_code}"
-                    logger.error(f"{error_msg} - {response.text[:200]}")
-                    return ModelDecision(
-                        competition_id="",
-                        model_name=self.name,
-                        cycle_number=cycle_number,
-                        action=TradeAction.HOLD,
-                        symbol=market_data.symbol,
-                        quantity=0,
-                        confidence=0,
-                        reasoning=f"Error: {error_msg}",
-                        price_at_decision=market_data.price,
-                    )
-
-                result = response.json()
-                # Fincept API returns: {"success": true, "data": {"response": "..."}}
-                data = result.get("data", result)
-                content = data.get("response", data.get("content", data.get("text", str(result))))
-                logger.info(f"Fincept response: {content[:200]}")
-
-                decision_data = self._parse_json_response(content)
-
-                action_str = decision_data.get("action", "hold").lower()
-                if action_str not in ["buy", "sell", "hold", "short"]:
-                    action_str = "hold"
-
-                return ModelDecision(
-                    competition_id="",
-                    model_name=self.name,
-                    cycle_number=cycle_number,
-                    action=TradeAction(action_str),
-                    symbol=decision_data.get("symbol", market_data.symbol),
-                    quantity=float(decision_data.get("quantity", 0.01)),
-                    confidence=float(decision_data.get("confidence", 0.5)),
-                    reasoning=decision_data.get("reasoning", ""),
-                    price_at_decision=market_data.price,
-                )
-
-        except Exception as e:
-            logger.error(f"Fincept API error: {e}")
-            return ModelDecision(
-                competition_id="",
-                model_name=self.name,
-                cycle_number=cycle_number,
-                action=TradeAction.HOLD,
-                symbol=market_data.symbol,
-                quantity=0,
-                confidence=0,
-                reasoning=f"Error: Fincept API - {str(e)}",
-                price_at_decision=market_data.price,
-            )
 
     async def make_polymarket_decision(
         self,

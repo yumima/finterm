@@ -8,7 +8,7 @@
 
 namespace fincept::services::maritime {
 
-/// Singleton service for Maritime Intelligence — HTTP calls to api.fincept.in/marine/
+/// Singleton service for Maritime Intelligence — HTTP calls to /marine/ on the localhost stub.
 class MaritimeService : public QObject
     , public fincept::datahub::Producer
 {
