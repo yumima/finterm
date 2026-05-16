@@ -16,6 +16,12 @@ FuturesDataService& FuturesDataService::instance() {
 }
 
 // Parse the router's standard envelope: {success, data, source, error, timestamp}.
+// Uses kRouterTimeoutMs (12s) rather than the default 30s — the router's
+// external sources respond in 2-8s when healthy, and the 30s ceiling was
+// observed to block the entire 3-worker Python pool on stuck CME / Databento
+// calls, freezing FUTURES navigation for the user (see hang investigation
+// 2026-05-16). Per-panel kFailureBackoffMs (5 min) prevents tight retry on
+// genuine outage.
 void FuturesDataService::run_router(const QStringList& args,
                                     std::function<void(bool, QJsonObject, QString)> cb) {
     python::PythonRunner::instance().run(
@@ -34,7 +40,8 @@ void FuturesDataService::run_router(const QStringList& args,
             const bool ok = obj.value("success").toBool(false);
             const QString source = obj.value("source").toString();
             cb(ok, obj, source);
-        });
+        },
+        {}, kRouterTimeoutMs);
 }
 
 static FuturesQuote parse_quote(const QJsonObject& o) {

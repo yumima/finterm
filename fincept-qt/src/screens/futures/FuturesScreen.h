@@ -47,11 +47,19 @@ class FuturesScreen : public QWidget {
   private:
     void build_header();
     void build_body();
-    void set_active_class(const QString& cls);
+    /// User-facing: handles tab-button click. Coalesces rapid clicks via
+    /// class_change_timer_ so each panel only re-fetches once when the user
+    /// lands on a class, instead of cascading async fetches per click.
+    void request_active_class(const QString& cls);
+    /// Internal: actually propagate the class change to every panel. Called
+    /// only after the debounce timer fires (or immediately on first set).
+    void apply_active_class(const QString& cls);
     void refresh_all();
     void apply_theme();
 
     QString active_class_;
+    QString pending_class_;
+    QTimer* class_change_timer_ = nullptr;
 
     // Header
     QWidget*               header_bar_  = nullptr;

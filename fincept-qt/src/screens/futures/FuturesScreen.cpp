@@ -36,11 +36,25 @@ FuturesScreen::FuturesScreen(QWidget* parent) : QWidget(parent) {
     refresh_timer_->setInterval(kFuturesRefreshIntervalMs);
     connect(refresh_timer_, &QTimer::timeout, this, &FuturesScreen::refresh_all);
 
+    // Click-debounce for the asset class tab strip. Without it, rapid clicks
+    // INDEX→RATES→ENERGY→… each fire 4 async Python fetches per panel (term
+    // structure, chart, settlements, COT) and bury the 3-worker pool. Single-
+    // shot timer that we restart on every click — only the LAST click's
+    // class survives, propagated to the panels when the user stops clicking.
+    class_change_timer_ = new QTimer(this);
+    class_change_timer_->setSingleShot(true);
+    class_change_timer_->setInterval(250); // 250 ms = "user landed on a tab"
+    connect(class_change_timer_, &QTimer::timeout, this, [this]() {
+        if (!pending_class_.isEmpty())
+            apply_active_class(pending_class_);
+    });
+
     connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
             [this](const ThemeTokens&) { apply_theme(); });
     apply_theme();
 
-    set_active_class("INDEX");
+    // First class loads immediately — no debounce for the initial paint.
+    apply_active_class("INDEX");
 }
 
 void FuturesScreen::showEvent(QShowEvent* event) {
@@ -94,7 +108,7 @@ void FuturesScreen::build_header() {
         btn->setProperty("asset_class", cls);
         btn->setFixedHeight(26);
         btn->setMinimumWidth(60);
-        connect(btn, &QPushButton::clicked, this, [this, cls]() { set_active_class(cls); });
+        connect(btn, &QPushButton::clicked, this, [this, cls]() { request_active_class(cls); });
         class_btns_.push_back(btn);
         h->addWidget(btn);
     }
@@ -190,7 +204,36 @@ void FuturesScreen::build_body() {
     });
 }
 
-void FuturesScreen::set_active_class(const QString& cls) {
+void FuturesScreen::request_active_class(const QString& cls) {
+    // Always reflect the latest button click in the tab visual state so the
+    // user gets immediate feedback (active tab highlights) even before the
+    // debounce fires. The actual panel propagation is deferred.
+    pending_class_ = cls;
+    for (auto* b : class_btns_) {
+        const bool active = b->property("asset_class").toString() == cls;
+        b->setStyleSheet(QString(
+            "QPushButton { background:%1; color:%2; border:1px solid %3;"
+            "  padding:0 10px; font-weight:600; letter-spacing:0.5px;"
+            "  font-family:'%4'; font-size:%5px; }"
+            "QPushButton:hover { background:%6; }")
+            .arg(active ? colors::AMBER()   : QString("transparent"))
+            .arg(active ? colors::BG_BASE() : colors::TEXT_PRIMARY())
+            .arg(active ? colors::AMBER_DIM(): colors::BORDER_DIM())
+            .arg(fonts::DATA_FAMILY())
+            .arg(fonts::font_px(-2))
+            .arg(colors::BG_RAISED()));
+    }
+    // No-op short-circuit: if the user clicks the already-active class there
+    // is nothing to refetch. Cancels any pending debounce that targets the
+    // same class.
+    if (cls == active_class_) {
+        if (class_change_timer_) class_change_timer_->stop();
+        return;
+    }
+    if (class_change_timer_) class_change_timer_->start();
+}
+
+void FuturesScreen::apply_active_class(const QString& cls) {
     active_class_ = cls;
 
     // Update tab visual state
@@ -242,9 +285,11 @@ void FuturesScreen::apply_theme() {
         header_bar_->setStyleSheet(QString("#futuresHeader { background:%1; border-bottom:1px solid %2; }")
                                        .arg(colors::BG_SURFACE())
                                        .arg(colors::BORDER_DIM()));
-    // Re-apply active class styling
+    // Re-apply active class styling on theme change. Use apply_active_class()
+    // (not request_active_class) so the theme reload doesn't go through the
+    // debounce path — theme changes need to repaint immediately.
     if (!active_class_.isEmpty())
-        set_active_class(active_class_);
+        apply_active_class(active_class_);
 }
 
 } // namespace fincept::screens::futures

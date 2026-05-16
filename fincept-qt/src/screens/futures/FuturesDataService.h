@@ -73,6 +73,15 @@ class FuturesDataService : public QObject {
     void fetch_spread(const QString& leg1, const QString& leg2, SpreadCallback cb);
     void fetch_china_main(const QString& exchange, ChinaListCallback cb);
 
+    /// Network-call ceiling for any futures_router.py invocation. Shorter
+    /// than PythonRunner's 30s default because the router's external sources
+    /// (CME public, Databento, akshare) usually respond in 2-8s when healthy.
+    /// 30s just means a failing source holds a Python worker pool slot for
+    /// half a minute and blocks other panels (yfinance batch, CFTC). Pairs
+    /// with the per-panel kFailureBackoffMs (5 min) so a timeout doesn't
+    /// immediately retry.
+    static constexpr int kRouterTimeoutMs = 12'000;
+
   private:
     FuturesDataService() = default;
 
