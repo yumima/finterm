@@ -96,9 +96,19 @@ Result<void> Database::rollback() {
 
 Result<void> Database::apply_pragmas() {
     const char* pragmas[] = {
-        "PRAGMA journal_mode = WAL",  "PRAGMA synchronous = NORMAL",  "PRAGMA cache_size = -20000",
-        "PRAGMA temp_store = MEMORY", "PRAGMA mmap_size = 268435456", "PRAGMA foreign_keys = ON",
+        "PRAGMA journal_mode = WAL",      "PRAGMA synchronous = NORMAL",
+        "PRAGMA cache_size = -20000",     "PRAGMA temp_store = MEMORY",
+        "PRAGMA mmap_size = 268435456",   "PRAGMA foreign_keys = ON",
         "PRAGMA busy_timeout = 5000",
+        // Bound WAL growth. The default wal_autocheckpoint (1000 pages ≈
+        // 4 MB) can drift much larger if any reader holds a connection
+        // open across the checkpoint, which is exactly what happens here
+        // — long-lived background pollers (trading, market data) keep
+        // reader connections open continuously. We checkpoint more often
+        // and hard-cap the on-disk WAL so a multi-day session can't
+        // accumulate GBs of WAL behind a stalled reader.
+        "PRAGMA wal_autocheckpoint = 400",      // checkpoint every ~1.5 MB
+        "PRAGMA journal_size_limit = 67108864", // truncate WAL to 64 MB after checkpoint
     };
     for (auto* p : pragmas) {
         auto r = exec(p);
@@ -106,7 +116,8 @@ Result<void> Database::apply_pragmas() {
             LOG_WARN("DB", QString("PRAGMA failed: %1 — %2").arg(p, QString::fromStdString(r.error())));
         }
     }
-    LOG_INFO("DB", "PRAGMAs applied (WAL, foreign_keys, cache_size=20MB)");
+    LOG_INFO("DB", "PRAGMAs applied (WAL, foreign_keys, cache_size=20MB, "
+                   "wal_autocheckpoint=400, journal_size_limit=64MB)");
     return Result<void>::ok();
 }
 

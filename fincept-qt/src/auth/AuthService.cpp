@@ -2,6 +2,7 @@
 #include "auth/AuthService.h"
 
 #include "core/config/AppPaths.h"
+#include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "storage/sqlite/Database.h"
 
@@ -265,6 +266,11 @@ void AuthService::register_local_user(const QString& username, const QString& pi
 }
 
 void AuthService::login_local(const QString& username, const QString& pin, Callback cb) {
+    // Instrumentation only — login_local runs one indexed SELECT and a single
+    // SHA-256 verify, sub-ms in practice. Wrapped here so any future slow
+    // path (FS-level lock contention, AV intercept on auth.db) surfaces in
+    // the perf log instead of silently delaying UNLOCK clicks.
+    FT_TIME_SLOT("AuthService.login_local", 50);
     const QString u = username.toLower().trimmed();
     QSqlQuery q(db_);
     q.prepare("SELECT username, email, password_hash, api_key "

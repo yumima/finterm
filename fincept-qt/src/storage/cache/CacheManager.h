@@ -27,6 +27,11 @@ class CacheManager : public QObject {
     /// Single-query variant of get(): std::nullopt on miss, value on hit. Prefer this over has()+get()
     /// — those two-round-trips duplicate work since get() already checks expiry.
     std::optional<QString> try_get(const QString& key) const;
+    /// Return every unexpired key/value pair whose key begins with `prefix`.
+    /// Uses the same sargable range-query trick as remove_prefix() (no LIKE
+    /// full-table scan). Intended for cold-start hydration where a service
+    /// wants to reload its previously-cached working set on launch.
+    QHash<QString, QString> get_prefix(const QString& prefix) const;
     bool has(const QString& key) const;
     void remove(const QString& key);
     void remove_prefix(const QString& prefix);

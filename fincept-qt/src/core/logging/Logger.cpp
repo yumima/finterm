@@ -18,6 +18,15 @@ namespace {
 constexpr qint64 kRotateBytes = 5 * 1024 * 1024; // 5 MB
 constexpr int kRotateKeep = 3;
 
+// Batched-flush thresholds. Per-line flush() on Windows triggers
+// FlushFileBuffers which is fsync-equivalent and runs 10–50 ms under AV
+// scans, stalling whichever thread emitted the log line (often the GUI
+// thread via the Qt message handler). We flush when *either* threshold is
+// reached, and always for Error/Fatal lines so anything related to a crash
+// reaches disk before the process can die.
+constexpr qint64 kFlushBytesThreshold = 4 * 1024; // 4 KB — typical disk page
+constexpr qint64 kFlushIntervalMs = 500;          // half a second worth of buffered logs
+
 // P1.5 + P1.6 — date + local time + offset suffix.
 // Example: 2026-04-18 03:12:08.123+05:30
 QString format_timestamp() {
@@ -168,6 +177,10 @@ void Logger::rotate_if_needed_locked() {
     log_file_.setFileName(base);
     if (log_file_.open(QIODevice::WriteOnly | QIODevice::Append)) {
         bytes_written_ = 0;
+        // Fresh file — no unflushed bytes, and reset the time gate so the
+        // first line after rotation doesn't trigger a redundant flush.
+        bytes_since_flush_ = 0;
+        last_flush_ms_ = QDateTime::currentMSecsSinceEpoch();
     } else {
         qWarning() << "[Logger] rotate: reopen failed for" << base
                    << "error:" << log_file_.errorString();
@@ -178,6 +191,7 @@ void Logger::flush_and_close() {
     QMutexLocker lock(&mutex_);
     if (log_file_.isOpen()) {
         log_file_.flush();
+        bytes_since_flush_ = 0;
         log_file_.close();
     }
 }
@@ -225,7 +239,23 @@ void Logger::write(LogLevel level, const QString& tag, const QString& msg) {
     const qint64 n = log_file_.write(bytes);
     if (n == bytes.size()) {
         bytes_written_ += n;
-        log_file_.flush(); // P0.3 — survive crash/kill
+        bytes_since_flush_ += n;
+
+        // Batched flush. We flush eagerly for high-severity lines so a
+        // crash investigation has the precursor on disk, and we flush
+        // whenever enough bytes have accumulated OR enough time has
+        // passed since the last flush — so an idle terminal still
+        // commits its buffered tail in a bounded window.
+        const bool urgent = (level == LogLevel::Error || level == LogLevel::Fatal);
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const bool size_reached = bytes_since_flush_ >= kFlushBytesThreshold;
+        const bool time_reached = last_flush_ms_ == 0 ||
+                                  (now - last_flush_ms_) >= kFlushIntervalMs;
+        if (urgent || size_reached || time_reached) {
+            log_file_.flush();
+            bytes_since_flush_ = 0;
+            last_flush_ms_ = now;
+        }
         rotate_if_needed_locked();
     } else if (!degraded_.load(std::memory_order_relaxed)) {
         // P1.9 — warn at most once per session (via stderr directly, not

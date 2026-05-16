@@ -56,6 +56,13 @@ class Logger {
     QHash<QString, LogLevel> tag_levels_;
     QFile log_file_;
     qint64 bytes_written_{0};
+    // Batched-flush bookkeeping. The earlier per-line flush() called
+    // FlushFileBuffers on Windows (fsync-equivalent), which stalls 10–50 ms
+    // under AV scans. We instead flush when a size or time threshold is
+    // reached, and always on Error/Fatal levels and on shutdown. See the
+    // implementation in Logger::write().
+    qint64 bytes_since_flush_{0};
+    qint64 last_flush_ms_{0};
     QMutex mutex_;
 };
 

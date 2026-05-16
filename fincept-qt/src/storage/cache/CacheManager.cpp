@@ -121,6 +121,28 @@ std::optional<QString> CacheManager::try_get(const QString& key) const {
     return v.toString();
 }
 
+QHash<QString, QString> CacheManager::get_prefix(const QString& prefix) const {
+    QHash<QString, QString> out;
+    if (prefix.isEmpty())
+        return out;
+    auto& cdb = CacheDatabase::instance();
+    if (!cdb.is_open())
+        return out;
+
+    const QString upper = prefix_upper_bound(prefix);
+    auto r = cdb.execute(
+        "SELECT key, value FROM unified_cache "
+        "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
+        {prefix, upper});
+    if (r.is_err())
+        return out;
+
+    QSqlQuery q = std::move(r.value());
+    while (q.next())
+        out.insert(q.value(0).toString(), q.value(1).toString());
+    return out;
+}
+
 bool CacheManager::has(const QString& key) const {
     if (key.isEmpty())
         return false;
