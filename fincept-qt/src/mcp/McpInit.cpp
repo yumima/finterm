@@ -13,6 +13,7 @@
 #include "mcp/tools/GeopoliticsTools.h"
 #include "mcp/tools/GovDataTools.h"
 #include "mcp/tools/MetaTools.h"
+#include "mcp/tools/QuantLabTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DataHubTools.h"
 #include "mcp/tools/DataSourcesTools.h"
@@ -116,6 +117,9 @@ void initialize_all_tools() {
 
     // gov_data — CKAN providers, datasets, resources for many countries
     provider.register_tools(tools::get_gov_data_tools());
+
+    // ai_quant_lab — factor models, backtests, attribution
+    provider.register_tools(tools::get_quant_lab_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`15ba9828`](https://github.com/yumima/finterm/commit/15ba9828) mcp(tools): GovDataTools — CKAN providers, datasets, resources
 - [`3ab06933`](https://github.com/yumima/finterm/commit/3ab06933) mcp(tools): GeopoliticsTools — conflict events, sanctions, maritime
 - [`a3332c7e`](https://github.com/yumima/finterm/commit/a3332c7e) mcp(tools): EquityResearchTools — fundamentals, sentiment, ratings
 - [`e934d2a4`](https://github.com/yumima/finterm/commit/e934d2a4) mcp(tools): DBnomicsTools — economic data (providers/datasets/series)
