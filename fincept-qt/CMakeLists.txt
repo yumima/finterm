@@ -784,6 +784,7 @@ set(MCP_SOURCES
     src/mcp/tools/GovDataTools.cpp
     src/mcp/tools/MetaTools.cpp
     src/mcp/tools/QuantLabTools.cpp
+    src/mcp/tools/SurfaceAnalyticsTools.cpp
     src/mcp/SchemaValidator.cpp
 )
 

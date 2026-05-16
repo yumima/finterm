@@ -14,6 +14,7 @@
 #include "mcp/tools/GovDataTools.h"
 #include "mcp/tools/MetaTools.h"
 #include "mcp/tools/QuantLabTools.h"
+#include "mcp/tools/SurfaceAnalyticsTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DataHubTools.h"
 #include "mcp/tools/DataSourcesTools.h"
@@ -120,6 +121,9 @@ void initialize_all_tools() {
 
     // ai_quant_lab — factor models, backtests, attribution
     provider.register_tools(tools::get_quant_lab_tools());
+
+    // surface analytics — options vol surface (Databento-backed)
+    provider.register_tools(tools::get_surface_analytics_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 
