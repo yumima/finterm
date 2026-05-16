@@ -47,28 +47,37 @@ QString format_article_html(const QString& plain) {
     const QStringList paras = escaped.split(QStringLiteral("\n\n"),
                                             Qt::SkipEmptyParts);
     QString html;
-    html.reserve(escaped.size() + paras.size() * 96);
+    html.reserve(escaped.size() + paras.size() * 64);
+
+    // QLabel's rich-text renderer is finicky:
+    //   - <p> with `text-indent` is dropped (first-line indent CSS doesn't
+    //     stick on QLabel; works in QTextEdit/QTextBrowser).
+    //   - <p> with `margin-bottom` is dropped too — Qt collapses <p> blocks
+    //     against the default margin and ignores per-block margin overrides.
+    // So we side-step <p> entirely and lay paragraphs out with <br>:
+    //   - Two <br>s between paragraphs → one blank line (at line-height
+    //     170%, that's ~27px — a clear paragraph gap).
+    //   - Leading non-breaking spaces on every non-first paragraph give the
+    //     first-line indent; they sit on the opening line and disappear
+    //     after wrap, exactly mimicking text-indent.
+    //   - line-height comes from the outer <div>; padding-right keeps the
+    //     last glyph off the splitter handle when the middle pane is narrow.
     html += QStringLiteral(
         "<div style=\"line-height:170%; padding-right:10px;\">");
 
-    // QLabel's rich-text renderer ignores the `text-indent` CSS property on
-    // <p> elements (known Qt limitation — text-indent IS in the supported
-    // subset for QTextDocument but the QLabel rendering path drops it).
-    // Workaround: prepend non-breaking spaces to the paragraph content. They
-    // sit on the first line and disappear after wrap, which is exactly the
-    // first-line-indent behaviour we want. 4 nbsps ≈ 4 chars at Consolas 12pt
-    // = ~1.6em of visual indent. First paragraph stays flush left per the
-    // typographic convention (opening paragraph never indents).
     static const QLatin1String kIndent("&#160;&#160;&#160;&#160;");
+    static const QLatin1String kParaSep("<br><br>");
+
     bool first = true;
     for (QString p : paras) {
         p = p.trimmed();
         if (p.isEmpty()) continue;
         p.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
-        html += QStringLiteral("<p style=\"margin:0 0 0.8em 0;\">");
-        if (!first) html += kIndent;
+        if (!first) {
+            html += kParaSep;
+            html += kIndent;
+        }
         html += p;
-        html += QStringLiteral("</p>");
         first = false;
     }
     html += QStringLiteral("</div>");

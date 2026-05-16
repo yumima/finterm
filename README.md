@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9357ccd2`](https://github.com/yumima/finterm/commit/9357ccd2) screens(news): use nbsp for paragraph indent (QLabel ignores text-indent)
 - [`24054702`](https://github.com/yumima/finterm/commit/24054702) screens(news): typographic format for inline article body
 - [`cb338c7e`](https://github.com/yumima/finterm/commit/cb338c7e) screens(news): self-review fixes — threat/impact race + meta-row bg
 - [`4a6e67bf`](https://github.com/yumima/finterm/commit/4a6e67bf) screens(news): match body/summary/title to WIRE-feed headline style
