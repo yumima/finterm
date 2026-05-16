@@ -177,14 +177,18 @@ void AccountDataStream::async_fetch_quote() {
     const QString symbol = selected_symbol_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbol]() {
+    // Load credentials on the calling (main) thread. QSqlDatabase is bound
+    // to the thread that opened it; calling SecureStorage::retrieve from a
+    // QtConcurrent worker corrupts SQLite memory and crashes.
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) {
+        quote_fetching_ = false;
+        return;
+    }
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbol, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) {
-            if (self) self->quote_fetching_ = false;
-            return;
-        }
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) {
             if (self) self->quote_fetching_ = false;
             return;
         }
@@ -200,7 +204,7 @@ void AccountDataStream::async_fetch_quote() {
         const auto quote = result.data->first();
         QMetaObject::invokeMethod(self, [self, acct_id, symbol, quote]() {
             if (!self) return;
-            self->quote_cache_.put(symbol, quote);
+            self->quote_cache_[symbol] = quote;
             emit self->quote_updated(acct_id, symbol, quote);
         }, Qt::QueuedConnection);
     });
@@ -211,11 +215,12 @@ void AccountDataStream::async_fetch_positions() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_positions(creds);
         if (!result.success || !result.data) {
             if (result.error.startsWith("[TOKEN_EXPIRED]") && self)
@@ -237,11 +242,12 @@ void AccountDataStream::async_fetch_holdings() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_holdings(creds);
         if (!result.success || !result.data) {
             if (result.error.startsWith("[TOKEN_EXPIRED]") && self)
@@ -263,11 +269,12 @@ void AccountDataStream::async_fetch_orders() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_orders(creds);
         if (!result.success || !result.data) {
             if (result.error.startsWith("[TOKEN_EXPIRED]") && self)
@@ -289,11 +296,12 @@ void AccountDataStream::async_fetch_funds() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_funds(creds);
         if (!result.success || !result.data) {
             if (result.error.startsWith("[TOKEN_EXPIRED]") && self)
@@ -318,17 +326,18 @@ void AccountDataStream::async_fetch_watchlist_quotes() {
     const QStringList symbols = watchlist_symbols_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbols]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbols, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_quotes(creds, symbols.toVector());
         if (!result.success || !result.data) return;
         QMetaObject::invokeMethod(self, [self, acct_id, data = *result.data]() {
             if (!self) return;
             for (const auto& q : data)
-                self->quote_cache_.put(q.symbol, q);
+                self->quote_cache_[q.symbol] = q;
             emit self->watchlist_updated(acct_id, data);
         }, Qt::QueuedConnection);
     });
@@ -343,14 +352,15 @@ void AccountDataStream::fetch_candles(const QString& symbol, const QString& time
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbol, timeframe]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) {
+        candles_fetching_ = false;
+        return;
+    }
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbol, timeframe, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) {
-            if (self) self->candles_fetching_ = false;
-            return;
-        }
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) {
             if (self) self->candles_fetching_ = false;
             return;
         }
@@ -391,11 +401,12 @@ void AccountDataStream::fetch_orderbook(const QString& symbol) {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbol]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbol, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
 
         // Try L2 depth from historical quotes
         const QString today = QDate::currentDate().toString("yyyy-MM-dd");
@@ -453,11 +464,12 @@ void AccountDataStream::fetch_time_sales(const QString& symbol) {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbol]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbol, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         const QString today = QDate::currentDate().toString("yyyy-MM-dd");
         auto result = broker->get_historical_trades_single(creds, symbol, today + "T00:00:00Z", "", 500);
         if (!result.success || !result.data) return;
@@ -473,11 +485,12 @@ void AccountDataStream::fetch_latest_trade(const QString& symbol) {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid, symbol]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+    if (creds.api_key.isEmpty()) return;
+
+    (void)QtConcurrent::run([self, acct_id, bid, symbol, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
-        if (creds.api_key.isEmpty()) return;
         auto result = broker->get_latest_trade(creds, symbol);
         if (!result.success || !result.data) return;
         QMetaObject::invokeMethod(self, [self, acct_id, data = *result.data]() {
@@ -492,10 +505,11 @@ void AccountDataStream::fetch_calendar() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
         const QString start = QDate::currentDate().addDays(-5).toString("yyyy-MM-dd");
         const QString end = QDate::currentDate().addDays(30).toString("yyyy-MM-dd");
         auto result = broker->get_calendar(creds, start, end);
@@ -512,10 +526,11 @@ void AccountDataStream::fetch_clock() {
     const QString bid = broker_id_;
     QPointer<AccountDataStream> self = this;
 
-    (void)QtConcurrent::run([self, acct_id, bid]() {
+    auto creds = AccountManager::instance().load_credentials(acct_id);
+
+    (void)QtConcurrent::run([self, acct_id, bid, creds]() {
         auto* broker = BrokerRegistry::instance().get(bid);
         if (!broker) return;
-        auto creds = AccountManager::instance().load_credentials(acct_id);
         auto result = broker->get_clock(creds);
         if (!result.success || !result.data) return;
         QMetaObject::invokeMethod(self, [self, acct_id, data = *result.data]() {
