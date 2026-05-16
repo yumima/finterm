@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`fa441467`](https://github.com/yumima/finterm/commit/fa441467) screens(news): match article body to #newsDetailHeadline style
 - [`0eada183`](https://github.com/yumima/finterm/commit/0eada183) screens(news): inline article body in detail panel + wider default split
 - [`da4185b1`](https://github.com/yumima/finterm/commit/da4185b1) **fix(relmap+dashboard+heatmap):** filter stale relmap data; align panel fonts
 - [`5d75906a`](https://github.com/yumima/finterm/commit/5d75906a) screens(futures+video): widen rails 1:2:1, scale panel fonts; seed Bloomberg

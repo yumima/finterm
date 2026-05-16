@@ -147,11 +147,15 @@ QWidget* NewsDetailPanel::build_content_view() {
     });
     layout->addWidget(headline_label_);
 
-    // Badge row
-    auto* badge_row = new QWidget(content);
-    auto* badge_layout = new QHBoxLayout(badge_row);
-    badge_layout->setContentsMargins(0, 0, 0, 0);
-    badge_layout->setSpacing(6);
+    // Meta row — badges + source/time + impact, all on a single line.
+    //   [BREAKING] [NEUTRAL] [MAJOR] [ENERGY]   CNBC 2s   Impact: HIGH
+    // Previously these lived on three separate rows (badges, source+time,
+    // impact). Collapsing them saves two rows of vertical space above the
+    // summary/article body and groups all the article metadata visually.
+    auto* meta_row = new QWidget(content);
+    auto* meta_layout = new QHBoxLayout(meta_row);
+    meta_layout->setContentsMargins(0, 0, 0, 0);
+    meta_layout->setSpacing(8);
 
     priority_badge_ = new QLabel(content);
     priority_badge_->setObjectName("newsDetailPriorityBadge");
@@ -161,38 +165,30 @@ QWidget* NewsDetailPanel::build_content_view() {
     tier_badge_->setObjectName("newsDetailTierBadge");
     category_label_ = new QLabel(content);
     category_label_->setObjectName("newsDetailCategory");
-
-    badge_layout->addWidget(priority_badge_);
-    badge_layout->addWidget(sentiment_badge_);
-    badge_layout->addWidget(tier_badge_);
-    badge_layout->addWidget(category_label_);
-    badge_layout->addStretch();
-    layout->addWidget(badge_row);
-
-    // Source + time
-    auto* source_row = new QWidget(content);
-    auto* source_layout = new QHBoxLayout(source_row);
-    source_layout->setContentsMargins(0, 0, 0, 0);
-    source_layout->setSpacing(8);
     source_label_ = new QLabel(content);
     source_label_->setObjectName("newsDetailSource");
     time_label_ = new QLabel(content);
     time_label_->setObjectName("newsDetailTime");
-    source_layout->addWidget(source_label_);
-    source_layout->addWidget(time_label_);
-    source_layout->addStretch();
-    layout->addWidget(source_row);
+    impact_label_ = new QLabel(content);
+    impact_label_->setObjectName("newsDetailImpact");
+
+    meta_layout->addWidget(priority_badge_);
+    meta_layout->addWidget(sentiment_badge_);
+    meta_layout->addWidget(tier_badge_);
+    meta_layout->addWidget(category_label_);
+    meta_layout->addSpacing(6);
+    meta_layout->addWidget(source_label_);
+    meta_layout->addWidget(time_label_);
+    meta_layout->addSpacing(6);
+    meta_layout->addWidget(impact_label_);
+    meta_layout->addStretch();
+    layout->addWidget(meta_row);
 
     // Summary
     summary_label_ = new QLabel(content);
     summary_label_->setObjectName("newsDetailSummary");
     summary_label_->setWordWrap(true);
     layout->addWidget(summary_label_);
-
-    // Impact
-    impact_label_ = new QLabel(content);
-    impact_label_->setObjectName("newsDetailImpact");
-    layout->addWidget(impact_label_);
 
     // Tickers
     tickers_label_ = new QLabel(content);
