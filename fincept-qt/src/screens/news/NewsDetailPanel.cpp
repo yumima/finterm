@@ -323,8 +323,12 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_layout->setContentsMargins(0, 6, 0, 4);
     body_layout->setSpacing(4);
 
+    // Distinct objectName from #newsDetailSectionTitle so the ARTICLE header
+    // can match the WIRE-feed cream (#f0e8d0) the user pointed at as the
+    // reference color, without disturbing the amber section-titles used by
+    // AI Analysis / Key Points / Monitor / Related / Entities / Infra.
     body_title_ = new QLabel("ARTICLE", body_section_);
-    body_title_->setObjectName("newsDetailSectionTitle");
+    body_title_->setObjectName("newsDetailBodyTitle");
     body_layout->addWidget(body_title_);
 
     body_status_ = new QLabel("Loading article…", body_section_);

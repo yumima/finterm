@@ -199,30 +199,33 @@ QString news_screen_styles() {
                "#newsDetailCategory { color: %7; font-size: 11px; background: transparent; }"
                "#newsDetailSource { color: %14; font-size: 12px; font-weight: 700; background: transparent; }"
                "#newsDetailTime { color: %6; font-size: 11px; background: transparent; }"
-               /* Summary block — same headline typography (color %4, 15px, 700) so it
-                  reads as a stacked subhead below the title + meta row. Background is
-                  pinned to %1 (BG_BASE = black) per the user's request, which makes
-                  the summary visually distinct from the headline / body that both ride
-                  on the panel's BG_SURFACE. */
-               "#newsDetailSummary { color: %4; font-size: 15px; font-weight: 700; line-height: 1.4;"
+               /* Summary block — matches the WIRE-feed headline style the user pointed
+                  at as the reference: cream #f0e8d0 (kNewsTextPrimary from
+                  NewsFeedDelegate.cpp), 12pt, regular weight (not bold). BG_BASE
+                  black background per the user's request — visually distinct from
+                  the headline / body which sit on the panel's BG_SURFACE. */
+               "#newsDetailSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4;"
                "  background: %1; padding: 4px 6px; }"
                "#newsDetailImpact { color: %16; font-size: 11px; background: transparent; }"
                "#newsDetailTickers { color: %16; font-size: 11px; font-weight: 700; background: transparent; }"
                "#newsDetailSep { background: %3; }"
-               /* Article body — extracted by NewsService::extract_article_body. Mirrors
-                  #newsDetailHeadline for color/size/weight/background so the article
-                  reads as a continuation of the headline pane.
+               /* Article body extracted by NewsService::extract_article_body. The
+                  target style is the WIRE-mode feed headline rendered by
+                  NewsFeedDelegate (kNewsTextPrimary cream #f0e8d0, point-size 12,
+                  regular weight) — not the middle-pane #newsDetailHeadline.
 
-                  #newsBodySection is the wrapper QWidget that contains the title +
-                  status + body labels. WITHOUT this rule it falls through to the
-                  global `QWidget { background-color: BG_BASE }` default, which is the
-                  near-black `%1` shade — that's what produced the "bold white on black
-                  box" the user flagged. Making the wrapper transparent lets the panel's
-                  BG_SURFACE bleed through, same as #newsDetailContent does for the
-                  headline above. */
+                  Title row keeps bold to act as a section header; status and body
+                  drop to regular weight so paragraphs read cleanly.
+
+                  #newsBodySection makes the wrapper QWidget transparent so the
+                  panel's BG_SURFACE shows through (without this it falls back to
+                  the global QWidget { background-color: BG_BASE } and produces a
+                  black box behind the body). */
                "#newsBodySection { background: transparent; }"
-               "#newsDetailBody { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
-               "#newsDetailBodyStatus { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
+               "#newsDetailBodyTitle { color: #f0e8d0; font-size: 12pt; font-weight: 700;"
+               "  background: transparent; padding: 2px 0; }"
+               "#newsDetailBody { color: #f0e8d0; font-size: 12pt; background: transparent; }"
+               "#newsDetailBodyStatus { color: #f0e8d0; font-size: 12pt; background: transparent; }"
                "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
                "  letter-spacing: 0.5px; background: transparent; padding: 2px 0; "
                "  border-bottom: 1px solid %3; }"
