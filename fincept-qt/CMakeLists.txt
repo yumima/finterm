@@ -778,6 +778,10 @@ set(MCP_SOURCES
     src/mcp/tools/DataHubTools.cpp
     src/mcp/tools/ReportBuilderTools.cpp
     src/mcp/tools/AgenticMemoryTools.cpp
+    src/mcp/tools/AgentsTools.cpp
+    src/mcp/tools/AgentsTools_Discovery.cpp
+    src/mcp/tools/AgentsTools_Execution.cpp
+    src/mcp/tools/AgentsTools_Repos.cpp
     src/mcp/tools/DBnomicsTools.cpp
     src/mcp/tools/EquityResearchTools.cpp
     src/mcp/tools/GeopoliticsTools.cpp

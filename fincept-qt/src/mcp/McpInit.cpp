@@ -6,6 +6,7 @@
 #include "mcp/McpProvider.h"
 #include "mcp/McpService.h"
 #include "mcp/tools/AgenticMemoryTools.h"
+#include "mcp/tools/AgentsTools.h"
 #include "mcp/tools/AiChatTools.h"
 #include "mcp/tools/AltInvestmentsTools.h"
 #include "mcp/tools/DBnomicsTools.h"
@@ -124,6 +125,9 @@ void initialize_all_tools() {
 
     // surface analytics — options vol surface (Databento-backed)
     provider.register_tools(tools::get_surface_analytics_tools());
+
+    // agents — agent / team / workflow / planner / memory CRUD + execution
+    provider.register_tools(tools::get_agents_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 
