@@ -3,6 +3,15 @@
 #include "mcp/McpProvider.h"
 
 #include "core/logging/Logger.h"
+#include "mcp/SchemaValidator.h"
+
+#include <QApplication>
+#include <QMetaObject>
+#include <QPromise>
+#include <QTimer>
+
+#include <atomic>
+#include <memory>
 
 namespace fincept::mcp {
 
@@ -109,33 +118,166 @@ bool McpProvider::has_tool(const QString& name) const {
 // ============================================================================
 
 ToolResult McpProvider::call_tool(const QString& name, const QJsonObject& args) {
-    ToolHandler handler;
+    // Sync entry. If the tool is async we still want to give legacy callers
+    // (LlmService, agent tooling, workflow nodes) a blocking ToolResult, so
+    // we dispatch via call_tool_async and wait. Every existing call site is
+    // already on a worker thread so blocking here is safe.
+    auto future = call_tool_async(name, args);
+    future.waitForFinished();
+    if (future.resultCount() == 0)
+        return ToolResult::fail("Tool '" + name + "' produced no result");
+    return future.result();
+}
+
+QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJsonObject& args, ToolContext ctx) {
+    ToolHandler sync_handler;
+    AsyncToolHandler async_handler;
+    ToolSchema schema;
+    int default_timeout_ms = 30000;
+    AuthLevel auth_required = AuthLevel::None;
+    bool is_destructive = false;
+
+    auto fail_now = [](const QString& msg) {
+        QPromise<ToolResult> p;
+        p.start();
+        p.addResult(ToolResult::fail(msg));
+        p.finish();
+        return p.future();
+    };
 
     {
         QMutexLocker lock(&mutex_);
 
         if (!tools_.contains(name))
-            return ToolResult::fail("Tool not found: " + name);
-
+            return fail_now("Tool not found: " + name);
         if (disabled_tools_.contains(name))
-            return ToolResult::fail("Tool is disabled: " + name);
+            return fail_now("Tool is disabled: " + name);
 
-        handler = tools_[name].handler;
+        const auto& def = tools_[name];
+        sync_handler = def.handler;
+        async_handler = def.async_handler;
+        schema = def.input_schema;
+        default_timeout_ms = def.default_timeout_ms;
+        auth_required = def.auth_required;
+        is_destructive = def.is_destructive;
+
+        if (!async_handler && !sync_handler)
+            return fail_now("Tool '" + name + "' has no handler");
     }
 
-    // Normalize: handlers expect a JSON object, never null/array
-    const QJsonObject& safe_args = args;
+    // Authorization gate. The app-layer hook (installed via set_auth_checker)
+    // handles the user-visible side. Without a checker we fail closed for
+    // Verified+; lesser levels pass with an advisory log.
+    if (auth_required != AuthLevel::None || is_destructive) {
+        AuthChecker checker;
+        {
+            QMutexLocker lock(&mutex_);
+            checker = auth_checker_;
+        }
+        if (checker) {
+            if (!checker(auth_required, is_destructive)) {
+                LOG_WARN(TAG, QString("Tool '%1' blocked by auth checker (required=%2, destructive=%3)")
+                                  .arg(name, auth_level_str(auth_required))
+                                  .arg(is_destructive ? "true" : "false"));
+                return fail_now(
+                    QString("Tool '%1' requires user authorization").arg(name));
+            }
+        } else if (auth_required >= AuthLevel::Verified) {
+            LOG_WARN(TAG, QString("Tool '%1' blocked: no AuthChecker installed (required=%2)")
+                              .arg(name, auth_level_str(auth_required)));
+            return fail_now("Tool requires confirmation but no authorisation hook is installed");
+        } else if (is_destructive) {
+            LOG_INFO(TAG,
+                     QString("Tool '%1' is destructive (advisory; install McpProvider::set_auth_checker to gate)")
+                         .arg(name));
+        }
+    }
 
+    // Validate + default-inject args before handing them to the handler.
+    // Tools that don't declare structured schemas see this as a no-op.
+    QJsonObject normalized = args;
+    auto vr = validate_args(schema, normalized);
+    if (vr.is_err()) {
+        const QString err = QString::fromStdString(vr.error());
+        LOG_WARN(TAG, QString("Tool '%1' rejected: %2").arg(name, err));
+        return fail_now(err);
+    }
+
+    // Per-call timeout override falls through ctx; fall back to per-tool default.
+    if (ctx.timeout_ms == 30000) // ToolContext default — not explicitly set
+        ctx.timeout_ms = default_timeout_ms;
+
+    // Async preferred; sync wrapped in a resolved future so call_tool() works
+    // uniformly for both shapes.
+    if (async_handler) {
+        auto promise = std::make_shared<QPromise<ToolResult>>();
+        promise->start();
+
+        auto cancelled = std::make_shared<std::atomic<bool>>(false);
+        if (!ctx.is_cancelled) {
+            ctx.is_cancelled = [cancelled]() { return cancelled->load(); };
+        } else {
+            auto orig = ctx.is_cancelled;
+            ctx.is_cancelled = [orig, cancelled]() { return cancelled->load() || orig(); };
+        }
+
+        // One-shot timeout watchdog. Posted onto the application thread so it
+        // fires even if the handler never returns control to a Qt event loop.
+        auto* watchdog = new QTimer;
+        watchdog->setSingleShot(true);
+        watchdog->moveToThread(qApp->thread());
+        QObject::connect(watchdog, &QTimer::timeout, watchdog,
+                         [promise, cancelled, watchdog, name]() {
+                             if (!promise->future().isFinished()) {
+                                 cancelled->store(true);
+                                 LOG_WARN(TAG, QString("Tool '%1' timed out").arg(name));
+                                 promise->addResult(ToolResult::fail("Tool '" + name + "' timed out"));
+                                 promise->finish();
+                             }
+                             watchdog->deleteLater();
+                         });
+        QMetaObject::invokeMethod(
+            watchdog, [watchdog, ms = ctx.timeout_ms]() { watchdog->start(ms); }, Qt::QueuedConnection);
+
+        try {
+            LOG_DEBUG(TAG, "Calling async tool: " + name);
+            async_handler(normalized, ctx, promise);
+        } catch (const std::exception& e) {
+            LOG_ERROR(TAG, QString("Async tool '%1' threw: %2").arg(name, e.what()));
+            if (!promise->future().isFinished()) {
+                promise->addResult(ToolResult::fail(QString("Tool execution error: ") + e.what()));
+                promise->finish();
+            }
+        } catch (...) {
+            LOG_ERROR(TAG, QString("Async tool '%1' threw unknown exception").arg(name));
+            if (!promise->future().isFinished()) {
+                promise->addResult(ToolResult::fail("Unknown error during tool execution"));
+                promise->finish();
+            }
+        }
+        return promise->future();
+    }
+
+    // Legacy sync path — invoke and wrap in a resolved future.
+    QPromise<ToolResult> p;
+    p.start();
     try {
-        LOG_DEBUG(TAG, "Calling tool: " + name);
-        return handler(safe_args);
+        LOG_DEBUG(TAG, "Calling sync tool: " + name);
+        p.addResult(sync_handler(normalized));
     } catch (const std::exception& e) {
         LOG_ERROR(TAG, QString("Tool '%1' threw exception: %2").arg(name, e.what()));
-        return ToolResult::fail(QString("Tool execution error: ") + e.what());
+        p.addResult(ToolResult::fail(QString("Tool execution error: ") + e.what()));
     } catch (...) {
         LOG_ERROR(TAG, QString("Tool '%1' threw unknown exception").arg(name));
-        return ToolResult::fail("Unknown error during tool execution");
+        p.addResult(ToolResult::fail("Unknown error during tool execution"));
     }
+    p.finish();
+    return p.future();
+}
+
+void McpProvider::set_auth_checker(AuthChecker checker) {
+    QMutexLocker lock(&mutex_);
+    auth_checker_ = std::move(checker);
 }
 
 // ============================================================================
