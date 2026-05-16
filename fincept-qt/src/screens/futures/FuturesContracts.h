@@ -46,6 +46,14 @@ struct ContractDef {
     /// confirm with their broker before sizing positions.
     double  initial_margin_usd = 0.0;
     ExpiryRule expiry_rule = ExpiryRule::None;
+    /// Optional yfinance symbol override. Default convention is ROOT+"=F"
+    /// (the continuous front-month), which works for every CME-listed root
+    /// in this catalog. Non-US regional contracts (Eurex DAX, HKEX HSI,
+    /// KRX KOSPI, …) aren't reachable via yfinance's =F namespace; we fall
+    /// back to the cash-index proxy (^GDAXI, ^HSI, …) — explicitly *not*
+    /// the futures contract itself. Term-structure / settlements panels
+    /// will still need a Databento key to render the real curve for these.
+    QString yf_override;
 };
 
 /// Compute the next expiry on or after `from` given a contract's rule.
@@ -53,10 +61,10 @@ struct ContractDef {
 QDate next_expiry(const ContractDef& c, const QDate& from);
 
 /// yfinance continuous-front-month symbol — for use when calling the yfinance
-/// daemon (PythonWorker batch_quotes / historical_period) directly.
-inline QString yf_symbol_for(const QString& root) {
-    return root + "=F";
-}
+/// daemon (PythonWorker batch_quotes / historical_period) directly. Most US
+/// CME contracts follow the ROOT+"=F" convention; non-US regional contracts
+/// supply a `yf_override` (cash-index proxy) in their ContractDef.
+inline QString yf_symbol_for(const QString& root); // defined below find_contract
 
 inline const QVector<ContractDef>& all_contracts() {
     using R = ExpiryRule;
@@ -115,6 +123,29 @@ inline const QVector<ContractDef>& all_contracts() {
         // Crypto (CME)
         {"BTC", "Bitcoin Futures",      "CRYPTO", 5.0,       5,         115'000, R::MonthlyLastFriday},
         {"MET", "Micro Ether Futures",  "CRYPTO", 0.25,      0.1,         1'100, R::MonthlyLastFriday},
+        // ── Non-US regions ──────────────────────────────────────────────────
+        // EUROPE / JAPAN / ASIA: yfinance's =F namespace mostly covers
+        // CME-cross-listed contracts. For everything else we fall back to the
+        // cash-index proxy via yf_override; tick/multiplier/initial-margin are
+        // left at zero because they don't apply to a spot index, and the
+        // expiry calendar shows "—" (rule = None). The real futures curve for
+        // these is gated behind Databento.
+        // EUROPE — Eurex/ICE/LSE benchmarks (spot proxies via yfinance)
+        {"DAX",   "DAX 40 (spot proxy)",         "EUROPE", 0, 0, 0, R::None, "^GDAXI"},
+        {"ESX",   "EuroStoxx 50 (spot proxy)",   "EUROPE", 0, 0, 0, R::None, "^STOXX50E"},
+        {"FTSE",  "FTSE 100 (spot proxy)",       "EUROPE", 0, 0, 0, R::None, "^FTSE"},
+        {"CAC",   "CAC 40 (spot proxy)",         "EUROPE", 0, 0, 0, R::None, "^FCHI"},
+        {"AEX",   "AEX (spot proxy)",            "EUROPE", 0, 0, 0, R::None, "^AEX"},
+        // JAPAN — Nikkei is CME-cross-listed so we get real futures here.
+        {"NIY",   "Nikkei 225 (Yen, CME)",       "JAPAN",  5.0,  500,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"NKD",   "Nikkei 225 (USD, CME)",       "JAPAN",  5.0,    5,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"TOPX",  "TOPIX (spot proxy)",          "JAPAN",  0, 0, 0, R::None, "^TPX"},
+        // ASIA — HSI, KOSPI, AXJO, NIFTY (spot proxies)
+        {"HSI",   "Hang Seng (spot proxy)",      "ASIA",   0, 0, 0, R::None, "^HSI"},
+        {"HSCEI", "Hang Seng China Ent. (spot)", "ASIA",   0, 0, 0, R::None, "^HSCE"},
+        {"KOSPI", "KOSPI Composite (spot)",      "ASIA",   0, 0, 0, R::None, "^KS11"},
+        {"AXJO",  "ASX 200 (spot proxy)",        "ASIA",   0, 0, 0, R::None, "^AXJO"},
+        {"NIFTY", "Nifty 50 (spot proxy)",       "ASIA",   0, 0, 0, R::None, "^NSEI"},
     };
     return kContracts;
 }
@@ -245,10 +276,12 @@ inline QDate next_expiry(const ContractDef& c, const QDate& from) {
 }
 
 /// Asset class tabs in display order. CHINA is sourced from akshare and
-/// resolved at runtime, not from the static catalog.
+/// resolved at runtime, not from the static catalog. EUROPE/JAPAN/ASIA use
+/// per-contract yf_override entries (mostly spot proxies; see all_contracts).
 inline const QStringList& asset_classes() {
     static const QStringList kClasses = {
-        "INDEX", "RATES", "ENERGY", "METALS", "AGS", "FX", "CRYPTO", "CHINA"
+        "INDEX", "RATES", "ENERGY", "METALS", "AGS", "FX", "CRYPTO",
+        "EUROPE", "JAPAN", "ASIA", "CHINA"
     };
     return kClasses;
 }
@@ -266,6 +299,12 @@ inline const ContractDef* find_contract(const QString& symbol) {
         if (c.symbol == symbol)
             return &c;
     return nullptr;
+}
+
+inline QString yf_symbol_for(const QString& root) {
+    if (const auto* def = find_contract(root); def && !def->yf_override.isEmpty())
+        return def->yf_override;
+    return root + "=F";
 }
 
 } // namespace fincept::screens::futures

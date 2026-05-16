@@ -96,7 +96,11 @@ void RelationshipMapScreen::build_ui() {
     root->setSpacing(0);
 
     // ── Header Bar ───────────────────────────────────────────────────────
-    auto* header = new QWidget(this);
+    // Stored as header_bar_ so set_embedded_mode() can hide it when the
+    // host screen (EQUITY RESEARCH's Relationships tab) already has its
+    // own title/search chrome.
+    header_bar_ = new QWidget(this);
+    auto* header = header_bar_;
     header->setFixedHeight(44);
     header->setStyleSheet(
         QString("background: %1; border-bottom: 1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
@@ -277,7 +281,9 @@ void RelationshipMapScreen::build_ui() {
     legend_widget_->hide();
 
     // ── Status bar ───────────────────────────────────────────────────────
-    auto* status = new QWidget(this);
+    // Stored as status_bar_ so set_embedded_mode() can hide it.
+    status_bar_ = new QWidget(this);
+    auto* status = status_bar_;
     status->setFixedHeight(24);
     status->setStyleSheet(
         QString("background: %1; border-top: 1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
@@ -825,6 +831,27 @@ void RelationshipMapScreen::restore_state(const QVariantMap& state) {
         search_input_->setText(ticker);
         on_search();
     }
+}
+
+// ── Embedded-host API ────────────────────────────────────────────────────────
+
+void RelationshipMapScreen::set_symbol(const QString& ticker) {
+    const QString upper = ticker.trimmed().toUpper();
+    if (upper.isEmpty()) return;
+    // Skip if the graph already reflects this ticker — guards against
+    // EquityResearchScreen's load_symbol path firing repeatedly on signal
+    // re-emission from the cache.
+    if (upper == loaded_ticker_.toUpper()) return;
+    if (!search_input_) return;
+    search_input_->blockSignals(true);
+    search_input_->setText(upper);
+    search_input_->blockSignals(false);
+    on_search();
+}
+
+void RelationshipMapScreen::set_embedded_mode(bool on) {
+    if (header_bar_) header_bar_->setVisible(!on);
+    if (status_bar_) status_bar_->setVisible(!on);
 }
 
 } // namespace fincept::screens

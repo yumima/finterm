@@ -13,6 +13,7 @@
 #include "screens/equity_research/EquitySentimentTab.h"
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
+#include "screens/relationship_map/RelationshipMapScreen.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
@@ -143,6 +144,14 @@ void EquityResearchScreen::build_ui() {
     peers_tab_ = new EquityPeersTab;
     news_tab_ = new EquityNewsTab;
     sentiment_tab_ = new EquitySentimentTab;
+    // Relationships tab — reuses the full RelationshipMapScreen widget in
+    // embedded mode (header/status bar hidden, since ER's title bar already
+    // exposes the symbol + freshness chip). The screen still owns its filter
+    // panel, detail panel, layout selector, and the inline ANALYZE search,
+    // which remains a useful per-tab override when the user wants to inspect
+    // a related entity without leaving ER.
+    relationships_tab_ = new RelationshipMapScreen;
+    relationships_tab_->set_embedded_mode(true);
 
     tab_widget_->addTab(overview_tab_, "Overview");
     tab_widget_->addTab(financials_tab_, "Financials");
@@ -152,6 +161,7 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(peers_tab_, "Peers");
     tab_widget_->addTab(news_tab_, "News");
     tab_widget_->addTab(sentiment_tab_, "Sentiment");
+    tab_widget_->addTab(relationships_tab_, "Relationships");
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
 
@@ -430,6 +440,15 @@ void EquityResearchScreen::on_tab_changed(int index) {
         case 7:
             sentiment_tab_->set_symbol(current_symbol_);
             break;
+        case 8:
+            // Relationships tab — lazy fetch on activation only. The
+            // RelationshipMapService::fetch call is multi-second and can spawn
+            // a Python subprocess, so we don't kick it from load_symbol().
+            // set_symbol() inside RelationshipMapScreen is idempotent for the
+            // same ticker, so re-activating the tab won't re-fire the request.
+            if (relationships_tab_)
+                relationships_tab_->set_symbol(current_symbol_);
+            break;
         default:
             break;
     }
@@ -471,6 +490,13 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in) {
     if (peers_tab_) peers_tab_->set_symbol(symbol);
     if (news_tab_) news_tab_->set_symbol(symbol);
     if (sentiment_tab_) sentiment_tab_->set_symbol(symbol);
+    // Relationships tab: forward only if it's the currently visible tab.
+    // RelationshipMapService::fetch is heavy (Python subprocess + graph
+    // rendering); we don't want to kick it in the background every time the
+    // user changes ER symbols. The tab_changed handler picks it up on
+    // activation otherwise.
+    if (relationships_tab_ && tab_widget_ && tab_widget_->currentIndex() == 8)
+        relationships_tab_->set_symbol(symbol);
 
     // Prefetch — fire every fetch in parallel so whichever tab the user
     // opens next is already populated (or rendering from a cache hit).

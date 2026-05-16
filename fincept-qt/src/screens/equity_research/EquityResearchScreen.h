@@ -25,6 +25,7 @@ class EquityTalippTab;
 class EquityPeersTab;
 class EquityNewsTab;
 class EquitySentimentTab;
+class RelationshipMapScreen;
 
 class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
@@ -99,6 +100,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityPeersTab* peers_tab_ = nullptr;
     EquityNewsTab* news_tab_ = nullptr;
     EquitySentimentTab* sentiment_tab_ = nullptr;
+    RelationshipMapScreen* relationships_tab_ = nullptr;
 
     QTimer* refresh_timer_ = nullptr;
     QString current_symbol_;

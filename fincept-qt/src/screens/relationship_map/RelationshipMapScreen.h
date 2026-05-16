@@ -32,6 +32,17 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     QString state_key() const override { return "relationship_map"; }
     int state_version() const override { return 1; }
 
+    /// Load a ticker programmatically — same flow as the user typing it into
+    /// the inline search and hitting ANALYZE. Used when the screen is hosted
+    /// inside another screen (e.g. EQUITY RESEARCH's Relationships tab).
+    void set_symbol(const QString& ticker);
+
+    /// Hide the title bar, status bar, and brand chip. Use when embedding
+    /// inside a host screen that has its own header — keeps the graph,
+    /// filter panel, detail panel, layout selector, FIT button, and search
+    /// (which still functions as a tab-local override). Default = full screen.
+    void set_embedded_mode(bool on);
+
   protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
@@ -60,6 +71,8 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     relmap::RelationshipGraphView* view_ = nullptr;
 
     // Header
+    QWidget* header_bar_ = nullptr;  // wraps title + search + buttons — hidable for embedded mode
+    QWidget* status_bar_ = nullptr;  // bottom brand strip — hidable for embedded mode
     QLineEdit* search_input_ = nullptr;
     QListWidget* search_dropdown_ = nullptr;
     QTimer* search_debounce_ = nullptr;

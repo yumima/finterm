@@ -124,7 +124,15 @@ QString ThemeManager::build_global_qss() const {
     const int p = density_pad_;      // padding px
     const int p2 = density_pad_ * 2; // double padding
 
-    return QString(R"(
+    // SVG icons in this template are embedded as `data:` URIs whose colors are
+    // URL-encoded `#hex` (i.e. `%23hex`). That `%23` token collides with the
+    // positional placeholder %23 used by the arg() chain below — Qt parses it
+    // as "insert arg 23 here" and substitutes positive_dim, producing 12
+    // "QString::arg: Argument missing" warnings per setStyleSheet and broken
+    // stroke colors. We use unmistakable sentinel tokens in the template
+    // (no `%` prefix → arg() never touches them) and rewrite them to the
+    // correct URL-encoded form after the arg() chain runs.
+    QString qss = QString(R"(
         * {
             font-family: %15;
             font-size: %16px;
@@ -328,11 +336,11 @@ QString ThemeManager::build_global_qss() const {
             background: none; border: none; padding: 2px;
             width: 16px; height: 16px; min-width: 16px; min-height: 16px;
             max-width: 16px; max-height: 16px;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #tabCloseButton:hover {
             background: %11;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #tabCloseButton:pressed { background: %12; }
         ads--CDockWidgetTab[focused="true"] > #tabCloseButton:hover { background: %12; }
@@ -340,42 +348,42 @@ QString ThemeManager::build_global_qss() const {
             background: none; border: none; padding: 2px;
             width: 16px; height: 16px; min-width: 16px; min-height: 16px;
             max-width: 16px; max-height: 16px;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='5' x2='13' y2='5' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='8' x2='13' y2='8' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='11' x2='13' y2='11' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='5' x2='13' y2='5' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='8' x2='13' y2='8' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='11' x2='13' y2='11' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #tabsMenuButton::menu-indicator { image: none; }
         #tabsMenuButton:hover {
             background: %11;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='5' x2='13' y2='5' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='8' x2='13' y2='8' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='11' x2='13' y2='11' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='5' x2='13' y2='5' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='8' x2='13' y2='8' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='3' y1='11' x2='13' y2='11' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #dockAreaCloseButton {
             background: none; border: none; padding: 2px;
             width: 16px; height: 16px; min-width: 16px; min-height: 16px;
             max-width: 16px; max-height: 16px;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #dockAreaCloseButton:hover {
             background: %11;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='4' y1='4' x2='12' y2='12' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/><line x1='12' y1='4' x2='4' y2='12' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #detachGroupButton {
             background: none; border: none; padding: 2px;
             width: 16px; height: 16px; min-width: 16px; min-height: 16px;
             max-width: 16px; max-height: 16px;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='7' width='6' height='6' fill='none' stroke='%2380808080' stroke-width='1.5' stroke-linejoin='round'/><polyline points='9,3 13,3 13,7' fill='none' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/><line x1='8' y1='8' x2='13' y2='3' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='7' width='6' height='6' fill='none' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linejoin='round'/><polyline points='9,3 13,3 13,7' fill='none' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/><line x1='8' y1='8' x2='13' y2='3' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #detachGroupButton:hover {
             background: %11;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='7' width='6' height='6' fill='none' stroke='%23e5e5e5' stroke-width='1.5' stroke-linejoin='round'/><polyline points='9,3 13,3 13,7' fill='none' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/><line x1='8' y1='8' x2='13' y2='3' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='7' width='6' height='6' fill='none' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linejoin='round'/><polyline points='9,3 13,3 13,7' fill='none' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/><line x1='8' y1='8' x2='13' y2='3' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #dockAreaAutoHideButton, #dockAreaMinimizeButton {
             background: none; border: none; padding: 2px;
             width: 16px; height: 16px; min-width: 16px; min-height: 16px;
             max-width: 16px; max-height: 16px;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='12' x2='13' y2='12' stroke='%2380808080' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='12' x2='13' y2='12' stroke='ZZICON_DIM_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         #dockAreaAutoHideButton:hover, #dockAreaMinimizeButton:hover {
             background: %11;
-            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='12' x2='13' y2='12' stroke='%23e5e5e5' stroke-width='1.5' stroke-linecap='round'/></svg>");
+            image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><line x1='3' y1='12' x2='13' y2='12' stroke='ZZICON_HOVER_HASHZZ' stroke-width='1.5' stroke-linecap='round'/></svg>");
         }
         /* ── Reusable object-name selectors ────────────────────────────── */
         #sectionTitle {
@@ -481,6 +489,15 @@ QString ThemeManager::build_global_qss() const {
         .arg(t.positive_bg)
         // %27 negative_bg
         .arg(t.negative_bg);
+
+    // Post-arg substitution: restore the URL-encoded `#` in SVG icon strokes.
+    // The sentinels (no `%` prefix) survived the arg() chain untouched, so we
+    // can now rewrite them to the form Qt's CSS engine expects without arg()
+    // mis-interpreting them as positional placeholders.
+    qss.replace("ZZICON_DIM_HASHZZ",   "%2380808080");  // dim icon stroke
+    qss.replace("ZZICON_HOVER_HASHZZ", "%23e5e5e5");    // hover icon stroke
+
+    return qss;
 }
 
 QString ThemeManager::build_ads_qss() const {

@@ -91,6 +91,7 @@ class FuturesTermStructurePanel : public FuturesPanelBase {
     QChartView*   chart_view_     = nullptr;
     QLabel*       placeholder_    = nullptr;
     QComboBox*    symbol_combo_   = nullptr;
+    QPushButton*  key_btn_        = nullptr; // shown when DATABENTO_API_KEY is unset
 };
 
 // ── 3. Spread monitor (cache-driven) ─────────────────────────────────────────
@@ -124,6 +125,7 @@ class FuturesSettlementsPanel : public FuturesPanelBase {
     QTableWidget* table_         = nullptr;
     QLabel*       placeholder_   = nullptr;
     QComboBox*    symbol_combo_  = nullptr;
+    QPushButton*  key_btn_       = nullptr; // shown when DATABENTO_API_KEY is unset
 };
 
 // ── 5. Heatmap (cache-driven, all classes) ───────────────────────────────────

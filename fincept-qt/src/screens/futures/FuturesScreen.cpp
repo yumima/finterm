@@ -124,35 +124,51 @@ void FuturesScreen::build_body() {
     cot_         = new FuturesCotPanel(grid_host_);
     expiry_      = new FuturesExpiryPanel(grid_host_);
 
-    // Row 0: heatmap full width (3 columns)
-    grid->addWidget(heatmap_,     0, 0, 1, 3);
-    // Row 1: watchlist | EXPIRY calendar | continuous chart.
-    // Expiry takes the slot that previously held term structure — most
-    // catalog contracts have a deterministic next-expiry date so this
-    // pane is rarely empty, unlike term structure which depends on a
-    // Databento key for the full forward curve.
-    grid->addWidget(watchlist_,   1, 0);
-    grid->addWidget(expiry_,      1, 1);
-    grid->addWidget(chart_,       1, 2);
-    // Row 2: settlements (2 cols) | TERM STRUCTURE (1 col).
-    // Term structure sits beside settlements/OI because both render the
-    // same per-month curve view (settlements = table, term = chart) so
-    // they're naturally compared side by side.
-    grid->addWidget(settlements_, 2, 0, 1, 2);
-    grid->addWidget(term_,        2, 2);
-    // Row 3: COT positioning (2 cols) | spread monitor (1 col).
-    // COT carries the most rows of any panel and benefits from extra
-    // stretch (3) so its table doesn't scroll with a single page of data.
-    grid->addWidget(cot_,         3, 0, 1, 2);
-    grid->addWidget(spread_,      3, 2);
+    // Bloomberg-style 3-rail layout. Tables get fixed widths so they don't
+    // stretch their 4-5 numeric columns across half the screen; the chart,
+    // heatmap, and COT (which wants to read like a wide grid) get the
+    // elastic center column.
+    constexpr int kRailWidth = 340;
+    for (auto* w : QVector<QWidget*>{watchlist_, settlements_, term_, spread_, expiry_}) {
+        w->setMinimumWidth(kRailWidth);
+        w->setMaximumWidth(kRailWidth);
+    }
 
-    grid->setRowStretch(0, 1);
-    grid->setRowStretch(1, 3);   // expiry + watchlist + chart — primary research row
-    grid->setRowStretch(2, 2);
-    grid->setRowStretch(3, 3);   // COT — taller so the 3-row table doesn't get clipped
-    grid->setColumnStretch(0, 1);
+    // Row 0: heatmap — compact horizontal strip, full width.
+    grid->addWidget(heatmap_, 0, 0, 1, 3);
+
+    // Row 1 — primary research row:
+    //   left rail   = watchlist  (drives symbol selection for the others)
+    //   center      = continuous chart (elastic)
+    //   right rail  = settlements · OI table
+    grid->addWidget(watchlist_,   1, 0);
+    grid->addWidget(chart_,       1, 1);
+    grid->addWidget(settlements_, 1, 2);
+
+    // Row 2 — analytics row:
+    //   left rail   = spread monitor (top) + expiry calendar (bottom), stacked
+    //   center      = COT positioning (elastic — three trader cohorts read
+    //                 better at width than crammed into a rail)
+    //   right rail  = term structure chart
+    auto* left_stack = new QWidget(grid_host_);
+    auto* left_layout = new QVBoxLayout(left_stack);
+    left_layout->setContentsMargins(0, 0, 0, 0);
+    left_layout->setSpacing(6);
+    left_layout->addWidget(spread_);
+    left_layout->addWidget(expiry_, 1);
+    left_stack->setMinimumWidth(kRailWidth);
+    left_stack->setMaximumWidth(kRailWidth);
+    grid->addWidget(left_stack, 2, 0);
+    grid->addWidget(cot_,       2, 1);
+    grid->addWidget(term_,      2, 2);
+
+    grid->setRowStretch(0, 1);   // heatmap — compact
+    grid->setRowStretch(1, 3);   // primary research row
+    grid->setRowStretch(2, 3);   // analytics row
+    // Column 0/2 are fixed-width rails; the elastic center is column 1.
+    grid->setColumnStretch(0, 0);
     grid->setColumnStretch(1, 1);
-    grid->setColumnStretch(2, 1);
+    grid->setColumnStretch(2, 0);
 
     stack->addWidget(grid_host_);
 

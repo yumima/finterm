@@ -5,6 +5,7 @@
 #include "screens/futures/FuturesContracts.h"
 #include "screens/futures/FuturesQuoteCache.h"
 #include "services/util/DiskCache.h"
+#include "storage/secure/SecureStorage.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -12,16 +13,21 @@
 #include <QChartView>
 #include <QDateTime>
 #include <QDateTimeAxis>
+#include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLineSeries>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPointer>
 #include <QPushButton>
 #include <QStackedLayout>
+#include <QUrl>
 #include <QValueAxis>
 #include <QVBoxLayout>
 
@@ -79,6 +85,92 @@ static QString table_ss() {
         .arg(fonts::font_px(-2))
         .arg(colors::BG_SURFACE())
         .arg(colors::BG_RAISED());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Databento key helper
+// ─────────────────────────────────────────────────────────────────────────────
+// Two panels (TERM STRUCTURE, SETTLEMENTS · OI) need the full forward curve
+// from Databento. Without a key they fall back to a single front-month point,
+// which we surface as a placeholder. The helpers below provide a single
+// source of truth for whether a key is configured plus an inline prompt that
+// stores it via SecureStorage — PythonRunner injects the value into the
+// subprocess env on every spawn, so no restart is required.
+
+static constexpr const char* kDatabentoKey = "DATABENTO_API_KEY";
+
+static bool has_databento_key() {
+    auto r = fincept::SecureStorage::instance().retrieve(kDatabentoKey);
+    return r.is_ok() && !r.value().isEmpty();
+}
+
+// Prompt for a Databento API key inline. Returns true if the user saved one.
+// Custom dialog (not QInputDialog::getText) so we can add the "Get a free key"
+// link alongside the input.
+static bool prompt_databento_key(QWidget* parent) {
+    QDialog dlg(parent);
+    dlg.setWindowTitle(QStringLiteral("Set Databento API Key"));
+    auto* v = new QVBoxLayout(&dlg);
+    v->setContentsMargins(16, 16, 16, 12);
+    v->setSpacing(10);
+
+    auto* intro = new QLabel(QStringLiteral(
+        "Databento provides the per-month forward curve used by\n"
+        "TERM STRUCTURE and SETTLEMENTS · OI. Without it you'll see\n"
+        "only the front-month price.\n\n"
+        "New accounts get $125 in free credits (6-month expiry).\n"));
+    intro->setWordWrap(true);
+    v->addWidget(intro);
+
+    auto* signup = new QPushButton(QStringLiteral("Sign up at databento.com →"));
+    signup->setCursor(Qt::PointingHandCursor);
+    QObject::connect(signup, &QPushButton::clicked, []() {
+        QDesktopServices::openUrl(QUrl("https://databento.com/signup"));
+    });
+    v->addWidget(signup);
+
+    auto* lbl = new QLabel(QStringLiteral("API key"));
+    v->addWidget(lbl);
+
+    auto* edit = new QLineEdit;
+    edit->setEchoMode(QLineEdit::Password);
+    edit->setPlaceholderText("db-...");
+    v->addWidget(edit);
+
+    auto* bb = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    bb->button(QDialogButtonBox::Save)->setEnabled(false);
+    QObject::connect(edit, &QLineEdit::textChanged, [bb](const QString& t) {
+        bb->button(QDialogButtonBox::Save)->setEnabled(!t.trimmed().isEmpty());
+    });
+    QObject::connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    QObject::connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    v->addWidget(bb);
+
+    if (dlg.exec() != QDialog::Accepted) return false;
+    const QString key = edit->text().trimmed();
+    if (key.isEmpty()) return false;
+    auto r = fincept::SecureStorage::instance().store(kDatabentoKey, key);
+    if (r.is_err()) {
+        QMessageBox::warning(parent, QStringLiteral("Save failed"),
+                             QStringLiteral("Could not store the Databento key."));
+        return false;
+    }
+    return true;
+}
+
+// Style a small amber button used to surface "Set Databento Key" inline in
+// panels that need it. Reads as a call-to-action without competing with the
+// panel title.
+static QString key_button_ss() {
+    return QString(
+        "QPushButton { background:transparent; color:%1; border:1px solid %1;"
+        " padding:2px 8px; font-family:'%2'; font-size:%3px; font-weight:600;"
+        " letter-spacing:0.3px; }"
+        "QPushButton:hover { background:%1; color:%4; }")
+        .arg(colors::AMBER())
+        .arg(fonts::DATA_FAMILY())
+        .arg(fonts::font_px(-3))
+        .arg(colors::BG_BASE());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,6 +315,24 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     symbol_combo_->setMinimumWidth(150);
     row->addWidget(symbol_combo_);
 
+    // Databento gate: when no key is configured, surface a prominent button
+    // that opens the inline prompt. Auto-hides on save so it doesn't keep
+    // nagging once the user has supplied a key.
+    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"));
+    key_btn_->setCursor(Qt::PointingHandCursor);
+    key_btn_->setStyleSheet(key_button_ss());
+    key_btn_->setVisible(!has_databento_key());
+    connect(key_btn_, &QPushButton::clicked, this, [this]() {
+        if (prompt_databento_key(this)) {
+            key_btn_->setVisible(false);
+            // Clear backoff so the next refresh re-attempts with the new key
+            // immediately instead of waiting out the failure window.
+            last_failed_ms_ = 0;
+            refresh();
+        }
+    });
+    row->addWidget(key_btn_);
+
     contango_label_ = new QLabel;
     contango_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(-2)));
     row->addStretch();
@@ -313,9 +423,9 @@ void FuturesTermStructurePanel::refresh() {
                 set_status("error", colors::NEGATIVE());
                 show_placeholder(QString("Term structure unavailable for %1.\n\n"
                                          "Neither CME public data nor a Databento key is\n"
-                                         "available. To enable live forward curves:\n"
-                                         "  • Set DATABENTO_API_KEY in your environment\n"
-                                         "    (free tier available at databento.com)\n"
+                                         "available. To enable the live forward curve:\n"
+                                         "  • Click \"SET DATABENTO KEY\" above\n"
+                                         "    ($125 free credits for new accounts)\n"
                                          "  • Or ensure network access to cmegroup.com").arg(sym));
                 return;
             }
@@ -335,8 +445,8 @@ void FuturesTermStructurePanel::render(const QVector<TermStructurePoint>& pts) {
     // The yfinance fallback only delivers a single "FRONT" point. Detect this
     // and render a clear placeholder rather than a misleading single dot.
     if (pts.size() <= 1) {
-        show_placeholder("Front-month only.\nLive forward curve requires a Databento subscription\n"
-                         "(set DATABENTO_API_KEY and restart).");
+        show_placeholder("Front-month only.\nLive forward curve requires a Databento key —\n"
+                         "click \"SET DATABENTO KEY\" above to enable it.");
         return;
     }
 
@@ -457,6 +567,9 @@ void FuturesSpreadPanel::set_asset_class(const QString& cls) {
     leg2_combo_->clear();
     leg1_combo_->addItems(syms);
     leg2_combo_->addItems(syms);
+    // Default to two distinct legs so the panel renders a real spread on first
+    // paint instead of "Pick two legs". When there's only one contract in the
+    // class (rare, e.g. CRYPTO when MET is delisted) we leave leg2 empty.
     if (syms.size() >= 2) {
         leg1_combo_->setCurrentIndex(0);
         leg2_combo_->setCurrentIndex(1);
@@ -529,6 +642,22 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
     symbol_combo_ = new QComboBox;
     symbol_combo_->setMinimumWidth(150);
     row->addWidget(symbol_combo_);
+
+    // Databento gate — same pattern as TERM STRUCTURE: visible when no key
+    // is stored, hides itself after a successful save, then refreshes.
+    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"));
+    key_btn_->setCursor(Qt::PointingHandCursor);
+    key_btn_->setStyleSheet(key_button_ss());
+    key_btn_->setVisible(!has_databento_key());
+    connect(key_btn_, &QPushButton::clicked, this, [this]() {
+        if (prompt_databento_key(this)) {
+            key_btn_->setVisible(false);
+            last_failed_ms_ = 0;
+            refresh();
+        }
+    });
+    row->addWidget(key_btn_);
+
     row->addStretch();
     layout()->addItem(row);
 
@@ -612,9 +741,9 @@ void FuturesSettlementsPanel::refresh() {
                 set_status("error", colors::NEGATIVE());
                 show_placeholder(QString("Per-month settlements unavailable for %1.\n\n"
                                          "Neither CME public data nor a Databento key is\n"
-                                         "available. To enable live settlement data:\n"
-                                         "  • Set DATABENTO_API_KEY in your environment\n"
-                                         "    (free tier available at databento.com)\n"
+                                         "available. To enable per-month settlements:\n"
+                                         "  • Click \"SET DATABENTO KEY\" above\n"
+                                         "    ($125 free credits for new accounts)\n"
                                          "  • Or ensure network access to cmegroup.com").arg(sym));
                 return;
             }
@@ -632,7 +761,8 @@ void FuturesSettlementsPanel::show_placeholder(const QString& message) {
 void FuturesSettlementsPanel::populate(const QVector<TermStructurePoint>& pts) {
     if (pts.size() <= 1) {
         show_placeholder("Per-month settlements unavailable.\n"
-                         "Live data requires Databento (set DATABENTO_API_KEY).");
+                         "Live data requires a Databento key —\n"
+                         "click \"SET DATABENTO KEY\" above to enable it.");
         return;
     }
     if (auto* stack = qobject_cast<QStackedLayout*>(placeholder_->parentWidget()->layout()))
@@ -694,7 +824,8 @@ void FuturesHeatmapPanel::render_from_cache() {
 
     clear_grid();
     int row = 0;
-    const QStringList order = {"INDEX", "RATES", "ENERGY", "METALS", "AGS", "FX", "CRYPTO"};
+    const QStringList order = {"INDEX", "RATES", "ENERGY", "METALS", "AGS",
+                               "FX", "CRYPTO", "EUROPE", "JAPAN", "ASIA"};
     for (const auto& cls : order) {
         if (!groups.contains(cls)) continue;
         auto* row_label = new QLabel(cls);

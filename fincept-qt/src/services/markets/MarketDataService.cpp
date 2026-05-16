@@ -1385,13 +1385,20 @@ QVector<MarketCategory> MarketDataService::default_global_markets() {
          {"EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X", "EURGBP=X", "EURJPY=X",
           "GBPJPY=X", "USDCNY=X", "USDINR=X", "USDHKD=X", "USDTWD=X", "USDSGD=X"}},
         {"Commodities",
+         // LBS=F (lumber) was delisted; yfinance returns YFPricesMissingError
+         // every refresh and the producer-refresh-timeout cycle burned ~25%
+         // of the data-hub budget. Lumber is now LBR=F.
          {"GC=F", "SI=F", "PL=F", "PA=F", "HG=F", "CL=F", "BZ=F", "NG=F", "RB=F", "HO=F", "ZC=F", "ZW=F", "ZS=F",
-          "KC=F", "CT=F", "SB=F", "CC=F", "LBS=F"}},
+          "KC=F", "CT=F", "SB=F", "CC=F", "LBR=F"}},
         {"Bonds", {"^TNX", "^TYX", "^IRX", "^FVX", "TLT", "IEF", "SHY", "BND", "AGG", "LQD", "HYG", "JNK"}},
         {"ETFs", {"SPY", "QQQ", "DIA", "EEM", "GLD", "XLK", "XLE", "XLF", "XLV", "VNQ", "IWM", "VTI"}},
         {"Cryptocurrencies",
+         // UNI-USD removed: yfinance has been failing this ticker; the hub
+         // kept retrying and emitting producer-refresh-timeout warnings. If
+         // it comes back, add it again — keeping a known-bad symbol just to
+         // be polite costs us a refresh slot every cycle.
          {"BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "ADA-USD", "DOGE-USD", "LINK-USD", "DOT-USD",
-          "AVAX-USD", "UNI-USD", "ATOM-USD"}},
+          "AVAX-USD", "ATOM-USD"}},
     };
 }
 
