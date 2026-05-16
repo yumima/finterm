@@ -230,8 +230,15 @@ QString news_screen_styles() {
                   rows transparent lets the panel's BG_SURFACE bleed through. */
                "#newsDetailMetaRow { background: transparent; }"
                "#newsBodySection { background: transparent; }"
+               /* ARTICLE header. Cream + bold + hairline border-bottom (using the
+                  same %3 BORDER_DIM as the panel's other section separators) sets
+                  this off as a clear "start of long-form prose" cue between the
+                  action button row above and the body paragraphs below.
+                  letter-spacing matches #newsDetailSectionTitle / #newsTldrTitle for
+                  consistency with the panel's other section headers. */
                "#newsDetailBodyTitle { color: #f0e8d0; font-size: 12pt; font-weight: 700;"
-               "  background: transparent; padding: 2px 0; }"
+               "  letter-spacing: 0.5px; background: transparent; padding: 2px 0 4px 0;"
+               "  border-bottom: 1px solid %3; }"
                "#newsDetailBody { color: #f0e8d0; font-size: 12pt; background: transparent; }"
                "#newsDetailBodyStatus { color: #f0e8d0; font-size: 12pt; background: transparent; }"
                "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "

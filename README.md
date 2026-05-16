@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cb338c7e`](https://github.com/yumima/finterm/commit/cb338c7e) screens(news): self-review fixes — threat/impact race + meta-row bg
 - [`4a6e67bf`](https://github.com/yumima/finterm/commit/4a6e67bf) screens(news): match body/summary/title to WIRE-feed headline style
 - [`c554a893`](https://github.com/yumima/finterm/commit/c554a893) screens(news): move tickers ($NVDA $AMD…) into the meta row
 - [`9fa02ed3`](https://github.com/yumima/finterm/commit/9fa02ed3) screens(news): fix detail-pane body background + restyle summary

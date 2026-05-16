@@ -20,6 +20,57 @@
 
 namespace fincept::screens {
 
+namespace {
+
+// Format extracted article text as rich-text HTML for body_label_.
+//
+// Design choices (typographic, deliberate):
+//   - First paragraph has no indent. Standard convention — the opening
+//     paragraph never indents because there's no preceding text to break
+//     from.
+//   - Subsequent paragraphs get a 1.8em first-line indent (≈ 3-4 chars at
+//     Consolas 12pt) so paragraph breaks are visible even when the bottom
+//     margin alone would be ambiguous (e.g. when a paragraph wraps to a
+//     short last line).
+//   - line-height: 170% — Consolas at 12pt with the default 100% leading
+//     stacks too tight for long-form reading. 170% is the Bloomberg-ish
+//     middle ground: airy but not magazine-spaced.
+//   - Bottom margin 0.8em on each <p> separates paragraphs as discrete
+//     blocks without an explicit blank line.
+//   - padding-right:10px keeps the rightmost glyph off the splitter handle
+//     when the user drags the middle pane narrow.
+//   - <br> for soft line breaks inside a paragraph (rare — extractors
+//     typically emit \n\n between paragraphs, but trafilatura occasionally
+//     emits single \n inside one paragraph for byline / dateline blocks).
+QString format_article_html(const QString& plain) {
+    QString escaped = plain.toHtmlEscaped();
+    const QStringList paras = escaped.split(QStringLiteral("\n\n"),
+                                            Qt::SkipEmptyParts);
+    QString html;
+    html.reserve(escaped.size() + paras.size() * 96);
+    html += QStringLiteral(
+        "<div style=\"line-height:170%; padding-right:10px;\">");
+
+    bool first = true;
+    for (QString p : paras) {
+        p = p.trimmed();
+        if (p.isEmpty()) continue;
+        p.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
+        const QLatin1String indent = first ? QLatin1String("0")
+                                           : QLatin1String("1.8em");
+        html += QStringLiteral(
+                    "<p style=\"text-indent:%1; margin:0 0 0.8em 0;\">")
+                    .arg(indent);
+        html += p;
+        html += QStringLiteral("</p>");
+        first = false;
+    }
+    html += QStringLiteral("</div>");
+    return html;
+}
+
+} // namespace
+
 NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDetailOverlay");
     // Width is now governed by whatever QSplitter cell hosts this widget
@@ -321,8 +372,12 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_section_ = new QWidget(content);
     body_section_->setObjectName("newsBodySection");
     auto* body_layout = new QVBoxLayout(body_section_);
-    body_layout->setContentsMargins(0, 6, 0, 4);
-    body_layout->setSpacing(4);
+    // Top margin separates the ARTICLE block from the action button row;
+    // bottom margin keeps the trailing separator off the last line of prose.
+    // Spacing of 6px between title / status / body groups them but lets the
+    // hairline under the title breathe.
+    body_layout->setContentsMargins(0, 14, 0, 8);
+    body_layout->setSpacing(6);
 
     // Distinct objectName from #newsDetailSectionTitle so the ARTICLE header
     // can match the WIRE-feed cream (#f0e8d0) the user pointed at as the
@@ -340,13 +395,13 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_label_->setObjectName("newsDetailBody");
     body_label_->setWordWrap(true);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Style comes from the global #newsDetailBody QSS, which mirrors
-    // #newsDetailHeadline. body_section_'s own background is set transparent
-    // in StyleSheets.cpp (#newsBodySection) — without that rule the section
-    // fell through to the global `QWidget { background-color: BG_BASE }`
-    // default, producing the black box the body label sat on while
-    // headline_label_ (parented to #newsDetailContent, which is transparent)
-    // showed the panel's BG_SURFACE through.
+    // Rich text so the per-paragraph CSS (line-height, text-indent, margin)
+    // emitted by format_article_html() actually renders — QLabel in plain
+    // text mode drops those properties on the floor. Font/colour/background
+    // still come from the #newsDetailBody QSS rule (12pt cream, transparent);
+    // we don't override those inline so the cascade stays a single source of
+    // truth for the typography tier.
+    body_label_->setTextFormat(Qt::RichText);
     body_layout->addWidget(body_label_);
     layout->addWidget(body_section_);
 
@@ -634,7 +689,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
                 return;
             }
             body_status_->hide();
-            body_label_->setText(text);
+            body_label_->setText(format_article_html(text));
         });
 }
 
