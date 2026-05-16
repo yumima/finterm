@@ -318,7 +318,11 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     // Databento gate: when no key is configured, surface a prominent button
     // that opens the inline prompt. Auto-hides on save so it doesn't keep
     // nagging once the user has supplied a key.
-    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"));
+    // Parent at construction is critical: setVisible(true) below would make
+    // a parentless QPushButton become its own top-level window (Qt rule),
+    // floating two stray windows over the chart. Reparenting via
+    // QHBoxLayout::addWidget happens too late — the show has already fired.
+    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"), this);
     key_btn_->setCursor(Qt::PointingHandCursor);
     key_btn_->setStyleSheet(key_button_ss());
     key_btn_->setVisible(!has_databento_key());
@@ -645,7 +649,11 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
 
     // Databento gate — same pattern as TERM STRUCTURE: visible when no key
     // is stored, hides itself after a successful save, then refreshes.
-    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"));
+    // Parent at construction is critical: setVisible(true) below would make
+    // a parentless QPushButton become its own top-level window (Qt rule),
+    // floating two stray windows over the chart. Reparenting via
+    // QHBoxLayout::addWidget happens too late — the show has already fired.
+    key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"), this);
     key_btn_->setCursor(Qt::PointingHandCursor);
     key_btn_->setStyleSheet(key_button_ss());
     key_btn_->setVisible(!has_databento_key());

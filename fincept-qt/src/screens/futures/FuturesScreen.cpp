@@ -10,6 +10,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QSplitter>
 #include <QStackedLayout>
 #include <QVBoxLayout>
 
@@ -123,11 +124,16 @@ void FuturesScreen::build_body() {
     stack->setSpacing(0);
 
     // ── Grid host (shown for all classes except CHINA) ──
+    //
+    // Resizable Bloomberg-style 3-rail layout built from QSplitters so the
+    // user can drag any divider to suit their screen. We deliberately don't
+    // pin minimum/maximum widths on panels — Qt's stretch factors set the
+    // initial proportions and the user owns the rest. CLAUDE.md note:
+    // "Trust Qt defaults — don't lock widths or intercept splitterMoved".
     grid_host_ = new QWidget(body_);
-    auto* grid = new QGridLayout(grid_host_);
-    grid->setContentsMargins(6, 6, 6, 6);
-    grid->setHorizontalSpacing(6);
-    grid->setVerticalSpacing(6);
+    auto* host_layout = new QVBoxLayout(grid_host_);
+    host_layout->setContentsMargins(6, 6, 6, 6);
+    host_layout->setSpacing(6);
 
     heatmap_     = new FuturesHeatmapPanel(grid_host_);
     watchlist_   = new FuturesWatchlistPanel(grid_host_);
@@ -138,51 +144,52 @@ void FuturesScreen::build_body() {
     cot_         = new FuturesCotPanel(grid_host_);
     expiry_      = new FuturesExpiryPanel(grid_host_);
 
-    // Bloomberg-style 3-rail layout. Tables get fixed widths so they don't
-    // stretch their 4-5 numeric columns across half the screen; the chart,
-    // heatmap, and COT (which wants to read like a wide grid) get the
-    // elastic center column.
-    constexpr int kRailWidth = 340;
-    for (auto* w : QVector<QWidget*>{watchlist_, settlements_, term_, spread_, expiry_}) {
-        w->setMinimumWidth(kRailWidth);
-        w->setMaximumWidth(kRailWidth);
-    }
+    // Top vertical splitter: heatmap strip (top) | row1 (middle) | row2 (bottom).
+    auto* v_split = new QSplitter(Qt::Vertical, grid_host_);
+    v_split->setChildrenCollapsible(false);  // panels can't collapse to 0
+    v_split->setHandleWidth(4);
 
-    // Row 0: heatmap — compact horizontal strip, full width.
-    grid->addWidget(heatmap_, 0, 0, 1, 3);
+    // Row 1 — primary research:
+    //   watchlist (drives symbol selection) | continuous chart | settlements · OI
+    auto* row1 = new QSplitter(Qt::Horizontal, v_split);
+    row1->setChildrenCollapsible(false);
+    row1->setHandleWidth(4);
+    row1->addWidget(watchlist_);
+    row1->addWidget(chart_);
+    row1->addWidget(settlements_);
+    row1->setStretchFactor(0, 1);  // watchlist  — narrow rail
+    row1->setStretchFactor(1, 3);  // chart      — elastic
+    row1->setStretchFactor(2, 1);  // settlements — narrow rail
 
-    // Row 1 — primary research row:
-    //   left rail   = watchlist  (drives symbol selection for the others)
-    //   center      = continuous chart (elastic)
-    //   right rail  = settlements · OI table
-    grid->addWidget(watchlist_,   1, 0);
-    grid->addWidget(chart_,       1, 1);
-    grid->addWidget(settlements_, 1, 2);
+    // Row 2 — analytics:
+    //   [spread monitor / expiry calendar — vertical splitter] | COT | term structure
+    auto* row2 = new QSplitter(Qt::Horizontal, v_split);
+    row2->setChildrenCollapsible(false);
+    row2->setHandleWidth(4);
 
-    // Row 2 — analytics row:
-    //   left rail   = spread monitor (top) + expiry calendar (bottom), stacked
-    //   center      = COT positioning (elastic — three trader cohorts read
-    //                 better at width than crammed into a rail)
-    //   right rail  = term structure chart
-    auto* left_stack = new QWidget(grid_host_);
-    auto* left_layout = new QVBoxLayout(left_stack);
-    left_layout->setContentsMargins(0, 0, 0, 0);
-    left_layout->setSpacing(6);
-    left_layout->addWidget(spread_);
-    left_layout->addWidget(expiry_, 1);
-    left_stack->setMinimumWidth(kRailWidth);
-    left_stack->setMaximumWidth(kRailWidth);
-    grid->addWidget(left_stack, 2, 0);
-    grid->addWidget(cot_,       2, 1);
-    grid->addWidget(term_,      2, 2);
+    auto* left_v = new QSplitter(Qt::Vertical, row2);
+    left_v->setChildrenCollapsible(false);
+    left_v->setHandleWidth(4);
+    left_v->addWidget(spread_);
+    left_v->addWidget(expiry_);
+    left_v->setStretchFactor(0, 1);  // spread — compact KPI card
+    left_v->setStretchFactor(1, 3);  // expiry — taller table
 
-    grid->setRowStretch(0, 1);   // heatmap — compact
-    grid->setRowStretch(1, 3);   // primary research row
-    grid->setRowStretch(2, 3);   // analytics row
-    // Column 0/2 are fixed-width rails; the elastic center is column 1.
-    grid->setColumnStretch(0, 0);
-    grid->setColumnStretch(1, 1);
-    grid->setColumnStretch(2, 0);
+    row2->addWidget(left_v);
+    row2->addWidget(cot_);
+    row2->addWidget(term_);
+    row2->setStretchFactor(0, 1);
+    row2->setStretchFactor(1, 3);
+    row2->setStretchFactor(2, 1);
+
+    v_split->addWidget(heatmap_);
+    v_split->addWidget(row1);
+    v_split->addWidget(row2);
+    v_split->setStretchFactor(0, 1);  // heatmap — compact strip
+    v_split->setStretchFactor(1, 3);  // row1
+    v_split->setStretchFactor(2, 3);  // row2
+
+    host_layout->addWidget(v_split, 1);
 
     stack->addWidget(grid_host_);
 
