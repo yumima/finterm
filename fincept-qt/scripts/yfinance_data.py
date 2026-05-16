@@ -466,6 +466,102 @@ def get_ipo_extras(symbol):
     return out
 
 
+def parse_s1_funding(url):
+    """Download an S-1 (or S-1/A) document from SEC EDGAR and extract the
+    'Recent Sales of Unregistered Securities' section verbatim. This is the
+    standardized prospectus section where companies disclose private-placement
+    rounds with dates and aggregate consideration — i.e. the free public
+    equivalent of Crunchbase / NPM's 'Financing History' panel.
+
+    Output:
+      url:           the source URL (echoed back)
+      section_text:  cleaned plain-text section (truncated to 12000 chars)
+      rounds:        best-effort list of {date, amount, context} hints
+      error:         set on download / parse failure
+    """
+    if not url:
+        return {"error": "no url"}
+    try:
+        import requests, re
+        from bs4 import BeautifulSoup
+        import warnings
+        try:
+            from bs4 import XMLParsedAsHTMLWarning
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+        except Exception:
+            pass
+
+        # SEC requires the User-Agent header. Same identifier our C++ client
+        # sends so SEC's rate limiter treats both as one client.
+        headers = {"User-Agent": "FinceptTerminal admin@hanlexon.com"}
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code != 200:
+            return {"url": url, "error": f"HTTP {r.status_code}"}
+
+        # Strip HTML, normalize whitespace. S-1s use heavy table markup so
+        # get_text() leaves a lot of whitespace; collapse runs.
+        soup = BeautifulSoup(r.text, "html.parser")
+        text = soup.get_text("\n")
+
+        m = re.search(r"recent\s+sales\s+of\s+unregistered\s+securities",
+                      text, re.IGNORECASE)
+        if not m:
+            # Return as an error so the C++ side lands in `s1_misses_` and the
+            # UI can distinguish "fetched but no section" from "section was
+            # empty after parsing". Some shell-company S-1s genuinely omit
+            # this section; treating it as a hard miss avoids re-parsing the
+            # same multi-MB file repeatedly.
+            return {"url": url, "error": "section not found in this filing"}
+
+        section = text[m.start(): m.start() + 12000]
+        # Trim at the next major prospectus heading.
+        nxt = re.search(
+            r"\n\s*(item\s+\d+|exhibits\s+and\s+financial|signatures|undertakings|index\s+to\s+(financial|exhibits))",
+            section[200:], re.IGNORECASE)
+        if nxt:
+            section = section[:nxt.start() + 200]
+        section = re.sub(r"\n{2,}", "\n\n", section)
+        section = re.sub(r"[ \t]+", " ", section)
+        section = section.strip()
+
+        # Best-effort round extraction. We look for sentence fragments that
+        # mention both a date-ish token AND a dollar amount; the surrounding
+        # 200 chars become `context`. Noisy by design — the user reads the
+        # section_text for the authoritative version.
+        rounds = []
+        money_re = re.compile(r"\$\s?[\d,]+(?:\.\d+)?\s?(?:million|billion|M|B)?",
+                              re.IGNORECASE)
+        date_re  = re.compile(
+            r"(?:January|February|March|April|May|June|July|August|"
+            r"September|October|November|December)\s+\d{1,2},?\s+\d{4}|"
+            r"(?:Q[1-4]\s+\d{4})|"
+            r"(?:in\s+\d{4})", re.IGNORECASE)
+        # Walk through money matches and grab nearest date in surrounding
+        # window. Cap at 20 rounds so the UI doesn't drown.
+        for mm in money_re.finditer(section):
+            if len(rounds) >= 20:
+                break
+            lo = max(0, mm.start() - 250)
+            hi = min(len(section), mm.end() + 100)
+            ctx = section[lo:hi].strip()
+            dm = date_re.search(ctx)
+            if not dm:
+                continue
+            rounds.append({
+                "date": dm.group(0).strip(),
+                "amount": mm.group(0).strip(),
+                "context": re.sub(r"\s+", " ", ctx)[:280],
+            })
+
+        return {
+            "url": url,
+            "section_text": section,
+            "rounds": rounds,
+        }
+    except Exception as e:
+        return {"url": url, "error": str(e)}
+
+
 def get_batch_quotes(symbols):
     """Fetch quotes for multiple symbols at once using yfinance batch download"""
     try:
@@ -1439,6 +1535,11 @@ def _daemon_dispatch_inner(action, payload):
         # IPO Watch detail-rail aggregator: quarterly financials, holders,
         # news. One daemon round-trip on row click.
         return get_ipo_extras((payload or {}).get("symbol"))
+    if action == "parse_s1":
+        # Parse an S-1 prospectus into its "Recent Sales of Unregistered
+        # Securities" section for the FUNDING tab. URL comes from
+        # fetch_sec_filings on the C++ side.
+        return parse_s1_funding((payload or {}).get("url"))
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

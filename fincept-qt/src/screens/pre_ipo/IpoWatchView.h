@@ -103,6 +103,12 @@ class IpoWatchView : public QWidget {
     enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensCount };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
                       TW_6Months, TW_12Months, TW_Past30Days };
+    // Tab indexes for the two detail-rail tab bars — kept in sync with the
+    // addTab order in build_detail_rail. Use these instead of magic numbers
+    // so reorders are caught at compile time.
+    enum FactTab  { FT_Deal = 0, FT_Business, FT_Leadership, FT_Fundamentals,
+                    FT_News, FT_Holders, FT_Filings, FT_Funding, FT_Pipeline };
+    enum ChartTab { CT_Price = 0, CT_Revenue, CT_Range, CT_Lockup, CT_Timeline };
 
     static const char* lens_label(Lens l);
 
@@ -144,6 +150,7 @@ class IpoWatchView : public QWidget {
     QString build_news_html(const Entry& e) const;
     QString build_holders_html(const Entry& e) const;
     QString build_filings_html(const Entry& e) const;
+    QString build_funding_html(const Entry& e) const;
     void    rebuild_price_chart(const Entry& e);   // mutates price_chart_view_
     void    rebuild_revenue_chart(const Entry& e); // mutates revenue_chart_view_
 
@@ -151,6 +158,7 @@ class IpoWatchView : public QWidget {
     void fetch_ipo_extras_for_detail(const Entry& e);
     void fetch_sec_filings_for_detail(const Entry& e);
     void fetch_wikipedia_for_detail(const Entry& e);
+    void fetch_s1_funding_for_detail(const Entry& e);
     QVector<int> filtered_indices() const;     // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
     /// definition "priced only" and shouldn't be silently emptied when the
@@ -198,6 +206,13 @@ class IpoWatchView : public QWidget {
     // "wiki tried but failed" set — keep so we don't repeatedly hit the
     // REST API for pre-IPO companies that simply have no Wikipedia page.
     QSet<QString>                                          wiki_misses_;
+    // Parsed S-1 "Recent Sales of Unregistered Securities" sections — the
+    // free, public surrogate for the funding-round history that NPM / Hiive
+    // sell. Keyed by ticker; misses kept separately so we don't re-parse
+    // huge S-1 documents when the section is genuinely absent.
+    QHash<QString, services::MarketDataService::S1Funding> s1_cache_;
+    QSet<QString>                                          s1_inflight_;
+    QSet<QString>                                          s1_misses_;
     // Lazy per-symbol price history cache for the detail rail's price-since-IPO
     // sparkline. Keyed by ticker. Presence in `history_cache_` means the fetch
     // returned (even if empty = "yfinance had nothing"); presence in
@@ -265,6 +280,7 @@ class IpoWatchView : public QWidget {
     QLabel*       page_news_     = nullptr;
     QLabel*       page_holders_  = nullptr;
     QLabel*       page_filings_  = nullptr;
+    QLabel*       page_funding_  = nullptr;
 
     QTabWidget*   tabs_charts_   = nullptr;
     QWidget*      page_price_chart_host_   = nullptr; // QVBoxLayout host for the QChartView

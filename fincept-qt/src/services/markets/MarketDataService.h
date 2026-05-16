@@ -224,6 +224,24 @@ class MarketDataService : public QObject
     using WikipediaCallback = std::function<void(bool, WikipediaSummary)>;
     void fetch_wikipedia_summary(const QString& title_query, WikipediaCallback cb);
 
+    /// S-1 funding-history extractor — free, public surrogate for the
+    /// Crunchbase/NPM "Financing History" panel. Downloads the company's
+    /// latest S-1 (or S-1/A) document from SEC EDGAR, lifts the
+    /// "Recent Sales of Unregistered Securities" section verbatim, and
+    /// best-effort tags any round mentions it can identify by regex.
+    /// Caller passes the S-1 document URL we already discovered via
+    /// fetch_sec_filings — we don't re-walk the submissions API here.
+    struct S1Funding {
+        QString source_url;     // S-1 document URL on sec.gov
+        QString section_text;   // cleaned "Recent Sales..." section
+        // Best-effort structured rows extracted from the section. Always
+        // partial; treat as hints, not the authoritative record.
+        struct Round { QString date; QString amount; QString context; };
+        QVector<Round> rounds;
+    };
+    using S1FundingCallback = std::function<void(bool, S1Funding)>;
+    void fetch_s1_funding(const QString& s1_url, S1FundingCallback cb);
+
     /// Fetch historical OHLCV data. period: "1mo","3mo","6mo","1y","2y","5y"
     /// interval: "1d","1wk","1mo"
     /// Phase 3+: prefer `DataHub::subscribe(this, "market:history:<sym>:<period>:<interval>", ...)`

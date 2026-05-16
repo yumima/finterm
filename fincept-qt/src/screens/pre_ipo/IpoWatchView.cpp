@@ -139,9 +139,16 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
                 ipo_extras_inflight_.clear();
                 filings_cache_.clear();
                 filings_inflight_.clear();
+                // S-1 caches must be cleared together with filings_cache_
+                // because fetch_s1_funding_for_detail looks up the S-1 URL
+                // from filings_cache_; if we clear one but not the other,
+                // a wake leaves S-1 lookups stranded on stale empty entries.
                 wiki_cache_.clear();
                 wiki_inflight_.clear();
                 wiki_misses_.clear();
+                s1_cache_.clear();
+                s1_inflight_.clear();
+                s1_misses_.clear();
                 refresh();
             });
 }
@@ -403,6 +410,7 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     tabs_facts_ = new QTabWidget;
     tabs_facts_->setDocumentMode(true);
     tabs_facts_->setTabPosition(QTabWidget::North);
+    // Tab order must match the FactTab enum in the header.
     tabs_facts_->addTab(make_scroll_label(page_deal_),    "DEAL");
     tabs_facts_->addTab(make_scroll_label(page_business_),"BUSINESS");
     tabs_facts_->addTab(make_scroll_label(page_leader_),  "LEADERSHIP");
@@ -410,6 +418,7 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     tabs_facts_->addTab(make_scroll_label(page_news_),    "NEWS");
     tabs_facts_->addTab(make_scroll_label(page_holders_), "HOLDERS");
     tabs_facts_->addTab(make_scroll_label(page_filings_), "FILINGS");
+    tabs_facts_->addTab(make_scroll_label(page_funding_), "FUNDING");
     tabs_facts_->addTab(make_scroll_label(page_pipeline_),"PIPELINE");
     mtv->addWidget(tabs_facts_, 1);
     middle_split->addWidget(middle_top_container);
@@ -496,7 +505,7 @@ void IpoWatchView::apply_styles() {
                 .arg(BG_SURFACE(), AMBER(), BG_BASE()));
     if (status_lbl_)
         status_lbl_->setStyleSheet(
-            QString("color:%1;font-size:11px;background:transparent;padding-right:10px;")
+            QString("color:%1;font-size:12px;background:transparent;padding-right:10px;")
                 .arg(TEXT_SECONDARY()));
 
     if (kpi_strip_)
@@ -505,14 +514,15 @@ void IpoWatchView::apply_styles() {
                 .arg(BG_SURFACE(), BORDER_DIM()));
 
     const QString kpi_qss =
-        QString("QLabel{color:%1;font-size:11px;background:transparent;}").arg(TEXT_PRIMARY());
+        QString("QLabel{color:%1;font-size:12px;background:transparent;}").arg(TEXT_PRIMARY());
     for (QLabel* l : {kpi_week_, kpi_month_, kpi_pop_, kpi_above_, kpi_in_, kpi_below_})
         if (l) l->setStyleSheet(kpi_qss);
 
     if (filter_row_)
         filter_row_->setStyleSheet(QString("background:%1;").arg(BG_RAISED()));
     const QString chip_qss =
-        QString("QComboBox{background:%1;color:%2;border:1px solid %3;border-radius:2px;padding:0 6px;}"
+        QString("QComboBox{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
+                "padding:0 6px;font-size:12px;}"
                 "QComboBox::drop-down{border:none;width:14px;}"
                 "QComboBox QAbstractItemView{background:%1;color:%2;selection-background-color:%4;}")
             .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER());
@@ -520,7 +530,8 @@ void IpoWatchView::apply_styles() {
         if (c) c->setStyleSheet(chip_qss);
     if (search_)
         search_->setStyleSheet(
-            QString("QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;padding:2px 6px;}"
+            QString("QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
+                    "padding:2px 6px;font-size:12px;}"
                     "QLineEdit:focus{border-color:%4;}")
                 .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER()));
 
@@ -529,7 +540,7 @@ void IpoWatchView::apply_styles() {
             QString("QTableWidget{background:%1;color:%2;border:0;gridline-color:%3;"
                     "alternate-background-color:%4;}"
                     "QHeaderView::section{background:%5;color:%6;border:0;padding:4px 8px;"
-                    "font-weight:bold;font-size:10px;}"
+                    "font-weight:bold;font-size:12px;}"
                     "QTableWidget::item:selected{background:%7;color:%8;}")
                 .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), BG_RAISED(), BG_RAISED(),
                      TEXT_SECONDARY(), AMBER(), BG_BASE()));
@@ -548,9 +559,9 @@ void IpoWatchView::apply_styles() {
 
     const QString tabs_qss =
         QString("QTabWidget::pane{background:%1;border:none;border-top:1px solid %2;}"
-                "QTabBar::tab{background:transparent;color:%3;padding:4px 12px;"
+                "QTabBar::tab{background:transparent;color:%3;padding:5px 14px;"
                 "  border:none;border-bottom:2px solid transparent;"
-                "  font-size:11px;font-weight:600;letter-spacing:1px;}"
+                "  font-size:12px;font-weight:600;letter-spacing:1px;}"
                 "QTabBar::tab:selected{color:%4;border-bottom-color:%4;}"
                 "QTabBar::tab:hover:!selected{color:%5;}"
                 "QTabBar::tab:disabled{color:#444;}")
@@ -561,7 +572,7 @@ void IpoWatchView::apply_styles() {
     const QString body_qss =
         QString("QLabel{color:%1;background:%2;}").arg(TEXT_PRIMARY(), BG_SURFACE());
     for (QLabel* lbl : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
-                        page_news_, page_holders_, page_filings_,
+                        page_news_, page_holders_, page_filings_, page_funding_,
                         page_range_, page_lockup_, page_timeline_,
                         right_top_, right_bottom_}) {
         if (lbl) lbl->setStyleSheet(body_qss);
@@ -838,6 +849,47 @@ void IpoWatchView::fetch_sec_filings_for_detail(const Entry& e) {
             // We insert even on failure (empty list) so we don't re-issue.
             // The "no filings yet" placeholder shows in that case.
             self->filings_cache_.insert(sym, ok ? filings : QVector<services::MarketDataService::SecFiling>{});
+            if (self->detail_symbol_ == sym) {
+                for (const auto& en : self->entries_) {
+                    if (en.ticker == sym) { self->render_detail(&en); return; }
+                }
+            }
+        });
+}
+
+void IpoWatchView::fetch_s1_funding_for_detail(const Entry& e) {
+    // V1 path: piggyback on filings_cache_ — pick the most recent S-1 or
+    // S-1/A doc, hand its URL to the daemon for parsing. If the SEC filings
+    // fetch hasn't landed yet, bail; the render-on-callback path inside
+    // fetch_sec_filings_for_detail will re-fire render_detail once it does,
+    // at which point we'll re-enter this function with filings populated.
+    if (e.ticker.isEmpty()) return;
+    if (s1_cache_.contains(e.ticker) || s1_inflight_.contains(e.ticker)) return;
+    if (s1_misses_.contains(e.ticker)) return;
+    auto fit = filings_cache_.constFind(e.ticker);
+    if (fit == filings_cache_.constEnd()) return;  // wait for SEC filings to load
+    QString s1_url;
+    for (const auto& f : fit.value()) {
+        if (f.form == "S-1" || f.form == "S-1/A") {
+            s1_url = f.url;
+            break; // filings list is date-desc → first match is most recent
+        }
+    }
+    if (s1_url.isEmpty()) {
+        // No S-1 in the recent-25 filings — older deal, parser can't help.
+        s1_misses_.insert(e.ticker);
+        return;
+    }
+
+    s1_inflight_.insert(e.ticker);
+    QPointer<IpoWatchView> self = this;
+    const QString sym = e.ticker;
+    services::MarketDataService::instance().fetch_s1_funding(
+        s1_url, [self, sym](bool ok, services::MarketDataService::S1Funding data) {
+            if (!self) return;
+            self->s1_inflight_.remove(sym);
+            if (!ok) { self->s1_misses_.insert(sym); return; }
+            self->s1_cache_.insert(sym, data);
             if (self->detail_symbol_ == sym) {
                 for (const auto& en : self->entries_) {
                     if (en.ticker == sym) { self->render_detail(&en); return; }
@@ -1377,30 +1429,32 @@ static QString position_bar(double pos, const QString& fill_color, int segments 
 // (unicode_sparkline removed — the PRICE chart is now a real QChartView from
 // ChartFactory::line_chart, rendered inline in the middle-bottom tab.)
 
-// Shared CSS injected once into every detail-rail QLabel — same as before
-// but compacted into a static so each page renders consistently.
+// Shared CSS injected once into every detail-rail QLabel. 12px is the floor
+// per the dashboard-wide convention (BaseWidget, TickerBar, OpenPositions all
+// use 12px for body text); accent labels (.sec, .k, .chip) use 12px too —
+// the visual hierarchy comes from weight/color, not size.
 static const char* kDetailCss =
     "<style>"
     "body{font-family:Consolas,Menlo,monospace;font-size:12px;color:#e5e5e5;}"
-    "h3{margin:0 0 4px 0;font-size:15px;color:#fff;}"
-    ".chip{display:inline-block;padding:2px 7px;background:#222;color:#d97706;"
-    "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:11px;}"
+    "h3{margin:0 0 6px 0;font-size:16px;color:#fff;}"
+    ".chip{display:inline-block;padding:2px 8px;background:#222;color:#d97706;"
+    "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:12px;}"
     ".chip.priced{color:#10b981;border-color:#10b981;}"
     ".chip.filed{color:#3b82f6;border-color:#3b82f6;}"
     ".chip.upcoming{color:#d97706;border-color:#d97706;}"
     "table.kv{border-collapse:collapse;width:100%;}"
-    "table.kv td{padding:3px 8px 3px 0;vertical-align:top;font-size:12px;}"
+    "table.kv td{padding:4px 8px 4px 0;vertical-align:top;font-size:12px;}"
     "table.grid{border-collapse:collapse;width:100%;margin-top:4px;}"
-    "table.grid td{padding:3px 6px;border-bottom:1px solid #2a2a2a;font-size:12px;}"
-    "table.grid td.k{color:#b8b8b8;font-size:11px;width:46%;letter-spacing:.3px;}"
-    ".k{color:#b8b8b8;font-size:11px;letter-spacing:.3px;}"
-    ".sec{color:#d97706;font-weight:bold;font-size:11px;letter-spacing:1.5px;"
-    "  margin:8px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:2px;}"
+    "table.grid td{padding:4px 6px;border-bottom:1px solid #2a2a2a;font-size:12px;}"
+    "table.grid td.k{color:#b8b8b8;font-size:12px;width:46%;letter-spacing:.3px;}"
+    ".k{color:#b8b8b8;font-size:12px;letter-spacing:.3px;}"
+    ".sec{color:#d97706;font-weight:bold;font-size:12px;letter-spacing:1.5px;"
+    "  margin:10px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:3px;}"
     "a{color:#d97706;text-decoration:none;}"
     "a:hover{text-decoration:underline;}"
     ".pos{color:#10b981;}"
     ".neg{color:#ef4444;}"
-    ".big{font-size:17px;font-weight:bold;}"
+    ".big{font-size:18px;font-weight:bold;}"
     ".muted{color:#7a7a7a;}"
     "</style>";
 
@@ -1409,7 +1463,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     if (!e) {
         header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");
         for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
-                          page_news_, page_holders_, page_filings_,
+                          page_news_, page_holders_, page_filings_, page_funding_,
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
             if (p) p->setText("");
         detail_symbol_.clear();
@@ -1424,6 +1478,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     fetch_ipo_extras_for_detail(*e);
     fetch_sec_filings_for_detail(*e);
     fetch_wikipedia_for_detail(*e);
+    fetch_s1_funding_for_detail(*e);
     // Lazy fetch fundamentals.
     if (!e->ticker.isEmpty() && !info_cache_.contains(e->ticker)) {
         QPointer<IpoWatchView> self = this;
@@ -1465,22 +1520,24 @@ void IpoWatchView::render_detail(const Entry* e) {
     page_news_     ->setText(QString(kDetailCss) + build_news_html(*e));
     page_holders_  ->setText(QString(kDetailCss) + build_holders_html(*e));
     page_filings_  ->setText(QString(kDetailCss) + build_filings_html(*e));
+    page_funding_  ->setText(QString(kDetailCss) + build_funding_html(*e));
     page_pipeline_ ->setText(QString(kDetailCss) + build_pipeline_html(*e));
 
-    // Tab visibility. Indexes match addTab order in build_detail_rail:
-    //   0 DEAL · 1 BUSINESS · 2 LEADERSHIP · 3 FUNDAMENTALS · 4 NEWS · 5 HOLDERS · 6 FILINGS · 7 PIPELINE
     // Data-dependent tabs stay visible while a ticker is resolvable so the
     // builders' "Loading…" placeholders are seen; only the no-ticker case
     // collapses them. PIPELINE only applies to upcoming/filed entries.
     const bool has_ticker = !e->ticker.isEmpty();
-    tabs_facts_->setTabVisible(1, has_ticker || (have_info &&
-        (!info.description.isEmpty() || info.employees > 0 || !info.website.isEmpty())));
-    tabs_facts_->setTabVisible(2, has_ticker || (have_info && !info.officers.isEmpty()));
-    tabs_facts_->setTabVisible(3, has_ticker);
-    tabs_facts_->setTabVisible(4, has_ticker);           // NEWS
-    tabs_facts_->setTabVisible(5, has_ticker);           // HOLDERS (priced-only really, but builder gates)
-    tabs_facts_->setTabVisible(6, has_ticker);           // FILINGS
-    tabs_facts_->setTabVisible(7, e->status != "priced"); // PIPELINE
+    tabs_facts_->setTabVisible(FT_Business,
+        has_ticker || (have_info && (!info.description.isEmpty() || info.employees > 0 ||
+                                     !info.website.isEmpty())));
+    tabs_facts_->setTabVisible(FT_Leadership,
+        has_ticker || (have_info && !info.officers.isEmpty()));
+    tabs_facts_->setTabVisible(FT_Fundamentals, has_ticker);
+    tabs_facts_->setTabVisible(FT_News,         has_ticker);
+    tabs_facts_->setTabVisible(FT_Holders,      has_ticker);
+    tabs_facts_->setTabVisible(FT_Filings,      has_ticker);
+    tabs_facts_->setTabVisible(FT_Funding,      has_ticker);
+    tabs_facts_->setTabVisible(FT_Pipeline,     e->status != "priced");
 
     // ── CHARTS TAB PAGES (middle-bottom) ────────────────────────────────────
     rebuild_price_chart(*e);
@@ -1489,13 +1546,11 @@ void IpoWatchView::render_detail(const Entry* e) {
     page_lockup_  ->setText(QString(kDetailCss) + build_lockup_html(*e));
     page_timeline_->setText(QString(kDetailCss) + build_timeline_html(*e));
 
-    // Chart tab indexes:
-    //   0 PRICE · 1 REVENUE · 2 RANGE · 3 LOCK-UP · 4 TIMELINE
-    tabs_charts_->setTabVisible(0, e->status == "priced");                          // PRICE
-    tabs_charts_->setTabVisible(1, has_ticker);                                     // REVENUE (lazy)
-    tabs_charts_->setTabVisible(2, has_ticker);                                     // RANGE
-    tabs_charts_->setTabVisible(3, e->status == "priced");                          // LOCK-UP
-    tabs_charts_->setTabVisible(4, e->status != "priced");                          // TIMELINE
+    tabs_charts_->setTabVisible(CT_Price,    e->status == "priced");
+    tabs_charts_->setTabVisible(CT_Revenue,  has_ticker);
+    tabs_charts_->setTabVisible(CT_Range,    has_ticker);
+    tabs_charts_->setTabVisible(CT_Lockup,   e->status == "priced");
+    tabs_charts_->setTabVisible(CT_Timeline, e->status != "priced");
     // If the currently-visible tab got hidden, jump to the first visible one.
     if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex())) {
         for (int i = 0; i < tabs_charts_->count(); ++i)
@@ -1848,6 +1903,73 @@ QString IpoWatchView::build_filings_html(const Entry& e) const {
              f.primary_doc.toHtmlEscaped() + "</a></td></tr>";
     }
     h += "</table>";
+    return h;
+}
+
+// ── FUNDING tab — parsed S-1 "Recent Sales of Unregistered Securities" ──────
+// Free public surrogate for the NPM / Hiive financing-history panel. The
+// parser is best-effort: structured `rounds` are noisy hints; the
+// `section_text` is the authoritative verbatim excerpt from the prospectus.
+QString IpoWatchView::build_funding_html(const Entry& e) const {
+    if (e.ticker.isEmpty())
+        return "<div class='muted'>Funding history appears once a ticker / CIK exists in SEC's index.</div>";
+
+    // SEC filings haven't loaded yet → can't even look for an S-1 URL.
+    if (!filings_cache_.contains(e.ticker))
+        return "<div class='muted'>Waiting on SEC filings to locate the latest S-1…</div>";
+
+    if (s1_inflight_.contains(e.ticker))
+        return "<div class='muted'>Parsing S-1 prospectus (large file, ~20-40s)…</div>";
+
+    if (s1_misses_.contains(e.ticker)) {
+        const auto& filings = filings_cache_.value(e.ticker);
+        bool any_s1 = false;
+        for (const auto& f : filings)
+            if (f.form == "S-1" || f.form == "S-1/A") { any_s1 = true; break; }
+        if (!any_s1)
+            return "<div class='muted'>No S-1 / S-1/A in the recent SEC filings for this ticker.<br><br>"
+                   "Funding history lives in the IPO prospectus, which is only in the recent 25 "
+                   "filings for newly-listed deals — older listings have it further back.</div>";
+        return "<div class='muted'>S-1 fetched, but no 'Recent Sales of Unregistered Securities' "
+               "section was found (some shell-company S-1s omit it).</div>";
+    }
+
+    if (!s1_cache_.contains(e.ticker))
+        return "<div class='muted'>Loading funding history from S-1…</div>";
+
+    const auto& f = s1_cache_.value(e.ticker);
+    QString h;
+    if (!f.rounds.isEmpty()) {
+        h += "<span class='sec'>EXTRACTED ROUNDS · best-effort regex pass</span>";
+        h += "<table class='grid'>";
+        h += "<tr><td class='k' style='width:22%;'>Date</td>"
+             "<td class='k' style='width:22%;'>Amount</td>"
+             "<td class='k'>Context</td></tr>";
+        for (const auto& r : f.rounds) {
+            h += "<tr><td><b>" + r.date.toHtmlEscaped() + "</b></td>"
+                 "<td>" + r.amount.toHtmlEscaped() + "</td>"
+                 "<td>" + r.context.toHtmlEscaped() + "</td></tr>";
+        }
+        h += "</table>";
+        h += "<div class='muted' style='margin-top:6px;'>The table above is regex-extracted "
+             "from the prospectus and may merge or miss entries. The verbatim section below "
+             "is authoritative.</div>";
+    }
+
+    h += "<span class='sec'>S-1 EXCERPT · Recent Sales of Unregistered Securities</span>";
+    if (f.section_text.isEmpty()) {
+        h += "<div class='muted'>Section was empty in the parsed S-1.</div>";
+    } else {
+        // Newlines from the parsed plain-text section need to become <br>'s
+        // for Qt's RichText to preserve paragraph breaks.
+        QString body = f.section_text.toHtmlEscaped();
+        body.replace("\n", "<br>");
+        h += "<div style='line-height:1.5;white-space:normal;'>" + body + "</div>";
+    }
+    if (!f.source_url.isEmpty()) {
+        h += "<div class='muted' style='margin-top:8px;'>source: "
+             "<a href='" + f.source_url.toHtmlEscaped() + "'>S-1 on sec.gov</a></div>";
+    }
     return h;
 }
 

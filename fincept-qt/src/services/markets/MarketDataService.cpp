@@ -1078,6 +1078,56 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
         });
 }
 
+// ── S-1 funding-history extractor ──────────────────────────────────────────
+void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallback cb) {
+    if (s1_url.isEmpty()) { cb(false, {}); return; }
+    // 24h CacheManager TTL — S-1s never change once filed (amendments are new
+    // documents with new URLs), so the value is effectively immutable. A
+    // shorter TTL would just waste daemon round-trips.
+    constexpr int kS1CacheTtlSec = 24 * 60 * 60;
+    const QString cache_key = "s1_funding:" + s1_url;
+    auto parse = [](const QJsonObject& o) -> S1Funding {
+        S1Funding f;
+        f.source_url   = o["url"].toString();
+        f.section_text = o["section_text"].toString();
+        for (const auto& v : o["rounds"].toArray()) {
+            const auto r = v.toObject();
+            S1Funding::Round rd;
+            rd.date    = r["date"].toString();
+            rd.amount  = r["amount"].toString();
+            rd.context = r["context"].toString();
+            if (!rd.amount.isEmpty()) f.rounds.append(rd);
+        }
+        return f;
+    };
+    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    if (cached.has_value()) {
+        const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
+        cb(true, parse(obj));
+        return;
+    }
+    QJsonObject payload;
+    payload["url"] = s1_url;
+    python::PythonWorker::instance().submit(
+        "parse_s1", payload,
+        [cb, parse, s1_url](bool ok, QJsonObject result, QString err) {
+            if (!ok || result.contains("error")) {
+                LOG_WARN("MarketData", "parse_s1 failed for " + s1_url + ": " + err);
+                cb(false, {});
+                return;
+            }
+            const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put("s1_funding:" + s1_url, raw,
+                                                  kS1CacheTtlSec, "sec");
+            cb(true, parse(result));
+        },
+        // S-1 documents are heavy (typically 2-5MB, sometimes 10-20MB).
+        // SEC throttles to ~10 req/s/IP; download + BeautifulSoup parse on
+        // large filings can take 15-30s. 60s of headroom prevents spurious
+        // timeouts on the long tail.
+        60000);
+}
+
 // ── Static symbol lists ─────────────────────────────────────────────────────
 
 QStringList MarketDataService::indices_symbols() {
