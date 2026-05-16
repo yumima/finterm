@@ -244,6 +244,12 @@ void CommandBar::build_commands() {
          {"deriv", "derivatives", "options"},
          "",
          {"derivatives", "options", "futures"}},
+        {"fno",
+         "F&O",
+         "Sensibull-style F&O analytics: option chain, strategy builder, OI, max-pain, multi-straddle",
+         {"fno", "f&o", "fando", "options", "chain", "strategy"},
+         "",
+         {"fno", "options", "option-chain", "strategy-builder", "open-interest"}},
         // Research
         {"equity_research",
          "Equity Research",

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`77a8e1f6`](https://github.com/yumima/finterm/commit/77a8e1f6) screens(fno): port F&O analytics screen alongside Futures
 - [`1c30883d`](https://github.com/yumima/finterm/commit/1c30883d) scrub: remove outbound paths to api.fincept.in (localhost-stance audit)
 - [`9f7ff5da`](https://github.com/yumima/finterm/commit/9f7ff5da) mcp(tools): fix Tier 3 cherry-pick build errors
 - [`65538d45`](https://github.com/yumima/finterm/commit/65538d45) **fix(trading):** load broker credentials on calling thread, not in worker
