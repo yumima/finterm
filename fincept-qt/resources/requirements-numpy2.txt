@@ -21,6 +21,10 @@ databento==0.66.0
 databento-dbn==0.44.0
 feedparser==6.0.12
 gnews==0.4.2
+# Article body extraction for NewsDetailPanel — trafilatura is primary,
+# readability-lxml is fallback when trafilatura returns empty (some paywalls).
+trafilatura>=1.12.2
+readability-lxml>=0.8.1
 geopy>=2.4.0
 akshare>=1.14.0
 aiohappyeyeballs==2.6.1

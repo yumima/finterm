@@ -481,10 +481,15 @@ void NewsFeedPanel::update_two_column_layout() {
             // previously-buggy fallback path saved middle=0 and the
             // detail panel appeared as a sliver on first click.
             //
-            // 2/5 · 1/5 · 2/5 split. 280px floor keeps the reader usable
-            // on small viewports.
+            // 1/3 · 1/3 · 1/3 split with a 480px floor on the middle.
+            // The previous 2/5 · 1/5 · 2/5 split left the article body and
+            // ARTICLE section so narrow (~20% of viewport) that long-form
+            // text wrapped to 3-4 words per line. 480px floor is the
+            // comfortable-reading width for the 13-14px monospace stack
+            // (~60-70 chars/line); bumps up proportionally on wider
+            // viewports without crowding out the side lists.
             const int detail_w =
-                std::max(280, width() / 5);
+                std::max(480, width() / 3);
             const int side = (width() - detail_w) / 2;
             feed_splitter_->setSizes({side, detail_w, side});
         } else {

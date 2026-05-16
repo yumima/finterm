@@ -76,6 +76,19 @@ class NewsDetailPanel : public QWidget {
     QLabel* impact_label_ = nullptr;
     QLabel* tickers_label_ = nullptr;
 
+    // Article body section — sits BELOW the action button row. Populated by
+    // NewsService::extract_article_body() on each show_article(). Reused
+    // across articles; the body label is replaced on each load and the
+    // "loading…" state is shown while the extractor runs.
+    QWidget* body_section_ = nullptr;
+    QLabel*  body_title_   = nullptr; // "ARTICLE" header, hidden on failure
+    QLabel*  body_status_  = nullptr; // "loading…" / error message
+    QLabel*  body_label_   = nullptr; // the extracted prose itself
+    // Generation token so a stale extraction callback for a previous article
+    // doesn't repaint a body we no longer care about (e.g. user clicked B
+    // while A was still extracting). Bumped on every show_article().
+    int      body_gen_     = 0;
+
     // AI analysis section
     QWidget* analysis_section_ = nullptr;
     QLabel* ai_summary_ = nullptr;

@@ -124,6 +124,9 @@ class NewsService : public QObject
     using ArticlesCallback = std::function<void(bool ok, QVector<NewsArticle>)>;
     using AnalysisCallback = std::function<void(bool ok, NewsAnalysis)>;
     using SummaryCallback = std::function<void(bool ok, QString summary)>;
+    /// (ok, title, body_text). Body text is plain text, paragraphs separated
+    /// by `\n\n`. Title may be empty if the extractor couldn't recover it.
+    using BodyCallback = std::function<void(bool ok, QString title, QString body)>;
 
     static NewsService& instance();
 
@@ -141,6 +144,13 @@ class NewsService : public QObject
 
     void fetch_all_news(bool force, ArticlesCallback cb);
     void analyze_article(const QString& url, AnalysisCallback cb);
+
+    /// Pull the cleaned body text out of an article URL via the
+    /// extract_article.py helper (trafilatura → readability → bs4 fallback).
+    /// Cached per URL hash for kArticleBodyTtlSec since article content is
+    /// effectively immutable once published. Callback fires on the Qt event
+    /// loop with (ok, title, body). On failure body is empty and ok=false.
+    void extract_article_body(const QString& url, BodyCallback cb);
 
     /// Summarize top N headlines via AI. Cached for 10 min per headline signature.
     void summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb);
@@ -186,6 +196,11 @@ class NewsService : public QObject
     QTimer* refresh_timer_ = nullptr;
     static constexpr int kArticleCacheTtlSec = 600; // 10 min
     static constexpr int kSummaryCacheTtlSec = 600;
+    // Article bodies are static once published, so cache aggressively. The
+    // first click on a story pays the ~1-3s extraction cost; every re-open
+    // (same session or after restart, since CacheManager persists) hits
+    // memory and renders instantly.
+    static constexpr int kArticleBodyTtlSec = 7 * 24 * 60 * 60; // 7 days
     int feed_count_ = 0;
     QStringList active_sources_;
 

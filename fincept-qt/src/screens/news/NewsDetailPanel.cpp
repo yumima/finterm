@@ -317,6 +317,44 @@ QWidget* NewsDetailPanel::build_content_view() {
             });
     });
 
+    // ── Article body (extracted prose) ───────────────────────────────────
+    // Sits right below the action button row — the empty area previously
+    // there. Populated by NewsService::extract_article_body() each time
+    // show_article() runs. Lives inside the scroll area so long articles
+    // remain readable without expanding the panel further.
+    body_section_ = new QWidget(content);
+    body_section_->setObjectName("newsBodySection");
+    auto* body_layout = new QVBoxLayout(body_section_);
+    body_layout->setContentsMargins(0, 6, 0, 4);
+    body_layout->setSpacing(4);
+
+    body_title_ = new QLabel("ARTICLE", body_section_);
+    body_title_->setObjectName("newsDetailSectionTitle");
+    body_layout->addWidget(body_title_);
+
+    body_status_ = new QLabel("Loading article…", body_section_);
+    body_status_->setObjectName("newsDetailBodyStatus");
+    body_status_->setStyleSheet(
+        QString("color:%1;background:transparent;font-size:%2px;")
+            .arg(ui::colors::TEXT_SECONDARY())
+            .arg(ui::fonts::font_px(-1)));
+    body_layout->addWidget(body_status_);
+
+    body_label_ = new QLabel(body_section_);
+    body_label_->setObjectName("newsDetailBody");
+    body_label_->setWordWrap(true);
+    body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    // Pin font-size explicitly — relying on the global QSS `*` rule loses
+    // when this label is reparented into the scroll area (same gotcha as
+    // News/IPO row labels). 13px gives a clear hierarchy below the 14px
+    // summary while still being easy to read for long-form prose.
+    body_label_->setStyleSheet(
+        QString("color:%1;background:transparent;font-size:%2px;line-height:1.4;")
+            .arg(ui::colors::TEXT_PRIMARY())
+            .arg(ui::fonts::font_px(-1)));
+    body_layout->addWidget(body_label_);
+    layout->addWidget(body_section_);
+
     // Separator
     auto* sep = new QWidget(content);
     sep->setFixedHeight(1);
@@ -570,6 +608,29 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // Clear related and monitors
     show_related({});
     monitor_section_->hide();
+
+    // Kick off article-body extraction. Bump the generation token so any
+    // late callback from a prior article is discarded — the trafilatura
+    // round-trip can take 1-3s and the user may have moved on by then.
+    const int my_gen = ++body_gen_;
+    body_label_->clear();
+    body_status_->setText("Loading article…");
+    body_status_->show();
+    body_title_->show();
+    services::NewsService::instance().extract_article_body(
+        article.link,
+        [this, my_gen](bool ok, QString /*title*/, QString text) {
+            if (my_gen != body_gen_) return; // stale — user opened a different article
+            if (!ok || text.trimmed().isEmpty()) {
+                body_status_->setText(
+                    "Could not extract body (paywall, blocked, or unsupported page). "
+                    "Use OPEN to read in browser.");
+                body_label_->clear();
+                return;
+            }
+            body_status_->hide();
+            body_label_->setText(text);
+        });
 }
 
 void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {

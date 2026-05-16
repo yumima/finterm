@@ -2,7 +2,10 @@
 
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
+#include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
+
+#include <QCryptographicHash>
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
@@ -412,6 +415,74 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
         cb(true, analysis);
         emit this->analysis_ready(analysis);
     });
+}
+
+// ── Article body extraction (trafilatura via Python helper) ─────────────────
+//
+// NewsDetailPanel calls this on article click to populate the ARTICLE section
+// below the action buttons. The Python helper does the network fetch and
+// boilerplate strip in-process, so we don't have to ship a C++ readability
+// implementation. Cached aggressively because article content doesn't change
+// once published — see kArticleBodyTtlSec.
+
+void NewsService::extract_article_body(const QString& url, BodyCallback cb) {
+    if (url.trimmed().isEmpty()) {
+        cb(false, {}, {});
+        return;
+    }
+
+    // Hash the URL for the cache key — raw URLs include query strings and
+    // tracking params that bloat the key and can include characters QSettings
+    // / SQLite handles awkwardly. SHA1 hex collapses any URL to 40 chars.
+    const QByteArray h = QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Sha1);
+    const QString cache_key = "news:body:" + QString::fromLatin1(h.toHex());
+
+    const QVariant cached = CacheManager::instance().get(cache_key);
+    if (!cached.isNull()) {
+        const auto obj = QJsonDocument::fromJson(cached.toString().toUtf8()).object();
+        cb(true, obj.value("title").toString(), obj.value("text").toString());
+        return;
+    }
+
+    // 25 s budget — most extracts finish in ~1–3 s, but a slow paywall page
+    // or upstream DNS hiccup can stretch out. Stays under the default 30 s
+    // process timeout in PythonRunner.
+    constexpr int kExtractTimeoutMs = 25'000;
+
+    python::PythonRunner::instance().run(
+        QStringLiteral("extract_article.py"),
+        QStringList{url},
+        [cb, cache_key](python::PythonResult result) {
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                LOG_WARN("NewsService",
+                         "extract_article failed: exit=" + QString::number(result.exit_code)
+                             + " err=" + result.error.left(200));
+                cb(false, {}, {});
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(result.output.toUtf8());
+            if (!doc.isObject()) {
+                cb(false, {}, {});
+                return;
+            }
+            const auto obj = doc.object();
+            if (!obj.value("success").toBool(false)) {
+                cb(false, {}, {});
+                return;
+            }
+            const QString title = obj.value("title").toString();
+            const QString text  = obj.value("text").toString();
+            // Cache the parsed object (not the raw stdout) so a malformed
+            // future extractor version with extra fields doesn't pollute the
+            // cache slot we read back.
+            QJsonObject store;
+            store["title"] = title;
+            store["text"]  = text;
+            const QString blob = QString::fromUtf8(QJsonDocument(store).toJson(QJsonDocument::Compact));
+            CacheManager::instance().put(cache_key, QVariant(blob), kArticleBodyTtlSec, "news");
+            cb(true, title, text);
+        },
+        /*on_line=*/{}, /*timeout_ms=*/kExtractTimeoutMs);
 }
 
 // ── AI Headline Summarization ────────────────────────────────────────────────
