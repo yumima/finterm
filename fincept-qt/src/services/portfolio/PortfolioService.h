@@ -171,6 +171,16 @@ class PortfolioService : public QObject {
     void build_summary(const QString& portfolio_id, const QVector<portfolio::PortfolioAsset>& assets,
                        const portfolio::Portfolio& portfolio);
 
+    /// Replace the price-dependent fields in `summary` with the freshest
+    /// values from the CacheManager's `market_last:*` entries, then re-derive
+    /// every aggregate (per-holding market_value/PnL, totals, weights,
+    /// gainers/losers). Used so the disk-cache emit in load_summary() paints
+    /// totals computed against current-known prices instead of the
+    /// previous session's snapshot — otherwise the user sees a briefly
+    /// wrong ribbon while DataHub's per-symbol hydration races to overwrite
+    /// the per-holding rows.
+    static void refresh_summary_prices_from_market_last(portfolio::PortfolioSummary& summary);
+
     // ── Summary cache (P11) ──────────────────────────────────────────────────
     // In-memory (not CacheManager) intentionally: PortfolioSummary holds nested
     // Portfolio + QVector<HoldingWithQuote>, which would require a large JSON

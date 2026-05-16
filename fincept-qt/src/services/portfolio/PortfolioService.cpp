@@ -6,6 +6,7 @@
 #include "python/PythonWorker.h"
 #include "services/sectors/SectorResolver.h"
 #include "services/util/DiskCache.h"
+#include "storage/cache/CacheManager.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -267,14 +268,22 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
 
     // Disk-cache hydration: emit the last-built summary from the previous
     // session immediately so the UI paints with real (if stale) numbers while
-    // the quote refetch + recompute runs below. The cached summary carries
-    // `from_cache=true` so the UI can flag it as stale until the live recompute
-    // overwrites it.
+    // the quote refetch + recompute runs below. Before emitting we refresh
+    // every price-dependent field from CacheManager's `market_last:*` entries
+    // — that cache is updated on every successful quote fetch by any code
+    // path (dashboard ticker, watchlist, prior portfolio refresh) so it's
+    // usually fresher than the portfolio's own disk snapshot, which was
+    // written when PortfolioService last ran build_summary. Without this,
+    // the ribbon flashed yesterday's totals briefly before DataHub's
+    // per-symbol hydration raced to overwrite individual holdings —
+    // producing a visible "wrong-looking intermediate" on the user's first
+    // portfolio click after launch.
     const auto cached_doc = portfolio_disk_cache().load(summary_filename(portfolio_id));
     if (cached_doc.isObject()) {
         auto summary = summary_from_json(cached_doc.object());
         if (!summary.portfolio.id.isEmpty()) {
             summary.from_cache = true;
+            refresh_summary_prices_from_market_last(summary);
             emit summary_loaded(summary);
         }
     }
@@ -306,6 +315,80 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
 void PortfolioService::refresh_summary(const QString& portfolio_id) {
     invalidate_cache(portfolio_id);
     load_summary(portfolio_id);
+}
+
+// static
+void PortfolioService::refresh_summary_prices_from_market_last(portfolio::PortfolioSummary& summary) {
+    if (summary.holdings.isEmpty())
+        return;
+
+    // One SQLite SELECT for the whole cohort — much cheaper than N
+    // CacheManager::get() round-trips on a 50-holding portfolio.
+    QStringList keys;
+    keys.reserve(summary.holdings.size());
+    for (const auto& h : summary.holdings)
+        keys.append(QStringLiteral("market_last:") + h.symbol);
+    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(keys);
+
+    double total_mv   = 0;
+    double total_cost = 0;
+    double total_day  = 0;
+    int    gainers    = 0;
+    int    losers     = 0;
+
+    for (auto& h : summary.holdings) {
+        const auto it = hits.constFind(QStringLiteral("market_last:") + h.symbol);
+        if (it != hits.constEnd()) {
+            const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
+            // Order-book fields aren't in the 7d market_last payload (they
+            // go stale within seconds — see MarketDataService::refresh
+            // comment). Read price-derived fields only; bid/ask/sizes
+            // stay at whatever the disk-cache had so consumers don't
+            // suddenly lose them across emits.
+            h.current_price      = o.value("price").toDouble(h.current_price);
+            h.day_change         = o.value("change").toDouble(h.day_change);
+            h.day_change_percent = o.value("change_pct").toDouble(h.day_change_percent);
+            h.day_high           = o.value("high").toDouble(h.day_high);
+            h.day_low            = o.value("low").toDouble(h.day_low);
+            h.day_volume         = o.value("volume").toDouble(h.day_volume);
+        }
+        // Always recompute per-holding aggregates: quantity / cost_basis
+        // come from disk cache (canonical for this asset row), price may
+        // have been refreshed above, and we want the math consistent
+        // regardless of whether the lookup hit.
+        h.market_value        = h.quantity * h.current_price;
+        h.unrealized_pnl      = h.market_value - h.cost_basis;
+        h.unrealized_pnl_percent =
+            (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+
+        total_mv   += h.market_value;
+        total_cost += h.cost_basis;
+        total_day  += h.day_change * h.quantity;
+        if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
+    }
+
+    for (auto& h : summary.holdings)
+        h.weight = (total_mv > 0) ? (h.market_value / total_mv) * 100.0 : 0;
+
+    summary.total_market_value          = total_mv;
+    summary.total_cost_basis            = total_cost;
+    summary.total_unrealized_pnl        = total_mv - total_cost;
+    summary.total_unrealized_pnl_percent =
+        (total_cost > 0) ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
+    summary.total_day_change            = total_day;
+    summary.total_day_change_percent    =
+        (total_mv - total_day > 0) ? (total_day / (total_mv - total_day)) * 100.0 : 0;
+    summary.gainers                     = gainers;
+    summary.losers                      = losers;
+    // Defensive: total_positions is normally serialised by summary_from_json,
+    // but if a future change ever drops the field, the POSITIONS hero card
+    // would render "0 ▲0 ▼0" on the cache emit. Keep it in sync with the
+    // actual holdings count we just iterated.
+    summary.total_positions             = summary.holdings.size();
+    // last_updated stays at the disk-cache value — the data here is a hybrid
+    // of disk-cache holdings + market_last prices, both potentially stale.
+    // Stamping "now" would lie to consumers (and to the stale-badge UI we
+    // may wire later off `from_cache`).
 }
 
 void PortfolioService::build_summary(const QString& portfolio_id, const QVector<portfolio::PortfolioAsset>& assets,
