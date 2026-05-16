@@ -221,6 +221,14 @@ QString news_screen_styles() {
                   panel's BG_SURFACE shows through (without this it falls back to
                   the global QWidget { background-color: BG_BASE } and produces a
                   black box behind the body). */
+               /* meta_row & body_section_ are plain QWidget containers with no
+                  objectName-specific rule, so without these overrides they fall
+                  through to the global `QWidget { background-color: BG_BASE }` and
+                  paint a black band behind their child labels. The headline above
+                  them rides on BG_SURFACE (via #newsDetailContent transparent), so
+                  the black band looks like an unintended dark strip. Making both
+                  rows transparent lets the panel's BG_SURFACE bleed through. */
+               "#newsDetailMetaRow { background: transparent; }"
                "#newsBodySection { background: transparent; }"
                "#newsDetailBodyTitle { color: #f0e8d0; font-size: 12pt; font-weight: 700;"
                "  background: transparent; padding: 2px 0; }"

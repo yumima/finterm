@@ -153,6 +153,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     // impact, tickers). Collapsing saves three rows of vertical space above
     // the summary and groups all the article metadata as one strip.
     auto* meta_row = new QWidget(content);
+    meta_row->setObjectName("newsDetailMetaRow");
     auto* meta_layout = new QHBoxLayout(meta_row);
     meta_layout->setContentsMargins(0, 0, 0, 0);
     meta_layout->setSpacing(8);
@@ -560,7 +561,16 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
             QString("color: %1; font-weight: 700; background: transparent;").arg(ui::colors::CYAN()));
     }
 
-    // Threat classification in impact label
+    summary_label_->setText(article.summary.isEmpty() ? "No summary available." : article.summary);
+
+    // Threat takes precedence over generic impact when classified above INFO —
+    // a high-threat article gets "Threat: …" rendered in the threat colour;
+    // otherwise the label falls back to the standard "Impact: …" themed via
+    // the #newsDetailImpact QSS. Previously the threat branch set the label,
+    // then the unconditional setText below clobbered it with "Impact: …" —
+    // so a high-threat row showed "Impact: LOW" in red. The else branch also
+    // clears the inline stylesheet so the QSS default takes over again after
+    // a prior threat-coloured article.
     if (article.threat.level != services::ThreatLevel::INFO) {
         QString threat_text = services::threat_level_string(article.threat.level);
         QString threat_color = services::threat_level_color(article.threat.level);
@@ -568,9 +578,10 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
                                    .arg(threat_text, article.threat.category)
                                    .arg(static_cast<int>(article.threat.confidence * 100)));
         impact_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(threat_color));
+    } else {
+        impact_label_->setText(QString("Impact: %1").arg(services::impact_string(article.impact)));
+        impact_label_->setStyleSheet(QString()); // restore default #newsDetailImpact styling
     }
-    summary_label_->setText(article.summary.isEmpty() ? "No summary available." : article.summary);
-    impact_label_->setText(QString("Impact: %1").arg(services::impact_string(article.impact)));
 
     if (!article.tickers.isEmpty())
         tickers_label_->setText("$" + article.tickers.join("  $"));
