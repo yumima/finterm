@@ -1,5 +1,6 @@
 #include "screens/pre_ipo/IpoWatchView.h"
 
+#include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "services/markets/MarketDataService.h"
@@ -396,16 +397,38 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     middle_pane_ = middle_split;
 
     // Company header above the facts tabs (always visible — anchors the view
-    // to the currently selected company).
+    // to the currently selected company). Header row contains the company
+    // name + chips QLabel and an "Open in Equity Research" button on the
+    // right that's only shown for priced entries.
     auto* middle_top_container = new QWidget;
     auto* mtv = new QVBoxLayout(middle_top_container);
     mtv->setContentsMargins(0, 0, 0, 0);
     mtv->setSpacing(0);
+    auto* header_row = new QWidget;
+    auto* header_h = new QHBoxLayout(header_row);
+    header_h->setContentsMargins(12, 10, 12, 6);
+    header_h->setSpacing(8);
     header_lbl_ = new QLabel("<i>Select a deal</i>");
     header_lbl_->setTextFormat(Qt::RichText);
     header_lbl_->setWordWrap(true);
-    header_lbl_->setContentsMargins(12, 10, 12, 6);
-    mtv->addWidget(header_lbl_);
+    header_h->addWidget(header_lbl_, 1);
+    er_btn_ = new QPushButton(QStringLiteral("EQUITY RESEARCH ↗"));
+    er_btn_->setCursor(Qt::PointingHandCursor);
+    er_btn_->setToolTip("Open the full Equity Research screen alongside this list, loaded with this ticker.");
+    er_btn_->setVisible(false);
+    connect(er_btn_, &QPushButton::clicked, this, [this]() {
+        if (detail_symbol_.isEmpty()) return;
+        // Mirror PortfolioBlotter's research-context-menu pattern: dock the
+        // ER screen beside the current panel (no-op if already open), then
+        // tell it which ticker to load. The router synchronously materializes
+        // the screen so the load_symbol event isn't dropped.
+        EventBus::instance().publish("nav.split_alongside",
+            QVariantMap{{"screen_id", "equity_research"}});
+        EventBus::instance().publish("equity_research.load_symbol",
+            QVariantMap{{"symbol", detail_symbol_}});
+    });
+    header_h->addWidget(er_btn_);
+    mtv->addWidget(header_row);
 
     tabs_facts_ = new QTabWidget;
     tabs_facts_->setDocumentMode(true);
@@ -490,11 +513,12 @@ void IpoWatchView::apply_styles() {
 
     const QString lens_qss =
         QString("QPushButton{background:transparent;color:%1;border:none;padding:0 14px;"
-                "font-size:12px;font-weight:700;letter-spacing:1px;"
+                "font-size:%4px;font-weight:700;letter-spacing:1px;"
                 "border-bottom:2px solid transparent;}"
                 "QPushButton:checked{color:%2;border-bottom-color:%2;}"
                 "QPushButton:hover:!checked{color:%3;}")
-            .arg(TEXT_SECONDARY(), AMBER(), TEXT_PRIMARY());
+            .arg(TEXT_SECONDARY(), AMBER(), TEXT_PRIMARY())
+            .arg(ui::fonts::font_px(-1));
     for (int i = 0; i < LensCount; ++i)
         if (lens_btns_[i]) lens_btns_[i]->setStyleSheet(lens_qss);
 
@@ -505,8 +529,8 @@ void IpoWatchView::apply_styles() {
                 .arg(BG_SURFACE(), AMBER(), BG_BASE()));
     if (status_lbl_)
         status_lbl_->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;padding-right:10px;")
-                .arg(TEXT_SECONDARY()));
+            QString("color:%1;font-size:%2px;background:transparent;padding-right:10px;")
+                .arg(TEXT_SECONDARY()).arg(ui::fonts::font_px(-1)));
 
     if (kpi_strip_)
         kpi_strip_->setStyleSheet(
@@ -514,7 +538,8 @@ void IpoWatchView::apply_styles() {
                 .arg(BG_SURFACE(), BORDER_DIM()));
 
     const QString kpi_qss =
-        QString("QLabel{color:%1;font-size:12px;background:transparent;}").arg(TEXT_PRIMARY());
+        QString("QLabel{color:%1;font-size:%2px;background:transparent;}")
+            .arg(TEXT_PRIMARY()).arg(ui::fonts::font_px(0));
     for (QLabel* l : {kpi_week_, kpi_month_, kpi_pop_, kpi_above_, kpi_in_, kpi_below_})
         if (l) l->setStyleSheet(kpi_qss);
 
@@ -522,28 +547,31 @@ void IpoWatchView::apply_styles() {
         filter_row_->setStyleSheet(QString("background:%1;").arg(BG_RAISED()));
     const QString chip_qss =
         QString("QComboBox{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
-                "padding:0 6px;font-size:12px;}"
+                "padding:0 6px;font-size:%5px;}"
                 "QComboBox::drop-down{border:none;width:14px;}"
                 "QComboBox QAbstractItemView{background:%1;color:%2;selection-background-color:%4;}")
-            .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER());
+            .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER())
+            .arg(ui::fonts::font_px(-1));
     for (QComboBox* c : {status_chip_, window_chip_, exch_chip_, size_chip_})
         if (c) c->setStyleSheet(chip_qss);
     if (search_)
         search_->setStyleSheet(
             QString("QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
-                    "padding:2px 6px;font-size:12px;}"
+                    "padding:2px 6px;font-size:%5px;}"
                     "QLineEdit:focus{border-color:%4;}")
-                .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER()));
+                .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), AMBER())
+                .arg(ui::fonts::font_px(-1)));
 
     if (table_)
         table_->setStyleSheet(
             QString("QTableWidget{background:%1;color:%2;border:0;gridline-color:%3;"
-                    "alternate-background-color:%4;}"
+                    "alternate-background-color:%4;font-size:%9px;}"
                     "QHeaderView::section{background:%5;color:%6;border:0;padding:4px 8px;"
-                    "font-weight:bold;font-size:12px;}"
+                    "font-weight:bold;font-size:%9px;}"
                     "QTableWidget::item:selected{background:%7;color:%8;}")
                 .arg(BG_BASE(), TEXT_PRIMARY(), BORDER_DIM(), BG_RAISED(), BG_RAISED(),
-                     TEXT_SECONDARY(), AMBER(), BG_BASE()));
+                     TEXT_SECONDARY(), AMBER(), BG_BASE())
+                .arg(ui::fonts::font_px(0)));
     // Detail rail — middle + right panes share the surface background. The
     // table on the left uses BG_BASE so the splitter handles read as faint
     // 1px dividers; the panes step up to BG_SURFACE so the dark/lighter
@@ -554,18 +582,25 @@ void IpoWatchView::apply_styles() {
     if (right_pane_)  right_pane_->setStyleSheet(pane_qss);
     if (header_lbl_)
         header_lbl_->setStyleSheet(
-            QString("color:%1;background:%2;border-bottom:1px solid %3;padding-bottom:6px;")
-                .arg(TEXT_PRIMARY(), BG_SURFACE(), BORDER_DIM()));
+            QString("color:%1;background:%2;").arg(TEXT_PRIMARY(), BG_SURFACE()));
+    if (er_btn_)
+        er_btn_->setStyleSheet(
+            QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
+                    "padding:4px 10px;border-radius:2px;font-size:%3px;font-weight:600;"
+                    "letter-spacing:1px;}"
+                    "QPushButton:hover{background:%1;color:%2;}")
+                .arg(AMBER(), BG_BASE()).arg(ui::fonts::font_px(-1)));
 
     const QString tabs_qss =
         QString("QTabWidget::pane{background:%1;border:none;border-top:1px solid %2;}"
                 "QTabBar::tab{background:transparent;color:%3;padding:5px 14px;"
                 "  border:none;border-bottom:2px solid transparent;"
-                "  font-size:12px;font-weight:600;letter-spacing:1px;}"
+                "  font-size:%6px;font-weight:600;letter-spacing:1px;}"
                 "QTabBar::tab:selected{color:%4;border-bottom-color:%4;}"
                 "QTabBar::tab:hover:!selected{color:%5;}"
                 "QTabBar::tab:disabled{color:#444;}")
-            .arg(BG_SURFACE(), BORDER_DIM(), TEXT_SECONDARY(), AMBER(), TEXT_PRIMARY());
+            .arg(BG_SURFACE(), BORDER_DIM(), TEXT_SECONDARY(), AMBER(), TEXT_PRIMARY())
+            .arg(ui::fonts::font_px(-1));
     if (tabs_facts_)  tabs_facts_->setStyleSheet(tabs_qss);
     if (tabs_charts_) tabs_charts_->setStyleSheet(tabs_qss);
 
@@ -1429,39 +1464,49 @@ static QString position_bar(double pos, const QString& fill_color, int segments 
 // (unicode_sparkline removed — the PRICE chart is now a real QChartView from
 // ChartFactory::line_chart, rendered inline in the middle-bottom tab.)
 
-// Shared CSS injected once into every detail-rail QLabel. 12px is the floor
-// per the dashboard-wide convention (BaseWidget, TickerBar, OpenPositions all
-// use 12px for body text); accent labels (.sec, .k, .chip) use 12px too —
-// the visual hierarchy comes from weight/color, not size.
-static const char* kDetailCss =
-    "<style>"
-    "body{font-family:Consolas,Menlo,monospace;font-size:12px;color:#e5e5e5;}"
-    "h3{margin:0 0 6px 0;font-size:16px;color:#fff;}"
-    ".chip{display:inline-block;padding:2px 8px;background:#222;color:#d97706;"
-    "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:12px;}"
-    ".chip.priced{color:#10b981;border-color:#10b981;}"
-    ".chip.filed{color:#3b82f6;border-color:#3b82f6;}"
-    ".chip.upcoming{color:#d97706;border-color:#d97706;}"
-    "table.kv{border-collapse:collapse;width:100%;}"
-    "table.kv td{padding:4px 8px 4px 0;vertical-align:top;font-size:12px;}"
-    "table.grid{border-collapse:collapse;width:100%;margin-top:4px;}"
-    "table.grid td{padding:4px 6px;border-bottom:1px solid #2a2a2a;font-size:12px;}"
-    "table.grid td.k{color:#b8b8b8;font-size:12px;width:46%;letter-spacing:.3px;}"
-    ".k{color:#b8b8b8;font-size:12px;letter-spacing:.3px;}"
-    ".sec{color:#d97706;font-weight:bold;font-size:12px;letter-spacing:1.5px;"
-    "  margin:10px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:3px;}"
-    "a{color:#d97706;text-decoration:none;}"
-    "a:hover{text-decoration:underline;}"
-    ".pos{color:#10b981;}"
-    ".neg{color:#ef4444;}"
-    ".big{font-size:18px;font-weight:bold;}"
-    ".muted{color:#7a7a7a;}"
-    "</style>";
+// Shared CSS injected into every detail-rail QLabel. Font sizes derive from
+// `ui::fonts::font_px()` so the detail rail scales with the user-configured
+// base size (Theme.h's "font_size_base") and matches the QTableWidget body
+// font on the left — which is what the user means by "the calendar font is
+// right, the detail rail is too small". font_px(0) is base (14px default),
+// font_px(-1) is base-1, etc., with a hard floor of 12px in the helper.
+static QString build_detail_css() {
+    const int body   = ui::fonts::font_px(0);   // 14 by default — matches table
+    const int meta   = ui::fonts::font_px(-1);  // 13 — labels, chips, sec headers
+    const int hdr    = ui::fonts::font_px(+2);  // 16 — company name
+    const int big    = ui::fonts::font_px(+4);  // 18 — big numbers (pop %, last price)
+    return QString(
+        "<style>"
+        "body{font-family:Consolas,Menlo,monospace;font-size:%1px;color:#e5e5e5;}"
+        "h3{margin:0 0 6px 0;font-size:%2px;color:#fff;}"
+        ".chip{display:inline-block;padding:2px 8px;background:#222;color:#d97706;"
+        "  border:1px solid #444;border-radius:2px;margin-right:4px;font-size:%3px;}"
+        ".chip.priced{color:#10b981;border-color:#10b981;}"
+        ".chip.filed{color:#3b82f6;border-color:#3b82f6;}"
+        ".chip.upcoming{color:#d97706;border-color:#d97706;}"
+        "table.kv{border-collapse:collapse;width:100%;}"
+        "table.kv td{padding:4px 8px 4px 0;vertical-align:top;font-size:%1px;}"
+        "table.grid{border-collapse:collapse;width:100%;margin-top:4px;}"
+        "table.grid td{padding:4px 6px;border-bottom:1px solid #2a2a2a;font-size:%1px;}"
+        "table.grid td.k{color:#b8b8b8;font-size:%3px;width:46%;letter-spacing:.3px;}"
+        ".k{color:#b8b8b8;font-size:%3px;letter-spacing:.3px;}"
+        ".sec{color:#d97706;font-weight:bold;font-size:%3px;letter-spacing:1.5px;"
+        "  margin:10px 0 4px 0;display:block;border-bottom:1px solid #333;padding-bottom:3px;}"
+        "a{color:#d97706;text-decoration:none;}"
+        "a:hover{text-decoration:underline;}"
+        ".pos{color:#10b981;}"
+        ".neg{color:#ef4444;}"
+        ".big{font-size:%4px;font-weight:bold;}"
+        ".muted{color:#7a7a7a;}"
+        "</style>"
+    ).arg(body).arg(hdr).arg(meta).arg(big);
+}
 
 void IpoWatchView::render_detail(const Entry* e) {
     if (!header_lbl_) return;
     if (!e) {
         header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");
+        if (er_btn_) er_btn_->setVisible(false);
         for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
                           page_news_, page_holders_, page_filings_, page_funding_,
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
@@ -1470,6 +1515,9 @@ void IpoWatchView::render_detail(const Entry* e) {
         return;
     }
     detail_symbol_ = e->ticker;
+    // Equity Research button only makes sense for already-listed companies —
+    // upcoming/filed have no public market for ER to research.
+    if (er_btn_) er_btn_->setVisible(e->status == "priced" && !e->ticker.isEmpty());
 
     // Lazy fetch the price-since-IPO history (priced only, no-op otherwise).
     fetch_history_for_detail(*e);
@@ -1498,8 +1546,13 @@ void IpoWatchView::render_detail(const Entry* e) {
     const services::InfoData info = info_cache_.value(e->ticker, {});
     const bool have_info = info_cache_.contains(e->ticker);
 
+    // Build the CSS once and reuse for every page label — saves ~15 calls
+    // to build_detail_css() per render_detail and keeps every pane on the
+    // same font scale even if ThemeManager mutates the base size mid-render.
+    const QString css = build_detail_css();
+
     // ── HEADER (company name + chips, anchored above the facts tabs) ──
-    QString hdr = QString(kDetailCss);
+    QString hdr = css;
     hdr += "<h3>" + e->company.toHtmlEscaped() + "</h3>";
     QStringList chips;
     if (!e->ticker.isEmpty())   chips << "<span class='chip'><b>" + e->ticker.toHtmlEscaped() + "</b></span>";
@@ -1513,15 +1566,15 @@ void IpoWatchView::render_detail(const Entry* e) {
     header_lbl_->setText(hdr);
 
     // ── FACTS TAB PAGES (middle-top) ────────────────────────────────────────
-    page_deal_     ->setText(QString(kDetailCss) + build_deal_html(*e));
-    page_business_ ->setText(QString(kDetailCss) + build_business_html(*e, info, have_info));
-    page_leader_   ->setText(QString(kDetailCss) + build_leadership_html(info, have_info));
-    page_fund_     ->setText(QString(kDetailCss) + build_fundamentals_html(info, have_info, *e));
-    page_news_     ->setText(QString(kDetailCss) + build_news_html(*e));
-    page_holders_  ->setText(QString(kDetailCss) + build_holders_html(*e));
-    page_filings_  ->setText(QString(kDetailCss) + build_filings_html(*e));
-    page_funding_  ->setText(QString(kDetailCss) + build_funding_html(*e));
-    page_pipeline_ ->setText(QString(kDetailCss) + build_pipeline_html(*e));
+    page_deal_     ->setText(css + build_deal_html(*e));
+    page_business_ ->setText(css + build_business_html(*e, info, have_info));
+    page_leader_   ->setText(css + build_leadership_html(info, have_info));
+    page_fund_     ->setText(css + build_fundamentals_html(info, have_info, *e));
+    page_news_     ->setText(css + build_news_html(*e));
+    page_holders_  ->setText(css + build_holders_html(*e));
+    page_filings_  ->setText(css + build_filings_html(*e));
+    page_funding_  ->setText(css + build_funding_html(*e));
+    page_pipeline_ ->setText(css + build_pipeline_html(*e));
 
     // Data-dependent tabs stay visible while a ticker is resolvable so the
     // builders' "Loading…" placeholders are seen; only the no-ticker case
@@ -1542,9 +1595,9 @@ void IpoWatchView::render_detail(const Entry* e) {
     // ── CHARTS TAB PAGES (middle-bottom) ────────────────────────────────────
     rebuild_price_chart(*e);
     rebuild_revenue_chart(*e);
-    page_range_   ->setText(QString(kDetailCss) + build_range_html(*e));
-    page_lockup_  ->setText(QString(kDetailCss) + build_lockup_html(*e));
-    page_timeline_->setText(QString(kDetailCss) + build_timeline_html(*e));
+    page_range_   ->setText(css + build_range_html(*e));
+    page_lockup_  ->setText(css + build_lockup_html(*e));
+    page_timeline_->setText(css + build_timeline_html(*e));
 
     tabs_charts_->setTabVisible(CT_Price,    e->status == "priced");
     tabs_charts_->setTabVisible(CT_Revenue,  has_ticker);
@@ -1562,8 +1615,8 @@ void IpoWatchView::render_detail(const Entry* e) {
     }
 
     // ── RIGHT PANE: sector heat + comps (top), research links (bottom) ─────
-    right_top_   ->setText(QString(kDetailCss) + build_sector_comps_html(*e));
-    right_bottom_->setText(QString(kDetailCss) + build_links_html(*e, info, have_info));
+    right_top_   ->setText(css + build_sector_comps_html(*e));
+    right_bottom_->setText(css + build_links_html(*e, info, have_info));
 }
 
 // ── Small format helpers shared by the per-tab builders ─────────────────────
@@ -1692,6 +1745,63 @@ QString IpoWatchView::build_fundamentals_html(const services::InfoData& info, bo
     if (info.debt_to_equity > 0)   h += kvg_row("Debt / Equity",  fmt_num(info.debt_to_equity));
     if (info.current_ratio > 0)    h += kvg_row("Current ratio",  fmt_num(info.current_ratio));
     h += "</table>";
+
+    // Annual revenue / margin trend (same data source EquityResearch's
+    // FinancialsTab uses for YoY). yfinance returns up to ~4 years; we
+    // render newest-first with YoY %.
+    if (!e.ticker.isEmpty() && ipo_extras_.contains(e.ticker)) {
+        const auto& ex = ipo_extras_.value(e.ticker);
+        // format_money rejects values <= 0 (returns "—") which is wrong for
+        // financial rows — revenue can be zero on shell IPOs and net income
+        // is often negative for fresh listings. Preserve the sign and color
+        // negatives so losses are visually distinct.
+        auto fmt_signed_money = [this](double v) -> QString {
+            if (std::abs(v) < 1e-9) return QStringLiteral("$0");
+            const QString abs_s = format_money(std::abs(v));
+            if (v < 0) return "<span class='neg'>-" + abs_s + "</span>";
+            return abs_s;
+        };
+        auto yoy_cell = [](double cur, double prev) -> QString {
+            if (std::abs(prev) < 1e-9) return QStringLiteral("—");
+            const double g = (cur - prev) / std::abs(prev) * 100.0;
+            return QString("<span class='%1'>%2%3%</span>")
+                .arg(g >= 0 ? "pos" : "neg")
+                .arg(g >= 0 ? "+" : "").arg(g, 0, 'f', 1);
+        };
+        if (!ex.annual_revenue.isEmpty()) {
+            h += "<span class='sec'>ANNUAL REVENUE · YoY</span>";
+            h += "<table class='grid'>";
+            h += "<tr><td class='k' style='width:30%;'>Year</td>"
+                 "<td class='k'>Revenue</td>"
+                 "<td class='k' style='text-align:right;'>YoY</td></tr>";
+            // The series is ordered oldest → newest by the daemon; iterate
+            // backwards so the most recent year is at the top.
+            const auto& rev = ex.annual_revenue;
+            for (int i = rev.size() - 1; i >= 0; --i) {
+                const auto& pt = rev.at(i);
+                const QString yoy = i > 0 ? yoy_cell(pt.value, rev.at(i - 1).value)
+                                          : QStringLiteral("—");
+                h += "<tr><td><b>" + pt.date.left(4) + "</b></td>"
+                     "<td>" + fmt_signed_money(pt.value) + "</td>"
+                     "<td style='text-align:right;'>" + yoy + "</td></tr>";
+            }
+            h += "</table>";
+        }
+        if (!ex.annual_net_income.isEmpty()) {
+            h += "<span class='sec'>NET INCOME · YoY</span>";
+            h += "<table class='grid'>";
+            const auto& ni = ex.annual_net_income;
+            for (int i = ni.size() - 1; i >= 0; --i) {
+                const auto& pt = ni.at(i);
+                const QString yoy = i > 0 ? yoy_cell(pt.value, ni.at(i - 1).value)
+                                          : QStringLiteral("—");
+                h += "<tr><td><b>" + pt.date.left(4) + "</b></td>"
+                     "<td>" + fmt_signed_money(pt.value) + "</td>"
+                     "<td style='text-align:right;'>" + yoy + "</td></tr>";
+            }
+            h += "</table>";
+        }
+    }
     return h;
 }
 

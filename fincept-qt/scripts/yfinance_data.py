@@ -384,7 +384,7 @@ def get_ipo_extras(symbol):
         items.sort(key=lambda r: r["date"])
         return items[-8:]
 
-    # ── Quarterly financials ───────────────────────────────────────────────
+    # ── Quarterly financials (REVENUE chart) ───────────────────────────────
     try:
         qf = t.quarterly_income_stmt
         if qf is not None and not qf.empty:
@@ -398,6 +398,26 @@ def get_ipo_extras(symbol):
                     break
     except Exception as e:
         out["financials_error"] = str(e)
+
+    # ── Annual financials (FINANCIALS tab YoY column) ──────────────────────
+    # `t.financials` returns annual data — the same source EquityResearch's
+    # financials tab uses for its "YoY" labels. Up to 4 years per yfinance.
+    try:
+        af = t.financials
+        if af is not None and not af.empty:
+            if "Total Revenue" in af.index:
+                out["annual_revenue"] = _series(af.loc["Total Revenue"])
+            for label in ("Net Income", "Net Income Common Stockholders",
+                          "Net Income From Continuing Operation Net Minority Interest"):
+                if label in af.index:
+                    out["annual_net_income"] = _series(af.loc[label])
+                    break
+            if "Gross Profit" in af.index:
+                out["annual_gross_profit"] = _series(af.loc["Gross Profit"])
+            if "Operating Income" in af.index:
+                out["annual_operating_income"] = _series(af.loc["Operating Income"])
+    except Exception as e:
+        out["annual_financials_error"] = str(e)
 
     # ── Institutional holders (top 8) ──────────────────────────────────────
     try:

@@ -855,8 +855,12 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
             }
             return out;
         };
-        ex.quarterly_revenue    = parse_series(o["quarterly_revenue"].toArray());
-        ex.quarterly_net_income = parse_series(o["quarterly_net_income"].toArray());
+        ex.quarterly_revenue       = parse_series(o["quarterly_revenue"].toArray());
+        ex.quarterly_net_income    = parse_series(o["quarterly_net_income"].toArray());
+        ex.annual_revenue          = parse_series(o["annual_revenue"].toArray());
+        ex.annual_net_income       = parse_series(o["annual_net_income"].toArray());
+        ex.annual_gross_profit     = parse_series(o["annual_gross_profit"].toArray());
+        ex.annual_operating_income = parse_series(o["annual_operating_income"].toArray());
         for (const auto& v : o["institutional_holders"].toArray()) {
             const auto r = v.toObject();
             InstitutionalHolder h;

@@ -270,6 +270,12 @@ class IpoWatchView : public QWidget {
     QWidget*      middle_pane_   = nullptr;
     QWidget*      right_pane_    = nullptr;
     QLabel*       header_lbl_    = nullptr;  // company name + chips above the tabs
+    /// "Open in Equity Research →" — only visible when a priced row is
+    /// selected. Publishes the same EventBus pair PortfolioBlotter uses
+    /// (`nav.split_alongside` + `equity_research.load_symbol`), so the full
+    /// Equity Research screen docks alongside IPO Watch with the ticker
+    /// already loaded.
+    QPushButton*  er_btn_        = nullptr;
 
     QTabWidget*   tabs_facts_    = nullptr;
     QLabel*       page_deal_     = nullptr;

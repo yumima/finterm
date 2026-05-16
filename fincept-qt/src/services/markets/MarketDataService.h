@@ -191,6 +191,12 @@ class MarketDataService : public QObject
         QString symbol;
         QVector<FinancialPoint>     quarterly_revenue;
         QVector<FinancialPoint>     quarterly_net_income;
+        // Annual series — same source EquityResearch's FinancialsTab uses
+        // for its YoY labels. ~4 years of history per yfinance.
+        QVector<FinancialPoint>     annual_revenue;
+        QVector<FinancialPoint>     annual_net_income;
+        QVector<FinancialPoint>     annual_gross_profit;
+        QVector<FinancialPoint>     annual_operating_income;
         QVector<InstitutionalHolder> institutional_holders;
         QVector<MajorHolderRow>     major_holders;
         QVector<NewsItem>           news;
