@@ -72,6 +72,28 @@ void FuturesScreen::showEvent(QShowEvent* event) {
     // cache for no benefit to Futures. refresh_all() below already triggers
     // the futures fetch through FuturesQuoteCache.
     refresh_all();
+
+    // First-show column alignment. Defer to the next event loop tick — at
+    // showEvent time the splitter geometry isn't final (width() returns the
+    // sizeHint-based estimate, not the painted size). singleShot(0) runs
+    // after the layout pass and gives us the real width to derive the
+    // 1:3:1 column sizes from. After this, splitterMoved sync keeps them
+    // aligned during user drags.
+    if (!initial_align_done_ && row1_split_ && row2_split_) {
+        QTimer::singleShot(0, this, [this]() {
+            if (initial_align_done_ || !row1_split_ || !row2_split_) return;
+            const int total = row1_split_->width();
+            if (total < 200) return;  // splitter not laid out yet, try later
+            const int rail = total / 5;
+            const int center = total - 2 * rail;
+            const QList<int> sizes = {rail, center, rail};
+            syncing_splits_ = true;
+            row1_split_->setSizes(sizes);
+            row2_split_->setSizes(sizes);
+            syncing_splits_ = false;
+            initial_align_done_ = true;
+        });
+    }
 }
 
 void FuturesScreen::hideEvent(QHideEvent* event) {
@@ -162,7 +184,10 @@ void FuturesScreen::build_body() {
     row1->setStretchFactor(2, 1);  // settlements — narrow rail
 
     // Row 2 — analytics:
-    //   [spread monitor / expiry calendar — vertical splitter] | COT | term structure
+    //   [expiry calendar / spread monitor — vertical splitter] | COT | term structure
+    // Expiry on top because it's the data-dense panel (always populated from
+    // the local CME calendar). Spread sits below — it's a compact KPI card
+    // and is the panel most likely to be empty during cache warmup.
     auto* row2 = new QSplitter(Qt::Horizontal, v_split);
     row2->setChildrenCollapsible(false);
     row2->setHandleWidth(4);
@@ -170,10 +195,10 @@ void FuturesScreen::build_body() {
     auto* left_v = new QSplitter(Qt::Vertical, row2);
     left_v->setChildrenCollapsible(false);
     left_v->setHandleWidth(4);
-    left_v->addWidget(spread_);
     left_v->addWidget(expiry_);
-    left_v->setStretchFactor(0, 1);  // spread — compact KPI card
-    left_v->setStretchFactor(1, 3);  // expiry — taller table
+    left_v->addWidget(spread_);
+    left_v->setStretchFactor(0, 3);  // expiry — taller table on top
+    left_v->setStretchFactor(1, 1);  // spread — compact KPI card below
 
     row2->addWidget(left_v);
     row2->addWidget(cot_);
@@ -190,6 +215,26 @@ void FuturesScreen::build_body() {
     v_split->setStretchFactor(2, 3);  // row2
 
     host_layout->addWidget(v_split, 1);
+
+    // Keep the two horizontal rows in column-lockstep so the rails (watchlist
+    // ↔ expiry+spread, settlements ↔ term-structure) read as aligned columns.
+    // Without this the two splitters size from differing children sizeHint()
+    // and end up staggered. syncing_splits_ guards against the ping-pong
+    // when the mirrored setSizes re-emits splitterMoved.
+    row1_split_ = row1;
+    row2_split_ = row2;
+    connect(row1, &QSplitter::splitterMoved, this, [this](int, int) {
+        if (syncing_splits_) return;
+        syncing_splits_ = true;
+        row2_split_->setSizes(row1_split_->sizes());
+        syncing_splits_ = false;
+    });
+    connect(row2, &QSplitter::splitterMoved, this, [this](int, int) {
+        if (syncing_splits_) return;
+        syncing_splits_ = true;
+        row1_split_->setSizes(row2_split_->sizes());
+        syncing_splits_ = false;
+    });
 
     stack->addWidget(grid_host_);
 

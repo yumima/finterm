@@ -2,6 +2,7 @@
 #include <QHideEvent>
 #include <QPushButton>
 #include <QShowEvent>
+#include <QSplitter>
 #include <QTimer>
 #include <QVector>
 #include <QWidget>
@@ -79,6 +80,17 @@ class FuturesScreen : public QWidget {
     FuturesExpiryPanel*    expiry_       = nullptr;
 
     QTimer* refresh_timer_ = nullptr;
+
+    // Row splitters held as members so we can:
+    //   1) align column widths on first show (compute rails from body width
+    //      rather than rely on differing sizeHint() between row1 and row2)
+    //   2) keep the two rows in lockstep via splitterMoved sync — dragging
+    //      a divider in either row mirrors the other so the Bloomberg-style
+    //      grid keeps its column alignment.
+    QSplitter* row1_split_ = nullptr;
+    QSplitter* row2_split_ = nullptr;
+    bool       syncing_splits_ = false;
+    bool       initial_align_done_ = false;
 };
 
 } // namespace fincept::screens::futures

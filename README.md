@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`23e5438d`](https://github.com/yumima/finterm/commit/23e5438d) screens(futures): fix floating Databento button + resizable rails via QSplitter
 - [`ab58feeb`](https://github.com/yumima/finterm/commit/ab58feeb) screens(futures): debounce class-tab clicks + cap router timeout at 12s
 - [`bc5c8c9b`](https://github.com/yumima/finterm/commit/bc5c8c9b) screens(futures+er): rail layout, inline Databento prompt, regions, ER relationships
 - [`231929b5`](https://github.com/yumima/finterm/commit/231929b5) screens(fno): wire F&O into ToolBar + CommandBar menus

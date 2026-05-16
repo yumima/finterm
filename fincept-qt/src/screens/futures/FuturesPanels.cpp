@@ -43,7 +43,12 @@ using namespace fincept::ui;
 // ─────────────────────────────────────────────────────────────────────────────
 
 static QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
-    const int sz = (px > 0) ? px : fonts::font_px(-2);
+    // Default to the system's "data" font size (font_px(0) = base 14 at default
+    // settings, floors at 12 per fonts::font_px contract). The previous default
+    // was font_px(-2) which sits at the 12px floor everywhere and made the
+    // panels read as chips instead of data tables. Call sites that want a
+    // smaller chip can still pass an explicit px like font_px(-2).
+    const int sz = (px > 0) ? px : fonts::font_px(0);
     return QString("color:%1;background:transparent;font-size:%2px;font-family:'%3';%4")
         .arg(color).arg(sz).arg(fonts::DATA_FAMILY()).arg(bold ? "font-weight:bold;" : "");
 }
@@ -73,6 +78,9 @@ static QString color_for_change(double v) {
 }
 
 static QString table_ss() {
+    // Data tables render at font_px(0) (14px at default base) — matches the
+    // rest of the app's data tables (ER, watchlist, peers). Previously at
+    // font_px(-2) which floored to 12px and felt cramped.
     return QString(
         "QTableWidget { background:%1; color:%2; gridline-color:%3; border:none;"
         " font-family:'%4'; font-size:%5px; alternate-background-color:%6; }"
@@ -82,7 +90,7 @@ static QString table_ss() {
         .arg(colors::TEXT_PRIMARY())
         .arg(colors::BORDER_DIM())
         .arg(fonts::DATA_FAMILY())
-        .arg(fonts::font_px(-2))
+        .arg(fonts::font_px(0))
         .arg(colors::BG_SURFACE())
         .arg(colors::BG_RAISED());
 }
