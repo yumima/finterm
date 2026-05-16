@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`916aece0`](https://github.com/yumima/finterm/commit/916aece0) **fix(portfolio):** rebuild disk-cache summary prices from market_last cache before emit
 - [`84b293b0`](https://github.com/yumima/finterm/commit/84b293b0) **fix(dashboard):** TickerBar — preserve scroll offset + don't restart timer on periodic re-data
 - [`778f30ec`](https://github.com/yumima/finterm/commit/778f30ec) **feat(dashboard):** NewsWidget shows "K new" / "no changes" so refresh is verifiable
 - [`0020bb22`](https://github.com/yumima/finterm/commit/0020bb22) **perf(market_data):** cold-start hydration from market_last cache + chunked refresh-callback drain

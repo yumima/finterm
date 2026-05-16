@@ -110,7 +110,8 @@ OrderPlaceResponse FyersBroker::place_order(const BrokerCredentials& creds, cons
     if (order.take_profit > 0)
         payload["takeProfit"] = order.take_profit;
 
-    auto resp = BrokerHttp::instance().post_json(QString(base_url()) + "/api/v3/orders", payload, auth_headers(creds));
+    auto resp =
+        BrokerHttp::instance().post_json(QString(base_url()) + "/api/v3/orders/sync", payload, auth_headers(creds));
 
     OrderPlaceResponse result;
     if (!resp.success) {
@@ -135,7 +136,8 @@ ApiResponse<QJsonObject> FyersBroker::modify_order(const BrokerCredentials& cred
                                                    const QJsonObject& modifications) {
     QJsonObject payload = modifications;
     payload["id"] = order_id;
-    auto resp = BrokerHttp::instance().put_json(QString(base_url()) + "/api/v3/orders", payload, auth_headers(creds));
+    auto resp =
+        BrokerHttp::instance().patch_json(QString(base_url()) + "/api/v3/orders/sync", payload, auth_headers(creds));
     int64_t ts = now_ts();
     if (!resp.success)
         return {false, std::nullopt, resp.error, ts};
@@ -146,7 +148,7 @@ ApiResponse<QJsonObject> FyersBroker::modify_order(const BrokerCredentials& cred
 
 ApiResponse<QJsonObject> FyersBroker::cancel_order(const BrokerCredentials& creds, const QString& order_id) {
     QJsonObject payload{{"id", order_id}};
-    auto resp = BrokerHttp::instance().del(QString(base_url()) + "/api/v3/orders", auth_headers(creds), payload);
+    auto resp = BrokerHttp::instance().del(QString(base_url()) + "/api/v3/orders/sync", auth_headers(creds), payload);
     int64_t ts = now_ts();
     if (!resp.success)
         return {false, std::nullopt, resp.error, ts};
