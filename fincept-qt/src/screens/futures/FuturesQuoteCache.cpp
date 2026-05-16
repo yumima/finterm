@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QtConcurrent/QtConcurrentRun>
 
 namespace fincept::screens::futures {
 
@@ -116,12 +117,22 @@ void FuturesQuoteCache::save_to_disk() {
     root.insert("source",       last_source_);
     root.insert("quotes",       arr);
 
-    // QSaveFile = write-to-tmp-then-rename. Survives a crash mid-write:
-    // the previous cache file stays intact until commit() succeeds.
-    QSaveFile f(cache_path());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
-    f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    f.commit();
+    // Serialize on the GUI thread (cheap — ~50 contracts), then hand the
+    // bytes off to a worker so the actual write + commit() fsync doesn't
+    // stall whatever is currently rendering or accepting input.
+    //
+    // QSaveFile uses a unique tmp filename under the hood and an atomic
+    // rename on commit(); two concurrent saves cannot corrupt the cache
+    // file — the file ends up containing whichever save's commit() ran
+    // last. For a cache that's fine.
+    const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    const QString path = cache_path();
+    (void)QtConcurrent::run([path, bytes]() {
+        QSaveFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+        f.write(bytes);
+        f.commit();
+    });
 }
 
 void FuturesQuoteCache::load_from_disk() {

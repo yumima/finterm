@@ -23,6 +23,23 @@ QNetworkRequest HttpClient::build_request(const QString& url) const {
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setHeader(QNetworkRequest::UserAgentHeader, "FinceptTerminal/4.0");
 
+    // Bound hang time. Without this, a half-open or stalled connection
+    // leaves the QNetworkReply pending until the OS TCP timeout (minutes),
+    // orphaning the callback and pinning memory. 30 s is well past any
+    // realistic financial-data API response. This setting can't affect
+    // response semantics — it only fires on connections that already
+    // weren't going to produce data.
+    req.setTransferTimeout(30000);
+
+    // We do NOT set Accept-Encoding: gzip globally, and we do NOT set
+    // Http2AllowedAttribute=true globally. Both were tried during a
+    // perf-tuning pass and produced intermittent empty-body failures on
+    // at least one third-party endpoint (api.nasdaq.com's IPO calendar).
+    // The shared cause is third-party servers/CDNs handling these
+    // protocol features inconsistently — sometimes correctly, sometimes
+    // returning data Qt can't parse. Both options can be opted into
+    // per-request by callers that have verified their target endpoint.
+
     // Only attach Fincept auth headers when the request targets the configured
     // Fincept API host. Notification providers (Slack, Discord, Telegram,
     // PagerDuty, user webhooks, …) and other services pass absolute third-party

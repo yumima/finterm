@@ -789,12 +789,22 @@ void AiChatScreen::load_messages(const QString& session_id) {
     const auto& msgs = result.value();
     total_messages_ = static_cast<int>(msgs.size());
     total_tokens_ = 0;
-    for (const auto& msg : msgs) {
+
+    // For sessions with more than the visible cap of past turns, materialize
+    // only the most recent kMaxVisibleBubbles bubbles. The DB still has the
+    // full history; we're just not building widgets for messages the user
+    // can't reasonably scroll through anyway. total_messages_/total_tokens_
+    // remain accurate so the header reflects the whole session.
+    const int total = static_cast<int>(msgs.size());
+    const int start = std::max(0, total - kMaxVisibleBubbles);
+    for (int i = start; i < total; ++i) {
+        const auto& msg = msgs[i];
         add_message_bubble(msg.role, msg.content, msg.timestamp);
         if (msg.role != "system")
             history_.push_back({msg.role, msg.content});
         total_tokens_ += msg.tokens_used;
     }
+    evict_oldest_history_if_needed();
     show_welcome(msgs.empty());
     scroll_to_bottom();
     update_stats();
@@ -915,6 +925,7 @@ void AiChatScreen::on_send() {
                                            ai_chat::LlmService::instance().active_provider(),
                                            ai_chat::LlmService::instance().active_model());
     history_.push_back({"user", text});
+    evict_oldest_history_if_needed();
 
     // Show typing indicator while waiting for first chunk
     show_typing(true);
@@ -1030,6 +1041,7 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
     }
     if (!content.isEmpty()) {
         history_.push_back({"assistant", content});
+        evict_oldest_history_if_needed();
         total_messages_++;
         total_tokens_ += response.total_tokens;
         update_stats();
@@ -1147,6 +1159,7 @@ void AiChatScreen::add_message_bubble(const QString& role, const QString& conten
         rl->addStretch();
 
     messages_layout_->insertWidget(messages_layout_->count() - 1, row);
+    evict_oldest_bubble_if_needed();
 }
 
 QLabel* AiChatScreen::add_streaming_bubble() {
@@ -1224,6 +1237,7 @@ QLabel* AiChatScreen::add_streaming_bubble() {
     rl->addStretch();
 
     messages_layout_->insertWidget(messages_layout_->count() - 1, row);
+    evict_oldest_bubble_if_needed();
     return body;
 }
 
@@ -1237,6 +1251,30 @@ void AiChatScreen::clear_messages() {
             item->widget()->deleteLater();
         delete item;
     }
+}
+
+void AiChatScreen::evict_oldest_bubble_if_needed() {
+    // The trailing stretch added in build_chat_area() always occupies one
+    // slot at the end of messages_layout_, so the real bubble count is
+    // count() - 1. We pop from index 0 (the oldest) when we exceed the
+    // cap; the stretch stays put at the tail.
+    while (messages_layout_->count() - 1 > kMaxVisibleBubbles) {
+        QLayoutItem* item = messages_layout_->takeAt(0);
+        if (!item) break;
+        if (item->widget())
+            item->widget()->deleteLater();
+        delete item;
+    }
+}
+
+void AiChatScreen::evict_oldest_history_if_needed() {
+    // history_ is touched only from main-thread slot handlers (load, send,
+    // streaming-complete) so no locking is needed despite the unused
+    // history_mutex_ member. Drop from the front to keep the most recent
+    // turns — those are what the model needs as context anyway.
+    const auto excess = static_cast<int>(history_.size()) - kMaxHistoryEntries;
+    if (excess > 0)
+        history_.erase(history_.begin(), history_.begin() + excess);
 }
 
 void AiChatScreen::scroll_to_bottom() {

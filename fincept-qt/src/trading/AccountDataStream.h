@@ -6,6 +6,7 @@
 //   - Cached data snapshots (positions, holdings, orders, funds, quotes)
 // Signals are emitted on the main thread for UI consumption.
 
+#include "core/util/LruMap.h"
 #include "trading/BrokerAccount.h"
 #include "trading/TradingTypes.h"
 
@@ -119,7 +120,11 @@ class AccountDataStream : public QObject {
     QVector<BrokerHolding> holdings_;
     QVector<BrokerOrderInfo> orders_;
     BrokerFunds funds_;
-    QHash<QString, BrokerQuote> quote_cache_;
+    // Bounded LRU. Previously a plain QHash that grew unbounded as the user
+    // browsed quotes — every symbol ever fetched stayed in memory for the
+    // life of the session. 500 entries comfortably covers a typical
+    // watchlist + active-symbol working set with hours of headroom.
+    fincept::util::LruMap<QString, BrokerQuote> quote_cache_{500};
 
     // Fetch guards
     std::atomic<bool> quote_fetching_{false};

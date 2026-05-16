@@ -127,6 +127,17 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     void update_stats();
     void show_welcome(bool show);
     void show_typing(bool show);
+
+    // Trailing-window caps — safety valves for runaway sessions. Each bubble
+    // is a non-trivial widget tree (row + col + label + footer + copy
+    // button + rendered markdown), so an unbounded chat balloons memory
+    // and lengthens scroll/relayout. These limits are well above any
+    // realistic session (10–200 turns), so eviction never fires in normal
+    // usage; it just bounds the worst case.
+    static constexpr int kMaxVisibleBubbles = 1000;  // widgets in messages_layout_
+    static constexpr int kMaxHistoryEntries = 2000;  // ConversationMessage in history_
+    void evict_oldest_bubble_if_needed();
+    void evict_oldest_history_if_needed();  // call inside history_mutex_
 };
 
 } // namespace fincept::screens

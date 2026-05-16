@@ -131,8 +131,10 @@ QVector<BrokerOrderInfo> AccountDataStream::cached_orders() const { return order
 BrokerFunds AccountDataStream::cached_funds() const { return funds_; }
 
 BrokerQuote AccountDataStream::cached_quote(const QString& symbol) const {
-    auto it = quote_cache_.find(symbol);
-    return it != quote_cache_.end() ? it.value() : BrokerQuote{};
+    // peek_or — don't promote on a read, since unrelated UI repaints (e.g.
+    // a status bar that reads every cached symbol once per second) would
+    // otherwise keep stale entries pinned at the MRU end forever.
+    return quote_cache_.peek_or(symbol);
 }
 
 // ── Timer callbacks ─────────────────────────────────────────────────────────
@@ -198,7 +200,7 @@ void AccountDataStream::async_fetch_quote() {
         const auto quote = result.data->first();
         QMetaObject::invokeMethod(self, [self, acct_id, symbol, quote]() {
             if (!self) return;
-            self->quote_cache_[symbol] = quote;
+            self->quote_cache_.put(symbol, quote);
             emit self->quote_updated(acct_id, symbol, quote);
         }, Qt::QueuedConnection);
     });
@@ -326,7 +328,7 @@ void AccountDataStream::async_fetch_watchlist_quotes() {
         QMetaObject::invokeMethod(self, [self, acct_id, data = *result.data]() {
             if (!self) return;
             for (const auto& q : data)
-                self->quote_cache_[q.symbol] = q;
+                self->quote_cache_.put(q.symbol, q);
             emit self->watchlist_updated(acct_id, data);
         }, Qt::QueuedConnection);
     });

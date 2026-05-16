@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QSet>
+#include <QSettings>
 #include <QShowEvent>
 #include <QWidget>
 
@@ -144,6 +145,17 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Debounced DB seen-writes
     QTimer* seen_flush_timer_ = nullptr;
     QSet<QString> pending_seen_ids_;
+
+    // Single QSettings handle reused for every filter write. The old pattern
+    // (one local `QSettings s;` per handler) re-opened and re-parsed the INI
+    // file on every keystroke / pill click — 5–30 ms per change on slow
+    // disks. We modify in memory here and sync() only on the trailing edge
+    // of `settings_write_debounce_` so a rapid burst of changes collapses to
+    // a single disk write. QSettings auto-syncs on destruction so the final
+    // value still persists if the user quits before the debounce fires.
+    QSettings settings_;
+    QTimer*   settings_write_debounce_ = nullptr;
+    void      schedule_settings_write();
 
     // Active variant for feed filtering
     QString active_variant_ = "FULL";

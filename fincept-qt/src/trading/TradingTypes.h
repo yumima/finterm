@@ -2,7 +2,9 @@
 // Trading Types — shared data types for paper trading, brokers, and exchange services.
 // Qt-adapted port from the ImGui codebase (portfolio_types.h + broker_types.h + exchange_service types).
 
-#include <QJsonArray>
+// QJsonObject is a value member of one struct below; QJsonArray was previously
+// imported here too but had no use in this header — dropped to save the
+// transitive include cost across the ~36 translation units that pull this in.
 #include <QJsonObject>
 #include <QString>
 

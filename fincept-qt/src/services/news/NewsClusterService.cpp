@@ -1,6 +1,7 @@
 #include "services/news/NewsClusterService.h"
 
 #include <QDateTime>
+#include <QRegularExpression>
 #include <QSet>
 #include <QUuid>
 
@@ -8,10 +9,17 @@
 
 namespace fincept::services {
 
-// Tokenize headline into lowercase words for Jaccard similarity
+// Tokenize headline into lowercase words for Jaccard similarity.
+// The non-word-boundary regex is compiled once per process — previously a
+// fresh QRegularExpression was constructed on every call, which at ~1µs per
+// compile added ~1 ms of pure regex setup time per 1000-article cluster pass.
+// `cluster_articles` already runs on a QtConcurrent worker (see
+// NewsScreen::apply_filters_async), so this is amortising cost rather than
+// rescuing the GUI thread.
 static QSet<QString> tokenize(const QString& text) {
+    static const QRegularExpression kNonWord(QStringLiteral("\\W+"));
     QSet<QString> tokens;
-    for (const auto& w : text.toLower().split(QRegularExpression("\\W+"), Qt::SkipEmptyParts)) {
+    for (const auto& w : text.toLower().split(kNonWord, Qt::SkipEmptyParts)) {
         if (w.size() > 2)
             tokens.insert(w);
     }

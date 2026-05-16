@@ -2,6 +2,8 @@
 
 #include "core/logging/Logger.h"
 
+#include <QRandomGenerator>
+
 namespace fincept {
 
 #ifdef HAS_QT_WEBSOCKETS
@@ -50,7 +52,16 @@ void WebSocketClient::on_disconnected() {
     LOG_WARN("WS", "Disconnected from " + url_);
     emit disconnected();
     if (reconnect_attempts_ < MAX_RECONNECT_ATTEMPTS) {
-        int delay = std::min(1000 * (1 << reconnect_attempts_), 30000);
+        // Exponential backoff with full-jitter. A network blip can knock
+        // out every WS connection in the app at once; without jitter they
+        // would all retry on identical schedules (1s, 2s, 4s, …) and the
+        // remote endpoint sees a thundering herd. Picking the delay
+        // uniformly from [base/2, base*1.5] spreads the retries over a
+        // realistic window without violating the backoff intent.
+        const int base = std::min(1000 * (1 << reconnect_attempts_), 30000);
+        const int low  = base / 2;
+        const int high = base + base / 2;
+        const int delay = QRandomGenerator::global()->bounded(low, high + 1);
         reconnect_timer_.start(delay);
     }
 }

@@ -106,14 +106,23 @@ NewsScreen::NewsScreen(QWidget* parent) : QWidget(parent) {
     setStyleSheet(ui::styles::news_screen_styles());
     LOG_INFO("NewsScreen", "news_screen_styles applied");
 
-    // Restore persistent preferences
-    QSettings settings;
-    settings.beginGroup("news");
-    active_category_ = settings.value("category", "ALL").toString();
-    time_range_ = settings.value("time_range", "24H").toString();
-    sort_mode_ = settings.value("sort_mode", "RELEVANCE").toString();
-    view_mode_ = settings.value("view_mode", "WIRE").toString();
-    settings.endGroup();
+    // Restore persistent preferences. Read once via the member QSettings —
+    // subsequent writes (filter changes) reuse this handle so we don't pay
+    // the INI open/parse cost on every keystroke / pill click.
+    active_category_ = settings_.value("news/category",   "ALL").toString();
+    time_range_      = settings_.value("news/time_range", "24H").toString();
+    sort_mode_       = settings_.value("news/sort_mode",  "RELEVANCE").toString();
+    view_mode_       = settings_.value("news/view_mode",  "WIRE").toString();
+
+    // Debounce filter-write storms — a user clicking through pill options
+    // generates a burst of setValue() calls. We coalesce the resulting
+    // disk write into one sync() on the trailing edge.
+    settings_write_debounce_ = new QTimer(this);
+    settings_write_debounce_->setSingleShot(true);
+    settings_write_debounce_->setInterval(500);
+    connect(settings_write_debounce_, &QTimer::timeout, this, [this]() {
+        settings_.sync();
+    });
 
     build_ui();
     connect_signals();
@@ -303,10 +312,8 @@ void NewsScreen::connect_signals() {
     // Variant selector
     connect(command_bar_, &NewsCommandBar::variant_changed, this, [this](const QString& variant) {
         active_variant_ = variant;
-        QSettings s;
-        s.beginGroup("news");
-        s.setValue("variant", variant);
-        s.endGroup();
+        settings_.setValue("news/variant", variant);
+        schedule_settings_write();
         on_refresh();
     });
 
@@ -476,10 +483,8 @@ void NewsScreen::hideEvent(QHideEvent* e) {
 void NewsScreen::on_category_changed(const QString& category) {
     active_category_ = category;
     visible_article_count_ = PAGE_SIZE;
-    QSettings s;
-    s.beginGroup("news");
-    s.setValue("category", category);
-    s.endGroup();
+    settings_.setValue("news/category", category);
+    schedule_settings_write();
     ScreenStateManager::instance().notify_changed(this);
     apply_filters_async();
 }
@@ -487,32 +492,35 @@ void NewsScreen::on_category_changed(const QString& category) {
 void NewsScreen::on_time_range_changed(const QString& range) {
     time_range_ = range;
     visible_article_count_ = PAGE_SIZE;
-    QSettings s;
-    s.beginGroup("news");
-    s.setValue("time_range", range);
-    s.endGroup();
+    settings_.setValue("news/time_range", range);
+    schedule_settings_write();
     ScreenStateManager::instance().notify_changed(this);
     apply_filters_async();
 }
 
 void NewsScreen::on_sort_changed(const QString& sort) {
     sort_mode_ = sort;
-    QSettings s;
-    s.beginGroup("news");
-    s.setValue("sort_mode", sort);
-    s.endGroup();
+    settings_.setValue("news/sort_mode", sort);
+    schedule_settings_write();
     ScreenStateManager::instance().notify_changed(this);
     apply_filters_async();
 }
 
 void NewsScreen::on_view_mode_changed(const QString& mode) {
     view_mode_ = mode;
-    QSettings s;
-    s.beginGroup("news");
-    s.setValue("view_mode", mode);
-    s.endGroup();
+    settings_.setValue("news/view_mode", mode);
+    schedule_settings_write();
     ScreenStateManager::instance().notify_changed(this);
     feed_panel_->model()->set_view_mode(mode);
+}
+
+void NewsScreen::schedule_settings_write() {
+    // Trailing-edge debounce. Rapid filter changes (pill spam, dropdown
+    // walking) collapse into a single sync() 500ms after the last edit;
+    // the QSettings destructor still syncs on quit so the latest value
+    // always persists.
+    if (settings_write_debounce_)
+        settings_write_debounce_->start();
 }
 
 void NewsScreen::on_search_changed(const QString& query) {

@@ -1,5 +1,6 @@
 #include "services/polymarket/PolymarketWebSocket.h"
 
+#include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "network/websocket/WebSocketClient.h"
 
@@ -105,6 +106,15 @@ void PolymarketWebSocket::on_ws_disconnected() {
 void PolymarketWebSocket::on_ws_message(const QString& msg) {
     if (msg == "PONG" || msg.isEmpty())
         return;
+
+    // Instrument the inbound parse+dispatch path. Polymarket WS messages
+    // are decoded + fanned out on the GUI thread; under heavy market
+    // activity (hundreds of price ticks/second on volatile events) this
+    // is the prime suspect for GUI-thread starvation. If we ever see
+    // [Perf] Slow op 'PolymarketWebSocket.on_ws_message' lines, the
+    // fix is to move the parse to a single-thread worker (must preserve
+    // order — orderbook updates would be wrong if reordered).
+    FT_TIME_SLOT("PolymarketWebSocket.on_ws_message", 10);
 
     QJsonParseError err;
     auto doc = QJsonDocument::fromJson(msg.toUtf8(), &err);

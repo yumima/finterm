@@ -157,25 +157,65 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
     if (bt.is_err())
         return bt;
 
-    const QString sql = "INSERT OR IGNORE INTO news_articles "
-                        "(id, headline, summary, source, region, category, link, sort_ts, "
-                        " priority, sentiment, impact, tickers, tier, lang, "
-                        " threat_level, threat_cat, threat_conf, source_flag) "
-                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    // Multi-row INSERT to amortise SQL parsing + statement-prep cost across
+    // each chunk. The previous one-row-per-INSERT loop reparsed the same
+    // statement N times — fine at 5 articles, perceptible at 500.
+    //
+    // Chunk size 50 = 50 × 18 cols = 900 bound parameters per statement,
+    // safely under SQLite's SQLITE_MAX_VARIABLE_NUMBER limit (999 on old
+    // builds, 32766 on >= 3.32). Larger chunks would let us amortise more
+    // but offer diminishing returns past a few hundred rows.
+    constexpr int kCols = 18;
+    constexpr int kChunkRows = 50;
+    static const QString kRowPlaceholder =
+        QStringLiteral("(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    static const QString kSqlPrefix =
+        QStringLiteral("INSERT OR IGNORE INTO news_articles "
+                       "(id, headline, summary, source, region, category, link, sort_ts, "
+                       " priority, sentiment, impact, tickers, tier, lang, "
+                       " threat_level, threat_cat, threat_conf, source_flag) VALUES ");
 
     int inserted = 0;
-    for (const auto& a : articles) {
-        QJsonArray tickers_arr;
-        for (const auto& t : a.tickers)
-            tickers_arr.append(t);
-        const QString tickers_json = QString::fromUtf8(QJsonDocument(tickers_arr).toJson(QJsonDocument::Compact));
+    const int total_rows = static_cast<int>(articles.size());
+    for (int start = 0; start < total_rows; start += kChunkRows) {
+        const int end = std::min(start + kChunkRows, total_rows);
+        const int rows_here = end - start;
 
-        auto r = exec_write(sql, {a.id, a.headline, a.summary, a.source, a.region, a.category, a.link,
-                                  static_cast<qint64>(a.sort_ts), priority_str(a.priority), sentiment_str(a.sentiment),
-                                  impact_str(a.impact), tickers_json, a.tier, a.lang, threat_level_str(a.threat.level),
-                                  a.threat.category, a.threat.confidence, static_cast<int>(a.source_flag)});
-        if (r.is_ok())
-            ++inserted;
+        QStringList placeholders;
+        placeholders.reserve(rows_here);
+        QVariantList params;
+        params.reserve(rows_here * kCols);
+
+        for (int i = start; i < end; ++i) {
+            const auto& a = articles[i];
+            QJsonArray tickers_arr;
+            for (const auto& t : a.tickers)
+                tickers_arr.append(t);
+            const QString tickers_json = QString::fromUtf8(
+                QJsonDocument(tickers_arr).toJson(QJsonDocument::Compact));
+
+            placeholders.append(kRowPlaceholder);
+            params << a.id << a.headline << a.summary << a.source << a.region
+                   << a.category << a.link << static_cast<qint64>(a.sort_ts)
+                   << priority_str(a.priority) << sentiment_str(a.sentiment)
+                   << impact_str(a.impact) << tickers_json << a.tier << a.lang
+                   << threat_level_str(a.threat.level) << a.threat.category
+                   << a.threat.confidence << static_cast<int>(a.source_flag);
+        }
+
+        const QString sql = kSqlPrefix + placeholders.join(QStringLiteral(","));
+        auto r = database.execute(sql, params);
+        if (r.is_err()) {
+            LOG_ERROR("NewsArticleRepo",
+                      QString("upsert_batch chunk failed: %1")
+                          .arg(QString::fromStdString(r.error())));
+            database.rollback();
+            return Result<void>::err(r.error());
+        }
+        // numRowsAffected() reflects how many rows were actually inserted
+        // (INSERT OR IGNORE skips duplicates without affecting the row
+        // count) so the log line stays honest.
+        inserted += r.value().numRowsAffected();
     }
 
     auto ct = database.commit();
@@ -184,7 +224,8 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
         return ct;
     }
 
-    LOG_DEBUG("NewsArticleRepo", QString("upsert_batch: %1 new / %2 total").arg(inserted).arg(articles.size()));
+    LOG_DEBUG("NewsArticleRepo",
+              QString("upsert_batch: %1 new / %2 total").arg(inserted).arg(articles.size()));
     return Result<void>::ok();
 }
 
