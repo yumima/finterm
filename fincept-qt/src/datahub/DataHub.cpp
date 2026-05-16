@@ -206,6 +206,34 @@ void DataHub::on_owner_destroyed(QObject* owner) {
         }
         owner_patterns_.erase(pats_it);
     }
+
+    // Mirror cleanup for error subscriptions.
+    auto err_topics_it = error_owner_topics_.find(owner);
+    if (err_topics_it != error_owner_topics_.end()) {
+        for (const auto& topic : err_topics_it.value()) {
+            auto sub_it = error_subscriptions_.find(topic);
+            if (sub_it == error_subscriptions_.end()) continue;
+            auto& vec = sub_it.value();
+            vec.erase(std::remove_if(vec.begin(), vec.end(),
+                         [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                      vec.end());
+            if (vec.isEmpty()) error_subscriptions_.erase(sub_it);
+        }
+        error_owner_topics_.erase(err_topics_it);
+    }
+    auto err_pats_it = error_owner_patterns_.find(owner);
+    if (err_pats_it != error_owner_patterns_.end()) {
+        for (const auto& pattern : err_pats_it.value()) {
+            auto sub_it = error_pattern_subscriptions_.find(pattern);
+            if (sub_it == error_pattern_subscriptions_.end()) continue;
+            auto& vec = sub_it.value();
+            vec.erase(std::remove_if(vec.begin(), vec.end(),
+                         [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                      vec.end());
+            if (vec.isEmpty()) error_pattern_subscriptions_.erase(sub_it);
+        }
+        error_owner_patterns_.erase(err_pats_it);
+    }
 }
 
 void DataHub::deliver_initial_value(
@@ -354,6 +382,22 @@ void DataHub::unsubscribe(QObject* owner, const QString& topic) {
     }
 }
 
+void DataHub::unsubscribe_pattern(QObject* owner, const QString& pattern) {
+    QMutexLocker lock(&mutex_);
+    auto sub_it = pattern_subscriptions_.find(pattern);
+    if (sub_it != pattern_subscriptions_.end()) {
+        auto& vec = sub_it.value();
+        vec.erase(std::remove_if(vec.begin(), vec.end(),
+                     [owner](const Subscription& s) { return s.owner.data() == owner; }),
+                  vec.end());
+        if (vec.isEmpty()) pattern_subscriptions_.erase(sub_it);
+    }
+    if (auto it = owner_patterns_.find(owner); it != owner_patterns_.end()) {
+        it.value().remove(pattern);
+        if (it.value().isEmpty()) owner_patterns_.erase(it);
+    }
+}
+
 // ── Publishing ─────────────────────────────────────────────────────────────
 
 void DataHub::emit_to_subscribers(const QString& topic, const QVariant& value) {
@@ -456,6 +500,72 @@ void DataHub::publish(const QString& topic, const QVariant& value,
     do_publish(topic, value, ttl);
 }
 
+QMetaObject::Connection DataHub::subscribe_errors(
+    QObject* owner, const QString& topic,
+    std::function<void(const QString&)> slot) {
+    Q_ASSERT(owner && "subscribe_errors requires a non-null owner");
+    {
+        QMutexLocker lock(&mutex_);
+        ErrorSub e;
+        e.owner = owner;
+        e.single_slot = std::move(slot);
+        e.is_pattern = false;
+        error_subscriptions_[topic].append(std::move(e));
+        error_owner_topics_[owner].insert(topic);
+    }
+    return connect(owner, &QObject::destroyed, this,
+        &DataHub::on_owner_destroyed,
+        Qt::ConnectionType(Qt::QueuedConnection | Qt::UniqueConnection));
+}
+
+QMetaObject::Connection DataHub::subscribe_pattern_errors(
+    QObject* owner, const QString& pattern,
+    std::function<void(const QString&, const QString&)> slot) {
+    Q_ASSERT(owner && "subscribe_pattern_errors requires a non-null owner");
+    {
+        QMutexLocker lock(&mutex_);
+        ErrorSub e;
+        e.owner = owner;
+        e.pattern_slot = std::move(slot);
+        e.is_pattern = true;
+        error_pattern_subscriptions_[pattern].append(std::move(e));
+        error_owner_patterns_[owner].insert(pattern);
+    }
+    return connect(owner, &QObject::destroyed, this,
+        &DataHub::on_owner_destroyed,
+        Qt::ConnectionType(Qt::QueuedConnection | Qt::UniqueConnection));
+}
+
+void DataHub::unsubscribe_errors(QObject* owner, const QString& topic) {
+    QMutexLocker lock(&mutex_);
+    if (auto it = error_subscriptions_.find(topic); it != error_subscriptions_.end()) {
+        auto& vec = it.value();
+        vec.erase(std::remove_if(vec.begin(), vec.end(),
+                     [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                  vec.end());
+        if (vec.isEmpty()) error_subscriptions_.erase(it);
+    }
+    if (auto it = error_owner_topics_.find(owner); it != error_owner_topics_.end()) {
+        it.value().remove(topic);
+        if (it.value().isEmpty()) error_owner_topics_.erase(it);
+    }
+}
+
+void DataHub::unsubscribe_pattern_errors(QObject* owner, const QString& pattern) {
+    QMutexLocker lock(&mutex_);
+    if (auto it = error_pattern_subscriptions_.find(pattern); it != error_pattern_subscriptions_.end()) {
+        auto& vec = it.value();
+        vec.erase(std::remove_if(vec.begin(), vec.end(),
+                     [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                  vec.end());
+        if (vec.isEmpty()) error_pattern_subscriptions_.erase(it);
+    }
+    if (auto it = error_owner_patterns_.find(owner); it != error_owner_patterns_.end()) {
+        it.value().remove(pattern);
+        if (it.value().isEmpty()) error_owner_patterns_.erase(it);
+    }
+}
+
 void DataHub::publish_error(const QString& topic, const QString& error) {
     if (QThread::currentThread() != this->thread()) {
         QMetaObject::invokeMethod(this, [this, topic, error]() {
@@ -464,6 +574,15 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         return;
     }
     StateTransition pending_state;
+    // Snapshot per-topic and pattern error subscribers under the lock so we
+    // invoke their slots outside it (same pattern as emit_to_subscribers).
+    struct PendingErr {
+        QPointer<QObject> owner;
+        std::function<void(const QString&)> single_slot;
+        std::function<void(const QString&, const QString&)> pattern_slot;
+        bool is_pattern = false;
+    };
+    QVector<PendingErr> error_targets;
     {
         QMutexLocker lock(&mutex_);
         auto& st = state_for(topic);
@@ -472,7 +591,24 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         st.last_error_ms = now_ms();
         st.total_errors += 1;
         pending_state = record_state_transition_locked(st);
+
+        if (auto it = error_subscriptions_.find(topic); it != error_subscriptions_.end()) {
+            for (const auto& e : it.value())
+                if (e.owner) error_targets.append({e.owner, e.single_slot, {}, false});
+        }
+        for (auto it = error_pattern_subscriptions_.begin();
+             it != error_pattern_subscriptions_.end(); ++it) {
+            if (!pattern_matches(it.key(), topic)) continue;
+            for (const auto& e : it.value())
+                if (e.owner) error_targets.append({e.owner, {}, e.pattern_slot, true});
+        }
     }
+    for (const auto& t : error_targets) {
+        if (!t.owner) continue;
+        if (t.is_pattern) t.pattern_slot(topic, error);
+        else              t.single_slot(error);
+    }
+
     LOG_WARN("DataHub", QString("publish_error topic='%1' error='%2'").arg(topic).arg(error.left(200)));
     emit topic_error(topic, error);
     if (pending_state.changed)

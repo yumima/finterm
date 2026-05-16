@@ -42,6 +42,15 @@ struct TopicPolicy {
     /// Default is false — most topics benefit from keeping last-known-
     /// good values for `peek()` and for re-subscribe warm-start.
     bool drop_on_idle = false;
+
+    /// Hint that fan-out to a subscriber may be suppressed when the
+    /// subscriber's owner window is inactive. Declarative only in this
+    /// single-window finterm build — DataHub does NOT consult this flag
+    /// during dispatch (upstream's WindowFrame-aware filtering wasn't
+    /// ported). Kept so producers like OptionChainService can set it
+    /// without #ifdef churn; promoting it to active enforcement requires
+    /// the multi-window WindowFrame infrastructure.
+    bool pause_when_inactive = false;
 };
 
 } // namespace fincept::datahub

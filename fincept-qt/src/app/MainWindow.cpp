@@ -42,6 +42,7 @@
 #include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/futures/FuturesScreen.h"
 #include "screens/futures/FuturesQuoteCache.h"
+#include "screens/fno/FnoScreen.h"
 #include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
@@ -666,6 +667,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_portfolio", {"Portfolio", "portfolio"}},
                 {"panel_markets", {"Markets", "markets"}},
                 {"panel_futures", {"Futures", "futures"}},
+                {"panel_fno", {"F&O", "fno"}},
                 {"panel_crypto", {"Crypto Trading", "crypto_trading"}},
                 {"panel_equity", {"Equity Trading", "equity_trading"}},
                 {"panel_algo", {"Algo Trading", "algo_trading"}},
@@ -1084,6 +1086,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("dashboard", []() { return new screens::DashboardScreen; });
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
     dock_router_->register_factory("futures", []() { return new screens::FuturesScreen; });
+    dock_router_->register_factory("fno", []() { return new screens::fno::FnoScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
     dock_router_->register_factory("forum", []() { return new screens::ForumScreen; });

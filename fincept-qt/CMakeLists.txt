@@ -682,6 +682,9 @@ set(STORAGE_SOURCES
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
+    src/storage/repositories/OISnapshotsRepository.cpp
+    src/storage/repositories/IvHistoryRepository.cpp
+    src/storage/repositories/StrategiesRepository.cpp
     src/storage/repositories/NewsMonitorRepository.cpp
     src/storage/repositories/NewsArticleRepository.cpp
     src/storage/repositories/PortfolioHoldingsRepository.cpp
@@ -736,6 +739,7 @@ set(PYTHON_SOURCES
     src/python/PythonRunner.cpp
     src/python/PythonSetupManager.cpp
     src/python/PythonWorker.cpp
+    src/python/OptionGreeksWorker.cpp
 )
 
 # AI Chat
@@ -868,6 +872,11 @@ set(SERVICE_SOURCES
     src/services/portfolio/PortfolioService.cpp
     src/services/portfolio/PortfolioAnalyticsService.cpp
     src/services/quantlib/QuantLibClient.cpp
+    src/services/options/OISnapshotter.cpp
+    src/services/options/OptionChainService.cpp
+    src/services/options/OptionPricing.cpp
+    src/services/options/StrategyAnalytics.cpp
+    src/services/options/StrategyTemplates.cpp
     src/services/economics/EconomicsService.cpp
     src/services/agents/AgentService.cpp
     src/services/file_manager/FileManagerService.cpp
@@ -1081,6 +1090,26 @@ set(SCREEN_SOURCES
     src/screens/futures/FuturesDataService.cpp
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
+    # ── F&O (Sensibull-style options analytics; FII/DII tab dropped) ─────
+    src/screens/fno/FnoScreen.cpp
+    src/screens/fno/FnoHeaderBar.cpp
+    src/screens/fno/ChainSubTab.cpp
+    src/screens/fno/OptionChainModel.cpp
+    src/screens/fno/OptionChainTable.cpp
+    src/screens/fno/BuilderSubTab.cpp
+    src/screens/fno/BuilderAnalyticsRibbon.cpp
+    src/screens/fno/LegEditorTable.cpp
+    src/screens/fno/PayoffChartWidget.cpp
+    src/screens/fno/TemplatePickerPanel.cpp
+    src/screens/fno/OrderConfirmDialog.cpp
+    src/screens/fno/OISubTab.cpp
+    src/screens/fno/IntradayOIChart.cpp
+    src/screens/fno/MultiStrikeOIChart.cpp
+    src/screens/fno/MaxPainChart.cpp
+    src/screens/fno/OIBuildupTable.cpp
+    src/screens/fno/MultiStraddleSubTab.cpp
+    src/screens/fno/MultiStraddleChart.cpp
+    src/screens/fno/ScreenerSubTab.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/DashboardStatusBar.cpp
@@ -1577,6 +1606,25 @@ set_source_files_properties(
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
     src/screens/futures/FuturesScreen.cpp
+    src/screens/fno/BuilderAnalyticsRibbon.cpp
+    src/screens/fno/BuilderSubTab.cpp
+    src/screens/fno/ChainSubTab.cpp
+    src/screens/fno/FnoHeaderBar.cpp
+    src/screens/fno/FnoScreen.cpp
+    src/screens/fno/IntradayOIChart.cpp
+    src/screens/fno/LegEditorTable.cpp
+    src/screens/fno/MaxPainChart.cpp
+    src/screens/fno/MultiStraddleChart.cpp
+    src/screens/fno/MultiStraddleSubTab.cpp
+    src/screens/fno/MultiStrikeOIChart.cpp
+    src/screens/fno/OIBuildupTable.cpp
+    src/screens/fno/OISubTab.cpp
+    src/screens/fno/OptionChainModel.cpp
+    src/screens/fno/OptionChainTable.cpp
+    src/screens/fno/OrderConfirmDialog.cpp
+    src/screens/fno/PayoffChartWidget.cpp
+    src/screens/fno/ScreenerSubTab.cpp
+    src/screens/fno/TemplatePickerPanel.cpp
     src/screens/geopolitics/ConflictMonitorPanel.cpp
     src/screens/geopolitics/GeopoliticsScreen.cpp
     src/screens/geopolitics/HDXDataPanel.cpp

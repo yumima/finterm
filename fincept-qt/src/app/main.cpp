@@ -33,6 +33,8 @@
 #include "services/maritime/MaritimeService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/news/NewsService.h"
+#include "services/options/OISnapshotter.h"
+#include "services/options/OptionChainService.h"
 #include "services/polymarket/PolymarketWebSocket.h"
 #include "services/prediction/PredictionCredentialStore.h"
 #include "services/prediction/PredictionExchangeRegistry.h"
@@ -201,6 +203,12 @@ int main(int argc, char* argv[]) {
     fincept::services::ma::MAAnalyticsService::instance().ensure_registered_with_hub();
     // Phase 9: AgentService as agent:* push-only producer (output/stream/status/routing/error).
     fincept::services::AgentService::instance().ensure_registered_with_hub();
+    // F&O: option:chain:* / option:tick:* fed by the active broker. OISnapshotter
+    // subscribes to option:chain:* and persists per-minute OI snapshots for the
+    // OI Buildup tab. FiiDiiService (upstream's India-specific FII/DII feed) is
+    // intentionally not registered — that tab was dropped from the screen.
+    fincept::services::options::OptionChainService::instance().ensure_registered_with_hub();
+    fincept::services::options::OISnapshotter::instance().ensure_registered_with_hub();
     // Crypto: WalletService owns wallet:balance:* and market:price:token:*.
     // TokenMetadataService loads its symbol/name cache from SecureStorage
     // first so the very first balance publish has labels for known tokens;

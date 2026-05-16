@@ -117,6 +117,32 @@ class DataHub : public QObject {
     void unsubscribe(QObject* owner);
     /// Remove only the subscription for `owner` on `topic`.
     void unsubscribe(QObject* owner, const QString& topic);
+    /// Remove only the wildcard subscription for `owner` on `pattern`.
+    void unsubscribe_pattern(QObject* owner, const QString& pattern);
+
+    // ── Error subscriptions ─────────────────────────────────────────────────
+    //
+    // The `topic_error` Qt signal fans every error to every connected slot;
+    // each handler then has to filter by topic name. For consumers that only
+    // care about errors on one specific topic family, the `subscribe_errors`
+    // family below provides per-topic / per-pattern filtering inside the hub.
+    // The `owner` lifetime contract is identical to the data subscribe API:
+    // auto-cleanup on destroyed().
+
+    /// Receive `publish_error()` events for a single concrete topic.
+    QMetaObject::Connection subscribe_errors(
+        QObject* owner,
+        const QString& topic,
+        std::function<void(const QString& error)> slot);
+
+    /// Receive `publish_error()` events for every topic matching `pattern`.
+    QMetaObject::Connection subscribe_pattern_errors(
+        QObject* owner,
+        const QString& pattern,
+        std::function<void(const QString& topic, const QString& error)> slot);
+
+    void unsubscribe_errors(QObject* owner, const QString& topic);
+    void unsubscribe_pattern_errors(QObject* owner, const QString& pattern);
 
     // ── Publishing (producer side) ──────────────────────────────────────────
 
@@ -306,6 +332,20 @@ class DataHub : public QObject {
     // owner -> set of (topic, is_pattern) so we can fast-unsub on destroy
     QHash<QObject*, QSet<QString>> owner_topics_;
     QHash<QObject*, QSet<QString>> owner_patterns_;
+
+    // Per-topic / per-pattern error subscriptions — symmetric to
+    // subscriptions_ / pattern_subscriptions_ but keyed for the error
+    // fan-out path inside publish_error().
+    struct ErrorSub {
+        QPointer<QObject> owner;
+        std::function<void(const QString&)> single_slot;        // subscribe_errors
+        std::function<void(const QString&, const QString&)> pattern_slot; // subscribe_pattern_errors
+        bool is_pattern = false;
+    };
+    QHash<QString, QVector<ErrorSub>> error_subscriptions_;
+    QHash<QString, QVector<ErrorSub>> error_pattern_subscriptions_;
+    QHash<QObject*, QSet<QString>> error_owner_topics_;
+    QHash<QObject*, QSet<QString>> error_owner_patterns_;
 
     QHash<QString, TopicState> topics_;
 
