@@ -21,6 +21,41 @@
 
 namespace fincept::datahub {
 
+/// Coarse freshness state of a topic — opt-in for widgets that want to
+/// render a "loading…" / "refreshing…" / "error" affordance instead of
+/// just reacting to topic_updated.
+///
+/// Existing widgets are unaffected: this enum is only delivered via the
+/// optional topic_state_changed() signal, which fires only for connected
+/// subscribers. The legacy topic_updated() and topic_error() signals are
+/// unchanged.
+///
+/// Why the states are deliberately coarse:
+///   * Empty       — no value ever published, no fetch in flight. Widgets
+///                   typically render an empty card or "—" placeholder.
+///   * Loading     — first fetch in flight; no cached value to show.
+///                   Widgets typically render a spinner / skeleton.
+///   * Fresh       — cached value, within TTL, no fetch in flight.
+///                   Widgets render the data normally.
+///   * Refreshing  — cached value exists AND a refresh is in flight.
+///                   Stale-while-revalidate: keep showing the old value,
+///                   add a subtle "updating" indicator.
+///   * Error       — last refresh errored; cached value (if any) is still
+///                   visible. Widgets typically show an error chip.
+///
+/// "Stale" (cached value past TTL with no refresh in flight) is NOT a
+/// separate state in the signal — it would require eager TTL-tick polling
+/// to detect transitions accurately, which is not worth the wakeups.
+/// Consumers that genuinely need stale detection can compute it themselves
+/// via peek_raw() + the topic's policy.ttl_ms.
+enum class SubscriptionState : int {
+    Empty = 0,
+    Loading,
+    Fresh,
+    Refreshing,
+    Error,
+};
+
 /// Lightweight snapshot of one topic's state — surfaced by `stats()` and
 /// the DataHub inspector screen.
 struct TopicStats {
@@ -147,6 +182,10 @@ class DataHub : public QObject {
 
     QVector<TopicStats> stats() const;
 
+    /// Coarse current freshness state for a topic. Returns Empty for
+    /// unknown topics (never published, never errored). Thread-safe.
+    SubscriptionState subscription_state(const QString& topic) const;
+
     /// Diagnostic: list the QObject owners currently subscribed to `topic`.
     /// Pointers are raw (not QPointer) — only safe to use for identity
     /// comparison, logging, or `QObject::objectName()` lookup on the GUI
@@ -183,6 +222,12 @@ class DataHub : public QObject {
     /// "refresh_timeout", ...). The topic's cached value is unchanged —
     /// subscribers still see the last good value if any.
     void topic_error(const QString& topic, const QString& error);
+    /// Coarse freshness-state transition. Fires only when the computed
+    /// SubscriptionState for `topic` differs from the previous emission,
+    /// so a flurry of publishes inside the same state generates one
+    /// signal, not N. Opt-in: widgets that don't connect this slot pay
+    /// nothing. See the enum's doc-comment for state semantics.
+    void topic_state_changed(const QString& topic, fincept::datahub::SubscriptionState state);
 
   private:
     DataHub();
@@ -212,6 +257,11 @@ class DataHub : public QObject {
         // Coalesce state — non-zero policy.coalesce_within_ms only.
         bool coalesce_pending = false;   ///< a deferred publish is armed
         QVariant coalesce_latest;        ///< most recent value inside window
+        // Last SubscriptionState emitted via topic_state_changed. Used to
+        // suppress duplicate transitions when the computed state hasn't
+        // actually changed. Initialised to Empty (default) so the first
+        // transition is whatever the topic's first real state is.
+        SubscriptionState last_emitted_state = SubscriptionState::Empty;
     };
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -227,6 +277,24 @@ class DataHub : public QObject {
                     std::chrono::milliseconds ttl_override);
     void do_coalesced_flush(const QString& topic);
     void scheduler_body();
+    // Periodic eviction of topics that have no subscribers (concrete or
+    // pattern) and have been idle past kStaleTopicTtlMs. Caller must hold
+    // mutex_. Producers that emit unique-per-run topic names (e.g.
+    // `agent:output:<run_id>`) otherwise grow topics_ for the session's
+    // lifetime.
+    void sweep_stale_topics_locked();
+    // Compute the freshness state implied by a TopicState. Pure function,
+    // does not touch any shared state.
+    static SubscriptionState compute_state(const TopicState& st);
+    // If the computed state for `topic` has changed since the last emit,
+    // update the tracker and queue a topic_state_changed signal. Caller
+    // must hold mutex_; the signal is emitted *after* the lock is dropped
+    // by the caller using the returned pending-emit pair.
+    struct StateTransition { bool changed = false; SubscriptionState to = SubscriptionState::Empty; };
+    StateTransition record_state_transition_locked(TopicState& st);
+    qint64 last_sweep_ms_ = 0;
+    static constexpr qint64 kSweepIntervalMs = 60 * 1000;        // sweep once per minute
+    static constexpr qint64 kStaleTopicTtlMs = 5 * 60 * 1000;    // 5 min idle → eligible
 
     // ── State ───────────────────────────────────────────────────────────────
     mutable QMutex mutex_;

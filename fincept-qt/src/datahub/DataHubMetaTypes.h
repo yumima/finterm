@@ -29,6 +29,8 @@
 #include "services/wallet/WalletTypes.h"               // WalletBalance, TokenHolding, TokenPrice (=FncptPrice), TokenMetadata
 #include "trading/TradingTypes.h"                       // TickerData, OrderBookData, Candle, TradeData, Broker*
 
+#include "datahub/DataHub.h"                             // SubscriptionState
+
 #include <QMetaType>
 
 // Types that are not declared in a dedicated type header above — declare
@@ -41,6 +43,7 @@ Q_DECLARE_METATYPE(fincept::trading::TickerData)
 Q_DECLARE_METATYPE(fincept::trading::OrderBookData)
 Q_DECLARE_METATYPE(fincept::trading::Candle)
 Q_DECLARE_METATYPE(fincept::trading::TradeData)
+Q_DECLARE_METATYPE(fincept::datahub::SubscriptionState)
 
 namespace fincept::datahub {
 

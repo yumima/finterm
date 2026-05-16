@@ -2,7 +2,9 @@
 
 #include "core/logging/Logger.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QGuiApplication>
 #include <QMetaObject>
 #include <QMutexLocker>
 #include <QThread>
@@ -33,6 +35,32 @@ DataHub::DataHub() {
                                    // measured in seconds.
     connect(&scheduler_, &QTimer::timeout, this, &DataHub::scheduler_body);
     scheduler_.start();
+
+    // Pause the scheduler when no window is visible — i.e. the user has
+    // minimised the last terminal window or the OS has hidden the app.
+    // The scheduler does TTL-expiry walks + producer dispatch on every
+    // tick; with the window invisible that's all wasted CPU + network.
+    // We resume on the next Active transition; subscribers' first peek()
+    // after waking re-triggers any cold paths through the normal flow.
+    //
+    // Distinction: ApplicationInactive (another window has focus) keeps
+    // the scheduler running — the terminal is still on screen, just not
+    // foreground, and traders typically want quotes ticking in the
+    // background. Only ApplicationHidden (everything minimised) pauses.
+    if (qApp) {
+        connect(qApp, &QGuiApplication::applicationStateChanged, this,
+                [this](Qt::ApplicationState state) {
+                    const bool hidden = (state == Qt::ApplicationHidden ||
+                                         state == Qt::ApplicationSuspended);
+                    if (hidden && scheduler_.isActive()) {
+                        scheduler_.stop();
+                        LOG_DEBUG("DataHub", "Scheduler paused (app hidden)");
+                    } else if (!hidden && !scheduler_.isActive()) {
+                        scheduler_.start();
+                        LOG_DEBUG("DataHub", "Scheduler resumed (app visible)");
+                    }
+                });
+    }
 
     // Coalesce timer — single-shot, armed by request(), fires once per window.
     // Default 100ms so widget burst subscriptions (dashboard + markets both
@@ -354,6 +382,7 @@ void DataHub::do_publish(const QString& topic, const QVariant& value,
                          std::chrono::milliseconds ttl_override) {
     int coalesce_ms = 0;
     bool defer = false;
+    StateTransition pending_state;
     {
         QMutexLocker lock(&mutex_);
         auto& st = state_for(topic);
@@ -374,7 +403,10 @@ void DataHub::do_publish(const QString& topic, const QVariant& value,
             }
             // else: a timer is already armed; it will pick up the new latest value
         }
+        pending_state = record_state_transition_locked(st);
     }
+    if (pending_state.changed)
+        emit topic_state_changed(topic, pending_state.to);
     if (coalesce_ms > 0) {
         if (defer) {
             // Arm a one-shot timer. Runs on hub thread (we're already there
@@ -431,6 +463,7 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         }, Qt::QueuedConnection);
         return;
     }
+    StateTransition pending_state;
     {
         QMutexLocker lock(&mutex_);
         auto& st = state_for(topic);
@@ -438,9 +471,12 @@ void DataHub::publish_error(const QString& topic, const QString& error) {
         st.last_error = error;
         st.last_error_ms = now_ms();
         st.total_errors += 1;
+        pending_state = record_state_transition_locked(st);
     }
     LOG_WARN("DataHub", QString("publish_error topic='%1' error='%2'").arg(topic).arg(error.left(200)));
     emit topic_error(topic, error);
+    if (pending_state.changed)
+        emit topic_state_changed(topic, pending_state.to);
 }
 
 // ── Producer registration ──────────────────────────────────────────────────
@@ -547,6 +583,9 @@ void DataHub::request(const QStringList& topics, bool force) {
     int accepted = 0;
     bool need_arm = false;
     QStringList orphan_topics;
+    // Collected under the lock, emitted after release. Each pair is a topic
+    // whose computed SubscriptionState actually changed in this call.
+    QVector<QPair<QString, SubscriptionState>> state_emits;
     {
         QMutexLocker lock(&mutex_);
         const qint64 t = now_ms();
@@ -576,9 +615,18 @@ void DataHub::request(const QStringList& topics, bool force) {
             // window are naturally prevented by the in_flight gate above.
             coalesce_pending_[p].append(topic);
             ++accepted;
+            // Transition: depending on whether we had a prior value the
+            // topic moves to Loading (no value yet) or Refreshing
+            // (stale-while-revalidate).
+            auto tr = record_state_transition_locked(st);
+            if (tr.changed)
+                state_emits.append({topic, tr.to});
         }
         need_arm = accepted > 0;
     }
+
+    for (const auto& [topic, state] : state_emits)
+        emit topic_state_changed(topic, state);
 
     if (!orphan_topics.isEmpty()) {
         // Topic requested by a consumer but no producer claims a matching
@@ -637,6 +685,14 @@ void DataHub::scheduler_body() {
     {
         QMutexLocker lock(&mutex_);
         const qint64 t = now_ms();
+
+        // Periodically evict stale, unsubscribed topics so dynamic-name
+        // producers (agent runs, per-request topics) can't grow topics_
+        // unboundedly across a long session. Cheap: runs once a minute.
+        if (last_sweep_ms_ == 0 || (t - last_sweep_ms_) >= kSweepIntervalMs) {
+            last_sweep_ms_ = t;
+            sweep_stale_topics_locked();
+        }
 
         // Pre-pass: clear `in_flight` on topics whose producer missed the
         // refresh_timeout_ms window. Without this a crashed / hung producer
@@ -743,6 +799,84 @@ void DataHub::tick_scheduler() {
 void DataHub::retire_topic(const QString& topic) {
     QMutexLocker lock(&mutex_);
     topics_.remove(topic);
+}
+
+SubscriptionState DataHub::compute_state(const TopicState& st) {
+    // Error wins over everything else — if there's an outstanding error
+    // we want widgets to render an error chip even while a retry is in
+    // flight. Errors are cleared on successful publish (see do_publish),
+    // so the Error state naturally clears once data flows again.
+    if (!st.last_error.isEmpty())
+        return SubscriptionState::Error;
+    const bool has_value = st.total_publishes > 0;
+    if (st.in_flight)
+        return has_value ? SubscriptionState::Refreshing : SubscriptionState::Loading;
+    return has_value ? SubscriptionState::Fresh : SubscriptionState::Empty;
+}
+
+DataHub::StateTransition DataHub::record_state_transition_locked(TopicState& st) {
+    const SubscriptionState now_state = compute_state(st);
+    if (now_state == st.last_emitted_state)
+        return {};
+    st.last_emitted_state = now_state;
+    return {true, now_state};
+}
+
+SubscriptionState DataHub::subscription_state(const QString& topic) const {
+    QMutexLocker lock(const_cast<QMutex*>(&mutex_));
+    auto it = topics_.constFind(topic);
+    if (it == topics_.constEnd())
+        return SubscriptionState::Empty;
+    return compute_state(*it);
+}
+
+void DataHub::sweep_stale_topics_locked() {
+    // Caller (scheduler_body) holds mutex_. Walk the topic map once and
+    // collect entries that are:
+    //   * not in_flight (don't pull a topic out from under a pending fetch)
+    //   * not coalesce_pending (likewise — a deferred publish is queued)
+    //   * not push_only (push producers may publish at unpredictable
+    //     intervals; we can't reason about staleness from the last publish)
+    //   * idle past kStaleTopicTtlMs since last publish
+    //   * have no current subscribers (concrete or matching pattern)
+    //
+    // Pattern matching is O(N_patterns) per topic; N_patterns is small in
+    // practice (single digits) so the sweep is bounded even with hundreds
+    // of topics.
+    const qint64 t = now_ms();
+    QStringList evict;
+    for (auto it = topics_.cbegin(); it != topics_.cend(); ++it) {
+        const TopicState& st = it.value();
+        if (st.in_flight) continue;
+        if (st.coalesce_pending) continue;
+        if (st.policy.push_only) continue;
+        if (st.last_publish_ms == 0) continue; // never published — leave alone
+        if ((t - st.last_publish_ms) < kStaleTopicTtlMs) continue;
+
+        // Concrete subscribers?
+        if (auto sub_it = subscriptions_.constFind(it.key());
+            sub_it != subscriptions_.cend() && !sub_it.value().isEmpty())
+            continue;
+
+        // Pattern subscribers whose pattern matches?
+        bool pattern_hit = false;
+        for (auto pit = pattern_subscriptions_.cbegin();
+             pit != pattern_subscriptions_.cend(); ++pit) {
+            if (pit.value().isEmpty()) continue;
+            if (pattern_matches(pit.key(), it.key())) {
+                pattern_hit = true;
+                break;
+            }
+        }
+        if (pattern_hit) continue;
+
+        evict.append(it.key());
+    }
+    if (!evict.isEmpty()) {
+        for (const auto& k : evict)
+            topics_.remove(k);
+        LOG_DEBUG("DataHub", QString("Swept %1 stale topic(s)").arg(evict.size()));
+    }
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────

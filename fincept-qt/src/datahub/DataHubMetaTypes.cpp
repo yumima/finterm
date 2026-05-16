@@ -17,6 +17,7 @@ void register_metatypes() {
     qRegisterMetaType<fincept::trading::OrderBookData>("fincept::trading::OrderBookData");
     qRegisterMetaType<fincept::trading::Candle>("fincept::trading::Candle");
     qRegisterMetaType<fincept::trading::TradeData>("fincept::trading::TradeData");
+    qRegisterMetaType<fincept::datahub::SubscriptionState>("fincept::datahub::SubscriptionState");
     qRegisterMetaType<fincept::services::polymarket::OrderBook>("fincept::services::polymarket::OrderBook");
 
     // Prediction Markets (Polymarket, Kalshi, …)
