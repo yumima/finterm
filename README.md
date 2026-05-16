@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`8da6cdb2`](https://github.com/yumima/finterm/commit/8da6cdb2) mcp: dual-shape dispatch — call_tool_async + AuthChecker + validation
 - [`2f5d281d`](https://github.com/yumima/finterm/commit/2f5d281d) mcp: SchemaValidator — validate + default-inject tool args
 - [`1a3f3dc9`](https://github.com/yumima/finterm/commit/1a3f3dc9) mcp: add dual-shape ToolDef + ToolContext + ToolSchemaBuilder + AsyncDispatch
 - [`99817b73`](https://github.com/yumima/finterm/commit/99817b73) **ui:** ToastService + ErrorPipeline — in-app toast queue and error aggregation
