@@ -38,6 +38,13 @@ class PythonWorker : public QObject {
 
     bool is_ready() const { return ready_; }
 
+    /// Begin spawning the persistent yfinance daemon now. The first
+    /// submit() would do this anyway, but calling it at app start lets
+    /// the ~1–3 s yfinance/pandas import cost overlap with the GUI's
+    /// first paint instead of stalling the dashboard's first refresh.
+    /// Idempotent; no-op if already starting or running.
+    void warm_up() { ensure_started(); }
+
     void submit(const QString& action, const QJsonObject& payload, Callback cb,
                 int timeout_ms = 0);
 

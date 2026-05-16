@@ -22,6 +22,7 @@
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonSetupManager.h"
+#include "python/PythonWorker.h"
 #include "screens/setup/SetupScreen.h"
 #include "services/agents/AgentService.h"
 #include "services/dbnomics/DBnomicsService.h"
@@ -605,6 +606,16 @@ int main(int argc, char* argv[]) {
                 fincept::services::AgentService::instance().discover_agents();
             });
 
+            // Pre-spawn the persistent yfinance daemon so its 1–3 s
+            // import cost overlaps with the GUI coming up instead of
+            // stalling the first dashboard refresh (the global indices
+            // and commodities widgets were observed taking long on
+            // initial load — that delay is the daemon import, not the
+            // upstream API).
+            QTimer::singleShot(0, &app, []() {
+                fincept::python::PythonWorker::instance().warm_up();
+            });
+
             LOG_INFO("App", "Application ready (after setup)");
         });
 
@@ -677,6 +688,13 @@ int main(int argc, char* argv[]) {
     // much smaller DB-only list. Run deferred so Python is fully ready.
     QTimer::singleShot(0, &app, []() {
         fincept::services::AgentService::instance().discover_agents();
+    });
+
+    // Pre-spawn the persistent yfinance daemon so its 1–3 s import cost
+    // overlaps with the GUI coming up instead of stalling the first
+    // dashboard refresh.
+    QTimer::singleShot(0, &app, []() {
+        fincept::python::PythonWorker::instance().warm_up();
     });
 
     LOG_INFO("App", "Application ready");
