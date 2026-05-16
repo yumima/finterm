@@ -336,11 +336,13 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_label_->setObjectName("newsDetailBody");
     body_label_->setWordWrap(true);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Style (color/size/weight/background) comes from the global QSS rule
-    // `#newsDetailBody` in StyleSheets.cpp, which mirrors `#newsDetailHeadline`
-    // so the body reads as a continuation of the title pane rather than a
-    // separate smaller block. No inline stylesheet here — it would override
-    // the QSS and reintroduce the size/color drift the user flagged.
+    // Style comes from the global #newsDetailBody QSS, which mirrors
+    // #newsDetailHeadline. body_section_'s own background is set transparent
+    // in StyleSheets.cpp (#newsBodySection) — without that rule the section
+    // fell through to the global `QWidget { background-color: BG_BASE }`
+    // default, producing the black box the body label sat on while
+    // headline_label_ (parented to #newsDetailContent, which is transparent)
+    // showed the panel's BG_SURFACE through.
     body_layout->addWidget(body_label_);
     layout->addWidget(body_section_);
 

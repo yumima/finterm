@@ -199,14 +199,28 @@ QString news_screen_styles() {
                "#newsDetailCategory { color: %7; font-size: 11px; background: transparent; }"
                "#newsDetailSource { color: %14; font-size: 12px; font-weight: 700; background: transparent; }"
                "#newsDetailTime { color: %6; font-size: 11px; background: transparent; }"
-               "#newsDetailSummary { color: %7; font-size: 12px; line-height: 1.4; background: transparent; }"
+               /* Summary block — same headline typography (color %4, 15px, 700) so it
+                  reads as a stacked subhead below the title + meta row. Background is
+                  pinned to %1 (BG_BASE = black) per the user's request, which makes
+                  the summary visually distinct from the headline / body that both ride
+                  on the panel's BG_SURFACE. */
+               "#newsDetailSummary { color: %4; font-size: 15px; font-weight: 700; line-height: 1.4;"
+               "  background: %1; padding: 4px 6px; }"
                "#newsDetailImpact { color: %16; font-size: 11px; background: transparent; }"
                "#newsDetailTickers { color: %16; font-size: 11px; font-weight: 700; background: transparent; }"
                "#newsDetailSep { background: %3; }"
-               /* Article body extracted by NewsService::extract_article_body — matches
-                  the headline pane (#newsDetailHeadline) for color, size, weight, and
-                  background so the inline article reads as a continuation of the title
-                  rather than a separate, smaller sidebar block. */
+               /* Article body — extracted by NewsService::extract_article_body. Mirrors
+                  #newsDetailHeadline for color/size/weight/background so the article
+                  reads as a continuation of the headline pane.
+
+                  #newsBodySection is the wrapper QWidget that contains the title +
+                  status + body labels. WITHOUT this rule it falls through to the
+                  global `QWidget { background-color: BG_BASE }` default, which is the
+                  near-black `%1` shade — that's what produced the "bold white on black
+                  box" the user flagged. Making the wrapper transparent lets the panel's
+                  BG_SURFACE bleed through, same as #newsDetailContent does for the
+                  headline above. */
+               "#newsBodySection { background: transparent; }"
                "#newsDetailBody { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
                "#newsDetailBodyStatus { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
                "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
