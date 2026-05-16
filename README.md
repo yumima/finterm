@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f843f564`](https://github.com/yumima/finterm/commit/f843f564) **feat(derivatives):** option_greeks_daemon — IV + Greeks via py_vollib
 - [`59f7c462`](https://github.com/yumima/finterm/commit/59f7c462) **feat(crypto):** Kraken symbol resolver via ccxt
 - [`9bdb708b`](https://github.com/yumima/finterm/commit/9bdb708b) **feat(data):** FII/DII daily flows scraper (NSE cash market)
 - [`5b561d8f`](https://github.com/yumima/finterm/commit/5b561d8f) **feat(data):** Taiwan TWSE/TPEX market connector
