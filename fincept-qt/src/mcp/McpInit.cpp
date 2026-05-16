@@ -11,6 +11,7 @@
 #include "mcp/tools/DBnomicsTools.h"
 #include "mcp/tools/EquityResearchTools.h"
 #include "mcp/tools/GeopoliticsTools.h"
+#include "mcp/tools/GovDataTools.h"
 #include "mcp/tools/MetaTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DataHubTools.h"
@@ -112,6 +113,9 @@ void initialize_all_tools() {
 
     // geopolitics — conflict events, sanctions, maritime, ACLED-style
     provider.register_tools(tools::get_geopolitics_tools());
+
+    // gov_data — CKAN providers, datasets, resources for many countries
+    provider.register_tools(tools::get_gov_data_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 

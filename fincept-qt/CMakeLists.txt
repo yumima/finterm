@@ -781,6 +781,7 @@ set(MCP_SOURCES
     src/mcp/tools/DBnomicsTools.cpp
     src/mcp/tools/EquityResearchTools.cpp
     src/mcp/tools/GeopoliticsTools.cpp
+    src/mcp/tools/GovDataTools.cpp
     src/mcp/tools/MetaTools.cpp
     src/mcp/SchemaValidator.cpp
 )
