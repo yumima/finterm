@@ -108,7 +108,8 @@ class IpoWatchView : public QWidget {
     // so reorders are caught at compile time.
     enum FactTab  { FT_Deal = 0, FT_Business, FT_Leadership, FT_Fundamentals,
                     FT_News, FT_Holders, FT_Filings, FT_Funding, FT_Pipeline };
-    enum ChartTab { CT_Price = 0, CT_Revenue, CT_NetIncome, CT_Range, CT_Lockup, CT_Timeline };
+    enum ChartTab { CT_Price = 0, CT_Revenue, CT_NetIncome, CT_Margins,
+                    CT_Range, CT_Lockup, CT_Timeline };
 
     static const char* lens_label(Lens l);
 
@@ -154,6 +155,7 @@ class IpoWatchView : public QWidget {
     void    rebuild_price_chart(const Entry& e);     // mutates price_chart_view_
     void    rebuild_revenue_chart(const Entry& e);   // mutates revenue_chart_view_
     void    rebuild_netincome_chart(const Entry& e); // mutates netincome_chart_view_
+    void    rebuild_margins_chart(const Entry& e);   // mutates margins_chart_view_
 
     // Lazy fetchers fired from render_detail when their tab data is missing.
     void fetch_ipo_extras_for_detail(const Entry& e);
@@ -293,9 +295,11 @@ class IpoWatchView : public QWidget {
     QWidget*      page_price_chart_host_     = nullptr; // QVBoxLayout host for the QChartView
     QWidget*      page_revenue_chart_host_   = nullptr; // QVBoxLayout host for revenue bar chart
     QWidget*      page_netincome_chart_host_ = nullptr; // QVBoxLayout host for net-income bar chart
+    QWidget*      page_margins_chart_host_   = nullptr; // QVBoxLayout host for multi-line margin chart
     QChartView*   price_chart_view_          = nullptr; // recreated each render
     QChartView*   revenue_chart_view_        = nullptr;
     QChartView*   netincome_chart_view_      = nullptr;
+    QChartView*   margins_chart_view_        = nullptr;
     QLabel*       page_range_    = nullptr;
     QLabel*       page_lockup_   = nullptr;
     QLabel*       page_timeline_ = nullptr;

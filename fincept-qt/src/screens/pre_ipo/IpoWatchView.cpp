@@ -8,7 +8,12 @@
 #include "ui/charts/ChartFactory.h"
 #include "ui/theme/Theme.h"
 
+#include <QtCharts/QCategoryAxis>
+#include <QtCharts/QChart>
 #include <QtCharts/QChartView>
+#include <QtCharts/QLegend>
+#include <QtCharts/QLineSeries>
+#include <QtCharts/QValueAxis>
 #include <QTabWidget>
 
 #include <QApplication>
@@ -499,10 +504,23 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     ni_placeholder->setWordWrap(true);
     nch->addWidget(ni_placeholder, 1);
 
+    page_margins_chart_host_ = new QWidget;
+    auto* mgh = new QVBoxLayout(page_margins_chart_host_);
+    mgh->setContentsMargins(8, 8, 8, 8);
+    mgh->setSpacing(0);
+    auto* mg_placeholder = new QLabel(
+        "<i style='color:#7a7a7a;'>Gross / operating / net margin curves "
+        "appear when yfinance has multi-year financials.</i>");
+    mg_placeholder->setTextFormat(Qt::RichText);
+    mg_placeholder->setAlignment(Qt::AlignCenter);
+    mg_placeholder->setWordWrap(true);
+    mgh->addWidget(mg_placeholder, 1);
+
     // Tab order must match the ChartTab enum in the header.
     tabs_charts_->addTab(page_price_chart_host_,          "PRICE");
     tabs_charts_->addTab(page_revenue_chart_host_,        "REVENUE");
     tabs_charts_->addTab(page_netincome_chart_host_,      "NET INCOME");
+    tabs_charts_->addTab(page_margins_chart_host_,        "MARGINS");
     tabs_charts_->addTab(make_scroll_label(page_range_),  "RANGE");
     tabs_charts_->addTab(make_scroll_label(page_lockup_), "LOCK-UP");
     tabs_charts_->addTab(make_scroll_label(page_timeline_),"TIMELINE");
@@ -1628,6 +1646,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     rebuild_price_chart(*e);
     rebuild_revenue_chart(*e);
     rebuild_netincome_chart(*e);
+    rebuild_margins_chart(*e);
     page_range_   ->setText(css + build_range_html(*e));
     page_lockup_  ->setText(css + build_lockup_html(*e));
     page_timeline_->setText(css + build_timeline_html(*e));
@@ -1635,6 +1654,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     tabs_charts_->setTabVisible(CT_Price,     e->status == "priced");
     tabs_charts_->setTabVisible(CT_Revenue,   has_ticker);
     tabs_charts_->setTabVisible(CT_NetIncome, has_ticker);
+    tabs_charts_->setTabVisible(CT_Margins,   has_ticker);
     tabs_charts_->setTabVisible(CT_Range,     has_ticker);
     tabs_charts_->setTabVisible(CT_Lockup,    e->status == "priced");
     tabs_charts_->setTabVisible(CT_Timeline,  e->status != "priced");
@@ -2337,6 +2357,134 @@ void IpoWatchView::rebuild_netincome_chart(const Entry& e) {
     auto* view = ui::ChartFactory::bar_chart(QStringLiteral("Annual net income ($M)"),
                                              categories, values, color);
     netincome_chart_view_ = view;
+    host_layout->addWidget(view, 1);
+}
+
+// ── MARGINS chart — gross / operating / net margin curves ──────────────────
+// Three QLineSeries overlaid on a percentage Y-axis. ChartFactory only
+// supports single-series line charts so we construct the QChart inline,
+// then apply ChartFactory::apply_theme so colors/grid match the rest of
+// the screen. The legend is re-enabled (apply_theme hides it because the
+// other charts use a single series).
+void IpoWatchView::rebuild_margins_chart(const Entry& e) {
+    if (!page_margins_chart_host_) return;
+    wipe_chart_host(page_margins_chart_host_, margins_chart_view_);
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_margins_chart_host_->layout());
+    if (!host_layout) return;
+
+    if (e.ticker.isEmpty()) {
+        chart_placeholder(page_margins_chart_host_,
+            "<i>Margin curves appear after the deal lists.</i>");
+        return;
+    }
+    if (!ipo_extras_.contains(e.ticker)) {
+        chart_placeholder(page_margins_chart_host_, "<i>Loading margin data…</i>");
+        return;
+    }
+    const auto& ex = ipo_extras_.value(e.ticker);
+    // Build per-year revenue index, then derive gross / op / net margins.
+    // yfinance can return different numbers of years per series (e.g. 4 yrs
+    // of revenue but only 3 of gross profit). Join on date — keep only
+    // years where revenue > 0 (denominator) AND at least one numerator.
+    QHash<QString, double> rev_by_date;
+    for (const auto& p : ex.annual_revenue)
+        if (p.value > 0) rev_by_date[p.date] = p.value;
+    if (rev_by_date.isEmpty()) {
+        chart_placeholder(page_margins_chart_host_,
+            "<i>yfinance has no multi-year revenue for this ticker — "
+            "margins cannot be derived.</i>");
+        return;
+    }
+    auto by_date = [](const QVector<services::MarketDataService::FinancialPoint>& v) {
+        QHash<QString, double> m;
+        for (const auto& p : v) m[p.date] = p.value;
+        return m;
+    };
+    const QHash<QString, double> gross_by = by_date(ex.annual_gross_profit);
+    const QHash<QString, double> op_by    = by_date(ex.annual_operating_income);
+    const QHash<QString, double> net_by   = by_date(ex.annual_net_income);
+
+    QStringList years;
+    years.reserve(rev_by_date.size());
+    for (auto it = rev_by_date.constBegin(); it != rev_by_date.constEnd(); ++it)
+        years.append(it.key());
+    std::sort(years.begin(), years.end()); // chronological left → right
+
+    auto* gross_series = new QLineSeries; gross_series->setName("Gross margin");
+    auto* op_series    = new QLineSeries; op_series   ->setName("Operating margin");
+    auto* net_series   = new QLineSeries; net_series  ->setName("Net margin");
+    gross_series->setPen(QPen(QColor("#10b981"), 2.0));
+    op_series   ->setPen(QPen(QColor("#d97706"), 2.0));
+    net_series  ->setPen(QPen(QColor("#3b82f6"), 2.0));
+
+    double y_lo = 1e9, y_hi = -1e9;
+    bool any_gross = false, any_op = false, any_net = false;
+    for (int i = 0; i < years.size(); ++i) {
+        const double rev = rev_by_date.value(years.at(i));
+        auto pct = [&](double num) -> double { return rev > 0 ? num / rev * 100.0 : 0; };
+        if (gross_by.contains(years.at(i))) {
+            const double v = pct(gross_by.value(years.at(i)));
+            gross_series->append(i, v); any_gross = true;
+            y_lo = std::min(y_lo, v); y_hi = std::max(y_hi, v);
+        }
+        if (op_by.contains(years.at(i))) {
+            const double v = pct(op_by.value(years.at(i)));
+            op_series->append(i, v); any_op = true;
+            y_lo = std::min(y_lo, v); y_hi = std::max(y_hi, v);
+        }
+        if (net_by.contains(years.at(i))) {
+            const double v = pct(net_by.value(years.at(i)));
+            net_series->append(i, v); any_net = true;
+            y_lo = std::min(y_lo, v); y_hi = std::max(y_hi, v);
+        }
+    }
+    if (!any_gross && !any_op && !any_net) {
+        // delete the orphaned series so they don't leak
+        delete gross_series; delete op_series; delete net_series;
+        chart_placeholder(page_margins_chart_host_,
+            "<i>None of gross / operating / net margins could be derived "
+            "from yfinance's annual data for this ticker.</i>");
+        return;
+    }
+
+    auto* chart = new QChart;
+    if (any_gross) chart->addSeries(gross_series); else delete gross_series;
+    if (any_op)    chart->addSeries(op_series);    else delete op_series;
+    if (any_net)   chart->addSeries(net_series);   else delete net_series;
+    chart->setTitle(QStringLiteral("Margin trend (%)"));
+
+    // X-axis: year labels (categorical).
+    auto* axisX = new QCategoryAxis;
+    for (int i = 0; i < years.size(); ++i)
+        axisX->append(years.at(i).left(4), i);
+    axisX->setRange(-0.25, years.size() - 0.75);
+    axisX->setLabelsPosition(QCategoryAxis::AxisLabelsPositionOnValue);
+    chart->addAxis(axisX, Qt::AlignBottom);
+
+    // Y-axis: percent. Pad ~15% on each side so the lines don't hug the
+    // top/bottom of the plot area. Force the zero line inside the range
+    // so the "profitable vs loss" boundary is always visible.
+    const double pad = std::max(5.0, (y_hi - y_lo) * 0.15);
+    auto* axisY = new QValueAxis;
+    axisY->setRange(std::min(0.0, y_lo) - pad, std::max(0.0, y_hi) + pad);
+    axisY->setLabelFormat("%.0f%%");
+    chart->addAxis(axisY, Qt::AlignLeft);
+    for (auto* s : chart->series()) {
+        s->attachAxis(axisX);
+        s->attachAxis(axisY);
+    }
+
+    ui::ChartFactory::apply_theme(chart);
+    // apply_theme hides the legend (most ChartFactory consumers are single-
+    // series). Re-enable here so the three margin lines are identifiable.
+    chart->legend()->setVisible(true);
+    chart->legend()->setAlignment(Qt::AlignBottom);
+    chart->legend()->setLabelColor(QColor("#b8b8b8"));
+
+    auto* view = new QChartView(chart);
+    view->setRenderHint(QPainter::Antialiasing);
+    view->setStyleSheet("background: transparent; border: none;");
+    margins_chart_view_ = view;
     host_layout->addWidget(view, 1);
 }
 
