@@ -39,11 +39,13 @@ namespace fincept::mcp::tools {
 
 namespace {
 
-static constexpr const char* TAG = "GovDataTools";
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kGovDataTag = "GovDataTools";
 
 // Government APIs vary wildly; some auctions / large dataset queries take
 // a long time. 90s default.
-static constexpr int kDefaultTimeoutMs = 90000;
+static constexpr int kGovDataTimeoutMs = 90000;
 
 // Script filenames — must match GovDataService::kProviders.
 constexpr const char* kTreasury  = "government_us_data.py";
@@ -87,7 +89,7 @@ void dispatch_gov_async(const QString& script, const QString& command,
         t.name = (NAME);                                                                                               \
         t.description = (DESC);                                                                                        \
         t.category = "gov-data";                                                                                       \
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGovDataTimeoutMs;
 
 #define GOV_TOOL_END                                                                                                   \
         tools.push_back(std::move(t));                                                                                 \
@@ -129,7 +131,7 @@ std::vector<ToolDef> get_gov_data_tools() {
         t.description = "Generic dispatcher: run any (script, command, args) on the gov-data Python backend.";
         t.category = "gov-data";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGovDataTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("script", "Python script filename (use list_gov_data_providers)").required().length(1, 128)
             .string("command", "Sub-command for the script").required().length(1, 64)
@@ -427,7 +429,7 @@ std::vector<ToolDef> get_gov_data_tools() {
         };
     GOV_TOOL_END;
 
-    LOG_INFO(TAG, QString("Defined %1 gov-data tools").arg(tools.size()));
+    LOG_INFO(kGovDataTag, QString("Defined %1 gov-data tools").arg(tools.size()));
     return tools;
 }
 

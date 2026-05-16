@@ -35,10 +35,12 @@ namespace fincept::mcp::tools {
 
 namespace {
 
-static constexpr const char* TAG = "EquityResearchTools";
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kEquityResearchTag = "EquityResearchTools";
 
 // Most calls hit yfinance via Python; 90s default covers slow paths.
-static constexpr int kDefaultTimeoutMs = 90000;
+static constexpr int kEquityResearchTimeoutMs = 90000;
 
 QJsonObject quote_to_json(const services::equity::QuoteData& q) {
     return QJsonObject{
@@ -301,7 +303,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "search_equity_symbols";
         t.description = "Search for tradable equity symbols matching a query (ticker, name, fragment).";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("query", "Search query").required().length(1, 128)
             .build();
@@ -330,7 +332,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -349,7 +354,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "load_equity_symbol";
         t.description = "Fetch quote + info + historical OHLCV for a symbol in one call (parallel under the hood).";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol (e.g. AAPL)").required().length(1, 32)
             .string("period", "Historical period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max)")
@@ -399,14 +404,17 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           try_finish();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                      [sym, state, try_finish](QString s, QVector<services::equity::Candle> cs) {
+                                      [sym, state, try_finish](QString s, QString, QVector<services::equity::Candle> cs) {
                                           if (s.toUpper() != sym) return;
                                           state->candles = candles_to_json(cs);
                                           state->got_hist = true;
                                           try_finish();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -423,7 +431,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = tool_name;
         t.description = desc;
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .string("period", "Historical period (only used for historical)").default_str("1y").length(1, 8)
@@ -453,7 +461,7 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           });
                     } else { // 'h'
                         QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                          [sym, resolve, holder](QString s, QVector<services::equity::Candle> cs) {
+                                          [sym, resolve, holder](QString s, QString, QVector<services::equity::Candle> cs) {
                                               if (s.toUpper() != sym) return;
                                               resolve(ToolResult::ok_data(QJsonObject{
                                                   {"symbol", s},
@@ -464,7 +472,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           });
                     }
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -488,7 +499,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "get_equity_financials";
         t.description = "Get income statement, balance sheet, and cash flow for a symbol (multi-period).";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .build();
@@ -512,7 +523,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -528,7 +542,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "get_equity_technicals";
         t.description = "Get technical indicators (trend/momentum/volatility/volume) and overall buy/sell signal.";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .string("period", "Historical period for indicator calc").default_str("1y").length(1, 8)
@@ -549,7 +563,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -565,7 +582,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "get_equity_peers";
         t.description = "Get peer comparison metrics for a symbol against a caller-supplied list of peer symbols.";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Anchor symbol").required().length(1, 32)
             .array("peer_symbols", "List of peer ticker symbols", QJsonObject{{"type", "string"}})
@@ -582,12 +599,18 @@ std::vector<ToolDef> get_equity_research_tools() {
                 [svc, sym, peers](auto resolve) {
                     auto* holder = new QObject(svc);
                     QObject::connect(svc, &services::equity::EquityResearchService::peers_loaded, holder,
-                                      [resolve, holder](QVector<services::equity::PeerData> ps) {
+                                      [resolve, holder](QString, QVector<services::equity::PeerData> ps) {
+                                          // finterm's signal carries the anchor symbol as the first
+                                          // arg for routing; we ignore it here since the holder is
+                                          // scoped to this call.
                                           resolve(ToolResult::ok_data(peers_to_json(ps)));
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -603,7 +626,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "get_equity_news";
         t.description = "Get recent news articles for a symbol.";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .integer("count", "Max articles").default_int(20).between(1, 100)
@@ -628,7 +651,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -644,7 +670,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "compute_equity_talipp";
         t.description = "Compute a talipp technical indicator over historical data for a symbol.";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .string("indicator", "Indicator id (use list_equity_talipp_indicators)").required().length(1, 32)
@@ -685,7 +711,10 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
+                                      [resolve, holder](QString, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). We ignore
+                                          // the routing fields and surface only the message — the
+                                          // caller already knows the symbol they asked for.
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -729,7 +758,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "get_equity_sentiment";
         t.description = "Get a market-sentiment snapshot for a symbol (buzz, bullish %, multi-source coverage).";
         t.category = "equity-research";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
             .integer("days", "Lookback window in days").default_int(7).between(1, 90)
@@ -763,7 +792,7 @@ std::vector<ToolDef> get_equity_research_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 equity-research tools").arg(tools.size()));
+    LOG_INFO(kEquityResearchTag, QString("Defined %1 equity-research tools").arg(tools.size()));
     return tools;
 }
 

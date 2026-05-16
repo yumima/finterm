@@ -204,7 +204,7 @@ void AccountDataStream::async_fetch_quote() {
         const auto quote = result.data->first();
         QMetaObject::invokeMethod(self, [self, acct_id, symbol, quote]() {
             if (!self) return;
-            self->quote_cache_[symbol] = quote;
+            self->quote_cache_.put(symbol, quote);
             emit self->quote_updated(acct_id, symbol, quote);
         }, Qt::QueuedConnection);
     });
@@ -337,7 +337,7 @@ void AccountDataStream::async_fetch_watchlist_quotes() {
         QMetaObject::invokeMethod(self, [self, acct_id, data = *result.data]() {
             if (!self) return;
             for (const auto& q : data)
-                self->quote_cache_[q.symbol] = q;
+                self->quote_cache_.put(q.symbol, q);
             emit self->watchlist_updated(acct_id, data);
         }, Qt::QueuedConnection);
     });

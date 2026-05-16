@@ -20,7 +20,9 @@
 
 namespace fincept::mcp::tools {
 
-static constexpr const char* TAG = "MetaTools";
+// Name suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' file-scope statics into one TU.
+static constexpr const char* kMetaTag = "MetaTools";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Telemetry counters — Tool RAG observability.
@@ -247,7 +249,7 @@ std::vector<ToolDef> get_meta_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 meta tools").arg(tools.size()));
+    LOG_INFO(kMetaTag, QString("Defined %1 meta tools").arg(tools.size()));
     return tools;
 }
 

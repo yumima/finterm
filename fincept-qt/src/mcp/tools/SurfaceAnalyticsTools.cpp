@@ -23,8 +23,10 @@
 namespace fincept::mcp::tools {
 
 namespace {
-static constexpr const char* TAG = "SurfaceAnalyticsTools";
-static constexpr int kDefaultTimeoutMs = 120000;
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kSurfaceAnalyticsTag = "SurfaceAnalyticsTools";
+static constexpr int kSurfaceAnalyticsTimeoutMs = 120000;
 
 // All 35 ChartType values in declaration order — maps int <-> name.
 static const std::array<std::pair<surface::ChartType, const char*>, 35> kChartTypes = {{
@@ -291,7 +293,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         t.description = "Fetch the full options surface (vol + delta + gamma + vega + theta + skew) for an underlying.";
         t.category = "surface-analytics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kSurfaceAnalyticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Underlying ticker (e.g. SPY, AAPL)").required().length(1, 16)
             .number("spot", "Spot price (0 = look up from DataHub)").default_num(0).min(0)
@@ -315,7 +317,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         t.description = "Fetch historical OHLCV bars for one or more symbols (used for correlation, PCA, drawdown, beta).";
         t.category = "surface-analytics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kSurfaceAnalyticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .array("symbols", "Symbols to fetch", QJsonObject{{"type", "string"}})
             .integer("days", "History window in days").default_int(60).between(1, 5000)
@@ -340,7 +342,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         t.description = "Fetch futures term structure for commodities (forward curve + contango/backwardation).";
         t.category = "surface-analytics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kSurfaceAnalyticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .array("commodities", "Commodity root symbols (e.g. CL, NG, GC)",
                    QJsonObject{{"type", "string"}})
@@ -365,7 +367,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         t.description = desc;
         t.category = "surface-analytics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kSurfaceAnalyticsTimeoutMs;
         return t;
     };
 
@@ -512,7 +514,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 surface-analytics tools").arg(tools.size()));
+    LOG_INFO(kSurfaceAnalyticsTag, QString("Defined %1 surface-analytics tools").arg(tools.size()));
     return tools;
 }
 

@@ -25,11 +25,13 @@ namespace fincept::mcp::tools {
 
 namespace {
 
-static constexpr const char* TAG = "QuantLabTools";
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kQuantLabTag = "QuantLabTools";
 
 // Quant Python scripts can run long (model training, full-period backtests).
 // 5 min default; callers can override per call via _meta.timeout_ms.
-static constexpr int kDefaultTimeoutMs = 300000;
+static constexpr int kQuantLabTimeoutMs = 300000;
 
 struct CatalogEntry {
     const char* module_id;
@@ -355,7 +357,7 @@ std::vector<ToolDef> get_quant_lab_tools() {
         t.description = "Run any AI Quant Lab module/command with custom params (generic dispatcher).";
         t.category = "quant-lab";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kQuantLabTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("module_id", "Module id (use list_quant_modules)").required().length(1, 64)
             .string("command", "Module command (use list_quant_module_commands)").required().length(1, 64)
@@ -379,7 +381,7 @@ std::vector<ToolDef> get_quant_lab_tools() {
         t.description = QString::fromUtf8(e.description);
         t.category = "quant-lab";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kQuantLabTimeoutMs;
         t.input_schema = generic_params_schema(QString::fromUtf8(e.command));
 
         const QString module_id = QString::fromUtf8(e.module_id);
@@ -391,7 +393,7 @@ std::vector<ToolDef> get_quant_lab_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 quant-lab tools").arg(tools.size()));
+    LOG_INFO(kQuantLabTag, QString("Defined %1 quant-lab tools").arg(tools.size()));
     return tools;
 }
 

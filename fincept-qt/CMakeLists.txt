@@ -790,6 +790,7 @@ set(MCP_SOURCES
     src/mcp/tools/QuantLabTools.cpp
     src/mcp/tools/SurfaceAnalyticsTools.cpp
     src/mcp/SchemaValidator.cpp
+    src/mcp/ToolRetriever.cpp
 )
 
 # Trading

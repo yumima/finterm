@@ -30,7 +30,9 @@
 namespace fincept::mcp::tools {
 
 namespace {
-constexpr const char* TAG = "AgenticMemoryTools";
+// Name suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+constexpr const char* kAgenticMemoryTag = "AgenticMemoryTools";
 
 QString db_path() {
     // Mirrors archival_memory.py:_DEFAULT_DB → <scripts>/agents/agent_tasks.db
@@ -49,7 +51,7 @@ QSqlDatabase open_conn() {
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn_name);
     db.setDatabaseName(db_path());
     if (!db.open()) {
-        LOG_ERROR(TAG, QString("Failed to open agent_tasks.db: ") + db.lastError().text());
+        LOG_ERROR(kAgenticMemoryTag, QString("Failed to open agent_tasks.db: ") + db.lastError().text());
     }
     return db;
 }

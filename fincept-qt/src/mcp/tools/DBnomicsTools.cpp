@@ -24,10 +24,12 @@ namespace fincept::mcp::tools {
 
 namespace {
 
-static constexpr const char* TAG = "DBnomicsTools";
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kDBnomicsTag = "DBnomicsTools";
 
 // DBnomics rate-limits at 3 req/s. Allow generous timeout for paginated fetches.
-static constexpr int kDefaultTimeoutMs = 60000;
+static constexpr int kDBnomicsTimeoutMs = 60000;
 
 QJsonObject pagination_to_json(const services::DbnPagination& p) {
     return QJsonObject{
@@ -61,7 +63,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         t.name = "list_dbnomics_providers";
         t.description = "List all DBnomics data providers (code + name). e.g. BLS, IMF, ECB, OECD.";
         t.category = "dbnomics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kDBnomicsTimeoutMs;
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             auto* svc = &services::DBnomicsService::instance();
@@ -94,7 +96,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         t.name = "list_dbnomics_datasets";
         t.description = "List datasets within a DBnomics provider (paginated). Returns code + name + pagination info.";
         t.category = "dbnomics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kDBnomicsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("provider_code", "Provider code (e.g. BLS, IMF, ECB)").required().length(1, 32)
             .integer("offset", "Pagination offset").default_int(0).min(0)
@@ -137,7 +139,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         t.name = "list_dbnomics_series";
         t.description = "List series within a dataset; optional in-dataset query filter (paginated).";
         t.category = "dbnomics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kDBnomicsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("provider_code", "Provider code").required().length(1, 32)
             .string("dataset_code", "Dataset code").required().length(1, 64)
@@ -184,7 +186,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         t.name = "get_dbnomics_observations";
         t.description = "Fetch full time-series observations (period + value) for a specific DBnomics series.";
         t.category = "dbnomics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kDBnomicsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("provider_code", "Provider code (e.g. BLS)").required().length(1, 32)
             .string("dataset_code", "Dataset code (e.g. ln)").required().length(1, 64)
@@ -232,7 +234,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         t.name = "search_dbnomics";
         t.description = "Global search across all DBnomics providers and datasets (paginated).";
         t.category = "dbnomics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kDBnomicsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("query", "Search query (e.g. 'unemployment')").required().length(1, 256)
             .integer("offset", "Pagination offset").default_int(0).min(0)
@@ -276,7 +278,7 @@ std::vector<ToolDef> get_dbnomics_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 dbnomics tools").arg(tools.size()));
+    LOG_INFO(kDBnomicsTag, QString("Defined %1 dbnomics tools").arg(tools.size()));
     return tools;
 }
 

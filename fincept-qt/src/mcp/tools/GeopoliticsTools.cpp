@@ -21,8 +21,10 @@
 namespace fincept::mcp::tools {
 
 namespace {
-static constexpr const char* TAG = "GeopoliticsTools";
-static constexpr int kDefaultTimeoutMs = 120000;
+// Names suffixed per file so the unity build doesn't trip on duplicates
+// when it groups multiple tools' anonymous namespaces into one TU.
+static constexpr const char* kGeopoliticsTag = "GeopoliticsTools";
+static constexpr int kGeopoliticsTimeoutMs = 120000;
 
 QJsonObject event_to_json(const services::geo::NewsEvent& e) {
     return QJsonObject{
@@ -33,15 +35,14 @@ QJsonObject event_to_json(const services::geo::NewsEvent& e) {
     };
 }
 
-QJsonObject events_page_to_json(const services::geo::EventsPage& p) {
+// Adapted for finterm's GeopoliticsService::events_loaded(QVector<NewsEvent>, int total)
+// signal — finterm doesn't surface upstream's EventsPage pagination fields.
+QJsonObject events_page_to_json(const QVector<services::geo::NewsEvent>& events, int total) {
     QJsonArray evs;
-    for (const auto& e : p.events) evs.append(event_to_json(e));
+    for (const auto& e : events) evs.append(event_to_json(e));
     return QJsonObject{
-        {"events", evs}, {"total_events", p.total_events},
-        {"current_page", p.current_page}, {"total_pages", p.total_pages},
-        {"events_per_page", p.events_per_page},
-        {"has_next", p.has_next}, {"has_prev", p.has_prev},
-        {"credits_used", p.credits_used}, {"remaining_credits", p.remaining_credits},
+        {"events", evs},
+        {"total_events", total},
     };
 }
 
@@ -81,18 +82,14 @@ std::vector<ToolDef> get_geopolitics_tools() {
     {
         ToolDef t;
         t.name = "fetch_geopolitics_events";
-        t.description = "Fetch geopolitical news events from the conflict monitor with optional filters (country, city, category, source, date range) and pagination.";
+        t.description = "Fetch geopolitical news events from the conflict monitor with optional filters (country, city, category).";
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("country", "Country filter").default_str("").length(0, 64)
             .string("city", "City filter").default_str("").length(0, 64)
             .string("category", "Event category filter").default_str("").length(0, 64)
-            .integer("limit", "Events per page").default_int(100).between(1, 500)
-            .integer("page", "Page (1-indexed)").default_int(1).min(1)
-            .string("source", "Source filter").default_str("").length(0, 128)
-            .string("date_from", "ISO date from").default_str("").length(0, 32)
-            .string("date_to", "ISO date to").default_str("").length(0, 32)
+            .integer("limit", "Max events").default_int(100).between(1, 500)
             .build();
         t.async_handler = [](const QJsonObject& args, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
@@ -100,16 +97,14 @@ std::vector<ToolDef> get_geopolitics_tools() {
             AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, args](auto resolve) {
                 auto* h = new QObject(svc);
                 QObject::connect(svc, &services::geo::GeopoliticsService::events_loaded, h,
-                                  [resolve, h](services::geo::EventsPage p) {
-                                      resolve(ToolResult::ok_data(events_page_to_json(p)));
+                                  [resolve, h](QVector<services::geo::NewsEvent> events, int total) {
+                                      resolve(ToolResult::ok_data(events_page_to_json(events, total)));
                                       h->deleteLater();
                                   });
                 QObject::connect(svc, &services::geo::GeopoliticsService::error_occurred, h,
                                   [resolve, h](QString, QString m) { resolve(ToolResult::fail(m)); h->deleteLater(); });
                 svc->fetch_events(args["country"].toString(), args["city"].toString(),
-                                   args["category"].toString(), args["limit"].toInt(100),
-                                   args["page"].toInt(1), args["source"].toString(),
-                                   args["date_from"].toString(), args["date_to"].toString());
+                                   args["category"].toString(), args["limit"].toInt(100));
             });
         };
         tools.push_back(std::move(t));
@@ -121,7 +116,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.name = "list_geopolitics_countries";
         t.description = "List all countries with event counts known to the conflict monitor.";
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             auto* svc = &services::geo::GeopoliticsService::instance();
@@ -149,7 +144,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.name = "list_geopolitics_categories";
         t.description = "List all event categories with counts.";
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             auto* svc = &services::geo::GeopoliticsService::instance();
@@ -178,7 +173,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.name = "list_geopolitics_cities";
         t.description = "List all cities known to the conflict monitor.";
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             auto* svc = &services::geo::GeopoliticsService::instance();
@@ -207,7 +202,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.name = name;
         t.description = desc;
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         if (need_arg) {
             t.input_schema = ToolSchemaBuilder()
                 .string(arg_name, arg_desc).required().length(1, 256)
@@ -258,7 +253,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.description = "Run trade-benefits analysis (welfare gains, consumer surplus, integration impact).";
         t.category = "geopolitics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .object("params", "Analysis params (trade_volume_gdp, price_reduction_percent, traded_goods_consumption, "
                               "integration_type, trade_creation, trade_diversion)").required()
@@ -288,7 +283,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.description = "Run trade-restrictions analysis (tariffs, quotas, subsidies, liberalization impact).";
         t.category = "geopolitics";
         t.is_destructive = true;
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .object("params", "Analysis params (tariff_rate, quota_volume, subsidy_rate, development_level, "
                               "industry_maturity, liberalization_type, tariff_reduction, gdp_size)").required()
@@ -317,7 +312,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         t.name = "extract_geolocations_from_headlines";
         t.description = "Extract geolocation hints (country/city/coords) from a batch of news headlines via Python NLP.";
         t.category = "geopolitics";
-        t.default_timeout_ms = kDefaultTimeoutMs;
+        t.default_timeout_ms = kGeopoliticsTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .array("headlines", "Headlines to analyse", QJsonObject{{"type", "string"}})
             .build();
@@ -341,7 +336,7 @@ std::vector<ToolDef> get_geopolitics_tools() {
         tools.push_back(std::move(t));
     }
 
-    LOG_INFO(TAG, QString("Defined %1 geopolitics tools").arg(tools.size()));
+    LOG_INFO(kGeopoliticsTag, QString("Defined %1 geopolitics tools").arg(tools.size()));
     return tools;
 }
 
