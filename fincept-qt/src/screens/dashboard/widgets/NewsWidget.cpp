@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
+#include <QSet>
 
 namespace fincept::screens::widgets {
 
@@ -96,12 +97,41 @@ void NewsWidget::refresh_data() {
         if (articles.isEmpty()) {
             // yfinance occasionally returns an empty list (rate limit, weekend,
             // session reset). Keep prior articles, just acknowledge the click.
-            finalize_refresh(QStringLiteral("no new articles"));
+            finalize_refresh(QStringLiteral("empty response · prior kept"));
             LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
             return;
         }
+
+        // Diff against the prior populate batch so the user can tell "click
+        // did a network round-trip but Yahoo had no new items" (the common
+        // case for SPY between refreshes minutes apart — Yahoo's news feed
+        // updates roughly every 10–30 min, not on every click) from "actually
+        // fresh headlines arrived". Compute before populate() since populate
+        // overwrites last_articles_.
+        QSet<QString> prior_titles;
+        for (const auto& v : last_articles_) {
+            const auto t = v.toObject().value("title").toString();
+            if (!t.isEmpty()) prior_titles.insert(t);
+        }
+        int new_count = 0;
+        for (const auto& v : articles) {
+            const auto t = v.toObject().value("title").toString();
+            if (!t.isEmpty() && !prior_titles.contains(t)) ++new_count;
+        }
+
         populate(articles);
-        finalize_refresh(QString::number(articles.size()) + " items");
+
+        QString outcome;
+        if (prior_titles.isEmpty()) {
+            // First populate of the session — reporting "10 new" would be
+            // noise (everything is new on a blank widget). Plain count.
+            outcome = QString::number(articles.size()) + " items";
+        } else if (new_count == 0) {
+            outcome = QString("%1 items · no changes").arg(articles.size());
+        } else {
+            outcome = QString("%1 items · %2 new").arg(articles.size()).arg(new_count);
+        }
+        finalize_refresh(outcome);
     });
 }
 
