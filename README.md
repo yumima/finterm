@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f4a0fdbf`](https://github.com/yumima/finterm/commit/f4a0fdbf) **fix(broker/aliceblue):** refactor onto BrokerEnumMap + bug fixes
 - [`6e61d403`](https://github.com/yumima/finterm/commit/6e61d403) **fix(broker/dhan):** refactor onto BrokerEnumMap + bug fixes
 - [`d455a9f6`](https://github.com/yumima/finterm/commit/d455a9f6) **fix(broker/alpaca):** refactor onto BrokerEnumMap + minor fixes
 - [`698ceff1`](https://github.com/yumima/finterm/commit/698ceff1) trading: BrokerEnumMap + MTF + F&O OI fields
