@@ -10,6 +10,7 @@
 #include "mcp/tools/AltInvestmentsTools.h"
 #include "mcp/tools/DBnomicsTools.h"
 #include "mcp/tools/EquityResearchTools.h"
+#include "mcp/tools/GeopoliticsTools.h"
 #include "mcp/tools/MetaTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DataHubTools.h"
@@ -108,6 +109,9 @@ void initialize_all_tools() {
 
     // equity research — fundamentals, sentiment, ratings, transcripts
     provider.register_tools(tools::get_equity_research_tools());
+
+    // geopolitics — conflict events, sanctions, maritime, ACLED-style
+    provider.register_tools(tools::get_geopolitics_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 

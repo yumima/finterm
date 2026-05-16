@@ -780,6 +780,7 @@ set(MCP_SOURCES
     src/mcp/tools/AgenticMemoryTools.cpp
     src/mcp/tools/DBnomicsTools.cpp
     src/mcp/tools/EquityResearchTools.cpp
+    src/mcp/tools/GeopoliticsTools.cpp
     src/mcp/tools/MetaTools.cpp
     src/mcp/SchemaValidator.cpp
 )
