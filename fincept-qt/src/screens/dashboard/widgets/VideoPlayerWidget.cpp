@@ -156,9 +156,10 @@ const QStringList kAccentPalette = {
 
 QVector<VideoPlayerWidget::ChannelDef> VideoPlayerWidget::default_channels() {
     return {
-        {"CNBC Live",     "https://www.youtube.com/@CNBC/live",         {}},
-        {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live", {}},
-        {"Euronews",      "https://www.youtube.com/@euronews/live",     {}},
+        {"Bloomberg",     "https://www.youtube.com/live/iEpJwprxDdk",    {}},
+        {"CNBC Live",     "https://www.youtube.com/@CNBC/live",          {}},
+        {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",  {}},
+        {"Euronews",      "https://www.youtube.com/@euronews/live",      {}},
     };
 }
 

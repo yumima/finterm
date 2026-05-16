@@ -316,7 +316,7 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     row->setSpacing(8);
 
     auto* lbl = new QLabel("Symbol");
-    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     row->addWidget(lbl);
 
     symbol_combo_ = new QComboBox;
@@ -346,7 +346,7 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     row->addWidget(key_btn_);
 
     contango_label_ = new QLabel;
-    contango_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(-2)));
+    contango_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(0)));
     row->addStretch();
     row->addWidget(contango_label_);
     layout()->addItem(row);
@@ -525,7 +525,7 @@ void FuturesTermStructurePanel::render(const QVector<TermStructurePoint>& pts) {
                                      .arg(QString::number(total_pct, 'f', 2))
                                      .arg(roll_segment));
         contango_label_->setStyleSheet(lbl_ss(contango ? colors::POSITIVE() : colors::NEGATIVE(),
-                                              true, fonts::font_px(-2)));
+                                              true, fonts::font_px(0)));
     } else {
         contango_label_->setText("");
     }
@@ -649,7 +649,7 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
     auto* row = new QHBoxLayout;
     row->setContentsMargins(0, 2, 0, 2);
     auto* lbl = new QLabel("Product");
-    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     row->addWidget(lbl);
     symbol_combo_ = new QComboBox;
     symbol_combo_->setMinimumWidth(150);
@@ -846,7 +846,7 @@ void FuturesHeatmapPanel::render_from_cache() {
         if (!groups.contains(cls)) continue;
         auto* row_label = new QLabel(cls);
         row_label->setFixedWidth(70);
-        row_label->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(-2)));
+        row_label->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(0)));
         grid_->addWidget(row_label, row, 0);
 
         const auto& cells = groups.value(cls);
@@ -873,7 +873,7 @@ void FuturesHeatmapPanel::render_from_cache() {
                                     .arg(colors::TEXT_PRIMARY())
                                     .arg(colors::BORDER_DIM())
                                     .arg(fonts::DATA_FAMILY())
-                                    .arg(fonts::font_px(-3)));
+                                    .arg(fonts::font_px(-1)));
             grid_->addWidget(tile, row, i + 1);
         }
         ++row;
@@ -889,11 +889,11 @@ FuturesChartPanel::FuturesChartPanel(QWidget* parent) : FuturesPanelBase("CONTIN
     row->setContentsMargins(0, 2, 0, 2);
     row->setSpacing(8);
     auto* lbl1 = new QLabel("Symbol");
-    lbl1->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl1->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     symbol_combo_ = new QComboBox;
     symbol_combo_->setMinimumWidth(150);
     auto* lbl2 = new QLabel("Period");
-    lbl2->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl2->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     period_combo_ = new QComboBox;
     period_combo_->addItems({"1mo", "3mo", "6mo", "1y", "2y"});
     period_combo_->setCurrentText("6mo");
@@ -1015,7 +1015,7 @@ FuturesChinaPanel::FuturesChinaPanel(QWidget* parent) : FuturesPanelBase("CHINA 
     auto* row = new QHBoxLayout;
     row->setContentsMargins(0, 2, 0, 2);
     auto* lbl = new QLabel("Exchange");
-    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     row->addWidget(lbl);
     exchange_combo_ = new QComboBox;
     exchange_combo_->addItems({"all", "SHFE", "DCE", "CZCE", "INE"});
@@ -1103,7 +1103,7 @@ FuturesExpiryPanel::FuturesExpiryPanel(QWidget* parent)
                 "QTableWidget::item{padding:4px 6px;border-bottom:1px solid %5;}")
             .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(),
                  fonts::DATA_FAMILY())
-            .arg(fonts::font_px(-2))
+            .arg(fonts::font_px(0))
             .arg(colors::BORDER_DIM()));
     table_->horizontalHeader()->setStyleSheet(
         QString("QHeaderView::section{background:%1;color:%2;border:none;"
@@ -1230,7 +1230,7 @@ FuturesCotPanel::FuturesCotPanel(QWidget* parent)
     row->setSpacing(8);
 
     auto* lbl = new QLabel("Symbol");
-    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    lbl->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     row->addWidget(lbl);
 
     symbol_combo_ = new QComboBox;
@@ -1238,13 +1238,13 @@ FuturesCotPanel::FuturesCotPanel(QWidget* parent)
     row->addWidget(symbol_combo_);
 
     sentiment_lbl_ = new QLabel;
-    sentiment_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(-2)));
+    sentiment_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(0)));
     row->addWidget(sentiment_lbl_);
 
     row->addStretch();
 
     date_lbl_ = new QLabel;
-    date_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-3)));
+    date_lbl_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), false, fonts::font_px(-1)));
     row->addWidget(date_lbl_);
     layout()->addItem(row);
 
@@ -1275,7 +1275,7 @@ FuturesCotPanel::FuturesCotPanel(QWidget* parent)
                 "QTableWidget::item{padding:4px 8px;border-bottom:1px solid %5;}")
             .arg(colors::BG_BASE(), colors::TEXT_PRIMARY(),
                  fonts::DATA_FAMILY())
-            .arg(fonts::font_px(-2))
+            .arg(fonts::font_px(0))
             .arg(colors::BORDER_DIM()));
     table_->horizontalHeader()->setStyleSheet(
         QString("QHeaderView::section{background:%1;color:%2;border:none;"
@@ -1544,7 +1544,7 @@ void FuturesCotPanel::render(const QJsonArray& rows) {
                                 .arg(label)
                                 .arg(pct >= 0 ? "+" : "")
                                 .arg(QString::number(pct, 'f', 1)));
-    sentiment_lbl_->setStyleSheet(lbl_ss(color, true, fonts::font_px(-2)));
+    sentiment_lbl_->setStyleSheet(lbl_ss(color, true, fonts::font_px(0)));
 
     const QString rep_date = latest.value(QStringLiteral("report_date_as_yyyy_mm_dd")).toString();
     date_lbl_->setText(rep_date.isEmpty() ? "" : "Report: " + rep_date.left(10));

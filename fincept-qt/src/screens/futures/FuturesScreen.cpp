@@ -77,14 +77,18 @@ void FuturesScreen::showEvent(QShowEvent* event) {
     // showEvent time the splitter geometry isn't final (width() returns the
     // sizeHint-based estimate, not the painted size). singleShot(0) runs
     // after the layout pass and gives us the real width to derive the
-    // 1:3:1 column sizes from. After this, splitterMoved sync keeps them
+    // 1:2:1 column sizes from. After this, splitterMoved sync keeps them
     // aligned during user drags.
     if (!initial_align_done_ && row1_split_ && row2_split_) {
         QTimer::singleShot(0, this, [this]() {
             if (initial_align_done_ || !row1_split_ || !row2_split_) return;
             const int total = row1_split_->width();
             if (total < 200) return;  // splitter not laid out yet, try later
-            const int rail = total / 5;
+            // Rails take 1/4 of total each (symmetric), center is 1/2. Bumped
+            // from the previous 1/5 : 3/5 : 1/5 layout — the rails were too
+            // narrow to read the watchlist / settlements / COT / term tables
+            // without horizontal scroll. Center chart still dominates at 50%.
+            const int rail = total / 4;
             const int center = total - 2 * rail;
             const QList<int> sizes = {rail, center, rail};
             syncing_splits_ = true;
@@ -179,9 +183,9 @@ void FuturesScreen::build_body() {
     row1->addWidget(watchlist_);
     row1->addWidget(chart_);
     row1->addWidget(settlements_);
-    row1->setStretchFactor(0, 1);  // watchlist  — narrow rail
-    row1->setStretchFactor(1, 3);  // chart      — elastic
-    row1->setStretchFactor(2, 1);  // settlements — narrow rail
+    row1->setStretchFactor(0, 1);  // watchlist  — rail (1/4)
+    row1->setStretchFactor(1, 2);  // chart      — center (1/2)
+    row1->setStretchFactor(2, 1);  // settlements — rail (1/4)
 
     // Row 2 — analytics:
     //   [expiry calendar / spread monitor — vertical splitter] | COT | term structure
@@ -203,9 +207,9 @@ void FuturesScreen::build_body() {
     row2->addWidget(left_v);
     row2->addWidget(cot_);
     row2->addWidget(term_);
-    row2->setStretchFactor(0, 1);
-    row2->setStretchFactor(1, 3);
-    row2->setStretchFactor(2, 1);
+    row2->setStretchFactor(0, 1);  // expiry/spread rail (1/4)
+    row2->setStretchFactor(1, 2);  // COT center (1/2)
+    row2->setStretchFactor(2, 1);  // term structure rail (1/4)
 
     v_split->addWidget(heatmap_);
     v_split->addWidget(row1);
