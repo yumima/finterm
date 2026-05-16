@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`d455a9f6`](https://github.com/yumima/finterm/commit/d455a9f6) **fix(broker/alpaca):** refactor onto BrokerEnumMap + minor fixes
 - [`698ceff1`](https://github.com/yumima/finterm/commit/698ceff1) trading: BrokerEnumMap + MTF + F&O OI fields
 - [`fec59b64`](https://github.com/yumima/finterm/commit/fec59b64) mcp(tools): AgentsTools — agent / team / workflow / planner / memory
 - [`8a943973`](https://github.com/yumima/finterm/commit/8a943973) mcp(tools): SurfaceAnalyticsTools — options vol surface (Databento)
