@@ -1,6 +1,7 @@
 #include "screens/dashboard/MarketPulsePanel.h"
 
 #include "services/markets/MarketDataService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -516,16 +517,6 @@ QWidget* MarketPulsePanel::build_mover_row(const QString& symbol, double change,
     return w;
 }
 
-static QString format_volume(double vol) {
-    if (vol >= 1e9)
-        return QString("%1B").arg(vol / 1e9, 0, 'f', 1);
-    if (vol >= 1e6)
-        return QString("%1M").arg(vol / 1e6, 0, 'f', 1);
-    if (vol >= 1e3)
-        return QString("%1K").arg(vol / 1e3, 0, 'f', 1);
-    return QString::number(static_cast<int>(vol));
-}
-
 QWidget* MarketPulsePanel::build_gainers_section() {
     auto* w = new QWidget(this);
     auto* vl = new QVBoxLayout(w);
@@ -887,7 +878,8 @@ void MarketPulsePanel::rebuild_movers_from_cache() {
     for (const auto& q : quotes) {
         if (q.change_pct <= 0 || gainers_added >= 3)
             break;
-        gainers_layout_->addWidget(build_mover_row(q.symbol, q.change_pct, format_volume(q.volume)));
+        gainers_layout_->addWidget(
+            build_mover_row(q.symbol, q.change_pct, ui::formatting::format_compact_volume(q.volume)));
         ++gainers_added;
     }
     int losers_added = 0;
@@ -895,7 +887,8 @@ void MarketPulsePanel::rebuild_movers_from_cache() {
         if (quotes[i].change_pct >= 0)
             continue;
         losers_layout_->addWidget(
-            build_mover_row(quotes[i].symbol, quotes[i].change_pct, format_volume(quotes[i].volume)));
+            build_mover_row(quotes[i].symbol, quotes[i].change_pct,
+                            ui::formatting::format_compact_volume(quotes[i].volume)));
         ++losers_added;
     }
 }

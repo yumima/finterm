@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/StockQuoteWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -183,15 +184,7 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
     low_val_->setText(fmt(q.low));
     prev_val_->setText(fmt(q.price - q.change));
 
-    // Format volume
-    if (q.volume >= 1e9)
-        volume_val_->setText(QString("%1B").arg(q.volume / 1e9, 0, 'f', 1));
-    else if (q.volume >= 1e6)
-        volume_val_->setText(QString("%1M").arg(q.volume / 1e6, 0, 'f', 1));
-    else if (q.volume >= 1e3)
-        volume_val_->setText(QString("%1K").arg(q.volume / 1e3, 0, 'f', 1));
-    else
-        volume_val_->setText(QString::number(static_cast<int>(q.volume)));
+    volume_val_->setText(ui::formatting::format_compact_volume(q.volume));
 }
 
 } // namespace fincept::screens::widgets

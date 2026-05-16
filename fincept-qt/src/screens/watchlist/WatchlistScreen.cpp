@@ -4,6 +4,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -509,7 +510,7 @@ void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes)
                              QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
                              QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
                              QString("$%1").arg(q.high, 0, 'f', 2), QString("$%1").arg(q.low, 0, 'f', 2),
-                             QString::number(static_cast<qint64>(q.volume))});
+                             ui::formatting::format_compact_volume(q.volume)});
 
             int row = table_->rowCount() - 1;
             // Green = good, Red = bad
