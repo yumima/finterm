@@ -1,8 +1,11 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 
+#include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
+
+#include <QResizeEvent>
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -53,32 +56,74 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
 
 void VideoRenderWidget::clear_frame() {
     last_image_ = QImage();
+    scaled_image_ = QImage();
+    paint_pending_ = false;
     update();
 }
 
 void VideoRenderWidget::present(const QVideoFrame& frame) {
     if (!frame.isValid())
         return;
+
+    // Backpressure guard: if the previous frame's paintEvent hasn't run yet,
+    // the main thread is behind. Drop this frame instead of queueing another
+    // paint behind whatever is keeping the event loop busy (typing, clicks,
+    // other widget updates). Live tiles trade frame completeness for input
+    // responsiveness — a dropped frame is invisible; queued frames stack
+    // up as visible UI lag.
+    if (paint_pending_)
+        return;
+
+    // Surface a warning if a single frame's worth of conversion + rescale
+    // ever crosses 25 ms — that's already chewing through a 40 ms 25 fps
+    // budget and would explain stutter on the calling thread.
+    FT_TIME_SLOT("VideoRenderWidget.present", 25);
+
     QImage img = frame.toImage();
     if (img.isNull())
         return; // Keep showing the previous frame — no flash.
     last_image_ = std::move(img);
+    rescale_for_widget();
+    paint_pending_ = true;
     update();   // schedule a repaint only when we have a new valid frame
 }
 
+void VideoRenderWidget::rescale_for_widget() {
+    if (last_image_.isNull() || size().isEmpty()) {
+        scaled_image_ = QImage();
+        scaled_origin_ = QPoint();
+        return;
+    }
+    // DPR-aware: scale to the *device* pixel size of the letterbox region,
+    // then tag the image with the matching devicePixelRatio. drawImage(QPoint,
+    // QImage) will lay it down 1:1 in device pixels at the logical origin —
+    // crisp on hi-DPI, no additional scaling at paint time. We do this work
+    // once per frame instead of once per paint.
+    const qreal dpr = devicePixelRatioF();
+    const QSize target_logical = last_image_.size().scaled(size(), Qt::KeepAspectRatio);
+    const QSize target_device(qMax(1, static_cast<int>(target_logical.width()  * dpr)),
+                              qMax(1, static_cast<int>(target_logical.height() * dpr)));
+    scaled_image_ = last_image_.scaled(target_device, Qt::KeepAspectRatio,
+                                       Qt::SmoothTransformation);
+    scaled_image_.setDevicePixelRatio(dpr);
+    scaled_origin_ = QPoint((width()  - target_logical.width())  / 2,
+                            (height() - target_logical.height()) / 2);
+}
+
+void VideoRenderWidget::resizeEvent(QResizeEvent* event) {
+    rescale_for_widget();
+    QWidget::resizeEvent(event);
+}
+
 void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
+    paint_pending_ = false;
     QPainter p(this);
     p.fillRect(rect(), Qt::black);
-    if (last_image_.isNull())
+    if (scaled_image_.isNull())
         return;
-
-    // Letterbox: scale to fit while preserving aspect ratio.
-    const QSize target = last_image_.size().scaled(size(), Qt::KeepAspectRatio);
-    const QRect dst((width()  - target.width())  / 2,
-                    (height() - target.height()) / 2,
-                    target.width(), target.height());
-    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    p.drawImage(dst, last_image_);
+    // Direct blit — no scaling in the paint path, just memcpy-ish. This is
+    // why the present() call did the SmoothTransformation work upstream.
+    p.drawImage(scaled_origin_, scaled_image_);
 }
 #endif
 
@@ -814,6 +859,7 @@ void VideoPlayerWidget::stop_playback() {
     status_label_->hide();
     set_title("LIVE TV / STREAMS");
 }
+
 
 void VideoPlayerWidget::on_player_error() {
 #ifdef HAS_QT_MULTIMEDIA

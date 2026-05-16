@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`536d78a2`](https://github.com/yumima/finterm/commit/536d78a2) **perf(python):** warm up yfinance daemon at app start
 - [`85d80e53`](https://github.com/yumima/finterm/commit/85d80e53) **perf:** event-loop hygiene + scale-safety + network defaults
 - [`cbe559bf`](https://github.com/yumima/finterm/commit/cbe559bf) **feat(datahub):** freshness state machine + scheduler pause on minimize + stale-topic eviction
 - [`4b90d79f`](https://github.com/yumima/finterm/commit/4b90d79f) **perf(core):** SlowOpTimer + LruMap + VisibilityAwareTimer scaffolding, batched logger, DB pragmas, sargable cache prefix

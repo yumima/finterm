@@ -61,9 +61,26 @@ class VideoRenderWidget : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
   private:
-    QImage last_image_; // last successfully-decoded frame; kept across transient failures
+    // Pre-scale the cached source frame to fit the current widget size,
+    // letterboxed. Called only on frame arrival or widget resize so the per-
+    // paint cost is just a blit. SmoothTransformation is applied once per
+    // frame instead of once per paint.
+    void rescale_for_widget();
+
+    QImage last_image_;       ///< source frame, kept across transient toImage() failures
+    QImage scaled_image_;     ///< pre-scaled to the current widget rect (letterboxed dst size)
+    QPoint scaled_origin_;    ///< top-left position to blit scaled_image_ at
+
+    // Drop-late-frames flag. The decoder can outrun the main thread on weak
+    // GPUs / busy event loops. If a frame arrives while we still haven't
+    // painted the previous one, we drop it instead of queueing more paint
+    // events behind whatever else the main thread is doing (typing,
+    // clicks). This is the right behaviour for a live tile: latency over
+    // completeness, since dropped frames are imperceptible.
+    bool paint_pending_ = false;
 };
 #endif
 
@@ -101,6 +118,12 @@ class VideoPlayerWidget : public BaseWidget {
   protected:
     void on_theme_changed() override;
     QDialog* make_config_dialog(QWidget* parent) override;
+    // NB: we intentionally do NOT pause playback on hideEvent. The user
+    // relies on the audio continuing while they navigate to other screens.
+    // The per-frame cost is bounded by VideoRenderWidget's drop-late-frames
+    // guard — when the widget isn't visible Qt suppresses paintEvent, the
+    // guard never clears, and present() returns early after the first
+    // frame. No paint work happens for hidden video.
 
   private:
     void apply_styles();

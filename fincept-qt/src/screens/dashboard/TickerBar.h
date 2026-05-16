@@ -1,4 +1,5 @@
 #pragma once
+#include <QElapsedTimer>
 #include <QHideEvent>
 #include <QLineEdit>
 #include <QPushButton>
@@ -25,7 +26,14 @@ class TickerBar : public QWidget {
 
     void set_data(const QVector<Entry>& entries);
     void pause()  { scroll_timer_.stop(); }
-    void resume() { if (total_width_ > 0) scroll_timer_.start(); }
+    void resume() {
+        if (total_width_ > 0) {
+            // Drop the stored delta so the first tick after resume doesn't
+            // teleport the ticker based on however long it was paused for.
+            scroll_clock_.invalidate();
+            scroll_timer_.start();
+        }
+    }
 
     /// Returns the current symbol list (persisted user preference).
     QStringList symbols() const { return symbols_; }
@@ -49,10 +57,18 @@ class TickerBar : public QWidget {
     void commit_edit();
 
     // ── Scrolling ──
+    // Animation is time-based, not tick-based. Each tick advances the offset
+    // by `kScrollPixelsPerSec * elapsed_since_last_tick` so a late timer
+    // firing (event loop busy with a quote refresh, a heavy paint elsewhere,
+    // etc.) advances further on the next tick to compensate — motion stays
+    // smooth even when the tick rate is irregular. The previous frame-rate-
+    // coupled `offset_ += 1.0` produced visible stutter under load.
     QVector<Entry> entries_;
     QTimer         scroll_timer_;
+    QElapsedTimer  scroll_clock_;            ///< last_tick wall-clock for delta
     double         offset_      = 0;
     int            total_width_ = 0;
+    static constexpr double kScrollPixelsPerSec = 20.0;  ///< matches prior visual speed
 
     // ── Symbol list ──
     QStringList symbols_;

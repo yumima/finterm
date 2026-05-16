@@ -40,9 +40,22 @@ TickerBar::TickerBar(QWidget* parent) : QWidget(parent) {
             });
 
     connect(&scroll_timer_, &QTimer::timeout, this, [this]() {
-        offset_ += 1.0;
+        // Time-delta animation. If the timer fired exactly on schedule the
+        // delta is ~50 ms and we advance ~1px (matching the old behaviour);
+        // if it fired late (event loop was busy), the delta is larger and
+        // we advance proportionally so the visible position keeps up with
+        // wall-clock instead of stuttering.
+        if (!scroll_clock_.isValid()) {
+            scroll_clock_.start();
+            return;
+        }
+        const qint64 ms = scroll_clock_.restart();
+        // Clamp absurd deltas (e.g. wake from suspend) so we don't teleport
+        // the ticker by hundreds of pixels and lose the "calm crawl" feel.
+        const double delta_s = std::min<qint64>(ms, 250) / 1000.0;
+        offset_ += kScrollPixelsPerSec * delta_s;
         if (total_width_ > 0 && offset_ >= total_width_)
-            offset_ = 0;
+            offset_ -= total_width_;
         update();
     });
     scroll_timer_.setInterval(50); // 20fps — started by showEvent (P3)
@@ -142,8 +155,10 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
         total_width_ += symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
     }
 
-    if (total_width_ > 0 && isVisible() && !edit_bar_->isVisible())
+    if (total_width_ > 0 && isVisible() && !edit_bar_->isVisible()) {
+        scroll_clock_.invalidate();  // first tick will re-prime the clock
         scroll_timer_.start();
+    }
 
     update();
 }
@@ -154,8 +169,10 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
 
 void TickerBar::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-    if (total_width_ > 0)
+    if (total_width_ > 0) {
+        scroll_clock_.invalidate();
         scroll_timer_.start();
+    }
 }
 
 void TickerBar::hideEvent(QHideEvent* event) {
@@ -204,8 +221,10 @@ void TickerBar::show_edit_bar() {
 
 void TickerBar::hide_edit_bar() {
     edit_bar_->hide();
-    if (total_width_ > 0 && isVisible())
+    if (total_width_ > 0 && isVisible()) {
+        scroll_clock_.invalidate();
         scroll_timer_.start();
+    }
 }
 
 void TickerBar::commit_edit() {
