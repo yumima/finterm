@@ -13,6 +13,8 @@
 #include <QPointer>
 #include <QResizeEvent>
 
+#include <cmath>
+
 namespace fincept::screens {
 
 static constexpr int    kItemSpacing      = 40;
@@ -140,9 +142,8 @@ void TickerBar::save_symbols() {
 
 void TickerBar::set_data(const QVector<Entry>& entries) {
     entries_ = entries;
-    offset_  = 0;
 
-    // Cache total width — paintEvent runs every 50ms, no per-frame allocation.
+    // Recompute total width — paintEvent runs every 50ms, no per-frame allocation.
     QFont font(ui::fonts::DATA_FAMILY(), ui::fonts::font_px(-2));
     QFontMetrics fm(font);
     total_width_ = 0;
@@ -155,8 +156,25 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
         total_width_ += symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
     }
 
-    if (total_width_ > 0 && isVisible() && !edit_bar_->isVisible()) {
-        scroll_clock_.invalidate();  // first tick will re-prime the clock
+    // Preserve scroll offset across periodic re-data. Resetting to 0 made
+    // the ticker jump back to the start every ~30 s when MarketData
+    // published fresh prices — visible as the "stop, jerk back, resume,
+    // flash back" stutter near ^DJI. Wrap with fmod in case total_width_
+    // shrank (fewer symbols, narrower digit count).
+    if (total_width_ > 0)
+        offset_ = std::fmod(offset_, static_cast<double>(total_width_));
+    else
+        offset_ = 0;
+
+    // Only kick the scroll timer + clock if they weren't already running.
+    // A live re-data call would otherwise restart the 50 ms timer (up to
+    // ~50 ms of dead time before next tick) and invalidate the wall-clock
+    // (the first tick after invalidate doesn't advance offset, costing
+    // another ~50 ms) — together that's the visible "stops" before the
+    // jump-back. We only need those resets for cold-start (first data
+    // after launch / after hide/show) where the timer is idle.
+    if (total_width_ > 0 && isVisible() && !edit_bar_->isVisible() && !scroll_timer_.isActive()) {
+        scroll_clock_.invalidate();
         scroll_timer_.start();
     }
 
