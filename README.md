@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9bdb708b`](https://github.com/yumima/finterm/commit/9bdb708b) **feat(data):** FII/DII daily flows scraper (NSE cash market)
 - [`5b561d8f`](https://github.com/yumima/finterm/commit/5b561d8f) **feat(data):** Taiwan TWSE/TPEX market connector
 - [`01cb572d`](https://github.com/yumima/finterm/commit/01cb572d) **feat(markets):** Copy Symbol right-click on market panel rows
 - [`95df6b86`](https://github.com/yumima/finterm/commit/95df6b86) **feat(news):** COPY TITLE button on article detail panel
