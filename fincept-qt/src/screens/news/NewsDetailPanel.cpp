@@ -334,24 +334,17 @@ QWidget* NewsDetailPanel::build_content_view() {
 
     body_status_ = new QLabel("Loading article…", body_section_);
     body_status_->setObjectName("newsDetailBodyStatus");
-    body_status_->setStyleSheet(
-        QString("color:%1;background:transparent;font-size:%2px;")
-            .arg(ui::colors::TEXT_SECONDARY())
-            .arg(ui::fonts::font_px(-1)));
     body_layout->addWidget(body_status_);
 
     body_label_ = new QLabel(body_section_);
     body_label_->setObjectName("newsDetailBody");
     body_label_->setWordWrap(true);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Pin font-size explicitly — relying on the global QSS `*` rule loses
-    // when this label is reparented into the scroll area (same gotcha as
-    // News/IPO row labels). 13px gives a clear hierarchy below the 14px
-    // summary while still being easy to read for long-form prose.
-    body_label_->setStyleSheet(
-        QString("color:%1;background:transparent;font-size:%2px;line-height:1.4;")
-            .arg(ui::colors::TEXT_PRIMARY())
-            .arg(ui::fonts::font_px(-1)));
+    // Style (color/size/weight/background) comes from the global QSS rule
+    // `#newsDetailBody` in StyleSheets.cpp, which mirrors `#newsDetailHeadline`
+    // so the body reads as a continuation of the title pane rather than a
+    // separate smaller block. No inline stylesheet here — it would override
+    // the QSS and reintroduce the size/color drift the user flagged.
     body_layout->addWidget(body_label_);
     layout->addWidget(body_section_);
 

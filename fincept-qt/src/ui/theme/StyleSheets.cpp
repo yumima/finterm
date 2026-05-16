@@ -203,6 +203,12 @@ QString news_screen_styles() {
                "#newsDetailImpact { color: %16; font-size: 11px; background: transparent; }"
                "#newsDetailTickers { color: %16; font-size: 11px; font-weight: 700; background: transparent; }"
                "#newsDetailSep { background: %3; }"
+               /* Article body extracted by NewsService::extract_article_body — matches
+                  the headline pane (#newsDetailHeadline) for color, size, weight, and
+                  background so the inline article reads as a continuation of the title
+                  rather than a separate, smaller sidebar block. */
+               "#newsDetailBody { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
+               "#newsDetailBodyStatus { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
                "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
                "  letter-spacing: 0.5px; background: transparent; padding: 2px 0; "
                "  border-bottom: 1px solid %3; }"
