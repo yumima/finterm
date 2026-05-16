@@ -8,6 +8,7 @@
 #include "mcp/tools/AgenticMemoryTools.h"
 #include "mcp/tools/AiChatTools.h"
 #include "mcp/tools/AltInvestmentsTools.h"
+#include "mcp/tools/MetaTools.h"
 #include "mcp/tools/CryptoTradingTools.h"
 #include "mcp/tools/DataHubTools.h"
 #include "mcp/tools/DataSourcesTools.h"
@@ -96,6 +97,9 @@ void initialize_all_tools() {
 
     // agentic memory — durable scratchpad for agent runs
     provider.register_tools(tools::get_agentic_memory_tools());
+
+    // meta — tool discovery + introspection ("what tools exist?")
+    provider.register_tools(tools::get_meta_tools());
 
     LOG_INFO(TAG, QString("Registered %1 internal MCP tools").arg(provider.tool_count()));
 
