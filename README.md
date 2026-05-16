@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`e934d2a4`](https://github.com/yumima/finterm/commit/e934d2a4) mcp(tools): DBnomicsTools — economic data (providers/datasets/series)
 - [`0d093e31`](https://github.com/yumima/finterm/commit/0d093e31) mcp(tools): MetaTools — tool discovery + introspection
 - [`2662ced4`](https://github.com/yumima/finterm/commit/2662ced4) mcp(tools): AgenticMemoryTools — durable scratchpad for agent runs
 - [`8da6cdb2`](https://github.com/yumima/finterm/commit/8da6cdb2) mcp: dual-shape dispatch — call_tool_async + AuthChecker + validation
