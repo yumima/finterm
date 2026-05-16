@@ -674,6 +674,45 @@ def parse_s1_funding(url):
         return {"url": url, "error": str(e)}
 
 
+def get_top_movers(count=10):
+    """Real day's top gainers / losers via yfinance's predefined screeners.
+    Replaces the previous TopMoversWidget behavior of ranking a hardcoded
+    12-ticker watchlist — which produced misleading "biggest gainer" rows
+    like PLTR +0.19% when the actual day's leader was something off-list.
+
+    Returns both sides in one call: {gainers: [...], losers: [...]}.
+    Each entry has the fields the C++ QuoteData struct already consumes,
+    so the widget can render the result without an extra fetch.
+    """
+    def _normalize(qs):
+        out = []
+        for q in qs:
+            sym = q.get("symbol") or ""
+            if not sym: continue
+            out.append({
+                "symbol":     sym,
+                "name":       q.get("shortName") or q.get("longName") or "",
+                "price":      float(q.get("regularMarketPrice") or 0),
+                "change":     float(q.get("regularMarketChange") or 0),
+                "change_pct": float(q.get("regularMarketChangePercent") or 0),
+                "high":       float(q.get("regularMarketDayHigh") or 0),
+                "low":        float(q.get("regularMarketDayLow") or 0),
+                "volume":     float(q.get("regularMarketVolume") or 0),
+            })
+        return out
+    try:
+        out = {}
+        for direction, scr in (("gainers", "day_gainers"), ("losers", "day_losers")):
+            try:
+                r = yf.screen(scr, count=count)
+                out[direction] = _normalize(r.get("quotes", []))
+            except Exception as e:
+                out[direction + "_error"] = str(e)
+        return out
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_batch_quotes(symbols):
     """Fetch quotes for multiple symbols at once using yfinance batch download"""
     try:
@@ -1652,6 +1691,10 @@ def _daemon_dispatch_inner(action, payload):
         # Securities" section for the FUNDING tab. URL comes from
         # fetch_sec_filings on the C++ side.
         return parse_s1_funding((payload or {}).get("url"))
+    if action == "top_movers":
+        # Real day's top gainers + losers via yfinance.screen. Replaces the
+        # hardcoded 12-ticker watchlist used by TopMoversWidget.
+        return get_top_movers((payload or {}).get("count", 10))
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

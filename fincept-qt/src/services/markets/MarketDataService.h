@@ -120,6 +120,17 @@ class MarketDataService : public QObject
     /// This callback API remains for one-shot reads (e.g. report builder snapshots).
     void fetch_quotes(const QStringList& symbols, QuoteCallback cb);
 
+    /// Real day's top gainers + losers via yfinance's predefined screeners.
+    /// Returns both sides in one daemon round-trip. Used by TopMoversWidget;
+    /// the prior implementation ranked a hardcoded 12-ticker watchlist, which
+    /// produced visibly wrong "biggest gainer" rows on quiet days.
+    struct TopMovers {
+        QVector<QuoteData> gainers;
+        QVector<QuoteData> losers;
+    };
+    using TopMoversCallback = std::function<void(bool, TopMovers)>;
+    void fetch_top_movers(int count, TopMoversCallback cb);
+
     /// Drop cached quote entries for the given symbols, forcing the next
     /// fetch_quotes() call to hit the data source. The DataHub min_interval
     /// (currently 2s) still rate-limits actual outbound calls, so rapid tab

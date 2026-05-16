@@ -10,11 +10,16 @@
 
 namespace fincept::screens::widgets {
 
-/// Top movers widget with gainers/losers tab toggle. Fetches real data via yfinance.
+/// Top movers widget with gainers/losers tab toggle.
 ///
-/// Subscribes to `market:quote:<sym>` on the DataHub for the fixed mover
-/// symbol set. The row cache is re-sorted into `all_quotes_` on every
-/// delivery so the gainers/losers split stays current.
+/// Uses yfinance's `day_gainers` / `day_losers` predefined screeners so the
+/// rows are the actual day's top movers across US equities — not a sort
+/// over a hardcoded watchlist, which was the previous behavior and produced
+/// misleading "biggest gainer" rows (e.g. PLTR +0.19%) on quiet days when
+/// none of the 12 hardcoded symbols had a big move.
+///
+/// Sparklines are subscribed via DataHub for whichever symbols the screener
+/// returned, so the inline mini-charts keep working.
 class TopMoversWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -30,21 +35,22 @@ class TopMoversWidget : public BaseWidget {
     void refresh_data();
     void show_tab(bool gainers);
 
-    void hub_subscribe_all();
-    void hub_unsubscribe_all();
-    /// Recompute `all_quotes_` from `row_cache_`, sort, and redraw the tab.
+    /// Fire-and-forget DataHub sparkline subscriptions for the symbols we
+    /// just discovered from the screener. Idempotent — re-subscribes only
+    /// for symbols we don't already have a sparkline cache entry for.
+    void resubscribe_sparklines();
+    /// Render the currently-selected gainers / losers list into the table.
     void rebuild_from_cache();
 
     ui::DataTable* table_ = nullptr;
     QPushButton* gainers_btn_ = nullptr;
     QPushButton* losers_btn_ = nullptr;
-    QVector<services::QuoteData> all_quotes_;
     bool showing_gainers_ = true;
 
-    QHash<QString, services::QuoteData> row_cache_;
-    QHash<QString, QVector<double>>     sparkline_cache_;
-    QStringList symbols_;
-    bool hub_active_ = false;
+    services::MarketDataService::TopMovers cached_movers_;
+    QHash<QString, QVector<double>>        sparkline_cache_;
+    QStringList                            subscribed_symbols_;
+    bool                                   hub_active_ = false;
 };
 
 } // namespace fincept::screens::widgets

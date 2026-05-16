@@ -818,6 +818,60 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
+// ── Top movers (real day_gainers / day_losers screeners) ───────────────────
+// 60-second CacheManager TTL — market movers shift through the trading day
+// but cycling between gainers/losers tabs shouldn't burn a fresh daemon call
+// each time. Slightly stale-but-real data beats hardcoded-watchlist data.
+void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
+    constexpr int kTopMoversCacheTtlSec = 60;
+    const QString cache_key = QString("top_movers:%1").arg(count);
+    auto parse_side = [](const QJsonArray& arr) -> QVector<QuoteData> {
+        QVector<QuoteData> out;
+        out.reserve(arr.size());
+        for (const auto& v : arr) {
+            const auto o = v.toObject();
+            QuoteData q;
+            q.symbol     = o["symbol"].toString();
+            q.name       = o["name"].toString();
+            q.price      = o["price"].toDouble();
+            q.change     = o["change"].toDouble();
+            q.change_pct = o["change_pct"].toDouble();
+            q.high       = o["high"].toDouble();
+            q.low        = o["low"].toDouble();
+            q.volume     = o["volume"].toDouble();
+            if (!q.symbol.isEmpty()) out.append(q);
+        }
+        return out;
+    };
+    auto parse = [parse_side](const QJsonObject& o) -> TopMovers {
+        TopMovers tm;
+        tm.gainers = parse_side(o["gainers"].toArray());
+        tm.losers  = parse_side(o["losers"].toArray());
+        return tm;
+    };
+    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    if (cached.has_value()) {
+        const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
+        cb(true, parse(obj));
+        return;
+    }
+    QJsonObject payload;
+    payload["count"] = count;
+    python::PythonWorker::instance().submit(
+        "top_movers", payload,
+        [cb, parse, cache_key](bool ok, QJsonObject result, QString err) {
+            if (!ok || result.contains("error")) {
+                LOG_WARN("MarketData", "top_movers failed: " + err);
+                cb(false, {});
+                return;
+            }
+            const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+            fincept::CacheManager::instance().put(cache_key, raw, kTopMoversCacheTtlSec, "movers");
+            cb(true, parse(result));
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
 // ── IPO Watch detail-rail enrichment ────────────────────────────────────────
 // fetch_ipo_extras: yfinance financials + holders + news in one round-trip.
 // fetch_sec_filings: SEC EDGAR submissions API (no key, free).

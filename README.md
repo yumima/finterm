@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0f69ea3c`](https://github.com/yumima/finterm/commit/0f69ea3c) **feat(ipo_watch):** MARGINS chart tab — gross / operating / net margin curves
 - [`40c7ef82`](https://github.com/yumima/finterm/commit/40c7ef82) **feat(ipo_watch):** auto-open ER on priced click + extended S-1 sections + NET INCOME chart
 - [`104d8bfc`](https://github.com/yumima/finterm/commit/104d8bfc) **feat(ipo_watch):** font_px scale + annual YoY revenue + Equity Research button
 - [`87705a28`](https://github.com/yumima/finterm/commit/87705a28) **feat(ipo_watch):** S-1 funding-history parser + 12px font sweep + tab enums
