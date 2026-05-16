@@ -342,12 +342,27 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     table_->setShowGrid(false);
     table_->horizontalHeader()->setStretchLastSection(false);
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
-        if (col != 0) return;
         auto* it = table_->item(row, 0);
         if (!it) return;
         const int idx = it->data(Qt::UserRole).toInt();
         if (idx < 0 || idx >= entries_.size()) return;
-        toggle_star(entries_.at(idx));
+        // Col 0 is the star — toggle and stop (don't trigger ER auto-pop on
+        // an action click).
+        if (col == 0) { toggle_star(entries_.at(idx)); return; }
+        // For any other column on a priced row with a ticker, pop the full
+        // Equity Research screen alongside IPO Watch with the ticker loaded.
+        // Mouse-click only — currentCellChanged (which also fires on arrow
+        // nav) deliberately does NOT trigger this, so keyboard-walking the
+        // list doesn't reflow the layout or steal focus from IPO Watch.
+        // split_alongside is idempotent (just raises an existing ER tab),
+        // and load_symbol on each click keeps ER in sync with the selection.
+        const Entry& e = entries_.at(idx);
+        if (e.status == "priced" && !e.ticker.isEmpty()) {
+            EventBus::instance().publish("nav.split_alongside",
+                QVariantMap{{"screen_id", "equity_research"}});
+            EventBus::instance().publish("equity_research.load_symbol",
+                QVariantMap{{"symbol", e.ticker}});
+        }
     });
     connect(table_, &QTableWidget::currentCellChanged, this,
             [this](int row, int /*col*/, int prev_row, int /*prev_col*/) {
@@ -464,13 +479,30 @@ void IpoWatchView::build_detail_rail(QSplitter* splitter) {
     auto* rch = new QVBoxLayout(page_revenue_chart_host_);
     rch->setContentsMargins(8, 8, 8, 8);
     rch->setSpacing(0);
-    auto* rev_placeholder = new QLabel("<i style='color:#7a7a7a;'>Quarterly revenue appears for priced deals once yfinance data lands.</i>");
+    auto* rev_placeholder = new QLabel(
+        "<i style='color:#7a7a7a;'>Annual revenue appears for priced deals once yfinance data lands. "
+        "Pre-IPO companies: see the S-1 \"Selected Financial Data\" excerpt in FUNDING.</i>");
     rev_placeholder->setTextFormat(Qt::RichText);
     rev_placeholder->setAlignment(Qt::AlignCenter);
+    rev_placeholder->setWordWrap(true);
     rch->addWidget(rev_placeholder, 1);
 
+    page_netincome_chart_host_ = new QWidget;
+    auto* nch = new QVBoxLayout(page_netincome_chart_host_);
+    nch->setContentsMargins(8, 8, 8, 8);
+    nch->setSpacing(0);
+    auto* ni_placeholder = new QLabel(
+        "<i style='color:#7a7a7a;'>Annual net income (with losses in red) "
+        "appears for priced deals once yfinance data lands.</i>");
+    ni_placeholder->setTextFormat(Qt::RichText);
+    ni_placeholder->setAlignment(Qt::AlignCenter);
+    ni_placeholder->setWordWrap(true);
+    nch->addWidget(ni_placeholder, 1);
+
+    // Tab order must match the ChartTab enum in the header.
     tabs_charts_->addTab(page_price_chart_host_,          "PRICE");
     tabs_charts_->addTab(page_revenue_chart_host_,        "REVENUE");
+    tabs_charts_->addTab(page_netincome_chart_host_,      "NET INCOME");
     tabs_charts_->addTab(make_scroll_label(page_range_),  "RANGE");
     tabs_charts_->addTab(make_scroll_label(page_lockup_), "LOCK-UP");
     tabs_charts_->addTab(make_scroll_label(page_timeline_),"TIMELINE");
@@ -1595,15 +1627,17 @@ void IpoWatchView::render_detail(const Entry* e) {
     // ── CHARTS TAB PAGES (middle-bottom) ────────────────────────────────────
     rebuild_price_chart(*e);
     rebuild_revenue_chart(*e);
+    rebuild_netincome_chart(*e);
     page_range_   ->setText(css + build_range_html(*e));
     page_lockup_  ->setText(css + build_lockup_html(*e));
     page_timeline_->setText(css + build_timeline_html(*e));
 
-    tabs_charts_->setTabVisible(CT_Price,    e->status == "priced");
-    tabs_charts_->setTabVisible(CT_Revenue,  has_ticker);
-    tabs_charts_->setTabVisible(CT_Range,    has_ticker);
-    tabs_charts_->setTabVisible(CT_Lockup,   e->status == "priced");
-    tabs_charts_->setTabVisible(CT_Timeline, e->status != "priced");
+    tabs_charts_->setTabVisible(CT_Price,     e->status == "priced");
+    tabs_charts_->setTabVisible(CT_Revenue,   has_ticker);
+    tabs_charts_->setTabVisible(CT_NetIncome, has_ticker);
+    tabs_charts_->setTabVisible(CT_Range,     has_ticker);
+    tabs_charts_->setTabVisible(CT_Lockup,    e->status == "priced");
+    tabs_charts_->setTabVisible(CT_Timeline,  e->status != "priced");
     // If the currently-visible tab got hidden, jump to the first visible one.
     if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex())) {
         for (int i = 0; i < tabs_charts_->count(); ++i)
@@ -2049,8 +2083,30 @@ QString IpoWatchView::build_funding_html(const Entry& e) const {
 
     const auto& f = s1_cache_.value(e.ticker);
     QString h;
+
+    // Helper: render a verbatim prospectus excerpt with newlines preserved.
+    // Qt RichText only treats <br> as a linebreak, so we escape then swap.
+    auto render_excerpt = [](const QString& raw) -> QString {
+        QString body = raw.toHtmlEscaped();
+        body.replace("\n", "<br>");
+        return "<div style='line-height:1.5;white-space:normal;'>" + body + "</div>";
+    };
+
+    // ── SELECTED FINANCIAL DATA — multi-year revenue / net income table from
+    //    the S-1. For pre-IPO companies this is the only free source. For
+    //    priced entries the same numbers are already in the FUNDAMENTALS
+    //    YoY table (from yfinance), so we only render this when yfinance has
+    //    nothing — avoids showing the same financials twice. ──
+    const bool have_yfin_annuals =
+        !e.ticker.isEmpty() && ipo_extras_.contains(e.ticker) &&
+        !ipo_extras_.value(e.ticker).annual_revenue.isEmpty();
+    if (!f.selected_financials.isEmpty() && !have_yfin_annuals) {
+        h += "<span class='sec'>S-1 EXCERPT · Selected Financial Data</span>";
+        h += render_excerpt(f.selected_financials);
+    }
+
     if (!f.rounds.isEmpty()) {
-        h += "<span class='sec'>EXTRACTED ROUNDS · best-effort regex pass</span>";
+        h += "<span class='sec'>FUNDING ROUNDS · regex extract from Recent Sales</span>";
         h += "<table class='grid'>";
         h += "<tr><td class='k' style='width:22%;'>Date</td>"
              "<td class='k' style='width:22%;'>Amount</td>"
@@ -2061,20 +2117,49 @@ QString IpoWatchView::build_funding_html(const Entry& e) const {
                  "<td>" + r.context.toHtmlEscaped() + "</td></tr>";
         }
         h += "</table>";
-        h += "<div class='muted' style='margin-top:6px;'>The table above is regex-extracted "
-             "from the prospectus and may merge or miss entries. The verbatim section below "
-             "is authoritative.</div>";
+        h += "<div class='muted' style='margin-top:6px;'>Regex-extracted from the "
+             "prospectus — may merge or miss entries. Verbatim excerpts below are "
+             "authoritative.</div>";
     }
 
+    // ── PRINCIPAL STOCKHOLDERS — the cap-table proxy ──
+    // This section lists 5%+ owners at the time of S-1 filing. It's the
+    // closest free public analog to NPM's "Cap Table" panel: shows VC funds,
+    // insiders, and founders with material stakes.
+    if (!f.principal_stockholders.isEmpty()) {
+        h += "<span class='sec'>S-1 EXCERPT · Principal Stockholders (5%+ holders)</span>";
+        h += render_excerpt(f.principal_stockholders);
+    }
+
+    // ── USE OF PROCEEDS — banker question #1 ──
+    if (!f.use_of_proceeds.isEmpty()) {
+        h += "<span class='sec'>S-1 EXCERPT · Use of Proceeds</span>";
+        h += render_excerpt(f.use_of_proceeds);
+    }
+
+    // ── UNDERWRITERS — bookrunner roster (Nasdaq's calendar API doesn't
+    //    return leadFirmName; this section is the free public source) ──
+    if (!f.underwriters.isEmpty()) {
+        h += "<span class='sec'>S-1 EXCERPT · Underwriting</span>";
+        h += render_excerpt(f.underwriters);
+    }
+
+    // ── RISK FACTORS — top-level headings only (full section is 50+ pages) ──
+    if (!f.risk_factors.isEmpty()) {
+        h += "<span class='sec'>S-1 EXCERPT · Top Risk Factors</span>";
+        h += "<ul style='margin:4px 0 4px 18px;padding:0;'>";
+        for (const auto& rf : f.risk_factors)
+            h += "<li style='margin-bottom:3px;'>" + rf.toHtmlEscaped() + "</li>";
+        h += "</ul>";
+    }
+
+    // ── RECENT SALES (the original section) — kept last because it's the
+    //    longest excerpt. Sources go to its position on sec.gov. ──
     h += "<span class='sec'>S-1 EXCERPT · Recent Sales of Unregistered Securities</span>";
     if (f.section_text.isEmpty()) {
         h += "<div class='muted'>Section was empty in the parsed S-1.</div>";
     } else {
-        // Newlines from the parsed plain-text section need to become <br>'s
-        // for Qt's RichText to preserve paragraph breaks.
-        QString body = f.section_text.toHtmlEscaped();
-        body.replace("\n", "<br>");
-        h += "<div style='line-height:1.5;white-space:normal;'>" + body + "</div>";
+        h += render_excerpt(f.section_text);
     }
     if (!f.source_url.isEmpty()) {
         h += "<div class='muted' style='margin-top:8px;'>source: "
@@ -2134,58 +2219,124 @@ void IpoWatchView::rebuild_price_chart(const Entry& e) {
     host_layout->addWidget(view, 1);
 }
 
-// ── REVENUE chart — quarterly bars from ipo_extras ───────────────────────────
-void IpoWatchView::rebuild_revenue_chart(const Entry& e) {
-    if (!page_revenue_chart_host_) return;
-    auto* host_layout = qobject_cast<QVBoxLayout*>(page_revenue_chart_host_->layout());
-    if (!host_layout) return;
-    while (host_layout->count() > 0) {
-        QLayoutItem* item = host_layout->takeAt(0);
+// ── Shared helper: wipe a chart-host layout and add a placeholder label ─────
+static void wipe_chart_host(QWidget* host, QChartView*& view_member) {
+    if (!host) return;
+    auto* layout = qobject_cast<QVBoxLayout*>(host->layout());
+    if (!layout) return;
+    while (layout->count() > 0) {
+        QLayoutItem* item = layout->takeAt(0);
         if (item->widget()) item->widget()->deleteLater();
         delete item;
     }
-    revenue_chart_view_ = nullptr;
+    view_member = nullptr;
+}
+static void chart_placeholder(QWidget* host, const QString& html) {
+    auto* layout = qobject_cast<QVBoxLayout*>(host->layout());
+    if (!layout) return;
+    auto* lbl = new QLabel(html);
+    lbl->setTextFormat(Qt::RichText);
+    lbl->setAlignment(Qt::AlignCenter);
+    lbl->setWordWrap(true);
+    lbl->setStyleSheet("color:#7a7a7a;");
+    layout->addWidget(lbl, 1);
+}
 
-    auto add_placeholder = [&](const QString& html) {
-        auto* lbl = new QLabel(html);
-        lbl->setTextFormat(Qt::RichText);
-        lbl->setAlignment(Qt::AlignCenter);
-        lbl->setStyleSheet("color:#7a7a7a;");
-        host_layout->addWidget(lbl, 1);
-    };
+// ── REVENUE chart — annual bars from ipo_extras (YoY view) ──────────────────
+// Switched from quarterly to annual so the chart actually answers "how is
+// revenue growing year-over-year" — which is what investors and bankers
+// research. Quarterly trend is still implicitly in the FUNDAMENTALS table.
+void IpoWatchView::rebuild_revenue_chart(const Entry& e) {
+    if (!page_revenue_chart_host_) return;
+    wipe_chart_host(page_revenue_chart_host_, revenue_chart_view_);
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_revenue_chart_host_->layout());
+    if (!host_layout) return;
 
     if (e.ticker.isEmpty()) {
-        add_placeholder("<i>Revenue history appears after the deal lists.</i>");
+        chart_placeholder(page_revenue_chart_host_,
+            "<i>Revenue history appears after the deal lists.<br>"
+            "Pre-IPO companies: see the S-1 \"Selected Financial Data\" excerpt in FUNDING.</i>");
         return;
     }
     if (!ipo_extras_.contains(e.ticker)) {
-        add_placeholder("<i>Loading quarterly revenue…</i>");
+        chart_placeholder(page_revenue_chart_host_, "<i>Loading annual revenue…</i>");
         return;
     }
     const auto& ex = ipo_extras_.value(e.ticker);
-    if (ex.quarterly_revenue.isEmpty()) {
-        add_placeholder("<i>No quarterly revenue history available.</i>");
+    if (ex.annual_revenue.isEmpty()) {
+        chart_placeholder(page_revenue_chart_host_,
+            "<i>yfinance has no annual revenue history for this ticker.<br>"
+            "If this is a fresh IPO, see the S-1 \"Selected Financial Data\" excerpt in FUNDING.</i>");
         return;
     }
     QStringList categories;
     QVector<double> values;
-    categories.reserve(ex.quarterly_revenue.size());
-    values.reserve(ex.quarterly_revenue.size());
-    for (const auto& p : ex.quarterly_revenue) {
-        // Convert "2026-03-31" → "Q1 26" style for readability.
-        const QDate d = QDate::fromString(p.date, "yyyy-MM-dd");
-        QString label = p.date;
-        if (d.isValid()) {
-            const int q = (d.month() - 1) / 3 + 1;
-            label = QString("Q%1 %2").arg(q).arg(d.year() % 100, 2, 10, QChar('0'));
-        }
-        categories.append(label);
-        // Display in $M so the y-axis is readable.
-        values.append(p.value / 1e6);
+    categories.reserve(ex.annual_revenue.size());
+    values.reserve(ex.annual_revenue.size());
+    for (const auto& p : ex.annual_revenue) {
+        // yfinance returns the period-end date — extract the year for the
+        // x-axis label.
+        categories.append(p.date.left(4));
+        values.append(p.value / 1e6);  // $M for readable axis
     }
-    auto* view = ui::ChartFactory::bar_chart(QStringLiteral("Quarterly revenue ($M)"),
+    auto* view = ui::ChartFactory::bar_chart(QStringLiteral("Annual revenue ($M)"),
                                              categories, values, ui::colors::AMBER());
     revenue_chart_view_ = view;
+    host_layout->addWidget(view, 1);
+}
+
+// ── NET INCOME chart — annual bars from ipo_extras ──────────────────────────
+// Negative bars are colored red so losses are immediately visible — fresh
+// IPOs commonly post net losses for years, which the bar height alone can't
+// communicate when mixed with positive bars on the same axis.
+void IpoWatchView::rebuild_netincome_chart(const Entry& e) {
+    if (!page_netincome_chart_host_) return;
+    wipe_chart_host(page_netincome_chart_host_, netincome_chart_view_);
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_netincome_chart_host_->layout());
+    if (!host_layout) return;
+
+    if (e.ticker.isEmpty()) {
+        chart_placeholder(page_netincome_chart_host_,
+            "<i>Net income history appears after the deal lists.</i>");
+        return;
+    }
+    if (!ipo_extras_.contains(e.ticker)) {
+        chart_placeholder(page_netincome_chart_host_, "<i>Loading annual net income…</i>");
+        return;
+    }
+    const auto& ex = ipo_extras_.value(e.ticker);
+    if (ex.annual_net_income.isEmpty()) {
+        chart_placeholder(page_netincome_chart_host_,
+            "<i>yfinance has no annual net income history for this ticker.<br>"
+            "Pre-IPO companies: see the S-1 \"Selected Financial Data\" excerpt in FUNDING.</i>");
+        return;
+    }
+    QStringList categories;
+    QVector<double> values;
+    categories.reserve(ex.annual_net_income.size());
+    values.reserve(ex.annual_net_income.size());
+    int n_profit = 0, n_loss = 0;
+    for (const auto& p : ex.annual_net_income) {
+        categories.append(p.date.left(4));
+        values.append(p.value / 1e6);
+        if (p.value >  0) ++n_profit;
+        if (p.value <  0) ++n_loss;
+    }
+    // ChartFactory::bar_chart colors the whole series uniformly (QBarSet
+    // doesn't expose per-bar color without splitting into multiple sets).
+    // To stay honest about mixed-history companies — common for fresh IPOs
+    // that flipped profitable mid-window — use a 3-way color:
+    //   green   = every year profitable
+    //   amber   = mixed (some loss years, some profit)
+    //   red     = every year a loss
+    // The actual sign of each bar still reads correctly because the value
+    // axis renders losses below the zero line.
+    QString color = ui::colors::AMBER();
+    if      (n_loss == 0)    color = ui::colors::POSITIVE();
+    else if (n_profit == 0)  color = ui::colors::NEGATIVE();
+    auto* view = ui::ChartFactory::bar_chart(QStringLiteral("Annual net income ($M)"),
+                                             categories, values, color);
+    netincome_chart_view_ = view;
     host_layout->addWidget(view, 1);
 }
 

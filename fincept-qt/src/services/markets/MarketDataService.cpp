@@ -1092,8 +1092,16 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
     const QString cache_key = "s1_funding:" + s1_url;
     auto parse = [](const QJsonObject& o) -> S1Funding {
         S1Funding f;
-        f.source_url   = o["url"].toString();
-        f.section_text = o["section_text"].toString();
+        f.source_url             = o["url"].toString();
+        f.section_text           = o["section_text"].toString();
+        f.principal_stockholders = o["principal_stockholders"].toString();
+        f.use_of_proceeds        = o["use_of_proceeds"].toString();
+        f.underwriters           = o["underwriters"].toString();
+        f.selected_financials    = o["selected_financials"].toString();
+        for (const auto& v : o["risk_factors"].toArray()) {
+            const QString s = v.toString().trimmed();
+            if (!s.isEmpty()) f.risk_factors.append(s);
+        }
         for (const auto& v : o["rounds"].toArray()) {
             const auto r = v.toObject();
             S1Funding::Round rd;

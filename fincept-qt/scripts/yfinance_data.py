@@ -488,16 +488,26 @@ def get_ipo_extras(symbol):
 
 def parse_s1_funding(url):
     """Download an S-1 (or S-1/A) document from SEC EDGAR and extract the
-    'Recent Sales of Unregistered Securities' section verbatim. This is the
-    standardized prospectus section where companies disclose private-placement
-    rounds with dates and aggregate consideration — i.e. the free public
-    equivalent of Crunchbase / NPM's 'Financing History' panel.
+    research-relevant sections — the free public surrogate for Crunchbase /
+    NPM's Financing History + Cap Table + Use-of-Proceeds panels.
 
-    Output:
-      url:           the source URL (echoed back)
-      section_text:  cleaned plain-text section (truncated to 12000 chars)
-      rounds:        best-effort list of {date, amount, context} hints
-      error:         set on download / parse failure
+    Sections extracted (all optional, omitted if not found):
+      section_text:           "Recent Sales of Unregistered Securities"
+                              (private-placement rounds with dates + amounts)
+      principal_stockholders: "Principal Stockholders" / "Principal and
+                              Selling Stockholders" (5%+ holders table)
+      use_of_proceeds:        "Use of Proceeds" (how IPO funds will be spent)
+      underwriters:           "Underwriting" / "Plan of Distribution"
+                              (bookrunner roster + allocation)
+      risk_factors:           list of top-level risk-factor headings
+
+      rounds: best-effort {date, amount, context} hints regex-extracted
+              from section_text. Noisy by design — the verbatim text is
+              authoritative; rounds is a quick scan aid.
+
+    On hard failure (HTTP error / Recent-Sales section absent) returns
+    {"url": url, "error": <reason>}. On partial failure (e.g. no Principal
+    Stockholders section) the corresponding key is just omitted.
     """
     if not url:
         return {"error": "no url"}
@@ -522,61 +532,143 @@ def parse_s1_funding(url):
         # get_text() leaves a lot of whitespace; collapse runs.
         soup = BeautifulSoup(r.text, "html.parser")
         text = soup.get_text("\n")
+        # Pre-clean whitespace so all subsequent regex searches and slicing
+        # operate on the same canonical form. Done once instead of per-section.
+        text = re.sub(r"\n{2,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
 
-        m = re.search(r"recent\s+sales\s+of\s+unregistered\s+securities",
-                      text, re.IGNORECASE)
-        if not m:
-            # Return as an error so the C++ side lands in `s1_misses_` and the
-            # UI can distinguish "fetched but no section" from "section was
-            # empty after parsing". Some shell-company S-1s genuinely omit
-            # this section; treating it as a hard miss avoids re-parsing the
-            # same multi-MB file repeatedly.
+        # ── Section slicer ─────────────────────────────────────────────────
+        # Each S-1 section we care about can be found by a heading regex; we
+        # slice from the heading to the next major-section heading (or a fixed
+        # cap, whichever comes first). Returns "" if the heading isn't found.
+        # Python re alternation is leftmost (not longest) — the more specific
+        # patterns must therefore appear in the alternation BEFORE the
+        # shorter prefixes they share. We dropped the bare "recent sales"
+        # alternative because the specific "recent sales of unregistered
+        # securities" pattern already covers our use; the bare form would
+        # have matched first if added back.
+        SECTION_BOUNDARY = re.compile(
+            r"\n\s*(item\s+\d+|exhibits\s+and\s+financial|signatures|"
+            r"undertakings|index\s+to\s+(?:financial|exhibits)|"
+            r"principal\s+stockholders|use\s+of\s+proceeds|underwriting|"
+            r"recent\s+sales\s+of\s+unregistered\s+securities|"
+            r"plan\s+of\s+distribution|risk\s+factors|"
+            r"description\s+of\s+capital\s+stock|"
+            r"selected\s+(?:consolidated\s+)?financial\s+data|"
+            r"summary\s+(?:consolidated\s+)?financial\s+data|"
+            r"management's\s+discussion)",
+            re.IGNORECASE,
+        )
+        def extract_section(pattern, cap=12000, lookahead_skip=200):
+            mm = re.search(pattern, text, re.IGNORECASE)
+            if not mm:
+                return ""
+            chunk = text[mm.start(): mm.start() + cap]
+            # Find the NEXT boundary heading after the current one (skip the
+            # current heading itself by skipping the first `lookahead_skip`
+            # chars).
+            nxt = SECTION_BOUNDARY.search(chunk[lookahead_skip:])
+            if nxt:
+                chunk = chunk[: nxt.start() + lookahead_skip]
+            return chunk.strip()
+
+        # ── Recent Sales (the original section — primary output) ───────────
+        section = extract_section(
+            r"recent\s+sales\s+of\s+unregistered\s+securities", cap=12000)
+        if not section:
+            # No Recent Sales = treat as hard miss so the UI shows the
+            # informative "no S-1 funding section" state and we cache the
+            # negative result instead of re-parsing on every click.
             return {"url": url, "error": "section not found in this filing"}
 
-        section = text[m.start(): m.start() + 12000]
-        # Trim at the next major prospectus heading.
-        nxt = re.search(
-            r"\n\s*(item\s+\d+|exhibits\s+and\s+financial|signatures|undertakings|index\s+to\s+(financial|exhibits))",
-            section[200:], re.IGNORECASE)
-        if nxt:
-            section = section[:nxt.start() + 200]
-        section = re.sub(r"\n{2,}", "\n\n", section)
-        section = re.sub(r"[ \t]+", " ", section)
-        section = section.strip()
+        # ── Principal Stockholders (5% holders — closest free analog to a
+        #    cap table) ──
+        principal = extract_section(
+            r"principal\s+(?:and\s+selling\s+)?stockholders?", cap=10000)
 
-        # Best-effort round extraction. We look for sentence fragments that
-        # mention both a date-ish token AND a dollar amount; the surrounding
-        # 200 chars become `context`. Noisy by design — the user reads the
-        # section_text for the authoritative version.
+        # ── Use of Proceeds ──
+        # Use a short lookahead_skip — "Use of Proceeds" sections can be a
+        # ~2-sentence summary, and a larger skip overshoots past the body so
+        # the boundary search runs against the next section's content.
+        proceeds = extract_section(r"use\s+of\s+proceeds", cap=4000, lookahead_skip=80)
+
+        # ── Underwriters (Underwriting / Plan of Distribution) ──
+        underwriters = extract_section(
+            r"(?:underwriting|plan\s+of\s+distribution)", cap=6000)
+
+        # ── Selected Financial Data — multi-year revenue / net income table.
+        # This is the section where pre-IPO companies historically disclose
+        # 3-5 years of audited annual financials. For freshly-listed deals
+        # yfinance also has this, but for upcoming/filed companies the S-1 is
+        # the only free public source. We return the verbatim text; future
+        # work can layer structured (year, revenue, net_income) extraction.
+        selected_financials = extract_section(
+            r"(?:selected\s+consolidated\s+financial\s+data|"
+            r"summary\s+consolidated\s+financial\s+data|"
+            r"selected\s+financial\s+data|"
+            r"summary\s+financial\s+data)", cap=8000)
+
+        # ── Risk Factors — extract just the top-level risk headings ────────
+        # The full Risk Factors section is huge (often 50+ pages of text).
+        # What's useful in a research rail is the list of top risks; each is
+        # usually a bolded sentence/heading followed by a paragraph. Heuristic:
+        # short non-empty lines under the Risk Factors heading that end with a
+        # period and aren't part of a sentence. Capped at 15.
+        risk_factors = []
+        risk_section = extract_section(r"risk\s+factors", cap=40000)
+        if risk_section:
+            # The header line itself plus typical preamble; skip to the body.
+            body = risk_section.split("\n", 8)[-1]
+            for line in body.split("\n"):
+                s = line.strip()
+                # Filter: 20-180 chars (heading-length), ends in a period or
+                # question mark, capitalized first letter, no inline tab/colon
+                # noise (skip table rows).
+                if not (20 <= len(s) <= 180): continue
+                if not s[0].isupper(): continue
+                if not (s.endswith(".") or s.endswith("?")): continue
+                if "$" in s or "%" in s: continue       # skip stat lines
+                if s.count(",") > 4: continue           # skip list-of-things rows
+                # Skip lines that are clearly sentences in a paragraph (start
+                # with "The ", "We ", "Our " followed by lowercase verb).
+                low = s.lower()
+                if any(low.startswith(p) for p in ("the company ", "we have ", "we may ",
+                                                    "our ", "in addition", "as a result")):
+                    continue
+                risk_factors.append(s)
+                if len(risk_factors) >= 15:
+                    break
+
+        # ── Best-effort round extraction from Recent Sales ─────────────────
         rounds = []
         money_re = re.compile(r"\$\s?[\d,]+(?:\.\d+)?\s?(?:million|billion|M|B)?",
                               re.IGNORECASE)
         date_re  = re.compile(
             r"(?:January|February|March|April|May|June|July|August|"
             r"September|October|November|December)\s+\d{1,2},?\s+\d{4}|"
-            r"(?:Q[1-4]\s+\d{4})|"
-            r"(?:in\s+\d{4})", re.IGNORECASE)
-        # Walk through money matches and grab nearest date in surrounding
-        # window. Cap at 20 rounds so the UI doesn't drown.
+            r"(?:Q[1-4]\s+\d{4})|(?:in\s+\d{4})", re.IGNORECASE)
         for mm in money_re.finditer(section):
-            if len(rounds) >= 20:
-                break
+            if len(rounds) >= 20: break
             lo = max(0, mm.start() - 250)
             hi = min(len(section), mm.end() + 100)
             ctx = section[lo:hi].strip()
             dm = date_re.search(ctx)
-            if not dm:
-                continue
+            if not dm: continue
             rounds.append({
-                "date": dm.group(0).strip(),
-                "amount": mm.group(0).strip(),
+                "date":    dm.group(0).strip(),
+                "amount":  mm.group(0).strip(),
                 "context": re.sub(r"\s+", " ", ctx)[:280],
             })
 
         return {
             "url": url,
-            "section_text": section,
-            "rounds": rounds,
+            "section_text":           section,
+            "principal_stockholders": principal,
+            "use_of_proceeds":        proceeds,
+            "underwriters":           underwriters,
+            "selected_financials":    selected_financials,
+            "risk_factors":           risk_factors,
+            "rounds":                 rounds,
         }
     except Exception as e:
         return {"url": url, "error": str(e)}

@@ -238,9 +238,17 @@ class MarketDataService : public QObject
     /// Caller passes the S-1 document URL we already discovered via
     /// fetch_sec_filings — we don't re-walk the submissions API here.
     struct S1Funding {
-        QString source_url;     // S-1 document URL on sec.gov
-        QString section_text;   // cleaned "Recent Sales..." section
-        // Best-effort structured rows extracted from the section. Always
+        QString source_url;            // S-1 document URL on sec.gov
+        QString section_text;          // cleaned "Recent Sales..." section
+        // Additional standardized prospectus sections — each is the cleaned
+        // plain-text excerpt, lifted verbatim from the S-1. Empty when the
+        // section isn't present (common for shell-company SPAC S-1s).
+        QString principal_stockholders; // 5%+ holders — closest free cap-table analog
+        QString use_of_proceeds;        // how the IPO funds will be spent
+        QString underwriters;           // bookrunner roster + allocation %
+        QString selected_financials;    // multi-year revenue / net income table
+        QStringList risk_factors;       // top-level risk headings (≤15)
+        // Best-effort structured rows extracted from section_text. Always
         // partial; treat as hints, not the authoritative record.
         struct Round { QString date; QString amount; QString context; };
         QVector<Round> rounds;
