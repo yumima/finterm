@@ -147,11 +147,11 @@ QWidget* NewsDetailPanel::build_content_view() {
     });
     layout->addWidget(headline_label_);
 
-    // Meta row — badges + source/time + impact, all on a single line.
-    //   [BREAKING] [NEUTRAL] [MAJOR] [ENERGY]   CNBC 2s   Impact: HIGH
-    // Previously these lived on three separate rows (badges, source+time,
-    // impact). Collapsing them saves two rows of vertical space above the
-    // summary/article body and groups all the article metadata visually.
+    // Meta row — badges + source/time + impact + tickers, all on a single line.
+    //   [BREAKING] [NEUTRAL] [MAJOR] [ENERGY]  CNBC 2s  Impact: HIGH  $NVDA $AMD
+    // Previously these lived on four separate rows (badges, source+time,
+    // impact, tickers). Collapsing saves three rows of vertical space above
+    // the summary and groups all the article metadata as one strip.
     auto* meta_row = new QWidget(content);
     auto* meta_layout = new QHBoxLayout(meta_row);
     meta_layout->setContentsMargins(0, 0, 0, 0);
@@ -171,6 +171,8 @@ QWidget* NewsDetailPanel::build_content_view() {
     time_label_->setObjectName("newsDetailTime");
     impact_label_ = new QLabel(content);
     impact_label_->setObjectName("newsDetailImpact");
+    tickers_label_ = new QLabel(content);
+    tickers_label_->setObjectName("newsDetailTickers");
 
     meta_layout->addWidget(priority_badge_);
     meta_layout->addWidget(sentiment_badge_);
@@ -181,6 +183,8 @@ QWidget* NewsDetailPanel::build_content_view() {
     meta_layout->addWidget(time_label_);
     meta_layout->addSpacing(6);
     meta_layout->addWidget(impact_label_);
+    meta_layout->addSpacing(6);
+    meta_layout->addWidget(tickers_label_);
     meta_layout->addStretch();
     layout->addWidget(meta_row);
 
@@ -189,11 +193,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     summary_label_->setObjectName("newsDetailSummary");
     summary_label_->setWordWrap(true);
     layout->addWidget(summary_label_);
-
-    // Tickers
-    tickers_label_ = new QLabel(content);
-    tickers_label_->setObjectName("newsDetailTickers");
-    layout->addWidget(tickers_label_);
 
     // Action buttons — arranged in a flow
     auto* actions = new QWidget(content);
