@@ -51,16 +51,22 @@ QString format_article_html(const QString& plain) {
     html += QStringLiteral(
         "<div style=\"line-height:170%; padding-right:10px;\">");
 
+    // QLabel's rich-text renderer ignores the `text-indent` CSS property on
+    // <p> elements (known Qt limitation — text-indent IS in the supported
+    // subset for QTextDocument but the QLabel rendering path drops it).
+    // Workaround: prepend non-breaking spaces to the paragraph content. They
+    // sit on the first line and disappear after wrap, which is exactly the
+    // first-line-indent behaviour we want. 4 nbsps ≈ 4 chars at Consolas 12pt
+    // = ~1.6em of visual indent. First paragraph stays flush left per the
+    // typographic convention (opening paragraph never indents).
+    static const QLatin1String kIndent("&#160;&#160;&#160;&#160;");
     bool first = true;
     for (QString p : paras) {
         p = p.trimmed();
         if (p.isEmpty()) continue;
         p.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
-        const QLatin1String indent = first ? QLatin1String("0")
-                                           : QLatin1String("1.8em");
-        html += QStringLiteral(
-                    "<p style=\"text-indent:%1; margin:0 0 0.8em 0;\">")
-                    .arg(indent);
+        html += QStringLiteral("<p style=\"margin:0 0 0.8em 0;\">");
+        if (!first) html += kIndent;
         html += p;
         html += QStringLiteral("</p>");
         first = false;
