@@ -946,8 +946,10 @@ set(SERVICE_SOURCES
 
 # UI framework
 set(UI_SOURCES
+    src/ui/error/ErrorPipeline.cpp
     src/ui/formatting/CsvWriter.cpp
     src/ui/markdown/MarkdownRenderer.cpp
+    src/ui/notifications/ToastService.cpp
     src/ui/theme/Theme.cpp
     src/ui/theme/ThemeManager.cpp
     src/ui/theme/StyleSheets.cpp

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`67e0fc29`](https://github.com/yumima/finterm/commit/67e0fc29) **feat(voice):** local tts (pyttsx3) + clap detector
 - [`1d84c5c2`](https://github.com/yumima/finterm/commit/1d84c5c2) **feat(analytics):** statsmodels_service entry point
 - [`f843f564`](https://github.com/yumima/finterm/commit/f843f564) **feat(derivatives):** option_greeks_daemon — IV + Greeks via py_vollib
 - [`59f7c462`](https://github.com/yumima/finterm/commit/59f7c462) **feat(crypto):** Kraken symbol resolver via ccxt
