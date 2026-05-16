@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`1a3f3dc9`](https://github.com/yumima/finterm/commit/1a3f3dc9) mcp: add dual-shape ToolDef + ToolContext + ToolSchemaBuilder + AsyncDispatch
 - [`99817b73`](https://github.com/yumima/finterm/commit/99817b73) **ui:** ToastService + ErrorPipeline — in-app toast queue and error aggregation
 - [`67e0fc29`](https://github.com/yumima/finterm/commit/67e0fc29) **feat(voice):** local tts (pyttsx3) + clap detector
 - [`1d84c5c2`](https://github.com/yumima/finterm/commit/1d84c5c2) **feat(analytics):** statsmodels_service entry point

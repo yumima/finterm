@@ -777,6 +777,7 @@ set(MCP_SOURCES
     src/mcp/tools/SystemTools.cpp
     src/mcp/tools/DataHubTools.cpp
     src/mcp/tools/ReportBuilderTools.cpp
+    src/mcp/SchemaValidator.cpp
 )
 
 # Trading
