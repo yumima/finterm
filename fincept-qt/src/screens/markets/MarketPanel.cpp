@@ -4,6 +4,9 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QApplication>
+#include <QClipboard>
+
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
@@ -96,6 +99,10 @@ void MarketPanel::build_ui() {
     // causing the first panel in each column to grab disproportionate space.
     table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     setup_table_columns();
+
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(table_, &QTableWidget::customContextMenuRequested, this, &MarketPanel::show_row_context_menu);
+
     table_->setVisible(false);  // hidden until first data arrives
     bl->addWidget(table_);
 
@@ -472,6 +479,28 @@ void MarketPanel::refresh_theme() {
                      ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM())
                 .arg(fhdr).arg(ff));
     }
+}
+
+void MarketPanel::show_row_context_menu(const QPoint& pos) {
+    auto* it = table_->itemAt(pos);
+    if (!it)
+        return;
+
+    // Find SYMBOL by name rather than hard-coding column 0 — finterm allows
+    // user-configurable column order, so SYMBOL's index isn't fixed.
+    const int sym_col = config_.column_order.indexOf(QStringLiteral("SYMBOL"));
+    if (sym_col < 0)
+        return; // SYMBOL not shown — nothing meaningful to copy
+
+    auto* sym_item = table_->item(it->row(), sym_col);
+    if (!sym_item || sym_item->text().isEmpty())
+        return;
+
+    QMenu menu(this);
+    const QString sym = sym_item->text();
+    QAction* copy_act = menu.addAction(QStringLiteral("Copy Symbol  (%1)").arg(sym));
+    connect(copy_act, &QAction::triggered, this, [sym]() { QApplication::clipboard()->setText(sym); });
+    menu.exec(table_->viewport()->mapToGlobal(pos));
 }
 
 } // namespace fincept::screens

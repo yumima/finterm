@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`95df6b86`](https://github.com/yumima/finterm/commit/95df6b86) **feat(news):** COPY TITLE button on article detail panel
 - [`02cd4fa8`](https://github.com/yumima/finterm/commit/02cd4fa8) **feat(watchlist):** Export + Import CSV
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
