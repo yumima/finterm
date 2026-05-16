@@ -60,6 +60,17 @@ class CsvWriter {
     /// own QFile (rare — prefer the class).
     static QString escape_cell(const QString& s);
 
+    /// Parse a single CSV row (one logical line). Handles RFC 4180 quoting
+    /// (doubled "" inside a quoted field becomes one "). Does NOT support
+    /// newlines inside quoted fields — pass logical lines only. For files
+    /// our CsvWriter creates this is safe; finance data fields don't
+    /// contain newlines.
+    ///
+    /// Strips a leading UTF-8 BOM if present (only meaningful on the first
+    /// line of a file but cheap to check). Callers should pass each line
+    /// through this rather than splitting on commas naively.
+    static QStringList parse_row(const QString& line);
+
   private:
     void set_error(const QString& msg);
 

@@ -61,6 +61,45 @@ bool CsvWriter::finalize() {
     return ok_;
 }
 
+QStringList CsvWriter::parse_row(const QString& line_in) {
+    // Strip leading UTF-8 BOM (U+FEFF) if present — happens on the first
+    // line of files our own CsvWriter creates.
+    QStringView line = line_in;
+    if (!line.isEmpty() && line.front() == QChar(0xFEFF))
+        line = line.mid(1);
+
+    QStringList fields;
+    QString cell;
+    bool in_quotes = false;
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar c = line[i];
+        if (in_quotes) {
+            if (c == QLatin1Char('"')) {
+                // Doubled "" inside a quoted field → literal "
+                if (i + 1 < line.size() && line[i + 1] == QLatin1Char('"')) {
+                    cell.append(QLatin1Char('"'));
+                    ++i;
+                } else {
+                    in_quotes = false;
+                }
+            } else {
+                cell.append(c);
+            }
+        } else {
+            if (c == QLatin1Char(',')) {
+                fields.append(cell);
+                cell.clear();
+            } else if (c == QLatin1Char('"') && cell.isEmpty()) {
+                in_quotes = true;
+            } else {
+                cell.append(c);
+            }
+        }
+    }
+    fields.append(cell);
+    return fields;
+}
+
 QString CsvWriter::escape_cell(const QString& s) {
     const bool needs_quoting = s.contains(QLatin1Char(',')) || s.contains(QLatin1Char('"')) ||
                                s.contains(QLatin1Char('\n')) || s.contains(QLatin1Char('\r'));

@@ -2,42 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-15)
+## Today's commits (2026-05-16)
 
 Latest first.
 
-- [`64e7c959`](https://github.com/yumima/finterm/commit/64e7c959) **ui:** shared CsvWriter — UTF-8 BOM, CRLF, RFC 4180, error-tracked
-- [`6d461935`](https://github.com/yumima/finterm/commit/6d461935) **ui:** shared format_compact_volume helper + adopt in volume rendering
-- [`6d5a88e8`](https://github.com/yumima/finterm/commit/6d5a88e8) **feat(dashboard):** click-to-toggle UTC/local on toolbar clock
-- [`510deeab`](https://github.com/yumima/finterm/commit/510deeab) **fix(broker/fyers):** use /api/v3/orders/sync for place/modify/cancel
-- [`916aece0`](https://github.com/yumima/finterm/commit/916aece0) **fix(portfolio):** rebuild disk-cache summary prices from market_last cache before emit
-- [`84b293b0`](https://github.com/yumima/finterm/commit/84b293b0) **fix(dashboard):** TickerBar — preserve scroll offset + don't restart timer on periodic re-data
-- [`778f30ec`](https://github.com/yumima/finterm/commit/778f30ec) **feat(dashboard):** NewsWidget shows "K new" / "no changes" so refresh is verifiable
-- [`0020bb22`](https://github.com/yumima/finterm/commit/0020bb22) **perf(market_data):** cold-start hydration from market_last cache + chunked refresh-callback drain
-- [`62a08b1e`](https://github.com/yumima/finterm/commit/62a08b1e) **perf(dashboard):** drop-late-frames + pre-scaled image cache for video + time-delta ticker animation
-- [`536d78a2`](https://github.com/yumima/finterm/commit/536d78a2) **perf(python):** warm up yfinance daemon at app start
-- [`85d80e53`](https://github.com/yumima/finterm/commit/85d80e53) **perf:** event-loop hygiene + scale-safety + network defaults
-- [`cbe559bf`](https://github.com/yumima/finterm/commit/cbe559bf) **feat(datahub):** freshness state machine + scheduler pause on minimize + stale-topic eviction
-- [`4b90d79f`](https://github.com/yumima/finterm/commit/4b90d79f) **perf(core):** SlowOpTimer + LruMap + VisibilityAwareTimer scaffolding, batched logger, DB pragmas, sargable cache prefix
-- [`727344de`](https://github.com/yumima/finterm/commit/727344de) **fix(dashboard):** TOP MOVERS uses real day_gainers/day_losers screener
-- [`0f69ea3c`](https://github.com/yumima/finterm/commit/0f69ea3c) **feat(ipo_watch):** MARGINS chart tab — gross / operating / net margin curves
-- [`40c7ef82`](https://github.com/yumima/finterm/commit/40c7ef82) **feat(ipo_watch):** auto-open ER on priced click + extended S-1 sections + NET INCOME chart
-- [`104d8bfc`](https://github.com/yumima/finterm/commit/104d8bfc) **feat(ipo_watch):** font_px scale + annual YoY revenue + Equity Research button
-- [`87705a28`](https://github.com/yumima/finterm/commit/87705a28) **feat(ipo_watch):** S-1 funding-history parser + 12px font sweep + tab enums
-- [`8f889c9b`](https://github.com/yumima/finterm/commit/8f889c9b) **feat(ipo_watch):** NEWS / HOLDERS / FILINGS / REVENUE tabs + Wikipedia fallback
-- [`7bae7fba`](https://github.com/yumima/finterm/commit/7bae7fba) **fix(ipo_watch):** wake-on-idle cache invalidation + scrub N/A sentinels
-- [`6345847d`](https://github.com/yumima/finterm/commit/6345847d) **feat(ipo_watch):** 3-pane Bloomberg-style detail rail
-- [`c73e6910`](https://github.com/yumima/finterm/commit/c73e6910) **feat(ipo_watch):** BUSINESS + LEADERSHIP section — officers, summary, website
-- [`811b5b42`](https://github.com/yumima/finterm/commit/811b5b42) **feat(ipo_watch):** FILED pipeline + 2-col detail rail + proper date sort
-- [`a68fc4e7`](https://github.com/yumima/finterm/commit/a68fc4e7) **feat(ipo_watch):** keyboard nav + Day-1/Week-1 returns + 52-week range bar
-- [`873d2fd8`](https://github.com/yumima/finterm/commit/873d2fd8) **feat(ipo_watch):** watchlist lens + price-since-IPO sparkline + stale-date filter
-- [`e1f5fee1`](https://github.com/yumima/finterm/commit/e1f5fee1) **feat(ipo_watch):** sector enrichment + clickable KPIs + richer research rail
-- [`15ce44a8`](https://github.com/yumima/finterm/commit/15ce44a8) **feat(ipo_watch):** Bloomberg-style consolidated screen — lens tabs, KPI strip, rich detail rail
-- [`8a43f525`](https://github.com/yumima/finterm/commit/8a43f525) **fix(ipo_watch):** add refresh button + harden deal-size parser
-- [`0f6c6a6c`](https://github.com/yumima/finterm/commit/0f6c6a6c) **fix(staleness):** live updates for Portfolio + News + IPO Watch; wake-on-resume
-- [`ccd82959`](https://github.com/yumima/finterm/commit/ccd82959) **chore(hooks):** drop docs(readme) follow-up; pre-commit stages README inline
-- [`338c1252`](https://github.com/yumima/finterm/commit/338c1252) **fix(dashboard):** COMPACT toggle restores pre-compact row height
-- [`651f91ee`](https://github.com/yumima/finterm/commit/651f91ee) **perf(startup):** strip unsupported QSS `text-transform`; UI: engine into config; drop portfolio TREND
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

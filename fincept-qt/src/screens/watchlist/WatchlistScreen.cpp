@@ -4,6 +4,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "ui/formatting/CsvWriter.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -11,12 +12,16 @@
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
+#include <QFile>
+#include <QFileDialog>
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QSet>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QTextStream>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -210,6 +215,16 @@ QWidget* WatchlistScreen::build_main_panel() {
     del_wl_btn_ = new QPushButton("DELETE LIST");
     connect(del_wl_btn_, &QPushButton::clicked, this, &WatchlistScreen::on_delete_watchlist);
     tl->addWidget(del_wl_btn_);
+
+    import_csv_btn_ = new QPushButton("IMPORT CSV");
+    import_csv_btn_->setEnabled(false);
+    connect(import_csv_btn_, &QPushButton::clicked, this, &WatchlistScreen::on_import_csv);
+    tl->addWidget(import_csv_btn_);
+
+    export_csv_btn_ = new QPushButton("EXPORT CSV");
+    export_csv_btn_->setEnabled(false);
+    connect(export_csv_btn_, &QPushButton::clicked, this, &WatchlistScreen::on_export_csv);
+    tl->addWidget(export_csv_btn_);
 
     lay->addWidget(top_bar_);
 
@@ -531,6 +546,8 @@ void WatchlistScreen::on_watchlist_selected(int row) {
     current_wl_id_ = watchlists_[row].id;
     panel_title_->setText(watchlists_[row].name.toUpper());
     load_stocks();
+    if (import_csv_btn_) import_csv_btn_->setEnabled(true);
+    if (export_csv_btn_) export_csv_btn_->setEnabled(true);
     ScreenStateManager::instance().notify_changed(this);
 }
 
@@ -564,6 +581,8 @@ void WatchlistScreen::on_delete_watchlist() {
     table_->clear_data();
     panel_title_->setText("Select a watchlist");
     stock_count_->clear();
+    if (import_csv_btn_) import_csv_btn_->setEnabled(false);
+    if (export_csv_btn_) export_csv_btn_->setEnabled(false);
     load_watchlists();
 }
 
@@ -604,6 +623,159 @@ void WatchlistScreen::on_refresh() {
     if (!current_wl_id_.isEmpty()) {
         fetch_quotes();
     }
+}
+
+void WatchlistScreen::on_export_csv() {
+    if (current_wl_id_.isEmpty())
+        return;
+
+    QString wl_name;
+    for (const auto& wl : watchlists_) {
+        if (wl.id == current_wl_id_) {
+            wl_name = wl.name;
+            break;
+        }
+    }
+    if (wl_name.isEmpty())
+        return;
+
+    const QString path = QFileDialog::getSaveFileName(
+        this, "Export Watchlist to CSV", wl_name + ".csv", "CSV Files (*.csv)");
+    if (path.isEmpty())
+        return;
+
+    ui::formatting::CsvWriter writer(path);
+    if (!writer.ok()) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Could not open file for writing:\n%1\n\n%2").arg(path).arg(writer.error()));
+        return;
+    }
+
+    writer.write_row({"SYMBOL", "NAME", "PRICE", "CHANGE", "CHG %", "HIGH", "LOW", "VOLUME"});
+
+    int written = 0;
+    int unquoted = 0;
+    for (const auto& s : stocks_) {
+        const auto it = row_cache_.find(s.symbol);
+        if (it == row_cache_.end()) {
+            // No live quote yet — write symbol + saved name, leave the
+            // numeric fields blank. Better than dropping the row silently.
+            writer.write_row({s.symbol, s.name, {}, {}, {}, {}, {}, {}});
+            ++unquoted;
+            continue;
+        }
+        const auto& q = it.value();
+        writer.write_row({q.symbol,
+                          q.name.isEmpty() ? s.name : q.name,
+                          QString::number(q.price, 'f', 2),
+                          QString::number(q.change, 'f', 2),
+                          QString::number(q.change_pct, 'f', 2),
+                          QString::number(q.high, 'f', 2),
+                          QString::number(q.low, 'f', 2),
+                          ui::formatting::format_compact_volume(q.volume)});
+        ++written;
+    }
+
+    if (!writer.finalize()) {
+        QMessageBox::warning(this, "Export failed",
+                             QString("Failed while writing CSV:\n%1\n\n%2").arg(path).arg(writer.error()));
+        return;
+    }
+
+    if (unquoted > 0) {
+        QMessageBox::information(this, "Export complete",
+                                 QString("Exported %1 rows (%2 without live quotes — fields left blank).")
+                                     .arg(written + unquoted).arg(unquoted));
+    }
+}
+
+void WatchlistScreen::on_import_csv() {
+    if (current_wl_id_.isEmpty())
+        return;
+
+    const QString path = QFileDialog::getOpenFileName(this, "Import Watchlist CSV", {}, "CSV Files (*.csv)");
+    if (path.isEmpty())
+        return;
+
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, "Import failed",
+                             QString("Could not open file for reading:\n%1\n\n%2").arg(path).arg(f.errorString()));
+        return;
+    }
+
+    QTextStream in(&f);
+    in.setEncoding(QStringConverter::Utf8);
+
+    const QString header_line = in.readLine();
+    if (header_line.isEmpty()) {
+        QMessageBox::warning(this, "Import failed", "CSV is empty.");
+        return;
+    }
+
+    const QStringList headers = ui::formatting::CsvWriter::parse_row(header_line);
+    int sym_col = -1;
+    int name_col = -1;
+    for (int i = 0; i < headers.size(); ++i) {
+        const QString h = headers[i].trimmed().toUpper();
+        if (h == "SYMBOL")
+            sym_col = i;
+        else if (h == "NAME")
+            name_col = i;
+    }
+    if (sym_col == -1) {
+        QMessageBox::warning(this, "Import failed", "CSV is missing a SYMBOL column.");
+        return;
+    }
+
+    // Build a case-insensitive set of symbols already in this watchlist so we
+    // dedup without hitting the repository for every row.
+    QSet<QString> existing;
+    existing.reserve(stocks_.size());
+    for (const auto& s : stocks_)
+        existing.insert(s.symbol.trimmed().toUpper());
+
+    int imported = 0;
+    int skipped_dupe = 0;
+    int skipped_blank = 0;
+
+    auto& repo = fincept::WatchlistRepository::instance();
+
+    while (!in.atEnd()) {
+        const QString line = in.readLine();
+        if (line.trimmed().isEmpty())
+            continue;
+
+        const QStringList fields = ui::formatting::CsvWriter::parse_row(line);
+        if (sym_col >= fields.size()) {
+            ++skipped_blank;
+            continue;
+        }
+        const QString sym = fields[sym_col].trimmed();
+        if (sym.isEmpty()) {
+            ++skipped_blank;
+            continue;
+        }
+        const QString upper = sym.toUpper();
+        if (existing.contains(upper)) {
+            ++skipped_dupe;
+            continue;
+        }
+
+        QString name;
+        if (name_col != -1 && name_col < fields.size())
+            name = fields[name_col].trimmed();
+
+        repo.add_stock(current_wl_id_, sym, name);
+        existing.insert(upper);
+        ++imported;
+    }
+
+    load_stocks();
+
+    QMessageBox::information(this, "Import complete",
+                             QString("Imported %1 new symbols.\nSkipped %2 duplicates, %3 blank rows.")
+                                 .arg(imported).arg(skipped_dupe).arg(skipped_blank));
 }
 
 // ── IStatefulScreen ───────────────────────────────────────────────────────────
