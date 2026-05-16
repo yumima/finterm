@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`6d461935`](https://github.com/yumima/finterm/commit/6d461935) **ui:** shared format_compact_volume helper + adopt in volume rendering
 - [`6d5a88e8`](https://github.com/yumima/finterm/commit/6d5a88e8) **feat(dashboard):** click-to-toggle UTC/local on toolbar clock
 - [`510deeab`](https://github.com/yumima/finterm/commit/510deeab) **fix(broker/fyers):** use /api/v3/orders/sync for place/modify/cancel
 - [`916aece0`](https://github.com/yumima/finterm/commit/916aece0) **fix(portfolio):** rebuild disk-cache summary prices from market_last cache before emit

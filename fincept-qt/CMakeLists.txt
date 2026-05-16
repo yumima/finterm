@@ -946,6 +946,7 @@ set(SERVICE_SOURCES
 
 # UI framework
 set(UI_SOURCES
+    src/ui/formatting/CsvWriter.cpp
     src/ui/markdown/MarkdownRenderer.cpp
     src/ui/theme/Theme.cpp
     src/ui/theme/ThemeManager.cpp
