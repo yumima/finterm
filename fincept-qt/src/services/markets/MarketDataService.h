@@ -302,6 +302,57 @@ class MarketDataService : public QObject
                                 const QVector<HistoryPoint>& points);
     void publish_sparkline_to_hub(const QString& symbol, const QVector<double>& points);
 
+    /// Read every `market_last:*` entry from CacheManager and publish it
+    /// into DataHub so widgets subscribing for the first time after launch
+    /// get an instant initial value. Invoked via QTimer::singleShot(0) from
+    /// ensure_registered_with_hub() — runs off the startup critical path
+    /// so the lock screen renders before this disk-read pass.
+    ///
+    /// Publishing is chunked: at most kHydrateChunkSize quotes per
+    /// event-loop turn, with the rest deferred via QTimer::singleShot(0).
+    /// This keeps each chunk's main-thread cost low (~1-2 ms) so input
+    /// events (PIN typing) and other queued events (video frames) can
+    /// interleave between chunks instead of waiting behind the whole
+    /// hundreds-of-quotes burst.
+    void hydrate_quotes_from_cache();
+    void hydrate_next_chunk();
+    static constexpr int kHydrateChunkSize = 25;
+    // Decoded payload waiting to be published. Built once in
+    // hydrate_quotes_from_cache(), drained in chunks.
+    QVector<QuoteData> hydrate_pending_;
+    int hydrate_pending_total_ = 0;
+
+    /// Steady-state refresh chunking. The Producer::refresh() callback can
+    /// arrive with 50–100 quotes plus sparklines + histories in one shot;
+    /// publishing them all synchronously costs ~1–4 ms each (cache write +
+    /// hub fan-out + signal emission), so a 100-quote burst monopolised the
+    /// main thread for ~100–300 ms — long enough to drop video frames and
+    /// stall a PIN keystroke. The Python callback now parses into these
+    /// pending queues and `drain_refresh_chunk()` publishes up to
+    /// kRefreshChunkSize items per event-loop turn, leaving room for paint
+    /// events and input between chunks. Same architectural pattern as
+    /// hydrate_quotes_from_cache(): bound the worst-case slice, not just
+    /// the total work.
+    void drain_refresh_chunk();
+    static constexpr int kRefreshChunkSize = 15;
+    struct PendingSparkline { QString symbol; QVector<double> points; };
+    struct PendingHistory {
+        QString symbol;
+        QString period;
+        QString interval;
+        QVector<HistoryPoint> points;
+    };
+    QVector<QuoteData>        refresh_pending_quotes_;
+    QVector<PendingSparkline> refresh_pending_sparks_;
+    QVector<PendingHistory>   refresh_pending_hists_;
+    bool                      refresh_drain_scheduled_ = false;
+    // Totals only used for the "drain complete" log line, so we report the
+    // burst size the user sees instead of "0 quotes" once the queue drains.
+    int refresh_quotes_total_ = 0;
+    int refresh_sparks_total_ = 0;
+    int refresh_hists_total_  = 0;
+    qint64 refresh_started_ms_ = 0;
+
     // ── Batching ──
     struct PendingRequest {
         QStringList symbols;

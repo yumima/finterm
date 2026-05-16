@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QTimer>
 #include <QUrl>
 
 #include <memory>
@@ -130,10 +131,17 @@ void MarketDataService::refresh(const QStringList& topics) {
             // PythonWorker passes through the `result` JSON as-is (or wraps
             // a scalar under "_value"). For batch_all the daemon returns an
             // object so root is already the {quotes,sparklines,histories} map.
-            // publish to hub, store in cache. We don't need the flush_batch code
-            // path here because no callback chain is waiting on this refresh tick.
+            //
+            // Parse-only here: append every decoded item to the refresh_pending_*
+            // queues, then schedule drain_refresh_chunk(). This callback's slice
+            // stays small (JSON parsing only — no SQLite writes, no hub fan-out)
+            // so we don't block input/paint while a 100-quote burst lands. The
+            // actual cache writes + hub publishes happen kRefreshChunkSize items
+            // at a time via singleShot(0). Wall-clock total is unchanged, but
+            // the event loop gets to interleave keystrokes and video frames
+            // between chunks instead of waiting behind the whole burst.
             const QJsonArray quotes_arr = root.value("quotes").toArray();
-            int quotes_ok = 0;
+            int quotes_parsed = 0;
             for (const auto& v : quotes_arr) {
                 const QJsonObject q = v.toObject();
                 if (q.isEmpty() || q.contains("error"))
@@ -151,73 +159,39 @@ void MarketDataService::refresh(const QStringList& topics) {
                 qd.ask        = q["ask"].toDouble();
                 qd.bid_size   = q["bid_size"].toDouble();
                 qd.ask_size   = q["ask_size"].toDouble();
-
-                // Cache write — mirrors store_quote() in flush_batch.
-                QJsonObject co;
-                co["symbol"] = qd.symbol;
-                co["name"] = qd.name;
-                co["price"] = qd.price;
-                co["change"] = qd.change;
-                co["change_pct"] = qd.change_pct;
-                co["high"] = qd.high;
-                co["low"] = qd.low;
-                co["volume"] = qd.volume;
-                co["bid"] = qd.bid;
-                co["ask"] = qd.ask;
-                co["bid_size"] = qd.bid_size;
-                co["ask_size"] = qd.ask_size;
-                const QString payload = QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
-                // 30s key holds the live snapshot including bid/ask.
-                fincept::CacheManager::instance().put(
-                    "market:" + qd.symbol, QVariant(payload),
-                    kQuoteCacheTtlSec, "market_data");
-                // 7d "last-known" key is a cold-start fallback. Order-book
-                // fields (bid/ask/bid_size/ask_size) go stale within seconds,
-                // so we strip them from the long-TTL payload — the UI would
-                // otherwise show a week-old spread as if it were live.
-                QJsonObject co_long = co;
-                co_long.remove("bid");
-                co_long.remove("ask");
-                co_long.remove("bid_size");
-                co_long.remove("ask_size");
-                const QString payload_long =
-                    QString::fromUtf8(QJsonDocument(co_long).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(
-                    "market_last:" + qd.symbol, QVariant(payload_long),
-                    kQuoteLastKnownTtlSec, "market_data");
-
-                self->publish_quote_to_hub(qd);
-                ++quotes_ok;
+                self->refresh_pending_quotes_.append(qd);
+                ++quotes_parsed;
             }
 
             // Sparklines — {sym: [closes]}
             const QJsonObject sparks = root.value("sparklines").toObject();
-            int sparks_ok = 0;
+            int sparks_parsed = 0;
             for (auto it = sparks.begin(); it != sparks.end(); ++it) {
                 const QJsonArray closes = it.value().toArray();
                 if (closes.isEmpty())
                     continue;
-                QVector<double> prices;
-                prices.reserve(closes.size());
+                PendingSparkline ps;
+                ps.symbol = it.key();
+                ps.points.reserve(closes.size());
                 for (const auto& c : closes)
-                    prices.append(c.toDouble());
-                self->publish_sparkline_to_hub(it.key(), prices);
-                ++sparks_ok;
+                    ps.points.append(c.toDouble());
+                self->refresh_pending_sparks_.append(std::move(ps));
+                ++sparks_parsed;
             }
 
             // Histories — array of {symbol, period, interval, points[]}
             const QJsonArray hists = root.value("histories").toArray();
-            int hists_ok = 0;
+            int hists_parsed = 0;
             for (const auto& hv : hists) {
                 const QJsonObject h = hv.toObject();
                 if (h.contains("error"))
                     continue;
-                const QString sym = h.value("symbol").toString();
-                const QString per = h.value("period").toString();
-                const QString ivl = h.value("interval").toString();
+                PendingHistory ph;
+                ph.symbol   = h.value("symbol").toString();
+                ph.period   = h.value("period").toString();
+                ph.interval = h.value("interval").toString();
                 const QJsonArray pts = h.value("points").toArray();
-                QVector<HistoryPoint> points;
-                points.reserve(pts.size());
+                ph.points.reserve(pts.size());
                 for (const auto& pv : pts) {
                     const QJsonObject p = pv.toObject();
                     HistoryPoint pt;
@@ -227,20 +201,128 @@ void MarketDataService::refresh(const QStringList& topics) {
                     pt.low = p["low"].toDouble();
                     pt.close = p["close"].toDouble();
                     pt.volume = static_cast<qint64>(p["volume"].toDouble());
-                    points.append(pt);
+                    ph.points.append(pt);
                 }
-                self->publish_history_to_hub(sym, per, ivl, points);
-                ++hists_ok;
+                self->refresh_pending_hists_.append(std::move(ph));
+                ++hists_parsed;
             }
 
+            self->refresh_quotes_total_ += quotes_parsed;
+            self->refresh_sparks_total_ += sparks_parsed;
+            self->refresh_hists_total_  += hists_parsed;
+            if (self->refresh_started_ms_ == 0)
+                self->refresh_started_ms_ = refresh_t0;
+
             LOG_INFO("MarketData",
-                     QString("batch_all OK in %1ms: quotes=%2/%3 sparks=%4/%5 hists=%6/%7")
+                     QString("batch_all parsed in %1ms: queued quotes=%2/%3 sparks=%4/%5 hists=%6/%7 "
+                             "(draining %8/chunk)")
                          .arg(elapsed)
-                         .arg(quotes_ok).arg(quote_syms.size())
-                         .arg(sparks_ok).arg(spark_syms.size())
-                         .arg(hists_ok).arg(hist_reqs.size()));
+                         .arg(quotes_parsed).arg(quote_syms.size())
+                         .arg(sparks_parsed).arg(spark_syms.size())
+                         .arg(hists_parsed).arg(hist_reqs.size())
+                         .arg(kRefreshChunkSize));
+
+            if (!self->refresh_drain_scheduled_ &&
+                (!self->refresh_pending_quotes_.isEmpty() ||
+                 !self->refresh_pending_sparks_.isEmpty() ||
+                 !self->refresh_pending_hists_.isEmpty())) {
+                self->refresh_drain_scheduled_ = true;
+                QTimer::singleShot(0, self.data(), [self]() {
+                    if (self) self->drain_refresh_chunk();
+                });
+            }
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
+}
+
+void MarketDataService::drain_refresh_chunk() {
+    // Process up to kRefreshChunkSize items this slice. Quotes are
+    // prioritised (UI subscribers wait on these first) then sparklines
+    // then histories. Each quote costs 2 SQLite writes + 1 hub publish;
+    // sparks/hists are publish-only. Keeping the budget mixed across types
+    // means we don't starve sparks/hists indefinitely if quotes keep
+    // arriving.
+    refresh_drain_scheduled_ = false;
+
+    int budget = kRefreshChunkSize;
+
+    // Quotes — cache write + publish.
+    while (budget > 0 && !refresh_pending_quotes_.isEmpty()) {
+        const QuoteData qd = refresh_pending_quotes_.takeFirst();
+        QJsonObject co;
+        co["symbol"]     = qd.symbol;
+        co["name"]       = qd.name;
+        co["price"]      = qd.price;
+        co["change"]     = qd.change;
+        co["change_pct"] = qd.change_pct;
+        co["high"]       = qd.high;
+        co["low"]        = qd.low;
+        co["volume"]     = qd.volume;
+        co["bid"]        = qd.bid;
+        co["ask"]        = qd.ask;
+        co["bid_size"]   = qd.bid_size;
+        co["ask_size"]   = qd.ask_size;
+        const QString payload =
+            QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
+        // 30s key holds the live snapshot including bid/ask.
+        fincept::CacheManager::instance().put(
+            "market:" + qd.symbol, QVariant(payload),
+            kQuoteCacheTtlSec, "market_data");
+        // 7d "last-known" key is a cold-start fallback. Order-book fields
+        // (bid/ask/bid_size/ask_size) go stale within seconds, so we strip
+        // them from the long-TTL payload — the UI would otherwise show a
+        // week-old spread as if it were live.
+        QJsonObject co_long = co;
+        co_long.remove("bid");
+        co_long.remove("ask");
+        co_long.remove("bid_size");
+        co_long.remove("ask_size");
+        const QString payload_long =
+            QString::fromUtf8(QJsonDocument(co_long).toJson(QJsonDocument::Compact));
+        fincept::CacheManager::instance().put(
+            "market_last:" + qd.symbol, QVariant(payload_long),
+            kQuoteLastKnownTtlSec, "market_data");
+        publish_quote_to_hub(qd);
+        --budget;
+    }
+
+    // Sparklines — publish only.
+    while (budget > 0 && !refresh_pending_sparks_.isEmpty()) {
+        const PendingSparkline ps = refresh_pending_sparks_.takeFirst();
+        publish_sparkline_to_hub(ps.symbol, ps.points);
+        --budget;
+    }
+
+    // Histories — publish only.
+    while (budget > 0 && !refresh_pending_hists_.isEmpty()) {
+        const PendingHistory ph = refresh_pending_hists_.takeFirst();
+        publish_history_to_hub(ph.symbol, ph.period, ph.interval, ph.points);
+        --budget;
+    }
+
+    const bool anything_left = !refresh_pending_quotes_.isEmpty() ||
+                               !refresh_pending_sparks_.isEmpty() ||
+                               !refresh_pending_hists_.isEmpty();
+    if (anything_left) {
+        refresh_drain_scheduled_ = true;
+        QPointer<MarketDataService> self = this;
+        QTimer::singleShot(0, this, [self]() {
+            if (self) self->drain_refresh_chunk();
+        });
+    } else if (refresh_quotes_total_ + refresh_sparks_total_ + refresh_hists_total_ > 0) {
+        const qint64 total_ms =
+            QDateTime::currentMSecsSinceEpoch() - refresh_started_ms_;
+        LOG_INFO("MarketData",
+                 QString("batch_all drain complete: quotes=%1 sparks=%2 hists=%3 in %4ms total")
+                     .arg(refresh_quotes_total_)
+                     .arg(refresh_sparks_total_)
+                     .arg(refresh_hists_total_)
+                     .arg(total_ms));
+        refresh_quotes_total_ = 0;
+        refresh_sparks_total_ = 0;
+        refresh_hists_total_  = 0;
+        refresh_started_ms_   = 0;
+    }
 }
 
 void MarketDataService::publish_quote_to_hub(const QuoteData& q) {
@@ -296,7 +378,80 @@ void MarketDataService::ensure_registered_with_hub() {
 
     hub_registered_ = true;
     LOG_INFO("DataHub",
-             "MarketDataService registered as producer for market:quote:*, market:sparkline:*, market:history:*");
+             "MarketDataService registered (quote:*, sparkline:*, history:*)");
+
+    // Cold-start hydration is deferred to the next event-loop tick so it
+    // never competes with the LockScreen for input handling during the
+    // first seconds after launch. ensure_registered_with_hub() is called
+    // synchronously from main() before MainWindow is constructed; doing
+    // disk I/O + N publishes here would extend the pre-paint critical
+    // path that already blocks the lock screen from showing/responding.
+    //
+    // The deferred hydration still runs well before any widget subscribes
+    // (widgets subscribe via showEvent — after the user has unlocked),
+    // so the cached values are in place by the time the dashboard
+    // requests them. DataHub::deliver_initial_value then serves them
+    // instantly. The scheduler's normal refresh replaces stale values
+    // with fresh data within seconds; users see "stale → fresh" instead
+    // of "blank → fresh".
+    QTimer::singleShot(0, this, [this]() { hydrate_quotes_from_cache(); });
+}
+
+void MarketDataService::hydrate_quotes_from_cache() {
+    // Decode every cached entry into the pending queue here — this is one
+    // SQLite read (fast) plus N small QJsonDocument::fromJson calls. The
+    // expensive part (publishing to the hub, which fans out to subscribers
+    // and emits state-transition signals) is split off into chunks below.
+    const auto last_known = fincept::CacheManager::instance().get_prefix("market_last:");
+    hydrate_pending_.clear();
+    hydrate_pending_.reserve(last_known.size());
+    for (auto it = last_known.cbegin(); it != last_known.cend(); ++it) {
+        const QString sym = it.key().mid(sizeof("market_last:") - 1);
+        if (sym.isEmpty())
+            continue;
+        const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
+        if (o.isEmpty())
+            continue;
+        QuoteData qd{};
+        qd.symbol     = o.value("symbol").toString(sym);
+        qd.name       = o.value("name").toString(qd.symbol);
+        qd.price      = o.value("price").toDouble();
+        qd.change     = o.value("change").toDouble();
+        qd.change_pct = o.value("change_pct").toDouble();
+        qd.high       = o.value("high").toDouble();
+        qd.low        = o.value("low").toDouble();
+        qd.volume     = o.value("volume").toDouble();
+        hydrate_pending_.append(qd);
+    }
+    hydrate_pending_total_ = hydrate_pending_.size();
+    LOG_INFO("DataHub",
+             QString("MarketDataService hydration queued %1 quote(s) — "
+                     "publishing in chunks of %2 to keep input responsive")
+                 .arg(hydrate_pending_total_).arg(kHydrateChunkSize));
+    if (!hydrate_pending_.isEmpty())
+        QTimer::singleShot(0, this, [this]() { hydrate_next_chunk(); });
+}
+
+void MarketDataService::hydrate_next_chunk() {
+    // Publish at most kHydrateChunkSize entries this event-loop turn. Each
+    // publish_quote_to_hub call walks DataHub subscribers (during startup
+    // typically zero; later potentially many) and emits the freshness-
+    // state signal — keeping the chunk small bounds the main-thread cost
+    // per slice to ~1–2 ms, leaving room for PIN keystrokes and queued
+    // video frames to be delivered between chunks.
+    const int n = std::min(kHydrateChunkSize, static_cast<int>(hydrate_pending_.size()));
+    for (int i = 0; i < n; ++i)
+        publish_quote_to_hub(hydrate_pending_[i]);
+    hydrate_pending_.erase(hydrate_pending_.begin(), hydrate_pending_.begin() + n);
+
+    if (!hydrate_pending_.isEmpty()) {
+        QTimer::singleShot(0, this, [this]() { hydrate_next_chunk(); });
+    } else if (hydrate_pending_total_ > 0) {
+        LOG_INFO("DataHub",
+                 QString("MarketDataService hydration complete (%1 quote(s) published)")
+                     .arg(hydrate_pending_total_));
+        hydrate_pending_total_ = 0;
+    }
 }
 
 
