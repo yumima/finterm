@@ -64,9 +64,16 @@ DashboardToolBar::DashboardToolBar(QWidget* parent) : QWidget(parent) {
 
     make_sep(ll);
 
-    clock_label_ = new QLabel;
-    clock_label_->setObjectName("dtClock");
-    ll->addWidget(clock_label_);
+    clock_btn_ = new QPushButton;
+    clock_btn_->setObjectName("dtClock");
+    clock_btn_->setFlat(true);
+    clock_btn_->setCursor(Qt::PointingHandCursor);
+    clock_btn_->setToolTip("Click to toggle UTC / local time");
+    connect(clock_btn_, &QPushButton::clicked, this, [this]() {
+        clock_is_utc_ = !clock_is_utc_;
+        update_clock();
+    });
+    ll->addWidget(clock_btn_);
     update_clock();
 
     make_sep(ll);
@@ -142,7 +149,9 @@ void DashboardToolBar::refresh_theme() {
                 "#dtBrand { color:%4; font-weight:bold; letter-spacing:1px; background:transparent; }"
                 "#dtSub { color:%5; font-weight:bold; background:transparent; }"
                 "#dtStatus { color:%6; font-weight:bold; background:transparent; }"
-                "#dtClock { color:%7; background:transparent; }"
+                "QPushButton#dtClock { color:%7; background:transparent; border:none; padding:0; "
+                "text-align:left; }"
+                "QPushButton#dtClock:hover { color:%11; }"
                 "#dtWidgetCount { color:%8; font-weight:bold; background:transparent; }"
                 "#dtBtn { background:%9; border:1px solid %3; color:%7; padding:0 10px; font-weight:bold; }"
                 "#dtBtn:hover { background:%10; color:%11; border-color:%12; }"
@@ -184,7 +193,9 @@ void DashboardToolBar::showEvent(QShowEvent* event) {
 }
 
 void DashboardToolBar::update_clock() {
-    clock_label_->setText(QDateTime::currentDateTimeUtc().toString("yyyy-MM-dd HH:mm:ss") + " UTC");
+    const QDateTime now = clock_is_utc_ ? QDateTime::currentDateTimeUtc() : QDateTime::currentDateTime();
+    const char* suffix = clock_is_utc_ ? " UTC" : " LOCAL";
+    clock_btn_->setText(now.toString("yyyy-MM-dd HH:mm:ss") + QString::fromLatin1(suffix));
 }
 
 void DashboardToolBar::set_widget_count(int count) {
