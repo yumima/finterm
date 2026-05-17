@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`381282d7`](https://github.com/yumima/finterm/commit/381282d7) screens(news): self-review fixes — wrap body status + QPointer guard
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

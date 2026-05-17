@@ -195,6 +195,7 @@ FuturesPanelBase::FuturesPanelBase(const QString& title, QWidget* parent) : QWid
     auto* header = new QHBoxLayout;
     header->setContentsMargins(0, 0, 0, 2);
     header->setSpacing(8);
+    header_layout_ = header; // stored so subclasses can add CTAs via add_header_action()
 
     title_label_ = new QLabel(title);
     title_label_->setStyleSheet(lbl_ss(colors::AMBER(), true, fonts::font_px(0)));
@@ -228,6 +229,15 @@ void FuturesPanelBase::set_status(const QString& s, const QString& color) {
     status_label_->setText(s);
     if (!color.isEmpty())
         status_label_->setStyleSheet(lbl_ss(color, false, fonts::font_px(-3)));
+}
+
+void FuturesPanelBase::add_header_action(QWidget* w) {
+    if (!header_layout_ || !w) return;
+    // The header has [title, stretch, status_label_] at construction. We want
+    // CTAs to sit on the right side, just before the status text. Inserting
+    // at count()-1 puts w at the position currently held by status_label_,
+    // pushing status one slot to the right.
+    header_layout_->insertWidget(header_layout_->count() - 1, w);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -324,12 +334,15 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
     row->addWidget(symbol_combo_);
 
     // Databento gate: when no key is configured, surface a prominent button
-    // that opens the inline prompt. Auto-hides on save so it doesn't keep
-    // nagging once the user has supplied a key.
+    // in the panel TITLE BAR (not inline next to the symbol picker — that
+    // pushed the contango chip off-screen on narrow rails). add_header_action
+    // inserts it between the stretch and status label, so it sits on the
+    // right side of the title row next to the loading/error chip.
+    //
     // Parent at construction is critical: setVisible(true) below would make
     // a parentless QPushButton become its own top-level window (Qt rule),
     // floating two stray windows over the chart. Reparenting via
-    // QHBoxLayout::addWidget happens too late — the show has already fired.
+    // add_header_action happens too late — the show has already fired.
     key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"), this);
     key_btn_->setCursor(Qt::PointingHandCursor);
     key_btn_->setStyleSheet(key_button_ss());
@@ -343,7 +356,7 @@ FuturesTermStructurePanel::FuturesTermStructurePanel(QWidget* parent)
             refresh();
         }
     });
-    row->addWidget(key_btn_);
+    add_header_action(key_btn_);
 
     contango_label_ = new QLabel;
     contango_label_->setStyleSheet(lbl_ss(colors::TEXT_SECONDARY(), true, fonts::font_px(0)));
@@ -655,12 +668,11 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
     symbol_combo_->setMinimumWidth(150);
     row->addWidget(symbol_combo_);
 
-    // Databento gate — same pattern as TERM STRUCTURE: visible when no key
-    // is stored, hides itself after a successful save, then refreshes.
-    // Parent at construction is critical: setVisible(true) below would make
-    // a parentless QPushButton become its own top-level window (Qt rule),
-    // floating two stray windows over the chart. Reparenting via
-    // QHBoxLayout::addWidget happens too late — the show has already fired.
+    // Databento gate — same pattern as TERM STRUCTURE: title-bar CTA
+    // (via add_header_action) instead of inline next to the form picker.
+    // Parent at construction is critical: setVisible(true) below would
+    // make a parentless QPushButton become its own top-level window
+    // (Qt rule), floating stray windows over the table.
     key_btn_ = new QPushButton(QStringLiteral("🔓 SET DATABENTO KEY"), this);
     key_btn_->setCursor(Qt::PointingHandCursor);
     key_btn_->setStyleSheet(key_button_ss());
@@ -672,7 +684,7 @@ FuturesSettlementsPanel::FuturesSettlementsPanel(QWidget* parent)
             refresh();
         }
     });
-    row->addWidget(key_btn_);
+    add_header_action(key_btn_);
 
     row->addStretch();
     layout()->addItem(row);

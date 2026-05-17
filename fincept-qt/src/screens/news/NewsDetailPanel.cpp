@@ -55,18 +55,27 @@ QString format_article_html(const QString& plain) {
     //     stick on QLabel; works in QTextEdit/QTextBrowser).
     //   - <p> with `margin-bottom` is dropped too — Qt collapses <p> blocks
     //     against the default margin and ignores per-block margin overrides.
-    // So we side-step <p> entirely and lay paragraphs out with <br>:
+    //   - Leading non-breaking spaces after a <br> get trimmed by the
+    //     wrap/whitespace pass — which is why &#160;×4 didn't visually
+    //     produce any indent in the previous pass.
+    //
+    // Workaround that survives all three quirks:
     //   - Two <br>s between paragraphs → one blank line (at line-height
     //     170%, that's ~27px — a clear paragraph gap).
-    //   - Leading non-breaking spaces on every non-first paragraph give the
-    //     first-line indent; they sit on the opening line and disappear
-    //     after wrap, exactly mimicking text-indent.
+    //   - First-line indent comes from em-spaces (&emsp; = U+2003, 1em wide
+    //     each) wrapped in <span style="white-space:pre;">. The `pre`
+    //     whitespace mode tells Qt's renderer to preserve those characters
+    //     verbatim regardless of line-start trimming, and em-spaces are
+    //     proper printable characters (not whitespace per Unicode's bidi
+    //     class) so they're never collapsed. 3 em-spaces ≈ 3em ≈ ~36px at
+    //     12pt monospace — a generous, unambiguous indent.
     //   - line-height comes from the outer <div>; padding-right keeps the
     //     last glyph off the splitter handle when the middle pane is narrow.
     html += QStringLiteral(
         "<div style=\"line-height:170%; padding-right:10px;\">");
 
-    static const QLatin1String kIndent("&#160;&#160;&#160;&#160;");
+    static const QLatin1String kIndent(
+        "<span style=\"white-space:pre;\">&emsp;&emsp;&emsp;</span>");
     static const QLatin1String kParaSep("<br><br>");
 
     bool first = true;

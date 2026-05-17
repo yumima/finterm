@@ -3,9 +3,11 @@
 
 #include <QComboBox>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QTableWidget>
 #include <QTimer>
 #include <QWidget>
@@ -36,6 +38,13 @@ class FuturesPanelBase : public QWidget {
     void apply_theme();
     void set_status(const QString& s, const QString& color = QString());
 
+    /// Insert a widget into the panel's title bar between the stretch and the
+    /// status label, so it floats on the right side of the header. Used for
+    /// inline call-to-action chips like SET DATABENTO KEY that should be
+    /// prominent in the title row when the panel needs user action to fetch
+    /// data. Subclasses call this from their constructor.
+    void add_header_action(QWidget* w);
+
     /// Bump on every state change that could trigger a stale async response.
     /// Symbol-driven panels capture the post-bump value in their callback and
     /// drop the result if the value has moved on.
@@ -57,6 +66,11 @@ class FuturesPanelBase : public QWidget {
     static constexpr qint64 kFailureBackoffMs = 5 * 60 * 1000; // 5 minutes
     QLabel*  title_label_  = nullptr;
     QLabel*  status_label_ = nullptr;
+    // Header HBox stored as a member so add_header_action() can insert chips
+    // (SET DATABENTO KEY, etc.) into it from subclass constructors. The base
+    // constructor lays out the row as [title, stretch, status]; actions land
+    // at index count()-1 so they sit just left of the status label.
+    QHBoxLayout* header_layout_ = nullptr;
 };
 
 // ── 1. Watchlist quote board (cache-driven) ──────────────────────────────────
