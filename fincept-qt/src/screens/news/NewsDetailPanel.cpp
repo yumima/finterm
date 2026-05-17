@@ -361,7 +361,14 @@ QWidget* NewsDetailPanel::build_content_view() {
             out << current_article_.headline << "\n";
             out << current_article_.source << "  |  " << current_article_.time << "\n";
             out << current_article_.link << "\n\n";
-            out << current_article_.summary << "\n";
+            if (!current_article_.summary.isEmpty())
+                out << current_article_.summary << "\n\n";
+            // Include the extracted body if available. Falls back gracefully if
+            // extraction failed or is still in flight — saved file just stops
+            // after the summary in that case. No need to block the SAVE on a
+            // possibly-stuck extractor; users can SAVE again later for the body.
+            if (!current_body_text_.isEmpty())
+                out << current_body_text_ << "\n";
             f.close();
             services::FileManagerService::instance().register_file(stored_name, safe + ".txt", QFileInfo(dest).size(),
                                                                    "text/plain", "news");
@@ -707,6 +714,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // NewsScreen::on_analyze_requested.
     const int my_gen = ++body_gen_;
     body_label_->clear();
+    current_body_text_.clear(); // drop the previous article's body before the new one resolves
     body_status_->setText("Loading article…");
     body_status_->show();
     body_title_->show();
@@ -724,6 +732,9 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
                 return;
             }
             self->body_status_->hide();
+            // Stash the plain text for the SAVE button — we already have it here,
+            // and saving expects plain text on disk, not the HTML we hand to QLabel.
+            self->current_body_text_ = text;
             self->body_label_->setText(format_article_html(text));
         });
 }

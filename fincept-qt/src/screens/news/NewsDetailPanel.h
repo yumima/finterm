@@ -88,6 +88,11 @@ class NewsDetailPanel : public QWidget {
     // doesn't repaint a body we no longer care about (e.g. user clicked B
     // while A was still extracting). Bumped on every show_article().
     int      body_gen_     = 0;
+    // Plain-text body cached from the most recent successful extraction —
+    // the SAVE button writes this to disk alongside the headline + summary
+    // so saved articles include the full story, not just the metadata.
+    // Cleared on each new article (before the next fetch resolves).
+    QString  current_body_text_;
 
     // AI analysis section
     QWidget* analysis_section_ = nullptr;
