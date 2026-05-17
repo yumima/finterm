@@ -2,58 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-16)
+## Today's commits (2026-05-17)
 
 Latest first.
 
-- [`9357ccd2`](https://github.com/yumima/finterm/commit/9357ccd2) screens(news): use nbsp for paragraph indent (QLabel ignores text-indent)
-- [`24054702`](https://github.com/yumima/finterm/commit/24054702) screens(news): typographic format for inline article body
-- [`cb338c7e`](https://github.com/yumima/finterm/commit/cb338c7e) screens(news): self-review fixes — threat/impact race + meta-row bg
-- [`4a6e67bf`](https://github.com/yumima/finterm/commit/4a6e67bf) screens(news): match body/summary/title to WIRE-feed headline style
-- [`c554a893`](https://github.com/yumima/finterm/commit/c554a893) screens(news): move tickers ($NVDA $AMD…) into the meta row
-- [`9fa02ed3`](https://github.com/yumima/finterm/commit/9fa02ed3) screens(news): fix detail-pane body background + restyle summary
-- [`490f01a1`](https://github.com/yumima/finterm/commit/490f01a1) screens(news): collapse detail-pane meta into a single row
-- [`fa441467`](https://github.com/yumima/finterm/commit/fa441467) screens(news): match article body to #newsDetailHeadline style
-- [`0eada183`](https://github.com/yumima/finterm/commit/0eada183) screens(news): inline article body in detail panel + wider default split
-- [`da4185b1`](https://github.com/yumima/finterm/commit/da4185b1) **fix(relmap+dashboard+heatmap):** filter stale relmap data; align panel fonts
-- [`5d75906a`](https://github.com/yumima/finterm/commit/5d75906a) screens(futures+video): widen rails 1:2:1, scale panel fonts; seed Bloomberg
-- [`7130f5d0`](https://github.com/yumima/finterm/commit/7130f5d0) screens(futures): align rows, swap expiry↑/spread↓, bump panel font size
-- [`23e5438d`](https://github.com/yumima/finterm/commit/23e5438d) screens(futures): fix floating Databento button + resizable rails via QSplitter
-- [`ab58feeb`](https://github.com/yumima/finterm/commit/ab58feeb) screens(futures): debounce class-tab clicks + cap router timeout at 12s
-- [`bc5c8c9b`](https://github.com/yumima/finterm/commit/bc5c8c9b) screens(futures+er): rail layout, inline Databento prompt, regions, ER relationships
-- [`231929b5`](https://github.com/yumima/finterm/commit/231929b5) screens(fno): wire F&O into ToolBar + CommandBar menus
-- [`77a8e1f6`](https://github.com/yumima/finterm/commit/77a8e1f6) screens(fno): port F&O analytics screen alongside Futures
-- [`1c30883d`](https://github.com/yumima/finterm/commit/1c30883d) scrub: remove outbound paths to api.fincept.in (localhost-stance audit)
-- [`9f7ff5da`](https://github.com/yumima/finterm/commit/9f7ff5da) mcp(tools): fix Tier 3 cherry-pick build errors
-- [`65538d45`](https://github.com/yumima/finterm/commit/65538d45) **fix(trading):** load broker credentials on calling thread, not in worker
-- [`9762d0da`](https://github.com/yumima/finterm/commit/9762d0da) **fix(broker/angelone):** refactor onto BrokerEnumMap + bug fixes
-- [`0ae5bcb5`](https://github.com/yumima/finterm/commit/0ae5bcb5) **fix(broker/groww):** refactor onto BrokerEnumMap + bug fixes
-- [`f4a0fdbf`](https://github.com/yumima/finterm/commit/f4a0fdbf) **fix(broker/aliceblue):** refactor onto BrokerEnumMap + bug fixes
-- [`6e61d403`](https://github.com/yumima/finterm/commit/6e61d403) **fix(broker/dhan):** refactor onto BrokerEnumMap + bug fixes
-- [`d455a9f6`](https://github.com/yumima/finterm/commit/d455a9f6) **fix(broker/alpaca):** refactor onto BrokerEnumMap + minor fixes
-- [`698ceff1`](https://github.com/yumima/finterm/commit/698ceff1) trading: BrokerEnumMap + MTF + F&O OI fields
-- [`fec59b64`](https://github.com/yumima/finterm/commit/fec59b64) mcp(tools): AgentsTools — agent / team / workflow / planner / memory
-- [`8a943973`](https://github.com/yumima/finterm/commit/8a943973) mcp(tools): SurfaceAnalyticsTools — options vol surface (Databento)
-- [`d43f3bf5`](https://github.com/yumima/finterm/commit/d43f3bf5) mcp(tools): QuantLabTools — factor models, backtests, attribution
-- [`15ba9828`](https://github.com/yumima/finterm/commit/15ba9828) mcp(tools): GovDataTools — CKAN providers, datasets, resources
-- [`3ab06933`](https://github.com/yumima/finterm/commit/3ab06933) mcp(tools): GeopoliticsTools — conflict events, sanctions, maritime
-- [`a3332c7e`](https://github.com/yumima/finterm/commit/a3332c7e) mcp(tools): EquityResearchTools — fundamentals, sentiment, ratings
-- [`e934d2a4`](https://github.com/yumima/finterm/commit/e934d2a4) mcp(tools): DBnomicsTools — economic data (providers/datasets/series)
-- [`0d093e31`](https://github.com/yumima/finterm/commit/0d093e31) mcp(tools): MetaTools — tool discovery + introspection
-- [`2662ced4`](https://github.com/yumima/finterm/commit/2662ced4) mcp(tools): AgenticMemoryTools — durable scratchpad for agent runs
-- [`8da6cdb2`](https://github.com/yumima/finterm/commit/8da6cdb2) mcp: dual-shape dispatch — call_tool_async + AuthChecker + validation
-- [`2f5d281d`](https://github.com/yumima/finterm/commit/2f5d281d) mcp: SchemaValidator — validate + default-inject tool args
-- [`1a3f3dc9`](https://github.com/yumima/finterm/commit/1a3f3dc9) mcp: add dual-shape ToolDef + ToolContext + ToolSchemaBuilder + AsyncDispatch
-- [`99817b73`](https://github.com/yumima/finterm/commit/99817b73) **ui:** ToastService + ErrorPipeline — in-app toast queue and error aggregation
-- [`67e0fc29`](https://github.com/yumima/finterm/commit/67e0fc29) **feat(voice):** local tts (pyttsx3) + clap detector
-- [`1d84c5c2`](https://github.com/yumima/finterm/commit/1d84c5c2) **feat(analytics):** statsmodels_service entry point
-- [`f843f564`](https://github.com/yumima/finterm/commit/f843f564) **feat(derivatives):** option_greeks_daemon — IV + Greeks via py_vollib
-- [`59f7c462`](https://github.com/yumima/finterm/commit/59f7c462) **feat(crypto):** Kraken symbol resolver via ccxt
-- [`9bdb708b`](https://github.com/yumima/finterm/commit/9bdb708b) **feat(data):** FII/DII daily flows scraper (NSE cash market)
-- [`5b561d8f`](https://github.com/yumima/finterm/commit/5b561d8f) **feat(data):** Taiwan TWSE/TPEX market connector
-- [`01cb572d`](https://github.com/yumima/finterm/commit/01cb572d) **feat(markets):** Copy Symbol right-click on market panel rows
-- [`95df6b86`](https://github.com/yumima/finterm/commit/95df6b86) **feat(news):** COPY TITLE button on article detail panel
-- [`02cd4fa8`](https://github.com/yumima/finterm/commit/02cd4fa8) **feat(watchlist):** Export + Import CSV
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

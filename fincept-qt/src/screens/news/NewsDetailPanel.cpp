@@ -12,6 +12,7 @@
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QTextStream>
@@ -404,6 +405,10 @@ QWidget* NewsDetailPanel::build_content_view() {
 
     body_status_ = new QLabel("Loading article…", body_section_);
     body_status_->setObjectName("newsDetailBodyStatus");
+    // Wrap so the multi-sentence failure message ("Could not extract … Use
+    // OPEN …") flows instead of clipping at the right edge when the middle
+    // pane is narrow.
+    body_status_->setWordWrap(true);
     body_layout->addWidget(body_status_);
 
     body_label_ = new QLabel(body_section_);
@@ -687,24 +692,30 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // Kick off article-body extraction. Bump the generation token so any
     // late callback from a prior article is discarded — the trafilatura
     // round-trip can take 1-3s and the user may have moved on by then.
+    // QPointer guards against the panel being destroyed mid-extraction
+    // (dock closed, screen switched) — without it the callback fires on
+    // a dangling `this`, matching the established pattern in
+    // NewsScreen::on_analyze_requested.
     const int my_gen = ++body_gen_;
     body_label_->clear();
     body_status_->setText("Loading article…");
     body_status_->show();
     body_title_->show();
+    QPointer<NewsDetailPanel> self = this;
     services::NewsService::instance().extract_article_body(
         article.link,
-        [this, my_gen](bool ok, QString /*title*/, QString text) {
-            if (my_gen != body_gen_) return; // stale — user opened a different article
+        [self, my_gen](bool ok, QString /*title*/, QString text) {
+            if (!self) return;
+            if (my_gen != self->body_gen_) return; // stale — user opened a different article
             if (!ok || text.trimmed().isEmpty()) {
-                body_status_->setText(
+                self->body_status_->setText(
                     "Could not extract body (paywall, blocked, or unsupported page). "
                     "Use OPEN to read in browser.");
-                body_label_->clear();
+                self->body_label_->clear();
                 return;
             }
-            body_status_->hide();
-            body_label_->setText(format_article_html(text));
+            self->body_status_->hide();
+            self->body_label_->setText(format_article_html(text));
         });
 }
 
