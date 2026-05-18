@@ -5,7 +5,11 @@
 #include "services/equity/EquityResearchService.h"
 #include "ui/theme/Theme.h"
 
+#include <QDateEdit>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QMouseEvent>
@@ -842,6 +846,20 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     make_btn("5Y", btn_5y_, "5y");
     active_period_btn_ = btn_1y_;
 
+    // Custom date-range button. Opens a tiny popover with two QDateEdits;
+    // confirming routes through switch_period with a "range:start:end"
+    // encoded period string. The daemon's get_historical_period decodes
+    // it back to yfinance .history(start=, end=) — same code path as the
+    // fixed periods so QueryStore caching, late-arrival filtering, and
+    // overlay rendering all just work.
+    btn_custom_ = new QPushButton(QStringLiteral("\xe2\x9c\x8e"));   // ✎ pencil glyph
+    btn_custom_->setCursor(Qt::PointingHandCursor);
+    btn_custom_->setToolTip("Custom date range");
+    btn_custom_->setStyleSheet(btn_style_inactive);
+    connect(btn_custom_, &QPushButton::clicked, this,
+            [this]() { open_custom_range_picker(); });
+    btn_row->addWidget(btn_custom_);
+
     // Canvas first — the chart toggles need candle_canvas_ to wire callbacks.
     candle_canvas_ = new ResearchCandleCanvas;
 
@@ -920,8 +938,8 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
                 "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
 
-    for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_})
-        b->setStyleSheet(b == btn ? active : inactive);
+    for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
+        if (b) b->setStyleSheet(b == btn ? active : inactive);
     active_period_btn_ = btn;
 
     // Clear the canvas + show the overlay so the user gets immediate visual
@@ -951,6 +969,57 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
             [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
         current_historical_key_ = "equity:candles:" + current_symbol_ + ":" + period;
     }
+}
+
+void EquityOverviewTab::open_custom_range_picker() {
+    // Two QDateEdits in a small dialog — Bloomberg-style date input is over-
+    // kill here, the user picks a window once and lives with it. Seeds with
+    // the last 90 days so the dialog opens to a useful default.
+    QDialog dlg(this);
+    dlg.setWindowTitle("Custom date range");
+    dlg.setModal(true);
+
+    auto* fl = new QFormLayout(&dlg);
+    fl->setContentsMargins(16, 16, 16, 16);
+    fl->setSpacing(10);
+
+    const QDate today = QDate::currentDate();
+    auto* start_edit = new QDateEdit(today.addDays(-90), &dlg);
+    auto* end_edit   = new QDateEdit(today, &dlg);
+    for (auto* de : {start_edit, end_edit}) {
+        de->setCalendarPopup(true);
+        de->setDisplayFormat("yyyy-MM-dd");
+        // Hard cap at today — yfinance can't price the future.
+        de->setMaximumDate(today);
+        // Yahoo only retains ~30 years of daily data; deeper than 1990
+        // wastes a daemon round-trip that always comes back empty.
+        de->setMinimumDate(QDate(1990, 1, 1));
+    }
+    fl->addRow("Start", start_edit);
+    fl->addRow("End",   end_edit);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+                                          Qt::Horizontal, &dlg);
+    fl->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    QDate start = start_edit->date();
+    QDate end   = end_edit->date();
+    // Swap if user picked backwards — keeps the daemon path safe and the
+    // resulting candle vector non-empty.
+    if (start > end) std::swap(start, end);
+    if (start == end) return;   // degenerate — yfinance returns 0 candles
+
+    // Encode as "range:YYYY-MM-DD:YYYY-MM-DD". get_historical_period in
+    // yfinance_data.py decodes this back to ticker.history(start=, end=).
+    // QueryStore caches by key, so re-picking the same window in the same
+    // session hits cache.
+    const QString range = "range:" + start.toString(Qt::ISODate) + ":" +
+                          end.toString(Qt::ISODate);
+    switch_period(btn_custom_, range);
 }
 
 // ── Column 4: Analyst + 52W + Profitability + Growth ─────────────────────────

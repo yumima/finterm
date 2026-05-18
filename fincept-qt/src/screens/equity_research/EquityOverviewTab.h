@@ -204,7 +204,9 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_6m_ = nullptr;
     QPushButton* btn_1y_ = nullptr;
     QPushButton* btn_5y_ = nullptr;
+    QPushButton* btn_custom_ = nullptr;   // opens date-range picker
     QPushButton* active_period_btn_ = nullptr;
+    void open_custom_range_picker();
 
     // Analyst panel
     QLabel* target_high_val_ = nullptr;

@@ -1432,13 +1432,32 @@ def _yf_ticker_with_fallback(symbol):
 
 
 def get_historical_period(symbol, period='6mo', interval='1d'):
-    """Fetch historical data using a period string (e.g., '1mo', '6mo', '1y', '5y')"""
+    """Fetch historical data using a period string ('1mo', '6mo', '1y', '5y')
+    or a custom date range encoded as 'range:YYYY-MM-DD:YYYY-MM-DD'. The
+    range form drives yfinance's start/end parameters so the C++ side can
+    pass any user-chosen window through the same daemon action."""
     try:
         import io, contextlib
         ticker = yf.Ticker(symbol)
         _buf = io.StringIO()
+
+        # Detect the range: prefix and route to start/end. Period strings
+        # like '1mo'/'1y' fall through to the legacy period= path so existing
+        # callers and the QueryStore cache keys keep working.
+        is_range = isinstance(period, str) and period.startswith("range:")
+        range_start = range_end = None
+        if is_range:
+            parts = period.split(":")
+            if len(parts) >= 3 and parts[1] and parts[2]:
+                range_start, range_end = parts[1], parts[2]
+            else:
+                is_range = False  # malformed — fall back to default period
+
         with contextlib.redirect_stdout(_buf):
-            hist = ticker.history(period=period, interval=interval)
+            if is_range:
+                hist = ticker.history(start=range_start, end=range_end, interval=interval)
+            else:
+                hist = ticker.history(period=period, interval=interval)
 
         # BRK.B-style dot notation returns empty history for periods > 1d
         # even though the 1d quote endpoint succeeds.  Retry with the
@@ -1447,7 +1466,10 @@ def get_historical_period(symbol, period='6mo', interval='1d'):
             ticker_alt, _ = _yf_ticker_with_fallback(symbol)
             if ticker_alt.ticker != symbol:
                 with contextlib.redirect_stdout(_buf):
-                    hist = ticker_alt.history(period=period, interval=interval)
+                    if is_range:
+                        hist = ticker_alt.history(start=range_start, end=range_end, interval=interval)
+                    else:
+                        hist = ticker_alt.history(period=period, interval=interval)
 
         if hist.empty:
             return []
