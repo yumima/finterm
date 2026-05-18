@@ -425,17 +425,23 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_label_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     body_label_->setOpenExternalLinks(false);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Font: match the WIRE-feed delegate exactly so the inline body reads at
-    // the same size as the headline column on the left/right. QTextBrowser
-    // doesn't honour QSS `font-size` reliably (the #newsDetailBody rule that
-    // worked for QLabel renders smaller here because QTextBrowser reads from
-    // the document's default font, not the widget's QSS). Build the QFont
-    // the same way NewsFeedDelegate does — DATA_FAMILY (Consolas) at TINY
-    // (12pt) — and apply it to both the widget and the document so any code
-    // path that consults either lands on the same metrics.
+    // Font + colour: match the WIRE-feed delegate exactly so the inline body
+    // reads at the same size AND tone as the headline column on the
+    // left/right. QTextBrowser doesn't honour QSS reliably for either —
+    // font-size falls through to qApp's 14px default; color falls through to
+    // the global `QWidget { color: %2 }` rule (=text_primary #e5e5e5, a cool
+    // gray rather than the wire's warmer cream). Both need to be pinned via
+    // the direct Qt APIs (QFont / QPalette) to take effect.
+    //
+    // The literal `#f0e8d0` matches kNewsTextPrimary in NewsFeedDelegate.cpp.
+    // It's hardcoded in both places (drift risk), but the wire delegate set
+    // the convention and the news pane is the only consumer.
     QFont body_font(ui::fonts::DATA_FAMILY, ui::fonts::TINY);
     body_label_->setFont(body_font);
     body_label_->document()->setDefaultFont(body_font);
+    QPalette body_pal = body_label_->palette();
+    body_pal.setColor(QPalette::Text, QColor(0xf0, 0xe8, 0xd0));
+    body_label_->setPalette(body_pal);
     // Transparent background — both on the widget (inline QSS) and the
     // viewport (autoFillBackground off) so the panel's BG_SURFACE shows
     // through.
