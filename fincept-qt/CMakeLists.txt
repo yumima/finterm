@@ -994,6 +994,7 @@ set(UI_SOURCES
     src/ui/widgets/GeometricBackground.cpp
     src/ui/widgets/WorldMapWidget.cpp
     src/ui/widgets/LoadingOverlay.cpp
+    src/ui/widgets/StatusPill.cpp
     src/ui/widgets/ConfettiOverlay.cpp
     src/ui/widgets/SpeedSparkline.cpp
     src/ui/tables/DataTable.cpp
