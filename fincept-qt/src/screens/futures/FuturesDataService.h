@@ -1,4 +1,5 @@
 #pragma once
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -93,6 +94,17 @@ class FuturesDataService : public QObject {
     void fetch_history_stooq(const QString& symbol, const QString& period, HistoryCallback cb);
 
     QString source_ = "yahoo";
+
+    // Short-TTL cache for the akshare main-contracts scrape. The underlying
+    // sina/em endpoints don't change intra-minute and akshare's cold path is
+    // multi-second; a 60s memo turns same-key re-clicks into instant
+    // returns and lets pre-warm pay off for the first real click.
+    struct ChinaCacheEntry {
+        QJsonArray rows;
+        QString    source;
+        QDateTime  fetched_at;
+    };
+    QHash<QString, ChinaCacheEntry> china_cache_;
 };
 
 } // namespace fincept::screens::futures

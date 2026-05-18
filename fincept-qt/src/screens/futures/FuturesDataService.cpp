@@ -290,13 +290,32 @@ void FuturesDataService::fetch_spread(const QString& leg1, const QString& leg2, 
 }
 
 void FuturesDataService::fetch_china_main(const QString& exchange, ChinaListCallback cb) {
-    QStringList args{"china_main", exchange.isEmpty() ? "all" : exchange};
-    run_router(args, [cb = std::move(cb)](bool ok, QJsonObject obj, QString source) {
+    // 60-second per-exchange in-memory cache. akshare's main-contract scrape
+    // is slow (~3-8s on a warm import, more on cold start) and its underlying
+    // sina/em endpoints don't update intra-minute anyway. Same-key hits
+    // within 60s return the cached payload synchronously — exactly the
+    // behaviour that turns the pre-warm into a real speedup for the
+    // user's first CHINA-tab click.
+    const QString key = exchange.isEmpty() ? QStringLiteral("all") : exchange;
+    {
+        const auto it = china_cache_.find(key);
+        const auto now = QDateTime::currentDateTime();
+        if (it != china_cache_.end() &&
+            it.value().fetched_at.secsTo(now) < 60) {
+            cb(true, it.value().rows, it.value().source);
+            return;
+        }
+    }
+    QStringList args{"china_main", key};
+    run_router(args, [this, key, cb = std::move(cb)]
+                     (bool ok, QJsonObject obj, QString source) {
         if (!ok) {
             cb(false, {}, source);
             return;
         }
-        cb(true, obj.value("data").toArray(), source);
+        const QJsonArray rows = obj.value("data").toArray();
+        china_cache_[key] = {rows, source, QDateTime::currentDateTime()};
+        cb(true, rows, source);
     });
 }
 

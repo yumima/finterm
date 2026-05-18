@@ -1,11 +1,14 @@
 #include "screens/futures/FuturesScreen.h"
 
 #include "screens/futures/FuturesContracts.h"
+#include "screens/futures/FuturesDataService.h"
 #include "screens/futures/FuturesPanels.h"
 #include "screens/futures/FuturesQuoteCache.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+
+#include <mutex>
 
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -64,6 +67,16 @@ void FuturesScreen::showEvent(QShowEvent* event) {
     FuturesQuoteCache::instance().retain();
     if (refresh_timer_ && !refresh_timer_->isActive())
         refresh_timer_->start();
+    // Pre-warm akshare in the background so the CHINA mainland-contracts
+    // panel doesn't pay the ~3-8s pandas+akshare cold-import cost the first
+    // time the user clicks the tab. Once-per-session: the Python subprocess
+    // imports cache for the lifetime of the daemon worker, and the result
+    // is cached for 60s in FuturesDataService so this isn't a wasted call.
+    static std::once_flag s_china_prewarm;
+    std::call_once(s_china_prewarm, []() {
+        FuturesDataService::instance().fetch_china_main("all",
+            [](bool, QJsonArray, QString) { /* pre-warm only — drop payload */ });
+    });
     // Force-fresh refresh — but DON'T invalidate MarketDataService's quote
     // cache. Futures use FuturesDataService, a separate service with no
     // connection to the "market:" cache prefix. The old code called
