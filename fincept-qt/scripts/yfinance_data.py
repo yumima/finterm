@@ -75,7 +75,81 @@ def get_orderbook(symbol):
     }
 
 def get_quote(symbol):
-    """Fetch real-time quote for a single symbol"""
+    """Fetch real-time quote for a single symbol.
+
+    Prefers ``ticker.fast_info`` (lightweight modern endpoint, ~100-200ms)
+    over the heavy ``ticker.info`` + ``ticker.history(1d)`` combination
+    (~500ms-1s with a full Yahoo summary-page scrape). The fast path covers
+    all fields the C++ side parses (price, change, OHLC, volume, exchange).
+
+    Falls back to the legacy ``.info``/``.history`` path when:
+      • fast_info raises (some yfinance versions / asset classes don't
+        populate it: certain crypto, FX, mutual funds);
+      • fast_info returns no price (delisted / data hole).
+
+    Wall-time savings matter most for the 20s refresh tick — historically
+    every refresh did a full info scrape just to compute the price delta.
+    """
+    try:
+        fast = _quote_via_fast_info(symbol)
+        if fast is not None:
+            return fast
+    except Exception:
+        # fall through to heavy path
+        pass
+    return _quote_via_full_info(symbol)
+
+
+def _quote_via_fast_info(symbol):
+    """Quote via ticker.fast_info. Returns None if fast_info doesn't have a
+    usable price (caller should fall back). Raises on yfinance errors."""
+    ticker = yf.Ticker(symbol)
+    fi = ticker.fast_info  # AttributeError if not supported (very old yfinance)
+
+    # last_price falls back to regularMarketPrice internally; if both are
+    # missing we don't have a quote.
+    last_price = getattr(fi, "last_price", None)
+    if last_price is None or (isinstance(last_price, float) and last_price != last_price):
+        return None
+
+    current = float(last_price)
+    prev_close_raw = getattr(fi, "previous_close", None)
+    prev_close = float(prev_close_raw) if prev_close_raw is not None else current
+    change = current - prev_close
+    pct = (change / prev_close * 100.0) if prev_close else 0.0
+
+    def _f(name):
+        v = getattr(fi, name, None)
+        if v is None: return None
+        try:
+            v = float(v)
+            return round(v, 2)
+        except (TypeError, ValueError):
+            return None
+
+    def _i(name):
+        v = getattr(fi, name, None)
+        if v is None: return None
+        try: return int(v)
+        except (TypeError, ValueError): return None
+
+    return {
+        "symbol":          symbol,
+        "price":           round(current, 2),
+        "change":          round(change, 2),
+        "change_percent":  round(pct, 2),
+        "volume":          _i("last_volume"),
+        "high":            _f("day_high"),
+        "low":             _f("day_low"),
+        "open":            _f("open"),
+        "previous_close":  round(prev_close, 2),
+        "timestamp":       int(datetime.now().timestamp()),
+        "exchange":        getattr(fi, "exchange", "") or "",
+    }
+
+
+def _quote_via_full_info(symbol):
+    """Legacy quote path — used as a fallback when fast_info isn't usable."""
     try:
         import io, contextlib
         ticker = yf.Ticker(symbol)
