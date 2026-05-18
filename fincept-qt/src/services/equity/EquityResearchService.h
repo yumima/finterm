@@ -22,6 +22,14 @@ class EquityResearchService : public QObject {
     /// Fetches quote + info + historical in parallel (three Python calls)
     void load_symbol(const QString& symbol, const QString& period = "1y");
 
+    /// Quote-only refresh — used by the 20s refresh timer and showEvent.
+    /// load_symbol() unnecessarily re-fires info + historical on every tick
+    /// (info hits cache cheaply but historical periodically misses TTL,
+    /// causing a visible chart hiccup every ~10min). The refresh path should
+    /// only freshen the quote; info/historical refresh on their own slower
+    /// cadence or on explicit user action.
+    void fetch_quote(const QString& symbol);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);

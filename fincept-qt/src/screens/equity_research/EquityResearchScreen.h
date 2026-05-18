@@ -60,7 +60,14 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     QWidget* build_title_bar();
     QWidget* build_quote_bar();
     void update_quote_bar(const services::equity::QuoteData& q);
-    void load_symbol(const QString& symbol);
+    /// @param force  Bypass the same-symbol early-return. Lets the user
+    ///               re-trigger a load by re-submitting the same ticker
+    ///               (e.g. for a manual refresh on breaking news).
+    void load_symbol(const QString& symbol, bool force = false);
+    /// Clear the quote-bar values to dimmed placeholders while a new symbol
+    /// is loading. Stops the header from showing the previous ticker's price
+    /// next to the new ticker's name during the cold-load window.
+    void clear_quote_bar();
 
     // Title bar
     QLabel* symbol_label_ = nullptr;

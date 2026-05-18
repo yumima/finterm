@@ -227,42 +227,52 @@ void EquityResearchService::search_symbols(const QString& query) {
     });
 }
 
+// ── Quote-only fetch (refresh-timer + showEvent path) ─────────────────────────
+void EquityResearchService::fetch_quote(const QString& symbol) {
+    if (symbol.isEmpty())
+        return;
+    const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
+    if (!qcv.isNull()) {
+        emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
+        return;
+    }
+    const QString inflight_key = "quote:" + symbol;
+    if (!acquire_inflight(inflight_key))
+        return; // existing call will fan out via quote_loaded
+    QJsonObject payload;
+    payload["symbol"] = symbol;
+    run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
+        release_inflight(inflight_key);
+        if (!ok || obj.contains("error")) {
+            emit error_occurred(symbol, "Quote", !ok ? err : obj["error"].toString());
+            QuoteData failed; failed.symbol = symbol; failed.valid = false;
+            emit quote_loaded(failed);
+            return;
+        }
+        fincept::CacheManager::instance().put(
+            "equity:quote:" + symbol,
+            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
+            "equity");
+        update_symbol_cache(symbol, "quote", obj);
+        update_symbol_cache(symbol, "symbol", symbol);
+        emit quote_loaded(parse_quote(obj));
+    });
+}
+
 // ── Load symbol (quote + info + historical in parallel) ───────────────────────
 void EquityResearchService::load_symbol(const QString& symbol, const QString& period) {
     if (symbol.isEmpty())
         return;
 
+    // Each block below must fall through independently — info and historical
+    // must run regardless of the quote outcome. Do NOT add early `return`s
+    // inside the blocks; that would abort the remaining fetches and leave the
+    // overview overlay hung waiting on signals that never arrive.
+
     // ── Quote ────────────────────────────────────────────────────────────────
-    // NOTE: Each block must fall through independently. Do NOT use `return`
-    // here — it aborts info and historical fetches, leaving the overlay hung.
-    {
-        const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
-        if (!qcv.isNull()) {
-            emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
-        } else {
-            const QString inflight_key = "quote:" + symbol;
-            if (acquire_inflight(inflight_key)) {
-                QJsonObject payload;
-                payload["symbol"] = symbol;
-                run_daemon("quote", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
-                    release_inflight(inflight_key);
-                    if (!ok || obj.contains("error")) {
-                        emit error_occurred(symbol, "Quote", !ok ? err : obj["error"].toString());
-                        QuoteData failed; failed.symbol = symbol; failed.valid = false;
-                        emit quote_loaded(failed);
-                        return;
-                    }
-                    fincept::CacheManager::instance().put(
-                        "equity:quote:" + symbol,
-                        QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
-                        "equity");
-                    update_symbol_cache(symbol, "quote", obj);
-                    update_symbol_cache(symbol, "symbol", symbol);
-                    emit quote_loaded(parse_quote(obj));
-                });
-            }
-        }
-    }
+    // Delegated to fetch_quote() so the 20s refresh path can share the same
+    // dedup + cache + emit logic without re-firing info and historical.
+    fetch_quote(symbol);
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {

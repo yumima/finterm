@@ -3,6 +3,7 @@
 #include "services/equity/EquityResearchModels.h"
 #include "ui/widgets/LoadingOverlay.h"
 
+#include <QFrame>
 #include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
@@ -14,9 +15,17 @@ namespace fincept::screens {
 class ResearchCandleCanvas : public QWidget {
     Q_OBJECT
   public:
+    enum class PlaceholderState { Loading, NoData, Error };
+
     explicit ResearchCandleCanvas(QWidget* parent = nullptr);
     void set_candles(const QVector<services::equity::Candle>& candles, const QString& currency_sym);
     void clear();
+    /// Set the empty-state message shown when there are no candles to draw.
+    /// Loading: covered by the LoadingOverlay above the canvas, so the
+    /// placeholder text is empty (the overlay's animation tells the story).
+    /// NoData: "No data available for this period" — valid symbol, no series.
+    /// Error: "Failed to load chart — try again" — fetch errored out.
+    void set_placeholder_state(PlaceholderState state);
 
   protected:
     void paintEvent(QPaintEvent*) override;
@@ -32,6 +41,7 @@ class ResearchCandleCanvas : public QWidget {
     QPixmap cache_;
     bool dirty_ = true;
     QString currency_sym_ = "$";
+    PlaceholderState placeholder_state_ = PlaceholderState::Loading;
 
     // Hover crosshair state. hover_idx_ is an absolute candles_ index
     // (NOT visible-window-relative). The cached geometry below is filled
@@ -44,7 +54,13 @@ class ResearchCandleCanvas : public QWidget {
     int    last_count_    = 0;   // visible candle count
     double last_slot_w_   = 0.0; // pixels per candle slot
 
-    static constexpr int MAX_VISIBLE = 260;
+    // Upper bound on candles rendered in a single paint. Used as a safety
+    // clamp only — the service shapes the dataset by period (1M/3M/6M/1Y/5Y)
+    // so this should never actually clip in normal use. 1500 covers 5Y daily
+    // (~1260 trading days) with margin. The previous value (260, ≈ one year
+    // of trading days) silently truncated every 5Y view down to its most
+    // recent 1Y window.
+    static constexpr int MAX_VISIBLE = 1500;
     static constexpr int PRICE_AXIS_W = 80;
     static constexpr int TIME_AXIS_H = 24;
     static constexpr int LABEL_STEP = 20;
@@ -55,7 +71,15 @@ class EquityOverviewTab : public QWidget {
     Q_OBJECT
   public:
     explicit EquityOverviewTab(QWidget* parent = nullptr);
-    void set_symbol(const QString& symbol);
+    /// @param force  Bypass the same-symbol early-return so the caller can
+    ///               re-trigger a load on the currently-displayed symbol
+    ///               (manual-refresh flow).
+    void set_symbol(const QString& symbol, bool force = false);
+
+    /// Read-only accessor for the currently selected period button.
+    /// Used by external refresh paths that want to re-fetch historical
+    /// without overriding the user's period choice.
+    QString current_period() const { return current_period_; }
 
     static QString currency_symbol(const QString& currency_code);
 
@@ -63,6 +87,10 @@ class EquityOverviewTab : public QWidget {
     void on_info_loaded(services::equity::StockInfo info);
     void on_historical_loaded(QString symbol, QString period, QVector<services::equity::Candle> candles);
     void on_quote_loaded(services::equity::QuoteData quote);
+    /// Surface service errors as a canvas placeholder so the chart pane
+    /// distinguishes "no data" from "fetch failed" — same overlay hides for
+    /// both, but the message after dismissal differs.
+    void on_error_occurred(QString symbol, QString context, QString message);
 
   private:
     void build_ui();
@@ -119,6 +147,7 @@ class EquityOverviewTab : public QWidget {
     QLabel* short_pct_val_ = nullptr;
 
     // Chart
+    QFrame*               chart_panel_   = nullptr;
     ResearchCandleCanvas* candle_canvas_ = nullptr;
     QPushButton* btn_1m_ = nullptr;
     QPushButton* btn_3m_ = nullptr;

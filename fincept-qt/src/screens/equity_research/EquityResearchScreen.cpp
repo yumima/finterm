@@ -35,8 +35,11 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(20 * 1000); // 20s quote refresh
     connect(refresh_timer_, &QTimer::timeout, this, [this]() {
-        if (!current_symbol_.isEmpty())
-            services::equity::EquityResearchService::instance().load_symbol(current_symbol_);
+        if (current_symbol_.isEmpty()) return;
+        // Quote-only refresh. load_symbol() would also re-fire info+historical;
+        // info hits cache cheaply but historical periodically misses its 10min
+        // TTL, causing a visible chart hiccup every ~10min for no benefit.
+        services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
     });
 
     // Wire service signals
@@ -96,11 +99,13 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
 void EquityResearchScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     refresh_timer_->start();
-    // Force-fresh on tab activation: invalidate the quote cache and re-load
-    // the active symbol so the user always sees the latest data.
+    // Force-fresh on tab activation: invalidate the quote cache and re-fetch
+    // just the quote. Info/historical stay warm — they don't move fast enough
+    // to justify a refetch on every screen activation. The user can force a
+    // full reload by re-submitting the symbol in the search bar.
     if (!current_symbol_.isEmpty()) {
         services::MarketDataService::instance().invalidate_quotes({current_symbol_});
-        services::equity::EquityResearchService::instance().load_symbol(current_symbol_);
+        services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
     }
 }
 
@@ -455,7 +460,7 @@ void EquityResearchScreen::on_tab_changed(int index) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-void EquityResearchScreen::load_symbol(const QString& symbol_in) {
+void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     // Defensive sanitize: if a caller passes "/stock AAPL" or similar
     // (CommandBar fallback path, EventBus payload from elsewhere, inline
     // search), strip the slash-command prefix and uppercase. Without this
@@ -466,19 +471,26 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in) {
         symbol = (sp >= 0) ? symbol.mid(sp + 1).trimmed() : QString();
     }
     symbol = symbol.toUpper();
-    if (symbol.isEmpty() || symbol == current_symbol_)
+    if (symbol.isEmpty())
+        return;
+    if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
 
-    // Update title bar and quote bar.
-    // Don't overwrite price_label_ with a placeholder — keep the last known
-    // value (or the initial dash) so the header is stable while the overlay
-    // covers the content pane. The actual price arrives via on_quote_loaded.
+    // Update title bar to the new symbol immediately.
     symbol_label_->setText(symbol);
     sym_label_->setText(symbol);
 
-    // Overview always loads (tab 0 is default)
-    overview_tab_->set_symbol(symbol);
+    // Clear quote-bar values so the header doesn't show the previous ticker's
+    // price next to the new ticker's name during the cold-load window.
+    // on_quote_loaded fills these in when the new symbol's data arrives.
+    clear_quote_bar();
+
+    // Overview tab owns its own historical fetch (with the period it has
+    // selected) — see EquityOverviewTab::set_symbol. The screen no longer
+    // calls svc.load_symbol() here; the overview tab triggers the full
+    // quote+info+historical bundle itself, and signals fan out to the rest.
+    overview_tab_->set_symbol(symbol, force);
 
     // Forward to every tab so each filters its own signals correctly when
     // the responses land. Tabs whose data hasn't been fetched yet just sit
@@ -498,11 +510,10 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in) {
     if (relationships_tab_ && tab_widget_ && tab_widget_->currentIndex() == 8)
         relationships_tab_->set_symbol(symbol);
 
-    // Prefetch — fire every fetch in parallel so whichever tab the user
-    // opens next is already populated (or rendering from a cache hit).
-    // load_symbol() handles overview info + historical + quote.
+    // Prefetch for inactive tabs so whichever tab the user opens next is
+    // already populated (or rendering from cache). Overview's own bundle
+    // (quote+info+historical) is fired by overview_tab_->set_symbol() above.
     auto& svc = services::equity::EquityResearchService::instance();
-    svc.load_symbol(symbol);
     svc.fetch_financials(symbol);
     svc.fetch_technicals(symbol);
     svc.fetch_news(symbol);
@@ -514,6 +525,19 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in) {
         SymbolContext::instance().set_group_symbol(
             link_group_, SymbolRef::equity(symbol), this);
     }
+}
+
+void EquityResearchScreen::clear_quote_bar() {
+    if (price_label_) price_label_->setText("\xe2\x80\x94");
+    if (change_label_) {
+        change_label_->setText("\xe2\x80\x94");
+        change_label_->setStyleSheet(
+            QString("font-size:13px; font-weight:600; color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+    }
+    if (vol_label_) vol_label_->setText("VOL: \xe2\x80\x94");
+    if (hl_label_) hl_label_->setText("H/L: \xe2\x80\x94");
+    if (mktcap_label_) mktcap_label_->setText("MKT CAP: \xe2\x80\x94");
+    if (rec_label_) rec_label_->setText("\xe2\x80\x94");
 }
 
 // ── IGroupLinked ─────────────────────────────────────────────────────────────

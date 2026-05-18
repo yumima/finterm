@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0be36ef2`](https://github.com/yumima/finterm/commit/0be36ef2) screens(news): pin body text colour to wire-feed cream via QPalette
 - [`43e5e854`](https://github.com/yumima/finterm/commit/43e5e854) scripts(extract_article): stitch one-sentence-per-paragraph sites into prose
 - [`3734f1b4`](https://github.com/yumima/finterm/commit/3734f1b4) screens(news): pin body font directly so QTextBrowser matches WIRE delegate
 - [`243ee0c8`](https://github.com/yumima/finterm/commit/243ee0c8) screens(news): switch body to QTextBrowser; collapse over-fragmented paragraphs

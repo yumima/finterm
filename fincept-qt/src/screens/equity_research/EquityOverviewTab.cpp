@@ -105,6 +105,11 @@ void ResearchCandleCanvas::set_candles(const QVector<services::equity::Candle>& 
     currency_sym_ = cs;
     dirty_ = true;
     hover_idx_ = -1;  // candles changed; previous hover index is meaningless
+    // A non-empty fetch result means the placeholder shouldn't show again
+    // until a future clear() / explicit state change. An empty result keeps
+    // whatever state the caller has set (NoData / Error).
+    if (!candles.isEmpty())
+        placeholder_state_ = PlaceholderState::Loading;
     update();
 }
 
@@ -112,6 +117,14 @@ void ResearchCandleCanvas::clear() {
     candles_.clear();
     dirty_ = true;
     hover_idx_ = -1;
+    placeholder_state_ = PlaceholderState::Loading;
+    update();
+}
+
+void ResearchCandleCanvas::set_placeholder_state(PlaceholderState state) {
+    if (placeholder_state_ == state) return;
+    placeholder_state_ = state;
+    dirty_ = true;
     update();
 }
 
@@ -153,9 +166,18 @@ void ResearchCandleCanvas::rebuild_cache() {
 
     const int total = candles_.size();
     if (total == 0) {
-        p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-        p.setFont(QFont("Consolas", 11));
-        p.drawText(cache_.rect(), Qt::AlignCenter, "Waiting for data...");
+        // The LoadingOverlay sitting above the canvas already animates the
+        // loading state, so the Loading placeholder draws nothing — anything
+        // we drew would just sit dimly behind the overlay. NoData/Error are
+        // shown directly because the overlay is hidden in those states.
+        if (placeholder_state_ != PlaceholderState::Loading) {
+            p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
+            p.setFont(QFont("Consolas", 11));
+            const QString msg = (placeholder_state_ == PlaceholderState::Error)
+                ? "Failed to load chart \xe2\x80\x94 try again"
+                : "No data available for this period";
+            p.drawText(cache_.rect(), Qt::AlignCenter, msg);
+        }
         return;
     }
 
@@ -403,22 +425,37 @@ EquityOverviewTab::EquityOverviewTab(QWidget* parent) : QWidget(parent) {
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityOverviewTab::on_info_loaded);
     connect(&svc, &services::equity::EquityResearchService::historical_loaded, this,
             &EquityOverviewTab::on_historical_loaded);
+    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
+            &EquityOverviewTab::on_error_occurred);
 }
 
-void EquityOverviewTab::set_symbol(const QString& symbol) {
-    if (symbol == current_symbol_)
+void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
+    if (symbol.isEmpty())
+        return;
+    if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
     info_loaded_ = quote_loaded_ = historical_loaded_ = false;
-    loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
+    if (candle_canvas_) {
+        candle_canvas_->clear();
+        candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
+    }
+    if (loading_overlay_)
+        loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
+
+    // Overview owns its historical fetch — uses current_period_ rather than
+    // the service-level default of "1y". Without this the screen was firing
+    // historical_loaded(symbol, "1y", ...) which the period filter in
+    // on_historical_loaded would silently reject when the user had a
+    // different period selected, leaving the overlay hung.
+    if (!symbol.isEmpty())
+        services::equity::EquityResearchService::instance().load_symbol(symbol, current_period_);
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────
 
 void EquityOverviewTab::build_ui() {
     setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
-
-    loading_overlay_ = new ui::LoadingOverlay(this);
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
@@ -440,6 +477,7 @@ void EquityOverviewTab::build_ui() {
     col1->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
     col1->setFixedWidth(220);
 
+    // build_chart_panel() creates candle_canvas_ as a member side effect.
     auto* chart = build_chart_panel();
     chart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
@@ -459,6 +497,12 @@ void EquityOverviewTab::build_ui() {
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->addWidget(scroll);
+
+    // Scope the loading overlay to the candle canvas only — not the whole
+    // tab. Side panels (Today's Trading, Valuation, etc.) populate as their
+    // own signals arrive and stay readable; period buttons remain clickable
+    // so the user can switch periods to interrupt a slow 5Y fetch.
+    loading_overlay_ = new ui::LoadingOverlay(candle_canvas_);
 }
 
 // ── Column 1: Trading + Valuation + Share Stats ───────────────────────────────
@@ -513,6 +557,7 @@ QWidget* EquityOverviewTab::build_share_stats_panel() {
 
 QWidget* EquityOverviewTab::build_chart_panel() {
     auto* p = new QFrame;
+    chart_panel_ = p;
     p->setStyleSheet(QString("QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
                          .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
 
@@ -586,6 +631,18 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
     for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_})
         b->setStyleSheet(b == btn ? active : inactive);
     active_period_btn_ = btn;
+
+    // Reset the historical-loaded gate so a stale prior-period emission can't
+    // leave the canvas showing the old period's candles while the new fetch
+    // is in flight. Clear the canvas + show the overlay so the user gets
+    // immediate visual feedback that the chart is updating.
+    historical_loaded_ = false;
+    if (candle_canvas_) {
+        candle_canvas_->clear();
+        candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
+    }
+    if (loading_overlay_)
+        loading_overlay_->show_loading("LOADING CHART\xe2\x80\xa6");
 
     // Reload data with new period
     if (!current_symbol_.isEmpty())
@@ -825,12 +882,31 @@ void EquityOverviewTab::on_historical_loaded(QString symbol, QString period, QVe
         return;
     historical_loaded_ = true;
     cached_candles_ = candles;
+    // Tell the canvas what to display when there are no candles: an empty
+    // success response from the service means "valid symbol, no series for
+    // this period" (delisted / pre-IPO / illiquid). The Error state is set
+    // separately via on_error_occurred when a fetch actually fails.
+    if (candle_canvas_ && candles.isEmpty())
+        candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::NoData);
     // Rebuild the chart before hiding the overlay so there is no one-frame
     // window where the overlay is gone but the canvas still shows the empty
-    // "Waiting for data..." placeholder.
+    // placeholder.
     rebuild_chart(candles);
     if (quote_loaded_ && historical_loaded_)
         loading_overlay_->hide_loading();
+}
+
+void EquityOverviewTab::on_error_occurred(QString symbol, QString context, QString /*message*/) {
+    // Only react to historical errors for the currently displayed symbol.
+    // Quote/info errors are handled by their own panels (or just leave the
+    // dashes in place — no chart-level signal needed).
+    if (symbol != current_symbol_ || context != "Historical")
+        return;
+    if (candle_canvas_)
+        candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+    // The service emits historical_loaded(symbol, period, {}) right after
+    // error_occurred, which will flip historical_loaded_ to true and hide the
+    // overlay. The Error placeholder remains until the next successful fetch.
 }
 
 void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& candles) {
