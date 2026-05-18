@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityNewsTab.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QEvent>
@@ -20,10 +21,8 @@ class EquityNewsTab : public QWidget {
   protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
-  private slots:
-    void on_news_loaded(QString symbol, QVector<services::equity::NewsArticle> articles);
-
   private:
+    void apply_news_state(const services::query::QueryStore::State& s);
     void build_ui();
     void populate(const QVector<services::equity::NewsArticle>& articles);
     void clear_cards();

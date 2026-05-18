@@ -15,13 +15,7 @@ namespace fincept::screens {
 
 EquityNewsTab::EquityNewsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::news_loaded, this, &EquityNewsTab::on_news_loaded);
-    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& symbol, const QString& context, const QString&) {
-                if (context != "News" || symbol != current_symbol_) return;
-                if (loading_overlay_) loading_overlay_->hide_loading();
-            });
+    // Subscribe per-symbol in set_symbol() via QueryStore.
 }
 
 void EquityNewsTab::set_symbol(const QString& symbol) {
@@ -34,7 +28,12 @@ void EquityNewsTab::set_symbol(const QString& symbol) {
     status_label_->setText("Loading news…");
     status_label_->show();
     loading_overlay_->show_loading("LOADING NEWS…");
-    services::equity::EquityResearchService::instance().fetch_news(symbol, 20);
+
+    auto& store = services::query::QueryStore::instance();
+    store.unsubscribe_all(this);
+    services::equity::EquityResearchService::instance().subscribe_news(
+        this, symbol,
+        [this](const services::query::QueryStore::State& s) { apply_news_state(s); });
 }
 
 void EquityNewsTab::build_ui() {
@@ -228,9 +227,13 @@ bool EquityNewsTab::eventFilter(QObject* obj, QEvent* event) {
     return QWidget::eventFilter(obj, event);
 }
 
-void EquityNewsTab::on_news_loaded(QString symbol, QVector<services::equity::NewsArticle> articles) {
-    if (symbol != current_symbol_)
+void EquityNewsTab::apply_news_state(const services::query::QueryStore::State& s) {
+    if (!s.error.isEmpty()) {
+        if (loading_overlay_) loading_overlay_->hide_loading();
         return;
+    }
+    if (!s.data.isValid() || s.data.isNull()) return;
+    const auto articles = s.data.value<QVector<services::equity::NewsArticle>>();
     loading_overlay_->hide_loading();
     populate(articles);
 }

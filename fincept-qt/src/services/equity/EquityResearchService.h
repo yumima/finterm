@@ -64,6 +64,20 @@ class EquityResearchService : public QObject {
     void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period,
                               query::QueryStore::Callback cb);
 
+    /// Subscribe to the quarterly financial-statements stream for `symbol`.
+    /// State carries FinancialsData.
+    void subscribe_financials(QObject* owner, const QString& symbol,
+                              query::QueryStore::Callback cb);
+    /// Subscribe to the news-articles stream for `symbol`.
+    /// State carries QVector<NewsArticle>.
+    void subscribe_news(QObject* owner, const QString& symbol,
+                        query::QueryStore::Callback cb);
+    /// Subscribe to the peer-comparison stream for (`symbol`, peer basket).
+    /// State carries QVector<PeerData>. `peer_symbols` is hashed into the
+    /// QueryStore key so different baskets stay independent.
+    void subscribe_peers(QObject* owner, const QString& symbol, const QStringList& peer_symbols,
+                         query::QueryStore::Callback cb);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);

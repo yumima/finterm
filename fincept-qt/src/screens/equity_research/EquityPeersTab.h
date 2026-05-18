@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityPeersTab.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QLabel>
@@ -17,10 +18,10 @@ class EquityPeersTab : public QWidget {
     void set_symbol(const QString& symbol);
 
   private slots:
-    void on_peers_loaded(QString symbol, QVector<services::equity::PeerData> peers);
     void on_load_clicked();
 
   private:
+    void apply_peers_state(const services::query::QueryStore::State& s);
     void build_ui();
     void populate_table(const QVector<services::equity::PeerData>& peers);
     QStringList default_peers(const QString& symbol) const;

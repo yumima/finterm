@@ -158,9 +158,7 @@ QChartView* make_chart_view(int fixed_height = 0) {
 
 EquityFinancialsTab::EquityFinancialsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::financials_loaded, this,
-            &EquityFinancialsTab::on_financials_loaded);
+    // Subscriptions are bound per-symbol in set_symbol() via QueryStore.
 }
 
 void EquityFinancialsTab::set_symbol(const QString& symbol) {
@@ -169,7 +167,12 @@ void EquityFinancialsTab::set_symbol(const QString& symbol) {
     current_symbol_ = symbol;
     loaded_ = false;
     loading_overlay_->show_loading("LOADING FINANCIALS…");
-    services::equity::EquityResearchService::instance().fetch_financials(symbol);
+
+    auto& store = services::query::QueryStore::instance();
+    store.unsubscribe_all(this);
+    services::equity::EquityResearchService::instance().subscribe_financials(
+        this, symbol,
+        [this](const services::query::QueryStore::State& s) { apply_financials_state(s); });
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────
@@ -618,9 +621,13 @@ QWidget* EquityFinancialsTab::build_cashflow_view() {
 
 // ── Data slot ─────────────────────────────────────────────────────────────────
 
-void EquityFinancialsTab::on_financials_loaded(services::equity::FinancialsData payload) {
-    if (payload.symbol != current_symbol_)
+void EquityFinancialsTab::apply_financials_state(const services::query::QueryStore::State& s) {
+    if (!s.error.isEmpty()) {
+        if (loading_overlay_) loading_overlay_->hide_loading();
         return;
+    }
+    if (!s.data.isValid() || s.data.isNull()) return;
+    const auto payload = s.data.value<services::equity::FinancialsData>();
     cached_data_ = payload;
     loaded_ = true;
     loading_overlay_->hide_loading();

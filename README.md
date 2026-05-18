@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0a354691`](https://github.com/yumima/finterm/commit/0a354691) screens(er): migrate Technicals tab to QueryStore
 - [`1794b417`](https://github.com/yumima/finterm/commit/1794b417) services(query+equity): SWR + speculative period prefetch
 - [`9378ff5d`](https://github.com/yumima/finterm/commit/9378ff5d) services(query): introduce QueryStore; migrate ER overview tab
 

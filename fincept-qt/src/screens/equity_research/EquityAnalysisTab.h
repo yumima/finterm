@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityAnalysisTab.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QLabel>
@@ -16,10 +17,8 @@ class EquityAnalysisTab : public QWidget {
     explicit EquityAnalysisTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
 
-  private slots:
-    void on_info_loaded(services::equity::StockInfo info);
-
   private:
+    void apply_info_state(const services::query::QueryStore::State& s);
     void build_ui();
     static QString fmt(double v, int decimals = 2);
     static QString fmt_large(double v);

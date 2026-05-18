@@ -14,13 +14,7 @@ namespace fincept::screens {
 
 EquityPeersTab::EquityPeersTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::peers_loaded, this, &EquityPeersTab::on_peers_loaded);
-    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& symbol, const QString& context, const QString&) {
-                if (context != "Peers" || symbol != current_symbol_) return;
-                if (loading_overlay_) loading_overlay_->hide_loading();
-            });
+    // Subscribe per-(symbol, basket) in on_load_clicked() via QueryStore.
 }
 
 void EquityPeersTab::set_symbol(const QString& symbol) {
@@ -137,12 +131,26 @@ void EquityPeersTab::on_load_clicked() {
         return;
     status_label_->setText("Loading peer data…");
     status_label_->show();
-    services::equity::EquityResearchService::instance().fetch_peers(current_symbol_, peers);
+
+    // Rebind the subscription — different basket = different key, so the
+    // unsubscribe_all here drops any prior basket's subscription before the
+    // new one binds. The QueryStore basket key (sorted peers) keeps multiple
+    // baskets independently cached.
+    auto& store = services::query::QueryStore::instance();
+    store.unsubscribe_all(this);
+    services::equity::EquityResearchService::instance().subscribe_peers(
+        this, current_symbol_, peers,
+        [this](const services::query::QueryStore::State& s) { apply_peers_state(s); });
 }
 
-void EquityPeersTab::on_peers_loaded(QString symbol, QVector<services::equity::PeerData> peers) {
-    if (symbol != current_symbol_)
+void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State& s) {
+    if (!s.error.isEmpty()) {
+        status_label_->hide();
+        if (loading_overlay_) loading_overlay_->hide_loading();
         return;
+    }
+    if (!s.data.isValid() || s.data.isNull()) return;
+    const auto peers = s.data.value<QVector<services::equity::PeerData>>();
     status_label_->hide();
     loading_overlay_->hide_loading();
     populate_table(peers);

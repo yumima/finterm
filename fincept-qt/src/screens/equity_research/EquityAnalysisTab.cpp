@@ -75,13 +75,7 @@ QWidget* make_card(const QString& label, QLabel*& val_out, const QString& val_co
 
 EquityAnalysisTab::EquityAnalysisTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityAnalysisTab::on_info_loaded);
-    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& symbol, const QString& context, const QString&) {
-                if (context != "Info" || symbol != current_symbol_) return;
-                if (loading_overlay_) loading_overlay_->hide_loading();
-            });
+    // No service-signal connects — subscribe per-symbol in set_symbol().
 }
 
 void EquityAnalysisTab::set_symbol(const QString& symbol) {
@@ -89,6 +83,12 @@ void EquityAnalysisTab::set_symbol(const QString& symbol) {
         return;
     current_symbol_ = symbol;
     loading_overlay_->show_loading("LOADING ANALYSIS…");
+
+    auto& store = services::query::QueryStore::instance();
+    store.unsubscribe_all(this);  // drop any prior info subscription
+    services::equity::EquityResearchService::instance().subscribe_info(
+        this, symbol,
+        [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
 }
 
 void EquityAnalysisTab::build_ui() {
@@ -170,9 +170,17 @@ void EquityAnalysisTab::build_ui() {
     ol->addWidget(scroll);
 }
 
-void EquityAnalysisTab::on_info_loaded(services::equity::StockInfo info) {
-    if (info.symbol != current_symbol_)
+void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::State& s) {
+    if (!s.error.isEmpty()) {
+        if (loading_overlay_) loading_overlay_->hide_loading();
         return;
+    }
+    if (!s.data.isValid() || s.data.isNull()) return;
+    const auto info = s.data.value<services::equity::StockInfo>();
+    if (!info.valid) {
+        if (loading_overlay_) loading_overlay_->hide_loading();
+        return;
+    }
     loading_overlay_->hide_loading();
 
     // Financial Health

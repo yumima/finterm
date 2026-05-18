@@ -441,6 +441,119 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
                                             std::move(cb), std::move(fetcher));
 }
 
+// All three of these (financials, news, peers) bridge to existing broadcast
+// emitters via a one-shot watcher rather than re-implementing the cache /
+// fetch chain. Same template as subscribe_technicals: cache check first,
+// then attach watcher, then call legacy fetch_* which emits the broadcast.
+// The watcher's QObject scope auto-disconnects on first matching event.
+
+void EquityResearchService::subscribe_financials(QObject* owner, const QString& symbol,
+                                                  query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:financials:" + symbol;
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
+                                   query::QueryStore::Rejecter reject) {
+        const QVariant fcv = fincept::CacheManager::instance().get("equity:financials:" + symbol);
+        if (!fcv.isNull()) {
+            const auto doc = QJsonDocument::fromJson(fcv.toString().toUtf8());
+            if (doc.isObject()) {
+                FinancialsData parsed = parse_financials(doc.object());
+                emit financials_loaded(parsed);
+                resolve(QVariant::fromValue(parsed));
+                return;
+            }
+        }
+        auto* watcher = new QObject(this);
+        QPointer<QObject> watcher_guard(watcher);
+        connect(this, &EquityResearchService::financials_loaded, watcher,
+            [symbol, resolve, watcher_guard](FinancialsData d) {
+                if (d.symbol != symbol) return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                resolve(QVariant::fromValue(d));
+            });
+        connect(this, &EquityResearchService::error_occurred, watcher,
+            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                if (sym != symbol || ctx != "Financials") return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                reject(msg);
+            });
+        fetch_financials(symbol);
+    };
+    query::QueryStore::instance().subscribe(owner, key, kFinancialsTtlSec, kFinancialsTtlSec * 4,
+                                            std::move(cb), std::move(fetcher));
+}
+
+void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol,
+                                            query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:news:" + symbol;
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
+                                   query::QueryStore::Rejecter reject) {
+        const QVariant ncv = fincept::CacheManager::instance().get("equity:news:" + symbol);
+        if (!ncv.isNull()) {
+            const auto doc = QJsonDocument::fromJson(ncv.toString().toUtf8());
+            if (doc.isArray()) {
+                QVector<NewsArticle> parsed = parse_news(doc.array());
+                emit news_loaded(symbol, parsed);
+                resolve(QVariant::fromValue(parsed));
+                return;
+            }
+        }
+        auto* watcher = new QObject(this);
+        QPointer<QObject> watcher_guard(watcher);
+        connect(this, &EquityResearchService::news_loaded, watcher,
+            [symbol, resolve, watcher_guard](QString sym, QVector<NewsArticle> articles) {
+                if (sym != symbol) return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                resolve(QVariant::fromValue(articles));
+            });
+        connect(this, &EquityResearchService::error_occurred, watcher,
+            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                if (sym != symbol || ctx != "News") return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                reject(msg);
+            });
+        fetch_news(symbol);
+    };
+    query::QueryStore::instance().subscribe(owner, key, kNewsTtlSec, kNewsTtlSec * 5,
+                                            std::move(cb), std::move(fetcher));
+}
+
+void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbol,
+                                             const QStringList& peer_symbols,
+                                             query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    // Basket-aware key: same symbol with different peer baskets is a
+    // different query and shouldn't share cache or in-flight slot.
+    QStringList sorted_peers = peer_symbols;
+    std::sort(sorted_peers.begin(), sorted_peers.end());
+    const QString basket = sorted_peers.join(",");
+    const QString key = "equity:peers:" + symbol + ":" + basket;
+    auto fetcher = [this, symbol, peer_symbols](query::QueryStore::Resolver resolve,
+                                                 query::QueryStore::Rejecter reject) {
+        // No cache short-circuit at this layer — fetch_peers's own cache
+        // path keys on the same basket and emits peers_loaded synchronously
+        // on hit. We just attach the bridge and call.
+        auto* watcher = new QObject(this);
+        QPointer<QObject> watcher_guard(watcher);
+        connect(this, &EquityResearchService::peers_loaded, watcher,
+            [symbol, resolve, watcher_guard](QString sym, QVector<PeerData> peers) {
+                if (sym != symbol) return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                resolve(QVariant::fromValue(peers));
+            });
+        connect(this, &EquityResearchService::error_occurred, watcher,
+            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                if (sym != symbol || ctx != "Peers") return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                reject(msg);
+            });
+        fetch_peers(symbol, peer_symbols);
+    };
+    query::QueryStore::instance().subscribe(owner, key, kPeersTtlSec, kPeersTtlSec * 2,
+                                            std::move(cb), std::move(fetcher));
+}
+
 void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
     if (symbol.isEmpty() || period.isEmpty()) return;
     const QString key = "equity:candles:" + symbol + ":" + period;
