@@ -221,3 +221,4 @@ struct MarketSentimentSnapshot {
 Q_DECLARE_METATYPE(fincept::services::equity::QuoteData)
 Q_DECLARE_METATYPE(fincept::services::equity::StockInfo)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::Candle>)
+Q_DECLARE_METATYPE(fincept::services::equity::TechnicalsData)

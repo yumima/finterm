@@ -207,18 +207,9 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
 
 EquityTechnicalsTab::EquityTechnicalsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::technicals_loaded, this,
-            &EquityTechnicalsTab::on_technicals_loaded);
-    // Hide the spinner on errors. Without this the overlay stays up forever
-    // when compute_technicals fails (e.g. missing module, malformed JSON,
-    // network error during candle fetch). Filter to the Technicals context
-    // so we don't react to other services' errors.
-    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            [this](const QString& symbol, const QString& context, const QString&) {
-                if (context != "Technicals" || symbol != current_symbol_) return;
-                if (loading_overlay_) loading_overlay_->hide_loading();
-            });
+    // No service-signal connects — subscriptions bind per-(symbol, period)
+    // in set_symbol() / switch_period() via QueryStore. The error path is
+    // delivered alongside data on the same callback (State.error).
 }
 
 void EquityTechnicalsTab::set_symbol(const QString& symbol) {
@@ -226,7 +217,14 @@ void EquityTechnicalsTab::set_symbol(const QString& symbol) {
         return;
     current_symbol_ = symbol;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
-    services::equity::EquityResearchService::instance().fetch_technicals(symbol, current_period_);
+
+    auto& store = services::query::QueryStore::instance();
+    if (!current_technicals_key_.isEmpty())
+        store.unsubscribe(this, current_technicals_key_);
+    services::equity::EquityResearchService::instance().subscribe_technicals(
+        this, symbol, current_period_,
+        [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
+    current_technicals_key_ = "equity:technicals:" + symbol + ":" + current_period_;
 }
 
 void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period) {
@@ -238,7 +236,14 @@ void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period)
     btn->setStyleSheet(period_btn_style_active());
     active_period_btn_ = btn;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
-    services::equity::EquityResearchService::instance().fetch_technicals(current_symbol_, period);
+
+    auto& store = services::query::QueryStore::instance();
+    if (!current_technicals_key_.isEmpty())
+        store.unsubscribe(this, current_technicals_key_);
+    services::equity::EquityResearchService::instance().subscribe_technicals(
+        this, current_symbol_, period,
+        [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
+    current_technicals_key_ = "equity:technicals:" + current_symbol_ + ":" + period;
 }
 
 // static
@@ -744,12 +749,21 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     }
 }
 
-// ── on_technicals_loaded ─────────────────────────────────────────────────────
+// ── apply_technicals_state ───────────────────────────────────────────────────
 
-void EquityTechnicalsTab::on_technicals_loaded(services::equity::TechnicalsData payload) {
-    if (payload.symbol != current_symbol_ || payload.period != current_period_)
+void EquityTechnicalsTab::apply_technicals_state(const services::query::QueryStore::State& s) {
+    // Error: hide overlay so the user isn't stuck. No populate() on error —
+    // the previous panel contents stay until the next successful fetch.
+    if (!s.error.isEmpty()) {
+        if (loading_overlay_) loading_overlay_->hide_loading();
         return;
-    loading_overlay_->hide_loading();
+    }
+    if (!s.data.isValid() || s.data.isNull()) {
+        // Still loading — overlay was already shown in set_symbol/switch_period.
+        return;
+    }
+    const auto payload = s.data.value<services::equity::TechnicalsData>();
+    if (loading_overlay_) loading_overlay_->hide_loading();
     populate(payload);
 }
 

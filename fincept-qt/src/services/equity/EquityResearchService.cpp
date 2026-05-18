@@ -389,6 +389,58 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                                             std::move(cb), std::move(fetcher));
 }
 
+void EquityResearchService::subscribe_technicals(QObject* owner, const QString& symbol,
+                                                  const QString& period,
+                                                  query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:technicals:" + symbol + ":" + period;
+    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
+                                           query::QueryStore::Rejecter reject) {
+        // Cache check first — fetch_technicals also checks but it emits the
+        // broadcast synchronously without going through resolve, which would
+        // skip the QueryStore delivery path. So we do an inline check that
+        // calls resolve directly on hit.
+        const QVariant tcv = fincept::CacheManager::instance().get(
+            "equity:technicals:" + symbol + ":" + period);
+        if (!tcv.isNull()) {
+            const auto doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
+            if (doc.isArray()) {
+                TechnicalsData parsed = parse_technicals(symbol, period, doc.array());
+                emit technicals_loaded(parsed);
+                resolve(QVariant::fromValue(parsed));
+                return;
+            }
+        }
+
+        // Cache miss → use the existing fetch_technicals two-stage chain.
+        // We hook one-shot listeners on technicals_loaded / error_occurred
+        // to bridge the broadcast back into the QueryStore promise pair.
+        // A `watcher` QObject owns both connections; deleting it on first
+        // matching event auto-disconnects both (no leak if we exit via
+        // either path).
+        auto* watcher = new QObject(this);
+        QPointer<QObject> watcher_guard(watcher);
+        connect(this, &EquityResearchService::technicals_loaded, watcher,
+            [symbol, period, resolve, watcher_guard](TechnicalsData d) {
+                if (d.symbol != symbol || d.period != period) return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                resolve(QVariant::fromValue(d));
+            });
+        connect(this, &EquityResearchService::error_occurred, watcher,
+            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                if (sym != symbol || ctx != "Technicals") return;
+                if (watcher_guard) watcher_guard->deleteLater();
+                reject(msg);
+            });
+        fetch_technicals(symbol, period);
+    };
+    // SWR window — technicals are derived from daily candles and barely
+    // change intraday. Same 24h cap as historical: beyond that the most-
+    // recent indicator values could be a day stale during market hours.
+    query::QueryStore::instance().subscribe(owner, key, kTechnicalsTtlSec, /*stale_max*/86400,
+                                            std::move(cb), std::move(fetcher));
+}
+
 void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
     if (symbol.isEmpty() || period.isEmpty()) return;
     const QString key = "equity:candles:" + symbol + ":" + period;

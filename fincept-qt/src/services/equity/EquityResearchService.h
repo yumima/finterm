@@ -57,6 +57,13 @@ class EquityResearchService : public QObject {
     /// an adjacent period (e.g. 5Y when viewing 1Y) instant on next click.
     void prefetch_historical(const QString& symbol, const QString& period);
 
+    /// Subscribe to the computed technicals stream for (`symbol`, `period`).
+    /// State carries TechnicalsData. Internally delegates to fetch_technicals
+    /// for the actual two-stage candles→compute chain; the QueryStore layer
+    /// just routes the result back to the right subscriber.
+    void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period,
+                              query::QueryStore::Callback cb);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);

@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityTechnicalsTab.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QFrame>
@@ -17,10 +18,9 @@ class EquityTechnicalsTab : public QWidget {
     explicit EquityTechnicalsTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
 
-  private slots:
-    void on_technicals_loaded(services::equity::TechnicalsData data);
-
   private:
+    void apply_technicals_state(const services::query::QueryStore::State& s);
+
     void build_ui();
     void populate(const services::equity::TechnicalsData& data);
     void clear_sections();
@@ -34,6 +34,11 @@ class EquityTechnicalsTab : public QWidget {
 
     QString current_symbol_;
     QString current_period_ = "1y";
+    // The QueryStore key the current subscription is bound to. Tracked so
+    // set_symbol() / switch_period() can drop the prior subscription before
+    // rebinding — without this, a late resolve for the previous (symbol,
+    // period) combination would still deliver and overwrite the panels.
+    QString current_technicals_key_;
 
     // Period buttons
     QPushButton* btn_1m_ = nullptr;
