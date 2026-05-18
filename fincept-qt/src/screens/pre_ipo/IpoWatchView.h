@@ -100,7 +100,12 @@ class IpoWatchView : public QWidget {
     /// BOOKRUNNERS lens removed — Nasdaq's public IPO calendar doesn't carry
     /// `leadFirmName`. We keep the field on the Entry struct for a future
     /// SEC EDGAR-driven source but the lens shipped only "Unknown" rows.
-    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensCount };
+    /// LOCKUPS shows upcoming insider-share lockup expiries from Finnhub —
+    /// the canonical post-IPO supply-surge signal. Free elsewhere only for
+    /// paid data services; we get it via finnhub_lockup_calendar in
+    /// PreIpoService::finnhub_lockups(). Hidden when no FINNHUB_API_KEY.
+    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups,
+                LensCount };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
                       TW_6Months, TW_12Months, TW_Past30Days };
     // Tab indexes for the two detail-rail tab bars — kept in sync with the
@@ -133,6 +138,7 @@ class IpoWatchView : public QWidget {
     void render_calendar();
     void render_performance();
     void render_watchlist();
+    void render_lockups();          // Finnhub-sourced — see Lens enum
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     // Per-section detail rail builders — each populates one tab page or pane.

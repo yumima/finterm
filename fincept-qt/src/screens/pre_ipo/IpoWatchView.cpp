@@ -3,7 +3,9 @@
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
+#include "services/finnhub/FinnhubService.h"
 #include "services/markets/MarketDataService.h"
+#include "services/pre_ipo/PreIpoService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/charts/ChartFactory.h"
 #include "ui/theme/Theme.h"
@@ -104,6 +106,7 @@ const char* IpoWatchView::lens_label(Lens l) {
         case LensCalendar:    return "CALENDAR";
         case LensPerformance: return "PERFORMANCE";
         case LensWatchlist:   return "WATCHLIST";
+        case LensLockups:     return "LOCKUPS";
         default:              return "";
     }
 }
@@ -115,6 +118,14 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     build_ui();
     apply_styles();
     refresh();
+
+    // PreIpoService::data_loaded carries the Finnhub lockup payload (among
+    // other SEC-sourced data). Re-render so the LOCKUPS lens picks it up
+    // as soon as it lands; the other lenses render from entries_ which is
+    // fetched separately via the Nasdaq calendar in refresh() above.
+    connect(&services::PreIpoService::instance(),
+            &services::PreIpoService::data_loaded, this,
+            [this](fincept::pre_ipo::PreIpoSummary) { render(); });
 
     // Wake-on-resume — when the user returns to the app after a long idle
     // (overnight, long lunch), our per-Entry perf_fetched/profile_fetched
@@ -349,6 +360,20 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int col) {
         auto* it = table_->item(row, 0);
         if (!it) return;
+        // LOCKUPS lens doesn't index into entries_ — each row stores its
+        // ticker directly in column 0's DisplayRole, and the sentinel
+        // UserRole = -1 marks the row as "non-entry-driven". Route the
+        // click to ER if the ticker is valid.
+        if (active_lens_ == LensLockups) {
+            const QString tkr = it->text();
+            if (!tkr.isEmpty() && tkr != "—") {
+                EventBus::instance().publish("nav.split_alongside",
+                    QVariantMap{{"screen_id", "equity_research"}});
+                EventBus::instance().publish("equity_research.load_symbol",
+                    QVariantMap{{"symbol", tkr}});
+            }
+            return;
+        }
         const int idx = it->data(Qt::UserRole).toInt();
         if (idx < 0 || idx >= entries_.size()) return;
         // Col 0 is the star — toggle and stop (don't trigger ER auto-pop on
@@ -1149,6 +1174,7 @@ void IpoWatchView::render() {
         case LensCalendar:    render_calendar(); break;
         case LensPerformance: render_performance(); break;
         case LensWatchlist:   render_watchlist(); break;
+        case LensLockups:     render_lockups(); break;
         default: break;
     }
 }
@@ -1446,6 +1472,98 @@ void IpoWatchView::render_watchlist() {
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
             if (p) p->setText("");
         detail_symbol_.clear();
+    }
+}
+
+void IpoWatchView::render_lockups() {
+    using ui::colors::AMBER;
+    using ui::colors::NEGATIVE;
+    using ui::colors::POSITIVE;
+    using ui::colors::TEXT_SECONDARY;
+
+    // Lockups are independent of entries_ (post-IPO insider events). Pull
+    // directly from the service singleton each render — list is tiny (<200
+    // rows) and refresh is rare so a per-render copy is fine.
+    const auto& svc = services::PreIpoService::instance();
+    const auto lockups = svc.finnhub_lockups();
+
+    const QStringList headers{"TKR", "EXPIRATION", "DAYS", "SHARES", "EVENT"};
+    table_->setSortingEnabled(false);
+    table_->clear();
+    table_->setColumnCount(headers.size());
+    table_->setHorizontalHeaderLabels(headers);
+
+    // No-data states: distinguish "no key" from "key set, no data".
+    if (lockups.isEmpty()) {
+        const bool has_key = services::finnhub::FinnhubService::instance().has_api_key();
+        const QString hint = has_key
+            ? QStringLiteral("No upcoming insider-share lockup expiries in the next 6 months.")
+            : QStringLiteral("Add a Finnhub API key in Settings → Credentials "
+                             "to unlock the lockup-expiry calendar.");
+        if (header_lbl_)
+            header_lbl_->setText(QString("<i style='color:#7a7a7a;'>%1</i>").arg(hint));
+        for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
+                          page_news_, page_holders_, page_filings_, page_funding_,
+                          page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
+            if (p) p->setText("");
+        detail_symbol_.clear();
+        table_->setRowCount(0);
+        return;
+    }
+
+    // Sort by expiration date ascending — soonest unlock first. That's the
+    // tradeable signal: when does insider supply hit the float.
+    auto sorted = lockups;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const services::finnhub::FinnhubLockup& a,
+                 const services::finnhub::FinnhubLockup& b) {
+                  return a.expiration_date < b.expiration_date;
+              });
+
+    const QDate today = QDate::currentDate();
+    table_->setRowCount(sorted.size());
+    for (int r = 0; r < sorted.size(); ++r) {
+        const auto& l = sorted.at(r);
+        // Col 0: ticker. UserRole = -1 sentinel so the cell-click handler
+        // routes to ER instead of indexing into entries_.
+        auto* tkr = new QTableWidgetItem(l.symbol);
+        tkr->setData(Qt::UserRole, -1);
+        tkr->setForeground(QBrush(QColor(AMBER())));
+        table_->setItem(r, 0, tkr);
+        table_->setItem(r, 1, new DateSortItem(
+            l.expiration_date.isValid() ? l.expiration_date.toString("MMM d, yyyy") : "—",
+            l.expiration_date.isValid() ? l.expiration_date.toString("yyyyMMdd").toLongLong() : 0));
+
+        const qint64 days = l.expiration_date.isValid()
+            ? today.daysTo(l.expiration_date) : 0;
+        QString days_str = days <= 0 ? "today" : QString::number(days) + "d";
+        QColor days_col(TEXT_SECONDARY());
+        if (days >= 0 && days <= 7)       days_col = QColor(NEGATIVE());   // imminent supply surge
+        else if (days >= 0 && days <= 30) days_col = QColor(AMBER());      // near-term
+        auto* d_item = new NumSortItem(days_str, double(days));
+        d_item->setForeground(QBrush(days_col));
+        table_->setItem(r, 2, d_item);
+
+        auto* sh = new NumSortItem(
+            l.shares > 0 ? format_money(double(l.shares)) : "—",
+            double(l.shares));
+        table_->setItem(r, 3, sh);
+        table_->setItem(r, 4, new QTableWidgetItem(
+            l.related_event.isEmpty() ? "lockup" : l.related_event));
+    }
+    table_->setSortingEnabled(true);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->setColumnWidth(0, 80);
+    for (int c = 1; c < table_->columnCount(); ++c)
+        table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setStretchLastSection(true);
+
+    if (header_lbl_) {
+        header_lbl_->setText(
+            "<i style='color:#7a7a7a;'>" +
+            QString::number(sorted.size()) +
+            " insider-share lockup expiries (Finnhub). "
+            "Click a row to open the ticker in Equity Research.</i>");
     }
 }
 
