@@ -167,6 +167,13 @@ void PreIpoService::refresh() {
     const QDate today = QDate::currentDate();
     run_nasdaq_ipo_fetch(today.toString("yyyy-MM"));
     run_nasdaq_ipo_fetch(today.addMonths(1).toString("yyyy-MM"));
+
+    // Finnhub augmentation — multi-exchange IPO calendar + lockup expiries.
+    // Independent of all the other fetches; no-op when no API key. The
+    // results live in finnhub_ipos_/finnhub_lockups_ alongside (not merged
+    // into) the SEC-sourced pipeline_, so the UI can render Finnhub-sourced
+    // rows with a distinct badge and the SEC source-of-truth stays clean.
+    run_finnhub_calendar_fetch();
 }
 
 QVector<PrivateCompany> PreIpoService::companies() const { return companies_; }
@@ -191,6 +198,9 @@ QVector<FormDFiling> PreIpoService::recent_form_d() const { return form_d_; }
 QVector<S1Filing>    PreIpoService::ipo_pipeline()  const { return pipeline_; }
 QVector<Signal>      PreIpoService::signal_list()   const { return signals_; }
 QVector<FundEntry>   PreIpoService::funds()         const { return funds_; }
+
+QVector<services::finnhub::FinnhubIPO>    PreIpoService::finnhub_ipos()    const { return finnhub_ipos_; }
+QVector<services::finnhub::FinnhubLockup> PreIpoService::finnhub_lockups() const { return finnhub_lockups_; }
 
 // ── Fetchers ─────────────────────────────────────────────────────────────────
 
@@ -297,6 +307,43 @@ void PreIpoService::run_s1_pipeline_fetch() {
 }
 
 // ── Nasdaq IPO calendar ───────────────────────────────────────────────────────
+
+// ── Finnhub augmentation ─────────────────────────────────────────────────────
+//
+// Runs the Finnhub IPO calendar + lockup calendar via FinnhubService and
+// stores the results alongside (NOT merged into) the SEC pipeline. The
+// existing SEC + Nasdaq path stays untouched — Finnhub is additive.
+// Skipped entirely when FINNHUB_API_KEY isn't set: the service returns
+// an empty result, finnhub_ipos_/finnhub_lockups_ stay empty, the
+// PicksView/PipelineView render without Finnhub-sourced rows.
+void PreIpoService::run_finnhub_calendar_fetch() {
+    if (!services::finnhub::FinnhubService::instance().has_api_key()) {
+        // No-op: the user hasn't configured a Finnhub key. UI's gated on
+        // finnhub_ipos_.isEmpty() / .has_api_key(), so this is invisible.
+        return;
+    }
+    const QDate from = QDate::currentDate().addMonths(-3);  // recently priced
+    const QDate to   = QDate::currentDate().addMonths(+3);  // upcoming
+    QPointer<PreIpoService> self = this;
+    services::finnhub::FinnhubService::instance().subscribe_ipo_calendar(
+        this, from, to,
+        [self](const services::query::QueryStore::State& s) {
+            if (!self) return;
+            if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull())
+                return;
+            self->finnhub_ipos_ = s.data.value<QVector<services::finnhub::FinnhubIPO>>();
+            self->emit_summary();
+        });
+    services::finnhub::FinnhubService::instance().subscribe_lockups(
+        this, QDate::currentDate(), QDate::currentDate().addMonths(+6), {},
+        [self](const services::query::QueryStore::State& s) {
+            if (!self) return;
+            if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull())
+                return;
+            self->finnhub_lockups_ = s.data.value<QVector<services::finnhub::FinnhubLockup>>();
+            self->emit_summary();
+        });
+}
 
 void PreIpoService::run_nasdaq_ipo_fetch(const QString& yyyymm) {
     const QString url =

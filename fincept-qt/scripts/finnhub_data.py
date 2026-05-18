@@ -19,6 +19,12 @@ session.mount('http://', adapter)
 
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:
+    # Fail fast when no key is set, rather than making a 401 round-trip to
+    # Finnhub. Callers can distinguish "key missing" from "key invalid" or
+    # "network failure" and degrade gracefully (skip the feature instead of
+    # error-banner the user).
+    if not API_KEY:
+        return {"error": "no api key", "needs_key": True}
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
     if params is None:
         params = {}
@@ -55,6 +61,59 @@ def get_earnings_calendar(from_date: str, to_date: str) -> Any:
         "from": from_date,
         "to": to_date,
     })
+
+
+def get_ipo_calendar(from_date: str, to_date: str) -> Any:
+    """Upcoming + recently-priced IPOs across NYSE / Nasdaq / AMEX.
+
+    Returns Finnhub's native shape: {"ipoCalendar": [{symbol, name, date,
+    exchange, status, price, numberOfShares, totalSharesValue}, ...]}.
+    The "status" field is the genuinely unique value-add over the
+    SEC + Nasdaq sources already in PreIpoService — Finnhub tracks
+    filed → expected → priced → withdrawn transitions.
+    """
+    return _make_request("calendar/ipo", {"from": from_date, "to": to_date})
+
+
+def get_lockup_calendar(from_date: str, to_date: str, symbol: str = "") -> Any:
+    """Upcoming insider-share lockup expiries.
+
+    Lockup unlocks = canonical IPO trading signal (supply surge typically
+    depresses price). This data is Finnhub-unique among free providers.
+
+    Returns Finnhub's native shape: {"data": [{symbol, expirationDate,
+    relatedEvent, share, ...}, ...]}.
+    """
+    params = {"from": from_date, "to": to_date}
+    if symbol:
+        params["symbol"] = symbol.upper()
+    return _make_request("stock/lockup", params)
+
+
+def get_insider_transactions(symbol: str, from_date: str = "",
+                              to_date: str = "") -> Any:
+    """SEC Form 4 insider transactions for a symbol.
+
+    For post-IPO companies, this is the trade tape: when officers / directors
+    are exercising options, selling, or buying. Combined with the lockup
+    expiry date it tells the user "is the supply surge underway."
+
+    Returns Finnhub's native shape: {"data": [{name, share, change,
+    transactionDate, transactionPrice, ...}, ...]}.
+    """
+    params = {"symbol": symbol.upper()}
+    if from_date: params["from"] = from_date
+    if to_date:   params["to"]   = to_date
+    return _make_request("stock/insider-transactions", params)
+
+
+def get_recommendation_trends(symbol: str) -> Any:
+    """Time-series of analyst-recommendation buckets (strong buy / buy /
+    hold / sell / strong sell) by month. Yahoo only exposes a current
+    snapshot; Finnhub gives you the trend so you can see whether sentiment
+    is firming or weakening — that 6-month change matters more than the
+    point-in-time count."""
+    return _make_request("stock/recommendation", {"symbol": symbol.upper()})
 
 
 def get_news(symbol: str, from_date: str, to_date: str) -> Any:
@@ -104,6 +163,23 @@ def main(args=None):
         from_date = args[1] if len(args) > 1 else "2024-01-01"
         to_date = args[2] if len(args) > 2 else "2024-12-31"
         result = get_earnings_calendar(from_date, to_date)
+    elif command == "ipo_calendar":
+        from_date = args[1] if len(args) > 1 else "2024-01-01"
+        to_date   = args[2] if len(args) > 2 else "2024-12-31"
+        result = get_ipo_calendar(from_date, to_date)
+    elif command == "lockup_calendar":
+        from_date = args[1] if len(args) > 1 else "2024-01-01"
+        to_date   = args[2] if len(args) > 2 else "2024-12-31"
+        symbol    = args[3] if len(args) > 3 else ""
+        result = get_lockup_calendar(from_date, to_date, symbol)
+    elif command == "insider_tx":
+        symbol    = args[1] if len(args) > 1 else "AAPL"
+        from_date = args[2] if len(args) > 2 else ""
+        to_date   = args[3] if len(args) > 3 else ""
+        result = get_insider_transactions(symbol, from_date, to_date)
+    elif command == "recommendation_trends":
+        symbol = args[1] if len(args) > 1 else "AAPL"
+        result = get_recommendation_trends(symbol)
     elif command == "news":
         symbol = args[1] if len(args) > 1 else "AAPL"
         from_date = args[2] if len(args) > 2 else "2024-01-01"
