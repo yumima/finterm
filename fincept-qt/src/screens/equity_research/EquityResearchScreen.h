@@ -82,12 +82,19 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
 
     // Quote bar
     QLabel* sym_label_ = nullptr;
+    QLabel* mkt_status_label_ = nullptr;   // OPEN / PRE / AFTER / CLOSED chip
     QLabel* price_label_ = nullptr;
     QLabel* change_label_ = nullptr;
     QLabel* vol_label_ = nullptr;
     QLabel* hl_label_ = nullptr;
     QLabel* mktcap_label_ = nullptr;
     QLabel* rec_label_ = nullptr;
+
+    // Last exchange code from StockInfo (e.g. "NYQ", "NMS"). Empty when
+    // unknown — mkt_status badge stays hidden until info_loaded lands.
+    QString current_exchange_;
+    QTimer* mkt_status_timer_ = nullptr;   // 30s tick to re-evaluate the badge
+    void update_market_status_badge();
     // Per-tab data freshness chip — shows "as of HH:mm:ss · 30s ago" for
     // whichever tab is active. Updated on service signals + 1-Hz ticker.
     QLabel* freshness_label_ = nullptr;

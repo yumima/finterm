@@ -21,9 +21,11 @@
 #include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QTimeZone>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -76,6 +78,15 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     freshness_ticker_->setInterval(1000);
     connect(freshness_ticker_, &QTimer::timeout, this, &EquityResearchScreen::update_freshness_chip);
     freshness_ticker_->start();
+
+    // Re-evaluate the market-status badge every 30s. Cheap (a few QDateTime
+    // ops + a string compare) and ensures the badge flips at the open/close
+    // bell without the user needing to click anything.
+    mkt_status_timer_ = new QTimer(this);
+    mkt_status_timer_->setInterval(30 * 1000);
+    connect(mkt_status_timer_, &QTimer::timeout, this,
+            &EquityResearchScreen::update_market_status_badge);
+    mkt_status_timer_->start();
 
     // Listen for navigation from CommandBar asset search
     EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
@@ -380,6 +391,16 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     };
 
     sym_label_ = make_label("—", ui::colors::AMBER());
+
+    // Market-status badge. Hidden until on_info_loaded fills in the
+    // exchange code — without that we don't know which trading calendar
+    // applies, so showing a default would be a lie. Re-positioning style
+    // is applied in update_market_status_badge.
+    mkt_status_label_ = new QLabel("");
+    mkt_status_label_->setVisible(false);
+    mkt_status_label_->setToolTip("Market session status for this listing's exchange");
+    hl->addWidget(mkt_status_label_);
+
     price_label_ = make_label("—", ui::colors::TEXT_PRIMARY());
     change_label_ = make_label("—");
     vol_label_ = make_label("VOL: —");
@@ -408,6 +429,8 @@ void EquityResearchScreen::on_info_loaded(services::equity::StockInfo info) {
     if (info.symbol != current_symbol_)
         return;
     current_currency_ = info.currency;
+    current_exchange_ = info.exchange;
+    update_market_status_badge();
 }
 
 void EquityResearchScreen::on_tab_changed(int index) {
@@ -538,6 +561,11 @@ void EquityResearchScreen::clear_quote_bar() {
     if (hl_label_) hl_label_->setText("H/L: \xe2\x80\x94");
     if (mktcap_label_) mktcap_label_->setText("MKT CAP: \xe2\x80\x94");
     if (rec_label_) rec_label_->setText("\xe2\x80\x94");
+    // Drop the cached exchange — the new symbol may list elsewhere, and
+    // showing the previous ticker's session status would be a lie. The
+    // badge re-appears when on_info_loaded fires for the new symbol.
+    current_exchange_.clear();
+    if (mkt_status_label_) mkt_status_label_->setVisible(false);
 }
 
 // ── IGroupLinked ─────────────────────────────────────────────────────────────
@@ -584,6 +612,134 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
 
     vol_label_->setText("VOL: " + fmt_vol(q.volume));
     hl_label_->setText(QString("H:%1%2  L:%1%3").arg(cs).arg(q.high, 0, 'f', 2).arg(q.low, 0, 'f', 2));
+}
+
+// ── Market-status badge ──────────────────────────────────────────────────────
+//
+// Renders a small "OPEN" / "PRE" / "AFTER" / "CLOSED" chip next to the
+// ticker. Driven by the listing's exchange code from StockInfo (yfinance
+// returns Yahoo's short codes — NYQ, NMS, NGM, ASE, PCX, …) and the
+// current wall-clock in the exchange's local timezone.
+//
+// Scope for Pass 2a: US equity venues + the major non-US ones we already
+// surface elsewhere in the app (LSE, TSX, TYO, HKG, NSE/BSE, German /
+// Euronext). Unrecognised codes show the raw venue code in a muted
+// "no status" style — better than misleading the user with a guess.
+void EquityResearchScreen::update_market_status_badge() {
+    if (!mkt_status_label_) return;
+    if (current_exchange_.isEmpty()) {
+        mkt_status_label_->setVisible(false);
+        return;
+    }
+
+    // Trading-session profile for one venue. `tz` is an IANA zone the
+    // QTimeZone constructor recognises; pre_h/regular_h/after_h are
+    // (start_hour, end_hour) windows in that zone. A window of (-1, -1)
+    // disables that phase (most non-US venues have no pre/after session
+    // we track here).
+    struct Session {
+        QString tz;
+        QPair<int, int> pre;      // hours-of-day (24h), inclusive start, exclusive end
+        QPair<int, int> regular;
+        QPair<int, int> after;
+        // Half-hour offsets for venues like NSE (09:15–15:30 IST). Encoded
+        // as start_minute / end_minute on top of the hour fields.
+        int regular_start_min = 0;
+        int regular_end_min   = 0;
+    };
+
+    // Map Yahoo exchange code → session. Codes sourced from yfinance .info
+    // (`exchange`) and cross-checked against yahooquery's mapping table.
+    // Single-source registry keeps the badge correct even if symbols move
+    // across venues (e.g. NYSE → NYSE Arca delisting transfer).
+    static const auto kSessions = [] {
+        QHash<QString, Session> m;
+        // PRE extends to 10 (not 9) so the 09:00–09:30 minutes don't fall
+        // into a CLOSED gap before regular opens at 09:30. Check order in
+        // the if/else below evaluates `regular` first, so 09:30+ correctly
+        // shows OPEN — pre only wins for the 09:00–09:29 strip.
+        const Session us  {"America/New_York", {4, 10}, {9, 16},  {16, 20}, 30, 0};
+        for (const char* code : {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX",
+                                  "BTS", "OEM", "OQB", "OQX", "PNK", "YHD"})
+            m.insert(QString::fromLatin1(code), us);
+        m.insert("LSE", {"Europe/London",     {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
+        m.insert("IOB", {"Europe/London",     {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
+        m.insert("TOR", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("TSX", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("VAN", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("JPX", {"Asia/Tokyo",        {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
+        m.insert("TYO", {"Asia/Tokyo",        {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
+        m.insert("HKG", {"Asia/Hong_Kong",    {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("SHH", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
+        m.insert("SHZ", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
+        m.insert("NSI", {"Asia/Kolkata",      {-1, -1}, {9, 15}, {-1, -1}, 15, 30});
+        m.insert("BSE", {"Asia/Kolkata",      {-1, -1}, {9, 15}, {-1, -1}, 15, 30});
+        m.insert("GER", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("FRA", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("AMS", {"Europe/Amsterdam",  {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("PAR", {"Europe/Paris",      {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("BRU", {"Europe/Brussels",   {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("ASX", {"Australia/Sydney",  {-1, -1}, {10, 16}, {-1, -1}, 0, 0});
+        return m;
+    }();
+
+    const auto it = kSessions.find(current_exchange_);
+
+    // Style helpers — match the rest of the quote bar's 13px weight.
+    auto chip_ss = [](const QString& color, bool muted = false) {
+        return QString("font-size:11px; font-weight:700; "
+                       "background:rgba(0,0,0,80); border:1px solid %1; "
+                       "color:%2; padding:1px 6px; border-radius:2px;")
+            .arg(color, muted ? ui::colors::TEXT_SECONDARY() : color);
+    };
+
+    if (it == kSessions.end()) {
+        // Unknown venue — show the raw code muted, no status guess.
+        mkt_status_label_->setText(current_exchange_);
+        mkt_status_label_->setStyleSheet(chip_ss(ui::colors::BORDER_MED(), true));
+        mkt_status_label_->setVisible(true);
+        return;
+    }
+
+    const Session& s = it.value();
+    const QTimeZone tz(s.tz.toUtf8());
+    if (!tz.isValid()) {
+        mkt_status_label_->setVisible(false);
+        return;
+    }
+    const QDateTime local = QDateTime::currentDateTime().toTimeZone(tz);
+    const int dow = local.date().dayOfWeek();   // 1=Mon … 7=Sun
+    const int mins_of_day = local.time().hour() * 60 + local.time().minute();
+
+    auto in_window = [&](QPair<int, int> hours, int start_min, int end_min) {
+        if (hours.first < 0) return false;
+        const int from = hours.first * 60 + start_min;
+        const int to   = hours.second * 60 + end_min;
+        return mins_of_day >= from && mins_of_day < to;
+    };
+
+    QString status;
+    QString color;
+    if (dow >= 6) {
+        status = "CLOSED";
+        color  = ui::colors::TEXT_SECONDARY();
+    } else if (in_window(s.regular, s.regular_start_min, s.regular_end_min)) {
+        status = "OPEN";
+        color  = ui::colors::POSITIVE();
+    } else if (in_window(s.pre, 0, 0)) {
+        status = "PRE";
+        color  = ui::colors::WARNING();
+    } else if (in_window(s.after, 0, 0)) {
+        status = "AFTER";
+        color  = ui::colors::WARNING();
+    } else {
+        status = "CLOSED";
+        color  = ui::colors::TEXT_SECONDARY();
+    }
+
+    mkt_status_label_->setText(status);
+    mkt_status_label_->setStyleSheet(chip_ss(color, status == "CLOSED"));
+    mkt_status_label_->setVisible(true);
 }
 
 QVariantMap EquityResearchScreen::save_state() const {
