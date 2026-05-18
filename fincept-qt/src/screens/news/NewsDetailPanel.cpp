@@ -425,10 +425,20 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_label_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     body_label_->setOpenExternalLinks(false);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Transparent background — both on the widget (via inline QSS, since the
-    // #newsDetailBody QSS rule may not reach the viewport reliably) and on
-    // the viewport (autoFillBackground off) so the panel's BG_SURFACE shows
-    // through. Font + text color come from the #newsDetailBody QSS rule.
+    // Font: match the WIRE-feed delegate exactly so the inline body reads at
+    // the same size as the headline column on the left/right. QTextBrowser
+    // doesn't honour QSS `font-size` reliably (the #newsDetailBody rule that
+    // worked for QLabel renders smaller here because QTextBrowser reads from
+    // the document's default font, not the widget's QSS). Build the QFont
+    // the same way NewsFeedDelegate does — DATA_FAMILY (Consolas) at TINY
+    // (12pt) — and apply it to both the widget and the document so any code
+    // path that consults either lands on the same metrics.
+    QFont body_font(ui::fonts::DATA_FAMILY, ui::fonts::TINY);
+    body_label_->setFont(body_font);
+    body_label_->document()->setDefaultFont(body_font);
+    // Transparent background — both on the widget (inline QSS) and the
+    // viewport (autoFillBackground off) so the panel's BG_SURFACE shows
+    // through.
     body_label_->setStyleSheet("QTextBrowser { background: transparent; border: none; }");
     body_label_->viewport()->setAutoFillBackground(false);
     // Auto-size to document height. With scrollbars suppressed, the widget
