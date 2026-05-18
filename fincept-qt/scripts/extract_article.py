@@ -201,7 +201,47 @@ def _merge_paragraphs(text: str) -> str:
             merged[-1] = merged[-1].rstrip() + " " + p
         else:
             merged.append(p)
-    return "\n\n".join(merged)
+
+    # Second pass — sentence stitching. The soft-wrap merge above only fires
+    # when a fragment LACKS sentence-end punctuation. Some news sites wrap
+    # *every individual sentence* in its own <p>, so each fragment is a
+    # complete sentence ending in `.!?` and the first pass leaves them all
+    # separate — producing the "one sentence per paragraph" wall the reader
+    # was looking at. This pass bundles consecutive short fragments into
+    # paragraph-sized blocks while keeping anything already paragraph-sized
+    # (≥ TARGET_CHARS) on its own line. Tuned to typical news prose: a
+    # comfortable paragraph runs 200-450 chars; we let buffer grow up to
+    # MAX_CHARS before flushing.
+    TARGET_CHARS = 180
+    MAX_CHARS = 480
+    stitched: list[str] = []
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            stitched.append(" ".join(buffer))
+            buffer.clear()
+
+    for p in merged:
+        # List items are paragraph-equivalent in their own right — never
+        # bundle them with prose on either side.
+        if _LIST_LEAD_RE.match(p) or (buffer and _LIST_LEAD_RE.match(buffer[-1])):
+            flush()
+            stitched.append(p)
+            continue
+        # Already paragraph-sized → keep independent.
+        if len(p) >= TARGET_CHARS:
+            flush()
+            stitched.append(p)
+            continue
+        # Would grow the buffer past MAX_CHARS → flush first.
+        buf_len = sum(len(b) for b in buffer) + max(0, len(buffer) - 1)
+        if buffer and buf_len + len(p) + 1 > MAX_CHARS:
+            flush()
+        buffer.append(p)
+    flush()
+
+    return "\n\n".join(stitched)
 
 
 def extract(url: str) -> dict:
