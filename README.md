@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`5ac16d27`](https://github.com/yumima/finterm/commit/5ac16d27) screens(er): keyboard shortcuts for chart actions (perf/UX #1)
 - [`0458f1ac`](https://github.com/yumima/finterm/commit/0458f1ac) screens(ipo): PRIVATE lens + clearer LOCKUPS empty-state messaging
 - [`9369ef4d`](https://github.com/yumima/finterm/commit/9369ef4d) services(finnhub): live-tick WebSocket → ER price push (Round 4)
 - [`8b92d6ee`](https://github.com/yumima/finterm/commit/8b92d6ee) screens(futures): CHINA pre-warm + 60s cache for akshare commodities

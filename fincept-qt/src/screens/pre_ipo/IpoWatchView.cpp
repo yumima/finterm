@@ -101,6 +101,11 @@ qint64 date_sort_key(const QDate& d) {
 }
 } // namespace
 
+// Forward declaration — defined further down inside the second anonymous
+// namespace block. render_detail_private (~1862 below) needs to call it
+// before the definition order would otherwise allow.
+static QString build_detail_css();
+
 const char* IpoWatchView::lens_label(Lens l) {
     switch (l) {
         case LensCalendar:    return "CALENDAR";
@@ -375,14 +380,48 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
             }
             return;
         }
-        // PRIVATE lens: rows carry the EDGAR URL in UserRole+1 (column 0)
-        // so a click on any column opens the Form D filing in the browser.
-        // Private companies don't trade publicly — no ER route, but the
-        // primary source document is the next-best research target.
+        // PRIVATE lens: column 0 toggles the star (company-name key,
+        // since private companies have no ticker); any other column
+        // routes to the in-app detail rail showing Form D history +
+        // EDGAR link. Auto-opening the browser was rejected — pros
+        // want the data in the workspace, not in a tab dance.
         if (active_lens_ == LensPrivate) {
-            const QString url = it->data(Qt::UserRole + 1).toString();
-            if (!url.isEmpty()) QDesktopServices::openUrl(QUrl(url));
+            // Company name is canonicalised onto the star cell at UserRole+1
+            // so we can read it from any column in the row.
+            auto* star_cell = table_->item(row, 0);
+            const QString company = star_cell
+                ? star_cell->data(Qt::UserRole + 1).toString()
+                : QString();
+            if (company.isEmpty()) return;
+            if (col == 0) {
+                if (starred_.contains(company))
+                    starred_.remove(company);
+                else
+                    starred_.insert(company);
+                save_starred();
+                render();   // re-paint the star glyph
+            } else {
+                render_detail_private(company);
+            }
             return;
+        }
+        // WATCHLIST lens with mixed types: private rows carry "PRIVATE"
+        // in UserRole+2 on the star cell. Route them to the same private
+        // detail rail; public rows fall through to the standard
+        // entries_-driven path below.
+        if (active_lens_ == LensWatchlist) {
+            auto* star_cell = table_->item(row, 0);
+            if (star_cell && star_cell->data(Qt::UserRole + 2).toString() == "PRIVATE") {
+                const QString company = star_cell->data(Qt::UserRole + 1).toString();
+                if (col == 0) {
+                    if (!company.isEmpty()) starred_.remove(company);
+                    save_starred();
+                    render();   // row disappears since we unstarred
+                } else if (!company.isEmpty()) {
+                    render_detail_private(company);
+                }
+                return;
+            }
         }
         const int idx = it->data(Qt::UserRole).toInt();
         if (idx < 0 || idx >= entries_.size()) return;
@@ -409,6 +448,15 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
                 if (row < 0 || row == prev_row) return;
                 auto* it = table_->item(row, 0);
                 if (!it) return;
+                // Private-row path — both PRIVATE lens and WATCHLIST rows
+                // tagged "PRIVATE" route to the Form D detail rail.
+                if (active_lens_ == LensPrivate ||
+                    (active_lens_ == LensWatchlist &&
+                     it->data(Qt::UserRole + 2).toString() == "PRIVATE")) {
+                    const QString company = it->data(Qt::UserRole + 1).toString();
+                    if (!company.isEmpty()) render_detail_private(company);
+                    return;
+                }
                 const int idx = it->data(Qt::UserRole).toInt();
                 if (idx >= 0 && idx < entries_.size())
                     render_detail(&entries_.at(idx));
@@ -1421,9 +1469,40 @@ void IpoWatchView::render_watchlist() {
             !e.ticker.toLower().contains(search_query_)) continue;
         rows.append(i);
     }
-    table_->setRowCount(rows.size());
-    for (int r = 0; r < rows.size(); ++r) {
-        const int gi = rows.at(r);
+
+    // Pull in starred private companies. starred_ keys are company names
+    // for private rows (no ticker exists). For each starred name not
+    // already matched by an Entry above, find the matching Form D filing
+    // and queue it as a private row.
+    QSet<QString> entry_keys;
+    for (int gi : rows) entry_keys.insert(starred_key(entries_.at(gi)));
+    QVector<pre_ipo::FormDFiling> private_rows;
+    {
+        // Group Form D filings by company — show the most-recent filing as
+        // the headline row, but the detail rail will display the full
+        // history when the user clicks.
+        const auto all_filings = services::PreIpoService::instance().recent_form_d();
+        QHash<QString, pre_ipo::FormDFiling> latest_by_company;
+        for (const auto& f : all_filings) {
+            if (!starred_.contains(f.company_name)) continue;
+            if (entry_keys.contains(f.company_name)) continue;   // public dup
+            auto it_l = latest_by_company.find(f.company_name);
+            if (it_l == latest_by_company.end() || f.filed_date > it_l.value().filed_date)
+                latest_by_company.insert(f.company_name, f);
+        }
+        for (auto it_l = latest_by_company.begin(); it_l != latest_by_company.end(); ++it_l) {
+            // Apply the same search filter to private rows.
+            const auto& f = it_l.value();
+            if (!search_query_.isEmpty() &&
+                !f.company_name.toLower().contains(search_query_))
+                continue;
+            private_rows.append(f);
+        }
+    }
+
+    table_->setRowCount(rows.size() + private_rows.size());
+
+    auto fill_public_row = [&](int r, int gi) {
         const Entry& e = entries_.at(gi);
         auto* star = new QTableWidgetItem(QStringLiteral("★"));
         star->setData(Qt::UserRole, gi);
@@ -1464,7 +1543,50 @@ void IpoWatchView::render_watchlist() {
             ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
             : e.sector;
         table_->setItem(r, 10, new QTableWidgetItem(sector_disp));
-    }
+    };
+
+    auto fill_private_row = [&](int r, const pre_ipo::FormDFiling& f) {
+        // Star cell carries the company name in UserRole+1 and the
+        // "PRIVATE" tag in UserRole+2 so the cellClicked handler routes
+        // these to render_detail_private. UserRole stays at -1 (sentinel
+        // that the row isn't entries_-indexed).
+        auto* star = new QTableWidgetItem(QStringLiteral("★"));
+        star->setData(Qt::UserRole, -1);
+        star->setData(Qt::UserRole + 1, f.company_name);
+        star->setData(Qt::UserRole + 2, QStringLiteral("PRIVATE"));
+        star->setTextAlignment(Qt::AlignCenter);
+        star->setForeground(QBrush(QColor(AMBER())));
+        star->setToolTip("Remove from watchlist");
+        table_->setItem(r, 0, star);
+
+        auto* co = new QTableWidgetItem(f.company_name);
+        co->setForeground(QBrush(QColor(ui::colors::CYAN())));
+        co->setToolTip(f.company_name + " · private (SEC Form D filer)");
+        table_->setItem(r, 1, co);
+        table_->setItem(r, 2, new QTableWidgetItem(QStringLiteral("—")));      // no ticker
+        table_->setItem(r, 3, new QTableWidgetItem(QStringLiteral("—")));      // no exchange
+        table_->setItem(r, 4, new DateSortItem(
+            f.filed_date.isValid() ? f.filed_date.toString("MMM d, yyyy") : "—",
+            f.filed_date.isValid() ? f.filed_date.toString("yyyyMMdd").toLongLong() : 0));
+        auto* st = new QTableWidgetItem(QStringLiteral("PRIVATE"));
+        st->setForeground(QBrush(QColor("#06b6d4")));   // cyan — distinct from upcoming/filed/priced
+        table_->setItem(r, 5, st);
+        table_->setItem(r, 6, new QTableWidgetItem(QStringLiteral("—")));      // no offer/range
+        table_->setItem(r, 7, new QTableWidgetItem(QStringLiteral("—")));      // no last
+        table_->setItem(r, 8, new QTableWidgetItem(QStringLiteral("—")));      // no pop
+        // Deal $ → Form D amount raised, formatted same as the public rows.
+        const double m = f.amount_raised / 1e6;
+        QString deal_str = "—";
+        if (m >= 1000.0)      deal_str = QString("$%1B").arg(m / 1000.0, 0, 'f', 1);
+        else if (m > 0.0)     deal_str = QString("$%1M").arg(m, 0, 'f', 0);
+        table_->setItem(r, 9, new NumSortItem(deal_str, f.amount_raised));
+        table_->setItem(r, 10, new QTableWidgetItem(QStringLiteral("—")));     // no sector
+    };
+
+    for (int r = 0; r < rows.size(); ++r) fill_public_row(r, rows.at(r));
+    for (int i = 0; i < private_rows.size(); ++i)
+        fill_private_row(rows.size() + i, private_rows.at(i));
+    const int total_rows = rows.size() + private_rows.size();
     table_->setSortingEnabled(true);
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     table_->setColumnWidth(0, 28);
@@ -1475,10 +1597,10 @@ void IpoWatchView::render_watchlist() {
     // from the Nasdaq fetch). Users who want a specific order click the
     // header; DateSortItem makes that a real date compare.
 
-    if (rows.isEmpty() && header_lbl_) {
+    if (total_rows == 0 && header_lbl_) {
         header_lbl_->setText(
-            "<i style='color:#7a7a7a;'>Watchlist is empty — click the ☆ next to a deal on CALENDAR or "
-            "PERFORMANCE to add it.</i>");
+            "<i style='color:#7a7a7a;'>Watchlist is empty — click the ☆ next to a deal on CALENDAR, "
+            "PERFORMANCE, or PRIVATE to add it.</i>");
         for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
             if (p) p->setText("");
@@ -1607,7 +1729,7 @@ void IpoWatchView::render_private() {
     const auto& svc = services::PreIpoService::instance();
     const auto filings = svc.recent_form_d();
 
-    const QStringList headers{"COMPANY", "FILED", "RAISED ($M)", "EXEMPTION", "STATE", "CIK"};
+    const QStringList headers{"★", "COMPANY", "FILED", "RAISED ($M)", "EXEMPTION", "STATE", "CIK"};
     table_->setSortingEnabled(false);
     table_->clear();
     table_->setColumnCount(headers.size());
@@ -1649,19 +1771,31 @@ void IpoWatchView::render_private() {
     table_->setRowCount(rows.size());
     for (int r = 0; r < rows.size(); ++r) {
         const auto& f = filings.at(rows.at(r));
-        // Col 0: company. UserRole = -1 sentinel (consistent with LOCKUPS —
-        // marks the row as non-entries-driven). UserRole + 1 carries the
-        // EDGAR URL so the cell-click handler can route the user straight
-        // to the primary-source filing.
+        // Col 0: star. starred_ keys on company name for private filers
+        // (no ticker exists — see starred_key for the public path).
+        const bool starred = starred_.contains(f.company_name);
+        auto* star = new QTableWidgetItem(starred ? QStringLiteral("★") : QStringLiteral("☆"));
+        star->setData(Qt::UserRole, -1);   // PRIVATE-lens sentinel; same as LOCKUPS
+        star->setData(Qt::UserRole + 1, f.company_name);  // key for cellClicked routing
+        star->setTextAlignment(Qt::AlignCenter);
+        star->setForeground(QBrush(QColor(starred ? AMBER() : "#666")));
+        star->setToolTip(starred ? "Remove from watchlist" : "Add to watchlist");
+        table_->setItem(r, 0, star);
+
+        // Col 1: company. UserRole + 1 carries the EDGAR URL (kept around
+        // for tooltip / future "open primary source" affordance — clicks
+        // now route to the in-app detail rail, not the browser).
         auto* co = new QTableWidgetItem(f.company_name);
         co->setData(Qt::UserRole, -1);
-        co->setData(Qt::UserRole + 1, f.edgar_url);
+        co->setData(Qt::UserRole + 1, f.company_name);
+        co->setData(Qt::UserRole + 2, f.edgar_url);
         co->setForeground(QBrush(QColor(CYAN())));
-        co->setToolTip(f.company_name + (f.edgar_url.isEmpty() ? "" :
-                                          "\nClick to open EDGAR filing"));
-        table_->setItem(r, 0, co);
+        co->setToolTip(f.company_name +
+                        "\nClick to view Form D history in the detail panel "
+                        "(EDGAR URL accessible via the LINKS row).");
+        table_->setItem(r, 1, co);
 
-        table_->setItem(r, 1, new DateSortItem(
+        table_->setItem(r, 2, new DateSortItem(
             f.filed_date.isValid() ? f.filed_date.toString("MMM d, yyyy") : "—",
             f.filed_date.isValid() ? f.filed_date.toString("yyyyMMdd").toLongLong() : 0));
 
@@ -1673,26 +1807,136 @@ void IpoWatchView::render_private() {
             f.amount_raised > 0 ? QString::number(amt_m, 'f', 1) : "—",
             amt_m);
         raised->setForeground(QBrush(QColor(AMBER())));
-        table_->setItem(r, 2, raised);
+        table_->setItem(r, 3, raised);
 
-        table_->setItem(r, 3, new QTableWidgetItem(
-            f.exemption.isEmpty() ? "—" : f.exemption));
         table_->setItem(r, 4, new QTableWidgetItem(
-            f.state.isEmpty() ? "—" : f.state));
+            f.exemption.isEmpty() ? "—" : f.exemption));
         table_->setItem(r, 5, new QTableWidgetItem(
+            f.state.isEmpty() ? "—" : f.state));
+        table_->setItem(r, 6, new QTableWidgetItem(
             f.cik.isEmpty() ? "—" : f.cik));
     }
     table_->setSortingEnabled(true);
-    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int c = 1; c < table_->columnCount(); ++c)
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table_->setColumnWidth(0, 28);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    for (int c = 2; c < table_->columnCount(); ++c)
         table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
 
     if (header_lbl_) {
         header_lbl_->setText(QString(
-            "<i style='color:#7a7a7a;'>%1 Form D filers (SEC) — click a row to open the EDGAR filing. "
-            "Type a company name in the search bar to filter.</i>")
+            "<i style='color:#7a7a7a;'>%1 Form D filers (SEC) — click ★ to watchlist, "
+            "click a row to view Form D history. Type to filter.</i>")
             .arg(rows.size()));
     }
+}
+
+void IpoWatchView::render_detail_private(const QString& company_name) {
+    if (!header_lbl_) return;
+    if (company_name.isEmpty()) { render_detail(nullptr); return; }
+
+    // Gather every Form D filing for this company. Same company can file
+    // multiple times (each funding round → separate Form D); showing the
+    // full trajectory is more useful than a single row.
+    const auto all_filings = services::PreIpoService::instance().recent_form_d();
+    QVector<pre_ipo::FormDFiling> mine;
+    for (const auto& f : all_filings)
+        if (f.company_name == company_name)
+            mine.append(f);
+    std::sort(mine.begin(), mine.end(),
+              [](const pre_ipo::FormDFiling& a, const pre_ipo::FormDFiling& b) {
+                  return a.filed_date > b.filed_date;
+              });
+
+    const auto& latest = mine.isEmpty() ? pre_ipo::FormDFiling{} : mine.first();
+    const double total_m = [&]() {
+        double t = 0.0;
+        for (const auto& f : mine) t += f.amount_raised;
+        return t / 1e6;
+    }();
+
+    // Header chip — name + "private (Form D)" tag + ER button hidden for
+    // private companies (they don't trade publicly).
+    header_lbl_->setText(QString(
+        "<span style='color:#06b6d4;font-size:16px;font-weight:bold;'>%1</span>"
+        "  <span style='color:#7a7a7a;font-size:11px;'>PRIVATE · SEC Form D filer</span>")
+        .arg(company_name.toHtmlEscaped()));
+    if (er_btn_) er_btn_->setVisible(false);
+
+    // DEAL tab: latest round summary
+    auto money = [](double dollars) {
+        if (dollars >= 1e9) return QString("$%1B").arg(dollars / 1e9, 0, 'f', 2);
+        if (dollars >= 1e6) return QString("$%1M").arg(dollars / 1e6, 0, 'f', 1);
+        if (dollars > 0)    return QString("$%1").arg(dollars, 0, 'f', 0);
+        return QString("—");
+    };
+
+    auto rows_html = [&]() {
+        QString html;
+        for (const auto& f : mine) {
+            html += QString(
+                "<tr><td class='k'>%1</td>"
+                "<td>%2</td>"
+                "<td class='k'>%3</td></tr>")
+                .arg(f.filed_date.isValid() ? f.filed_date.toString("MMM d, yyyy") : "—")
+                .arg(money(f.amount_raised))
+                .arg(f.exemption.isEmpty() ? "—" : f.exemption);
+        }
+        if (html.isEmpty())
+            html = "<tr><td colspan='3' class='muted'>(no Form D filings cached)</td></tr>";
+        return html;
+    };
+
+    const QString deal_html = build_detail_css() + QString(
+        "<div class='sec'>LATEST ROUND</div>"
+        "<table class='grid'>"
+        "<tr><td class='k'>Filed</td><td>%1</td></tr>"
+        "<tr><td class='k'>Raised</td><td>%2</td></tr>"
+        "<tr><td class='k'>Exemption</td><td>%3</td></tr>"
+        "<tr><td class='k'>State</td><td>%4</td></tr>"
+        "<tr><td class='k'>CIK</td><td>%5</td></tr>"
+        "</table>"
+        "<div class='sec'>FORM D HISTORY (%6 filings, $%7M cumulative)</div>"
+        "<table class='grid'>"
+        "<tr><td class='k' style='width:30%;'>FILED</td>"
+        "<td style='width:30%;'>AMOUNT</td>"
+        "<td class='k' style='width:40%;'>EXEMPTION</td></tr>"
+        "%8"
+        "</table>"
+        "<div class='sec'>PRIMARY SOURCE</div>"
+        "<p><a href='%9'>%9</a></p>"
+        "<p class='muted'>Form D is SEC's notice form for exempt private "
+        "offerings under Regulation D. The filing discloses the amount "
+        "raised but not the post-money valuation — secondary marketplaces "
+        "(Hiive / Nasdaq Private Market / Forge) carry the valuation "
+        "signal but require paid feeds.</p>")
+        .arg(latest.filed_date.isValid() ? latest.filed_date.toString("MMM d, yyyy") : "—")
+        .arg(money(latest.amount_raised))
+        .arg(latest.exemption.isEmpty() ? "—" : latest.exemption)
+        .arg(latest.state.isEmpty() ? "—" : latest.state)
+        .arg(latest.cik.isEmpty() ? "—" : latest.cik)
+        .arg(mine.size())
+        .arg(total_m, 0, 'f', 1)
+        .arg(rows_html())
+        .arg(latest.edgar_url.toHtmlEscaped());
+
+    if (page_deal_)     page_deal_->setText(deal_html);
+    if (page_business_) page_business_->setText("<i class='muted'>Business description unavailable — "
+                                                "private companies don't file 10-Ks.</i>");
+    if (page_leader_)   page_leader_->setText("<i class='muted'>Leadership data unavailable — "
+                                              "Form D doesn't capture officer detail.</i>");
+    if (page_fund_)     page_fund_->setText("<i class='muted'>Financial statements unavailable for private filers.</i>");
+    if (page_news_)     page_news_->setText("");
+    if (page_holders_)  page_holders_->setText("");
+    if (page_filings_)  page_filings_->setText("");
+    if (page_funding_)  page_funding_->setText("");
+    if (page_pipeline_) page_pipeline_->setText("");
+    if (page_range_)    page_range_->setText("");
+    if (page_lockup_)   page_lockup_->setText("");
+    if (page_timeline_) page_timeline_->setText("");
+    if (right_top_)     right_top_->setText("");
+    if (right_bottom_)  right_bottom_->setText("");
+    detail_symbol_ = company_name;
 }
 
 // ── Watchlist helpers ────────────────────────────────────────────────────────

@@ -146,6 +146,11 @@ class IpoWatchView : public QWidget {
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
     void render_private();          // SEC Form D filers — pre-S-1 privates
+    /// Detail-rail render for a private company. Pulled out separately
+    /// because the per-Entry render_detail() assumes Nasdaq-calendar
+    /// columns we don't have for private companies; this version
+    /// surfaces Form D history + EDGAR link inside the same rail.
+    void render_detail_private(const QString& company_name);
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     // Per-section detail rail builders — each populates one tab page or pane.
