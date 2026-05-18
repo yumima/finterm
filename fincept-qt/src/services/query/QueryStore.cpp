@@ -18,10 +18,13 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
     if (!owner || key.isEmpty() || !callback || !fetcher)
         return;
 
+    const bool is_new_key = !entries_.contains(key);
     auto& entry = entries_[key];
     entry.ttl_sec = ttl_sec;
     entry.stale_max_sec = stale_max_sec;
     entry.pending_fetcher = fetcher;  // remembered for invalidate()-driven re-fetch
+    entry.last_accessed = QDateTime::currentDateTime();
+    if (is_new_key) evict_if_full();
 
     // Idempotent re-subscribe: if this owner is already subscribed to this
     // key, just update the callback. Avoids duplicate deliveries when a
@@ -127,9 +130,12 @@ void QueryStore::invalidate(const QString& key) {
 void QueryStore::prefetch(const QString& key, int ttl_sec, Fetcher fetcher) {
     if (key.isEmpty() || !fetcher)
         return;
+    const bool is_new_key = !entries_.contains(key);
     auto& entry = entries_[key];
     entry.ttl_sec = ttl_sec;
     entry.pending_fetcher = fetcher;
+    entry.last_accessed = QDateTime::currentDateTime();
+    if (is_new_key) evict_if_full();
     if (entry.inflight) return;
     // Fresh-cache short-circuit — don't burn a fetch when a recent value
     // exists.
@@ -177,6 +183,10 @@ QVariant QueryStore::peek(const QString& key) const {
         e.fetched_at.secsTo(QDateTime::currentDateTime()) >= e.ttl_sec) {
         return {};  // expired
     }
+    // Cast-away const for the access timestamp — peek is logically
+    // const but it touches the LRU watermark so a frequently-peeked
+    // entry doesn't get evicted. The cached value itself is unchanged.
+    const_cast<Entry&>(e).last_accessed = QDateTime::currentDateTime();
     return e.cached_value;
 }
 
@@ -229,6 +239,7 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
 void QueryStore::deliver(const QString& key, const State& state) {
     auto it = entries_.find(key);
     if (it == entries_.end()) return;
+    it.value().last_accessed = QDateTime::currentDateTime();
     auto& subs = it.value().subscribers;
     // Walk in reverse for cheap erase-during-iteration on dead QPointers.
     for (int i = subs.size() - 1; i >= 0; --i) {
@@ -242,6 +253,44 @@ void QueryStore::deliver(const QString& key, const State& state) {
         auto cb = subs[i].callback;
         cb(state);
     }
+}
+
+void QueryStore::evict_if_full() {
+    if (entries_.size() <= kMaxEntries) return;
+
+    // Find the oldest entry (by last_accessed) that's safe to drop:
+    //   • no live subscribers — otherwise we'd silently stop delivering
+    //     to them.
+    //   • not inflight — the resolver would still fire and write to a
+    //     re-created entry, but the side-effect of evicting an inflight
+    //     entry is a wasted subprocess RPC. Skip them.
+    //
+    // O(n) scan; n bounded by kMaxEntries. Overflow is rare enough that
+    // the linear search beats maintaining a separate LRU list.
+    auto candidate = entries_.end();
+    QDateTime oldest;
+    for (auto it = entries_.begin(); it != entries_.end(); ++it) {
+        // Live-subscriber check tolerates already-pruned QPointers — we
+        // count an entry as "in use" only if at least one QPointer is
+        // still alive. Pre-prune dead ones in place so a later deliver
+        // doesn't have to.
+        auto& subs = it.value().subscribers;
+        for (int i = subs.size() - 1; i >= 0; --i) {
+            if (!subs[i].owner) subs.removeAt(i);
+        }
+        if (!subs.isEmpty()) continue;
+        if (it.value().inflight) continue;
+        if (!oldest.isValid() || it.value().last_accessed < oldest) {
+            oldest = it.value().last_accessed;
+            candidate = it;
+        }
+    }
+    if (candidate != entries_.end()) {
+        entries_.erase(candidate);
+    }
+    // If no candidate is found, the cache is at capacity but every entry
+    // is actively in use. Don't force-evict — let the count drift up
+    // until subscriptions drop. The next eviction attempt will retry.
 }
 
 void QueryStore::prune_owner(QObject* owner) {

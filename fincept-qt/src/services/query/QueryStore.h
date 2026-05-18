@@ -138,12 +138,23 @@ class QueryStore : public QObject {
     struct Entry {
         QVariant cached_value;        // null if no data
         QDateTime fetched_at;          // when cached_value was last set
+        QDateTime last_accessed;       // bumped on subscribe / peek / deliver;
+                                       // drives LRU eviction
         int ttl_sec = 0;
         int stale_max_sec = 0;         // for Round 3 SWR; ignored in Round 2
         bool inflight = false;
         Fetcher pending_fetcher;       // last fetcher registered; reused on invalidate
         QVector<Subscriber> subscribers;
     };
+
+    /// Soft cap on cached entries. Sized for ~30 tickers worth of state
+    /// across the typical {quote, info, candles×5 periods, technicals,
+    /// financials, news, peers, earnings} categories. Long pro sessions
+    /// can walk 100+ tickers; without eviction the heap drifts toward GB
+    /// scale and never gets reclaimed. We only evict entries that have no
+    /// live subscribers and no in-flight fetch, so eviction never disrupts
+    /// the active view.
+    static constexpr int kMaxEntries = 256;
 
     /// Deliver `state` to every live subscriber of `key`. Dead subscribers
     /// (owner destroyed) are pruned in the same pass.
@@ -156,6 +167,12 @@ class QueryStore : public QObject {
     /// Remove all subscriptions for `owner` across every key. Called from
     /// QObject::destroyed.
     void prune_owner(QObject* owner);
+    /// LRU sweep — invoked from subscribe/prefetch after an insert. If the
+    /// total entry count exceeds kMaxEntries, scan for the oldest entry
+    /// (by last_accessed) that has no live subscribers and no in-flight
+    /// fetch, and remove it. O(n) per overflow event; n is bounded by
+    /// kMaxEntries so this is amortised tiny.
+    void evict_if_full();
 
     QHash<QString, Entry> entries_;
 };
