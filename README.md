@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`7ce42588`](https://github.com/yumima/finterm/commit/7ce42588) services(finnhub): FinnhubService + IPO/lockup augmentation in PreIpoService
 - [`2fcb19ce`](https://github.com/yumima/finterm/commit/2fcb19ce) screens(er): Pass 1 chart upgrades — log scale + volume + SMA + earnings + comparators
 - [`c3757889`](https://github.com/yumima/finterm/commit/c3757889) screens(er): migrate Analysis/Financials/News/Peers tabs to QueryStore
 - [`0a354691`](https://github.com/yumima/finterm/commit/0a354691) screens(er): migrate Technicals tab to QueryStore

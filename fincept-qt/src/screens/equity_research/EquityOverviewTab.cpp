@@ -552,11 +552,18 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     // Comparators — only built if the source data is set. These add context
     // a pro looks for at a glance: how far below 52w-high is this print, how
     // far from the 50d trend, etc.
+    // Compute the comparator deltas once each. Both color and label below
+    // reuse these values — previously each was computed twice per hover and
+    // the SMA50 label had a broken format string ("SMA50 +%X.Y%" instead
+    // of "SMA50 +X.Y%") because %1% in QString::arg() leaves a literal %
+    // after the substitution.
+    double off_high = std::numeric_limits<double>::quiet_NaN();
     QString vs_52w;
     if (week52_high_ > 0.0) {
-        const double off_high = (c.close - week52_high_) / week52_high_ * 100.0;
+        off_high = (c.close - week52_high_) / week52_high_ * 100.0;
         vs_52w = QString("52w-hi %1%").arg(off_high, 0, 'f', 1);  // negative = below
     }
+    double off_sma = std::numeric_limits<double>::quiet_NaN();
     QString vs_sma50;
     if (candles_.size() >= 50) {
         // Reproduce the SMA50 value at hover_idx_ — same compute path as the
@@ -567,8 +574,8 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         const int n = hover_idx_ - s + 1;
         if (n >= 50) {
             const double sma = sum / n;
-            const double off_sma = (c.close - sma) / sma * 100.0;
-            vs_sma50 = QString("SMA50 %1%").arg(off_sma >= 0 ? "+" : "")
+            off_sma = (c.close - sma) / sma * 100.0;
+            vs_sma50 = QString("SMA50 ") + (off_sma >= 0 ? "+" : "")
                            + QString::number(off_sma, 'f', 1) + "%";
         }
     }
@@ -615,7 +622,6 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     if (!vs_52w.isEmpty()) {
         x_cursor += GAP;
         // Always "below" — green when close, red when far. Threshold 5%.
-        const double off_high = (c.close - week52_high_) / week52_high_ * 100.0;
         p.setPen(off_high > -5.0
                      ? QColor(ui::colors::POSITIVE.get())
                      : QColor(ui::colors::TEXT_SECONDARY()));
@@ -624,12 +630,6 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     }
     if (!vs_sma50.isEmpty()) {
         x_cursor += GAP;
-        double sum = 0.0;
-        const int s = qMax(0, hover_idx_ - 49);
-        for (int k = s; k <= hover_idx_; ++k) sum += candles_[k].close;
-        const int n = hover_idx_ - s + 1;
-        const double sma = sum / n;
-        const double off_sma = (c.close - sma) / sma * 100.0;
         p.setPen(off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
                               : QColor(ui::colors::NEGATIVE.get()));
         p.drawText(x_cursor, baseline, vs_sma50);
