@@ -1,5 +1,6 @@
 // src/screens/power_trader/PowerTraderScreen.h
 #pragma once
+#include "screens/IStatefulScreen.h"
 #include "screens/power_trader/PowerTraderTypes.h"
 
 #include <QButtonGroup>
@@ -11,6 +12,7 @@
 #include <QStackedWidget>
 #include <QString>
 #include <QTabWidget>
+#include <QVariantMap>
 #include <QWidget>
 
 // Forward declarations
@@ -38,10 +40,18 @@ namespace fincept::power_trader {
 ///   Content    — left sidebar (searchable member list, 240px)
 ///                + right tab widget (7 tabs):
 ///                  OVERVIEW · RANKINGS · MEMBER · FEED · COMMITTEE · PARTY · INSIDER WATCH
-class PowerTraderScreen : public QWidget {
+class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScreen {
     Q_OBJECT
   public:
     explicit PowerTraderScreen(QWidget* parent = nullptr);
+
+    // IStatefulScreen — cross-session persistence. Within-session preservation
+    // is automatic via DockScreenRouter's screen-instance cache; this only
+    // matters across app restarts. Saves the user's selected congress member,
+    // body filter, and active tab so a relaunch returns them to the same view.
+    void restore_state(const QVariantMap& state) override;
+    QVariantMap save_state() const override;
+    QString state_key() const override { return "power_trader"; }
 
   signals:
     void navigate_to_screen(QString screen_id, QString ticker);

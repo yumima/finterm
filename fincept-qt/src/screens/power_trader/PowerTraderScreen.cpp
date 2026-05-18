@@ -1118,4 +1118,45 @@ void PowerTraderScreen::on_watchlist_filter_toggled(bool /*only_watched*/) {
     populate_member_list(PowerTraderService::instance().filtered_summary(active_body_).members);
 }
 
+// ── IStatefulScreen ──────────────────────────────────────────────────────────
+//
+// Within-session navigation already preserves all member state because
+// DockScreenRouter caches the screen instance — no destroy/recreate on
+// click-away. The save/restore here is only consulted across app restarts.
+// The watchlist sets are separately persisted via QSettings (see
+// save_watchlist / save_ticker_watchlist) and don't need to live in this map.
+//
+// Member selection is intentionally NOT restored across sessions: the
+// existing on_member_selected() pops the slide-in drawer as a side effect,
+// which would be intrusive on app launch. The user's last filter + tab are
+// the high-value items to restore; member focus is opt-in per session
+// (same pattern PortfolioScreen uses for symbol focus — see its
+// restore_state for the analogue).
+
+QVariantMap PowerTraderScreen::save_state() const {
+    QVariantMap m;
+    m["body_filter"] = static_cast<int>(active_body_);
+    if (tab_widget_)
+        m["active_tab"] = tab_widget_->currentIndex();
+    return m;
+}
+
+void PowerTraderScreen::restore_state(const QVariantMap& state) {
+    if (state.contains("body_filter")) {
+        const int raw = state.value("body_filter").toInt();
+        // BodyFilter is a closed enum (All/Senate/House/Cabinet). Bound-check
+        // to avoid casting stored garbage to a nonexistent enum value.
+        if (raw >= 0 && raw <= static_cast<int>(BodyFilter::Cabinet)) {
+            const auto bf = static_cast<BodyFilter>(raw);
+            if (bf != active_body_)
+                on_body_filter_changed(bf);
+        }
+    }
+    if (state.contains("active_tab") && tab_widget_) {
+        const int idx = state.value("active_tab").toInt();
+        if (idx >= 0 && idx < tab_widget_->count())
+            tab_widget_->setCurrentIndex(idx);
+    }
+}
+
 } // namespace fincept::power_trader

@@ -194,6 +194,24 @@ void DockScreenRouter::register_screen(const QString& id, QWidget* screen) {
 }
 
 void DockScreenRouter::register_factory(const QString& id, ScreenFactory factory) {
+    // Within-session state preservation contract:
+    //
+    // The factory is invoked AT MOST ONCE per process lifetime — see
+    // materialize_screen(), which calls it lazily on first navigate() then
+    // erases the factory entry and stores the resulting widget in screens_[id].
+    // Subsequent navigate(id) calls reuse the same widget instance.
+    //
+    // Consequence: any state held in screen member variables (selected ticker,
+    // active tab, scroll position, table selection, etc.) persists across
+    // click-away-and-back navigation automatically — no IStatefulScreen
+    // implementation needed for that case. IStatefulScreen exists only for
+    // cross-session persistence (i.e., across app restarts), via
+    // ScreenStateManager save/restore in materialize_screen()'s tail.
+    //
+    // Screens that want refreshed real-time data on return should refresh in
+    // showEvent() (preferred: refresh only what's time-sensitive — e.g. quotes
+    // — not full re-fetch — info / financials / historical change slowly enough
+    // that re-fetching them on every navigate is wasted bandwidth).
     factories_[id] = std::move(factory);
 }
 
