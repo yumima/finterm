@@ -1340,6 +1340,46 @@ void EquityOverviewTab::refresh_comparisons() {
     }
 }
 
+// ── Keyboard shortcuts ───────────────────────────────────────────────────────
+//
+// Each method routes the keystroke through the same path a mouse click
+// would take — clicking the button, toggling the canvas, opening the
+// dialog. No new state, no side channels. The QPushButton::click() call
+// fires the existing toggled/clicked signals so save_chart_view runs
+// automatically.
+
+void EquityOverviewTab::shortcut_set_period(int slot) {
+    QPushButton* b = nullptr;
+    switch (slot) {
+        case 1: b = btn_1m_;  break;
+        case 2: b = btn_3m_;  break;
+        case 3: b = btn_6m_;  break;
+        case 4: b = btn_1y_;  break;
+        case 5: b = btn_5y_;  break;
+        default: return;
+    }
+    if (b) b->click();
+}
+
+void EquityOverviewTab::shortcut_toggle_log() {
+    if (btn_log_) btn_log_->toggle();
+}
+void EquityOverviewTab::shortcut_toggle_volume() {
+    if (btn_vol_) btn_vol_->toggle();
+}
+void EquityOverviewTab::shortcut_toggle_sma50() {
+    if (btn_sma50_) btn_sma50_->toggle();
+}
+void EquityOverviewTab::shortcut_toggle_earnings() {
+    if (btn_earn_) btn_earn_->toggle();
+}
+void EquityOverviewTab::shortcut_open_comparison() {
+    if (btn_comp_) btn_comp_->click();
+}
+void EquityOverviewTab::shortcut_open_range_picker() {
+    if (btn_custom_) btn_custom_->click();
+}
+
 void EquityOverviewTab::open_custom_range_picker() {
     // Two QDateEdits in a small dialog — Bloomberg-style date input is over-
     // kill here, the user picks a window once and lives with it. Seeds with

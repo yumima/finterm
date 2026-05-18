@@ -131,6 +131,19 @@ class EquityOverviewTab : public QWidget {
 
     static QString currency_symbol(const QString& currency_code);
 
+    // ── Keyboard-shortcut entry points ──────────────────────────────────────
+    // Each method maps to one user-visible chart action — clicking the
+    // relevant toggle / period button programmatically. Public so the
+    // hosting screen can wire QShortcuts on the screen root without
+    // poking into private button members.
+    void shortcut_set_period(int slot);   // 1..5 → 1mo/3mo/6mo/1y/5y
+    void shortcut_toggle_log();
+    void shortcut_toggle_volume();
+    void shortcut_toggle_sma50();
+    void shortcut_toggle_earnings();
+    void shortcut_open_comparison();
+    void shortcut_open_range_picker();
+
   private:
     /// Called by the three QueryStore subscription callbacks set up in
     /// set_symbol(). Each consumes the State tuple for its category and

@@ -31,6 +31,7 @@
 #include <QListWidget>
 #include <QMetaType>
 #include <QPainter>
+#include <QShortcut>
 #include <QStyledItemDelegate>
 #include <QTimeZone>
 #include <QVBoxLayout>
@@ -215,6 +216,54 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
                 // landing for whichever tab is showing the price.
                 mark_tab_loaded(0);
             });
+
+    // ── Keyboard shortcuts ──────────────────────────────────────────────────
+    // Pro-tool muscle memory: hand on the keyboard, eyes on the chart.
+    // Context-scoped to ER's widget tree so they don't fire when other
+    // screens hold focus. Tooltip-visible bindings:
+    //   1..5         → period 1mo / 3mo / 6mo / 1y / 5y
+    //   L            → log-scale toggle
+    //   V            → volume strip toggle
+    //   S            → SMA50 toggle (most-used moving average)
+    //   E            → earnings markers toggle
+    //   C            → open comparison overlay dialog
+    //   D            → open custom date-range picker
+    //   /            → focus the inline search input
+    //   Esc          → dismiss search popup
+    auto bind = [this](const QString& key, std::function<void()> action) {
+        auto* sc = new QShortcut(QKeySequence(key), this);
+        sc->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(sc, &QShortcut::activated, this, std::move(action));
+    };
+    auto bind_period = [this](const QString& key, int slot) {
+        auto* sc = new QShortcut(QKeySequence(key), this);
+        sc->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(sc, &QShortcut::activated, this,
+                [this, slot]() { if (overview_tab_) overview_tab_->shortcut_set_period(slot); });
+    };
+    bind_period("1", 1);
+    bind_period("2", 2);
+    bind_period("3", 3);
+    bind_period("4", 4);
+    bind_period("5", 5);
+    bind("L", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_log(); });
+    bind("V", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_volume(); });
+    bind("S", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_sma50(); });
+    bind("E", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_earnings(); });
+    bind("C", [this]() { if (overview_tab_) overview_tab_->shortcut_open_comparison(); });
+    bind("D", [this]() { if (overview_tab_) overview_tab_->shortcut_open_range_picker(); });
+    bind("/", [this]() {
+        if (inline_search_input_) {
+            inline_search_input_->setFocus();
+            inline_search_input_->selectAll();
+        }
+    });
+    bind("Escape", [this]() {
+        if (inline_search_popup_ && inline_search_popup_->isVisible())
+            inline_search_popup_->hide();
+        else if (inline_search_input_ && inline_search_input_->hasFocus())
+            inline_search_input_->clear();
+    });
 
     // Listen for navigation from CommandBar asset search
     EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
