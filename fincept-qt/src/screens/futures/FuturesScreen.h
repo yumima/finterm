@@ -16,7 +16,6 @@ class FuturesSpreadPanel;
 class FuturesSettlementsPanel;
 class FuturesHeatmapPanel;
 class FuturesChartPanel;
-class FuturesChinaPanel;
 class FuturesCotPanel;
 class FuturesExpiryPanel;
 
@@ -31,7 +30,11 @@ class FuturesExpiryPanel;
 ///   │  └────────────────────────────────────────────────────────────────  │  │
 ///   └──────────────────────────────────────────────────────────────────────┘
 ///
-/// Selecting CHINA replaces the panel grid with FuturesChinaPanel (akshare data).
+/// All asset-class tabs (including CHINA) share the same grid; CHINA's
+/// underlying symbols are onshore-index spot proxies in the ContractDef
+/// catalog. The akshare-backed FuturesChinaPanel that used to replace the
+/// grid has been retired — coverage of SHFE/DCE commodity futures will
+/// land back as a panel within the grid in a follow-up pass.
 class FuturesScreen : public QWidget {
     Q_OBJECT
   public:
@@ -68,14 +71,13 @@ class FuturesScreen : public QWidget {
 
     // Body
     QWidget*               body_         = nullptr;
-    QWidget*               grid_host_    = nullptr;   // shown when not CHINA
+    QWidget*               grid_host_    = nullptr;
     FuturesHeatmapPanel*   heatmap_      = nullptr;
     FuturesWatchlistPanel* watchlist_    = nullptr;
     FuturesTermStructurePanel* term_     = nullptr;
     FuturesChartPanel*     chart_        = nullptr;
     FuturesSettlementsPanel* settlements_ = nullptr;
     FuturesSpreadPanel*    spread_       = nullptr;
-    FuturesChinaPanel*     china_        = nullptr;
     FuturesCotPanel*       cot_          = nullptr;
     FuturesExpiryPanel*    expiry_       = nullptr;
 

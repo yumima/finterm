@@ -146,6 +146,20 @@ inline const QVector<ContractDef>& all_contracts() {
         {"KOSPI", "KOSPI Composite (spot)",      "ASIA",   0, 0, 0, R::None, "^KS11"},
         {"AXJO",  "ASX 200 (spot proxy)",        "ASIA",   0, 0, 0, R::None, "^AXJO"},
         {"NIFTY", "Nifty 50 (spot proxy)",       "ASIA",   0, 0, 0, R::None, "^NSEI"},
+        // CHINA — onshore index spot proxies. Real CFFEX index futures (IF/IH/
+        // IC/IM) aren't on yfinance for free; we route to the underlying SSE/
+        // SZSE indices so CHINA renders the same heatmap+watchlist+chart grid
+        // as the other regional tabs. Mainland commodities (SHFE/DCE/CZCE Cu,
+        // Al, Au, Rb, oil, grains …) need an akshare-backed quote shim — see
+        // follow-up task for Option B coverage.
+        {"CSI300",  "CSI 300 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000300.SS"},
+        {"SSE50",   "SSE 50 (spot proxy)",          "CHINA", 0, 0, 0, R::None, "000016.SS"},
+        {"CSI500",  "CSI 500 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000905.SS"},
+        {"CSI1000", "CSI 1000 (spot proxy)",        "CHINA", 0, 0, 0, R::None, "000852.SS"},
+        {"SHCOMP",  "Shanghai Composite (spot)",    "CHINA", 0, 0, 0, R::None, "000001.SS"},
+        {"SZCOMP",  "Shenzhen Component (spot)",    "CHINA", 0, 0, 0, R::None, "399001.SZ"},
+        {"CHINEXT", "ChiNext (spot proxy)",         "CHINA", 0, 0, 0, R::None, "399006.SZ"},
+        {"STAR50",  "STAR 50 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000688.SS"},
     };
     return kContracts;
 }

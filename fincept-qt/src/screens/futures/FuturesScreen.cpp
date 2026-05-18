@@ -11,7 +11,6 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSplitter>
-#include <QStackedLayout>
 #include <QVBoxLayout>
 
 namespace fincept::screens::futures {
@@ -145,11 +144,11 @@ void FuturesScreen::build_header() {
 
 void FuturesScreen::build_body() {
     body_ = new QWidget(this);
-    auto* stack = new QStackedLayout(body_);
-    stack->setContentsMargins(0, 0, 0, 0);
-    stack->setSpacing(0);
+    auto* body_layout = new QVBoxLayout(body_);
+    body_layout->setContentsMargins(0, 0, 0, 0);
+    body_layout->setSpacing(0);
 
-    // ── Grid host (shown for all classes except CHINA) ──
+    // ── Grid host (single layout for all asset classes) ──
     //
     // Resizable Bloomberg-style 3-rail layout built from QSplitters so the
     // user can drag any divider to suit their screen. We deliberately don't
@@ -240,15 +239,13 @@ void FuturesScreen::build_body() {
         syncing_splits_ = false;
     });
 
-    stack->addWidget(grid_host_);
+    body_layout->addWidget(grid_host_);
 
-    // ── China host ──
-    auto* china_host = new QWidget(body_);
-    auto* china_layout = new QVBoxLayout(china_host);
-    china_layout->setContentsMargins(6, 6, 6, 6);
-    china_ = new FuturesChinaPanel(china_host);
-    china_layout->addWidget(china_);
-    stack->addWidget(china_host);
+    // CHINA used to live in a separate akshare-backed panel here. Since
+    // CHINA is now in the static ContractDef catalog (spot-index proxies),
+    // it flows through the same grid as every other regional tab and we
+    // don't need a stacked alternative. The akshare commodity coverage
+    // moves to a follow-up panel (Option B) rendered inside the grid.
 
     // Cross-panel wiring: clicking a watchlist row routes the symbol to the
     // term structure / chart / settlements / COT panels for drill-down.
@@ -308,24 +305,13 @@ void FuturesScreen::apply_active_class(const QString& cls) {
             .arg(colors::BG_RAISED()));
     }
 
-    auto* stack = qobject_cast<QStackedLayout*>(body_->layout());
-    if (cls == "CHINA") {
-        if (stack) stack->setCurrentIndex(1);
-        if (china_) china_->refresh();
-    } else {
-        if (stack) stack->setCurrentIndex(0);
-        if (heatmap_) heatmap_->refresh();
-        for (auto* p : QVector<FuturesPanelBase*>{watchlist_, term_, chart_, settlements_, spread_, cot_, expiry_}) {
-            if (p) p->set_asset_class(cls);
-        }
+    if (heatmap_) heatmap_->refresh();
+    for (auto* p : QVector<FuturesPanelBase*>{watchlist_, term_, chart_, settlements_, spread_, cot_, expiry_}) {
+        if (p) p->set_asset_class(cls);
     }
 }
 
 void FuturesScreen::refresh_all() {
-    if (active_class_ == "CHINA") {
-        if (china_) china_->refresh();
-        return;
-    }
     // Cache-driven panels (heatmap/watchlist/spread) re-render automatically
     // when the cache broadcasts; we just kick the cache. Symbol-driven panels
     // refresh themselves to pick up new history/settlements data.
