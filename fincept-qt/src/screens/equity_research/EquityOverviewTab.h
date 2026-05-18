@@ -208,6 +208,24 @@ class EquityOverviewTab : public QWidget {
     QPushButton* active_period_btn_ = nullptr;
     void open_custom_range_picker();
 
+    // Overlay toggle buttons. Held as members so saved chart views can
+    // re-check them programmatically on symbol switch — without these the
+    // saved state could be applied to the canvas but the buttons would lie.
+    QPushButton* btn_log_   = nullptr;
+    QPushButton* btn_vol_   = nullptr;
+    QPushButton* btn_sma20_ = nullptr;
+    QPushButton* btn_sma50_ = nullptr;
+    QPushButton* btn_sma200_= nullptr;
+    QPushButton* btn_earn_  = nullptr;
+
+    // Per-ticker view persistence (period + overlays + custom range).
+    void save_chart_view() const;
+    void load_chart_view(const QString& symbol);
+    /// Set to true while load_chart_view is applying — gates save_chart_view
+    /// against the toggled signals each setChecked emits, so we don't
+    /// thrash storage with redundant writes during restoration.
+    bool restoring_view_ = false;
+
     // Analyst panel
     QLabel* target_high_val_ = nullptr;
     QLabel* target_mean_val_ = nullptr;

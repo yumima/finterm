@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`48d23bc8`](https://github.com/yumima/finterm/commit/48d23bc8) screens(er): custom date-range picker for the chart
 - [`3bb18995`](https://github.com/yumima/finterm/commit/3bb18995) screens(ipo): LOCKUPS lens — Finnhub-sourced post-IPO supply-surge signal
 - [`fec34036`](https://github.com/yumima/finterm/commit/fec34036) screens(er): rich search popup — symbol/name + venue/ccy/type chips
 - [`9911e69d`](https://github.com/yumima/finterm/commit/9911e69d) review-noted: tooltip + CHINA leftover guards

@@ -3,7 +3,11 @@
 
 #include "screens/knowledge/HelpHint.h"
 #include "services/equity/EquityResearchService.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <QDateEdit>
 #include <QDateTime>
@@ -659,6 +663,11 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
+    // Restore the previously-saved chart view for this ticker (period +
+    // overlay toggles + custom range). load_chart_view sets current_period_
+    // before we subscribe below so the historical fetch uses the restored
+    // period in one shot — avoids a wasted fetch for the default period.
+    load_chart_view(symbol);
     if (candle_canvas_) {
         candle_canvas_->clear();
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
@@ -892,23 +901,42 @@ QWidget* EquityOverviewTab::build_chart_panel() {
         return b;
     };
 
-    make_toggle("LOG", "Log-scale price axis (better for long periods)",
+    btn_log_ = make_toggle("LOG", "Log-scale price axis (better for long periods)",
                 ui::colors::AMBER(),
-                [this](bool on) { if (candle_canvas_) candle_canvas_->set_log_scale(on); });
-    make_toggle("VOL", "Volume subchart under candles",
+                [this](bool on) {
+                    if (candle_canvas_) candle_canvas_->set_log_scale(on);
+                    save_chart_view();
+                });
+    btn_vol_ = make_toggle("VOL", "Volume subchart under candles",
                 ui::colors::AMBER(),
-                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_volume(on); });
+                [this](bool on) {
+                    if (candle_canvas_) candle_canvas_->set_show_volume(on);
+                    save_chart_view();
+                });
     btn_row->addSpacing(8);
-    make_toggle("SMA20", "20-day simple moving average overlay", "#3b82f6",
-                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(20, on); });
-    make_toggle("SMA50", "50-day simple moving average overlay", "#a855f7",
-                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(50, on); });
-    make_toggle("SMA200", "200-day simple moving average overlay", "#eab308",
-                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(200, on); });
+    btn_sma20_ = make_toggle("SMA20", "20-day simple moving average overlay", "#3b82f6",
+                [this](bool on) {
+                    if (candle_canvas_) candle_canvas_->set_show_sma(20, on);
+                    save_chart_view();
+                });
+    btn_sma50_ = make_toggle("SMA50", "50-day simple moving average overlay", "#a855f7",
+                [this](bool on) {
+                    if (candle_canvas_) candle_canvas_->set_show_sma(50, on);
+                    save_chart_view();
+                });
+    btn_sma200_= make_toggle("SMA200", "200-day simple moving average overlay", "#eab308",
+                [this](bool on) {
+                    if (candle_canvas_) candle_canvas_->set_show_sma(200, on);
+                    save_chart_view();
+                });
     btn_row->addSpacing(8);
-    make_toggle("EARN", "Earnings markers — vertical lines on report dates",
+    btn_earn_ = make_toggle("EARN", "Earnings markers — vertical lines on report dates",
                 ui::colors::AMBER(),
-                [this](bool on) { show_earnings_ = on; refresh_earnings_subscription(); });
+                [this](bool on) {
+                    show_earnings_ = on;
+                    refresh_earnings_subscription();
+                    save_chart_view();
+                });
 
     btn_row->addStretch();
     vl->addLayout(btn_row);
@@ -969,6 +997,84 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
             [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
         current_historical_key_ = "equity:candles:" + current_symbol_ + ":" + period;
     }
+    save_chart_view();
+}
+
+void EquityOverviewTab::save_chart_view() const {
+    if (restoring_view_) return;
+    if (current_symbol_.isEmpty()) return;
+    // Read overlay state from the button check marks rather than mirroring
+    // it on the tab. Those bools live on the canvas (ResearchCandleCanvas)
+    // and accessors aren't exposed — buttons are the single source of truth
+    // for what the user has toggled.
+    QJsonObject view;
+    view.insert("period",  current_period_);
+    view.insert("log",     btn_log_    ? btn_log_->isChecked()    : false);
+    view.insert("vol",     btn_vol_    ? btn_vol_->isChecked()    : false);
+    view.insert("sma20",   btn_sma20_  ? btn_sma20_->isChecked()  : false);
+    view.insert("sma50",   btn_sma50_  ? btn_sma50_->isChecked()  : false);
+    view.insert("sma200",  btn_sma200_ ? btn_sma200_->isChecked() : false);
+    view.insert("earn",    show_earnings_);
+    const QString blob = QString::fromUtf8(
+        QJsonDocument(view).toJson(QJsonDocument::Compact));
+    fincept::SettingsRepository::instance().set(
+        "er.chart_view." + current_symbol_, blob);
+}
+
+void EquityOverviewTab::load_chart_view(const QString& symbol) {
+    auto r = fincept::SettingsRepository::instance().get(
+        "er.chart_view." + symbol);
+    if (!r.is_ok() || r.value().isEmpty()) {
+        // No saved view for this symbol — keep the previous tab's settings.
+        // (We don't reset toggles to off; users typically want their chart
+        // preferences to persist across un-saved tickers too.)
+        return;
+    }
+    const auto doc = QJsonDocument::fromJson(r.value().toUtf8());
+    if (!doc.isObject()) return;
+    const auto v = doc.object();
+
+    restoring_view_ = true;
+    const QString period = v.value("period").toString("1y");
+    current_period_ = period;
+
+    auto apply = [](QPushButton* b, bool on) {
+        if (b && b->isChecked() != on) b->setChecked(on);
+    };
+    apply(btn_log_,    v.value("log").toBool(false));
+    apply(btn_vol_,    v.value("vol").toBool(false));
+    apply(btn_sma20_,  v.value("sma20").toBool(false));
+    apply(btn_sma50_,  v.value("sma50").toBool(false));
+    apply(btn_sma200_, v.value("sma200").toBool(false));
+    apply(btn_earn_,   v.value("earn").toBool(false));
+
+    // Reflect the saved period in the active-button highlight. The set of
+    // fixed period buttons may not include the saved period (e.g. saved
+    // value was a "range:…" custom). In that case nothing gets the active
+    // style — the custom-range pencil glyph signals the state implicitly.
+    QPushButton* match = nullptr;
+    if      (period == "1mo") match = btn_1m_;
+    else if (period == "3mo") match = btn_3m_;
+    else if (period == "6mo") match = btn_6m_;
+    else if (period == "1y")  match = btn_1y_;
+    else if (period == "5y")  match = btn_5y_;
+    else if (period.startsWith("range:")) match = btn_custom_;
+
+    auto inactive_ss =
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+                "QPushButton:hover{border-color:%3;background:%4;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::AMBER(), ui::colors::BG_RAISED());
+    auto active_ss =
+        QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
+                "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
+    for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
+        if (b) b->setStyleSheet(b == match ? active_ss : inactive_ss);
+    active_period_btn_ = match;
+
+    restoring_view_ = false;
 }
 
 void EquityOverviewTab::open_custom_range_picker() {
