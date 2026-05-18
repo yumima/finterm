@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace fincept::screens {
 
@@ -160,6 +161,12 @@ void ResearchCandleCanvas::set_show_sma(int period, bool on) {
     }
     if (*target == on) return;
     *target = on;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_comparisons(const QVector<Comparison>& list) {
+    comparisons_ = list;
     dirty_ = true;
     update();
 }
@@ -357,6 +364,86 @@ void ResearchCandleCanvas::rebuild_cache() {
     if (show_sma20_)  draw_sma(20,  QColor("#3b82f6"));   // blue
     if (show_sma50_)  draw_sma(50,  QColor("#a855f7"));   // purple
     if (show_sma200_) draw_sma(200, QColor("#eab308"));   // amber
+
+    // ── Comparison overlays ──────────────────────────────────────────────────
+    // Each comparison series is normalized to the primary's first visible
+    // close. y(t) = primary_anchor × (comp[t] / comp_anchor). Reads as
+    // "what would $primary_anchor invested in <comp_symbol> be worth on
+    // the same date?" — the canonical performance-comparison view.
+    if (!comparisons_.isEmpty() && count > 0) {
+        const double primary_anchor = candles_[start].close;
+        // Build a timestamp → primary index map covering visible window so
+        // we can align comparison candles by date (their dataset may have
+        // fewer or extra trading days, e.g. holiday skews).
+        for (const auto& comp : comparisons_) {
+            if (comp.candles.isEmpty()) continue;
+            // Find comp's anchor: first candle at or after candles_[start]'s
+            // timestamp. Binary scan — comparisons are date-sorted ascending.
+            const qint64 anchor_ts = candles_[start].timestamp;
+            int comp_anchor_idx = -1;
+            for (int k = 0; k < comp.candles.size(); ++k) {
+                if (comp.candles[k].timestamp >= anchor_ts) {
+                    comp_anchor_idx = k; break;
+                }
+            }
+            if (comp_anchor_idx < 0) continue;
+            const double comp_anchor = comp.candles[comp_anchor_idx].close;
+            if (comp_anchor <= 0.0) continue;
+
+            p.setPen(QPen(comp.color, 1.5, Qt::SolidLine));
+            QPainterPath path;
+            bool started = false;
+            int j = comp_anchor_idx;
+            for (int i = 0; i < count; ++i) {
+                const qint64 ts_i = candles_[start + i].timestamp;
+                // Advance j until comp.candles[j].timestamp >= ts_i (sparse
+                // matching — we paint the comp's latest known close at or
+                // before each primary candle). j only moves forward.
+                while (j + 1 < comp.candles.size() &&
+                       comp.candles[j + 1].timestamp <= ts_i) ++j;
+                const double y_value = primary_anchor *
+                                       (comp.candles[j].close / comp_anchor);
+                const QPointF pt(static_cast<double>(i + 0.5) * slot_w, py(y_value));
+                if (!started) { path.moveTo(pt); started = true; }
+                else            path.lineTo(pt);
+            }
+            if (started) p.drawPath(path);
+        }
+
+        // Legend chip stack, top-right of the plot. One row per comparison:
+        // colored swatch + symbol + total-window return %.
+        QFont legend_font("Consolas", 9, QFont::Bold);
+        p.setFont(legend_font);
+        QFontMetrics lfm(legend_font);
+        int ly = 4;
+        for (const auto& comp : comparisons_) {
+            if (comp.candles.isEmpty()) continue;
+            const qint64 anchor_ts = candles_[start].timestamp;
+            int idx_first = -1, idx_last = comp.candles.size() - 1;
+            for (int k = 0; k < comp.candles.size(); ++k) {
+                if (comp.candles[k].timestamp >= anchor_ts) {
+                    idx_first = k; break;
+                }
+            }
+            if (idx_first < 0) continue;
+            const double first_c = comp.candles[idx_first].close;
+            const double last_c  = comp.candles[idx_last].close;
+            if (first_c <= 0.0) continue;
+            const double pct = (last_c - first_c) / first_c * 100.0;
+            const QString text = comp.symbol + "  " +
+                                  (pct >= 0 ? "+" : "") +
+                                  QString::number(pct, 'f', 1) + "%";
+            const int tw = lfm.horizontalAdvance(text);
+            const int lh = lfm.height();
+            const QRect r(width() - PRICE_AXIS_W - tw - 16, ly, tw + 14, lh + 2);
+            p.fillRect(r, QColor(0, 0, 0, 160));
+            // Color swatch on the left
+            p.fillRect(r.left() + 3, r.center().y() - 4, 6, 8, comp.color);
+            p.setPen(QColor(220, 220, 220));
+            p.drawText(r.adjusted(12, 0, -2, 0), Qt::AlignVCenter | Qt::AlignLeft, text);
+            ly += lh + 4;
+        }
+    }
     p.setRenderHint(QPainter::Antialiasing, false);
 
     // ── Earnings markers ─────────────────────────────────────────────────────
@@ -663,6 +750,11 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
+    // Comparisons are picked per-primary (Apple → Msft/Goog; Boeing →
+    // Lockheed/RTX). Switching primary invalidates that choice, so clear
+    // the running comparison set and the canvas overlay.
+    comp_state_.clear();
+    if (candle_canvas_) candle_canvas_->set_comparisons({});
     // Restore the previously-saved chart view for this ticker (period +
     // overlay toggles + custom range). load_chart_view sets current_period_
     // before we subscribe below so the historical fetch uses the restored
@@ -938,6 +1030,21 @@ QWidget* EquityOverviewTab::build_chart_panel() {
                     save_chart_view();
                 });
 
+    btn_row->addSpacing(8);
+    btn_comp_ = new QPushButton(QStringLiteral("+ COMP"));
+    btn_comp_->setCursor(Qt::PointingHandCursor);
+    btn_comp_->setToolTip("Add a comparison ticker (rebased line overlay)");
+    btn_comp_->setStyleSheet(QString(
+        "QPushButton{background:transparent;color:%1;border:1px solid %2;"
+        "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
+        "font-family:'Consolas',monospace;}"
+        "QPushButton:hover{border-color:%3;background:%4;}")
+        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+             ui::colors::CYAN(), ui::colors::BG_RAISED()));
+    connect(btn_comp_, &QPushButton::clicked, this,
+            [this]() { add_comparison_dialog(); });
+    btn_row->addWidget(btn_comp_);
+
     btn_row->addStretch();
     vl->addLayout(btn_row);
     vl->addWidget(candle_canvas_, 1);
@@ -997,6 +1104,9 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
             [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
         current_historical_key_ = "equity:candles:" + current_symbol_ + ":" + period;
     }
+    // Re-fetch comparison series at the new period so the overlays stay in
+    // sync with the primary chart's window.
+    refresh_comparisons();
     save_chart_view();
 }
 
@@ -1075,6 +1185,159 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
     active_period_btn_ = match;
 
     restoring_view_ = false;
+}
+
+void EquityOverviewTab::add_comparison_dialog() {
+    // Tight cap on series count — beyond 3 the chart starts to wash out
+    // and the legend column eats the right edge of the plot.
+    constexpr int kMaxComparisons = 3;
+
+    // Lightweight management dialog: shows the currently-active comparisons
+    // and lets the user add one or remove existing ones. Persisting them
+    // across symbols feels surprising — comparison sets are usually
+    // primary-specific (Apple → Msft, Google; Boeing → Lockheed, RTX).
+    QDialog dlg(this);
+    dlg.setWindowTitle("Comparison overlays");
+    dlg.setModal(true);
+
+    auto* root = new QVBoxLayout(&dlg);
+    root->setContentsMargins(16, 14, 16, 14);
+    root->setSpacing(10);
+
+    auto* list_lbl = new QLabel("Active overlays (click ✕ to remove):");
+    list_lbl->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    root->addWidget(list_lbl);
+
+    auto* list_layout = new QVBoxLayout;
+    list_layout->setSpacing(4);
+    root->addLayout(list_layout);
+
+    // std::function (not `auto`) because the lambda recursively references
+    // itself via the inner ✕-button click handler — auto can't be deduced
+    // until the body completes, so `&rebuild_chips` inside the body would
+    // capture an undeduced type.
+    std::function<void()> rebuild_chips = [&, this]() {
+        // Clear list
+        while (auto* it = list_layout->takeAt(0)) {
+            if (it->widget()) it->widget()->deleteLater();
+            delete it;
+        }
+        if (comp_state_.isEmpty()) {
+            auto* empty = new QLabel("(none)");
+            empty->setStyleSheet(QString("color:%1;font-style:italic;font-size:12px;")
+                                     .arg(ui::colors::TEXT_SECONDARY()));
+            list_layout->addWidget(empty);
+            return;
+        }
+        for (int i = 0; i < comp_state_.size(); ++i) {
+            auto* row = new QWidget;
+            auto* hl = new QHBoxLayout(row);
+            hl->setContentsMargins(0, 0, 0, 0);
+            auto* swatch = new QLabel;
+            swatch->setFixedSize(10, 10);
+            swatch->setStyleSheet(QString("background:%1;border-radius:2px;")
+                                       .arg(comp_state_[i].color.name()));
+            hl->addWidget(swatch);
+            auto* sym = new QLabel(comp_state_[i].symbol);
+            sym->setStyleSheet(QString("color:%1;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+            hl->addWidget(sym);
+            hl->addStretch();
+            auto* rm = new QPushButton("✕");
+            rm->setFixedSize(24, 22);
+            rm->setCursor(Qt::PointingHandCursor);
+            hl->addWidget(rm);
+            connect(rm, &QPushButton::clicked, this, [this, i, &rebuild_chips]() {
+                comp_state_.removeAt(i);
+                refresh_comparisons();
+                rebuild_chips();
+            });
+            list_layout->addWidget(row);
+        }
+    };
+    rebuild_chips();
+
+    auto* form = new QFormLayout;
+    auto* sym_edit = new QLineEdit;
+    sym_edit->setPlaceholderText("e.g. MSFT");
+    form->addRow("Add ticker", sym_edit);
+    root->addLayout(form);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Close,
+                                          Qt::Horizontal, &dlg);
+    buttons->button(QDialogButtonBox::Ok)->setText("Add");
+    root->addWidget(buttons);
+
+    // 6-step palette. We pick by index modulo so even after removes the
+    // remaining series keep deterministic colours.
+    static const QVector<QColor> kPalette = {
+        QColor("#06b6d4"), QColor("#10b981"), QColor("#f59e0b"),
+        QColor("#ef4444"), QColor("#a855f7"), QColor("#3b82f6"),
+    };
+
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, [&, this]() {
+        const QString sym = sym_edit->text().trimmed().toUpper();
+        if (sym.isEmpty()) return;
+        if (sym == current_symbol_) return;   // pointless self-comp
+        for (const auto& c : comp_state_)
+            if (c.symbol == sym) return;       // already added
+        if (comp_state_.size() >= kMaxComparisons) return;
+        const QColor color = kPalette.at(comp_state_.size() % kPalette.size());
+        comp_state_.append({sym, color});
+        sym_edit->clear();
+        refresh_comparisons();
+        rebuild_chips();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    dlg.exec();
+}
+
+void EquityOverviewTab::refresh_comparisons() {
+    if (!candle_canvas_) return;
+    if (comp_state_.isEmpty()) {
+        candle_canvas_->set_comparisons({});
+        return;
+    }
+
+    // Push the current candle snapshots up to the canvas right away so the
+    // user sees the existing overlays immediately on dialog close. Any
+    // empty `candles` slots will be filled in by the callbacks below.
+    auto push_to_canvas = [this]() {
+        QVector<ResearchCandleCanvas::Comparison> out;
+        out.reserve(comp_state_.size());
+        for (const auto& cs : comp_state_) {
+            out.append({cs.symbol, cs.color, cs.candles});
+        }
+        candle_canvas_->set_comparisons(out);
+    };
+    push_to_canvas();
+
+    auto& svc = services::equity::EquityResearchService::instance();
+    const QString period_at_fetch = current_period_;
+    const QString primary_at_fetch = current_symbol_;
+    for (int i = 0; i < comp_state_.size(); ++i) {
+        const QString sym = comp_state_[i].symbol;
+        svc.subscribe_historical(
+            this, sym, period_at_fetch,
+            [this, sym, period_at_fetch, primary_at_fetch, push_to_canvas]
+            (const services::query::QueryStore::State& s) {
+                // Drop stale callbacks (primary or period changed mid-flight).
+                if (primary_at_fetch != current_symbol_) return;
+                if (period_at_fetch != current_period_) return;
+                if (!candle_canvas_) return;
+                if (!s.data.isValid() || s.data.isNull()) return;
+                const auto candles = s.data.value<QVector<services::equity::Candle>>();
+                if (candles.isEmpty()) return;
+                // Update the running CompState entry — by symbol, since
+                // index could have shifted if the user removed a chip
+                // mid-flight. Re-push the whole list so the canvas keeps
+                // all currently-loaded series visible.
+                for (auto& cs : comp_state_) {
+                    if (cs.symbol == sym) { cs.candles = candles; break; }
+                }
+                push_to_canvas();
+            });
+    }
 }
 
 void EquityOverviewTab::open_custom_range_picker() {

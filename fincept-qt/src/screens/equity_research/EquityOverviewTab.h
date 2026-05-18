@@ -72,6 +72,20 @@ class ResearchCandleCanvas : public QWidget {
     QVector<services::equity::EarningsEvent> earnings_events_;
     double week52_high_ = 0.0;
 
+    // Comparison overlay state. Each series is rendered as a single line
+    // normalized to the primary symbol's first visible close — so the user
+    // reads divergence as relative outperformance, not absolute price.
+  public:
+    struct Comparison {
+        QString symbol;
+        QColor  color;
+        QVector<services::equity::Candle> candles;
+    };
+    void set_comparisons(const QVector<Comparison>& list);
+
+  private:
+    QVector<Comparison> comparisons_;
+
     // Volume strip geometry — when show_volume_ is on, the price plot
     // shrinks by VOLUME_FRAC of its height to make room. The volume strip
     // sits between the price plot and the time axis.
@@ -217,6 +231,22 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_sma50_ = nullptr;
     QPushButton* btn_sma200_= nullptr;
     QPushButton* btn_earn_  = nullptr;
+    QPushButton* btn_comp_  = nullptr;   // opens comparison-add dialog
+
+    // Comparison series the user has added. We hold the canvas-bound state
+    // here too so re-subscribing on symbol/period change can re-fetch each
+    // comp without losing the colour assignment. `candles` is the running
+    // copy that survives partial callbacks — if comp#1 resolves before
+    // comp#2, we re-push the full list to the canvas so #1 doesn't flash
+    // out while #2 is still in flight.
+    struct CompState {
+        QString symbol;
+        QColor  color;
+        QVector<services::equity::Candle> candles;
+    };
+    QVector<CompState> comp_state_;
+    void add_comparison_dialog();
+    void refresh_comparisons();
 
     // Per-ticker view persistence (period + overlays + custom range).
     void save_chart_view() const;
