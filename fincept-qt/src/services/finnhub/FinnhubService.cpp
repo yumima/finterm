@@ -300,7 +300,11 @@ QVector<FinnhubInsiderTx> FinnhubService::parse_insider_tx(const QJsonObject& ro
         e.transaction_date  = QDate::fromString(o.value("transactionDate").toString(), Qt::ISODate);
         e.transaction_price = o.value("transactionPrice").toDouble();
         e.code              = o.value("transactionCode").toString();
-        out.append(e);
+        // Drop rows with no insider name or no parseable date — they'd render
+        // as blank table cells. Matches the empty-symbol filter in
+        // parse_ipo_calendar / parse_lockups.
+        if (!e.name.isEmpty() && e.transaction_date.isValid())
+            out.append(e);
     }
     return out;
 }
@@ -317,7 +321,9 @@ QVector<FinnhubRecTrend> FinnhubService::parse_recommendations(const QJsonArray&
         e.hold         = o.value("hold").toInt();
         e.sell         = o.value("sell").toInt();
         e.strong_sell  = o.value("strongSell").toInt();
-        out.append(e);
+        // Period is the time-bucket label — without it the row is meaningless.
+        if (!e.period.isEmpty())
+            out.append(e);
     }
     return out;
 }
