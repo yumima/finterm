@@ -104,8 +104,14 @@ class IpoWatchView : public QWidget {
     /// the canonical post-IPO supply-surge signal. Free elsewhere only for
     /// paid data services; we get it via finnhub_lockup_calendar in
     /// PreIpoService::finnhub_lockups(). Hidden when no FINNHUB_API_KEY.
+    ///
+    /// PRIVATE shows SEC Form D filers (Rule 506(b)/(c)/504 fundraises) so
+    /// pre-S-1 private companies — SpaceX, Anthropic, OpenAI, Anduril,
+    /// Qumulo, etc. — surface in IPO Watch's search and can be starred.
+    /// Backed by PreIpoService::recent_form_d(); no live quote (private
+    /// companies don't trade publicly).
     enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups,
-                LensCount };
+                LensPrivate, LensCount };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
                       TW_6Months, TW_12Months, TW_Past30Days };
     // Tab indexes for the two detail-rail tab bars — kept in sync with the
@@ -139,6 +145,7 @@ class IpoWatchView : public QWidget {
     void render_performance();
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
+    void render_private();          // SEC Form D filers — pre-S-1 privates
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     // Per-section detail rail builders — each populates one tab page or pane.

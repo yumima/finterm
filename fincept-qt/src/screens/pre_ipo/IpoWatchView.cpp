@@ -107,6 +107,7 @@ const char* IpoWatchView::lens_label(Lens l) {
         case LensPerformance: return "PERFORMANCE";
         case LensWatchlist:   return "WATCHLIST";
         case LensLockups:     return "LOCKUPS";
+        case LensPrivate:     return "PRIVATE";
         default:              return "";
     }
 }
@@ -372,6 +373,15 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
                 EventBus::instance().publish("equity_research.load_symbol",
                     QVariantMap{{"symbol", tkr}});
             }
+            return;
+        }
+        // PRIVATE lens: rows carry the EDGAR URL in UserRole+1 (column 0)
+        // so a click on any column opens the Form D filing in the browser.
+        // Private companies don't trade publicly — no ER route, but the
+        // primary source document is the next-best research target.
+        if (active_lens_ == LensPrivate) {
+            const QString url = it->data(Qt::UserRole + 1).toString();
+            if (!url.isEmpty()) QDesktopServices::openUrl(QUrl(url));
             return;
         }
         const int idx = it->data(Qt::UserRole).toInt();
@@ -1175,6 +1185,7 @@ void IpoWatchView::render() {
         case LensPerformance: render_performance(); break;
         case LensWatchlist:   render_watchlist(); break;
         case LensLockups:     render_lockups(); break;
+        case LensPrivate:     render_private(); break;
         default: break;
     }
 }
@@ -1493,13 +1504,34 @@ void IpoWatchView::render_lockups() {
     table_->setColumnCount(headers.size());
     table_->setHorizontalHeaderLabels(headers);
 
-    // No-data states: distinguish "no key" from "key set, no data".
+    // No-data states: distinguish (a) no key, (b) key set but service still
+    // loading, (c) key set, load done, Finnhub returned empty for our
+    // window. The third is the most common case once the user has a key —
+    // Finnhub's free lockup feed only covers companies actively running an
+    // IPO lockup; many months have zero entries.
     if (lockups.isEmpty()) {
         const bool has_key = services::finnhub::FinnhubService::instance().has_api_key();
-        const QString hint = has_key
-            ? QStringLiteral("No upcoming insider-share lockup expiries in the next 6 months.")
-            : QStringLiteral("Add a Finnhub API key in Settings → Credentials "
-                             "to unlock the lockup-expiry calendar.");
+        const bool loaded  = svc.is_loaded();
+        const QDate today = QDate::currentDate();
+        const QString window = today.toString("MMM d, yyyy") + " → " +
+                                today.addMonths(6).toString("MMM d, yyyy");
+        QString hint;
+        if (!has_key) {
+            hint = QStringLiteral("Add a Finnhub API key in Settings → Credentials "
+                                  "to unlock the insider-share lockup-expiry calendar. "
+                                  "(Bloomberg-grade signal; nowhere else for free.)");
+        } else if (!loaded) {
+            hint = QStringLiteral(
+                "Loading lockup expiries from Finnhub for %1… (first launch can take 60-90s).")
+                .arg(window);
+        } else {
+            hint = QStringLiteral(
+                "Finnhub has no upcoming insider-share lockup expiries in the window %1. "
+                "Their lockup feed only covers companies that filed an IPO with an active "
+                "lockup clause — typical months have 0-5 entries. Coverage widens around "
+                "IPO bursts (Q1 + late Q3 historically).")
+                .arg(window);
+        }
         if (header_lbl_)
             header_lbl_->setText(QString("<i style='color:#7a7a7a;'>%1</i>").arg(hint));
         for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
@@ -1564,6 +1596,102 @@ void IpoWatchView::render_lockups() {
             QString::number(sorted.size()) +
             " insider-share lockup expiries (Finnhub). "
             "Click a row to open the ticker in Equity Research.</i>");
+    }
+}
+
+void IpoWatchView::render_private() {
+    using ui::colors::AMBER;
+    using ui::colors::CYAN;
+    using ui::colors::TEXT_SECONDARY;
+
+    const auto& svc = services::PreIpoService::instance();
+    const auto filings = svc.recent_form_d();
+
+    const QStringList headers{"COMPANY", "FILED", "RAISED ($M)", "EXEMPTION", "STATE", "CIK"};
+    table_->setSortingEnabled(false);
+    table_->clear();
+    table_->setColumnCount(headers.size());
+    table_->setHorizontalHeaderLabels(headers);
+
+    if (filings.isEmpty()) {
+        // Initial load is async (~60-90s on first launch). Distinguish that
+        // from "service has run, returned empty" via is_loaded().
+        const QString hint = svc.is_loaded()
+            ? QStringLiteral("SEC Form D filings unavailable — the EDGAR fetch returned empty. "
+                             "This usually means the rate-limited Form D scan didn't surface "
+                             "any operating-company filings in the last 365 days.")
+            : QStringLiteral("Loading SEC Form D filings… (60-90s on first launch).");
+        if (header_lbl_)
+            header_lbl_->setText(QString("<i style='color:#7a7a7a;'>%1</i>").arg(hint));
+        table_->setRowCount(0);
+        return;
+    }
+
+    // Build filtered + sorted list. Filter is the same search_query_ the
+    // other lenses use — typing "SpaceX" or "Anthropic" surfaces them
+    // immediately. Sorted by filed_date descending (most recent raises
+    // first), which matches the user's actual mental model: "what just
+    // happened in private markets."
+    QVector<int> rows;
+    for (int i = 0; i < filings.size(); ++i) {
+        const auto& f = filings.at(i);
+        if (!search_query_.isEmpty() &&
+            !f.company_name.toLower().contains(search_query_) &&
+            !f.cik.toLower().contains(search_query_))
+            continue;
+        rows.append(i);
+    }
+    std::sort(rows.begin(), rows.end(),
+              [&filings](int a, int b) {
+                  return filings.at(a).filed_date > filings.at(b).filed_date;
+              });
+
+    table_->setRowCount(rows.size());
+    for (int r = 0; r < rows.size(); ++r) {
+        const auto& f = filings.at(rows.at(r));
+        // Col 0: company. UserRole = -1 sentinel (consistent with LOCKUPS —
+        // marks the row as non-entries-driven). UserRole + 1 carries the
+        // EDGAR URL so the cell-click handler can route the user straight
+        // to the primary-source filing.
+        auto* co = new QTableWidgetItem(f.company_name);
+        co->setData(Qt::UserRole, -1);
+        co->setData(Qt::UserRole + 1, f.edgar_url);
+        co->setForeground(QBrush(QColor(CYAN())));
+        co->setToolTip(f.company_name + (f.edgar_url.isEmpty() ? "" :
+                                          "\nClick to open EDGAR filing"));
+        table_->setItem(r, 0, co);
+
+        table_->setItem(r, 1, new DateSortItem(
+            f.filed_date.isValid() ? f.filed_date.toString("MMM d, yyyy") : "—",
+            f.filed_date.isValid() ? f.filed_date.toString("yyyyMMdd").toLongLong() : 0));
+
+        // Form D amount is in dollars after the parser; format as millions
+        // because every meaningful private raise is at the seven-figure
+        // scale or above.
+        const double amt_m = f.amount_raised / 1e6;
+        auto* raised = new NumSortItem(
+            f.amount_raised > 0 ? QString::number(amt_m, 'f', 1) : "—",
+            amt_m);
+        raised->setForeground(QBrush(QColor(AMBER())));
+        table_->setItem(r, 2, raised);
+
+        table_->setItem(r, 3, new QTableWidgetItem(
+            f.exemption.isEmpty() ? "—" : f.exemption));
+        table_->setItem(r, 4, new QTableWidgetItem(
+            f.state.isEmpty() ? "—" : f.state));
+        table_->setItem(r, 5, new QTableWidgetItem(
+            f.cik.isEmpty() ? "—" : f.cik));
+    }
+    table_->setSortingEnabled(true);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int c = 1; c < table_->columnCount(); ++c)
+        table_->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+
+    if (header_lbl_) {
+        header_lbl_->setText(QString(
+            "<i style='color:#7a7a7a;'>%1 Form D filers (SEC) — click a row to open the EDGAR filing. "
+            "Type a company name in the search bar to filter.</i>")
+            .arg(rows.size()));
     }
 }
 

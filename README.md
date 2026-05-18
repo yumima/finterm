@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9369ef4d`](https://github.com/yumima/finterm/commit/9369ef4d) services(finnhub): live-tick WebSocket → ER price push (Round 4)
 - [`8b92d6ee`](https://github.com/yumima/finterm/commit/8b92d6ee) screens(futures): CHINA pre-warm + 60s cache for akshare commodities
 - [`173b95e4`](https://github.com/yumima/finterm/commit/173b95e4) screens(er): multi-symbol comparison overlay on the chart (Pass 5)
 - [`79a3c122`](https://github.com/yumima/finterm/commit/79a3c122) screens(er): saved chart view per ticker
