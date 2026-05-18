@@ -281,11 +281,15 @@ void FuturesWatchlistPanel::refresh() {
 }
 
 void FuturesWatchlistPanel::render_from_cache() {
-    if (active_class_.isEmpty() || active_class_ == "CHINA") {
+    if (active_class_.isEmpty()) {
         table_->setRowCount(0);
         set_status("—");
         return;
     }
+    // CHINA used to bypass the watchlist entirely (akshare panel replaced
+    // the grid). With CHINA now sourced from the standard ContractDef
+    // catalog via .SS/.SZ spot proxies, it flows through here like every
+    // other class — no special-case guard.
     auto& cache = FuturesQuoteCache::instance();
     const auto rows = cache.quotes_for_class(active_class_);
     if (rows.isEmpty()) {
@@ -853,7 +857,8 @@ void FuturesHeatmapPanel::render_from_cache() {
     clear_grid();
     int row = 0;
     const QStringList order = {"INDEX", "RATES", "ENERGY", "METALS", "AGS",
-                               "FX", "CRYPTO", "EUROPE", "JAPAN", "ASIA"};
+                               "FX", "CRYPTO", "EUROPE", "JAPAN", "ASIA",
+                               "CHINA"};
     for (const auto& cls : order) {
         if (!groups.contains(cls)) continue;
         auto* row_label = new QLabel(cls);

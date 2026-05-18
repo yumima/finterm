@@ -703,11 +703,22 @@ void EquityResearchScreen::update_market_status_badge() {
 
     if (it == kSessions.end()) {
         // Unknown venue — show the raw code muted, no status guess.
+        // Tooltip is repointed so the user doesn't misread the venue
+        // code (e.g. "BVB", "JNB") as a session status.
         mkt_status_label_->setText(current_exchange_);
         mkt_status_label_->setStyleSheet(chip_ss(ui::colors::BORDER_MED(), true));
+        mkt_status_label_->setToolTip(
+            QString("Listed on %1 — no session calendar tracked for this venue.")
+                .arg(current_exchange_));
         mkt_status_label_->setVisible(true);
         return;
     }
+
+    // NB: we don't track per-exchange holidays here (NYSE 4 July, LSE
+    // bank holidays, etc.). On those days the badge will say OPEN during
+    // what is actually a closed session. Acceptable scope limit for a
+    // glance-readable hint; the trader's order book / live ticks would
+    // tell the truth.
 
     const Session& s = it.value();
     const QTimeZone tz(s.tz.toUtf8());
@@ -747,6 +758,9 @@ void EquityResearchScreen::update_market_status_badge() {
 
     mkt_status_label_->setText(status);
     mkt_status_label_->setStyleSheet(chip_ss(color, status == "CLOSED"));
+    mkt_status_label_->setToolTip(
+        QString("%1 · %2 (local %3)")
+            .arg(current_exchange_, status, local.time().toString("HH:mm")));
     mkt_status_label_->setVisible(true);
 }
 
