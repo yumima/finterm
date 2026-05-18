@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9911e69d`](https://github.com/yumima/finterm/commit/9911e69d) review-noted: tooltip + CHINA leftover guards
 - [`39d14e63`](https://github.com/yumima/finterm/commit/39d14e63) screens(futures): CHINA uses the standard grid (no more special case)
 - [`2ecd3b8d`](https://github.com/yumima/finterm/commit/2ecd3b8d) screens(er): analyst recommendation-trend chip (Finnhub)
 - [`7ef8ac2b`](https://github.com/yumima/finterm/commit/7ef8ac2b) screens(er): market-status badge in quote bar (OPEN/PRE/AFTER/CLOSED)

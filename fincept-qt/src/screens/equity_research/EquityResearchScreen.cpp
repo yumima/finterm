@@ -21,16 +21,116 @@
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHash>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMetaType>
+#include <QPainter>
+#include <QStyledItemDelegate>
 #include <QTimeZone>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
+
+namespace {
+
+// Data roles on QListWidgetItem for the search-result popup. UserRole holds
+// the symbol (used by activation handlers); the rest are read by the
+// delegate below for richer rendering. Kept anonymous-namespace local to
+// this translation unit — only the popup uses them.
+constexpr int kRoleSymbol   = Qt::UserRole;
+constexpr int kRoleName     = Qt::UserRole + 1;
+constexpr int kRoleExchange = Qt::UserRole + 2;
+constexpr int kRoleCurrency = Qt::UserRole + 3;
+constexpr int kRoleType     = Qt::UserRole + 4;
+
+// Custom row painter for the inline ticker-search popup. Renders each
+// match as:
+//     SYMBOL (bold amber) · NAME (primary, ellipsized) ········ EX · CCY · [TYPE]
+// The right-aligned chip stack disambiguates cross-listings (e.g. BHP on
+// NYSE in USD vs ASX in AUD), which a single plain-text line buried in
+// the middle of the row couldn't make obvious. Type chip only shown when
+// the row isn't a plain equity — adding "EQUITY" to every line would be
+// noise.
+class SearchResultDelegate : public QStyledItemDelegate {
+  public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QSize sizeHint(const QStyleOptionViewItem& opt, const QModelIndex&) const override {
+        const QFontMetrics fm(opt.font);
+        return {0, fm.height() + 10};
+    }
+
+    void paint(QPainter* p, const QStyleOptionViewItem& opt,
+               const QModelIndex& idx) const override {
+        p->save();
+
+        // Selection background — let the default style draw the highlight
+        // rectangle so the popup's QSS theming continues to control colors.
+        QStyleOptionViewItem o(opt);
+        initStyleOption(&o, idx);
+        o.text.clear();   // suppress the default text-paint
+        QStyledItemDelegate::paint(p, o, idx);
+
+        const QString sym  = idx.data(kRoleSymbol).toString();
+        const QString name = idx.data(kRoleName).toString();
+        const QString exch = idx.data(kRoleExchange).toString();
+        const QString ccy  = idx.data(kRoleCurrency).toString();
+        const QString type = idx.data(kRoleType).toString().toUpper();
+
+        QRect r = opt.rect.adjusted(8, 0, -8, 0);
+
+        // ── Right side: type chip first (drawn rightmost), then ccy, exch.
+        QFont chip_font = opt.font;
+        chip_font.setPointSizeF(chip_font.pointSizeF() - 1);
+        chip_font.setBold(true);
+        const QFontMetrics chip_fm(chip_font);
+        p->setFont(chip_font);
+
+        auto draw_chip = [&](const QString& text, const QColor& color) {
+            if (text.isEmpty()) return;
+            const int tw = chip_fm.horizontalAdvance(text);
+            const QRect cr(r.right() - tw - 8, r.top() + (r.height() - chip_fm.height()) / 2 - 1,
+                           tw + 8, chip_fm.height() + 2);
+            // Background fill is omitted on purpose — keeps the popup looking
+            // flat and avoids fighting selection highlight. Just coloured text.
+            p->setPen(color);
+            p->drawText(cr, Qt::AlignCenter, text);
+            r.setRight(cr.left() - 6);
+        };
+
+        const QColor dim(0x88, 0x88, 0x88);
+        if (!type.isEmpty() && type != "EQUITY" && type != "STOCK")
+            draw_chip("[" + type + "]", dim);
+        draw_chip(ccy, dim);
+        draw_chip(exch, QColor(0xC8, 0x9B, 0x3C));   // muted amber
+
+        // ── Left side: symbol bold amber, then name in primary text colour.
+        QFont sym_font = opt.font;
+        sym_font.setBold(true);
+        const QFontMetrics sym_fm(sym_font);
+        p->setFont(sym_font);
+        p->setPen(QColor(0xFF, 0xB0, 0x00));
+        const int sym_w = sym_fm.horizontalAdvance(sym);
+        p->drawText(r, Qt::AlignVCenter | Qt::AlignLeft, sym);
+
+        QRect name_rect = r.adjusted(sym_w + 12, 0, 0, 0);
+        QFont name_font = opt.font;
+        p->setFont(name_font);
+        p->setPen(opt.palette.color(QPalette::Text));
+        const QString elided = QFontMetrics(name_font).elidedText(
+            name, Qt::ElideRight, name_rect.width());
+        p->drawText(name_rect, Qt::AlignVCenter | Qt::AlignLeft, elided);
+
+        p->restore();
+    }
+};
+
+} // namespace
 
 EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -267,6 +367,7 @@ QWidget* EquityResearchScreen::build_title_bar() {
              ui::colors::BORDER_MED(), ui::colors::AMBER_DIM(),
              ui::colors::AMBER(), ui::colors::BG_RAISED()));
     inline_search_popup_->hide();
+    inline_search_popup_->setItemDelegate(new SearchResultDelegate(inline_search_popup_));
 
     // Debounced search on text change.
     connect(inline_search_input_, &QLineEdit::textChanged, this,
@@ -289,11 +390,16 @@ QWidget* EquityResearchScreen::build_title_bar() {
         if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
         inline_search_popup_->clear();
         for (const auto& r : results) {
-            QString line = r.symbol;
-            if (!r.name.isEmpty())  line += "  " + r.name;
-            if (!r.exchange.isEmpty()) line += "  · " + r.exchange;
-            auto* it = new QListWidgetItem(line);
-            it->setData(Qt::UserRole, r.symbol);
+            // The delegate paints from the structured roles — no display
+            // text is set on the item itself. A11y / fallback readers fall
+            // back to the (empty) display string, which we accept for now;
+            // a richer accessibleText is a future polish.
+            auto* it = new QListWidgetItem;
+            it->setData(kRoleSymbol,   r.symbol);
+            it->setData(kRoleName,     r.name);
+            it->setData(kRoleExchange, r.exchange);
+            it->setData(kRoleCurrency, r.currency);
+            it->setData(kRoleType,     r.type);
             inline_search_popup_->addItem(it);
         }
         if (inline_search_popup_->count() == 0) {
