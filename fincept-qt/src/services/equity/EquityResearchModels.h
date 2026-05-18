@@ -210,6 +210,19 @@ struct MarketSentimentSnapshot {
     QString fetched_at;
 };
 
+// ── Earnings event ───────────────────────────────────────────────────────────
+// Single earnings announcement — used to draw markers on the price chart.
+// Surprise percentage is signed: positive = beat, negative = miss.
+struct EarningsEvent {
+    qint64 timestamp = 0;          // unix seconds at announcement
+    double eps_estimate = 0.0;     // analyst consensus
+    double eps_actual = 0.0;       // reported (0 for upcoming)
+    double surprise_pct = 0.0;     // (actual - estimate) / |estimate| × 100
+    bool   has_estimate = false;
+    bool   has_actual = false;
+    bool   has_surprise = false;
+};
+
 } // namespace fincept::services::equity
 
 // ── QVariant interop for QueryStore ─────────────────────────────────────────
@@ -225,3 +238,4 @@ Q_DECLARE_METATYPE(fincept::services::equity::TechnicalsData)
 Q_DECLARE_METATYPE(fincept::services::equity::FinancialsData)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::NewsArticle>)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::PeerData>)
+Q_DECLARE_METATYPE(QVector<fincept::services::equity::EarningsEvent>)

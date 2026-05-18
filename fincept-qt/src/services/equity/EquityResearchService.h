@@ -78,6 +78,12 @@ class EquityResearchService : public QObject {
     void subscribe_peers(QObject* owner, const QString& symbol, const QStringList& peer_symbols,
                          query::QueryStore::Callback cb);
 
+    /// Subscribe to the earnings-dates stream for `symbol`. State carries
+    /// QVector<EarningsEvent>. Backed by yfinance's ticker.earnings_dates;
+    /// fetch is a single daemon call (~200-500ms).
+    void subscribe_earnings(QObject* owner, const QString& symbol,
+                            query::QueryStore::Callback cb);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
@@ -135,6 +141,7 @@ class EquityResearchService : public QObject {
     TechSignal score_indicator(const QString& name, double value, double sma20, double sma50) const;
     QVector<PeerData> parse_peers(const QJsonArray& arr) const;
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;
+    QVector<EarningsEvent> parse_earnings(const QJsonArray& arr) const;
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
     static constexpr int kQuoteTtlSec = 60;
@@ -146,6 +153,9 @@ class EquityResearchService : public QObject {
     static constexpr int kFinancialsTtlSec = 3600;
     // Peer fundamentals (P/E, P/B, ROE, …) move slowly — same hour-long TTL.
     static constexpr int kPeersTtlSec = 3600;
+    // Earnings dates are only updated when a new quarter is announced —
+    // session-long TTL is plenty.
+    static constexpr int kEarningsTtlSec = 3600;
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

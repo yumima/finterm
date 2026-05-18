@@ -1172,6 +1172,67 @@ def search_symbols(query, limit=20):
     except Exception as e:
         return {"error": str(e), "query": query, "results": []}
 
+def get_earnings_dates(symbol, lookback_days=1825, lookahead_days=180):
+    """Return past + upcoming earnings dates for a symbol.
+
+    yfinance's `ticker.earnings_dates` returns a DataFrame indexed by date
+    with EPS estimate / actual / surprise columns. We keep the last 5 years
+    (covers the ER 5Y chart) and any upcoming dates within 180 days so the
+    chart can flag the next earnings event.
+
+    Returns:
+        {"symbol": "...", "dates": [
+            {"timestamp": <unix sec>,
+             "eps_estimate": <float|None>,
+             "eps_actual":   <float|None>,
+             "surprise_pct": <float|None>}, ...]}
+    """
+    from datetime import datetime, timedelta, timezone
+    try:
+        ticker = yf.Ticker(symbol)
+        df = ticker.earnings_dates
+        if df is None or getattr(df, "empty", True):
+            return {"symbol": symbol, "dates": []}
+        now = datetime.now(timezone.utc)
+        cutoff_back = now - timedelta(days=lookback_days)
+        cutoff_fwd  = now + timedelta(days=lookahead_days)
+        dates = []
+        for idx, row in df.iterrows():
+            # yfinance returns tz-aware timestamps; normalize.
+            ts = pd.Timestamp(idx)
+            if ts.tzinfo is None:
+                ts = ts.tz_localize("UTC")
+            dt = ts.to_pydatetime()
+            if dt < cutoff_back or dt > cutoff_fwd:
+                continue
+
+            def _f(name):
+                if name not in df.columns:
+                    return None
+                v = row[name]
+                try:
+                    if pd.isna(v):
+                        return None
+                except Exception:
+                    pass
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return None
+
+            dates.append({
+                "timestamp":    int(dt.timestamp()),
+                "eps_estimate": _f("EPS Estimate"),
+                "eps_actual":   _f("Reported EPS"),
+                "surprise_pct": _f("Surprise(%)"),
+            })
+        # Sort oldest → newest (chart layer can pick a slice).
+        dates.sort(key=lambda d: d["timestamp"])
+        return {"symbol": symbol, "dates": dates}
+    except Exception as e:
+        return {"error": str(e), "symbol": symbol, "dates": []}
+
+
 def get_news(symbol, count=20):
     """Fetch news articles for a symbol using yfinance"""
     try:
@@ -1769,6 +1830,16 @@ def _daemon_dispatch_inner(action, payload):
         # Real day's top gainers + losers via yfinance.screen. Replaces the
         # hardcoded 12-ticker watchlist used by TopMoversWidget.
         return get_top_movers((payload or {}).get("count", 10))
+    if action == "earnings_dates":
+        # Per-symbol earnings dates (past + upcoming) for the chart's
+        # earnings markers. Backed by yfinance's ticker.earnings_dates so
+        # we don't pay the Finnhub round-trip when the key isn't set.
+        p = payload or {}
+        return get_earnings_dates(
+            p.get("symbol"),
+            p.get("lookback_days", 1825),
+            p.get("lookahead_days", 180),
+        )
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

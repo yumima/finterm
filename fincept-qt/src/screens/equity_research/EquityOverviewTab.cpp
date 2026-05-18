@@ -128,6 +128,47 @@ void ResearchCandleCanvas::set_placeholder_state(PlaceholderState state) {
     update();
 }
 
+void ResearchCandleCanvas::set_log_scale(bool on) {
+    if (log_scale_ == on) return;
+    log_scale_ = on;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_show_volume(bool on) {
+    if (show_volume_ == on) return;
+    show_volume_ = on;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_show_sma(int period, bool on) {
+    bool* target = nullptr;
+    switch (period) {
+        case 20:  target = &show_sma20_;  break;
+        case 50:  target = &show_sma50_;  break;
+        case 200: target = &show_sma200_; break;
+        default: return;
+    }
+    if (*target == on) return;
+    *target = on;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_earnings_events(const QVector<services::equity::EarningsEvent>& events) {
+    earnings_events_ = events;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_week52_high(double v) {
+    if (qFuzzyCompare(week52_high_, v)) return;
+    week52_high_ = v;
+    // 52w high only affects the hover overlay readout, not the cached
+    // pixmap — no need to dirty. The overlay redraws on every mouse move.
+}
+
 void ResearchCandleCanvas::resizeEvent(QResizeEvent* e) {
     QWidget::resizeEvent(e);
     dirty_ = true;
@@ -184,7 +225,23 @@ void ResearchCandleCanvas::rebuild_cache() {
     const int start = qMax(0, total - MAX_VISIBLE);
     const int count = total - start;
 
-    // Price range
+    // ── Plot-area geometry ───────────────────────────────────────────────────
+    // Optional volume strip steals VOLUME_FRAC of the available plot height.
+    // Layout (top to bottom): price plot | (gap) | volume strip | time axis.
+    const int plot_w = W - PRICE_AXIS_W;
+    const int total_plot_h = H - TIME_AXIS_H;
+    if (plot_w <= 0 || total_plot_h <= 0)
+        return;
+    const int volume_gap = show_volume_ ? 4 : 0;
+    const int volume_h = show_volume_
+                             ? qMax(36, static_cast<int>(total_plot_h * VOLUME_FRAC))
+                             : 0;
+    const int plot_h = total_plot_h - volume_h - volume_gap;
+    if (plot_h <= 0)
+        return;
+    const int volume_top = plot_h + volume_gap;
+
+    // ── Price range (over visible window) ────────────────────────────────────
     double lo = 1e18, hi = 0.0;
     for (int i = start; i < total; ++i) {
         lo = std::min(lo, candles_[i].low);
@@ -192,26 +249,30 @@ void ResearchCandleCanvas::rebuild_cache() {
     }
     if (lo >= hi)
         return;
-
     const double margin = (hi - lo) * 0.06;
     lo -= margin;
     hi += margin;
 
-    const int plot_w = W - PRICE_AXIS_W;
-    const int plot_h = H - TIME_AXIS_H;
-    if (plot_w <= 0 || plot_h <= 0)
-        return;
+    // Log-scale projection — kept as a single lambda so SMA/candle/grid all
+    // share the same mapping. lo_l/hi_l are precomputed; log(<=0) guarded.
+    const double lo_l = log_scale_ ? std::log(qMax(1e-9, lo)) : lo;
+    const double hi_l = log_scale_ ? std::log(qMax(1e-9, hi)) : hi;
+    auto py = [&](double price) -> int {
+        if (log_scale_) {
+            const double v = std::log(qMax(1e-9, price));
+            return static_cast<int>(plot_h - (v - lo_l) / (hi_l - lo_l) * plot_h);
+        }
+        return static_cast<int>(plot_h - (price - lo) / (hi - lo) * plot_h);
+    };
 
-    auto py = [&](double price) -> int { return static_cast<int>(plot_h - (price - lo) / (hi - lo) * plot_h); };
-
-    // Grid lines
+    // ── Price-plot grid lines ────────────────────────────────────────────────
     p.setPen(QPen(QColor(ui::colors::BORDER_DIM()), 1, Qt::DotLine));
     for (int g = 1; g < 6; ++g) {
         int gy = plot_h * g / 6;
         p.drawLine(0, gy, plot_w, gy);
     }
 
-    // Candles
+    // Candle layout
     const double slot_w = static_cast<double>(plot_w) / count;
     const int body_w = qMax(1, static_cast<int>(slot_w * 0.65));
     const int half = body_w / 2;
@@ -230,6 +291,7 @@ void ResearchCandleCanvas::rebuild_cache() {
     const QColor wick_bull("#2a9d5c");
     const QColor wick_bear("#b83a3a");
 
+    // ── Candles ──────────────────────────────────────────────────────────────
     for (int i = 0; i < count; ++i) {
         const auto& c = candles_[start + i];
         const int cx = static_cast<int>((i + 0.5) * slot_w);
@@ -246,16 +308,114 @@ void ResearchCandleCanvas::rebuild_cache() {
         const int body_bot = std::max(open_y, close_y);
         const int body_h = qMax(1, body_bot - body_top);
 
-        // Wick
         p.setPen(QPen(wcol, 1));
         p.drawLine(cx, high_y, cx, body_top);
         p.drawLine(cx, body_bot, cx, low_y);
-
-        // Body
         p.fillRect(cx - half, body_top, body_w, body_h, col);
     }
 
-    // Price axis (right)
+    // ── SMA overlays ─────────────────────────────────────────────────────────
+    // Computed across the full candles_ array in one O(n) pass per period.
+    // Skipped if the array is shorter than the SMA window (no value to draw).
+    auto compute_sma = [&](int period) -> QVector<double> {
+        QVector<double> out(candles_.size(), std::numeric_limits<double>::quiet_NaN());
+        if (static_cast<int>(candles_.size()) < period) return out;
+        double sum = 0.0;
+        for (int i = 0; i < period; ++i) sum += candles_[i].close;
+        out[period - 1] = sum / period;
+        for (int i = period; i < candles_.size(); ++i) {
+            sum += candles_[i].close - candles_[i - period].close;
+            out[i] = sum / period;
+        }
+        return out;
+    };
+    auto draw_sma = [&](int period, const QColor& color) {
+        if (static_cast<int>(candles_.size()) < period) return;
+        const auto sma = compute_sma(period);
+        p.setPen(QPen(color, 1, Qt::SolidLine));
+        QPainterPath path;
+        bool started = false;
+        for (int i = 0; i < count; ++i) {
+            const double v = sma[start + i];
+            if (std::isnan(v)) continue;
+            const QPointF pt(static_cast<double>(i + 0.5) * slot_w, py(v));
+            if (!started) { path.moveTo(pt); started = true; }
+            else            path.lineTo(pt);
+        }
+        if (started)
+            p.drawPath(path);
+    };
+    p.setRenderHint(QPainter::Antialiasing, true);
+    if (show_sma20_)  draw_sma(20,  QColor("#3b82f6"));   // blue
+    if (show_sma50_)  draw_sma(50,  QColor("#a855f7"));   // purple
+    if (show_sma200_) draw_sma(200, QColor("#eab308"));   // amber
+    p.setRenderHint(QPainter::Antialiasing, false);
+
+    // ── Earnings markers ─────────────────────────────────────────────────────
+    // For each event, find the first visible candle whose timestamp ≥ the
+    // event time; draw a dashed vertical line + small "E" badge above the
+    // chart. Events outside the visible window are skipped.
+    if (!earnings_events_.isEmpty()) {
+        const qint64 first_ts = candles_[start].timestamp;
+        const qint64 last_ts  = candles_.last().timestamp;
+        QPen earn_pen(QColor(255, 200, 64, 140), 1, Qt::DashLine);
+        QFont earn_font("Consolas", 8, QFont::Bold);
+        QFontMetrics efm(earn_font);
+        for (const auto& e : earnings_events_) {
+            if (e.timestamp < first_ts || e.timestamp > last_ts) continue;
+            // Binary-search the visible slice for the first candle ≥ event ts.
+            int lo_i = 0, hi_i = count - 1, found = -1;
+            while (lo_i <= hi_i) {
+                const int mid = (lo_i + hi_i) / 2;
+                if (candles_[start + mid].timestamp >= e.timestamp) {
+                    found = mid; hi_i = mid - 1;
+                } else {
+                    lo_i = mid + 1;
+                }
+            }
+            if (found < 0) continue;
+            const int ex = static_cast<int>((found + 0.5) * slot_w);
+            p.setPen(earn_pen);
+            p.drawLine(ex, 0, ex, plot_h + volume_h + volume_gap);
+            p.setPen(QColor(255, 200, 64, 230));
+            p.setFont(earn_font);
+            // Pick color tinge by surprise sign (only if we have actual data).
+            QString label = "E";
+            if (e.has_actual && e.has_surprise) {
+                label = e.surprise_pct >= 0 ? "E+" : "E-";
+                p.setPen(QColor(e.surprise_pct >= 0
+                                    ? ui::colors::POSITIVE.get()
+                                    : ui::colors::NEGATIVE.get()));
+            }
+            const int tw = efm.horizontalAdvance(label);
+            p.drawText(ex - tw / 2, efm.ascent() + 2, label);
+        }
+    }
+
+    // ── Volume strip ─────────────────────────────────────────────────────────
+    if (show_volume_) {
+        // Range over visible window only — different period selections have
+        // very different volume scales (5Y dwarfs 1M).
+        double vmax = 1.0;
+        for (int i = start; i < total; ++i)
+            vmax = std::max(vmax, static_cast<double>(candles_[i].volume));
+        // Strip border
+        p.setPen(QPen(QColor(ui::colors::BORDER_DIM()), 1));
+        p.drawLine(0, volume_top, plot_w, volume_top);
+        for (int i = 0; i < count; ++i) {
+            const auto& c = candles_[start + i];
+            if (c.volume <= 0) continue;
+            const int cx = static_cast<int>((i + 0.5) * slot_w);
+            const bool bull = c.close >= c.open;
+            QColor col = bull ? bull_color : bear_color;
+            col.setAlpha(180);
+            const int bar_h = qMax(1, static_cast<int>(c.volume / vmax * (volume_h - 2)));
+            const int by = volume_top + 1 + (volume_h - 2 - bar_h);
+            p.fillRect(cx - half, by, body_w, bar_h, col);
+        }
+    }
+
+    // ── Price axis (right) ───────────────────────────────────────────────────
     p.setPen(QPen(QColor(ui::colors::BORDER_DIM.get()), 1));
     p.drawLine(plot_w, 0, plot_w, plot_h);
 
@@ -266,15 +426,25 @@ void ResearchCandleCanvas::rebuild_cache() {
 
     const bool is_large = hi > 1000;
     for (int g = 0; g <= 6; ++g) {
-        double price = lo + (hi - lo) * g / 6.0;
+        // In log mode, distribute the tick prices in log space so the labels
+        // match the visual position. In linear mode this is just lo+(hi-lo)*t.
+        double price;
+        if (log_scale_) {
+            const double t = static_cast<double>(g) / 6.0;
+            price = std::exp(lo_l + (hi_l - lo_l) * t);
+        } else {
+            price = lo + (hi - lo) * g / 6.0;
+        }
         int gy = py(price);
-        QString txt = currency_sym_ + (is_large ? QString::number(price, 'f', 0) : QString::number(price, 'f', 2));
+        QString txt = currency_sym_ + (is_large ? QString::number(price, 'f', 0)
+                                                : QString::number(price, 'f', 2));
         p.drawText(plot_w + 6, gy + fm.ascent() / 2, txt);
     }
 
-    // Time axis (bottom)
+    // ── Time axis (bottom — sits below volume strip if present) ──────────────
+    const int time_axis_y = plot_h + volume_h + volume_gap;
     p.setPen(QPen(QColor(ui::colors::BORDER_DIM.get()), 1));
-    p.drawLine(0, plot_h, plot_w, plot_h);
+    p.drawLine(0, time_axis_y, plot_w, time_axis_y);
 
     p.setPen(QColor(ui::colors::TEXT_SECONDARY.get()));
     const qint64 span_sec = candles_.last().timestamp - candles_.first().timestamp;
@@ -294,10 +464,11 @@ void ResearchCandleCanvas::rebuild_cache() {
         int lx = static_cast<int>((i + 0.5) * slot_w);
         int tw = fm.horizontalAdvance(label);
         if (lx - tw / 2 > 0 && lx + tw / 2 < plot_w)
-            p.drawText(lx - tw / 2, plot_h + TIME_AXIS_H - 4, label);
+            p.drawText(lx - tw / 2, time_axis_y + TIME_AXIS_H - 4, label);
     }
 
-    // Last candle close price line (highlight)
+    // Last candle close price line — drawn after volume so it doesn't get
+    // hidden if the user toggles volume.
     if (!candles_.isEmpty()) {
         double last_close = candles_.last().close;
         int ly = py(last_close);
@@ -378,6 +549,30 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     const QString delta = QString("Δ %1 (%2%)").arg(fmt_signed(dchg), fmt_signed2(dpct));
     const QString right = QString("Vol %1").arg(fmt_v(c.volume));
 
+    // Comparators — only built if the source data is set. These add context
+    // a pro looks for at a glance: how far below 52w-high is this print, how
+    // far from the 50d trend, etc.
+    QString vs_52w;
+    if (week52_high_ > 0.0) {
+        const double off_high = (c.close - week52_high_) / week52_high_ * 100.0;
+        vs_52w = QString("52w-hi %1%").arg(off_high, 0, 'f', 1);  // negative = below
+    }
+    QString vs_sma50;
+    if (candles_.size() >= 50) {
+        // Reproduce the SMA50 value at hover_idx_ — same compute path as the
+        // chart overlay. O(50) per hover, negligible.
+        double sum = 0.0;
+        const int s = qMax(0, hover_idx_ - 49);
+        for (int k = s; k <= hover_idx_; ++k) sum += candles_[k].close;
+        const int n = hover_idx_ - s + 1;
+        if (n >= 50) {
+            const double sma = sum / n;
+            const double off_sma = (c.close - sma) / sma * 100.0;
+            vs_sma50 = QString("SMA50 %1%").arg(off_sma >= 0 ? "+" : "")
+                           + QString::number(off_sma, 'f', 1) + "%";
+        }
+    }
+
     // 3. Render the readout strip at the top-left of the plot area.
     QFont lbl_font("Consolas", 9);
     p.setFont(lbl_font);
@@ -387,10 +582,14 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     constexpr int PAD_Y = 4;
     constexpr int GAP   = 12;
 
-    const int left_w  = fm.horizontalAdvance(left);
-    const int delta_w = fm.horizontalAdvance(delta);
-    const int right_w = fm.horizontalAdvance(right);
-    const int total_w = left_w + GAP + delta_w + GAP + right_w;
+    const int left_w   = fm.horizontalAdvance(left);
+    const int delta_w  = fm.horizontalAdvance(delta);
+    const int right_w  = fm.horizontalAdvance(right);
+    const int v52w_w   = vs_52w.isEmpty()   ? 0 : fm.horizontalAdvance(vs_52w);
+    const int vsma_w   = vs_sma50.isEmpty() ? 0 : fm.horizontalAdvance(vs_sma50);
+    int total_w = left_w + GAP + delta_w + GAP + right_w;
+    if (v52w_w) total_w += GAP + v52w_w;
+    if (vsma_w) total_w += GAP + vsma_w;
     const int line_h  = fm.height();
 
     const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
@@ -411,6 +610,30 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
 
     p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
     p.drawText(x_cursor, baseline, right);
+    x_cursor += right_w;
+
+    if (!vs_52w.isEmpty()) {
+        x_cursor += GAP;
+        // Always "below" — green when close, red when far. Threshold 5%.
+        const double off_high = (c.close - week52_high_) / week52_high_ * 100.0;
+        p.setPen(off_high > -5.0
+                     ? QColor(ui::colors::POSITIVE.get())
+                     : QColor(ui::colors::TEXT_SECONDARY()));
+        p.drawText(x_cursor, baseline, vs_52w);
+        x_cursor += v52w_w;
+    }
+    if (!vs_sma50.isEmpty()) {
+        x_cursor += GAP;
+        double sum = 0.0;
+        const int s = qMax(0, hover_idx_ - 49);
+        for (int k = s; k <= hover_idx_; ++k) sum += candles_[k].close;
+        const int n = hover_idx_ - s + 1;
+        const double sma = sum / n;
+        const double off_sma = (c.close - sma) / sma * 100.0;
+        p.setPen(off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
+                              : QColor(ui::colors::NEGATIVE.get()));
+        p.drawText(x_cursor, baseline, vs_sma50);
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -465,6 +688,9 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
         if (period != current_period_)
             svc.prefetch_historical(symbol, period);
     }
+
+    // Earnings markers re-bind to the new symbol if the toggle is on.
+    refresh_earnings_subscription();
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────
@@ -615,12 +841,59 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     make_btn("1Y", btn_1y_, "1y");
     make_btn("5Y", btn_5y_, "5y");
     active_period_btn_ = btn_1y_;
-    btn_row->addStretch();
 
-    vl->addLayout(btn_row);
-
-    // Canvas
+    // Canvas first — the chart toggles need candle_canvas_ to wire callbacks.
     candle_canvas_ = new ResearchCandleCanvas;
+
+    // ── Chart overlay toggles ───────────────────────────────────────────────
+    // LOG / VOL / SMA20/50/200 / EARN. Checkable QPushButtons; clicking
+    // toggles the corresponding canvas option. Persist across symbol changes
+    // (they live on the canvas, which we don't rebuild).
+    btn_row->addSpacing(12);
+
+    auto make_toggle = [&](const QString& label, const QString& tooltip,
+                            const QString& accent,
+                            std::function<void(bool)> on_toggle,
+                            bool initial = false) -> QPushButton* {
+        auto* b = new QPushButton(label);
+        b->setCheckable(true);
+        b->setChecked(initial);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(tooltip);
+        const QString ss = QString(
+            "QPushButton{background:transparent;color:%1;border:1px solid %2;"
+            "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
+            "font-family:'Consolas',monospace;}"
+            "QPushButton:hover{border-color:%3;background:%4;}"
+            "QPushButton:checked{background:%3;color:%5;border-color:%3;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), accent,
+                 ui::colors::BG_RAISED(), ui::colors::BG_BASE());
+        b->setStyleSheet(ss);
+        QObject::connect(b, &QPushButton::toggled, this, on_toggle);
+        btn_row->addWidget(b);
+        return b;
+    };
+
+    make_toggle("LOG", "Log-scale price axis (better for long periods)",
+                ui::colors::AMBER(),
+                [this](bool on) { if (candle_canvas_) candle_canvas_->set_log_scale(on); });
+    make_toggle("VOL", "Volume subchart under candles",
+                ui::colors::AMBER(),
+                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_volume(on); });
+    btn_row->addSpacing(8);
+    make_toggle("SMA20", "20-day simple moving average overlay", "#3b82f6",
+                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(20, on); });
+    make_toggle("SMA50", "50-day simple moving average overlay", "#a855f7",
+                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(50, on); });
+    make_toggle("SMA200", "200-day simple moving average overlay", "#eab308",
+                [this](bool on) { if (candle_canvas_) candle_canvas_->set_show_sma(200, on); });
+    btn_row->addSpacing(8);
+    make_toggle("EARN", "Earnings markers — vertical lines on report dates",
+                ui::colors::AMBER(),
+                [this](bool on) { show_earnings_ = on; refresh_earnings_subscription(); });
+
+    btn_row->addStretch();
+    vl->addLayout(btn_row);
     vl->addWidget(candle_canvas_, 1);
 
     return p;
@@ -818,6 +1091,10 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
         return;
     cached_info_ = info;
     current_currency_ = info.currency;
+    // Feed the 52-week high to the canvas so the hover crosshair can show
+    // "vs 52w-high" relative %. Zero suppresses the readout cleanly.
+    if (candle_canvas_)
+        candle_canvas_->set_week52_high(info.week52_high);
 
     // Re-render quote (now with correct currency symbol) and chart (likewise).
     if (cached_quote_.valid) {
@@ -925,6 +1202,34 @@ void EquityOverviewTab::apply_historical_state(const services::query::QueryStore
     rebuild_chart(candles);
     if (loading_overlay_ && !s.loading)
         loading_overlay_->hide_loading();
+}
+
+void EquityOverviewTab::apply_earnings_state(const services::query::QueryStore::State& s) {
+    if (!candle_canvas_) return;
+    if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull()) {
+        candle_canvas_->set_earnings_events({});
+        return;
+    }
+    const auto events = s.data.value<QVector<services::equity::EarningsEvent>>();
+    candle_canvas_->set_earnings_events(events);
+}
+
+void EquityOverviewTab::refresh_earnings_subscription() {
+    auto& store = services::query::QueryStore::instance();
+    // Drop any prior earnings subscription unconditionally — either the
+    // toggle is off (clear markers) or the symbol has changed (rebind below).
+    if (!current_earnings_key_.isEmpty())
+        store.unsubscribe(this, current_earnings_key_);
+    current_earnings_key_.clear();
+    if (candle_canvas_)
+        candle_canvas_->set_earnings_events({});  // clear any prior
+
+    if (!show_earnings_ || current_symbol_.isEmpty())
+        return;
+    services::equity::EquityResearchService::instance().subscribe_earnings(
+        this, current_symbol_,
+        [this](const services::query::QueryStore::State& st) { apply_earnings_state(st); });
+    current_earnings_key_ = "equity:earnings:" + current_symbol_;
 }
 
 void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& candles) {

@@ -554,6 +554,46 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
                                             std::move(cb), std::move(fetcher));
 }
 
+void EquityResearchService::subscribe_earnings(QObject* owner, const QString& symbol,
+                                                query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:earnings:" + symbol;
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
+                                   query::QueryStore::Rejecter reject) {
+        const QVariant ecv = fincept::CacheManager::instance().get("equity:earnings:" + symbol);
+        if (!ecv.isNull()) {
+            const auto doc = QJsonDocument::fromJson(ecv.toString().toUtf8());
+            if (doc.isArray()) {
+                resolve(QVariant::fromValue(parse_earnings(doc.array())));
+                return;
+            }
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        run_daemon("earnings_dates", payload,
+            [this, symbol, resolve, reject](bool ok, QJsonObject result, QString err) {
+                if (!ok) { reject(err); return; }
+                if (result.contains("error")) {
+                    // Non-fatal: many tickers have no earnings (ETFs, indices,
+                    // certain ADRs). Resolve with empty so the chart just
+                    // doesn't draw markers, rather than reporting an error.
+                    resolve(QVariant::fromValue(QVector<EarningsEvent>{}));
+                    return;
+                }
+                const QJsonArray arr = result.value("dates").toArray();
+                fincept::CacheManager::instance().put(
+                    "equity:earnings:" + symbol,
+                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                    kEarningsTtlSec, "equity");
+                update_symbol_cache(symbol, "earnings", arr);
+                resolve(QVariant::fromValue(parse_earnings(arr)));
+            });
+    };
+    // Earnings dates are session-stable. Generous SWR window.
+    query::QueryStore::instance().subscribe(owner, key, kEarningsTtlSec, kEarningsTtlSec * 6,
+                                            std::move(cb), std::move(fetcher));
+}
+
 void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
     if (symbol.isEmpty() || period.isEmpty()) return;
     const QString key = "equity:candles:" + symbol + ":" + period;
@@ -1413,6 +1453,26 @@ QVector<NewsArticle> EquityResearchService::parse_news(const QJsonArray& arr) co
             articles.append(a);
     }
     return articles;
+}
+
+QVector<EarningsEvent> EquityResearchService::parse_earnings(const QJsonArray& arr) const {
+    QVector<EarningsEvent> events;
+    events.reserve(arr.size());
+    for (const auto& v : arr) {
+        const auto o = v.toObject();
+        EarningsEvent e;
+        e.timestamp = o.value("timestamp").toVariant().toLongLong();
+        if (e.timestamp <= 0)
+            continue;
+        const auto est_v = o.value("eps_estimate");
+        if (!est_v.isNull()) { e.eps_estimate = est_v.toDouble(); e.has_estimate = true; }
+        const auto act_v = o.value("eps_actual");
+        if (!act_v.isNull()) { e.eps_actual = act_v.toDouble(); e.has_actual = true; }
+        const auto sur_v = o.value("surprise_pct");
+        if (!sur_v.isNull()) { e.surprise_pct = sur_v.toDouble(); e.has_surprise = true; }
+        events.append(e);
+    }
+    return events;
 }
 
 } // namespace fincept::services::equity

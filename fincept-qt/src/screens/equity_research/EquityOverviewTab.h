@@ -28,6 +28,24 @@ class ResearchCandleCanvas : public QWidget {
     /// Error: "Failed to load chart — try again" — fetch errored out.
     void set_placeholder_state(PlaceholderState state);
 
+    // ── Pass 1 chart-overlay controls ────────────────────────────────────────
+    /// Toggle log scaling on the price axis. Linear is the default; log is
+    /// dramatically more accurate visually for long periods where the price
+    /// has compounded across multiple multiples.
+    void set_log_scale(bool on);
+    /// Toggle the volume subchart underneath the candles. Costs ~25% of the
+    /// vertical plot area when on.
+    void set_show_volume(bool on);
+    /// Toggle individual moving-average overlays. SMAs are computed on the
+    /// fly from candles_ (cheap — O(n) one pass per SMA).
+    void set_show_sma(int period, bool on);  // period ∈ {20, 50, 200}
+    /// Earnings markers — drawn as dashed vertical lines at each event
+    /// whose timestamp lies within the visible candle window.
+    void set_earnings_events(const QVector<services::equity::EarningsEvent>& events);
+    /// 52-week high for the crosshair "vs 52w-high" comparator. Set by the
+    /// tab when StockInfo arrives; 0 ⇒ comparator suppressed.
+    void set_week52_high(double v);
+
   protected:
     void paintEvent(QPaintEvent*) override;
     void resizeEvent(QResizeEvent*) override;
@@ -43,6 +61,21 @@ class ResearchCandleCanvas : public QWidget {
     bool dirty_ = true;
     QString currency_sym_ = "$";
     PlaceholderState placeholder_state_ = PlaceholderState::Loading;
+
+    // Pass 1 overlay state — every toggle invalidates the pixmap cache so
+    // the next paintEvent rebuilds with the new options.
+    bool log_scale_   = false;
+    bool show_volume_ = false;
+    bool show_sma20_  = false;
+    bool show_sma50_  = false;
+    bool show_sma200_ = false;
+    QVector<services::equity::EarningsEvent> earnings_events_;
+    double week52_high_ = 0.0;
+
+    // Volume strip geometry — when show_volume_ is on, the price plot
+    // shrinks by VOLUME_FRAC of its height to make room. The volume strip
+    // sits between the price plot and the time axis.
+    static constexpr double VOLUME_FRAC = 0.22;
 
     // Hover crosshair state. hover_idx_ is an absolute candles_ index
     // (NOT visible-window-relative). The cached geometry below is filled
@@ -93,6 +126,11 @@ class EquityOverviewTab : public QWidget {
     void apply_quote_state(const services::query::QueryStore::State& s);
     void apply_info_state(const services::query::QueryStore::State& s);
     void apply_historical_state(const services::query::QueryStore::State& s);
+    void apply_earnings_state(const services::query::QueryStore::State& s);
+    /// Bind or drop the earnings subscription depending on the EARN toggle
+    /// state and the current symbol. Called when the toggle flips or the
+    /// symbol changes.
+    void refresh_earnings_subscription();
 
   private:
     void build_ui();
@@ -129,6 +167,11 @@ class EquityOverviewTab : public QWidget {
     // before rebinding — without this, a late resolve for the previous
     // key would still deliver to apply_historical_state with stale candles.
     QString current_historical_key_;
+    /// Mirror of the EARN toggle button state — gates whether we hold an
+    /// earnings subscription. When false, set_symbol() skips earnings work
+    /// entirely to avoid an unused Finnhub-or-yfinance call per symbol.
+    bool show_earnings_ = false;
+    QString current_earnings_key_;
 
     // Trading panel
     QLabel* open_val_ = nullptr;
