@@ -53,20 +53,47 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
 
     // ── Deliver current state immediately to the new subscriber ─────────────
     if (!entry.cached_value.isNull()) {
-        // Cache hit — deliver the cached value first. Whether the cache is
-        // stale (past TTL) is a Round-3 concern; Round 2 treats any cached
-        // value as authoritative. The caller's callback should already be
-        // robust to data + loading=true (concurrent refresh).
-        State s;
-        s.data = entry.cached_value;
-        s.loading = entry.inflight;
-        entry.subscribers.last().callback(s);
-        // If no fetch is in flight and the cache is older than TTL, kick a
-        // refresh so subscribers get fresh data soon. Round 2: simple TTL
-        // check; Round 3 will fold this into the SWR path.
-        if (!entry.inflight && ttl_sec > 0 && entry.fetched_at.isValid() &&
-            entry.fetched_at.secsTo(QDateTime::currentDateTime()) >= ttl_sec) {
-            kick_fetch(key, fetcher);
+        // Three states for cached data:
+        //   1. Fresh (age < ttl): deliver as-is, no refetch.
+        //   2. Stale-but-acceptable (ttl ≤ age < stale_max): deliver with
+        //      is_stale=true, kick a background revalidate. This is the SWR
+        //      core — the consumer can render last-known data immediately
+        //      (instant view) while a fresh fetch runs in the background.
+        //   3. Beyond stale_max: discard, treat as cold miss.
+        const qint64 age = entry.fetched_at.isValid()
+                               ? entry.fetched_at.secsTo(QDateTime::currentDateTime())
+                               : INT64_MAX;
+        const bool fresh = (ttl_sec <= 0) || (age < ttl_sec);
+        const bool acceptable_stale =
+            !fresh && stale_max_sec > 0 && age < stale_max_sec;
+
+        if (fresh) {
+            State s;
+            s.data = entry.cached_value;
+            s.loading = entry.inflight;
+            entry.subscribers.last().callback(s);
+        } else if (acceptable_stale) {
+            // Deliver stale-but-served, then kick revalidate. The consumer
+            // sees instant data + a refreshing indicator; when the revalidate
+            // resolves, every subscriber (including this one) receives the
+            // fresh state.
+            State s;
+            s.data = entry.cached_value;
+            s.is_stale = true;
+            s.loading = true;  // background revalidate is in flight
+            entry.subscribers.last().callback(s);
+            if (!entry.inflight)
+                kick_fetch(key, fetcher);
+        } else {
+            // Beyond SWR window — treat as cold. Discard cached value to
+            // avoid delivering ancient data, then start a fresh fetch.
+            entry.cached_value = QVariant();
+            entry.fetched_at = QDateTime();
+            State s;
+            s.loading = true;
+            entry.subscribers.last().callback(s);
+            if (!entry.inflight)
+                kick_fetch(key, fetcher);
         }
     } else if (entry.inflight) {
         // No data yet but a fetch is in flight — emit a loading-only state

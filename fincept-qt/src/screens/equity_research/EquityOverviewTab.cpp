@@ -454,6 +454,17 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     svc.subscribe_historical(this, symbol, current_period_,
         [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
     current_historical_key_ = "equity:candles:" + symbol + ":" + current_period_;
+
+    // Speculatively warm the most-likely-next periods. yfinance's
+    // ticker.history is the heaviest call after .info, so pre-fetching while
+    // the user examines the current period turns subsequent period clicks
+    // into cache hits. Strategy: warm the longest non-active period (5Y) and
+    // the most common alternative (1Y) — covers the typical drill-out
+    // behavior. No-op for whichever one matches current_period_.
+    for (const QString& period : {QStringLiteral("1y"), QStringLiteral("5y")}) {
+        if (period != current_period_)
+            svc.prefetch_historical(symbol, period);
+    }
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────

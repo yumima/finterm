@@ -51,6 +51,12 @@ class EquityResearchService : public QObject {
     void subscribe_historical(QObject* owner, const QString& symbol, const QString& period,
                               query::QueryStore::Callback cb);
 
+    /// Warm the historical cache for (`symbol`, `period`) without binding a
+    /// subscriber. No-op if already cached fresh or a fetch is in flight.
+    /// Used by the ER overview tab on symbol-land / period-switch to make
+    /// an adjacent period (e.g. 5Y when viewing 1Y) instant on next click.
+    void prefetch_historical(const QString& symbol, const QString& period);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);

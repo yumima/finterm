@@ -281,7 +281,10 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
                 resolve(QVariant::fromValue(parsed));
             });
     };
-    query::QueryStore::instance().subscribe(owner, key, kQuoteTtlSec, /*stale_max*/0,
+    // SWR window: 5 × TTL. A quote 5 minutes past its 60s TTL is still
+    // useful for "show last-known + refresh indicator" UX. Beyond that we
+    // discard — a 30-minute-old quote during market hours is misleading.
+    query::QueryStore::instance().subscribe(owner, key, kQuoteTtlSec, kQuoteTtlSec * 5,
                                             std::move(cb), std::move(fetcher));
 }
 
@@ -321,7 +324,10 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                 resolve(QVariant::fromValue(parsed));
             });
     };
-    query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, /*stale_max*/0,
+    // Info is the slowest yfinance call (~1-3s) and changes slowly. Generous
+    // SWR window — 8 × TTL ≈ 4 hours — keeps repeat views instant for a
+    // working session. After that, treat as cold.
+    query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, kInfoTtlSec * 8,
                                             std::move(cb), std::move(fetcher));
 }
 
@@ -375,8 +381,57 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                 resolve(QVariant::fromValue(parsed));
             });
     };
-    query::QueryStore::instance().subscribe(owner, key, kHistoricalTtlSec, /*stale_max*/0,
+    // Daily candles barely change intraday — generous SWR window so period
+    // switches feel instant for the rest of the session. Beyond 24h the
+    // most-recent candle could be a day stale during market hours, which is
+    // genuinely misleading; cap there.
+    query::QueryStore::instance().subscribe(owner, key, kHistoricalTtlSec, /*stale_max*/86400,
                                             std::move(cb), std::move(fetcher));
+}
+
+void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
+    if (symbol.isEmpty() || period.isEmpty()) return;
+    const QString key = "equity:candles:" + symbol + ":" + period;
+    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
+                                           query::QueryStore::Rejecter reject) {
+        const QString candles_key = "equity:candles:" + symbol + ":" + period;
+        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        if (!hcv.isNull()) {
+            QVector<Candle> parsed = parse_candles(
+                QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
+            // No legacy broadcast emission on prefetch — nobody is waiting,
+            // and broadcasting would mislead any subscribed tab into
+            // thinking the user actively switched to this period.
+            resolve(QVariant::fromValue(parsed));
+            return;
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        payload["period"] = period;
+        payload["interval"] = "1d";
+        run_daemon("historical_period", payload,
+            [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
+                if (!ok) { reject(err); return; }
+                const auto arr = result.contains("_value")
+                                     ? result.value("_value").toArray()
+                                     : result.value("history").toArray();
+                fincept::CacheManager::instance().put(
+                    candles_key,
+                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                    kHistoricalTtlSec, "equity");
+                {
+                    const QString fname = symbol_filename(symbol);
+                    QJsonObject root = disk_cache().load(fname).object();
+                    root.insert("symbol", symbol);
+                    QJsonObject by_period = root.value("candles").toObject();
+                    by_period.insert(period, arr);
+                    root.insert("candles", by_period);
+                    disk_cache().save(fname, QJsonDocument(root));
+                }
+                resolve(QVariant::fromValue(parse_candles(arr)));
+            });
+    };
+    query::QueryStore::instance().prefetch(key, kHistoricalTtlSec, std::move(fetcher));
 }
 
 // ── Quote-only fetch (refresh-timer + showEvent path) ─────────────────────────
