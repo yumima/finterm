@@ -211,3 +211,13 @@ struct MarketSentimentSnapshot {
 };
 
 } // namespace fincept::services::equity
+
+// ── QVariant interop for QueryStore ─────────────────────────────────────────
+// QueryStore is type-erased through QVariant. Each parsed-payload type needs
+// to be registered with Qt's meta-type system so it can round-trip through a
+// QVariant. Outside the namespace because Q_DECLARE_METATYPE injects template
+// specializations into the global namespace.
+#include <QMetaType>
+Q_DECLARE_METATYPE(fincept::services::equity::QuoteData)
+Q_DECLARE_METATYPE(fincept::services::equity::StockInfo)
+Q_DECLARE_METATYPE(QVector<fincept::services::equity::Candle>)

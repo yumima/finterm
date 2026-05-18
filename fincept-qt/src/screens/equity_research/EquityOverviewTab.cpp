@@ -419,14 +419,11 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
 
 EquityOverviewTab::EquityOverviewTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-
-    auto& svc = services::equity::EquityResearchService::instance();
-    connect(&svc, &services::equity::EquityResearchService::quote_loaded, this, &EquityOverviewTab::on_quote_loaded);
-    connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityOverviewTab::on_info_loaded);
-    connect(&svc, &services::equity::EquityResearchService::historical_loaded, this,
-            &EquityOverviewTab::on_historical_loaded);
-    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
-            &EquityOverviewTab::on_error_occurred);
+    // No connects here — subscriptions are bound per-symbol in set_symbol()
+    // via QueryStore. The legacy broadcast signals still fire on the service
+    // for non-migrated tabs (Analysis, Technicals, …); we just don't listen
+    // to them anymore. QueryStore::subscribe is responsible for routing the
+    // State tuple only to subscribers of the matching key.
 }
 
 void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
@@ -435,7 +432,6 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
-    info_loaded_ = quote_loaded_ = historical_loaded_ = false;
     if (candle_canvas_) {
         candle_canvas_->clear();
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
@@ -443,13 +439,21 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
 
-    // Overview owns its historical fetch — uses current_period_ rather than
-    // the service-level default of "1y". Without this the screen was firing
-    // historical_loaded(symbol, "1y", ...) which the period filter in
-    // on_historical_loaded would silently reject when the user had a
-    // different period selected, leaving the overlay hung.
-    if (!symbol.isEmpty())
-        services::equity::EquityResearchService::instance().load_symbol(symbol, current_period_);
+    // Drop every prior subscription before rebinding. Without this, a late
+    // resolve for the previous symbol (quote/info/historical) would still
+    // call into apply_*_state with stale data — exactly the filter-on-
+    // receive bug class QueryStore is meant to eliminate.
+    auto& store = services::query::QueryStore::instance();
+    store.unsubscribe_all(this);
+
+    auto& svc = services::equity::EquityResearchService::instance();
+    svc.subscribe_quote(this, symbol,
+        [this](const services::query::QueryStore::State& s) { apply_quote_state(s); });
+    svc.subscribe_info(this, symbol,
+        [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
+    svc.subscribe_historical(this, symbol, current_period_,
+        [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
+    current_historical_key_ = "equity:candles:" + symbol + ":" + current_period_;
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────
@@ -612,7 +616,11 @@ QWidget* EquityOverviewTab::build_chart_panel() {
 }
 
 void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
-    if (period == current_period_ && historical_loaded_)
+    // Same period as current and we already have candles? Nothing to do.
+    // (The cached_candles_ check replaces the old historical_loaded_ flag;
+    // QueryStore owns the load state now, but we still want to avoid
+    // re-binding the subscription when the user re-clicks the active button.)
+    if (period == current_period_ && !cached_candles_.isEmpty())
         return;
     current_period_ = period;
 
@@ -632,11 +640,11 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
         b->setStyleSheet(b == btn ? active : inactive);
     active_period_btn_ = btn;
 
-    // Reset the historical-loaded gate so a stale prior-period emission can't
-    // leave the canvas showing the old period's candles while the new fetch
-    // is in flight. Clear the canvas + show the overlay so the user gets
-    // immediate visual feedback that the chart is updating.
-    historical_loaded_ = false;
+    // Clear the canvas + show the overlay so the user gets immediate visual
+    // feedback that the chart is updating. QueryStore takes care of the
+    // gate logic — switching the subscription key replaces the previous
+    // historical subscription so late deliveries for the old period (if any
+    // are still in flight) go to the dropped subscription, not us.
     if (candle_canvas_) {
         candle_canvas_->clear();
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
@@ -644,9 +652,21 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING CHART\xe2\x80\xa6");
 
-    // Reload data with new period
-    if (!current_symbol_.isEmpty())
-        services::equity::EquityResearchService::instance().load_symbol(current_symbol_, period);
+    // Rebind the historical subscription to the new period. Quote+info
+    // subscriptions keep their existing keys (they don't depend on period).
+    if (!current_symbol_.isEmpty()) {
+        auto& store = services::query::QueryStore::instance();
+        // Drop the prior period's historical subscription before binding
+        // the new one. A late resolve for the previous period would
+        // otherwise overwrite the chart with old data once the new period's
+        // fetch finishes.
+        if (!current_historical_key_.isEmpty())
+            store.unsubscribe(this, current_historical_key_);
+        services::equity::EquityResearchService::instance().subscribe_historical(
+            this, current_symbol_, period,
+            [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
+        current_historical_key_ = "equity:candles:" + current_symbol_ + ":" + period;
+    }
 }
 
 // ── Column 4: Analyst + 52W + Profitability + Growth ─────────────────────────
@@ -762,19 +782,16 @@ QWidget* EquityOverviewTab::build_financial_health_panel() {
 
 // ── Slots ─────────────────────────────────────────────────────────────────────
 
-void EquityOverviewTab::on_quote_loaded(services::equity::QuoteData q) {
-    if (q.symbol != current_symbol_)
+void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::State& s) {
+    // Loading/error transitions: no panel update needed — the quote panel
+    // already shows dashes from clear_quote_bar() / initial state. If a
+    // future iteration wants a skeleton-pulse on loading, it slots in here.
+    if (!s.data.isValid() || s.data.isNull())
         return;
-    quote_loaded_ = true;
-    // Gate on quote+historical only; info fills in the side panels as it
-    // arrives.  Waiting for info (the slowest yfinance call) would keep the
-    // overlay visible long after the chart has already rendered.
-    if (quote_loaded_ && historical_loaded_)
-        loading_overlay_->hide_loading();
+    const auto q = s.data.value<services::equity::QuoteData>();
     if (!q.valid)
         return;
     cached_quote_ = q;
-
     open_val_->setText(fmt_price(q.open));
     high_val_->setText(fmt_price(q.high));
     low_val_->setText(fmt_price(q.low));
@@ -782,28 +799,23 @@ void EquityOverviewTab::on_quote_loaded(services::equity::QuoteData q) {
     vol_val_->setText(fmt_large(q.volume));
 }
 
-void EquityOverviewTab::on_info_loaded(services::equity::StockInfo info) {
-    if (info.symbol != current_symbol_)
+void EquityOverviewTab::apply_info_state(const services::query::QueryStore::State& s) {
+    if (!s.data.isValid() || s.data.isNull())
         return;
-    info_loaded_ = true;
-    // info_loaded_ is not part of the overlay gate (see on_quote_loaded).
-    // Still hide here in the edge case where info arrives last and the
-    // quote+historical path already fired but couldn't hide yet.
-    if (quote_loaded_ && historical_loaded_)
-        loading_overlay_->hide_loading();
+    const auto info = s.data.value<services::equity::StockInfo>();
     if (!info.valid)
         return;
     cached_info_ = info;
     current_currency_ = info.currency;
 
-    // Re-render quote and chart with correct currency
-    if (quote_loaded_) {
+    // Re-render quote (now with correct currency symbol) and chart (likewise).
+    if (cached_quote_.valid) {
         open_val_->setText(fmt_price(cached_quote_.open));
         high_val_->setText(fmt_price(cached_quote_.high));
         low_val_->setText(fmt_price(cached_quote_.low));
         prev_close_val_->setText(fmt_price(cached_quote_.prev_close));
     }
-    if (historical_loaded_ && !cached_candles_.isEmpty()) {
+    if (!cached_candles_.isEmpty()) {
         candle_canvas_->set_candles(cached_candles_,
                                     currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_));
     }
@@ -871,42 +883,37 @@ void EquityOverviewTab::on_info_loaded(services::equity::StockInfo info) {
     free_cf_val_->setText(fmt_large(info.free_cashflow));
 }
 
-void EquityOverviewTab::on_historical_loaded(QString symbol, QString period, QVector<services::equity::Candle> candles) {
-    if (symbol != current_symbol_)
+void EquityOverviewTab::apply_historical_state(const services::query::QueryStore::State& s) {
+    // The historical subscription owns the overlay. Other categories
+    // (quote/info) populate their panels asynchronously and don't gate the
+    // chart-loading affordance.
+    if (!s.error.isEmpty()) {
+        // Fetch failed — show the Error placeholder and hide the overlay so
+        // the message is readable. Cached candles, if any, are kept on
+        // screen until the next successful fetch overwrites them.
+        if (candle_canvas_)
+            candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         return;
-    // Filter by period too: a refresh-timer reload (or any caller using the
-    // default "1y") must not overwrite the chart while the user has 1M/3M/
-    // 6M/5Y selected. Without this check the chart visibly flips back to
-    // the default period a few seconds after the user switches.
-    if (period != current_period_)
+    }
+    if (!s.data.isValid() || s.data.isNull()) {
+        // Still loading — keep the overlay up.
+        if (s.loading && loading_overlay_ && !loading_overlay_->isVisible())
+            loading_overlay_->show_loading("LOADING CHART\xe2\x80\xa6");
         return;
-    historical_loaded_ = true;
+    }
+    const auto candles = s.data.value<QVector<services::equity::Candle>>();
     cached_candles_ = candles;
-    // Tell the canvas what to display when there are no candles: an empty
-    // success response from the service means "valid symbol, no series for
-    // this period" (delisted / pre-IPO / illiquid). The Error state is set
-    // separately via on_error_occurred when a fetch actually fails.
+    // Empty success = valid symbol, no candles for this period (delisted /
+    // pre-IPO / illiquid). Show the NoData placeholder; the Error
+    // placeholder is reserved for actual fetch failures (s.error path
+    // above).
     if (candle_canvas_ && candles.isEmpty())
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::NoData);
-    // Rebuild the chart before hiding the overlay so there is no one-frame
-    // window where the overlay is gone but the canvas still shows the empty
-    // placeholder.
     rebuild_chart(candles);
-    if (quote_loaded_ && historical_loaded_)
+    if (loading_overlay_ && !s.loading)
         loading_overlay_->hide_loading();
-}
-
-void EquityOverviewTab::on_error_occurred(QString symbol, QString context, QString /*message*/) {
-    // Only react to historical errors for the currently displayed symbol.
-    // Quote/info errors are handled by their own panels (or just leave the
-    // dashes in place — no chart-level signal needed).
-    if (symbol != current_symbol_ || context != "Historical")
-        return;
-    if (candle_canvas_)
-        candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
-    // The service emits historical_loaded(symbol, period, {}) right after
-    // error_occurred, which will flip historical_loaded_ to true and hide the
-    // overlay. The Error placeholder remains until the next successful fetch.
 }
 
 void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& candles) {

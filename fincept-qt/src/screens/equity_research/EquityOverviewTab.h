@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityOverviewTab.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QFrame>
@@ -83,14 +84,15 @@ class EquityOverviewTab : public QWidget {
 
     static QString currency_symbol(const QString& currency_code);
 
-  private slots:
-    void on_info_loaded(services::equity::StockInfo info);
-    void on_historical_loaded(QString symbol, QString period, QVector<services::equity::Candle> candles);
-    void on_quote_loaded(services::equity::QuoteData quote);
-    /// Surface service errors as a canvas placeholder so the chart pane
-    /// distinguishes "no data" from "fetch failed" — same overlay hides for
-    /// both, but the message after dismissal differs.
-    void on_error_occurred(QString symbol, QString context, QString message);
+  private:
+    /// Called by the three QueryStore subscription callbacks set up in
+    /// set_symbol(). Each consumes the State tuple for its category and
+    /// updates the relevant UI surfaces. Kept as private (non-slot) methods
+    /// because they're invoked from std::function callbacks, not Qt
+    /// signal/slot machinery.
+    void apply_quote_state(const services::query::QueryStore::State& s);
+    void apply_info_state(const services::query::QueryStore::State& s);
+    void apply_historical_state(const services::query::QueryStore::State& s);
 
   private:
     void build_ui();
@@ -122,6 +124,11 @@ class EquityOverviewTab : public QWidget {
     QString current_symbol_;
     QString current_period_ = "1y";
     QString current_currency_;
+    // The QueryStore key the historical subscription is currently bound to.
+    // Tracked so switch_period() / set_symbol() can call unsubscribe(key)
+    // before rebinding — without this, a late resolve for the previous
+    // key would still deliver to apply_historical_state with stale candles.
+    QString current_historical_key_;
 
     // Trading panel
     QLabel* open_val_ = nullptr;
@@ -198,9 +205,10 @@ class EquityOverviewTab : public QWidget {
     QVector<services::equity::Candle> cached_candles_;
 
     ui::LoadingOverlay* loading_overlay_ = nullptr;
-    bool info_loaded_ = false;
-    bool quote_loaded_ = false;
-    bool historical_loaded_ = false;
+    // Loading state is owned by QueryStore now — no more per-category booleans.
+    // Overlay show/hide is driven from apply_historical_state's State.loading
+    // tuple; quote/info panels populate independently as their subscriptions
+    // resolve.
 };
 
 } // namespace fincept::screens

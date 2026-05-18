@@ -227,6 +227,158 @@ void EquityResearchService::search_symbols(const QString& query) {
     });
 }
 
+// ── QueryStore-backed subscriptions ───────────────────────────────────────────
+//
+// Each subscribe_* builds a fetcher closure that
+//   1. Checks CacheManager. Hit → resolve with parsed value synchronously.
+//   2. Miss → fire the existing daemon action. On daemon response, write
+//      CacheManager + per-symbol disk + emit the legacy broadcast signal
+//      (so non-migrated tabs keep receiving updates) + call QueryStore's
+//      resolver with the parsed payload.
+//
+// The compat broadcast emission stays for Round 2; Round 5 will remove it
+// once every consumer is on QueryStore. Doing both is harmless because the
+// in-flight dedup is keyed by category+symbol — only one daemon spawn per
+// concurrent subscribe wave.
+
+void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbol,
+                                            query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:quote:" + symbol;
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
+                                   query::QueryStore::Rejecter reject) {
+        // Cache check inside the fetcher so we participate in QueryStore's
+        // in-flight dedup. If multiple subscribers attach concurrently, only
+        // one daemon spawn happens; everyone else waits on the same fetch.
+        const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
+        if (!qcv.isNull()) {
+            QuoteData parsed = parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object());
+            // Mirror to legacy broadcast for non-migrated tabs.
+            emit quote_loaded(parsed);
+            resolve(QVariant::fromValue(parsed));
+            return;
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        run_daemon("quote", payload,
+            [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
+                if (!ok || obj.contains("error")) {
+                    const QString msg = !ok ? err : obj["error"].toString();
+                    emit error_occurred(symbol, "Quote", msg);
+                    QuoteData failed; failed.symbol = symbol; failed.valid = false;
+                    emit quote_loaded(failed);
+                    reject(msg);
+                    return;
+                }
+                fincept::CacheManager::instance().put(
+                    "equity:quote:" + symbol,
+                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+                    kQuoteTtlSec, "equity");
+                update_symbol_cache(symbol, "quote", obj);
+                update_symbol_cache(symbol, "symbol", symbol);
+                QuoteData parsed = parse_quote(obj);
+                emit quote_loaded(parsed);
+                resolve(QVariant::fromValue(parsed));
+            });
+    };
+    query::QueryStore::instance().subscribe(owner, key, kQuoteTtlSec, /*stale_max*/0,
+                                            std::move(cb), std::move(fetcher));
+}
+
+void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol,
+                                           query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:info:" + symbol;
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
+                                   query::QueryStore::Rejecter reject) {
+        const QVariant icv = fincept::CacheManager::instance().get("equity:info:" + symbol);
+        if (!icv.isNull()) {
+            StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
+            emit info_loaded(parsed);
+            resolve(QVariant::fromValue(parsed));
+            return;
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        run_daemon("info", payload,
+            [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
+                if (!ok || obj.contains("error")) {
+                    const QString msg = !ok ? err : obj["error"].toString();
+                    emit error_occurred(symbol, "Info", msg);
+                    StockInfo failed; failed.symbol = symbol; failed.valid = false;
+                    emit info_loaded(failed);
+                    reject(msg);
+                    return;
+                }
+                fincept::CacheManager::instance().put(
+                    "equity:info:" + symbol,
+                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+                    kInfoTtlSec, "equity");
+                update_symbol_cache(symbol, "info", obj);
+                update_symbol_cache(symbol, "symbol", symbol);
+                StockInfo parsed = parse_info(obj);
+                emit info_loaded(parsed);
+                resolve(QVariant::fromValue(parsed));
+            });
+    };
+    query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, /*stale_max*/0,
+                                            std::move(cb), std::move(fetcher));
+}
+
+void EquityResearchService::subscribe_historical(QObject* owner, const QString& symbol,
+                                                  const QString& period,
+                                                  query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:candles:" + symbol + ":" + period;
+    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
+                                           query::QueryStore::Rejecter reject) {
+        const QString candles_key = "equity:candles:" + symbol + ":" + period;
+        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        if (!hcv.isNull()) {
+            QVector<Candle> parsed = parse_candles(
+                QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
+            emit historical_loaded(symbol, period, parsed);
+            resolve(QVariant::fromValue(parsed));
+            return;
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        payload["period"] = period;
+        payload["interval"] = "1d";
+        run_daemon("historical_period", payload,
+            [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
+                if (!ok) {
+                    const QString msg = "Failed to fetch historical for " + symbol + ": " + err;
+                    emit error_occurred(symbol, "Historical", msg);
+                    emit historical_loaded(symbol, period, {});
+                    reject(msg);
+                    return;
+                }
+                const auto arr = result.contains("_value")
+                                     ? result.value("_value").toArray()
+                                     : result.value("history").toArray();
+                fincept::CacheManager::instance().put(
+                    candles_key,
+                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                    kHistoricalTtlSec, "equity");
+                {
+                    const QString fname = symbol_filename(symbol);
+                    QJsonObject root = disk_cache().load(fname).object();
+                    root.insert("symbol", symbol);
+                    QJsonObject by_period = root.value("candles").toObject();
+                    by_period.insert(period, arr);
+                    root.insert("candles", by_period);
+                    disk_cache().save(fname, QJsonDocument(root));
+                }
+                QVector<Candle> parsed = parse_candles(arr);
+                emit historical_loaded(symbol, period, parsed);
+                resolve(QVariant::fromValue(parsed));
+            });
+    };
+    query::QueryStore::instance().subscribe(owner, key, kHistoricalTtlSec, /*stale_max*/0,
+                                            std::move(cb), std::move(fetcher));
+}
+
 // ── Quote-only fetch (refresh-timer + showEvent path) ─────────────────────────
 void EquityResearchService::fetch_quote(const QString& symbol) {
     if (symbol.isEmpty())

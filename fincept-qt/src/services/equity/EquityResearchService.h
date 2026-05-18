@@ -1,6 +1,7 @@
 // src/services/equity/EquityResearchService.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/query/QueryStore.h"
 
 #include <QObject>
 #include <QSet>
@@ -29,6 +30,26 @@ class EquityResearchService : public QObject {
     /// only freshen the quote; info/historical refresh on their own slower
     /// cadence or on explicit user action.
     void fetch_quote(const QString& symbol);
+
+    // ── QueryStore-backed subscription API ────────────────────────────────────
+    // Per-subscriber stream replacing the broadcast quote_loaded /
+    // info_loaded / historical_loaded signals. Consumers receive a
+    // QueryStore::State on every transition (loading / data / error). The
+    // broadcast signals continue to fire alongside — non-migrated tabs
+    // (Analysis, Technicals, News, …) keep working until their own
+    // migration PR lands.
+
+    /// Subscribe to the quote stream for `symbol`. State carries a
+    /// QuoteData via `state.data.value<QuoteData>()` once available.
+    void subscribe_quote(QObject* owner, const QString& symbol,
+                         query::QueryStore::Callback cb);
+    /// Subscribe to the info stream for `symbol`. State carries StockInfo.
+    void subscribe_info(QObject* owner, const QString& symbol,
+                        query::QueryStore::Callback cb);
+    /// Subscribe to the historical-candles stream for (`symbol`, `period`).
+    /// State carries QVector<Candle>.
+    void subscribe_historical(QObject* owner, const QString& symbol, const QString& period,
+                              query::QueryStore::Callback cb);
 
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");

@@ -2,19 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-17)
+## Today's commits (2026-05-18)
 
 Latest first.
 
-- [`af0df8ce`](https://github.com/yumima/finterm/commit/af0df8ce) scripts(yfinance): switch get_quote to fast_info with fallback
-- [`4904dd8e`](https://github.com/yumima/finterm/commit/4904dd8e) screens(er): overview owns historical fetch + scoped overlay + 3-state placeholder
-- [`0be36ef2`](https://github.com/yumima/finterm/commit/0be36ef2) screens(news): pin body text colour to wire-feed cream via QPalette
-- [`43e5e854`](https://github.com/yumima/finterm/commit/43e5e854) scripts(extract_article): stitch one-sentence-per-paragraph sites into prose
-- [`3734f1b4`](https://github.com/yumima/finterm/commit/3734f1b4) screens(news): pin body font directly so QTextBrowser matches WIRE delegate
-- [`243ee0c8`](https://github.com/yumima/finterm/commit/243ee0c8) screens(news): switch body to QTextBrowser; collapse over-fragmented paragraphs
-- [`ece2771f`](https://github.com/yumima/finterm/commit/ece2771f) screens(news): SAVE writes the extracted body, not just the metadata
-- [`b6741a56`](https://github.com/yumima/finterm/commit/b6741a56) screens(futures+news): move Databento CTA to title row; fix body indent
-- [`381282d7`](https://github.com/yumima/finterm/commit/381282d7) screens(news): self-review fixes — wrap body status + QPointer guard
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
