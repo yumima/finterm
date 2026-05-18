@@ -864,6 +864,7 @@ set(SERVICE_SOURCES
     src/services/equity/MarketSentimentService.cpp
     src/services/equity/MarketSentimentSupport.cpp
     src/services/finnhub/FinnhubService.cpp
+    src/services/finnhub/FinnhubLiveTicks.cpp
     src/services/query/QueryStore.cpp
     src/services/ma_analytics/MAAnalyticsService.cpp
     src/services/geopolitics/GeopoliticsService.cpp

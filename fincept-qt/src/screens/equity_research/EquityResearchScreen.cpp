@@ -15,6 +15,7 @@
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "services/equity/EquityResearchService.h"
+#include "services/finnhub/FinnhubLiveTicks.h"
 #include "services/finnhub/FinnhubService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/query/QueryStore.h"
@@ -189,6 +190,31 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     connect(mkt_status_timer_, &QTimer::timeout, this,
             &EquityResearchScreen::update_market_status_badge);
     mkt_status_timer_->start();
+
+    // Finnhub live-tick stream — pushes price updates in <200ms instead of
+    // the 20s REST poll. Free tier covers US equities; non-US tickers
+    // subscribe successfully but never emit (silent fallback to REST).
+    // Ticks are throttled to ~3 Hz here: liquid US names print dozens of
+    // trades per second and a label setText per tick is wasteful — the
+    // user can't read updates faster than the eye refresh anyway.
+    connect(&services::finnhub::FinnhubLiveTicks::instance(),
+            &services::finnhub::FinnhubLiveTicks::tick, this,
+            [this](QString sym, double price, qint64 /*ts_ms*/, qint64 /*size*/) {
+                if (sym != current_symbol_) return;
+                if (!price_label_ || !change_label_) return;
+                // Throttle: skip if a tick landed in the last 300ms.
+                static qint64 s_last_paint_ms = 0;
+                const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
+                if (now_ms - s_last_paint_ms < 300) return;
+                s_last_paint_ms = now_ms;
+
+                const QString cs = EquityOverviewTab::currency_symbol(
+                    current_currency_.isEmpty() ? "USD" : current_currency_);
+                price_label_->setText(QString("%1%2").arg(cs).arg(price, 0, 'f', 2));
+                // Update freshness — treat the live print as the latest data
+                // landing for whichever tab is showing the price.
+                mark_tab_loaded(0);
+            });
 
     // Listen for navigation from CommandBar asset search
     EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
@@ -656,6 +682,11 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     // moment the user lands on any tab. No-op when no FINNHUB_API_KEY is
     // configured: subscribe_recommendations resolves an empty vector.
     refresh_recommendation_chip();
+
+    // Switch the live-tick websocket subscription to the new symbol. The
+    // service no-ops when no Finnhub key is set, so we don't need to gate
+    // the call here.
+    services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
 
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
     if (link_group_ != SymbolGroup::None) {
