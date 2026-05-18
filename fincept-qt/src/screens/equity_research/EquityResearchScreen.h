@@ -95,6 +95,10 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     QString current_exchange_;
     QTimer* mkt_status_timer_ = nullptr;   // 30s tick to re-evaluate the badge
     void update_market_status_badge();
+
+    // Finnhub analyst-recommendation chip. Subscribed in load_symbol;
+    // rendered into rec_label_ (the existing placeholder in the quote bar).
+    void refresh_recommendation_chip();
     // Per-tab data freshness chip — shows "as of HH:mm:ss · 30s ago" for
     // whichever tab is active. Updated on service signals + 1-Hz ticker.
     QLabel* freshness_label_ = nullptr;

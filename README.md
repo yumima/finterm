@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`7ef8ac2b`](https://github.com/yumima/finterm/commit/7ef8ac2b) screens(er): market-status badge in quote bar (OPEN/PRE/AFTER/CLOSED)
 - [`304165c8`](https://github.com/yumima/finterm/commit/304165c8) services(finnhub): review-noted — drop junk rows in two parsers
 - [`cb96c759`](https://github.com/yumima/finterm/commit/cb96c759) screens(er): fix SMA50 crosshair label + dedup compute
 - [`7ce42588`](https://github.com/yumima/finterm/commit/7ce42588) services(finnhub): FinnhubService + IPO/lockup augmentation in PreIpoService

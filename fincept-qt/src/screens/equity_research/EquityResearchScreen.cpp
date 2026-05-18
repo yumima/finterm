@@ -15,7 +15,9 @@
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "services/equity/EquityResearchService.h"
+#include "services/finnhub/FinnhubService.h"
 #include "services/markets/MarketDataService.h"
+#include "services/query/QueryStore.h"
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
@@ -543,6 +545,12 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     // peers + sentiment have their own fetch APIs — invoked by the tabs on
     // first show. Skipping eager prefetch since they don't lock the UI.
 
+    // Analyst recommendation-trend chip — Finnhub-sourced. Subscribing here
+    // (rather than waiting for tab activation) keeps the chip visible the
+    // moment the user lands on any tab. No-op when no FINNHUB_API_KEY is
+    // configured: subscribe_recommendations resolves an empty vector.
+    refresh_recommendation_chip();
+
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
     if (link_group_ != SymbolGroup::None) {
         SymbolContext::instance().set_group_symbol(
@@ -740,6 +748,108 @@ void EquityResearchScreen::update_market_status_badge() {
     mkt_status_label_->setText(status);
     mkt_status_label_->setStyleSheet(chip_ss(color, status == "CLOSED"));
     mkt_status_label_->setVisible(true);
+}
+
+// ── Recommendation-trend chip (Finnhub) ──────────────────────────────────────
+//
+// Renders a compact buy/hold/sell summary in rec_label_, with a direction
+// arrow indicating whether sentiment is firming or weakening across the
+// last two monthly buckets. Tooltip shows the full breakdown including
+// strong-buy / strong-sell. No-op when no FINNHUB_API_KEY: the service
+// resolves an empty vector, and we hide the chip until data arrives.
+void EquityResearchScreen::refresh_recommendation_chip() {
+    if (!rec_label_) return;
+    if (!services::finnhub::FinnhubService::instance().has_api_key()) {
+        rec_label_->setText("");
+        rec_label_->setToolTip("Add a Finnhub API key in Settings → Credentials "
+                               "to see analyst recommendations.");
+        rec_label_->setVisible(false);
+        return;
+    }
+
+    const QString sym = current_symbol_;
+    rec_label_->setVisible(false);    // hide until callback lands
+    services::finnhub::FinnhubService::instance().subscribe_recommendations(
+        this, sym,
+        [this, sym](const services::query::QueryStore::State& s) {
+            // Late callback from a previous symbol — drop on the floor.
+            if (sym != current_symbol_) return;
+            if (!rec_label_) return;
+            if (!s.data.isValid() || s.data.isNull()) {
+                rec_label_->setVisible(false);
+                return;
+            }
+            const auto rows =
+                s.data.value<QVector<services::finnhub::FinnhubRecTrend>>();
+            if (rows.isEmpty()) {
+                rec_label_->setVisible(false);
+                return;
+            }
+
+            // Finnhub returns periods newest-first; the first row is the most
+            // recent month. Bucket strong_buy with buy, strong_sell with sell
+            // for the compact display; the tooltip preserves the breakdown.
+            const auto& latest = rows.first();
+            const int b = latest.strong_buy + latest.buy;
+            const int h = latest.hold;
+            const int s_ = latest.sell + latest.strong_sell;
+            const int total = b + h + s_;
+            if (total <= 0) {
+                rec_label_->setVisible(false);
+                return;
+            }
+
+            // Direction arrow: compare buy% latest vs prior bucket. Only
+            // meaningful with at least two periods.
+            QString arrow = "\xe2\x80\xa2";   // bullet — no prior data
+            QString arrow_color = ui::colors::TEXT_SECONDARY();
+            if (rows.size() >= 2) {
+                const auto& prior = rows.at(1);
+                const int b_prev = prior.strong_buy + prior.buy;
+                const int total_prev = b_prev + prior.hold
+                                       + prior.sell + prior.strong_sell;
+                if (total_prev > 0) {
+                    const double pct_now  = double(b)      / total;
+                    const double pct_prev = double(b_prev) / total_prev;
+                    if (pct_now > pct_prev + 0.02) {
+                        arrow = "\xe2\x96\xb2";          // ▲ improving
+                        arrow_color = ui::colors::POSITIVE();
+                    } else if (pct_now < pct_prev - 0.02) {
+                        arrow = "\xe2\x96\xbc";          // ▼ weakening
+                        arrow_color = ui::colors::NEGATIVE();
+                    } else {
+                        arrow = "\xe2\x80\xa2";          // • flat
+                    }
+                }
+            }
+
+            rec_label_->setText(
+                QString("<span style='color:%5;'>%1</span> "
+                        "<span style='color:%6;'>%2B</span>"
+                        "<span style='color:%7;'>/%3H</span>"
+                        "<span style='color:%8;'>/%4S</span>")
+                    .arg(arrow).arg(b).arg(h).arg(s_)
+                    .arg(arrow_color,
+                         ui::colors::POSITIVE(),
+                         ui::colors::TEXT_SECONDARY(),
+                         ui::colors::NEGATIVE()));
+            rec_label_->setStyleSheet("font-size:12px; font-weight:600;");
+            rec_label_->setTextFormat(Qt::RichText);
+            rec_label_->setToolTip(
+                QString("Analyst recommendations (Finnhub, %1)\n"
+                        "Strong Buy: %2\n"
+                        "Buy: %3\n"
+                        "Hold: %4\n"
+                        "Sell: %5\n"
+                        "Strong Sell: %6")
+                    .arg(latest.period)
+                    .arg(latest.strong_buy)
+                    .arg(latest.buy)
+                    .arg(latest.hold)
+                    .arg(latest.sell)
+                    .arg(latest.strong_sell));
+            rec_label_->setVisible(true);
+        });
 }
 
 QVariantMap EquityResearchScreen::save_state() const {
