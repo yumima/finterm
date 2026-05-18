@@ -10,6 +10,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QAbstractTextDocumentLayout>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
@@ -50,47 +51,29 @@ QString format_article_html(const QString& plain) {
     QString html;
     html.reserve(escaped.size() + paras.size() * 64);
 
-    // QLabel's rich-text renderer is finicky:
-    //   - <p> with `text-indent` is dropped (first-line indent CSS doesn't
-    //     stick on QLabel; works in QTextEdit/QTextBrowser).
-    //   - <p> with `margin-bottom` is dropped too — Qt collapses <p> blocks
-    //     against the default margin and ignores per-block margin overrides.
-    //   - Leading non-breaking spaces after a <br> get trimmed by the
-    //     wrap/whitespace pass — which is why &#160;×4 didn't visually
-    //     produce any indent in the previous pass.
-    //
-    // Workaround that survives all three quirks:
-    //   - Two <br>s between paragraphs → one blank line (at line-height
-    //     170%, that's ~27px — a clear paragraph gap).
-    //   - First-line indent comes from em-spaces (&emsp; = U+2003, 1em wide
-    //     each) wrapped in <span style="white-space:pre;">. The `pre`
-    //     whitespace mode tells Qt's renderer to preserve those characters
-    //     verbatim regardless of line-start trimming, and em-spaces are
-    //     proper printable characters (not whitespace per Unicode's bidi
-    //     class) so they're never collapsed. 3 em-spaces ≈ 3em ≈ ~36px at
-    //     12pt monospace — a generous, unambiguous indent.
-    //   - line-height comes from the outer <div>; padding-right keeps the
-    //     last glyph off the splitter handle when the middle pane is narrow.
-    html += QStringLiteral(
-        "<div style=\"line-height:170%; padding-right:10px;\">");
-
-    static const QLatin1String kIndent(
-        "<span style=\"white-space:pre;\">&emsp;&emsp;&emsp;</span>");
-    static const QLatin1String kParaSep("<br><br>");
-
+    // body_label_ is a QTextBrowser, which uses the full QTextDocument
+    // pipeline and honors block-level CSS on <p>. Each paragraph becomes
+    // a <p> with:
+    //   - text-indent in PIXELS (em units don't always resolve in Qt's
+    //     CSS parser; px does)
+    //   - line-height in % for prose readability
+    //   - margin-bottom in px for clear paragraph separation
+    // First paragraph keeps text-indent:0 per the typographic convention
+    // (opening paragraph never indents).
     bool first = true;
     for (QString p : paras) {
         p = p.trimmed();
         if (p.isEmpty()) continue;
         p.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
-        if (!first) {
-            html += kParaSep;
-            html += kIndent;
-        }
+        const int indent_px = first ? 0 : 30;
+        html += QStringLiteral(
+                    "<p style=\"text-indent:%1px; line-height:170%; "
+                    "margin-bottom:14px;\">")
+                    .arg(indent_px);
         html += p;
+        html += QStringLiteral("</p>");
         first = false;
     }
-    html += QStringLiteral("</div>");
     return html;
 }
 
@@ -427,17 +410,37 @@ QWidget* NewsDetailPanel::build_content_view() {
     body_status_->setWordWrap(true);
     body_layout->addWidget(body_status_);
 
-    body_label_ = new QLabel(body_section_);
+    // QTextBrowser instead of QLabel: QLabel's rich-text renderer drops
+    // block-level CSS like `text-indent` on <p>, which we need for first-line
+    // paragraph indent. QTextBrowser uses the full QTextDocument pipeline
+    // and supports the entire Qt rich-text CSS subset.
+    body_label_ = new QTextBrowser(body_section_);
     body_label_->setObjectName("newsDetailBody");
-    body_label_->setWordWrap(true);
+    body_label_->setReadOnly(true);
+    body_label_->setFrameShape(QFrame::NoFrame);
+    body_label_->setLineWrapMode(QTextEdit::WidgetWidth);
+    // Outer #newsDetailContent scroll area handles overflow; suppress the
+    // browser's own scrollbars so we don't get nested scrolling.
+    body_label_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    body_label_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    body_label_->setOpenExternalLinks(false);
     body_label_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-    // Rich text so the per-paragraph CSS (line-height, text-indent, margin)
-    // emitted by format_article_html() actually renders — QLabel in plain
-    // text mode drops those properties on the floor. Font/colour/background
-    // still come from the #newsDetailBody QSS rule (12pt cream, transparent);
-    // we don't override those inline so the cascade stays a single source of
-    // truth for the typography tier.
-    body_label_->setTextFormat(Qt::RichText);
+    // Transparent background — both on the widget (via inline QSS, since the
+    // #newsDetailBody QSS rule may not reach the viewport reliably) and on
+    // the viewport (autoFillBackground off) so the panel's BG_SURFACE shows
+    // through. Font + text color come from the #newsDetailBody QSS rule.
+    body_label_->setStyleSheet("QTextBrowser { background: transparent; border: none; }");
+    body_label_->viewport()->setAutoFillBackground(false);
+    // Auto-size to document height. With scrollbars suppressed, the widget
+    // must be tall enough to show every line; the outer scroll area handles
+    // overflow when the panel is shorter than the article. documentLayout's
+    // documentSizeChanged fires after every reflow (content + resize), so
+    // the widget tracks the document's natural height across rewraps.
+    connect(body_label_->document()->documentLayout(),
+            &QAbstractTextDocumentLayout::documentSizeChanged,
+            body_label_, [this](const QSizeF& size) {
+                body_label_->setFixedHeight(static_cast<int>(size.height()) + 4);
+            });
     body_layout->addWidget(body_label_);
     layout->addWidget(body_section_);
 
@@ -733,9 +736,12 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
             }
             self->body_status_->hide();
             // Stash the plain text for the SAVE button — we already have it here,
-            // and saving expects plain text on disk, not the HTML we hand to QLabel.
+            // and saving expects plain text on disk, not the HTML we render.
             self->current_body_text_ = text;
-            self->body_label_->setText(format_article_html(text));
+            // setHtml (not setText): QTextBrowser's setText treats input as
+            // plain text by default; setHtml forces rich-text parsing so the
+            // <p style="text-indent:…"> CSS we emit actually applies.
+            self->body_label_->setHtml(format_article_html(text));
         });
 }
 

@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QTextBrowser>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -80,10 +81,18 @@ class NewsDetailPanel : public QWidget {
     // NewsService::extract_article_body() on each show_article(). Reused
     // across articles; the body label is replaced on each load and the
     // "loading…" state is shown while the extractor runs.
-    QWidget* body_section_ = nullptr;
-    QLabel*  body_title_   = nullptr; // "ARTICLE" header, hidden on failure
-    QLabel*  body_status_  = nullptr; // "loading…" / error message
-    QLabel*  body_label_   = nullptr; // the extracted prose itself
+    //
+    // body_label_ is a QTextBrowser, not a QLabel: QLabel's rich-text path
+    // is a documented subset that silently drops block-level CSS like
+    // `text-indent` on <p>, which is exactly what we need for first-line
+    // paragraph indent. QTextBrowser uses the full QTextDocument render
+    // pipeline and honors the full Qt rich-text subset. Configured for
+    // static display (read-only, no frame, scrollbars off — outer scroll
+    // area handles overflow, auto-resized to document height).
+    QWidget*       body_section_ = nullptr;
+    QLabel*        body_title_   = nullptr; // "ARTICLE" header, hidden on failure
+    QLabel*        body_status_  = nullptr; // "loading…" / error message
+    QTextBrowser*  body_label_   = nullptr; // the extracted prose itself
     // Generation token so a stale extraction callback for a previous article
     // doesn't repaint a body we no longer care about (e.g. user clicked B
     // while A was still extracting). Bumped on every show_article().

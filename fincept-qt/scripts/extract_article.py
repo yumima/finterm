@@ -144,6 +144,66 @@ def _via_soup(html: str) -> Optional[dict]:
         return None
 
 
+_SENTENCE_END_RE = re.compile(r"[.!?][\"')\]]*\s*$")
+_LIST_LEAD_RE = re.compile(r"^\s*(?:[-*•·]|\d+[.)]|[a-z][.)]\s)\s")
+
+
+def _merge_paragraphs(text: str) -> str:
+    """Collapse over-fragmented paragraphs into natural prose.
+
+    Many news sites markup individual lines with their own `<p>` or `<br>`,
+    and trafilatura/readability faithfully preserve that — producing output
+    where a single semantic paragraph is split across 3-5 `\\n\\n`-separated
+    fragments. The reader perceives these as "many one-line paragraphs",
+    which they are visually.
+
+    Heuristic: if a fragment doesn't end with sentence-terminating
+    punctuation (`.`, `!`, `?`, optionally followed by closing quote /
+    bracket), it's a soft-wrap continuation — join it to the previous
+    fragment with a single space. Skip the merge when the next fragment
+    looks like a list item ("- ", "* ", "1. ", "a) ") since those are
+    legitimately their own paragraphs.
+
+    Conservative — leaves paragraphs that already end with a period
+    untouched. Won't fix true paragraphs that happen to lack terminal
+    punctuation (rare), and won't split run-on text without `\\n\\n`.
+
+    Also normalises soft line-wraps WITHIN each paragraph: single `\\n`
+    inside a paragraph (as opposed to `\\n\\n` paragraph separators) almost
+    always comes from the source page wrapping a sentence across multiple
+    `<br>` tags or pre-formatted lines. Collapse those to single spaces so
+    the C++ formatter, which turns single `\\n` into `<br>` for visual
+    parity, doesn't reintroduce the same soft-wrap problem the merge step
+    just fixed."""
+    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if not paras:
+        return text
+    # Most extractors emit \n\n between paragraphs and (possibly) \n inside
+    # one. A few — Wikipedia is the canonical example — emit only single \n
+    # between paragraphs with no \n\n anywhere. If we ended up with one
+    # giant fragment full of \n's, treat those as the paragraph separators
+    # instead.
+    if len(paras) == 1 and paras[0].count("\n") > 5:
+        paras = [p.strip() for p in paras[0].split("\n") if p.strip()]
+    else:
+        # Typical case: collapse soft line-wraps within each fragment first
+        # (single \n inside a fragment comes from the source's <br> tags).
+        paras = [re.sub(r"\s*\n\s*", " ", p).strip() for p in paras]
+    paras = [re.sub(r"[ \t]{2,}", " ", p) for p in paras]
+    merged: list[str] = []
+    for p in paras:
+        if (
+            merged
+            and not _SENTENCE_END_RE.search(merged[-1])
+            and not _LIST_LEAD_RE.match(merged[-1])  # don't bleed prose into a list item
+            and not _LIST_LEAD_RE.match(p)           # don't start a list as a continuation
+        ):
+            merged[-1] = merged[-1].rstrip() + " " + p
+        else:
+            merged.append(p)
+    return "\n\n".join(merged)
+
+
 def extract(url: str) -> dict:
     if not url or not (url.startswith("http://") or url.startswith("https://")):
         return {"success": False, "error": "invalid url"}
@@ -162,6 +222,11 @@ def extract(url: str) -> dict:
         if result:
             result["success"] = True
             result["url"] = url
+            # Post-process to repair over-fragmented paragraphs (see
+            # _merge_paragraphs). Applied uniformly across all extractors
+            # since every one of them can produce soft-wrap fragments from
+            # certain site layouts.
+            result["text"] = _merge_paragraphs(result["text"])
             return result
 
     return {"success": False, "error": "no extractor produced usable text"}
