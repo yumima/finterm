@@ -52,16 +52,6 @@ class SessionManager : public QObject {
     void save_dock_layout(int window_id, const QByteArray& layout);
     QByteArray load_dock_layout(int window_id) const;
 
-    // Per-primary ADS layout snapshots. Companion to save_dock_layout: the
-    // dock_layout blob captures whatever was on screen at shutdown (a
-    // single primary's view after exclusive-hide), while these snapshots
-    // hold the multi-pane arrangements the user built up for OTHER
-    // primaries during the session. Without persisting them, navigating
-    // back to those primaries after restart loses the side panes —
-    // exclusive-hide drops them from the dock manager at nav-away time.
-    void save_layout_snapshots(int window_id, const QHash<QString, QByteArray>& snapshots);
-    QHash<QString, QByteArray> load_layout_snapshots(int window_id) const;
-
     // Dock layout version — used to auto-discard stale layouts after code changes
     void set_dock_layout_version(int window_id, int version);
     int dock_layout_version(int window_id) const;

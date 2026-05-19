@@ -127,31 +127,6 @@ QByteArray SessionManager::load_dock_layout(int window_id) const {
     return val;
 }
 
-void SessionManager::save_layout_snapshots(int window_id, const QHash<QString, QByteArray>& snapshots) {
-    const QString group = QString("window_%1/layout_snapshots").arg(window_id);
-    settings_.beginGroup(group);
-    settings_.remove("");  // wipe any previous snapshots (primaries the user
-                           // hasn't revisited since last save are irrelevant)
-    for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
-        settings_.setValue(it.key(), it.value());
-    }
-    settings_.endGroup();
-}
-
-QHash<QString, QByteArray> SessionManager::load_layout_snapshots(int window_id) const {
-    QHash<QString, QByteArray> out;
-    const QString group = QString("window_%1/layout_snapshots").arg(window_id);
-    settings_.beginGroup(group);
-    const QStringList keys = settings_.childKeys();
-    out.reserve(keys.size());
-    for (const QString& k : keys) {
-        const QByteArray b = settings_.value(k).toByteArray();
-        if (!b.isEmpty()) out.insert(k, b);
-    }
-    settings_.endGroup();
-    return out;
-}
-
 void SessionManager::set_dock_layout_version(int window_id, int version) {
     const QString prefix = QString("window_%1/").arg(window_id);
     settings_.setValue(prefix + "dock_layout_version", version);

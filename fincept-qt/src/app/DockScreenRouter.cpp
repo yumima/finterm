@@ -443,14 +443,7 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // so the work done above — placing dw at center, toggleView(true), etc. —
     // is harmlessly overridden by the saved arrangement. The user's pre-leave
     // layout (e.g. Portfolio + ER side-by-side) is back in one paint.
-    //
-    // Latency gate: skip restore when navigating to the primary we're
-    // already on. ADS restoreState() on a complex multi-pane blob blocks
-    // the main thread for ~200-500ms (which is also where QMediaPlayer
-    // delivers video frames — same root cause as the save-side gate in
-    // commit 3afaec24). A same-primary nav can't have changed anything
-    // the snapshot wouldn't already match, so the restore is pure waste.
-    if (exclusive && current_primary_id_ != id) {
+    if (exclusive) {
         auto it = layout_snapshots_.constFind(id);
         if (it != layout_snapshots_.constEnd()) {
             LOG_DEBUG("DockRouter",
@@ -459,8 +452,6 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
             sync_grid_from_reality();
             apply_ads_theme();
         }
-    }
-    if (exclusive) {
         // current_primary_id_ tracks the most-recently-exclusive-navigated
         // screen — that's the key under which we'll save the layout next time
         // the user navigates exclusively away.
@@ -688,39 +679,6 @@ void DockScreenRouter::replace_screen(const QString& primary, const QString& sec
     // navigate to secondary in exclusive mode so it fills the full area.
     Q_UNUSED(primary)
     navigate(secondary, true);
-}
-
-QHash<QString, QByteArray> DockScreenRouter::snapshot_states_for_save() {
-    // Roll up everything that should survive a restart:
-    //
-    // 1. Every primary in layout_snapshots_ — these were captured at
-    //    earlier nav-away moments and are otherwise correct.
-    // 2. The CURRENT primary's live view, IF it's multi-pane — without
-    //    this, the primary that's active at shutdown gets the same
-    //    fate as the others in 1af16b67: exclusive-hide on next start
-    //    erases its split. Same multi-pane gate as the in-session
-    //    save path (commit 3afaec24) so we don't capture trivial
-    //    single-pane state.
-    QHash<QString, QByteArray> out = layout_snapshots_;
-    if (manager_ && !current_primary_id_.isEmpty()
-        && manager_->openedDockAreas().size() > 1) {
-        out.insert(current_primary_id_, manager_->saveState());
-        LOG_DEBUG("DockRouter",
-                  QString("snapshot_states_for_save: included live current primary '%1' (%2 bytes)")
-                      .arg(current_primary_id_)
-                      .arg(out[current_primary_id_].size()));
-    }
-    return out;
-}
-
-void DockScreenRouter::hydrate_snapshots(const QHash<QString, QByteArray>& snapshots) {
-    layout_snapshots_ = snapshots;
-    LOG_DEBUG("DockRouter",
-              QString("hydrate_snapshots: %1 primaries").arg(layout_snapshots_.size()));
-}
-
-void DockScreenRouter::set_current_primary_id(const QString& id) {
-    current_primary_id_ = id;
 }
 
 void DockScreenRouter::ensure_all_registered() {

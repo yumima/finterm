@@ -6,7 +6,6 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
-- [`cdebdcea`](https://github.com/yumima/finterm/commit/cdebdcea) screens(er): COMP column → explicit QCheckBox, moved to last position
 - [`309e6b12`](https://github.com/yumima/finterm/commit/309e6b12) screens(er): ✓ checkbox in Peers row → toggle comp overlay (two-way)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

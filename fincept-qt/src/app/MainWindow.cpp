@@ -864,32 +864,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dw->toggleView(false);
         }
 
-        // Rehydrate per-primary layout snapshots so the user's prior
-        // multi-pane arrangements (e.g. Portfolio + ER alongside) come
-        // back the next time they navigate to those primaries. Also seed
-        // current_primary_id_ from the last-active screen — otherwise the
-        // FIRST nav-away after restart would skip the save-snapshot block
-        // (because current_primary_id_ would be empty) and immediately
-        // re-lose the user's just-restored layout for that primary.
-        //
-        // Gated on dock_restored: if restoreState failed (clean install,
-        // version mismatch, corrupt blob), the saved snapshots are
-        // either from an older layout format OR target widgets that were
-        // re-closed above — replaying them would feed stale XML into a
-        // freshly-rebuilt dock manager and is the exact crash path the
-        // kDockLayoutVersion gate exists to prevent.
-        if (dock_router_ && dock_restored) {
-            dock_router_->hydrate_snapshots(
-                SessionManager::instance().load_layout_snapshots(window_id_));
-            const QString last_active = SessionManager::instance().last_screen();
-            if (!last_active.isEmpty())
-                dock_router_->set_current_primary_id(last_active);
-        } else if (!dock_restored) {
-            // Clean install or version bump: wipe stale snapshots from
-            // disk so the next save doesn't merge them back in.
-            SessionManager::instance().save_layout_snapshots(window_id_, {});
-        }
-
         // Save the current version so next startup knows the format.
         SessionManager::instance().set_dock_layout_version(window_id_, kDockLayoutVersion);
     }
@@ -1612,15 +1586,6 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         SessionManager::instance().save_screen_name(window_id_, scr->name());
     if (dock_manager_) {
         SessionManager::instance().save_dock_layout(window_id_, dock_manager_->saveState());
-        // Persist per-primary multi-pane snapshots too. Without this, the
-        // exclusive-hide that runs on every nav-away (introduced by
-        // 1af16b67) destroys each non-active primary's side panes at
-        // shutdown, and clicking that primary post-restart restores a
-        // default single-pane layout instead of the user's arrangement.
-        if (dock_router_) {
-            SessionManager::instance().save_layout_snapshots(
-                window_id_, dock_router_->snapshot_states_for_save());
-        }
         QSettings tmp;
         dock_manager_->savePerspectives(tmp);
         SessionManager::instance().save_perspectives(tmp);
