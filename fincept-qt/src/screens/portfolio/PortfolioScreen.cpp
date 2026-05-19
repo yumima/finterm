@@ -198,6 +198,7 @@ void PortfolioScreen::build_ui() {
             command_bar_->set_detail_view(std::nullopt);
             ffn_view_->set_data(current_summary_, current_summary_.portfolio.currency);
         }
+        command_bar_->set_ffn_active(show_ffn_);
         update_content_state();
     });
 
@@ -245,6 +246,7 @@ void PortfolioScreen::build_ui() {
     ffn_view_ = new PortfolioFFNView(this);
     connect(ffn_view_, &PortfolioFFNView::back_requested, this, [this]() {
         show_ffn_ = false;
+        command_bar_->set_ffn_active(false);
         update_content_state();
     });
 

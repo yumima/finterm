@@ -3,13 +3,11 @@
 
 #include "ui/theme/Theme.h"
 
-#include <QAction>
 #include <QApplication>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QMenu>
 #include <QScrollArea>
-#include <QToolButton>
+#include <QStyle>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -99,8 +97,14 @@ void PortfolioCommandBar::build_row1(QHBoxLayout* layout) {
 
     layout->addStretch(1);
 
-    // Refresh + interval + overflow (right-aligned)
-    refresh_btn_ = new QPushButton("\u21BB");
+    // Refresh + interval (right-aligned). The icon used to be Unicode "\u21BB"
+    // (CLOCKWISE TOP SEMICIRCLE ARROW) rendered as text \u2014 but on some systems
+    // the default UI font lacks the glyph, so it appeared as a tiny dot/box.
+    // Switching to the system's QStyle reload icon guarantees a recognizable
+    // refresh symbol regardless of installed fonts.
+    refresh_btn_ = new QPushButton;
+    refresh_btn_->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    refresh_btn_->setIconSize(QSize(14, 14));
     refresh_btn_->setFixedSize(24, 22);
     refresh_btn_->setCursor(Qt::PointingHandCursor);
     refresh_btn_->setToolTip("Refresh portfolio data");
@@ -121,10 +125,6 @@ void PortfolioCommandBar::build_row1(QHBoxLayout* layout) {
     connect(interval_cb_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int idx) { emit refresh_interval_changed(interval_cb_->itemData(idx).toInt()); });
     layout->addWidget(interval_cb_);
-
-    // Overflow "⋯" menu: CSV / JSON / Import / FFN
-    build_overflow_menu();
-    layout->addWidget(overflow_btn_);
 
     apply_row1_styles();
 }
@@ -221,6 +221,33 @@ void PortfolioCommandBar::build_portfolio_selector() {
     btn_row->addWidget(delete_btn);
 
     dd_layout->addLayout(btn_row);
+
+    // Portfolio-level I/O — previously hidden in a "⋯" overflow menu on
+    // the title bar (undiscoverable). Surfaced here next to Create/Delete
+    // since they're portfolio-management ops, not stats/analytics actions.
+    auto* io_row = new QHBoxLayout;
+    io_row->setSpacing(4);
+    auto make_io = [&](const QString& label, auto signal) {
+        auto* b = new QPushButton(label);
+        b->setFixedHeight(22);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                                 "  font-size:11px; letter-spacing:0.3px; }"
+                                 "QPushButton:hover { color:%3; border-color:%3; }")
+                             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        connect(b, &QPushButton::clicked, this, [this, signal]() {
+            dropdown_->hide();
+            dropdown_visible_ = false;
+            emit (this->*signal)();
+        });
+        io_row->addWidget(b);
+        return b;
+    };
+    make_io("EXPORT CSV",  &PortfolioCommandBar::export_csv_requested);
+    make_io("EXPORT JSON", &PortfolioCommandBar::export_json_requested);
+    make_io("IMPORT JSON", &PortfolioCommandBar::import_requested);
+    dd_layout->addLayout(io_row);
+
     dropdown_->hide();
 }
 
@@ -242,39 +269,6 @@ void PortfolioCommandBar::build_stats_cluster(QHBoxLayout* layout) {
     layout->addWidget(pnl_label_);
     layout->addWidget(day_label_);
     layout->addWidget(pos_label_);
-}
-
-void PortfolioCommandBar::build_overflow_menu() {
-    overflow_btn_ = new QToolButton(this);
-    overflow_btn_->setText("\u22EF"); // horizontal ellipsis
-    overflow_btn_->setFixedSize(24, 22);
-    overflow_btn_->setCursor(Qt::PointingHandCursor);
-    overflow_btn_->setToolTip("More actions");
-    overflow_btn_->setPopupMode(QToolButton::InstantPopup);
-    overflow_btn_->setObjectName("pfOverflowBtn");
-
-    overflow_menu_ = new QMenu(this);
-    overflow_menu_->setStyleSheet(QString("QMenu { background:%1; color:%2; border:1px solid %3;"
-                                          "  padding:4px; font-size:12px; }"
-                                          "QMenu::item { padding:6px 16px; }"
-                                          "QMenu::item:selected { background:%4; color:%5; }"
-                                          "QMenu::separator { height:1px; background:%3; margin:4px 8px; }")
-                                      .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-                                           ui::colors::AMBER_DIM(), ui::colors::AMBER()));
-
-    auto* export_csv = overflow_menu_->addAction("Export CSV");
-    auto* export_json = overflow_menu_->addAction("Export JSON");
-    auto* import_action = overflow_menu_->addAction("Import JSON…");
-    overflow_menu_->addSeparator();
-    ffn_action_ = overflow_menu_->addAction("FFN Analysis");
-    ffn_action_->setCheckable(true);
-
-    connect(export_csv, &QAction::triggered, this, &PortfolioCommandBar::export_csv_requested);
-    connect(export_json, &QAction::triggered, this, &PortfolioCommandBar::export_json_requested);
-    connect(import_action, &QAction::triggered, this, &PortfolioCommandBar::import_requested);
-    connect(ffn_action_, &QAction::triggered, this, &PortfolioCommandBar::ffn_toggled);
-
-    overflow_btn_->setMenu(overflow_menu_);
 }
 
 // ── Row 2 ────────────────────────────────────────────────────────────────────
@@ -345,6 +339,18 @@ void PortfolioCommandBar::build_detail_tabs(QHBoxLayout* layout) {
         layout->addWidget(btn);
         detail_btns_.append(btn);
     }
+
+    // FFN Analysis — used to be tucked into the "⋯" overflow menu (hidden,
+    // undiscoverable). Promoted to a visible pill next to the analytics
+    // tabs since it IS an analytics view, just one that uses a different
+    // state path (show_ffn_) than the active_detail_ pills above.
+    ffn_btn_ = new QPushButton("FFN");
+    ffn_btn_->setFixedHeight(22);
+    ffn_btn_->setCursor(Qt::PointingHandCursor);
+    ffn_btn_->setObjectName("pfTab");
+    ffn_btn_->setToolTip("FFN portfolio analysis");
+    connect(ffn_btn_, &QPushButton::clicked, this, &PortfolioCommandBar::ffn_toggled);
+    layout->addWidget(ffn_btn_);
 }
 
 void PortfolioCommandBar::build_tools_cluster(QHBoxLayout* layout) {
@@ -385,12 +391,6 @@ void PortfolioCommandBar::apply_row1_styles() {
                 "QComboBox QAbstractItemView { background:%1; color:%2; selection-background-color:%4; }")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM()));
 
-    overflow_btn_->setStyleSheet(
-        QString("QToolButton#pfOverflowBtn { background:transparent; color:%1; border:1px solid %2;"
-                "  border-radius:2px; font-size:14px; font-weight:700; padding-bottom:4px; }"
-                "QToolButton#pfOverflowBtn:hover { border-color:%3; color:%3; }"
-                "QToolButton#pfOverflowBtn::menu-indicator { image:none; width:0; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
 }
 
 void PortfolioCommandBar::apply_row2_styles() {
@@ -491,8 +491,13 @@ void PortfolioCommandBar::set_summary(const portfolio::PortfolioSummary& s) {
 }
 
 void PortfolioCommandBar::set_refreshing(bool refreshing) {
+    // setEnabled drives the visual state via the :disabled QSS rule \u2014
+    // the button greys out while a refresh is in flight, then returns
+    // to normal. We deliberately do NOT swap the icon for a text glyph
+    // (the previous "\u23F3" / "\u21BB" path triggered the same missing-font
+    // fallback that the icon swap was meant to eliminate, putting the
+    // orange dot right back).
     refresh_btn_->setEnabled(!refreshing);
-    refresh_btn_->setText(refreshing ? "\u23F3" : "\u21BB");
 }
 
 void PortfolioCommandBar::set_detail_view(std::optional<portfolio::DetailView> view) {
@@ -503,6 +508,23 @@ void PortfolioCommandBar::set_detail_view(std::optional<portfolio::DetailView> v
         btn->style()->unpolish(btn);
         btn->style()->polish(btn);
     }
+    // Mutually-exclusive with FFN — opening a detail view should clear the
+    // FFN pill's active highlight even though show_ffn_ is owned by
+    // PortfolioScreen. PortfolioScreen also calls set_ffn_active(true)
+    // when FFN is opened and clears active_detail_, so the two stays in
+    // sync.
+    if (ffn_btn_ && view.has_value()) {
+        ffn_btn_->setProperty("active", false);
+        ffn_btn_->style()->unpolish(ffn_btn_);
+        ffn_btn_->style()->polish(ffn_btn_);
+    }
+}
+
+void PortfolioCommandBar::set_ffn_active(bool active) {
+    if (!ffn_btn_) return;
+    ffn_btn_->setProperty("active", active);
+    ffn_btn_->style()->unpolish(ffn_btn_);
+    ffn_btn_->style()->polish(ffn_btn_);
 }
 
 void PortfolioCommandBar::set_has_selection(bool has) {

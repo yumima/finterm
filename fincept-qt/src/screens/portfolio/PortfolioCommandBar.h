@@ -7,9 +7,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
-#include <QMenu>
 #include <QPushButton>
-#include <QToolButton>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -24,6 +22,7 @@ class PortfolioCommandBar : public QWidget {
     void set_summary(const portfolio::PortfolioSummary& summary);
     void set_refreshing(bool refreshing);
     void set_detail_view(std::optional<portfolio::DetailView> view);
+    void set_ffn_active(bool active);
     void set_has_selection(bool has_selection);
     void set_has_portfolios(bool has_portfolios);
     void set_refresh_interval(int ms);
@@ -55,7 +54,6 @@ class PortfolioCommandBar : public QWidget {
     void build_trade_cluster(QHBoxLayout* layout);
     void build_detail_tabs(QHBoxLayout* layout);
     void build_tools_cluster(QHBoxLayout* layout);
-    void build_overflow_menu();
     void toggle_dropdown();
     void update_selector_label();
     void apply_row1_styles();
@@ -79,9 +77,7 @@ class PortfolioCommandBar : public QWidget {
     QPushButton* div_btn_ = nullptr;
     QPushButton* refresh_btn_ = nullptr;
     QComboBox* interval_cb_ = nullptr;
-    QToolButton* overflow_btn_ = nullptr;
-    QMenu* overflow_menu_ = nullptr;
-    QAction* ffn_action_ = nullptr;
+    QPushButton* ffn_btn_ = nullptr;
     QPushButton* ai_btn_ = nullptr;
     QPushButton* agent_btn_ = nullptr;
 
