@@ -363,9 +363,20 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     };
 
     if (exclusive) {
-        // Exclusive: place into full container (always, regardless of must_place)
-        auto* area = manager_->addDockWidget(ads::CenterDockWidgetArea, dw);
-        grid_top_left_ = area;
+        // Skip addDockWidget when dw is already correctly placed: the
+        // exclusive-hide loop above just cleared every other widget, so if
+        // dw still owns a solo, non-poisoned area, it's ALREADY the only
+        // thing at center. Calling addDockWidget(CenterDockWidgetArea, dw)
+        // anyway forces ADS to tear down the layout and rebuild it from
+        // scratch — measured at 800-1500ms per warm nav and the dominant
+        // cost of the post-1af16b67 nav-tab lag the user reports.
+        if (must_place) {
+            auto* area = manager_->addDockWidget(ads::CenterDockWidgetArea, dw);
+            grid_top_left_ = area;
+        } else {
+            // Already-placed, solo, non-poisoned area — reuse it.
+            grid_top_left_ = existing_area;
+        }
         grid_top_right_ = grid_bottom_left_ = grid_bottom_right_ = nullptr;
         panel_count_ = 1;
 

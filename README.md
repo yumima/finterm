@@ -6,6 +6,11 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`3530ea8e`](https://github.com/yumima/finterm/commit/3530ea8e) Revert "app(nav): persist per-primary layout snapshots + skip same-primary restore"
+- [`0a20acf1`](https://github.com/yumima/finterm/commit/0a20acf1) Revert "app(diag): log dock manager state at save/restore/unlock phases"
+- [`f05bd0e5`](https://github.com/yumima/finterm/commit/f05bd0e5) app(diag): log dock manager state at save/restore/unlock phases
+- [`50d0c34b`](https://github.com/yumima/finterm/commit/50d0c34b) app(nav): persist per-primary layout snapshots + skip same-primary restore
+- [`cdebdcea`](https://github.com/yumima/finterm/commit/cdebdcea) screens(er): COMP column → explicit QCheckBox, moved to last position
 - [`309e6b12`](https://github.com/yumima/finterm/commit/309e6b12) screens(er): ✓ checkbox in Peers row → toggle comp overlay (two-way)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
