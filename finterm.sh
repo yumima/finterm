@@ -64,6 +64,14 @@ START
     hurts the QtMultimedia FFmpeg pipeline, audio, and GPU sync timing.
     Kernel core files (apport / systemd-coredump) stay enabled regardless.
 
+    Video hwaccel diagnostics:
+      FINCEPT_VIDEO_DEBUG=1     Enable QtMultimedia FFmpeg-backend logging
+                                (hwaccel attempt, texture-converter, etc.)
+      FINCEPT_HWACCEL=vaapi     Force VAAPI decode (Intel iGPU on Linux).
+      FINCEPT_HWACCEL=off       Force CPU-only decode (baseline test).
+    Qt 6.8.3's plugin does NOT support NVDEC for decode — only VAAPI on
+    Linux. NVIDIA-only systems fall back to CPU decode regardless.
+
 BUILD
     Default: incremental build of the existing build/<preset>.
     --clean   Re-run cmake configure and force a clean rebuild.
@@ -133,6 +141,30 @@ EOF
     local CRASHDUMP_DIR="$SHARE_DIR/crashdumps"
     mkdir -p "$CRASHDUMP_DIR"
     ulimit -c unlimited
+
+    # ── Video hwaccel knobs ──────────────────────────────────────────────────
+    # Qt 6.8.3's FFmpeg media plugin supports VAAPI for decode on Linux but
+    # NOT NVDEC/CUVID (only the encoders h264_nvenc etc.). On NVIDIA-only
+    # systems the H.264 decode falls back to CPU; on systems with an Intel
+    # iGPU + VAAPI, decode should land on the iGPU automatically. Use these
+    # env vars to diagnose or force the path when Qt's auto-detect isn't
+    # doing what you'd expect.
+    #
+    # FINCEPT_VIDEO_DEBUG=1 — enables FFmpeg-backend logging
+    #   QT_FFMPEG_DEBUG=1 and qt.multimedia.ffmpeg.* logging rules so the
+    #   hwaccel attempt + texture-converter outcome is visible on stderr.
+    # FINCEPT_HWACCEL=vaapi|off — overrides Qt's auto-detection
+    #   "vaapi" forces VAAPI decode (QT_FFMPEG_DECODING_HW_DEVICE_TYPES).
+    #   "off"   disables all hwaccel (forces software decode — slow but
+    #            useful as a baseline to confirm CPU is decode-bound).
+    if [[ "${FINCEPT_VIDEO_DEBUG:-0}" == "1" ]]; then
+        export QT_FFMPEG_DEBUG=1
+        export QT_LOGGING_RULES="${QT_LOGGING_RULES:+$QT_LOGGING_RULES;}qt.multimedia.ffmpeg.*=true"
+    fi
+    case "${FINCEPT_HWACCEL:-}" in
+        vaapi) export QT_FFMPEG_DECODING_HW_DEVICE_TYPES=vaapi ;;
+        off)   export QT_FFMPEG_DECODING_HW_DEVICE_TYPES=     ;;
+    esac
 
     if [[ "${FINCEPT_GDB:-0}" == "1" ]] && command -v gdb >/dev/null 2>&1; then
         local GDB_LOG="$CRASHDUMP_DIR/gdb-$(date +%Y%m%d-%H%M%S).log"
