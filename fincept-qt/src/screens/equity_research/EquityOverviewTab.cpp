@@ -265,20 +265,19 @@ void ResearchCandleCanvas::rebuild_cache() {
     if (lo >= hi)
         return;
 
-    // Extend the range to include each comparison series' projected values.
-    // Without this, when a comp outperforms (or underperforms) the primary
-    // over the visible window, its normalized curve clips off the top (or
-    // bottom) of the plot — e.g. AVGO + INTC up 400% renders with the INTC
-    // line disappearing past the chart frame. Projection formula matches
-    // the rendering path below: y_value = primary_anchor × (comp[t] / comp_anchor).
-    // Aware: this is a second pass over each comp's candles; the line-draw
-    // loop below repeats the same walk. At ≤3 comps × ~1500 visible candles
-    // the duplication is sub-ms, not worth deduping.
+    // Extend the range to include each comparison series' actual closes.
+    // Comparison curves are rendered at the comp's own prices (so the user
+    // can read e.g. GOOG ≈ $190 directly off the y-axis when GOOG is in
+    // the chart), which means the y-axis has to span the union of all
+    // tickers' visible ranges. For mixed price levels (AMZN ~$220, MSFT
+    // ~$500), this compresses each ticker's vertical band — accepted as
+    // the cost of showing real prices instead of relative performance.
     if (!comparisons_.isEmpty() && count > 0) {
-        const double primary_anchor = candles_[start].close;
-        const qint64 anchor_ts      = candles_[start].timestamp;
+        const qint64 anchor_ts = candles_[start].timestamp;
         for (const auto& comp : comparisons_) {
             if (comp.candles.isEmpty()) continue;
+            // Walk the same time window we'll render. Anchor index lets us
+            // skip the comp's pre-window candles for the y-range too.
             int comp_anchor_idx = -1;
             for (int k = 0; k < comp.candles.size(); ++k) {
                 if (comp.candles[k].timestamp >= anchor_ts) {
@@ -286,18 +285,15 @@ void ResearchCandleCanvas::rebuild_cache() {
                 }
             }
             if (comp_anchor_idx < 0) continue;
-            const double comp_anchor = comp.candles[comp_anchor_idx].close;
-            if (comp_anchor <= 0.0) continue;
             int j = comp_anchor_idx;
             for (int i = 0; i < count; ++i) {
                 const qint64 ts_i = candles_[start + i].timestamp;
                 while (j + 1 < comp.candles.size() &&
                        comp.candles[j + 1].timestamp <= ts_i) ++j;
-                const double proj = primary_anchor *
-                                    (comp.candles[j].close / comp_anchor);
-                if (proj > 0.0) {
-                    lo = std::min(lo, proj);
-                    hi = std::max(hi, proj);
+                const double v = comp.candles[j].close;
+                if (v > 0.0) {
+                    lo = std::min(lo, v);
+                    hi = std::max(hi, v);
                 }
             }
         }
@@ -405,19 +401,17 @@ void ResearchCandleCanvas::rebuild_cache() {
     if (show_sma200_) draw_sma(200, QColor("#eab308"));   // amber
 
     // ── Comparison overlays ──────────────────────────────────────────────────
-    // Each comparison series is normalized to the primary's first visible
-    // close. y(t) = primary_anchor × (comp[t] / comp_anchor). Reads as
-    // "what would $primary_anchor invested in <comp_symbol> be worth on
-    // the same date?" — the canonical performance-comparison view.
+    // Comparison curves render at the comp's actual closing prices on the
+    // same y-axis as the primary's candles. The y-range pass above already
+    // extended lo/hi to include each comp's visible range, so the labels
+    // span the union and every series is readable. Tradeoff vs normalized
+    // overlay: relative performance is harder to eyeball, but the user can
+    // read each ticker's actual price directly off the axis.
     if (!comparisons_.isEmpty() && count > 0) {
-        const double primary_anchor = candles_[start].close;
-        // Build a timestamp → primary index map covering visible window so
-        // we can align comparison candles by date (their dataset may have
-        // fewer or extra trading days, e.g. holiday skews).
         for (const auto& comp : comparisons_) {
             if (comp.candles.isEmpty()) continue;
             // Find comp's anchor: first candle at or after candles_[start]'s
-            // timestamp. Binary scan — comparisons are date-sorted ascending.
+            // timestamp. Linear scan — comparisons are date-sorted ascending.
             const qint64 anchor_ts = candles_[start].timestamp;
             int comp_anchor_idx = -1;
             for (int k = 0; k < comp.candles.size(); ++k) {
@@ -426,8 +420,6 @@ void ResearchCandleCanvas::rebuild_cache() {
                 }
             }
             if (comp_anchor_idx < 0) continue;
-            const double comp_anchor = comp.candles[comp_anchor_idx].close;
-            if (comp_anchor <= 0.0) continue;
 
             p.setPen(QPen(comp.color, 1.5, Qt::SolidLine));
             QPainterPath path;
@@ -440,8 +432,7 @@ void ResearchCandleCanvas::rebuild_cache() {
                 // before each primary candle). j only moves forward.
                 while (j + 1 < comp.candles.size() &&
                        comp.candles[j + 1].timestamp <= ts_i) ++j;
-                const double y_value = primary_anchor *
-                                       (comp.candles[j].close / comp_anchor);
+                const double y_value = comp.candles[j].close;
                 const QPointF pt(static_cast<double>(i + 0.5) * slot_w, py(y_value));
                 if (!started) { path.moveTo(pt); started = true; }
                 else            path.lineTo(pt);
@@ -449,18 +440,17 @@ void ResearchCandleCanvas::rebuild_cache() {
             if (started) p.drawPath(path);
         }
 
-        // Legend chip stack, top-right of the plot. One row per comparison:
-        // colored swatch + symbol + total-window return %. We deliberately
-        // do not show the absolute last close here — the comparison series
-        // is rendered in the PRIMARY stock's price scale, so a textual
-        // price next to a normalized curve would invite the very confusion
-        // the legend is meant to resolve. The chip strip above the chart
-        // (symbol + colour) is the canonical handle on which series is
-        // which; the % return on this legend reflects the curve directly.
+        // Legend chips in a single right-aligned row at the top of the plot.
+        // Each chip: colored swatch + symbol + total-window return %. Chips
+        // are placed right-to-left so the first comparison sits closest to
+        // the price axis; this keeps the user's eye-path from the rightmost
+        // candle to the rightmost chip natural.
         QFont legend_font("Consolas", 9, QFont::Bold);
         p.setFont(legend_font);
         QFontMetrics lfm(legend_font);
-        int ly = 4;
+        const int lh    = lfm.height();
+        const int ly    = 4;
+        int       lx_r  = width() - PRICE_AXIS_W - 6; // running right edge
         for (const auto& comp : comparisons_) {
             if (comp.candles.isEmpty()) continue;
             const qint64 anchor_ts = candles_[start].timestamp;
@@ -478,15 +468,15 @@ void ResearchCandleCanvas::rebuild_cache() {
             const QString text = comp.symbol + "  " +
                                   (pct >= 0 ? "+" : "") +
                                   QString::number(pct, 'f', 1) + "%";
-            const int tw = lfm.horizontalAdvance(text);
-            const int lh = lfm.height();
-            const QRect r(width() - PRICE_AXIS_W - tw - 16, ly, tw + 14, lh + 2);
+            const int tw    = lfm.horizontalAdvance(text);
+            const int box_w = tw + 14;
+            const QRect r(lx_r - box_w, ly, box_w, lh + 2);
             p.fillRect(r, QColor(0, 0, 0, 160));
-            // Color swatch on the left
+            // Color swatch on the left of each chip
             p.fillRect(r.left() + 3, r.center().y() - 4, 6, 8, comp.color);
             p.setPen(QColor(220, 220, 220));
             p.drawText(r.adjusted(12, 0, -2, 0), Qt::AlignVCenter | Qt::AlignLeft, text);
-            ly += lh + 4;
+            lx_r -= box_w + 6;
         }
     }
     p.setRenderHint(QPainter::Antialiasing, false);
@@ -720,6 +710,25 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         }
     }
 
+    // Per-comparison readouts at the hovered date — actual close, colored to
+    // match the curve. Lets the user trace each line back to a real price
+    // as they move the crosshair along the time axis. Linear scan per comp
+    // (≤3 comps × ≤5Y daily ≈ 4K ops per hover); negligible vs the paint cost.
+    struct CompReadout { QColor color; QString text; int width = 0; };
+    QVector<CompReadout> comp_readouts;
+    const qint64 hover_ts = c.timestamp;
+    for (const auto& comp : comparisons_) {
+        if (comp.candles.isEmpty()) continue;
+        int idx = -1;
+        for (int k = 0; k < comp.candles.size(); ++k) {
+            if (comp.candles[k].timestamp > hover_ts) break;
+            idx = k;
+        }
+        if (idx < 0) continue;
+        comp_readouts.push_back({comp.color,
+                                  comp.symbol + " " + fmt_p(comp.candles[idx].close)});
+    }
+
     // 3. Render the readout strip at the top-left of the plot area.
     QFont lbl_font("Consolas", 9);
     p.setFont(lbl_font);
@@ -737,6 +746,10 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     int total_w = left_w + GAP + delta_w + GAP + right_w;
     if (v52w_w) total_w += GAP + v52w_w;
     if (vsma_w) total_w += GAP + vsma_w;
+    for (auto& cr : comp_readouts) {
+        cr.width = fm.horizontalAdvance(cr.text);
+        total_w += GAP + cr.width;
+    }
     const int line_h  = fm.height();
 
     const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
@@ -773,6 +786,13 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         p.setPen(off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
                               : QColor(ui::colors::NEGATIVE.get()));
         p.drawText(x_cursor, baseline, vs_sma50);
+        x_cursor += vsma_w;
+    }
+    for (const auto& cr : comp_readouts) {
+        x_cursor += GAP;
+        p.setPen(cr.color);
+        p.drawText(x_cursor, baseline, cr.text);
+        x_cursor += cr.width;
     }
 }
 

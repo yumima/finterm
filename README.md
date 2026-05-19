@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`2c9255ca`](https://github.com/yumima/finterm/commit/2c9255ca) **ui(theme):** fix transparent QToolTip across the app
 - [`3afaec24`](https://github.com/yumima/finterm/commit/3afaec24) app(nav): gate layout-snapshot save on multi-pane state — fix nav stall + video freeze
 - [`60b025a9`](https://github.com/yumima/finterm/commit/60b025a9) screens(er): fix comparison curves clipping past the plot frame
 - [`6d11c2e1`](https://github.com/yumima/finterm/commit/6d11c2e1) finterm.sh: video hwaccel diagnostics (FINCEPT_VIDEO_DEBUG / FINCEPT_HWACCEL)
