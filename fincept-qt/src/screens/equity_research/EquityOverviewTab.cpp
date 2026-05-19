@@ -1081,12 +1081,20 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     // primary's hover-overlay strip (drawn at the top of the canvas) is
     // visually above the comp chips. chg%/price update dynamically as the
     // user moves the crosshair (hover_changed → update_comp_chip_labels).
-    auto* comp_row = new QHBoxLayout();
+    //
+    // Wrap in an explicit QWidget container with a minimum height — the
+    // bare QHBoxLayout could otherwise lose its vertical share to the
+    // canvas (stretch=1) and render at 0 height. A fixed-ish 24 px keeps
+    // the chips reliably visible at the bottom of the chart panel.
+    auto* comp_row_widget = new QWidget;
+    comp_row_widget->setMinimumHeight(24);
+    comp_row_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* comp_row = new QHBoxLayout(comp_row_widget);
     comp_row->setContentsMargins(0, 0, 0, 0);
     comp_row->setSpacing(4);
     comp_chips_ = comp_row;
     comp_row->addStretch();
-    vl->addLayout(comp_row);
+    vl->addWidget(comp_row_widget);
 
     // Canvas → tab hover updates. Crosshair-moved → recompute chip labels.
     connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,

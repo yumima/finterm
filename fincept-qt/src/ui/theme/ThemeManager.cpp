@@ -3,6 +3,8 @@
 #include "core/logging/Logger.h"
 
 #include <QApplication>
+#include <QPalette>
+#include <QToolTip>
 #include <QWidget>
 
 namespace fincept::ui {
@@ -115,6 +117,20 @@ void ThemeManager::rebuild_and_apply() {
     } else {
         LOG_INFO("ThemeManager", "QSS unchanged — skipping setStyleSheet");
     }
+
+    // Tooltip colors via palette, not QSS.
+    //
+    // The QSS-only fix (`QToolTip { background-color: …; }`) doesn't actually
+    // win against the broader `QFrame { background: transparent }` rule on
+    // every Qt/Linux/Wayland combination — QTipLabel inherits QFrame and the
+    // cascade ordering is ambiguous in practice. QTipLabel's paintEvent
+    // reads QPalette::ToolTipBase / ToolTipText directly, so writing them
+    // here bypasses the QSS argument entirely and lands an opaque tooltip
+    // on every platform we care about.
+    QPalette tip_pal = QToolTip::palette();
+    tip_pal.setColor(QPalette::ToolTipBase, QColor(current_.bg_surface));
+    tip_pal.setColor(QPalette::ToolTipText, QColor(current_.text_primary));
+    QToolTip::setPalette(tip_pal);
     emit theme_changed(current_);
     LOG_INFO("ThemeManager", "theme_changed emitted");
 }
