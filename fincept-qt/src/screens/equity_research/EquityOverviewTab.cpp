@@ -411,7 +411,17 @@ void ResearchCandleCanvas::rebuild_cache() {
         }
 
         // Legend chip stack, top-right of the plot. One row per comparison:
-        // colored swatch + symbol + total-window return %.
+        // colored swatch + symbol + absolute last close + total-window return %.
+        //
+        // Why we show the absolute price: the comparison series is rendered
+        // in the PRIMARY stock's price scale (normalized to the primary's
+        // anchor), so the y-axis labels under a comparison line read as
+        // "what $primary_anchor invested in comp would be worth today",
+        // NOT comp's actual price. Without the absolute close in the legend
+        // users mis-read the chart — e.g., seeing GOOG cross the y-axis at
+        // $160 (its 52-week low's primary-scale position) and thinking
+        // GOOG is trading at $160 when it's actually at $393. The legend
+        // chip is the canonical place to anchor that mental model.
         QFont legend_font("Consolas", 9, QFont::Bold);
         p.setFont(legend_font);
         QFontMetrics lfm(legend_font);
@@ -430,7 +440,13 @@ void ResearchCandleCanvas::rebuild_cache() {
             const double last_c  = comp.candles[idx_last].close;
             if (first_c <= 0.0) continue;
             const double pct = (last_c - first_c) / first_c * 100.0;
-            const QString text = comp.symbol + "  " +
+            // Format absolute close like the y-axis would: no-decimal for
+            // values >= 1000, two-decimal otherwise. Matches the chart's
+            // currency symbol so e.g. $393.11 / ₹2487 align visually.
+            const QString abs_str = currency_sym_
+                + (last_c >= 1000.0 ? QString::number(last_c, 'f', 0)
+                                    : QString::number(last_c, 'f', 2));
+            const QString text = comp.symbol + "  " + abs_str + "  " +
                                   (pct >= 0 ? "+" : "") +
                                   QString::number(pct, 'f', 1) + "%";
             const int tw = lfm.horizontalAdvance(text);

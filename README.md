@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`b819355a`](https://github.com/yumima/finterm/commit/b819355a) services(video): LiveHlsProxy review fixes — cache aging, no-copy, tests
 - [`59a0e513`](https://github.com/yumima/finterm/commit/59a0e513) services(video): live-HLS trimming proxy — fix Bloomberg/CNBC freeze in GL mode
 - [`e85d4c07`](https://github.com/yumima/finterm/commit/e85d4c07) services(finnhub): WS source-side throttle — fix GUI thread CPU storm
 - [`d1c8aab4`](https://github.com/yumima/finterm/commit/d1c8aab4) screens(ipo): PRIVATE dedup + Wikipedia summaries for private companies
