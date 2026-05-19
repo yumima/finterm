@@ -743,22 +743,35 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     const int right_w  = fm.horizontalAdvance(right);
     const int v52w_w   = vs_52w.isEmpty()   ? 0 : fm.horizontalAdvance(vs_52w);
     const int vsma_w   = vs_sma50.isEmpty() ? 0 : fm.horizontalAdvance(vs_sma50);
-    int total_w = left_w + GAP + delta_w + GAP + right_w;
-    if (v52w_w) total_w += GAP + v52w_w;
-    if (vsma_w) total_w += GAP + vsma_w;
+    int primary_w = left_w + GAP + delta_w + GAP + right_w;
+    if (v52w_w) primary_w += GAP + v52w_w;
+    if (vsma_w) primary_w += GAP + vsma_w;
+    int comp_w = 0;
     for (auto& cr : comp_readouts) {
         cr.width = fm.horizontalAdvance(cr.text);
-        total_w += GAP + cr.width;
+        comp_w += (comp_w > 0 ? GAP : 0) + cr.width;
     }
     const int line_h  = fm.height();
 
-    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
+    // If primary + comps on one line would spill past the plot's right edge,
+    // wrap comps to a second line below the primary stats. Threshold uses
+    // last_plot_w_ (snapshotted by rebuild_cache for this hover path) and
+    // accounts for the bg-rect's own outer padding so the wrap fires just
+    // before clipping starts, not after. Single-line otherwise.
+    const int avail_w = last_plot_w_ - 2 * PAD_X;
+    const bool wrap   = !comp_readouts.isEmpty() && avail_w > 0 &&
+                        (primary_w + GAP + comp_w) > avail_w;
+    const int total_w   = wrap ? std::max(primary_w, comp_w)
+                               : primary_w + (comp_w > 0 ? GAP + comp_w : 0);
+    const int total_h   = wrap ? (line_h * 2 + 2) : line_h;
+
+    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, total_h + 4);
     p.fillRect(bg, QColor(0, 0, 0, 180));
     p.setPen(QColor(ui::colors::BORDER_DIM()));
     p.drawRect(bg);
 
-    int x_cursor = PAD_X;
-    const int baseline = PAD_Y + fm.ascent();
+    int x_cursor       = PAD_X;
+    int baseline       = PAD_Y + fm.ascent();
 
     p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
     p.drawText(x_cursor, baseline, left);
@@ -788,8 +801,20 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         p.drawText(x_cursor, baseline, vs_sma50);
         x_cursor += vsma_w;
     }
+    if (wrap) {
+        // Drop to the second line; comps start flush with the primary row's
+        // left edge so the bg rect's two rows line up.
+        x_cursor = PAD_X;
+        baseline += line_h;
+    }
+    bool first_comp = true;
     for (const auto& cr : comp_readouts) {
-        x_cursor += GAP;
+        // On a wrapped second line, the first comp has no leading gap (it
+        // sits at PAD_X). On a single line, every comp gets a GAP separator
+        // from whatever primary segment preceded it.
+        if (!(wrap && first_comp))
+            x_cursor += GAP;
+        first_comp = false;
         p.setPen(cr.color);
         p.drawText(x_cursor, baseline, cr.text);
         x_cursor += cr.width;
