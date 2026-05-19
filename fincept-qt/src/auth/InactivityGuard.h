@@ -45,12 +45,21 @@ class InactivityGuard : public QObject {
     /// Terminal-locked flag. MainWindow sets this to true while the lock
     /// screen is active so other subsystems (e.g. DockScreenRouter) can
     /// early-return and refuse to mutate state behind the lock screen.
-    void set_terminal_locked(bool locked) { terminal_locked_ = locked; }
+    /// Emits terminal_locked_changed when the value actually changes.
+    void set_terminal_locked(bool locked) {
+        if (terminal_locked_ == locked) return;
+        terminal_locked_ = locked;
+        emit terminal_locked_changed(locked);
+    }
     bool is_terminal_locked() const { return terminal_locked_; }
 
   signals:
     /// Emitted when the idle timeout expires — MainWindow should show lock screen.
     void lock_requested();
+    /// Emitted whenever set_terminal_locked() flips the locked flag. Lets
+    /// subsystems pause/resume work scoped to the unlocked session — e.g.
+    /// the video widget auto-pausing GL playback during lockscreen.
+    void terminal_locked_changed(bool locked);
 
   protected:
     bool eventFilter(QObject* obj, QEvent* event) override;

@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 
+#include "auth/InactivityGuard.h"
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "services/video/LiveHlsProxy.h"
@@ -320,6 +321,30 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         now_playing_ = new QLabel("—");
         cl->addWidget(now_playing_, 1);
 
+        // Pause/resume — GL pipeline only. WEB engine's iframe is
+        // cross-origin so JS pause is unreliable; we hide the button in WEB
+        // mode. Visibility is set immediately below this controls_ block
+        // (initial) and re-applied in the config dialog's accept handler
+        // when the user switches engines.
+        play_pause_btn_ = new QPushButton(QString(QChar(0x23F8)) + " PAUSE");
+        play_pause_btn_->setCursor(Qt::PointingHandCursor);
+        play_pause_btn_->setFixedHeight(20);
+        play_pause_btn_->setToolTip("Pause / resume the current stream");
+        connect(play_pause_btn_, &QPushButton::clicked, this, [this]() {
+#ifdef HAS_QT_MULTIMEDIA
+            if (!player_) return;
+            if (player_->playbackState() == QMediaPlayer::PlayingState) {
+                player_->pause();
+            } else {
+                player_->play();
+            }
+            // User pressed the button → not an auto-pause, so clear the
+            // latch even if a subsequent unlock fires.
+            auto_paused_on_lock_ = false;
+#endif
+        });
+        cl->addWidget(play_pause_btn_);
+
         stop_btn_ = new QPushButton(QString(QChar(0x25A0)) + " BACK");
         stop_btn_->setCursor(Qt::PointingHandCursor);
         stop_btn_->setFixedHeight(20);
@@ -328,9 +353,40 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
 
         content_layout()->addWidget(controls_);
         controls_->hide();
+#ifdef HAS_QT_WEBENGINE
+        // Pause/play has no effect on the WEB engine (cross-origin iframe);
+        // hide it in that mode so the control bar reflects what actually
+        // works. Re-toggled by the config dialog's accept handler when the
+        // user switches engines.
+        play_pause_btn_->setVisible(!use_web_engine_);
+#endif
     }
 
     connect(this, &BaseWidget::refresh_requested, this, &VideoPlayerWidget::refresh_data);
+
+    // Auto-pause GL playback when the terminal locks; auto-resume on unlock
+    // — only if we'd been the ones to pause it, so a user-initiated pause
+    // before lock is not undone. WEB engine is unaffected (cross-origin JS
+    // can't reliably pause an embedded YouTube iframe).
+    connect(&auth::InactivityGuard::instance(),
+            &auth::InactivityGuard::terminal_locked_changed, this,
+            [this](bool locked) {
+#ifdef HAS_QT_MULTIMEDIA
+                if (!player_) return;
+                if (locked) {
+                    if (player_->playbackState() == QMediaPlayer::PlayingState) {
+                        player_->pause();
+                        auto_paused_on_lock_ = true;
+                    }
+                } else if (auto_paused_on_lock_) {
+                    auto_paused_on_lock_ = false;
+                    if (player_->playbackState() == QMediaPlayer::PausedState)
+                        player_->play();
+                }
+#else
+                Q_UNUSED(locked);
+#endif
+            });
 
     apply_styles();
     stack_->setCurrentIndex(0);
@@ -488,6 +544,16 @@ void VideoPlayerWidget::build_player_view() {
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::PlayingState)
                     play_in_progress_ = false;
+                // Reflect state on the pause/play button. StoppedState falls
+                // through to "PAUSE" since the controls bar is hidden then
+                // anyway (stop_playback returns the user to the channel list).
+                if (play_pause_btn_) {
+                    if (s == QMediaPlayer::PlayingState) {
+                        play_pause_btn_->setText(QString(QChar(0x23F8)) + " PAUSE");
+                    } else if (s == QMediaPlayer::PausedState) {
+                        play_pause_btn_->setText(QString(QChar(0x25B6)) + " PLAY");
+                    }
+                }
             });
 #else
     status_label_placeholder_ =
@@ -1263,6 +1329,10 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
         if (want_web != use_web_engine_) {
             use_web_engine_ = want_web;
             save_engine(use_web_engine_);
+            // Pause/play targets the GL player only; reflect that in the
+            // control bar so the button disappears when WEB takes over.
+            if (play_pause_btn_)
+                play_pause_btn_->setVisible(!use_web_engine_);
         }
 #endif
 

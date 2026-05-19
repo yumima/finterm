@@ -204,6 +204,15 @@ class VideoPlayerWidget : public BaseWidget {
     QLabel*              status_label_placeholder_ = nullptr;
     QWidget*             controls_                 = nullptr;
     QPushButton*         stop_btn_                 = nullptr;
+    /// Pause/resume toggle for the GL pipeline's QMediaPlayer. Hidden when
+    /// the WEB engine is active (QWebEngineView's iframe is cross-origin so
+    /// pause via JS is unreliable). Text flips between "⏸ PAUSE" and
+    /// "▶ PLAY" via the player's playbackStateChanged signal.
+    QPushButton*         play_pause_btn_           = nullptr;
+    /// True if the GL player was auto-paused by terminal-lock so that the
+    /// follow-up unlock can resume only when we'd been the ones to pause it
+    /// — never resume a user-initiated pause.
+    bool                 auto_paused_on_lock_      = false;
 
     QVector<ChannelDef> channels_;
 
