@@ -271,13 +271,26 @@ class EquityOverviewTab : public QWidget {
     // Inline COMP controls — split across two rows:
     //   • Button row (btn_row): COMP focus-button + inline ticker input.
     //   • Legend row (comp_row_): one chip per active comparison, always
-    //     visible, sitting between the button row and the canvas widget.
+    //     visible, sitting between the primary OHLC strip and the canvas.
     //     Each chip = [✕][color swatch] TICKER: chg% $price. The chg% and
     //     price update dynamically as the user hovers the crosshair (via
     //     ResearchCandleCanvas::hover_changed); when not hovering they show
     //     the full-window return and the last close.
     QHBoxLayout* comp_chips_   = nullptr;   ///< layout for chip widgets in comp_row_
     QLineEdit*   comp_input_   = nullptr;   ///< inline ticker input (Enter to add)
+
+    // Permanent primary-ticker stats strip — date + OHLC + Δ + vol + 52w-hi
+    // + SMA50. Sits between btn_row and comp_row, always visible. When the
+    // user isn't hovering it shows the most-recent candle; while hovering
+    // it tracks the crosshair via the same hover_changed signal that drives
+    // the comp chip labels. Each pointer is held so update_primary_stats_row
+    // can rewrite text without rebuilding the row.
+    QLabel* primary_date_lbl_  = nullptr;
+    QLabel* primary_ohlc_lbl_  = nullptr;
+    QLabel* primary_delta_lbl_ = nullptr;
+    QLabel* primary_vol_lbl_   = nullptr;
+    QLabel* primary_52w_lbl_   = nullptr;
+    QLabel* primary_sma50_lbl_ = nullptr;
     /// Per-comp label widget pointers, keyed by ticker symbol, so the hover
     /// slot can update chip text in O(1) without rebuilding the row. Cleared
     /// + repopulated each rebuild_comp_strip() call.
@@ -295,6 +308,11 @@ class EquityOverviewTab : public QWidget {
     /// return and the last close). Walks comp_state_ × comp_chip_labels_;
     /// no allocations beyond QString formatting.
     void update_comp_chip_labels(int hover_idx);
+    /// Rewrite the permanent primary stats strip from cached_candles_ at
+    /// the given index (or the latest candle when hover_idx == -1 or out
+    /// of range). Mirrors the formatting the canvas hover overlay used —
+    /// date · O H L C · Δ ± · Vol · 52w-hi · SMA50.
+    void update_primary_stats_row(int hover_idx);
 
     // Comparison series the user has added. We hold the canvas-bound state
     // here too so re-subscribing on symbol/period change can re-fetch each

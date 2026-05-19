@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`10cbbdbc`](https://github.com/yumima/finterm/commit/10cbbdbc) **ui:** fix collapsing ER comp row + transparent tooltip on Linux
 - [`4a6d9b0d`](https://github.com/yumima/finterm/commit/4a6d9b0d) screens(er): move comp chip row below the canvas
 - [`99cbcf4d`](https://github.com/yumima/finterm/commit/99cbcf4d) screens(er): comparison chip strip → always-visible 2nd row, dynamic on hover
 - [`712ee366`](https://github.com/yumima/finterm/commit/712ee366) screens(er): wrap hover comps to a second line when readout would clip

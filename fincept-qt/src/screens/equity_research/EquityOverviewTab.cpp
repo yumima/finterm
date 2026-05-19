@@ -606,129 +606,13 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     const int visible_i = hover_idx_ - last_start_;
     if (visible_i < 0 || visible_i >= last_count_) return;
 
+    // Only the dashed vertical crosshair lives on the canvas now. The
+    // OHLC/Δ/vol/52w/SMA50 readout that used to render at the top-left of
+    // the plot is now an always-visible widget row (primary stats strip)
+    // owned by EquityOverviewTab, kept in sync via the hover_changed signal.
     const int cx = static_cast<int>((visible_i + 0.5) * last_slot_w_);
-
-    // 1. Dashed vertical crosshair line through the candle.
     p.setPen(QPen(QColor(ui::colors::TEXT_SECONDARY()), 1, Qt::DashLine));
     p.drawLine(cx, 0, cx, last_plot_h_);
-
-    // 2. Build the readout text segments.
-    const auto& c = candles_[hover_idx_];
-    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp);
-    const QString date_str = dt.toString("ddd dd MMM yyyy");
-
-    // Δ vs previous close (or open if it's the first candle).
-    const double prev_close = (hover_idx_ > 0) ? candles_[hover_idx_ - 1].close : c.open;
-    const double dchg = c.close - prev_close;
-    const double dpct = (prev_close != 0.0) ? (dchg / prev_close * 100.0) : 0.0;
-
-    auto fmt_p = [](double v) { return QString::number(v, 'f', 2); };
-    auto fmt_v = [](double v) -> QString {
-        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-        if (v >= 1e6) return QString::number(v / 1e6, 'f', 1) + "M";
-        if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
-        return QString::number(v, 'f', 0);
-    };
-    auto fmt_signed = [&](double v) {
-        return (v >= 0 ? QString("+") : QString()) + fmt_p(v);
-    };
-    auto fmt_signed2 = [](double v) {
-        return (v >= 0 ? QString("+") : QString()) + QString::number(v, 'f', 2);
-    };
-
-    const QString left  = QString("%1   O %2  H %3  L %4  C %5")
-                              .arg(date_str, fmt_p(c.open), fmt_p(c.high), fmt_p(c.low), fmt_p(c.close));
-    const QString delta = QString("Δ %1 (%2%)").arg(fmt_signed(dchg), fmt_signed2(dpct));
-    const QString right = QString("Vol %1").arg(fmt_v(c.volume));
-
-    // Comparators — only built if the source data is set. These add context
-    // a pro looks for at a glance: how far below 52w-high is this print, how
-    // far from the 50d trend, etc.
-    // Compute the comparator deltas once each. Both color and label below
-    // reuse these values — previously each was computed twice per hover and
-    // the SMA50 label had a broken format string ("SMA50 +%X.Y%" instead
-    // of "SMA50 +X.Y%") because %1% in QString::arg() leaves a literal %
-    // after the substitution.
-    double off_high = std::numeric_limits<double>::quiet_NaN();
-    QString vs_52w;
-    if (week52_high_ > 0.0) {
-        off_high = (c.close - week52_high_) / week52_high_ * 100.0;
-        vs_52w = QString("52w-hi %1%").arg(off_high, 0, 'f', 1);  // negative = below
-    }
-    double off_sma = std::numeric_limits<double>::quiet_NaN();
-    QString vs_sma50;
-    if (candles_.size() >= 50) {
-        // Reproduce the SMA50 value at hover_idx_ — same compute path as the
-        // chart overlay. O(50) per hover, negligible.
-        double sum = 0.0;
-        const int s = qMax(0, hover_idx_ - 49);
-        for (int k = s; k <= hover_idx_; ++k) sum += candles_[k].close;
-        const int n = hover_idx_ - s + 1;
-        if (n >= 50) {
-            const double sma = sum / n;
-            off_sma = (c.close - sma) / sma * 100.0;
-            vs_sma50 = QString("SMA50 ") + (off_sma >= 0 ? "+" : "")
-                           + QString::number(off_sma, 'f', 1) + "%";
-        }
-    }
-
-    // 3. Render the readout strip at the top-left of the plot area.
-    QFont lbl_font("Consolas", 9);
-    p.setFont(lbl_font);
-    QFontMetrics fm(lbl_font);
-
-    constexpr int PAD_X = 8;
-    constexpr int PAD_Y = 4;
-    constexpr int GAP   = 12;
-
-    const int left_w   = fm.horizontalAdvance(left);
-    const int delta_w  = fm.horizontalAdvance(delta);
-    const int right_w  = fm.horizontalAdvance(right);
-    const int v52w_w   = vs_52w.isEmpty()   ? 0 : fm.horizontalAdvance(vs_52w);
-    const int vsma_w   = vs_sma50.isEmpty() ? 0 : fm.horizontalAdvance(vs_sma50);
-    int total_w = left_w + GAP + delta_w + GAP + right_w;
-    if (v52w_w) total_w += GAP + v52w_w;
-    if (vsma_w) total_w += GAP + vsma_w;
-    const int line_h = fm.height();
-
-    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
-    p.fillRect(bg, QColor(0, 0, 0, 180));
-    p.setPen(QColor(ui::colors::BORDER_DIM()));
-    p.drawRect(bg);
-
-    int x_cursor       = PAD_X;
-    const int baseline = PAD_Y + fm.ascent();
-
-    p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
-    p.drawText(x_cursor, baseline, left);
-    x_cursor += left_w + GAP;
-
-    p.setPen(QColor(dchg >= 0 ? ui::colors::POSITIVE.get() : ui::colors::NEGATIVE.get()));
-    p.drawText(x_cursor, baseline, delta);
-    x_cursor += delta_w + GAP;
-
-    p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-    p.drawText(x_cursor, baseline, right);
-    x_cursor += right_w;
-
-    if (!vs_52w.isEmpty()) {
-        x_cursor += GAP;
-        // Always "below" — green when close, red when far. Threshold 5%.
-        p.setPen(off_high > -5.0
-                     ? QColor(ui::colors::POSITIVE.get())
-                     : QColor(ui::colors::TEXT_SECONDARY()));
-        p.drawText(x_cursor, baseline, vs_52w);
-        x_cursor += v52w_w;
-    }
-    if (!vs_sma50.isEmpty()) {
-        x_cursor += GAP;
-        p.setPen(off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
-                              : QColor(ui::colors::NEGATIVE.get()));
-        p.drawText(x_cursor, baseline, vs_sma50);
-    }
-    // Comparison readouts live in the always-visible chip row above the
-    // chart, not here — the tab's slot listens to hover_changed and pushes
-    // the at-cursor chg% + price into each chip's label widget.
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -765,6 +649,12 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
         candle_canvas_->clear();
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
     }
+    // The primary stats strip is always visible now, so the prior ticker's
+    // OHLC/Δ/52w/SMA50 must be blanked the moment we switch symbol —
+    // otherwise it lingers for the duration of the historical+info fetch.
+    cached_candles_.clear();
+    cached_info_ = {};
+    update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
 
@@ -1074,18 +964,45 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     btn_row->addStretch();
     vl->addLayout(btn_row);
 
-    vl->addWidget(candle_canvas_, 1);
+    // Permanent primary-ticker stats strip — date · O H L C · Δ · Vol ·
+    // 52w-hi · SMA50. Always visible; tracks the crosshair via hover_changed
+    // (latest candle when not hovering). Wrapped in a QWidget container with
+    // minimum height for the same reason the comp row is — a bare
+    // QHBoxLayout could otherwise lose its vertical share to the canvas
+    // (stretch=1) and render at 0 height.
+    auto* primary_row_widget = new QWidget;
+    primary_row_widget->setMinimumHeight(22);
+    primary_row_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* primary_row = new QHBoxLayout(primary_row_widget);
+    primary_row->setContentsMargins(2, 0, 2, 0);
+    primary_row->setSpacing(12);
+    // Important: do NOT bake `color:` into the QSS. We update colors on
+    // hover via setPalette(QPalette::WindowText), and Qt's QSS `color:`
+    // wins over palette — so a static QSS color would lock these labels
+    // and the Δ/52w/SMA50 conditional coloring would never take effect.
+    // Initial colors are set below via the same setPalette path.
+    auto make_stat = [&](QLabel*& target, const QColor& initial) {
+        target = new QLabel();
+        target->setStyleSheet(QStringLiteral(
+            "QLabel{font-family:'Consolas',monospace;font-size:11px;"
+            "background:transparent;border:0;}"));
+        QPalette pal = target->palette();
+        pal.setColor(QPalette::WindowText, initial);
+        target->setPalette(pal);
+        primary_row->addWidget(target);
+    };
+    make_stat(primary_date_lbl_,  QColor(ui::colors::TEXT_PRIMARY()));
+    make_stat(primary_ohlc_lbl_,  QColor(ui::colors::TEXT_PRIMARY()));
+    make_stat(primary_delta_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
+    make_stat(primary_vol_lbl_,   QColor(ui::colors::TEXT_SECONDARY()));
+    make_stat(primary_52w_lbl_,   QColor(ui::colors::TEXT_SECONDARY()));
+    make_stat(primary_sma50_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
+    primary_row->addStretch();
+    vl->addWidget(primary_row_widget);
 
     // Always-visible comparison legend row: one chip per active comp
-    // ([✕][color] TICKER: chg% $price). Sits BELOW the canvas so the
-    // primary's hover-overlay strip (drawn at the top of the canvas) is
-    // visually above the comp chips. chg%/price update dynamically as the
-    // user moves the crosshair (hover_changed → update_comp_chip_labels).
-    //
-    // Wrap in an explicit QWidget container with a minimum height — the
-    // bare QHBoxLayout could otherwise lose its vertical share to the
-    // canvas (stretch=1) and render at 0 height. A fixed-ish 24 px keeps
-    // the chips reliably visible at the bottom of the chart panel.
+    // ([✕][color] TICKER: chg% $price). Sits between the primary stats row
+    // and the canvas — primary stats are immediately above; chart is below.
     auto* comp_row_widget = new QWidget;
     comp_row_widget->setMinimumHeight(24);
     comp_row_widget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -1096,9 +1013,15 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     comp_row->addStretch();
     vl->addWidget(comp_row_widget);
 
-    // Canvas → tab hover updates. Crosshair-moved → recompute chip labels.
+    vl->addWidget(candle_canvas_, 1);
+
+    // Canvas → tab hover updates. Crosshair-moved → recompute both the
+    // permanent primary stats strip AND the comp chip labels in lockstep.
+    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
+            this, &EquityOverviewTab::update_primary_stats_row);
     connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
             this, &EquityOverviewTab::update_comp_chip_labels);
+    update_primary_stats_row(-1);  // initial state (will repopulate when candles load)
 
     return p;
 }
@@ -1137,6 +1060,12 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
         candle_canvas_->clear();
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Loading);
     }
+    // Blank the always-visible primary stats strip in lockstep with the
+    // canvas — otherwise the prior period's last candle keeps showing
+    // until the new period's historical resolves. cached_info_ is
+    // period-independent so we leave it alone.
+    cached_candles_.clear();
+    update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING CHART\xe2\x80\xa6");
 
@@ -1419,6 +1348,98 @@ void EquityOverviewTab::update_comp_chip_labels(int hover_idx) {
                               QString::number(pct, 'f', 1),
                               cur_sym,
                               fmt_price(price_c)));
+    }
+}
+
+void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
+    // Pre-construction guard — build_chart_panel hasn't created the labels
+    // yet on the very first set_symbol() path during constructor wiring.
+    if (!primary_date_lbl_) return;
+
+    if (cached_candles_.isEmpty()) {
+        primary_date_lbl_->clear();
+        primary_ohlc_lbl_->clear();
+        primary_delta_lbl_->clear();
+        primary_vol_lbl_->clear();
+        primary_52w_lbl_->clear();
+        primary_sma50_lbl_->clear();
+        return;
+    }
+
+    const int n   = cached_candles_.size();
+    const int idx = (hover_idx >= 0 && hover_idx < n) ? hover_idx : n - 1;
+    const auto& c = cached_candles_[idx];
+
+    auto fmt_p = [](double v) { return QString::number(v, 'f', 2); };
+    auto fmt_v = [](double v) -> QString {
+        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
+        if (v >= 1e6) return QString::number(v / 1e6, 'f', 1) + "M";
+        if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+        return QString::number(v, 'f', 0);
+    };
+    // Lambda to flip a label's foreground via palette (cheaper than
+    // setStyleSheet, which triggers a full QSS reparse for the widget).
+    auto set_fg = [](QLabel* lbl, const QColor& col) {
+        QPalette pal = lbl->palette();
+        pal.setColor(QPalette::WindowText, col);
+        lbl->setPalette(pal);
+    };
+
+    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp);
+    primary_date_lbl_->setText(dt.toString("ddd dd MMM yyyy"));
+    primary_ohlc_lbl_->setText(QString("O %1  H %2  L %3  C %4")
+                                   .arg(fmt_p(c.open), fmt_p(c.high),
+                                        fmt_p(c.low),  fmt_p(c.close)));
+
+    // Δ vs previous close (or open if it's the first candle).
+    const double prev_close = (idx > 0) ? cached_candles_[idx - 1].close : c.open;
+    const double dchg       = c.close - prev_close;
+    const double dpct       = (prev_close != 0.0) ? (dchg / prev_close * 100.0) : 0.0;
+    primary_delta_lbl_->setText(QString("Δ %1%2 (%3%4%)")
+                                    .arg(dchg >= 0 ? "+" : "")
+                                    .arg(fmt_p(dchg))
+                                    .arg(dpct >= 0 ? "+" : "")
+                                    .arg(dpct, 0, 'f', 2));
+    set_fg(primary_delta_lbl_,
+           dchg >= 0 ? QColor(ui::colors::POSITIVE.get())
+                     : QColor(ui::colors::NEGATIVE.get()));
+
+    primary_vol_lbl_->setText(QStringLiteral("Vol ") + fmt_v(c.volume));
+
+    // 52w-hi delta — only when we actually have the high from StockInfo.
+    if (cached_info_.week52_high > 0.0) {
+        const double off_high = (c.close - cached_info_.week52_high)
+                                / cached_info_.week52_high * 100.0;
+        primary_52w_lbl_->setText(QString("52w-hi %1%").arg(off_high, 0, 'f', 1));
+        // Green when close to the high (within 5%), dim otherwise. Always
+        // negative for normal data so we don't bother with a "+" prefix.
+        set_fg(primary_52w_lbl_,
+               off_high > -5.0 ? QColor(ui::colors::POSITIVE.get())
+                               : QColor(ui::colors::TEXT_SECONDARY()));
+    } else {
+        primary_52w_lbl_->clear();
+    }
+
+    // SMA50 delta — needs at least 50 candles ending at idx.
+    if (n >= 50) {
+        double    sum = 0.0;
+        const int s   = qMax(0, idx - 49);
+        for (int k = s; k <= idx; ++k) sum += cached_candles_[k].close;
+        const int win = idx - s + 1;
+        if (win >= 50) {
+            const double sma     = sum / win;
+            const double off_sma = (c.close - sma) / sma * 100.0;
+            primary_sma50_lbl_->setText(QString("SMA50 %1%2%")
+                                            .arg(off_sma >= 0 ? "+" : "")
+                                            .arg(off_sma, 0, 'f', 1));
+            set_fg(primary_sma50_lbl_,
+                   off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
+                                : QColor(ui::colors::NEGATIVE.get()));
+        } else {
+            primary_sma50_lbl_->clear();
+        }
+    } else {
+        primary_sma50_lbl_->clear();
     }
 }
 
@@ -1714,6 +1735,12 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     // "vs 52w-high" relative %. Zero suppresses the readout cleanly.
     if (candle_canvas_)
         candle_canvas_->set_week52_high(info.week52_high);
+    // The 52w-hi cell on the always-visible primary stats strip depends on
+    // cached_info_.week52_high. If info arrives after candles (common —
+    // .info is the slowest yfinance call), the strip rendered earlier
+    // would have blanked the 52w cell. Repaint now so the cell appears
+    // without waiting for the user to mouse over the canvas.
+    update_primary_stats_row(-1);
 
     // Re-render quote (now with correct currency symbol) and chart (likewise).
     if (cached_quote_.valid) {
@@ -1819,6 +1846,9 @@ void EquityOverviewTab::apply_historical_state(const services::query::QueryStore
     if (candle_canvas_ && candles.isEmpty())
         candle_canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::NoData);
     rebuild_chart(candles);
+    // Repopulate the permanent primary-stats strip — until now it was
+    // empty/stale because cached_candles_ was empty.
+    update_primary_stats_row(-1);
     if (loading_overlay_ && !s.loading)
         loading_overlay_->hide_loading();
 }
