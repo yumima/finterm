@@ -247,19 +247,10 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
         const int opened_area_count = manager_->openedDockAreas().size();
         if (opened_area_count > 1) {
             layout_snapshots_[current_primary_id_] = manager_->saveState();
-            LOG_DEBUG("DockRouter",
-                      QString("Snapshot saved for primary '%1' (%2 bytes, %3 areas) before exclusive nav to '%4'")
-                          .arg(current_primary_id_)
-                          .arg(layout_snapshots_[current_primary_id_].size())
-                          .arg(opened_area_count)
-                          .arg(id));
-        } else if (layout_snapshots_.remove(current_primary_id_) > 0) {
+        } else {
             // Outgoing primary now solo — invalidate any stale multi-pane
-            // snapshot the user has since dismissed. Without this, returning
-            // to that primary later would surprise them with a re-instated
-            // pane they had explicitly closed.
-            LOG_DEBUG("DockRouter",
-                      QString("Snapshot invalidated for primary '%1' — now solo").arg(current_primary_id_));
+            // snapshot the user has since dismissed.
+            layout_snapshots_.remove(current_primary_id_);
         }
     }
 
@@ -457,8 +448,6 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     if (exclusive) {
         auto it = layout_snapshots_.constFind(id);
         if (it != layout_snapshots_.constEnd()) {
-            LOG_DEBUG("DockRouter",
-                      QString("Snapshot restored for primary '%1' (%2 bytes)").arg(id).arg(it->size()));
             manager_->restoreState(*it);
             sync_grid_from_reality();
             apply_ads_theme();

@@ -117,6 +117,12 @@ bool SessionManager::load_window_flag(int window_id, const QString& name, bool d
 void SessionManager::save_dock_layout(int window_id, const QByteArray& layout) {
     const QString prefix = QString("window_%1/").arg(window_id);
     settings_.setValue(prefix + "dock_layout", layout);
+    // sync() forces the in-memory write to hit disk now instead of
+    // deferring to the QSettings destructor. Terminal apps that exit
+    // via SIGINT or unclean kill skip the destructor, and a layout
+    // blob that never reached disk leaves the next session with a
+    // stale layout. Cheap on Linux (single write to ~/.config).
+    settings_.sync();
 }
 
 QByteArray SessionManager::load_dock_layout(int window_id) const {
@@ -130,6 +136,9 @@ QByteArray SessionManager::load_dock_layout(int window_id) const {
 void SessionManager::set_dock_layout_version(int window_id, int version) {
     const QString prefix = QString("window_%1/").arg(window_id);
     settings_.setValue(prefix + "dock_layout_version", version);
+    // Force flush so the version is durable even if the app is killed
+    // before QSettings's destructor would normally sync.
+    settings_.sync();
 }
 
 int SessionManager::dock_layout_version(int window_id) const {
