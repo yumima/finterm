@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`bed760e0`](https://github.com/yumima/finterm/commit/bed760e0) screens(er): tighten COMP chip bar + drop price text from chart legend
 - [`69c5c041`](https://github.com/yumima/finterm/commit/69c5c041) screens(er): inline COMP chip bar — replace popup with one-line chips + Peers click-to-add
 - [`f7bd6204`](https://github.com/yumima/finterm/commit/f7bd6204) finterm.sh: GDB wrapper opt-in via FINCEPT_GDB=1
 - [`4dbdda16`](https://github.com/yumima/finterm/commit/4dbdda16) screens(er): show absolute close in comparison legend — fix GOOG-at-$160 confusion

@@ -135,6 +135,16 @@ class DockScreenRouter : public QObject {
     ads::CDockAreaWidget* grid_bottom_right_ = nullptr;
     int panel_count_ = 0; // number of currently open panels
 
+    // Per-primary layout snapshots. When the user navigates exclusively from
+    // primary A to primary B, we snapshot the ADS dock layout under "A"; when
+    // they later navigate exclusively back to A, we restoreState() from that
+    // blob so any panes that were alongside A last session (e.g. an ER
+    // split next to Portfolio) come back. In-memory only — the existing
+    // SessionManager::save_dock_layout already handles cross-restart state
+    // for whichever primary was active at quit.
+    QString current_primary_id_;
+    QHash<QString, QByteArray> layout_snapshots_;
+
     ads::CDockWidget* create_dock_widget(const QString& id);
     void materialize_screen(const QString& id);
 

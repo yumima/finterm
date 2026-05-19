@@ -232,6 +232,22 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     // on failure and we still fall into the unknown-screen branch below.
     PopularityTracker::instance().increment(id);
 
+    // If we're about to navigate exclusively *away* from a different primary,
+    // snapshot the current ADS layout under that primary's id. The user
+    // expects coming back to it to restore whichever panes were alongside it
+    // (e.g. Portfolio with ER split → switch to Dashboard → come back to
+    // Portfolio expecting ER still beside it). The snapshot is taken before
+    // any exclusive-hide / restoreState below, so it captures the layout the
+    // user was looking at the moment they navigated away.
+    if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
+        layout_snapshots_[current_primary_id_] = manager_->saveState();
+        LOG_DEBUG("DockRouter",
+                  QString("Snapshot saved for primary '%1' (%2 bytes) before exclusive nav to '%3'")
+                      .arg(current_primary_id_)
+                      .arg(layout_snapshots_[current_primary_id_].size())
+                      .arg(id));
+    }
+
     auto* dw = find_dock_widget(id);
 
     bool needs_add = false;
@@ -406,6 +422,26 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     dw->setAsCurrentTab();
 
     apply_ads_theme();
+
+    // If we have a saved layout snapshot for this primary, restore it now.
+    // restoreState() reuses the existing CDockWidgets (matched by objectName),
+    // so the work done above — placing dw at center, toggleView(true), etc. —
+    // is harmlessly overridden by the saved arrangement. The user's pre-leave
+    // layout (e.g. Portfolio + ER side-by-side) is back in one paint.
+    if (exclusive) {
+        auto it = layout_snapshots_.constFind(id);
+        if (it != layout_snapshots_.constEnd()) {
+            LOG_DEBUG("DockRouter",
+                      QString("Snapshot restored for primary '%1' (%2 bytes)").arg(id).arg(it->size()));
+            manager_->restoreState(*it);
+            sync_grid_from_reality();
+            apply_ads_theme();
+        }
+        // current_primary_id_ tracks the most-recently-exclusive-navigated
+        // screen — that's the key under which we'll save the layout next time
+        // the user navigates exclusively away.
+        current_primary_id_ = id;
+    }
 
     current_id_ = id;
     SessionManager::instance().set_last_screen(id);
