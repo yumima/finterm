@@ -168,4 +168,12 @@ QString SessionManager::last_screen() const {
     return settings_.value("session/last_screen", "dashboard").toString();
 }
 
+void SessionManager::set_last_primary_screen(const QString& screen_id) {
+    settings_.setValue("session/last_primary_screen", screen_id);
+}
+
+QString SessionManager::last_primary_screen() const {
+    return settings_.value("session/last_primary_screen").toString();
+}
+
 } // namespace fincept

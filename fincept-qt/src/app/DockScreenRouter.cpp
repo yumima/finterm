@@ -465,8 +465,12 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
         }
         // current_primary_id_ tracks the most-recently-exclusive-navigated
         // screen — that's the key under which we'll save the layout next time
-        // the user navigates exclusively away.
+        // the user navigates exclusively away. Also persist this distinctly
+        // from last_screen so startup can re-seed current_primary_id_ even
+        // when split_alongside has since overwritten last_screen with a
+        // secondary's id (e.g. "equity_research").
         current_primary_id_ = id;
+        SessionManager::instance().set_last_primary_screen(id);
     }
 
     current_id_ = id;

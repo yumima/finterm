@@ -60,6 +60,16 @@ class SessionManager : public QObject {
     void save_perspectives(QSettings& source);
     void load_perspectives(QSettings& target) const;
 
+    // Last EXCLUSIVE-nav target, distinct from last_screen (which is
+    // overwritten by split_alongside with the secondary's id). Used to
+    // seed DockScreenRouter::current_primary_id_ at startup so the very
+    // first nav-away after a restart correctly fires the layout-snapshot
+    // save — without this, restart-restored multi-pane arrangements
+    // (Portfolio + ER alongside) collapse on the first nav-away because
+    // the snapshot block guards on a non-empty current_primary_id_.
+    void set_last_primary_screen(const QString& screen_id);
+    QString last_primary_screen() const;
+
     // Last active screen
     void set_last_screen(const QString& screen_id);
     QString last_screen() const;

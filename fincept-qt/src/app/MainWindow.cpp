@@ -864,6 +864,20 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dw->toggleView(false);
         }
 
+        // Seed DockScreenRouter's current_primary_id_ so the FIRST nav-away
+        // after restart fires the layout-snapshot save block. Without this,
+        // a restart that successfully brought back Portfolio+ER alongside
+        // collapses to solo Portfolio on the first switch-away — the save
+        // block guards on a non-empty current_primary_id_, which only
+        // navigate() populates. last_primary_screen tracks exclusive navs
+        // distinctly from last_screen (which split_alongside overwrites
+        // with the secondary's id like "equity_research").
+        if (dock_restored && dock_router_) {
+            const QString lp = SessionManager::instance().last_primary_screen();
+            if (!lp.isEmpty())
+                dock_router_->set_current_primary_id(lp);
+        }
+
         // Save the current version so next startup knows the format.
         SessionManager::instance().set_dock_layout_version(window_id_, kDockLayoutVersion);
     }

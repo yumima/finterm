@@ -91,6 +91,15 @@ class DockScreenRouter : public QObject {
     /// ADS needs all dock widgets to exist by objectName.
     void ensure_all_registered();
 
+    /// Seed current_primary_id_ at startup so the very first nav-away
+    /// after a restart fires the layout-snapshot save. Without this, a
+    /// restart that successfully restores Portfolio+ER alongside would
+    /// nevertheless lose ER on the first switch to another primary —
+    /// the save block guards on a non-empty current_primary_id_, which
+    /// only gets populated inside navigate(). Caller is MainWindow,
+    /// reading SessionManager::last_primary_screen() after restoreState.
+    void set_current_primary_id(const QString& id) { current_primary_id_ = id; }
+
     /// Find an existing dock widget by screen id, or nullptr.
     ads::CDockWidget* find_dock_widget(const QString& id) const;
 
