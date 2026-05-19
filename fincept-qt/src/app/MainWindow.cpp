@@ -832,6 +832,33 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     static constexpr int kDockLayoutVersion = 4;
     bool dock_restored = false;
 
+    // Diagnostic helper: dump dock-manager state for save/restore tracing.
+    // The user reports Portfolio+ER alongside is not preserved across restart;
+    // this logs each phase so we can see exactly what's captured/restored.
+    auto log_dock_state = [this](const char* phase) {
+        if (!dock_manager_) return;
+        const auto opened = dock_manager_->openedDockAreas();
+        QStringList area_summaries;
+        area_summaries.reserve(opened.size());
+        for (int i = 0; i < opened.size(); ++i) {
+            QStringList ids;
+            const auto widgets = opened.at(i)->openedDockWidgets();
+            ids.reserve(widgets.size());
+            for (auto* dw : widgets) ids.append(dw->objectName());
+            area_summaries.append(QString("area%1=[%2]").arg(i).arg(ids.join(",")));
+        }
+        int total_registered = dock_manager_->dockWidgetsMap().size();
+        int total_open = 0;
+        for (auto* dw : dock_manager_->dockWidgetsMap())
+            if (dw && !dw->isClosed()) ++total_open;
+        LOG_INFO("DockDiag", QString("[%1] areas=%2 open=%3/%4 %5")
+                                 .arg(phase)
+                                 .arg(opened.size())
+                                 .arg(total_open)
+                                 .arg(total_registered)
+                                 .arg(area_summaries.join(" ")));
+    };
+
     if (dock_manager_) {
         QSettings persp_settings;
         SessionManager::instance().load_perspectives(persp_settings);
@@ -841,8 +868,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         if (saved_version == kDockLayoutVersion) {
             const QByteArray saved_dock = SessionManager::instance().load_dock_layout(window_id_);
             if (!saved_dock.isEmpty()) {
+                LOG_INFO("DockDiag", QString("loading dock_layout: %1 bytes").arg(saved_dock.size()));
                 dock_router_->ensure_all_registered();
+                log_dock_state("after ensure_all_registered");
                 dock_restored = dock_manager_->restoreState(saved_dock);
+                log_dock_state(dock_restored ? "after restoreState OK" : "after restoreState FAILED");
 
                 // Sanity check: if restoreState produced an unreasonable number
                 // of visible dock areas (>6), the layout is likely corrupt.
@@ -851,6 +881,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                                                .arg(dock_manager_->openedDockAreas().size()));
                     dock_restored = false;
                 }
+            } else {
+                LOG_INFO("DockDiag", "saved dock_layout is empty");
             }
         } else if (saved_version != 0) {
             LOG_INFO("MainWindow", QString("Dock layout version mismatch (saved %1, expected %2) — resetting")
@@ -1499,7 +1531,33 @@ void MainWindow::on_terminal_unlocked() {
                 chat_bubble_->raise();
             }
         }
+        // Diagnostic: snapshot dock state on either side of workspace load
+        // to see if load_last_workspace mutates the layout post-unlock.
+        if (dock_manager_) {
+            const auto opened = dock_manager_->openedDockAreas();
+            QStringList summaries;
+            for (int i = 0; i < opened.size(); ++i) {
+                QStringList ids;
+                for (auto* dw : opened.at(i)->openedDockWidgets()) ids.append(dw->objectName());
+                summaries.append(QString("area%1=[%2]").arg(i).arg(ids.join(",")));
+            }
+            LOG_INFO("DockDiag", QString("[unlock pre-workspace] areas=%1 %2")
+                                     .arg(opened.size())
+                                     .arg(summaries.join(" ")));
+        }
         WorkspaceManager::instance().load_last_workspace();
+        if (dock_manager_) {
+            const auto opened = dock_manager_->openedDockAreas();
+            QStringList summaries;
+            for (int i = 0; i < opened.size(); ++i) {
+                QStringList ids;
+                for (auto* dw : opened.at(i)->openedDockWidgets()) ids.append(dw->objectName());
+                summaries.append(QString("area%1=[%2]").arg(i).arg(ids.join(",")));
+            }
+            LOG_INFO("DockDiag", QString("[unlock post-workspace] areas=%1 %2")
+                                     .arg(opened.size())
+                                     .arg(summaries.join(" ")));
+        }
         QTimer::singleShot(3000, this, [this]() {
             services::UpdateService::instance().set_dialog_parent(this);
             services::UpdateService::instance().check_for_updates(true);
@@ -1611,15 +1669,34 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     if (QScreen* scr = screen())
         SessionManager::instance().save_screen_name(window_id_, scr->name());
     if (dock_manager_) {
-        SessionManager::instance().save_dock_layout(window_id_, dock_manager_->saveState());
+        // Diagnostic: log dock state immediately before save.
+        {
+            const auto opened = dock_manager_->openedDockAreas();
+            QStringList area_summaries;
+            for (int i = 0; i < opened.size(); ++i) {
+                QStringList ids;
+                for (auto* dw : opened.at(i)->openedDockWidgets()) ids.append(dw->objectName());
+                area_summaries.append(QString("area%1=[%2]").arg(i).arg(ids.join(",")));
+            }
+            LOG_INFO("DockDiag", QString("[closeEvent pre-save] areas=%1 %2")
+                                     .arg(opened.size())
+                                     .arg(area_summaries.join(" ")));
+        }
+        const QByteArray blob = dock_manager_->saveState();
+        LOG_INFO("DockDiag", QString("[closeEvent] saveState produced %1 bytes").arg(blob.size()));
+        SessionManager::instance().save_dock_layout(window_id_, blob);
         // Persist per-primary multi-pane snapshots too. Without this, the
         // exclusive-hide that runs on every nav-away (introduced by
         // 1af16b67) destroys each non-active primary's side panes at
         // shutdown, and clicking that primary post-restart restores a
         // default single-pane layout instead of the user's arrangement.
         if (dock_router_) {
-            SessionManager::instance().save_layout_snapshots(
-                window_id_, dock_router_->snapshot_states_for_save());
+            const auto snaps = dock_router_->snapshot_states_for_save();
+            QStringList keys;
+            for (auto it = snaps.cbegin(); it != snaps.cend(); ++it)
+                keys.append(QString("%1(%2B)").arg(it.key()).arg(it.value().size()));
+            LOG_INFO("DockDiag", QString("[closeEvent] snapshots: %1").arg(keys.join(", ")));
+            SessionManager::instance().save_layout_snapshots(window_id_, snaps);
         }
         QSettings tmp;
         dock_manager_->savePerspectives(tmp);
