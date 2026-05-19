@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`60b025a9`](https://github.com/yumima/finterm/commit/60b025a9) screens(er): fix comparison curves clipping past the plot frame
 - [`6d11c2e1`](https://github.com/yumima/finterm/commit/6d11c2e1) finterm.sh: video hwaccel diagnostics (FINCEPT_VIDEO_DEBUG / FINCEPT_HWACCEL)
 - [`ab833d0d`](https://github.com/yumima/finterm/commit/ab833d0d) widgets(video): pause/play button + auto-pause on terminal lock
 - [`9de3b2f3`](https://github.com/yumima/finterm/commit/9de3b2f3) widgets(video): user-pickable max resolution (480/720/1080) for GL pipeline

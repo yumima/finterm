@@ -233,19 +233,34 @@ void DockScreenRouter::navigate(const QString& id, bool exclusive) {
     PopularityTracker::instance().increment(id);
 
     // If we're about to navigate exclusively *away* from a different primary,
-    // snapshot the current ADS layout under that primary's id. The user
-    // expects coming back to it to restore whichever panes were alongside it
-    // (e.g. Portfolio with ER split → switch to Dashboard → come back to
-    // Portfolio expecting ER still beside it). The snapshot is taken before
-    // any exclusive-hide / restoreState below, so it captures the layout the
-    // user was looking at the moment they navigated away.
+    // snapshot the current ADS layout under that primary's id — but ONLY
+    // when there's a multi-pane arrangement worth preserving. Solo primary
+    // (one open dock area) is identical to what the default exclusive
+    // navigate-back would produce, so saving + restoring it is pure waste
+    // and the ADS saveState/restoreState calls visibly stall the main
+    // thread (which is where QMediaPlayer's video sink delivery runs — a
+    // ~1 s navigate causes an audible audio glitch and video freeze).
+    //
+    // With this gate, only navigations that left a real split behind pay
+    // the cost, and only when coming back to that split.
     if (exclusive && !current_primary_id_.isEmpty() && current_primary_id_ != id) {
-        layout_snapshots_[current_primary_id_] = manager_->saveState();
-        LOG_DEBUG("DockRouter",
-                  QString("Snapshot saved for primary '%1' (%2 bytes) before exclusive nav to '%3'")
-                      .arg(current_primary_id_)
-                      .arg(layout_snapshots_[current_primary_id_].size())
-                      .arg(id));
+        const int opened_area_count = manager_->openedDockAreas().size();
+        if (opened_area_count > 1) {
+            layout_snapshots_[current_primary_id_] = manager_->saveState();
+            LOG_DEBUG("DockRouter",
+                      QString("Snapshot saved for primary '%1' (%2 bytes, %3 areas) before exclusive nav to '%4'")
+                          .arg(current_primary_id_)
+                          .arg(layout_snapshots_[current_primary_id_].size())
+                          .arg(opened_area_count)
+                          .arg(id));
+        } else if (layout_snapshots_.remove(current_primary_id_) > 0) {
+            // Outgoing primary now solo — invalidate any stale multi-pane
+            // snapshot the user has since dismissed. Without this, returning
+            // to that primary later would surprise them with a re-instated
+            // pane they had explicitly closed.
+            LOG_DEBUG("DockRouter",
+                      QString("Snapshot invalidated for primary '%1' — now solo").arg(current_primary_id_));
+        }
     }
 
     auto* dw = find_dock_widget(id);
