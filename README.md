@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`945d9943`](https://github.com/yumima/finterm/commit/945d9943) screens(portfolio): icon-based refresh button + surface FFN/Export inline
 - [`c6b41e5a`](https://github.com/yumima/finterm/commit/c6b41e5a) app: sync() after dock-layout writes; remove diagnostic logging
 - [`7c716a75`](https://github.com/yumima/finterm/commit/7c716a75) app(nav): persist last_primary_screen; seed at startup so first switch keeps ER
 - [`2af83886`](https://github.com/yumima/finterm/commit/2af83886) app(nav): skip addDockWidget when target already solo at center

@@ -227,14 +227,18 @@ void PortfolioCommandBar::build_portfolio_selector() {
     // since they're portfolio-management ops, not stats/analytics actions.
     auto* io_row = new QHBoxLayout;
     io_row->setSpacing(4);
-    auto make_io = [&](const QString& label, auto signal) {
+    auto make_io = [&](const QString& label, const QString& accent, auto signal) {
         auto* b = new QPushButton(label);
         b->setFixedHeight(22);
         b->setCursor(Qt::PointingHandCursor);
-        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                                 "  font-size:11px; letter-spacing:0.3px; }"
-                                 "QPushButton:hover { color:%3; border-color:%3; }")
-                             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        // Coloured outline at rest (vs the old muted-grey on muted-grey
+        // that blended into the dropdown surface). Hover fills with the
+        // accent on a dark background for the standard "this is the
+        // primary affordance under the cursor" cue.
+        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
+                                 "  font-size:11px; font-weight:700; letter-spacing:0.3px; }"
+                                 "QPushButton:hover { background:%1; color:%2; }")
+                             .arg(accent, ui::colors::BG_BASE()));
         connect(b, &QPushButton::clicked, this, [this, signal]() {
             dropdown_->hide();
             dropdown_visible_ = false;
@@ -243,9 +247,12 @@ void PortfolioCommandBar::build_portfolio_selector() {
         io_row->addWidget(b);
         return b;
     };
-    make_io("EXPORT CSV",  &PortfolioCommandBar::export_csv_requested);
-    make_io("EXPORT JSON", &PortfolioCommandBar::export_json_requested);
-    make_io("IMPORT JSON", &PortfolioCommandBar::import_requested);
+    // Exports share CYAN — paired data-OUT operations. Import gets the
+    // amber accent (paired with the CREATE NEW above): both bring new
+    // portfolio state into the app, so they share the constructive cue.
+    make_io("EXPORT CSV",  ui::colors::CYAN(),  &PortfolioCommandBar::export_csv_requested);
+    make_io("EXPORT JSON", ui::colors::CYAN(),  &PortfolioCommandBar::export_json_requested);
+    make_io("IMPORT JSON", ui::colors::AMBER(), &PortfolioCommandBar::import_requested);
     dd_layout->addLayout(io_row);
 
     dropdown_->hide();
