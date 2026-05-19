@@ -95,6 +95,10 @@ void EquityPeersTab::build_ui() {
     peer_table_->verticalHeader()->hide();
     peer_table_->horizontalHeader()->setStretchLastSection(false);
     peer_table_->setSortingEnabled(true);
+    // Clicking a SYMBOL cell adds that ticker to the chart's comparison
+    // overlay (routed via add_to_comparison_requested → EquityOverviewTab
+    // ::add_comparison). All other columns are read-only.
+    connect(peer_table_, &QTableWidget::cellClicked, this, &EquityPeersTab::on_cell_clicked);
     vl->addWidget(peer_table_, 1);
 
     // ── Legend row ────────────────────────────────────────────────────────────
@@ -117,6 +121,18 @@ void EquityPeersTab::build_ui() {
     make_leg("#22d3ee", "Symbol / Info");
     leg_hl->addStretch();
     vl->addWidget(legend);
+}
+
+void EquityPeersTab::on_cell_clicked(int row, int column) {
+    // Only the SYMBOL column (0) is actionable. Sorting is enabled, so the
+    // row index here is the post-sort visible row — peer_table_->item(row, 0)
+    // returns the correct cell.
+    if (column != 0) return;
+    auto* item = peer_table_->item(row, 0);
+    if (!item) return;
+    const QString sym = item->text().trimmed().toUpper();
+    if (sym.isEmpty() || sym == current_symbol_) return;
+    emit add_to_comparison_requested(sym);
 }
 
 void EquityPeersTab::on_load_clicked() {
@@ -199,7 +215,9 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
     for (int r = 0; r < peers.size(); ++r) {
         const auto& p = peers[r];
 
-        // Symbol — highlight current symbol in amber
+        // Symbol — highlight current symbol in amber. Non-primary rows are
+        // clickable to add to the chart's comparison overlay; the primary
+        // row is shown but isn't actionable (self-comparison is pointless).
         auto* sym_item = new QTableWidgetItem(p.symbol);
         sym_item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         sym_item->setForeground(p.symbol == current_symbol_ ? QColor(ui::colors::AMBER()) : QColor("#22d3ee"));
@@ -208,6 +226,9 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
             f.setBold(true);
             return f;
         }());
+        sym_item->setToolTip(p.symbol == current_symbol_
+                                  ? QStringLiteral("(current symbol)")
+                                  : QStringLiteral("Click to add to comparison overlay"));
         peer_table_->setItem(r, 0, sym_item);
 
         set_cell(r, 1, fmt(p.price, 2), QColor("#22d3ee"));

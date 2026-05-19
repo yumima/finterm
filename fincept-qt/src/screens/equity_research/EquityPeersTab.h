@@ -17,8 +17,19 @@ class EquityPeersTab : public QWidget {
     explicit EquityPeersTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
 
+  signals:
+    /// Emitted when the user clicks a SYMBOL cell. The hosting screen
+    /// routes this to EquityOverviewTab::add_comparison so the chart
+    /// gains a comparison overlay — same code path as typing into the
+    /// inline COMP input. Suppressed for the row matching the current
+    /// primary symbol (a self-comparison is pointless).
+    void add_to_comparison_requested(const QString& symbol);
+
   private slots:
     void on_load_clicked();
+    /// Translate cellClicked(row, col) into add_to_comparison_requested when
+    /// the user clicked column 0 (SYMBOL).
+    void on_cell_clicked(int row, int column);
 
   private:
     void apply_peers_state(const services::query::QueryStore::State& s);

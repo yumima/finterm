@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f7bd6204`](https://github.com/yumima/finterm/commit/f7bd6204) finterm.sh: GDB wrapper opt-in via FINCEPT_GDB=1
 - [`4dbdda16`](https://github.com/yumima/finterm/commit/4dbdda16) screens(er): show absolute close in comparison legend — fix GOOG-at-$160 confusion
 - [`b819355a`](https://github.com/yumima/finterm/commit/b819355a) services(video): LiveHlsProxy review fixes — cache aging, no-copy, tests
 - [`59a0e513`](https://github.com/yumima/finterm/commit/59a0e513) services(video): live-HLS trimming proxy — fix Bloomberg/CNBC freeze in GL mode

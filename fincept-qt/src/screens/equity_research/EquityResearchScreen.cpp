@@ -358,6 +358,12 @@ void EquityResearchScreen::build_ui() {
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
 
+    // Peers ticker click → add as a comparison overlay on the Overview tab's
+    // chart. Same code path as typing into the inline COMP input — Peers
+    // becomes a discovery surface, the COMP strip is the canonical state.
+    connect(peers_tab_, &EquityPeersTab::add_to_comparison_requested,
+            overview_tab_, &EquityOverviewTab::add_comparison);
+
     vl->addWidget(tab_widget_, 1);
 }
 

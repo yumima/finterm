@@ -768,9 +768,10 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     current_symbol_ = symbol;
     // Comparisons are picked per-primary (Apple → Msft/Goog; Boeing →
     // Lockheed/RTX). Switching primary invalidates that choice, so clear
-    // the running comparison set and the canvas overlay.
+    // the running comparison set, the canvas overlay, and the chip strip.
     comp_state_.clear();
     if (candle_canvas_) candle_canvas_->set_comparisons({});
+    rebuild_comp_strip();
     // Restore the previously-saved chart view for this ticker (period +
     // overlay toggles + custom range). load_chart_view sets current_period_
     // before we subscribe below so the historical fetch uses the restored
@@ -1047,9 +1048,9 @@ QWidget* EquityOverviewTab::build_chart_panel() {
                 });
 
     btn_row->addSpacing(8);
-    btn_comp_ = new QPushButton(QStringLiteral("+ COMP"));
+    btn_comp_ = new QPushButton(QStringLiteral("COMP"));
     btn_comp_->setCursor(Qt::PointingHandCursor);
-    btn_comp_->setToolTip("Add a comparison ticker (rebased line overlay)");
+    btn_comp_->setToolTip("Type a ticker and press Enter to add a comparison overlay");
     btn_comp_->setStyleSheet(QString(
         "QPushButton{background:transparent;color:%1;border:1px solid %2;"
         "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
@@ -1057,9 +1058,46 @@ QWidget* EquityOverviewTab::build_chart_panel() {
         "QPushButton:hover{border-color:%3;background:%4;}")
         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
              ui::colors::CYAN(), ui::colors::BG_RAISED()));
+    // Click the COMP label → focus the inline input. Keeps the keyboard
+    // shortcut (C) cheap: also just focus the input.
     connect(btn_comp_, &QPushButton::clicked, this,
-            [this]() { add_comparison_dialog(); });
+            [this]() { if (comp_input_) comp_input_->setFocus(); });
     btn_row->addWidget(btn_comp_);
+
+    // Inline chip strip — chips + ticker input live on the same row as the
+    // overlay toggle buttons so add/delete is one click, no popup.
+    comp_strip_ = new QWidget;
+    auto* strip_hl = new QHBoxLayout(comp_strip_);
+    strip_hl->setContentsMargins(0, 0, 0, 0);
+    strip_hl->setSpacing(4);
+
+    auto* chips_holder = new QWidget;
+    comp_chips_ = new QHBoxLayout(chips_holder);
+    comp_chips_->setContentsMargins(0, 0, 0, 0);
+    comp_chips_->setSpacing(4);
+    strip_hl->addWidget(chips_holder);
+
+    comp_input_ = new QLineEdit;
+    comp_input_->setMaxLength(12);
+    comp_input_->setFixedWidth(80);
+    comp_input_->setStyleSheet(QString(
+        "QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
+        "padding:2px 6px;font-size:11px;font-family:'Consolas',monospace;}"
+        "QLineEdit:focus{border-color:%4;}"
+        "QLineEdit:disabled{color:%5;background:transparent;}")
+        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BORDER_DIM(), ui::colors::CYAN(),
+             ui::colors::TEXT_SECONDARY()));
+    connect(comp_input_, &QLineEdit::returnPressed, this, [this]() {
+        const QString sym = comp_input_->text().trimmed().toUpper();
+        if (sym.isEmpty()) return;
+        comp_input_->clear();
+        add_comparison(sym);
+    });
+    strip_hl->addWidget(comp_input_);
+
+    btn_row->addWidget(comp_strip_);
+    refresh_comp_input_state();
 
     btn_row->addStretch();
     vl->addLayout(btn_row);
@@ -1203,109 +1241,102 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
     restoring_view_ = false;
 }
 
-void EquityOverviewTab::add_comparison_dialog() {
-    // Tight cap on series count — beyond 3 the chart starts to wash out
-    // and the legend column eats the right edge of the plot.
-    constexpr int kMaxComparisons = 3;
+// Tight cap on series count — beyond 3 the chart starts to wash out and
+// the legend column eats the right edge of the plot.
+static constexpr int kMaxComparisons = 3;
 
-    // Lightweight management dialog: shows the currently-active comparisons
-    // and lets the user add one or remove existing ones. Persisting them
-    // across symbols feels surprising — comparison sets are usually
-    // primary-specific (Apple → Msft, Google; Boeing → Lockheed, RTX).
-    QDialog dlg(this);
-    dlg.setWindowTitle("Comparison overlays");
-    dlg.setModal(true);
-
-    auto* root = new QVBoxLayout(&dlg);
-    root->setContentsMargins(16, 14, 16, 14);
-    root->setSpacing(10);
-
-    auto* list_lbl = new QLabel("Active overlays (click ✕ to remove):");
-    list_lbl->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    root->addWidget(list_lbl);
-
-    auto* list_layout = new QVBoxLayout;
-    list_layout->setSpacing(4);
-    root->addLayout(list_layout);
-
-    // std::function (not `auto`) because the lambda recursively references
-    // itself via the inner ✕-button click handler — auto can't be deduced
-    // until the body completes, so `&rebuild_chips` inside the body would
-    // capture an undeduced type.
-    std::function<void()> rebuild_chips = [&, this]() {
-        // Clear list
-        while (auto* it = list_layout->takeAt(0)) {
-            if (it->widget()) it->widget()->deleteLater();
-            delete it;
-        }
-        if (comp_state_.isEmpty()) {
-            auto* empty = new QLabel("(none)");
-            empty->setStyleSheet(QString("color:%1;font-style:italic;font-size:12px;")
-                                     .arg(ui::colors::TEXT_SECONDARY()));
-            list_layout->addWidget(empty);
-            return;
-        }
-        for (int i = 0; i < comp_state_.size(); ++i) {
-            auto* row = new QWidget;
-            auto* hl = new QHBoxLayout(row);
-            hl->setContentsMargins(0, 0, 0, 0);
-            auto* swatch = new QLabel;
-            swatch->setFixedSize(10, 10);
-            swatch->setStyleSheet(QString("background:%1;border-radius:2px;")
-                                       .arg(comp_state_[i].color.name()));
-            hl->addWidget(swatch);
-            auto* sym = new QLabel(comp_state_[i].symbol);
-            sym->setStyleSheet(QString("color:%1;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
-            hl->addWidget(sym);
-            hl->addStretch();
-            auto* rm = new QPushButton("✕");
-            rm->setFixedSize(24, 22);
-            rm->setCursor(Qt::PointingHandCursor);
-            hl->addWidget(rm);
-            connect(rm, &QPushButton::clicked, this, [this, i, &rebuild_chips]() {
-                comp_state_.removeAt(i);
-                refresh_comparisons();
-                rebuild_chips();
-            });
-            list_layout->addWidget(row);
-        }
-    };
-    rebuild_chips();
-
-    auto* form = new QFormLayout;
-    auto* sym_edit = new QLineEdit;
-    sym_edit->setPlaceholderText("e.g. MSFT");
-    form->addRow("Add ticker", sym_edit);
-    root->addLayout(form);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Close,
-                                          Qt::Horizontal, &dlg);
-    buttons->button(QDialogButtonBox::Ok)->setText("Add");
-    root->addWidget(buttons);
-
-    // 6-step palette. We pick by index modulo so even after removes the
-    // remaining series keep deterministic colours.
+// Fixed 6-step palette for comparison lines. We pick by index modulo so
+// even after removes the remaining series keep deterministic colours
+// matching the canvas legend.
+static const QVector<QColor>& comp_palette() {
     static const QVector<QColor> kPalette = {
         QColor("#06b6d4"), QColor("#10b981"), QColor("#f59e0b"),
         QColor("#ef4444"), QColor("#a855f7"), QColor("#3b82f6"),
     };
+    return kPalette;
+}
 
-    connect(buttons, &QDialogButtonBox::accepted, &dlg, [&, this]() {
-        const QString sym = sym_edit->text().trimmed().toUpper();
-        if (sym.isEmpty()) return;
-        if (sym == current_symbol_) return;   // pointless self-comp
-        for (const auto& c : comp_state_)
-            if (c.symbol == sym) return;       // already added
-        if (comp_state_.size() >= kMaxComparisons) return;
-        const QColor color = kPalette.at(comp_state_.size() % kPalette.size());
-        comp_state_.append({sym, color});
-        sym_edit->clear();
-        refresh_comparisons();
-        rebuild_chips();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+void EquityOverviewTab::add_comparison(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty()) return;
+    if (sym == current_symbol_) return;               // pointless self-comp
+    for (const auto& c : comp_state_)
+        if (c.symbol == sym) return;                  // already added
+    if (comp_state_.size() >= kMaxComparisons) return;
 
-    dlg.exec();
+    const QColor color = comp_palette().at(comp_state_.size() % comp_palette().size());
+    comp_state_.append({sym, color, {}});
+    refresh_comparisons();
+    rebuild_comp_strip();
+}
+
+void EquityOverviewTab::rebuild_comp_strip() {
+    if (!comp_chips_) return;
+    // Tear down existing chip widgets. Layout is small (≤3 chips) so the
+    // takeAt loop is trivially fast; deleteLater keeps us safe if any
+    // signal handler is mid-fire on the buttons we're removing.
+    while (auto* it = comp_chips_->takeAt(0)) {
+        if (it->widget()) it->widget()->deleteLater();
+        delete it;
+    }
+    for (int i = 0; i < comp_state_.size(); ++i) {
+        const QString sym = comp_state_[i].symbol;
+        const QString color_name = comp_state_[i].color.name();
+
+        auto* chip = new QFrame;
+        chip->setStyleSheet(QString(
+            "QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+        auto* hl = new QHBoxLayout(chip);
+        hl->setContentsMargins(4, 1, 2, 1);
+        hl->setSpacing(4);
+
+        auto* swatch = new QLabel;
+        swatch->setFixedSize(8, 8);
+        swatch->setStyleSheet(QString("background:%1;border-radius:1px;").arg(color_name));
+        hl->addWidget(swatch);
+
+        auto* sym_lbl = new QLabel(sym);
+        sym_lbl->setStyleSheet(QString(
+            "color:%1;font-weight:700;font-size:11px;font-family:'Consolas',monospace;"
+            "background:transparent;border:0;")
+            .arg(ui::colors::TEXT_PRIMARY()));
+        hl->addWidget(sym_lbl);
+
+        auto* rm = new QPushButton(QStringLiteral("✕"));
+        rm->setCursor(Qt::PointingHandCursor);
+        rm->setToolTip("Remove from comparison");
+        rm->setFixedSize(16, 16);
+        rm->setStyleSheet(QString(
+            "QPushButton{background:transparent;color:%1;border:0;"
+            "padding:0;font-size:11px;font-weight:700;}"
+            "QPushButton:hover{color:%2;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
+        // Remove-by-symbol (not by index) — index could shift if a
+        // simultaneous add/remove races; symbol is the stable key.
+        connect(rm, &QPushButton::clicked, this, [this, sym]() {
+            for (int j = 0; j < comp_state_.size(); ++j) {
+                if (comp_state_[j].symbol == sym) {
+                    comp_state_.removeAt(j);
+                    break;
+                }
+            }
+            refresh_comparisons();
+            rebuild_comp_strip();
+        });
+        hl->addWidget(rm);
+
+        comp_chips_->addWidget(chip);
+    }
+    refresh_comp_input_state();
+}
+
+void EquityOverviewTab::refresh_comp_input_state() {
+    if (!comp_input_) return;
+    const bool at_max = comp_state_.size() >= kMaxComparisons;
+    comp_input_->setEnabled(!at_max);
+    comp_input_->setPlaceholderText(at_max ? QStringLiteral("(max %1)").arg(kMaxComparisons)
+                                           : QStringLiteral("ticker…"));
 }
 
 void EquityOverviewTab::refresh_comparisons() {
@@ -1390,7 +1421,7 @@ void EquityOverviewTab::shortcut_toggle_earnings() {
     if (btn_earn_) btn_earn_->toggle();
 }
 void EquityOverviewTab::shortcut_open_comparison() {
-    if (btn_comp_) btn_comp_->click();
+    if (comp_input_) comp_input_->setFocus();
 }
 void EquityOverviewTab::shortcut_open_range_picker() {
     if (btn_custom_) btn_custom_->click();

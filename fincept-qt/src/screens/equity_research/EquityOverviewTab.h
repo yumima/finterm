@@ -5,7 +5,9 @@
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPixmap>
 #include <QPushButton>
 #include <QWidget>
@@ -144,6 +146,13 @@ class EquityOverviewTab : public QWidget {
     void shortcut_open_comparison();
     void shortcut_open_range_picker();
 
+    /// Add a ticker to the comparison overlay. Public entry point so other
+    /// surfaces (Peers tab click-to-add) can route through the same code
+    /// path the inline input uses. Silently no-ops on empty/duplicate/
+    /// self-comparison/max-reached — chip strip and overlay are updated as
+    /// a side effect. Symbol is upper-cased before compare/store.
+    void add_comparison(const QString& symbol);
+
   private:
     /// Called by the three QueryStore subscription callbacks set up in
     /// set_symbol(). Each consumes the State tuple for its category and
@@ -244,7 +253,21 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_sma50_ = nullptr;
     QPushButton* btn_sma200_= nullptr;
     QPushButton* btn_earn_  = nullptr;
-    QPushButton* btn_comp_  = nullptr;   // opens comparison-add dialog
+    QPushButton* btn_comp_  = nullptr;   // label + click-to-focus the inline input
+
+    // Inline COMP strip — chips for the already-added comparisons plus an
+    // input for the next ticker. Rendered immediately after btn_comp_ on
+    // the same row, so add/delete is one click without a popup dialog.
+    QWidget*     comp_strip_   = nullptr;   ///< container holding chips + input
+    QHBoxLayout* comp_chips_   = nullptr;   ///< layout holding only the chip widgets
+    QLineEdit*   comp_input_   = nullptr;   ///< inline ticker input (Enter to add)
+    /// Tear down and rebuild the chip widgets from comp_state_. Cheap (≤3
+    /// chips), called whenever a comparison is added or removed.
+    void rebuild_comp_strip();
+    /// Update comp_input_'s placeholder and enabled state to reflect whether
+    /// adding another comparison is allowed (cap is kMaxComparisons in the
+    /// .cpp). Called from rebuild_comp_strip and on construction.
+    void refresh_comp_input_state();
 
     // Comparison series the user has added. We hold the canvas-bound state
     // here too so re-subscribing on symbol/period change can re-fetch each
@@ -258,7 +281,6 @@ class EquityOverviewTab : public QWidget {
         QVector<services::equity::Candle> candles;
     };
     QVector<CompState> comp_state_;
-    void add_comparison_dialog();
     void refresh_comparisons();
 
     // Per-ticker view persistence (period + overlays + custom range).
