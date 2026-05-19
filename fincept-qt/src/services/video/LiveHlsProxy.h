@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QHostAddress>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -51,9 +52,18 @@ namespace fincept::services::video {
 /// timer.
 class LiveHlsProxy : public QObject {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(LiveHlsProxy)
   public:
     explicit LiveHlsProxy(QObject* parent = nullptr);
     ~LiveHlsProxy() override;
+
+    /// Pure function exposed for unit testing. Parses an HLS variant
+    /// playlist and returns a new playlist containing only the last
+    /// `keep_segments` segments, with #EXT-X-MEDIA-SEQUENCE adjusted so
+    /// the trimmed playlist's first segment carries the original
+    /// sequence number. If input isn't a recognized HLS playlist
+    /// (missing #EXTM3U), returns input unchanged.
+    static QByteArray trim_playlist(const QByteArray& upstream, int keep_segments);
 
     /// Start the proxy with the upstream HLS variant playlist URL (the
     /// thing yt-dlp -g returns). Binds an ephemeral localhost port and
@@ -91,21 +101,24 @@ class LiveHlsProxy : public QObject {
     void on_upstream_finished();
 
   private:
-    /// Pure function: parse a YouTube DVR HLS variant playlist and return
-    /// a trimmed variant containing the last N segments with the
-    /// MEDIA-SEQUENCE adjusted. If parsing fails (not a recognized HLS
-    /// playlist), returns the input unchanged.
-    static QByteArray trim_playlist(const QByteArray& upstream, int keep_segments);
-
     /// Send an HTTP response on the socket with the current cached
-    /// trimmed playlist, then close the connection. If the cache is still
-    /// empty, returns 503 Service Unavailable.
+    /// trimmed playlist, then close the connection. If the cache is
+    /// stale or never-fetched, returns 503 Service Unavailable.
     void serve_request(QTcpSocket* client);
+
+    /// True if we have a cached playlist that is still fresh enough to
+    /// serve. The freshness bound matters because YouTube's signed
+    /// segment URLs in the cache expire ~6 hours after issue; we also
+    /// want to detect prolonged upstream failure (e.g., 30s+ of refresh
+    /// timeouts) and surface it as an error instead of silently serving
+    /// segments QMediaPlayer can no longer fetch.
+    bool cache_is_fresh() const;
 
     /// Tunables.
     static constexpr int kEdgeSegmentsToKeep   = 6;     ///< trimmed playlist size
     static constexpr int kRefreshIntervalMs    = 4000;  ///< background fetch period
     static constexpr int kFetchTimeoutMs       = 30000; ///< per-fetch timeout
+    static constexpr int kMaxCacheAgeMs        = 30000; ///< drop cache after this without a successful refresh
 
     QTcpServer*           server_         = nullptr;
     QNetworkAccessManager* netman_        = nullptr;
@@ -114,8 +127,14 @@ class LiveHlsProxy : public QObject {
     QUrl                  upstream_url_;
     QUrl                  local_url_;
     QByteArray            trimmed_cache_;
+    /// Age of trimmed_cache_. Invalid (i.e., !isValid()) until first
+    /// successful refresh.
+    QElapsedTimer         cache_age_;
     QString               last_error_;
     bool                  first_ready_emitted_ = false;
+    /// Latched once we emit upstream_error due to stale cache, so we
+    /// don't spam the signal on every subsequent client request.
+    bool                  stale_error_emitted_ = false;
 };
 
 } // namespace fincept::services::video

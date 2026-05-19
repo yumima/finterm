@@ -62,6 +62,37 @@ set_target_properties(test_event_bus PROPERTIES
 
 add_test(NAME event_bus COMMAND test_event_bus)
 
+# ── LiveHlsProxy::trim_playlist tests ────────────────────────────────────────
+# Locks in the playlist-trim correctness. The whole live-HLS fix
+# (commit 59a0e513) depends on the trim producing a valid playlist with
+# the right MEDIA-SEQUENCE, per-segment tags carried through, etc.
+# Compiles only the LiveHlsProxy.cpp + its Logger dependency — the
+# trim function is static and pure, so we don't need to instantiate
+# any QNetwork/QTcpServer machinery to exercise it.
+
+add_executable(test_live_hls_proxy
+    services/video/test_live_hls_proxy.cpp
+    ../src/services/video/LiveHlsProxy.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_live_hls_proxy PRIVATE
+    ../src
+)
+
+target_link_libraries(test_live_hls_proxy PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+
+set_target_properties(test_live_hls_proxy PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME live_hls_proxy COMMAND test_live_hls_proxy)
+
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,
 # and asserts legitimate dirs survive while junk is gone. Guards against the

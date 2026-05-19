@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`59a0e513`](https://github.com/yumima/finterm/commit/59a0e513) services(video): live-HLS trimming proxy — fix Bloomberg/CNBC freeze in GL mode
 - [`e85d4c07`](https://github.com/yumima/finterm/commit/e85d4c07) services(finnhub): WS source-side throttle — fix GUI thread CPU storm
 - [`d1c8aab4`](https://github.com/yumima/finterm/commit/d1c8aab4) screens(ipo): PRIVATE dedup + Wikipedia summaries for private companies
 - [`7b78fb79`](https://github.com/yumima/finterm/commit/7b78fb79) **ui(widgets):** StatusPill — shared idle/loading/stale/error/empty pill

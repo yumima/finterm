@@ -33,7 +33,9 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
 
     upstream_url_ = upstream;
     trimmed_cache_.clear();
+    cache_age_.invalidate();
     first_ready_emitted_ = false;
+    stale_error_emitted_ = false;
     last_error_.clear();
 
     // Bind ephemeral port on loopback. Letting the OS pick the port
@@ -46,9 +48,9 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
     local_url_ = QUrl(QStringLiteral("http://127.0.0.1:%1/play.m3u8")
                           .arg(server_->serverPort()));
 
-    LOG_INFO("LiveHlsProxy",
-             "started: upstream=" + upstream_url_.toString(QUrl::RemoveQuery).left(80) +
-             " local=" + local_url_.toString());
+    LOG_DEBUG("LiveHlsProxy",
+              "started: upstream=" + upstream_url_.toString(QUrl::RemoveQuery).left(80) +
+              " local=" + local_url_.toString());
 
     // Kick off the first upstream fetch immediately so the ready signal
     // can fire ASAP — caller typically waits for ready before calling
@@ -71,7 +73,14 @@ void LiveHlsProxy::stop() {
         in_flight_ = nullptr;
     }
     trimmed_cache_.clear();
+    cache_age_.invalidate();
     local_url_.clear();
+}
+
+bool LiveHlsProxy::cache_is_fresh() const {
+    return !trimmed_cache_.isEmpty()
+        && cache_age_.isValid()
+        && cache_age_.elapsed() < kMaxCacheAgeMs;
 }
 
 void LiveHlsProxy::on_new_connection() {
@@ -97,10 +106,25 @@ void LiveHlsProxy::on_new_connection() {
 }
 
 void LiveHlsProxy::serve_request(QTcpSocket* client) {
-    if (trimmed_cache_.isEmpty()) {
-        // First fetch hasn't completed yet — tell the client to retry
-        // shortly rather than serving an empty playlist (which would
-        // cause libavformat to error out).
+    if (!cache_is_fresh()) {
+        // Either first fetch hasn't completed yet, or the upstream has
+        // been unreachable for kMaxCacheAgeMs+ and our cached segment
+        // URLs are probably stale (YouTube signed-URL TTL on segments).
+        // Serve 503 + Retry-After. If the cache went stale (was once
+        // populated, now expired), latch an upstream_error so the widget
+        // can surface "live stream lost" to the user.
+        if (!trimmed_cache_.isEmpty() && !stale_error_emitted_) {
+            stale_error_emitted_ = true;
+            LOG_WARN("LiveHlsProxy",
+                     "cache aged out (>"
+                     + QString::number(kMaxCacheAgeMs / 1000) + "s without successful refresh)");
+            // Drop the now-untrustworthy cache so future requests get a
+            // clean 503 instead of risking 6-hour-old segment URLs.
+            trimmed_cache_.clear();
+            cache_age_.invalidate();
+            emit upstream_error(QStringLiteral("Live stream lost — upstream unreachable for over %1s")
+                                    .arg(kMaxCacheAgeMs / 1000));
+        }
         const QByteArray msg =
             "HTTP/1.1 503 Service Unavailable\r\n"
             "Content-Type: text/plain\r\n"
@@ -177,12 +201,16 @@ void LiveHlsProxy::on_upstream_finished() {
         return;
     }
     trimmed_cache_ = trimmed;
+    cache_age_.restart();
+    // Reset the stale-error latch — we're freshly populated again, so
+    // any future aging-out should be reported as a new event.
+    stale_error_emitted_ = false;
 
     if (!first_ready_emitted_) {
         first_ready_emitted_ = true;
-        LOG_INFO("LiveHlsProxy",
-                 "ready: upstream=" + QString::number(raw.size()) +
-                 "B trimmed=" + QString::number(trimmed.size()) + "B");
+        LOG_DEBUG("LiveHlsProxy",
+                  "ready: upstream=" + QString::number(raw.size()) +
+                  "B trimmed=" + QString::number(trimmed.size()) + "B");
         emit ready();
     }
 }
