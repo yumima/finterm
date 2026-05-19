@@ -2,54 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-18)
+## Today's commits (2026-05-19)
 
 Latest first.
 
-- [`10cbbdbc`](https://github.com/yumima/finterm/commit/10cbbdbc) **ui:** fix collapsing ER comp row + transparent tooltip on Linux
-- [`4a6d9b0d`](https://github.com/yumima/finterm/commit/4a6d9b0d) screens(er): move comp chip row below the canvas
-- [`99cbcf4d`](https://github.com/yumima/finterm/commit/99cbcf4d) screens(er): comparison chip strip → always-visible 2nd row, dynamic on hover
-- [`712ee366`](https://github.com/yumima/finterm/commit/712ee366) screens(er): wrap hover comps to a second line when readout would clip
-- [`f29fa547`](https://github.com/yumima/finterm/commit/f29fa547) screens(er): comparison curves at actual prices + horizontal legend + hover prices
-- [`2c9255ca`](https://github.com/yumima/finterm/commit/2c9255ca) **ui(theme):** fix transparent QToolTip across the app
-- [`3afaec24`](https://github.com/yumima/finterm/commit/3afaec24) app(nav): gate layout-snapshot save on multi-pane state — fix nav stall + video freeze
-- [`60b025a9`](https://github.com/yumima/finterm/commit/60b025a9) screens(er): fix comparison curves clipping past the plot frame
-- [`6d11c2e1`](https://github.com/yumima/finterm/commit/6d11c2e1) finterm.sh: video hwaccel diagnostics (FINCEPT_VIDEO_DEBUG / FINCEPT_HWACCEL)
-- [`ab833d0d`](https://github.com/yumima/finterm/commit/ab833d0d) widgets(video): pause/play button + auto-pause on terminal lock
-- [`9de3b2f3`](https://github.com/yumima/finterm/commit/9de3b2f3) widgets(video): user-pickable max resolution (480/720/1080) for GL pipeline
-- [`8e11f4fc`](https://github.com/yumima/finterm/commit/8e11f4fc) app(nav): per-primary ADS layout snapshots — preserve split panes across top-level switches
-- [`bed760e0`](https://github.com/yumima/finterm/commit/bed760e0) screens(er): tighten COMP chip bar + drop price text from chart legend
-- [`69c5c041`](https://github.com/yumima/finterm/commit/69c5c041) screens(er): inline COMP chip bar — replace popup with one-line chips + Peers click-to-add
-- [`f7bd6204`](https://github.com/yumima/finterm/commit/f7bd6204) finterm.sh: GDB wrapper opt-in via FINCEPT_GDB=1
-- [`4dbdda16`](https://github.com/yumima/finterm/commit/4dbdda16) screens(er): show absolute close in comparison legend — fix GOOG-at-$160 confusion
-- [`b819355a`](https://github.com/yumima/finterm/commit/b819355a) services(video): LiveHlsProxy review fixes — cache aging, no-copy, tests
-- [`59a0e513`](https://github.com/yumima/finterm/commit/59a0e513) services(video): live-HLS trimming proxy — fix Bloomberg/CNBC freeze in GL mode
-- [`e85d4c07`](https://github.com/yumima/finterm/commit/e85d4c07) services(finnhub): WS source-side throttle — fix GUI thread CPU storm
-- [`d1c8aab4`](https://github.com/yumima/finterm/commit/d1c8aab4) screens(ipo): PRIVATE dedup + Wikipedia summaries for private companies
-- [`7b78fb79`](https://github.com/yumima/finterm/commit/7b78fb79) **ui(widgets):** StatusPill — shared idle/loading/stale/error/empty pill
-- [`4fbd59ea`](https://github.com/yumima/finterm/commit/4fbd59ea) services(query): LRU eviction so long sessions don't grow unbounded
-- [`b3ca1b83`](https://github.com/yumima/finterm/commit/b3ca1b83) screens(ipo): PRIVATE star + in-app detail rail + mixed WATCHLIST
-- [`5ac16d27`](https://github.com/yumima/finterm/commit/5ac16d27) screens(er): keyboard shortcuts for chart actions (perf/UX #1)
-- [`0458f1ac`](https://github.com/yumima/finterm/commit/0458f1ac) screens(ipo): PRIVATE lens + clearer LOCKUPS empty-state messaging
-- [`9369ef4d`](https://github.com/yumima/finterm/commit/9369ef4d) services(finnhub): live-tick WebSocket → ER price push (Round 4)
-- [`8b92d6ee`](https://github.com/yumima/finterm/commit/8b92d6ee) screens(futures): CHINA pre-warm + 60s cache for akshare commodities
-- [`173b95e4`](https://github.com/yumima/finterm/commit/173b95e4) screens(er): multi-symbol comparison overlay on the chart (Pass 5)
-- [`79a3c122`](https://github.com/yumima/finterm/commit/79a3c122) screens(er): saved chart view per ticker
-- [`48d23bc8`](https://github.com/yumima/finterm/commit/48d23bc8) screens(er): custom date-range picker for the chart
-- [`3bb18995`](https://github.com/yumima/finterm/commit/3bb18995) screens(ipo): LOCKUPS lens — Finnhub-sourced post-IPO supply-surge signal
-- [`fec34036`](https://github.com/yumima/finterm/commit/fec34036) screens(er): rich search popup — symbol/name + venue/ccy/type chips
-- [`9911e69d`](https://github.com/yumima/finterm/commit/9911e69d) review-noted: tooltip + CHINA leftover guards
-- [`39d14e63`](https://github.com/yumima/finterm/commit/39d14e63) screens(futures): CHINA uses the standard grid (no more special case)
-- [`2ecd3b8d`](https://github.com/yumima/finterm/commit/2ecd3b8d) screens(er): analyst recommendation-trend chip (Finnhub)
-- [`7ef8ac2b`](https://github.com/yumima/finterm/commit/7ef8ac2b) screens(er): market-status badge in quote bar (OPEN/PRE/AFTER/CLOSED)
-- [`304165c8`](https://github.com/yumima/finterm/commit/304165c8) services(finnhub): review-noted — drop junk rows in two parsers
-- [`cb96c759`](https://github.com/yumima/finterm/commit/cb96c759) screens(er): fix SMA50 crosshair label + dedup compute
-- [`7ce42588`](https://github.com/yumima/finterm/commit/7ce42588) services(finnhub): FinnhubService + IPO/lockup augmentation in PreIpoService
-- [`2fcb19ce`](https://github.com/yumima/finterm/commit/2fcb19ce) screens(er): Pass 1 chart upgrades — log scale + volume + SMA + earnings + comparators
-- [`c3757889`](https://github.com/yumima/finterm/commit/c3757889) screens(er): migrate Analysis/Financials/News/Peers tabs to QueryStore
-- [`0a354691`](https://github.com/yumima/finterm/commit/0a354691) screens(er): migrate Technicals tab to QueryStore
-- [`1794b417`](https://github.com/yumima/finterm/commit/1794b417) services(query+equity): SWR + speculative period prefetch
-- [`9378ff5d`](https://github.com/yumima/finterm/commit/9378ff5d) services(query): introduce QueryStore; migrate ER overview tab
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

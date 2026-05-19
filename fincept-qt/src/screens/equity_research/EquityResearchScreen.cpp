@@ -358,11 +358,19 @@ void EquityResearchScreen::build_ui() {
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
 
-    // Peers ticker click → add as a comparison overlay on the Overview tab's
-    // chart. Same code path as typing into the inline COMP input — Peers
-    // becomes a discovery surface, the COMP strip is the canonical state.
+    // Peers ✓ checkbox ↔ comparison overlay (two-way binding). The Peers
+    // tab is a discovery surface; the canonical comparison state lives in
+    // EquityOverviewTab::comp_state_. Tick → add_comparison; untick →
+    // remove_comparison. The overview tab broadcasts comparisons_changed
+    // on every mutation (including chip-✕ removals and the implicit clear
+    // on primary-symbol switch) so the Peers checkbox column stays in sync
+    // even when the user mutates the set elsewhere.
     connect(peers_tab_, &EquityPeersTab::add_to_comparison_requested,
             overview_tab_, &EquityOverviewTab::add_comparison);
+    connect(peers_tab_, &EquityPeersTab::remove_from_comparison_requested,
+            overview_tab_, &EquityOverviewTab::remove_comparison);
+    connect(overview_tab_, &EquityOverviewTab::comparisons_changed,
+            peers_tab_, &EquityPeersTab::set_active_comparisons);
 
     vl->addWidget(tab_widget_, 1);
 }

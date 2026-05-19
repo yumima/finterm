@@ -640,6 +640,7 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     comp_state_.clear();
     if (candle_canvas_) candle_canvas_->set_comparisons({});
     rebuild_comp_strip();
+    emit comparisons_changed({});
     // Restore the previously-saved chart view for this ticker (period +
     // overlay toggles + custom range). load_chart_view sets current_period_
     // before we subscribe below so the historical fetch uses the restored
@@ -1194,6 +1195,31 @@ void EquityOverviewTab::add_comparison(const QString& symbol) {
     comp_state_.append({sym, color, {}});
     refresh_comparisons();
     rebuild_comp_strip();
+    // Notify external surfaces (Peers checkbox column) so they can mirror.
+    QStringList syms;
+    syms.reserve(comp_state_.size());
+    for (const auto& c : comp_state_) syms.append(c.symbol);
+    emit comparisons_changed(syms);
+}
+
+void EquityOverviewTab::remove_comparison(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty()) return;
+    bool removed = false;
+    for (int j = 0; j < comp_state_.size(); ++j) {
+        if (comp_state_[j].symbol == sym) {
+            comp_state_.removeAt(j);
+            removed = true;
+            break;
+        }
+    }
+    if (!removed) return;
+    refresh_comparisons();
+    rebuild_comp_strip();
+    QStringList syms;
+    syms.reserve(comp_state_.size());
+    for (const auto& c : comp_state_) syms.append(c.symbol);
+    emit comparisons_changed(syms);
 }
 
 void EquityOverviewTab::rebuild_comp_strip() {
@@ -1238,21 +1264,13 @@ void EquityOverviewTab::rebuild_comp_strip() {
             "padding:0;font-size:11px;font-weight:700;}"
             "QPushButton:hover{color:%2;}")
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
-        // Remove-by-symbol (not by index) — index could shift if a
-        // simultaneous add/remove races; symbol is the stable key.
-        // rebuild_comp_strip below schedules the firing button for
-        // deleteLater, which is safe because deleteLater defers to the
-        // next event-loop iteration and the connect's receiver context is
-        // `this` (the tab), not the button.
+        // Route through the public remove_comparison path so the chip ✕
+        // shares the same removal + comparisons_changed emission as the
+        // Peers-tab checkbox uncheck. deleteLater (via rebuild_comp_strip)
+        // is safe because the connect's receiver context is `this` (the
+        // tab) and deleteLater defers to the next event-loop tick.
         connect(rm, &QPushButton::clicked, this, [this, sym]() {
-            for (int j = 0; j < comp_state_.size(); ++j) {
-                if (comp_state_[j].symbol == sym) {
-                    comp_state_.removeAt(j);
-                    break;
-                }
-            }
-            refresh_comparisons();
-            rebuild_comp_strip();
+            remove_comparison(sym);
         });
         hl->addWidget(rm);
 

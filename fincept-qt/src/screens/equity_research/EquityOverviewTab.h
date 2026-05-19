@@ -166,6 +166,19 @@ class EquityOverviewTab : public QWidget {
     /// a side effect. Symbol is upper-cased before compare/store.
     void add_comparison(const QString& symbol);
 
+    /// Remove a ticker from the comparison overlay. Symmetric to the chip
+    /// ✕ button — exposed so Peers-tab checkbox uncheck can route through
+    /// the same removal path. No-op when the symbol isn't present.
+    void remove_comparison(const QString& symbol);
+
+  signals:
+    /// Emitted whenever the comparison set changes — add, remove, or the
+    /// implicit clear that happens on primary-symbol switch. Carries the
+    /// current set of symbols (upper-cased, in display order) so external
+    /// surfaces (Peers tab checkbox column) can mirror the state without
+    /// reading private members.
+    void comparisons_changed(const QStringList& symbols);
+
   private:
     /// Called by the three QueryStore subscription callbacks set up in
     /// set_symbol(). Each consumes the State tuple for its category and

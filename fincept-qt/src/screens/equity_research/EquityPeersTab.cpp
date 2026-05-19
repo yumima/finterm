@@ -95,10 +95,20 @@ void EquityPeersTab::build_ui() {
     peer_table_->verticalHeader()->hide();
     peer_table_->horizontalHeader()->setStretchLastSection(false);
     peer_table_->setSortingEnabled(true);
-    // Clicking a SYMBOL cell adds that ticker to the chart's comparison
-    // overlay (routed via add_to_comparison_requested → EquityOverviewTab
-    // ::add_comparison). All other columns are read-only.
-    connect(peer_table_, &QTableWidget::cellClicked, this, &EquityPeersTab::on_cell_clicked);
+    // Column 0 hosts the ✓ checkbox that toggles each peer in/out of the
+    // chart's comparison overlay. itemChanged fires on every check-state
+    // change (user click OR our own programmatic refresh) — we gate the
+    // user-vs-self distinction with suppress_check_signal_.
+    connect(peer_table_, &QTableWidget::itemChanged, this, &EquityPeersTab::on_item_changed);
+    // ✓ items hold no text, so clicking that header would shift the sort
+    // indicator to col 0 with no visible reorder — a confusing "nothing
+    // happened" event. Bounce the indicator back to SYMBOL on any attempt
+    // to sort by col 0 so the click is a tidy no-op instead.
+    connect(peer_table_->horizontalHeader(), &QHeaderView::sortIndicatorChanged,
+            this, [this](int col, Qt::SortOrder) {
+                if (col == 0)
+                    peer_table_->horizontalHeader()->setSortIndicator(1, Qt::AscendingOrder);
+            });
     vl->addWidget(peer_table_, 1);
 
     // ── Legend row ────────────────────────────────────────────────────────────
@@ -123,16 +133,51 @@ void EquityPeersTab::build_ui() {
     vl->addWidget(legend);
 }
 
-void EquityPeersTab::on_cell_clicked(int row, int column) {
-    // Only the SYMBOL column (0) is actionable. Sorting is enabled, so the
-    // row index here is the post-sort visible row — peer_table_->item(row, 0)
-    // returns the correct cell.
-    if (column != 0) return;
-    auto* item = peer_table_->item(row, 0);
-    if (!item) return;
-    const QString sym = item->text().trimmed().toUpper();
+void EquityPeersTab::on_item_changed(QTableWidgetItem* item) {
+    // Only column 0 (✓) participates in the comparison toggle. Anything
+    // else here is a stray edit (and the table is NoEditTriggers anyway).
+    if (!item || item->column() != 0) return;
+    // Refresh-time writes flip suppress_check_signal_ to avoid this slot
+    // echoing our own setCheckState back as a user toggle.
+    if (suppress_check_signal_) return;
+    // The peer ticker lives in the SYMBOL column (now column 1, since the
+    // check column shifted everything one slot right).
+    auto* sym_item = peer_table_->item(item->row(), 1);
+    if (!sym_item) return;
+    const QString sym = sym_item->text().trimmed().toUpper();
     if (sym.isEmpty() || sym == current_symbol_) return;
-    emit add_to_comparison_requested(sym);
+    const bool checked = item->checkState() == Qt::Checked;
+    if (checked) {
+        active_comp_set_.insert(sym);
+        emit add_to_comparison_requested(sym);
+    } else {
+        active_comp_set_.remove(sym);
+        emit remove_from_comparison_requested(sym);
+    }
+}
+
+void EquityPeersTab::set_active_comparisons(const QStringList& symbols) {
+    QSet<QString> next;
+    next.reserve(symbols.size());
+    for (const auto& s : symbols) next.insert(s.toUpper());
+    if (next == active_comp_set_) return;     // no-op when unchanged
+    active_comp_set_ = std::move(next);
+    refresh_check_column();
+}
+
+void EquityPeersTab::refresh_check_column() {
+    if (!peer_table_) return;
+    suppress_check_signal_ = true;
+    for (int r = 0; r < peer_table_->rowCount(); ++r) {
+        auto* check = peer_table_->item(r, 0);
+        auto* sym_item = peer_table_->item(r, 1);
+        if (!check || !sym_item) continue;
+        const QString sym = sym_item->text().trimmed().toUpper();
+        const bool should_check = active_comp_set_.contains(sym);
+        const Qt::CheckState want = should_check ? Qt::Checked : Qt::Unchecked;
+        if (check->checkState() != want) check->setCheckState(want);
+    }
+    suppress_check_signal_ = false;
 }
 
 void EquityPeersTab::on_load_clicked() {
@@ -173,11 +218,17 @@ void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State&
 }
 
 void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& peers) {
-    static const QStringList headers = {"SYMBOL",    "PRICE", "P/E",       "FWD P/E",   "P/B",     "P/S",
-                                        "PEG",       "ROE",   "ROA",       "GROSS MGN", "NET MGN", "OP MGN",
-                                        "REV GRWTH", "D/E",   "DIV YIELD", "BETA"};
+    // Column 0 is the ✓ checkbox that adds/removes the peer from the chart
+    // overlay. All other columns shift right by 1 vs the pre-checkbox
+    // layout — set_cell takes the new column index directly.
+    static const QStringList headers = {"✓",         "SYMBOL", "PRICE",     "P/E",       "FWD P/E", "P/B",
+                                        "P/S",       "PEG",    "ROE",       "ROA",       "GROSS MGN", "NET MGN",
+                                        "OP MGN",    "REV GRWTH", "D/E",    "DIV YIELD", "BETA"};
 
+    // populate_table replaces every item; the itemChanged echo for our
+    // own writes would otherwise emit add/remove requests on every reload.
     peer_table_->setSortingEnabled(false);
+    suppress_check_signal_ = true;
     peer_table_->setColumnCount(headers.size());
     peer_table_->setRowCount(peers.size());
     peer_table_->setHorizontalHeaderLabels(headers);
@@ -214,44 +265,65 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
 
     for (int r = 0; r < peers.size(); ++r) {
         const auto& p = peers[r];
+        const bool is_primary = (p.symbol == current_symbol_);
 
-        // Symbol — highlight current symbol in amber. Non-primary rows are
-        // clickable to add to the chart's comparison overlay; the primary
-        // row is shown but isn't actionable (self-comparison is pointless).
+        // ✓ checkbox column. Disabled for the primary row (self-comparison
+        // is meaningless) — the user-toggle path also blocks this case in
+        // on_item_changed but we strip ItemIsUserCheckable here so the box
+        // doesn't even visually invite a click. Initial check state mirrors
+        // active_comp_set_ (re-applied at the end of this function in case
+        // sorting reorders rows post-resize).
+        auto* check = new QTableWidgetItem;
+        check->setTextAlignment(Qt::AlignCenter);
+        if (is_primary) {
+            check->setFlags(Qt::ItemIsSelectable);
+            check->setToolTip(QStringLiteral("(current symbol — already the primary)"));
+        } else {
+            check->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+            check->setCheckState(active_comp_set_.contains(p.symbol) ? Qt::Checked : Qt::Unchecked);
+            check->setToolTip(QStringLiteral("Toggle on chart overlay"));
+        }
+        peer_table_->setItem(r, 0, check);
+
+        // Symbol — highlight current symbol in amber. Non-primary rows
+        // formerly served as the click-to-add affordance; that lives on
+        // the ✓ column now, but the cyan color cue is kept for scannability.
         auto* sym_item = new QTableWidgetItem(p.symbol);
         sym_item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        sym_item->setForeground(p.symbol == current_symbol_ ? QColor(ui::colors::AMBER()) : QColor("#22d3ee"));
+        sym_item->setForeground(is_primary ? QColor(ui::colors::AMBER()) : QColor("#22d3ee"));
         sym_item->setFont([&] {
             QFont f;
             f.setBold(true);
             return f;
         }());
-        sym_item->setToolTip(p.symbol == current_symbol_
-                                  ? QStringLiteral("(current symbol)")
-                                  : QStringLiteral("Click to add to comparison overlay"));
-        peer_table_->setItem(r, 0, sym_item);
+        if (is_primary) sym_item->setToolTip(QStringLiteral("(current symbol)"));
+        peer_table_->setItem(r, 1, sym_item);
 
-        set_cell(r, 1, fmt(p.price, 2), QColor("#22d3ee"));
-        set_cell(r, 2, fmt(p.pe_ratio, 1), color_ratio(p.pe_ratio, 15, 30));
-        set_cell(r, 3, fmt(p.forward_pe, 1), color_ratio(p.forward_pe, 15, 30));
-        set_cell(r, 4, fmt(p.price_to_book, 2), color_ratio(p.price_to_book, 2, 5));
-        set_cell(r, 5, fmt(p.price_to_sales, 2), color_ratio(p.price_to_sales, 3, 8));
-        set_cell(r, 6, fmt(p.peg_ratio, 2), color_ratio(p.peg_ratio, 1, 2));
-        set_cell(r, 7, fmt_pct(p.roe), color_pct_pos(p.roe));
-        set_cell(r, 8, fmt_pct(p.roa), color_pct_pos(p.roa));
-        set_cell(r, 9, fmt_pct(p.gross_margin), color_pct_pos(p.gross_margin));
-        set_cell(r, 10, fmt_pct(p.profit_margin), color_pct_pos(p.profit_margin));
-        set_cell(r, 11, fmt_pct(p.operating_margin), color_pct_pos(p.operating_margin));
-        set_cell(r, 12, fmt_pct(p.revenue_growth), color_pct_pos(p.revenue_growth));
-        set_cell(r, 13, fmt(p.debt_to_equity, 2), color_ratio(p.debt_to_equity, 0.5, 2.0));
-        set_cell(r, 14, fmt_pct(p.dividend_yield),
+        set_cell(r, 2, fmt(p.price, 2), QColor("#22d3ee"));
+        set_cell(r, 3, fmt(p.pe_ratio, 1), color_ratio(p.pe_ratio, 15, 30));
+        set_cell(r, 4, fmt(p.forward_pe, 1), color_ratio(p.forward_pe, 15, 30));
+        set_cell(r, 5, fmt(p.price_to_book, 2), color_ratio(p.price_to_book, 2, 5));
+        set_cell(r, 6, fmt(p.price_to_sales, 2), color_ratio(p.price_to_sales, 3, 8));
+        set_cell(r, 7, fmt(p.peg_ratio, 2), color_ratio(p.peg_ratio, 1, 2));
+        set_cell(r, 8, fmt_pct(p.roe), color_pct_pos(p.roe));
+        set_cell(r, 9, fmt_pct(p.roa), color_pct_pos(p.roa));
+        set_cell(r, 10, fmt_pct(p.gross_margin), color_pct_pos(p.gross_margin));
+        set_cell(r, 11, fmt_pct(p.profit_margin), color_pct_pos(p.profit_margin));
+        set_cell(r, 12, fmt_pct(p.operating_margin), color_pct_pos(p.operating_margin));
+        set_cell(r, 13, fmt_pct(p.revenue_growth), color_pct_pos(p.revenue_growth));
+        set_cell(r, 14, fmt(p.debt_to_equity, 2), color_ratio(p.debt_to_equity, 0.5, 2.0));
+        set_cell(r, 15, fmt_pct(p.dividend_yield),
                  p.dividend_yield > 0 ? QColor(ui::colors::POSITIVE()) : QColor("#6b7280"));
-        set_cell(r, 15, fmt(p.beta, 2),
+        set_cell(r, 16, fmt(p.beta, 2),
                  p.beta >= 0 && p.beta <= 1.5 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE()));
     }
 
     peer_table_->resizeColumnsToContents();
+    // Keep ✓ narrow (resizeColumnsToContents may stretch it for the header
+    // glyph). 28px gives the checkbox a comfortable click target.
+    peer_table_->setColumnWidth(0, 28);
     peer_table_->setSortingEnabled(true);
+    suppress_check_signal_ = false;
 }
 
 QStringList EquityPeersTab::default_peers(const QString& symbol) const {
