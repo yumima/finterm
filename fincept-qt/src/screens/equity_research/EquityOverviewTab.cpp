@@ -1074,18 +1074,19 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     btn_row->addStretch();
     vl->addLayout(btn_row);
 
+    vl->addWidget(candle_canvas_, 1);
+
     // Always-visible comparison legend row: one chip per active comp
-    // ([✕][color] TICKER: chg% $price). Sits between the button row and
-    // the candle canvas. chg%/price update dynamically as the user moves
-    // the crosshair (hover_changed → update_comp_chip_labels).
+    // ([✕][color] TICKER: chg% $price). Sits BELOW the canvas so the
+    // primary's hover-overlay strip (drawn at the top of the canvas) is
+    // visually above the comp chips. chg%/price update dynamically as the
+    // user moves the crosshair (hover_changed → update_comp_chip_labels).
     auto* comp_row = new QHBoxLayout();
     comp_row->setContentsMargins(0, 0, 0, 0);
     comp_row->setSpacing(4);
     comp_chips_ = comp_row;
     comp_row->addStretch();
     vl->addLayout(comp_row);
-
-    vl->addWidget(candle_canvas_, 1);
 
     // Canvas → tab hover updates. Crosshair-moved → recompute chip labels.
     connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
