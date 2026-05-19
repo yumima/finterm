@@ -179,6 +179,30 @@ class DockScreenRouter : public QObject {
     /// Map a screen id to its human-readable title.
     static QString title_for_id(const QString& id);
 
+    // ── Layout-snapshot persistence ─────────────────────────────────────────
+    // The in-memory layout_snapshots_ map captures per-primary multi-pane
+    // arrangements so navigating away and back preserves them. These
+    // helpers let MainWindow round-trip the map to QSettings across
+    // process restarts — without them, exclusive-hide at nav-away
+    // permanently destroys those side panes the moment the user quits.
+
+    /// Snapshot of every primary's stored layout, plus the live current
+    /// primary's view if it is multi-pane. Calling this at shutdown
+    /// rolls up everything that should survive the restart.
+    QHash<QString, QByteArray> snapshot_states_for_save();
+
+    /// Replace the in-memory snapshot map (used at startup after loading
+    /// from QSettings). Subsequent navigate() calls will consult this
+    /// map for restoreState as if they had been built during the session.
+    void hydrate_snapshots(const QHash<QString, QByteArray>& snapshots);
+
+    /// Tell the router what the active primary was at shutdown so the
+    /// first nav-away after restart correctly saves THAT primary's
+    /// snapshot. Without this, current_primary_id_ would be empty and
+    /// the save-snapshot block would skip on the very next nav, losing
+    /// the multi-pane arrangement the user had at restart.
+    void set_current_primary_id(const QString& id);
+
   private:
     /// Persist and restore a user-edited tab title (separate from screen state).
     void save_tab_title(const QString& id, const QString& title);
