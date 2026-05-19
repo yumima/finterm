@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`712ee366`](https://github.com/yumima/finterm/commit/712ee366) screens(er): wrap hover comps to a second line when readout would clip
 - [`f29fa547`](https://github.com/yumima/finterm/commit/f29fa547) screens(er): comparison curves at actual prices + horizontal legend + hover prices
 - [`2c9255ca`](https://github.com/yumima/finterm/commit/2c9255ca) **ui(theme):** fix transparent QToolTip across the app
 - [`3afaec24`](https://github.com/yumima/finterm/commit/3afaec24) app(nav): gate layout-snapshot save on multi-pane state — fix nav stall + video freeze

@@ -439,45 +439,10 @@ void ResearchCandleCanvas::rebuild_cache() {
             }
             if (started) p.drawPath(path);
         }
-
-        // Legend chips in a single right-aligned row at the top of the plot.
-        // Each chip: colored swatch + symbol + total-window return %. Chips
-        // are placed right-to-left so the first comparison sits closest to
-        // the price axis; this keeps the user's eye-path from the rightmost
-        // candle to the rightmost chip natural.
-        QFont legend_font("Consolas", 9, QFont::Bold);
-        p.setFont(legend_font);
-        QFontMetrics lfm(legend_font);
-        const int lh    = lfm.height();
-        const int ly    = 4;
-        int       lx_r  = width() - PRICE_AXIS_W - 6; // running right edge
-        for (const auto& comp : comparisons_) {
-            if (comp.candles.isEmpty()) continue;
-            const qint64 anchor_ts = candles_[start].timestamp;
-            int idx_first = -1, idx_last = comp.candles.size() - 1;
-            for (int k = 0; k < comp.candles.size(); ++k) {
-                if (comp.candles[k].timestamp >= anchor_ts) {
-                    idx_first = k; break;
-                }
-            }
-            if (idx_first < 0) continue;
-            const double first_c = comp.candles[idx_first].close;
-            const double last_c  = comp.candles[idx_last].close;
-            if (first_c <= 0.0) continue;
-            const double pct = (last_c - first_c) / first_c * 100.0;
-            const QString text = comp.symbol + "  " +
-                                  (pct >= 0 ? "+" : "") +
-                                  QString::number(pct, 'f', 1) + "%";
-            const int tw    = lfm.horizontalAdvance(text);
-            const int box_w = tw + 14;
-            const QRect r(lx_r - box_w, ly, box_w, lh + 2);
-            p.fillRect(r, QColor(0, 0, 0, 160));
-            // Color swatch on the left of each chip
-            p.fillRect(r.left() + 3, r.center().y() - 4, 6, 8, comp.color);
-            p.setPen(QColor(220, 220, 220));
-            p.drawText(r.adjusted(12, 0, -2, 0), Qt::AlignVCenter | Qt::AlignLeft, text);
-            lx_r -= box_w + 6;
-        }
+        // The comparison legend (color + symbol + return + price) used to
+        // be painted on the canvas here. It's now an always-visible widget
+        // row above the canvas owned by EquityOverviewTab — kept in sync
+        // with crosshair position via the hover_changed signal.
     }
     p.setRenderHint(QPainter::Antialiasing, false);
 
@@ -607,34 +572,31 @@ void ResearchCandleCanvas::rebuild_cache() {
     }
 }
 
+void ResearchCandleCanvas::set_hover_idx(int idx) {
+    if (idx == hover_idx_) return;
+    hover_idx_ = idx;
+    update();              // cached-pixmap blit + overlay, cheap
+    emit hover_changed(idx);
+}
+
 void ResearchCandleCanvas::mouseMoveEvent(QMouseEvent* event) {
     QWidget::mouseMoveEvent(event);
-    if (last_count_ <= 0 || last_slot_w_ <= 0.0) {
-        if (hover_idx_ != -1) { hover_idx_ = -1; update(); }
-        return;
-    }
+    if (last_count_ <= 0 || last_slot_w_ <= 0.0) { set_hover_idx(-1); return; }
     const int x = event->position().toPoint().x();
     const int y = event->position().toPoint().y();
     // Outside the plot area? Drop hover.
     if (x < 0 || x >= last_plot_w_ || y < 0 || y >= last_plot_h_) {
-        if (hover_idx_ != -1) { hover_idx_ = -1; update(); }
+        set_hover_idx(-1);
         return;
     }
     int visible_i = static_cast<int>(x / last_slot_w_);
     visible_i = std::clamp(visible_i, 0, last_count_ - 1);
-    const int abs_idx = last_start_ + visible_i;
-    if (abs_idx != hover_idx_) {
-        hover_idx_ = abs_idx;
-        update();  // full repaint is cheap (cached pixmap blit + overlay)
-    }
+    set_hover_idx(last_start_ + visible_i);
 }
 
 void ResearchCandleCanvas::leaveEvent(QEvent* event) {
     QWidget::leaveEvent(event);
-    if (hover_idx_ != -1) {
-        hover_idx_ = -1;
-        update();
-    }
+    set_hover_idx(-1);
 }
 
 void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
@@ -710,25 +672,6 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         }
     }
 
-    // Per-comparison readouts at the hovered date — actual close, colored to
-    // match the curve. Lets the user trace each line back to a real price
-    // as they move the crosshair along the time axis. Linear scan per comp
-    // (≤3 comps × ≤5Y daily ≈ 4K ops per hover); negligible vs the paint cost.
-    struct CompReadout { QColor color; QString text; int width = 0; };
-    QVector<CompReadout> comp_readouts;
-    const qint64 hover_ts = c.timestamp;
-    for (const auto& comp : comparisons_) {
-        if (comp.candles.isEmpty()) continue;
-        int idx = -1;
-        for (int k = 0; k < comp.candles.size(); ++k) {
-            if (comp.candles[k].timestamp > hover_ts) break;
-            idx = k;
-        }
-        if (idx < 0) continue;
-        comp_readouts.push_back({comp.color,
-                                  comp.symbol + " " + fmt_p(comp.candles[idx].close)});
-    }
-
     // 3. Render the readout strip at the top-left of the plot area.
     QFont lbl_font("Consolas", 9);
     p.setFont(lbl_font);
@@ -743,35 +686,18 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
     const int right_w  = fm.horizontalAdvance(right);
     const int v52w_w   = vs_52w.isEmpty()   ? 0 : fm.horizontalAdvance(vs_52w);
     const int vsma_w   = vs_sma50.isEmpty() ? 0 : fm.horizontalAdvance(vs_sma50);
-    int primary_w = left_w + GAP + delta_w + GAP + right_w;
-    if (v52w_w) primary_w += GAP + v52w_w;
-    if (vsma_w) primary_w += GAP + vsma_w;
-    int comp_w = 0;
-    for (auto& cr : comp_readouts) {
-        cr.width = fm.horizontalAdvance(cr.text);
-        comp_w += (comp_w > 0 ? GAP : 0) + cr.width;
-    }
-    const int line_h  = fm.height();
+    int total_w = left_w + GAP + delta_w + GAP + right_w;
+    if (v52w_w) total_w += GAP + v52w_w;
+    if (vsma_w) total_w += GAP + vsma_w;
+    const int line_h = fm.height();
 
-    // If primary + comps on one line would spill past the plot's right edge,
-    // wrap comps to a second line below the primary stats. Threshold uses
-    // last_plot_w_ (snapshotted by rebuild_cache for this hover path) and
-    // accounts for the bg-rect's own outer padding so the wrap fires just
-    // before clipping starts, not after. Single-line otherwise.
-    const int avail_w = last_plot_w_ - 2 * PAD_X;
-    const bool wrap   = !comp_readouts.isEmpty() && avail_w > 0 &&
-                        (primary_w + GAP + comp_w) > avail_w;
-    const int total_w   = wrap ? std::max(primary_w, comp_w)
-                               : primary_w + (comp_w > 0 ? GAP + comp_w : 0);
-    const int total_h   = wrap ? (line_h * 2 + 2) : line_h;
-
-    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, total_h + 4);
+    const QRect bg(PAD_X - 4, PAD_Y - 2, total_w + 8, line_h + 4);
     p.fillRect(bg, QColor(0, 0, 0, 180));
     p.setPen(QColor(ui::colors::BORDER_DIM()));
     p.drawRect(bg);
 
     int x_cursor       = PAD_X;
-    int baseline       = PAD_Y + fm.ascent();
+    const int baseline = PAD_Y + fm.ascent();
 
     p.setPen(QColor(ui::colors::TEXT_PRIMARY()));
     p.drawText(x_cursor, baseline, left);
@@ -799,26 +725,10 @@ void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
         p.setPen(off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
                               : QColor(ui::colors::NEGATIVE.get()));
         p.drawText(x_cursor, baseline, vs_sma50);
-        x_cursor += vsma_w;
     }
-    if (wrap) {
-        // Drop to the second line; comps start flush with the primary row's
-        // left edge so the bg rect's two rows line up.
-        x_cursor = PAD_X;
-        baseline += line_h;
-    }
-    bool first_comp = true;
-    for (const auto& cr : comp_readouts) {
-        // On a wrapped second line, the first comp has no leading gap (it
-        // sits at PAD_X). On a single line, every comp gets a GAP separator
-        // from whatever primary segment preceded it.
-        if (!(wrap && first_comp))
-            x_cursor += GAP;
-        first_comp = false;
-        p.setPen(cr.color);
-        p.drawText(x_cursor, baseline, cr.text);
-        x_cursor += cr.width;
-    }
+    // Comparison readouts live in the always-visible chip row above the
+    // chart, not here — the tab's slot listens to hover_changed and pushes
+    // the at-cursor chg% + price into each chip's label widget.
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1138,14 +1048,9 @@ QWidget* EquityOverviewTab::build_chart_panel() {
             [this]() { if (comp_input_) comp_input_->setFocus(); });
     btn_row->addWidget(btn_comp_);
 
-    // Inline chip strip — chips + ticker input live on the same row as the
-    // overlay toggle buttons so add/delete is one click, no popup.
-    auto* chips_holder = new QWidget;
-    comp_chips_ = new QHBoxLayout(chips_holder);
-    comp_chips_->setContentsMargins(0, 0, 0, 0);
-    comp_chips_->setSpacing(4);
-    btn_row->addWidget(chips_holder);
-
+    // Inline ticker input stays on the button row (Enter adds a comparison).
+    // The chips themselves live on a separate always-visible row below the
+    // button row — see comp_row below.
     comp_input_ = new QLineEdit;
     comp_input_->setMaxLength(12);
     comp_input_->setFixedWidth(80);
@@ -1168,7 +1073,23 @@ QWidget* EquityOverviewTab::build_chart_panel() {
 
     btn_row->addStretch();
     vl->addLayout(btn_row);
+
+    // Always-visible comparison legend row: one chip per active comp
+    // ([✕][color] TICKER: chg% $price). Sits between the button row and
+    // the candle canvas. chg%/price update dynamically as the user moves
+    // the crosshair (hover_changed → update_comp_chip_labels).
+    auto* comp_row = new QHBoxLayout();
+    comp_row->setContentsMargins(0, 0, 0, 0);
+    comp_row->setSpacing(4);
+    comp_chips_ = comp_row;
+    comp_row->addStretch();
+    vl->addLayout(comp_row);
+
     vl->addWidget(candle_canvas_, 1);
+
+    // Canvas → tab hover updates. Crosshair-moved → recompute chip labels.
+    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
+            this, &EquityOverviewTab::update_comp_chip_labels);
 
     return p;
 }
@@ -1339,15 +1260,27 @@ void EquityOverviewTab::add_comparison(const QString& symbol) {
 
 void EquityOverviewTab::rebuild_comp_strip() {
     if (!comp_chips_) return;
-    // Tear down existing chip widgets. Layout is small (≤3 chips) so the
-    // takeAt loop is trivially fast; deleteLater keeps us safe if any
-    // signal handler is mid-fire on the buttons we're removing.
-    while (auto* it = comp_chips_->takeAt(0)) {
-        if (it->widget()) it->widget()->deleteLater();
+    // Tear down existing chip widgets. Skip the trailing addStretch item so
+    // it survives across rebuilds — without that, the strip would no longer
+    // pin chips to the left after the first rebuild.
+    while (comp_chips_->count() > 0) {
+        QLayoutItem* it = comp_chips_->itemAt(0);
+        if (!it) break;
+        if (!it->widget()) break;            // trailing stretch — leave it
+        comp_chips_->takeAt(0);
+        it->widget()->deleteLater();
         delete it;
     }
+    comp_chip_labels_.clear();
+
+    // Each chip: [✕][color swatch] TICKER: chg% $price.
+    //   - ✕ first: matches Bloomberg-style "click ✕ to dismiss" patterns
+    //     and pairs the destructive action with the chip's leading edge.
+    //   - The label is one QLabel whose text is dynamically rewritten by
+    //     update_comp_chip_labels() — cheaper than swapping multiple
+    //     widgets, and lets hover updates avoid touching the layout.
     for (int i = 0; i < comp_state_.size(); ++i) {
-        const QString sym = comp_state_[i].symbol;
+        const QString sym        = comp_state_[i].symbol;
         const QString color_name = comp_state_[i].color.name();
 
         auto* chip = new QFrame;
@@ -1355,20 +1288,8 @@ void EquityOverviewTab::rebuild_comp_strip() {
             "QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
         auto* hl = new QHBoxLayout(chip);
-        hl->setContentsMargins(4, 1, 2, 1);
+        hl->setContentsMargins(2, 1, 6, 1);
         hl->setSpacing(4);
-
-        auto* swatch = new QLabel;
-        swatch->setFixedSize(8, 8);
-        swatch->setStyleSheet(QString("background:%1;border-radius:1px;").arg(color_name));
-        hl->addWidget(swatch);
-
-        auto* sym_lbl = new QLabel(sym);
-        sym_lbl->setStyleSheet(QString(
-            "color:%1;font-weight:700;font-size:11px;font-family:'Consolas',monospace;"
-            "background:transparent;border:0;")
-            .arg(ui::colors::TEXT_PRIMARY()));
-        hl->addWidget(sym_lbl);
 
         auto* rm = new QPushButton(QStringLiteral("✕"));
         rm->setCursor(Qt::PointingHandCursor);
@@ -1381,13 +1302,10 @@ void EquityOverviewTab::rebuild_comp_strip() {
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
         // Remove-by-symbol (not by index) — index could shift if a
         // simultaneous add/remove races; symbol is the stable key.
-        //
-        // Re-entrance: rebuild_comp_strip() below schedules every existing
-        // chip widget (including `rm`, the button currently in its slot)
-        // for deleteLater. That's safe — deleteLater defers destruction to
-        // the next event-loop iteration, and the connect's receiver context
-        // is `this` (the tab), not the button, so the connection's lifetime
-        // tracker doesn't fire mid-emit.
+        // rebuild_comp_strip below schedules the firing button for
+        // deleteLater, which is safe because deleteLater defers to the
+        // next event-loop iteration and the connect's receiver context is
+        // `this` (the tab), not the button.
         connect(rm, &QPushButton::clicked, this, [this, sym]() {
             for (int j = 0; j < comp_state_.size(); ++j) {
                 if (comp_state_[j].symbol == sym) {
@@ -1400,9 +1318,99 @@ void EquityOverviewTab::rebuild_comp_strip() {
         });
         hl->addWidget(rm);
 
-        comp_chips_->addWidget(chip);
+        auto* swatch = new QLabel;
+        swatch->setFixedSize(8, 8);
+        swatch->setStyleSheet(QString("background:%1;border-radius:1px;").arg(color_name));
+        hl->addWidget(swatch);
+
+        auto* lbl = new QLabel(sym);
+        lbl->setStyleSheet(QString(
+            "color:%1;font-weight:700;font-size:11px;font-family:'Consolas',monospace;"
+            "background:transparent;border:0;")
+            .arg(ui::colors::TEXT_PRIMARY()));
+        hl->addWidget(lbl);
+        comp_chip_labels_.insert(sym, lbl);
+
+        // Insert before the trailing addStretch so chips stay left-packed.
+        comp_chips_->insertWidget(comp_chips_->count() - 1, chip);
     }
     refresh_comp_input_state();
+    update_comp_chip_labels(-1);  // populate with full-window/static values
+}
+
+void EquityOverviewTab::update_comp_chip_labels(int hover_idx) {
+    if (comp_chip_labels_.isEmpty()) return;
+
+    // Currency follows the primary ticker — comp prices are still in their
+    // own currency on the chart, but for the chip label we accept the primary
+    // symbol for the prefix glyph because the chip row already lives inside
+    // the primary's context (one ER tab is one primary). Falls back to $ when
+    // we haven't learned the currency yet.
+    const QString cur_sym = current_currency_.isEmpty()
+                                ? QStringLiteral("$")
+                                : currency_symbol(current_currency_);
+
+    auto fmt_price = [](double v) {
+        return (v >= 1000.0 ? QString::number(v, 'f', 0)
+                            : QString::number(v, 'f', 2));
+    };
+
+    for (const auto& cs : comp_state_) {
+        QLabel* lbl = comp_chip_labels_.value(cs.symbol, nullptr);
+        if (!lbl) continue;
+        if (cs.candles.isEmpty()) {
+            lbl->setText(cs.symbol + QStringLiteral(" loading…"));
+            continue;
+        }
+
+        // Anchor close at the visible window's start. For hover_idx == -1
+        // (no hover) the anchor is the comp's first candle; the "price" is
+        // the comp's last close so the chip reads as "full-window return +
+        // current price". For hover_idx >= 0 the anchor is comp's first
+        // candle at-or-after the visible-window-start timestamp, and the
+        // price is comp's close at-or-before the hovered candle.
+        const auto& comp_candles = cs.candles;
+        const int   n            = comp_candles.size();
+
+        double anchor_c = comp_candles.first().close;
+        double price_c  = comp_candles.last().close;
+
+        if (hover_idx >= 0 && hover_idx < cached_candles_.size() && !cached_candles_.isEmpty()) {
+            // Resolve "visible window" via cached_candles_ — the tab's
+            // working copy of the primary's data, kept consistent with the
+            // canvas. Without the cached copy we'd have no anchor timestamp
+            // to share with the comp.
+            // Find a window-start anchor by scanning from the most recent
+            // common-sense default: the primary's first candle (good enough
+            // when the user is on a "full series" period; for shorter
+            // periods we rely on the primary always being fetched at the
+            // same period as comps so the first candle aligns).
+            const qint64 anchor_ts = cached_candles_.first().timestamp;
+            for (int k = 0; k < n; ++k) {
+                if (comp_candles[k].timestamp >= anchor_ts) {
+                    anchor_c = comp_candles[k].close;
+                    break;
+                }
+            }
+            const qint64 hover_ts = cached_candles_[hover_idx].timestamp;
+            int          j        = -1;
+            for (int k = 0; k < n; ++k) {
+                if (comp_candles[k].timestamp > hover_ts) break;
+                j = k;
+            }
+            if (j >= 0) price_c = comp_candles[j].close;
+        }
+
+        const double pct = (anchor_c > 0.0)
+                               ? (price_c - anchor_c) / anchor_c * 100.0
+                               : 0.0;
+        const QString sign = pct >= 0 ? QStringLiteral("+") : QString();
+        lbl->setText(QString("%1: %2%3%  %4%5")
+                         .arg(cs.symbol, sign,
+                              QString::number(pct, 'f', 1),
+                              cur_sym,
+                              fmt_price(price_c)));
+    }
 }
 
 void EquityOverviewTab::refresh_comp_input_state() {
@@ -1457,6 +1465,9 @@ void EquityOverviewTab::refresh_comparisons() {
                     if (cs.symbol == sym) { cs.candles = candles; break; }
                 }
                 push_to_canvas();
+                // The chip-row label for this symbol still says "loading…"
+                // until we recompute with the fresh candles.
+                update_comp_chip_labels(-1);
             });
     }
 }

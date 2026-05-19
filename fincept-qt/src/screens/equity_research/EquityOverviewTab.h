@@ -6,6 +6,7 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPixmap>
@@ -48,6 +49,14 @@ class ResearchCandleCanvas : public QWidget {
     /// tab when StockInfo arrives; 0 ⇒ comparator suppressed.
     void set_week52_high(double v);
 
+  signals:
+    /// Fired whenever the crosshair lands on a different candle (mouseMove)
+    /// or the cursor leaves the plot area (-1). Lets the hosting tab keep
+    /// an always-visible comparison legend in sync with the hovered date
+    /// without polling. Idx is an absolute candles_ index, or -1 for "no
+    /// hover" (show the most-recent close instead).
+    void hover_changed(int hover_idx);
+
   protected:
     void paintEvent(QPaintEvent*) override;
     void resizeEvent(QResizeEvent*) override;
@@ -57,6 +66,10 @@ class ResearchCandleCanvas : public QWidget {
   private:
     void rebuild_cache();
     void draw_hover_overlay(QPainter& p);
+    /// Helper for mouseMoveEvent / leaveEvent — sets hover_idx_ and emits
+    /// the signal if the value actually changed. Centralizes the dedupe so
+    /// rapid mouse moves over the same candle don't fire repeated signals.
+    void set_hover_idx(int idx);
 
     QVector<services::equity::Candle> candles_;
     QPixmap cache_;
@@ -255,20 +268,33 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_earn_  = nullptr;
     QPushButton* btn_comp_  = nullptr;   // label + click-to-focus the inline input
 
-    // Inline COMP strip — chips for the already-added comparisons plus an
-    // input for the next ticker. Rendered immediately after btn_comp_ on
-    // the same row, so add/delete is one click without a popup dialog.
-    // We hold only the chip layout and the input — the wrapping container
-    // widgets are owned by btn_row and don't need to be reached again.
-    QHBoxLayout* comp_chips_   = nullptr;   ///< layout holding only the chip widgets
+    // Inline COMP controls — split across two rows:
+    //   • Button row (btn_row): COMP focus-button + inline ticker input.
+    //   • Legend row (comp_row_): one chip per active comparison, always
+    //     visible, sitting between the button row and the canvas widget.
+    //     Each chip = [✕][color swatch] TICKER: chg% $price. The chg% and
+    //     price update dynamically as the user hovers the crosshair (via
+    //     ResearchCandleCanvas::hover_changed); when not hovering they show
+    //     the full-window return and the last close.
+    QHBoxLayout* comp_chips_   = nullptr;   ///< layout for chip widgets in comp_row_
     QLineEdit*   comp_input_   = nullptr;   ///< inline ticker input (Enter to add)
+    /// Per-comp label widget pointers, keyed by ticker symbol, so the hover
+    /// slot can update chip text in O(1) without rebuilding the row. Cleared
+    /// + repopulated each rebuild_comp_strip() call.
+    QHash<QString, QLabel*> comp_chip_labels_;
     /// Tear down and rebuild the chip widgets from comp_state_. Cheap (≤3
-    /// chips), called whenever a comparison is added or removed.
+    /// chips), called whenever a comparison is added/removed or its candles
+    /// arrive from the service.
     void rebuild_comp_strip();
     /// Update comp_input_'s placeholder and enabled state to reflect whether
     /// adding another comparison is allowed (cap is kMaxComparisons in the
     /// .cpp). Called from rebuild_comp_strip and on construction.
     void refresh_comp_input_state();
+    /// Recompute each chip's label text for the given hover candle index
+    /// (or -1 for no-hover, in which case the label shows the full-window
+    /// return and the last close). Walks comp_state_ × comp_chip_labels_;
+    /// no allocations beyond QString formatting.
+    void update_comp_chip_labels(int hover_idx);
 
     // Comparison series the user has added. We hold the canvas-bound state
     // here too so re-subscribing on symbol/period change can re-fetch each
