@@ -58,12 +58,18 @@ class PortfolioCommandBar : public QWidget {
     void update_selector_label();
     void apply_row1_styles();
     void apply_row2_styles();
+    void apply_dropdown_styles();
 
     // Portfolio selector
     QPushButton* selector_btn_ = nullptr;
     QWidget* dropdown_ = nullptr;
     QLineEdit* search_edit_ = nullptr;
     QListWidget* portfolio_list_ = nullptr;
+    QPushButton* dd_create_btn_ = nullptr;
+    QPushButton* dd_delete_btn_ = nullptr;
+    QPushButton* dd_export_csv_btn_ = nullptr;
+    QPushButton* dd_export_json_btn_ = nullptr;
+    QPushButton* dd_import_json_btn_ = nullptr;
 
     // Stats in the bar
     QLabel* nav_label_ = nullptr;

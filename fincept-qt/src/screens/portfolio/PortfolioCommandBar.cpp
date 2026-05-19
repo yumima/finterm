@@ -141,8 +141,6 @@ void PortfolioCommandBar::build_portfolio_selector() {
     dropdown_ = new QWidget(this);
     dropdown_->setWindowFlags(Qt::Popup);
     dropdown_->setFixedWidth(280);
-    dropdown_->setStyleSheet(
-        QString("background:%1; border:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED()));
 
     auto* dd_layout = new QVBoxLayout(dropdown_);
     dd_layout->setContentsMargins(4, 4, 4, 4);
@@ -151,21 +149,10 @@ void PortfolioCommandBar::build_portfolio_selector() {
     search_edit_ = new QLineEdit;
     search_edit_->setPlaceholderText("Search portfolios...");
     search_edit_->setFixedHeight(26);
-    search_edit_->setStyleSheet(QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
-                                        "  padding:0 8px; font-size:12px; }"
-                                        "QLineEdit:focus { border-color:%4; }")
-                                    .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-                                         ui::colors::AMBER()));
     dd_layout->addWidget(search_edit_);
 
     portfolio_list_ = new QListWidget;
     portfolio_list_->setFixedHeight(180);
-    portfolio_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:none; font-size:12px; }"
-                                           "QListWidget::item { padding:5px 8px; }"
-                                           "QListWidget::item:selected { background:%3; color:%4; }"
-                                           "QListWidget::item:hover { background:%5; }")
-                                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::AMBER_DIM(),
-                                            ui::colors::AMBER(), ui::colors::BG_HOVER()));
     dd_layout->addWidget(portfolio_list_);
 
     connect(portfolio_list_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
@@ -190,35 +177,27 @@ void PortfolioCommandBar::build_portfolio_selector() {
     auto* btn_row = new QHBoxLayout;
     btn_row->setSpacing(4);
 
-    auto* create_btn = new QPushButton("+ CREATE NEW");
-    create_btn->setFixedHeight(24);
-    create_btn->setCursor(Qt::PointingHandCursor);
-    create_btn->setStyleSheet(QString("QPushButton { background:%1; color:%3; border:none;"
-                                      "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                                      "QPushButton:hover { background:%2; }")
-                                  .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_BASE()));
-    connect(create_btn, &QPushButton::clicked, this, [this]() {
+    dd_create_btn_ = new QPushButton("+ CREATE NEW");
+    dd_create_btn_->setFixedHeight(24);
+    dd_create_btn_->setCursor(Qt::PointingHandCursor);
+    connect(dd_create_btn_, &QPushButton::clicked, this, [this]() {
         dropdown_->hide();
         dropdown_visible_ = false;
         emit create_requested();
     });
-    btn_row->addWidget(create_btn);
+    btn_row->addWidget(dd_create_btn_);
 
-    auto* delete_btn = new QPushButton("DELETE");
-    delete_btn->setFixedHeight(24);
-    delete_btn->setCursor(Qt::PointingHandCursor);
-    delete_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                                      "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                                      "QPushButton:hover { background:%1; color:%2; }")
-                                  .arg(ui::colors::NEGATIVE(), ui::colors::BG_BASE()));
-    connect(delete_btn, &QPushButton::clicked, this, [this]() {
+    dd_delete_btn_ = new QPushButton("DELETE");
+    dd_delete_btn_->setFixedHeight(24);
+    dd_delete_btn_->setCursor(Qt::PointingHandCursor);
+    connect(dd_delete_btn_, &QPushButton::clicked, this, [this]() {
         if (!selected_id_.isEmpty()) {
             dropdown_->hide();
             dropdown_visible_ = false;
             emit delete_requested(selected_id_);
         }
     });
-    btn_row->addWidget(delete_btn);
+    btn_row->addWidget(dd_delete_btn_);
 
     dd_layout->addLayout(btn_row);
 
@@ -227,34 +206,24 @@ void PortfolioCommandBar::build_portfolio_selector() {
     // since they're portfolio-management ops, not stats/analytics actions.
     auto* io_row = new QHBoxLayout;
     io_row->setSpacing(4);
-    auto make_io = [&](const QString& label, const QString& accent, auto signal) {
+    auto make_io = [&](const QString& label, QPushButton*& slot, auto signal) {
         auto* b = new QPushButton(label);
         b->setFixedHeight(22);
         b->setCursor(Qt::PointingHandCursor);
-        // Coloured outline at rest (vs the old muted-grey on muted-grey
-        // that blended into the dropdown surface). Hover fills with the
-        // accent on a dark background for the standard "this is the
-        // primary affordance under the cursor" cue.
-        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                                 "  font-size:11px; font-weight:700; letter-spacing:0.3px; }"
-                                 "QPushButton:hover { background:%1; color:%2; }")
-                             .arg(accent, ui::colors::BG_BASE()));
         connect(b, &QPushButton::clicked, this, [this, signal]() {
             dropdown_->hide();
             dropdown_visible_ = false;
             emit (this->*signal)();
         });
         io_row->addWidget(b);
-        return b;
+        slot = b;
     };
-    // Exports share CYAN — paired data-OUT operations. Import gets the
-    // amber accent (paired with the CREATE NEW above): both bring new
-    // portfolio state into the app, so they share the constructive cue.
-    make_io("EXPORT CSV",  ui::colors::CYAN(),  &PortfolioCommandBar::export_csv_requested);
-    make_io("EXPORT JSON", ui::colors::CYAN(),  &PortfolioCommandBar::export_json_requested);
-    make_io("IMPORT JSON", ui::colors::AMBER(), &PortfolioCommandBar::import_requested);
+    make_io("EXPORT CSV",  dd_export_csv_btn_,  &PortfolioCommandBar::export_csv_requested);
+    make_io("EXPORT JSON", dd_export_json_btn_, &PortfolioCommandBar::export_json_requested);
+    make_io("IMPORT JSON", dd_import_json_btn_, &PortfolioCommandBar::import_requested);
     dd_layout->addLayout(io_row);
 
+    apply_dropdown_styles();
     dropdown_->hide();
 }
 
@@ -567,9 +536,58 @@ void PortfolioCommandBar::refresh_theme() {
 
     apply_row1_styles();
     apply_row2_styles();
+    apply_dropdown_styles();
+}
 
-    dropdown_->setStyleSheet(
-        QString("background:%1; border:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED()));
+void PortfolioCommandBar::apply_dropdown_styles() {
+    if (dropdown_) {
+        dropdown_->setStyleSheet(
+            QString("background:%1; border:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED()));
+    }
+    if (search_edit_) {
+        search_edit_->setStyleSheet(QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
+                                            "  padding:0 8px; font-size:12px; }"
+                                            "QLineEdit:focus { border-color:%4; }")
+                                        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                                             ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    }
+    if (portfolio_list_) {
+        portfolio_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:none; font-size:12px; }"
+                                               "QListWidget::item { padding:5px 8px; }"
+                                               "QListWidget::item:selected { background:%3; color:%4; }"
+                                               "QListWidget::item:hover { background:%5; }")
+                                           .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                                                ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::colors::BG_HOVER()));
+    }
+    if (dd_create_btn_) {
+        dd_create_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%3; border:none;"
+                                              "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
+                                              "QPushButton:hover, QPushButton:focus { background:%2; outline:none; }")
+                                          .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_BASE()));
+    }
+    // Coloured outline at rest, fills with the accent on hover/focus.
+    // :focus mirrors :hover so keyboard nav gets the same cue as the mouse.
+    auto outline_lg = [](QPushButton* b, const QString& accent) {
+        if (!b) return;
+        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
+                                 "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
+                                 "QPushButton:hover, QPushButton:focus { background:%1; color:%2; outline:none; }")
+                             .arg(accent, ui::colors::BG_BASE()));
+    };
+    auto outline_sm = [](QPushButton* b, const QString& accent) {
+        if (!b) return;
+        b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
+                                 "  font-size:11px; font-weight:700; letter-spacing:0.3px; }"
+                                 "QPushButton:hover, QPushButton:focus { background:%1; color:%2; outline:none; }")
+                             .arg(accent, ui::colors::BG_BASE()));
+    };
+    outline_lg(dd_delete_btn_, ui::colors::NEGATIVE());
+    // Exports share CYAN — paired data-OUT operations. Import gets the
+    // amber accent (paired with the CREATE NEW above): both bring new
+    // portfolio state into the app, so they share the constructive cue.
+    outline_sm(dd_export_csv_btn_,  ui::colors::CYAN());
+    outline_sm(dd_export_json_btn_, ui::colors::CYAN());
+    outline_sm(dd_import_json_btn_, ui::colors::AMBER());
 }
 
 } // namespace fincept::screens
