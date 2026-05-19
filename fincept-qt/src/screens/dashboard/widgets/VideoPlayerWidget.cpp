@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
+#include "services/video/LiveHlsProxy.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
@@ -238,6 +239,21 @@ void VideoPlayerWidget::save_engine(bool web) {
 static bool is_youtube_url(const QString& url) {
     return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.contains("youtube.com/live") ||
            url.contains("youtube.com/@");
+}
+
+// YouTube *live* (vs. VOD). Live HLS streams use sliding-window playlists
+// that Qt 6.8.3's in-process libavformat HLS demuxer can't keep drained
+// smoothly — it stalls intermittently and the whole audio+video pipeline
+// freezes (Bloomberg/CNBC/Yahoo all reproduce). VOD HLS plays fine through
+// the same demuxer because the playlist is static. We route live through
+// the local trimming proxy; this predicate decides which path to take.
+//   - /live/{11-char-id}                — direct live video URL
+//   - /@channel/live, /c/.../live, etc. — channel's current broadcast
+static bool is_youtube_live_url(const QString& url) {
+    if (url.contains(QStringLiteral("/live/"))) return true;
+    static const QRegularExpression re(
+        QStringLiteral(R"(youtube\.com/(?:@[^/]+|c/[^/]+|user/[^/]+)/live(?:[/?]|$))"));
+    return re.match(url).hasMatch();
 }
 
 // Extract YouTube video ID from any standard YouTube URL format.
@@ -664,6 +680,12 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     set_title("LIVE TV — " + title.toUpper());
 
 #ifdef HAS_QT_MULTIMEDIA
+    // Sticky flag — read by on_ytdlp_finished() to decide whether to route
+    // the resolved URL through the local trimming proxy (live, needed to
+    // avoid Qt 6.8.3's broken sliding-window HLS demuxer) or play_direct()
+    // (VOD, fine through Qt's normal path).
+    current_is_live_ = is_youtube_live_url(url);
+
     if (is_youtube_url(url)) {
         resolve_youtube_and_play(url, title);
     } else {
@@ -799,7 +821,14 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
         return;
     }
 
-    play_direct(stream_url);
+    // Live HLS goes through the local trimming proxy — Qt 6.8.3's in-process
+    // HLS demuxer stalls on YouTube's 3.5 MB DVR playlists. The proxy hands
+    // it a 7 KB trimmed playlist instead. VOD HLS plays fine via Qt's normal
+    // path so we skip the proxy for those.
+    if (current_is_live_)
+        play_via_proxy(stream_url);
+    else
+        play_direct(stream_url);
 }
 
 void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
@@ -827,6 +856,10 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
 void VideoPlayerWidget::play_direct(const QString& stream_url) {
 #ifdef HAS_QT_MULTIMEDIA
+    // If a prior live playback left the local relay proxy around (e.g.
+    // user switched from a live preset to a VOD URL), tear it down before
+    // attaching the player to a new source.
+    stop_hls_proxy();
     set_loading(false);
     status_label_->hide();
     controls_->show();
@@ -835,6 +868,83 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
     player_->play();
 #else
     Q_UNUSED(stream_url)
+#endif
+}
+
+// Play a live HLS stream through a local trimming proxy. The proxy
+// fetches the YouTube DVR playlist (3.5 MB / 2800 segments), keeps just
+// the last 6 segments, and serves the resulting 7 KB playlist over
+// loopback HTTP. QMediaPlayer uses its existing libavformat HLS demuxer
+// — but now on a tiny playlist that refreshes in milliseconds instead
+// of seconds. The actual segment downloads still go direct from
+// QMediaPlayer to YouTube's CDN (segment URLs are unchanged in the
+// trimmed playlist), so no video bytes flow through us.
+//
+// This is the root-cause fix: Qt's HLS demuxer was choking on the
+// 14-second-per-refresh upstream playlist, not on the segments. Now
+// it refreshes a 7 KB playlist from RAM in microseconds and stays
+// ahead of the live edge with bandwidth to spare.
+void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
+#ifdef HAS_QT_MULTIMEDIA
+    // Stop the player and any prior proxy FIRST so QMediaPlayer releases
+    // its hold on the old source before we hook up a new one.
+    player_->stop();
+    stop_hls_proxy();
+
+    hls_proxy_ = new fincept::services::video::LiveHlsProxy(this);
+
+    // Wait for the proxy's first successful fetch before pointing
+    // QMediaPlayer at it. Otherwise QMediaPlayer's first GET hits a
+    // 503 "not ready yet" and Qt's HLS demuxer typically gives up
+    // immediately rather than retrying.
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::ready,
+            this, [this]() {
+        if (!hls_proxy_) return; // user stopped between fetch start and ready
+        status_label_->hide();
+        controls_->show();
+        stack_->setCurrentIndex(1);
+        player_->setSource(hls_proxy_->local_url());
+        player_->play();
+    });
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error,
+            this, [this](const QString& msg) {
+        set_loading(false);
+        status_label_->setText("Live stream relay failed: " + msg.left(200));
+        status_label_->show();
+        play_in_progress_ = false;
+    });
+
+    if (!hls_proxy_->start(QUrl(hls_url))) {
+        const QString err = hls_proxy_->last_error();
+        stop_hls_proxy();
+        set_loading(false);
+        status_label_->setText("Could not start local relay: " + err.left(200));
+        status_label_->show();
+        play_in_progress_ = false;
+        LOG_ERROR("VideoPlayer", "LiveHlsProxy::start failed: " + err);
+        return;
+    }
+
+    set_loading(false);
+    status_label_->setText("Starting live relay…");
+    status_label_->show();
+    controls_->show();
+    stack_->setCurrentIndex(1);
+#else
+    Q_UNUSED(hls_url)
+#endif
+}
+
+void VideoPlayerWidget::stop_hls_proxy() {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!hls_proxy_) return;
+    // Disconnect signals before delete so the late-arriving `ready` /
+    // `upstream_error` from an in-flight upstream fetch doesn't touch a
+    // widget mid-teardown.
+    disconnect(hls_proxy_, nullptr, this, nullptr);
+    hls_proxy_->stop();
+    hls_proxy_->deleteLater();
+    hls_proxy_ = nullptr;
 #endif
 }
 
@@ -853,6 +963,10 @@ void VideoPlayerWidget::stop_playback() {
 #endif
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
+    // Tear down the relay proxy AFTER player_->stop() so QMediaPlayer is
+    // no longer pulling from it when we close the listening socket.
+    stop_hls_proxy();
+    current_is_live_ = false;
     if (video_widget_)
         video_widget_->clear_frame();
 #endif

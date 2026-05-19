@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`e85d4c07`](https://github.com/yumima/finterm/commit/e85d4c07) services(finnhub): WS source-side throttle — fix GUI thread CPU storm
 - [`d1c8aab4`](https://github.com/yumima/finterm/commit/d1c8aab4) screens(ipo): PRIVATE dedup + Wikipedia summaries for private companies
 - [`7b78fb79`](https://github.com/yumima/finterm/commit/7b78fb79) **ui(widgets):** StatusPill — shared idle/loading/stale/error/empty pill
 - [`4fbd59ea`](https://github.com/yumima/finterm/commit/4fbd59ea) services(query): LRU eviction so long sessions don't grow unbounded

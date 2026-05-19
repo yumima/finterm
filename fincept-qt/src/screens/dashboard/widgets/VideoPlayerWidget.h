@@ -24,6 +24,8 @@
 #    include <QtWebEngineCore/QWebEnginePermission>
 #endif
 
+namespace fincept::services::video { class LiveHlsProxy; }
+
 namespace fincept::screens::widgets {
 
 #ifdef HAS_QT_MULTIMEDIA
@@ -134,6 +136,13 @@ class VideoPlayerWidget : public BaseWidget {
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);
     QString resolve_ytdlp_program() const;
     void play_direct(const QString& stream_url);
+    // Live HLS via local trimming proxy. Bypasses Qt 6.8.3's libavformat
+    // HLS demuxer choking on YouTube's 3.5 MB DVR playlists: the proxy
+    // fetches the upstream variant playlist, trims it to a 6-segment
+    // live-edge window, and serves a 7 KB version locally. QMediaPlayer
+    // sees a tiny playlist its existing HLS code handles in milliseconds.
+    void play_via_proxy(const QString& hls_url);
+    void stop_hls_proxy();
     void set_loading(bool loading);
 
     void load_channels();                                     // pull from SettingsRepository (+ seed defaults)
@@ -192,6 +201,14 @@ class VideoPlayerWidget : public BaseWidget {
     VideoRenderWidget* video_widget_ = nullptr; // plain QWidget — no native surface
     QVideoSink*        video_sink_   = nullptr; // frame delivery pipe
     QAudioOutput*      audio_output_ = nullptr;
+    // Local HLS trimming proxy for live streams. Null when no live
+    // playback is active. Owned (parented) by this widget — also gets
+    // cleaned up automatically on destruction.
+    fincept::services::video::LiveHlsProxy* hls_proxy_ = nullptr;
+    // Sticky flag set on play_url() entry: tells on_ytdlp_finished() whether
+    // to route the resolved stream URL through the proxy (live) or
+    // directly to QMediaPlayer (VOD, no proxy needed).
+    bool               current_is_live_ = false;
 #endif
 };
 
