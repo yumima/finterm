@@ -149,6 +149,12 @@ class VideoPlayerWidget : public BaseWidget {
     void save_channels(const QVector<ChannelDef>& channels);  // persist to SettingsRepository
     void load_engine();                                       // pull video.engine ("gl"/"web", default gl)
     void save_engine(bool web);                               // persist video.engine
+    /// Pull video.max_height from SettingsRepository. Default 1080. Values
+    /// outside the allowed set (480/720/1080) clamp to the nearest valid
+    /// option so a hand-edited setting can't break stream resolution.
+    void load_max_height();
+    /// Persist max_height_ to SettingsRepository under video.max_height.
+    void save_max_height(int height);
     static QVector<ChannelDef> default_channels();            // first-run seed
     static void assign_colors(QVector<ChannelDef>& channels); // round-robin palette
 
@@ -170,6 +176,11 @@ class VideoPlayerWidget : public BaseWidget {
     // videos. Loaded from SettingsRepository on construct.
     bool            use_web_engine_    = false;
 #endif
+    // Cap on the GL pipeline's preferred resolution — controls the height<=N
+    // term in the yt-dlp -f format selector. Allowed: 480, 720, 1080.
+    // Loaded on construct, mutated via the config dialog. The format chain
+    // still falls back to lower resolutions if N isn't available.
+    int             max_height_        = 1080;
     QLineEdit*      url_input_    = nullptr;
     QLabel*         now_playing_  = nullptr;
     QLabel*         status_label_ = nullptr;

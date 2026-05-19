@@ -8,6 +8,7 @@
 
 #include <QResizeEvent>
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDialog>
@@ -141,6 +142,7 @@ void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
 namespace {
 constexpr const char* kSettingsKey      = "video.channels";
 constexpr const char* kEngineKey        = "video.engine";   // "gl" | "web"
+constexpr const char* kMaxHeightKey     = "video.max_height"; // "480" | "720" | "1080"
 constexpr const char* kSettingsCategory = "video";
 
 // Color palette assigned round-robin to channels. Users pick name/URL only;
@@ -236,6 +238,26 @@ void VideoPlayerWidget::save_engine(bool web) {
                   "failed to persist video.engine: " + QString::fromStdString(r.error()));
 }
 
+void VideoPlayerWidget::load_max_height() {
+    auto r = fincept::SettingsRepository::instance().get(kMaxHeightKey);
+    bool ok = false;
+    const int raw = r.is_ok() ? r.value().toInt(&ok) : 0;
+    // Clamp to the allowed set. Anything else (including the unset case
+    // where toInt returns 0) falls through to the 1080 default.
+    if (ok && (raw == 480 || raw == 720 || raw == 1080))
+        max_height_ = raw;
+    else
+        max_height_ = 1080;
+}
+
+void VideoPlayerWidget::save_max_height(int height) {
+    auto r = fincept::SettingsRepository::instance().set(
+        kMaxHeightKey, QString::number(height), kSettingsCategory);
+    if (r.is_err())
+        LOG_ERROR("VideoPlayer",
+                  "failed to persist video.max_height: " + QString::fromStdString(r.error()));
+}
+
 static bool is_youtube_url(const QString& url) {
     return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.contains("youtube.com/live") ||
            url.contains("youtube.com/@");
@@ -274,6 +296,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
 
     load_channels(); // populates channels_ from SettingsRepository (or seeds defaults)
     load_engine();   // GL by default; WEB persists across sessions if user picks it
+    load_max_height();
 
     stack_ = new QStackedWidget;
     stack_->setStyleSheet("background: transparent;");
@@ -770,18 +793,23 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     // Force HLS (m3u8_native) protocol — critical for memory safety.
     //
     // HLS rolling-window buffering keeps only 3-10 segments (a few MB) resident
-    // regardless of resolution, so we can target 1080p without the DASH-style
-    // OOM that the previous bestvideo+bestaudio formats triggered.
+    // regardless of resolution, so we can target the user's chosen ceiling
+    // without the DASH-style OOM that bestvideo+bestaudio formats triggered.
     //
-    // Prefer 1080p HLS; fall back through 720p / any HLS / any best.
+    // Format chain: ceiling HLS → (one explicit step-down HLS if the ceiling
+    // is above 720, e.g. 1080→720) → any HLS → ceiling-capped best → best.
     // YouTube live formats: 91(144p) 92(240p) 93(360p) 94(480p) 95(720p) 96(1080p).
     // --js-runtimes node: yt-dlp 2025+ needs a JS runtime for YouTube extraction.
+    const int ceiling = max_height_;
+    QString fmt = QString("best[protocol=m3u8_native][height<=%1]").arg(ceiling);
+    // Only add the explicit step-down term when it would be lower than the
+    // ceiling — otherwise it'd be a duplicate of the first term and yt-dlp
+    // would burn parse cycles retrying the same filter.
+    if (ceiling > 720)
+        fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
+    fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
     proc->start(ytdlp_program,
-                {"-f",
-                 "best[protocol=m3u8_native][height<=1080]"
-                 "/best[protocol=m3u8_native][height<=720]"
-                 "/best[protocol=m3u8_native]"
-                 "/best[height<=1080]/best",
+                {"-f", fmt,
                  "--no-playlist", "--quiet", "--js-runtimes", "node",
                  "-g", youtube_url});
 }
@@ -1110,6 +1138,25 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     root->addWidget(engine_group);
 #endif
 
+    // Maximum resolution. Only affects the GL pipeline (yt-dlp -f selector);
+    // the WEB iframe path picks its own resolution. Higher ceilings deliver
+    // a sharper picture at the cost of CPU/GPU decode load — drop to 720p
+    // or 480p on weaker hardware. The format chain falls back gracefully if
+    // the source doesn't offer the chosen height.
+    auto* res_group = new QGroupBox("Maximum resolution (GL pipeline)", dlg);
+    auto* res_h     = new QHBoxLayout(res_group);
+    auto* res_combo = new QComboBox(res_group);
+    res_combo->addItem("1080p — Sharper, more decode load", 1080);
+    res_combo->addItem("720p — Balanced",                    720);
+    res_combo->addItem("480p — Lowest CPU load",             480);
+    {
+        const int idx = res_combo->findData(max_height_);
+        res_combo->setCurrentIndex(idx >= 0 ? idx : 0);
+    }
+    res_h->addWidget(res_combo);
+    res_h->addStretch();
+    root->addWidget(res_group);
+
     auto* table = new QTableWidget(0, 2, dlg);
     table->setHorizontalHeaderLabels({"Name", "URL"});
     table->verticalHeader()->setVisible(false);
@@ -1186,7 +1233,7 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     root->addWidget(buttons);
 
     connect(buttons, &QDialogButtonBox::accepted, dlg,
-            [this, dlg, table
+            [this, dlg, table, res_combo
 #ifdef HAS_QT_WEBENGINE
              , web_radio
 #endif
@@ -1218,6 +1265,15 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
             save_engine(use_web_engine_);
         }
 #endif
+
+        const int want_height = res_combo->currentData().toInt();
+        if (want_height != max_height_ && (want_height == 480 || want_height == 720 || want_height == 1080)) {
+            max_height_ = want_height;
+            save_max_height(max_height_);
+            // The new ceiling applies to the next stream resolution — currently
+            // playing stream keeps its existing height. Users who want immediate
+            // effect can hit BACK and restart the channel.
+        }
 
         apply_styles();
         dlg->accept();
