@@ -264,6 +264,45 @@ void ResearchCandleCanvas::rebuild_cache() {
     }
     if (lo >= hi)
         return;
+
+    // Extend the range to include each comparison series' projected values.
+    // Without this, when a comp outperforms (or underperforms) the primary
+    // over the visible window, its normalized curve clips off the top (or
+    // bottom) of the plot — e.g. AVGO + INTC up 400% renders with the INTC
+    // line disappearing past the chart frame. Projection formula matches
+    // the rendering path below: y_value = primary_anchor × (comp[t] / comp_anchor).
+    // Aware: this is a second pass over each comp's candles; the line-draw
+    // loop below repeats the same walk. At ≤3 comps × ~1500 visible candles
+    // the duplication is sub-ms, not worth deduping.
+    if (!comparisons_.isEmpty() && count > 0) {
+        const double primary_anchor = candles_[start].close;
+        const qint64 anchor_ts      = candles_[start].timestamp;
+        for (const auto& comp : comparisons_) {
+            if (comp.candles.isEmpty()) continue;
+            int comp_anchor_idx = -1;
+            for (int k = 0; k < comp.candles.size(); ++k) {
+                if (comp.candles[k].timestamp >= anchor_ts) {
+                    comp_anchor_idx = k; break;
+                }
+            }
+            if (comp_anchor_idx < 0) continue;
+            const double comp_anchor = comp.candles[comp_anchor_idx].close;
+            if (comp_anchor <= 0.0) continue;
+            int j = comp_anchor_idx;
+            for (int i = 0; i < count; ++i) {
+                const qint64 ts_i = candles_[start + i].timestamp;
+                while (j + 1 < comp.candles.size() &&
+                       comp.candles[j + 1].timestamp <= ts_i) ++j;
+                const double proj = primary_anchor *
+                                    (comp.candles[j].close / comp_anchor);
+                if (proj > 0.0) {
+                    lo = std::min(lo, proj);
+                    hi = std::max(hi, proj);
+                }
+            }
+        }
+    }
+
     const double margin = (hi - lo) * 0.06;
     lo -= margin;
     hi += margin;
