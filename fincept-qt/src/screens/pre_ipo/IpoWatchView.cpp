@@ -1066,6 +1066,63 @@ void IpoWatchView::fetch_s1_funding_for_detail(const Entry& e) {
         });
 }
 
+void IpoWatchView::fetch_wikipedia_for_private(const QString& company) {
+    // Reuses the same wiki_cache_ / wiki_inflight_ / wiki_misses_ that the
+    // public detail path uses — keyed by name (the public path also keys
+    // by company name, not ticker). So a public company that later moves
+    // to private (or vice versa) shares the same cached extract.
+    if (company.isEmpty()) return;
+    if (wiki_cache_.contains(company) || wiki_inflight_.contains(company)) return;
+    if (wiki_misses_.contains(company)) return;
+    wiki_inflight_.insert(company);
+    QPointer<IpoWatchView> self = this;
+
+    // Form D's legal-name column often holds the formal entity name
+    // ("Space Exploration Technologies Corp."), which Wikipedia doesn't
+    // always match directly even after redirects. Strip the most common
+    // corporate suffixes for a second-chance lookup if the raw name
+    // returns nothing — handled inside the callback.
+    auto try_lookup = [self](const QString& title, const QString& original_key,
+                              auto&& self_ref) -> void {
+        services::MarketDataService::instance().fetch_wikipedia_summary(
+            title, [self, title, original_key, self_ref]
+            (bool ok, services::MarketDataService::WikipediaSummary s) {
+                if (!self) return;
+                if (ok && !s.extract.isEmpty()) {
+                    self->wiki_inflight_.remove(original_key);
+                    self->wiki_cache_.insert(original_key, s);
+                    if (self->detail_symbol_ == original_key)
+                        self->render_detail_private(original_key);
+                    return;
+                }
+                // First-pass miss — try a stripped variant once.
+                static const QStringList kSuffixes = {
+                    ", PBC", ", Inc.", " Inc.", ", LLC", " LLC", ", L.P.",
+                    " L.P.", " Corp.", ", Corp.", " Corporation", ", Corporation",
+                    " Co.", ", Co.", " Holdings", " Industries", " Technologies",
+                    " Technologies Corp.", ", OpCo, LLC"
+                };
+                QString stripped = title.trimmed();
+                bool changed = false;
+                for (const auto& suf : kSuffixes) {
+                    if (stripped.endsWith(suf)) {
+                        stripped.chop(suf.size());
+                        stripped = stripped.trimmed();
+                        changed = true;
+                    }
+                }
+                if (changed && !stripped.isEmpty() && stripped != title) {
+                    // Recurse once into the lookup with the stripped name.
+                    self_ref(stripped, original_key, self_ref);
+                } else {
+                    self->wiki_inflight_.remove(original_key);
+                    self->wiki_misses_.insert(original_key);
+                }
+            });
+    };
+    try_lookup(company, company, try_lookup);
+}
+
 void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
     // Use the company name as the Wikipedia title — there's no ticker→title
     // mapping that's reliable. False positives (e.g. matching a person, not
@@ -1749,20 +1806,26 @@ void IpoWatchView::render_private() {
         return;
     }
 
-    // Build filtered + sorted list. Filter is the same search_query_ the
-    // other lenses use — typing "SpaceX" or "Anthropic" surfaces them
-    // immediately. Sorted by filed_date descending (most recent raises
-    // first), which matches the user's actual mental model: "what just
-    // happened in private markets."
-    QVector<int> rows;
+    // Deduplicate by company name. The SEC Form D registry has multiple
+    // filings per company (one per funding round) — SpaceX alone has 6+,
+    // Anthropic has several. Showing every filing in the list view both
+    // clutters the table and creates a confusing UX where starring "the
+    // SpaceX row" actually stars the company (every filing shows ★).
+    // The detail rail already renders the full filing history when a
+    // company is selected; the table view stays one-row-per-company.
+    QHash<QString, int> latest_idx_by_company;
     for (int i = 0; i < filings.size(); ++i) {
         const auto& f = filings.at(i);
         if (!search_query_.isEmpty() &&
             !f.company_name.toLower().contains(search_query_) &&
             !f.cik.toLower().contains(search_query_))
             continue;
-        rows.append(i);
+        auto it_l = latest_idx_by_company.find(f.company_name);
+        if (it_l == latest_idx_by_company.end() ||
+            f.filed_date > filings.at(it_l.value()).filed_date)
+            latest_idx_by_company.insert(f.company_name, i);
     }
+    QVector<int> rows = latest_idx_by_company.values().toVector();
     std::sort(rows.begin(), rows.end(),
               [&filings](int a, int b) {
                   return filings.at(a).filed_date > filings.at(b).filed_date;
@@ -1785,14 +1848,24 @@ void IpoWatchView::render_private() {
         // Col 1: company. UserRole + 1 carries the EDGAR URL (kept around
         // for tooltip / future "open primary source" affordance — clicks
         // now route to the in-app detail rail, not the browser).
-        auto* co = new QTableWidgetItem(f.company_name);
+        // Count this company's total filings so the tooltip + display tell
+        // the user "this row represents the latest of N filings."
+        int filings_for_this_company = 0;
+        for (const auto& g : filings)
+            if (g.company_name == f.company_name) ++filings_for_this_company;
+
+        const QString display = filings_for_this_company > 1
+            ? QString("%1  (×%2)").arg(f.company_name).arg(filings_for_this_company)
+            : f.company_name;
+        auto* co = new QTableWidgetItem(display);
         co->setData(Qt::UserRole, -1);
         co->setData(Qt::UserRole + 1, f.company_name);
         co->setData(Qt::UserRole + 2, f.edgar_url);
-        co->setForeground(QBrush(QColor(CYAN())));
-        co->setToolTip(f.company_name +
-                        "\nClick to view Form D history in the detail panel "
-                        "(EDGAR URL accessible via the LINKS row).");
+        co->setForeground(QBrush(QColor(ui::colors::CYAN())));
+        co->setToolTip(QString("%1 — %2 Form D filing(s) on record. "
+                                "Click to view full history.")
+                            .arg(f.company_name)
+                            .arg(filings_for_this_company));
         table_->setItem(r, 1, co);
 
         table_->setItem(r, 2, new DateSortItem(
@@ -1921,11 +1994,47 @@ void IpoWatchView::render_detail_private(const QString& company_name) {
         .arg(latest.edgar_url.toHtmlEscaped());
 
     if (page_deal_)     page_deal_->setText(deal_html);
-    if (page_business_) page_business_->setText("<i class='muted'>Business description unavailable — "
-                                                "private companies don't file 10-Ks.</i>");
+
+    // BUSINESS tab — pull Wikipedia summary if we have one. Strong coverage
+    // for well-known private cos (SpaceX, Anthropic, OpenAI, Anduril);
+    // patchy for obscure issuers. Kick a fetch on miss so subsequent
+    // detail renders for the same company show the description.
+    QString business_html = build_detail_css();
+    auto wit = wiki_cache_.constFind(company_name);
+    if (wit != wiki_cache_.constEnd() && !wit.value().extract.isEmpty()) {
+        const auto& w = wit.value();
+        business_html += "<div class='sec'>FROM WIKIPEDIA</div>";
+        if (!w.description.isEmpty())
+            business_html += QString("<p class='k'>%1</p>").arg(w.description.toHtmlEscaped());
+        business_html += QString("<p>%1</p>").arg(w.extract.toHtmlEscaped());
+        // Wikipedia REST returns a content URL in the `url` field; fall back
+        // to a search URL when the structured field is absent.
+        const QString wiki_url = w.url.isEmpty()
+            ? QString("https://en.wikipedia.org/wiki/Special:Search?search=%1")
+                  .arg(QString(QUrl::toPercentEncoding(company_name)))
+            : w.url;
+        business_html += QString("<p class='muted'>Source: <a href='%1'>%1</a></p>")
+                              .arg(wiki_url.toHtmlEscaped());
+    } else if (wiki_misses_.contains(company_name)) {
+        business_html += "<i class='muted'>No Wikipedia entry found for this company name. "
+                          "SEC Form D doesn't carry a business description, so the operating "
+                          "details (products, business model, sector) aren't available here. "
+                          "The EDGAR filing in the DEAL tab is the primary-source document.</i>";
+    } else {
+        business_html += "<i class='muted'>Loading description from Wikipedia…</i>";
+        // Kick the fetch — on success it'll call render_detail_private again
+        // and we'll fall into the first branch.
+        const_cast<IpoWatchView*>(this)->fetch_wikipedia_for_private(company_name);
+    }
+    if (page_business_) page_business_->setText(business_html);
+
     if (page_leader_)   page_leader_->setText("<i class='muted'>Leadership data unavailable — "
-                                              "Form D doesn't capture officer detail.</i>");
-    if (page_fund_)     page_fund_->setText("<i class='muted'>Financial statements unavailable for private filers.</i>");
+                                              "Form D doesn't capture officer detail. "
+                                              "See the company's About / Team page for current "
+                                              "leadership.</i>");
+    if (page_fund_)     page_fund_->setText("<i class='muted'>Financial statements unavailable — "
+                                            "private companies don't file 10-Ks or 10-Qs. "
+                                            "See DEAL tab for the Form D raise amount.</i>");
     if (page_news_)     page_news_->setText("");
     if (page_holders_)  page_holders_->setText("");
     if (page_filings_)  page_filings_->setText("");

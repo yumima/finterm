@@ -179,6 +179,12 @@ class IpoWatchView : public QWidget {
     void fetch_ipo_extras_for_detail(const Entry& e);
     void fetch_sec_filings_for_detail(const Entry& e);
     void fetch_wikipedia_for_detail(const Entry& e);
+    /// Wikipedia summary for private (Form D) companies — reused by
+    /// render_detail_private. Tries the legal company name first; falls
+    /// back to a suffix-stripped variant for filings whose Form D legal
+    /// name doesn't match the common Wikipedia title (e.g. "Space
+    /// Exploration Technologies Corp." → "SpaceX").
+    void fetch_wikipedia_for_private(const QString& company);
     void fetch_s1_funding_for_detail(const Entry& e);
     QVector<int> filtered_indices() const;     // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
