@@ -258,7 +258,8 @@ class EquityOverviewTab : public QWidget {
     // Inline COMP strip — chips for the already-added comparisons plus an
     // input for the next ticker. Rendered immediately after btn_comp_ on
     // the same row, so add/delete is one click without a popup dialog.
-    QWidget*     comp_strip_   = nullptr;   ///< container holding chips + input
+    // We hold only the chip layout and the input — the wrapping container
+    // widgets are owned by btn_row and don't need to be reached again.
     QHBoxLayout* comp_chips_   = nullptr;   ///< layout holding only the chip widgets
     QLineEdit*   comp_input_   = nullptr;   ///< inline ticker input (Enter to add)
     /// Tear down and rebuild the chip widgets from comp_state_. Cheap (≤3

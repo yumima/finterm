@@ -411,17 +411,13 @@ void ResearchCandleCanvas::rebuild_cache() {
         }
 
         // Legend chip stack, top-right of the plot. One row per comparison:
-        // colored swatch + symbol + absolute last close + total-window return %.
-        //
-        // Why we show the absolute price: the comparison series is rendered
-        // in the PRIMARY stock's price scale (normalized to the primary's
-        // anchor), so the y-axis labels under a comparison line read as
-        // "what $primary_anchor invested in comp would be worth today",
-        // NOT comp's actual price. Without the absolute close in the legend
-        // users mis-read the chart — e.g., seeing GOOG cross the y-axis at
-        // $160 (its 52-week low's primary-scale position) and thinking
-        // GOOG is trading at $160 when it's actually at $393. The legend
-        // chip is the canonical place to anchor that mental model.
+        // colored swatch + symbol + total-window return %. We deliberately
+        // do not show the absolute last close here — the comparison series
+        // is rendered in the PRIMARY stock's price scale, so a textual
+        // price next to a normalized curve would invite the very confusion
+        // the legend is meant to resolve. The chip strip above the chart
+        // (symbol + colour) is the canonical handle on which series is
+        // which; the % return on this legend reflects the curve directly.
         QFont legend_font("Consolas", 9, QFont::Bold);
         p.setFont(legend_font);
         QFontMetrics lfm(legend_font);
@@ -440,13 +436,7 @@ void ResearchCandleCanvas::rebuild_cache() {
             const double last_c  = comp.candles[idx_last].close;
             if (first_c <= 0.0) continue;
             const double pct = (last_c - first_c) / first_c * 100.0;
-            // Format absolute close like the y-axis would: no-decimal for
-            // values >= 1000, two-decimal otherwise. Matches the chart's
-            // currency symbol so e.g. $393.11 / ₹2487 align visually.
-            const QString abs_str = currency_sym_
-                + (last_c >= 1000.0 ? QString::number(last_c, 'f', 0)
-                                    : QString::number(last_c, 'f', 2));
-            const QString text = comp.symbol + "  " + abs_str + "  " +
+            const QString text = comp.symbol + "  " +
                                   (pct >= 0 ? "+" : "") +
                                   QString::number(pct, 'f', 1) + "%";
             const int tw = lfm.horizontalAdvance(text);
@@ -1050,7 +1040,7 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     btn_row->addSpacing(8);
     btn_comp_ = new QPushButton(QStringLiteral("COMP"));
     btn_comp_->setCursor(Qt::PointingHandCursor);
-    btn_comp_->setToolTip("Type a ticker and press Enter to add a comparison overlay");
+    btn_comp_->setToolTip("Comparison overlays — click to focus the ticker input");
     btn_comp_->setStyleSheet(QString(
         "QPushButton{background:transparent;color:%1;border:1px solid %2;"
         "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
@@ -1066,16 +1056,11 @@ QWidget* EquityOverviewTab::build_chart_panel() {
 
     // Inline chip strip — chips + ticker input live on the same row as the
     // overlay toggle buttons so add/delete is one click, no popup.
-    comp_strip_ = new QWidget;
-    auto* strip_hl = new QHBoxLayout(comp_strip_);
-    strip_hl->setContentsMargins(0, 0, 0, 0);
-    strip_hl->setSpacing(4);
-
     auto* chips_holder = new QWidget;
     comp_chips_ = new QHBoxLayout(chips_holder);
     comp_chips_->setContentsMargins(0, 0, 0, 0);
     comp_chips_->setSpacing(4);
-    strip_hl->addWidget(chips_holder);
+    btn_row->addWidget(chips_holder);
 
     comp_input_ = new QLineEdit;
     comp_input_->setMaxLength(12);
@@ -1094,9 +1079,7 @@ QWidget* EquityOverviewTab::build_chart_panel() {
         comp_input_->clear();
         add_comparison(sym);
     });
-    strip_hl->addWidget(comp_input_);
-
-    btn_row->addWidget(comp_strip_);
+    btn_row->addWidget(comp_input_);
     refresh_comp_input_state();
 
     btn_row->addStretch();
@@ -1314,6 +1297,13 @@ void EquityOverviewTab::rebuild_comp_strip() {
             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
         // Remove-by-symbol (not by index) — index could shift if a
         // simultaneous add/remove races; symbol is the stable key.
+        //
+        // Re-entrance: rebuild_comp_strip() below schedules every existing
+        // chip widget (including `rm`, the button currently in its slot)
+        // for deleteLater. That's safe — deleteLater defers destruction to
+        // the next event-loop iteration, and the connect's receiver context
+        // is `this` (the tab), not the button, so the connection's lifetime
+        // tracker doesn't fire mid-emit.
         connect(rm, &QPushButton::clicked, this, [this, sym]() {
             for (int j = 0; j < comp_state_.size(); ++j) {
                 if (comp_state_[j].symbol == sym) {
