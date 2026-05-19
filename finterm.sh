@@ -59,6 +59,11 @@ START
     Set FINCEPT_KEEP_WINDOW=1 to skip the window-state cleanup if you
     want Qt to remember a hand-arranged layout across launches.
 
+    Set FINCEPT_GDB=1 to run under gdb --batch and capture a backtrace
+    in $SHARE_DIR/crashdumps/ on crash. Off by default — ptrace overhead
+    hurts the QtMultimedia FFmpeg pipeline, audio, and GPU sync timing.
+    Kernel core files (apport / systemd-coredump) stay enabled regardless.
+
 BUILD
     Default: incremental build of the existing build/<preset>.
     --clean   Re-run cmake configure and force a clean rebuild.
@@ -120,17 +125,16 @@ EOF
     fi
 
     # ── Crash capture ────────────────────────────────────────────────────────
-    # Run under GDB in batch mode so any crash produces a full backtrace in
-    # $SHARE_DIR/crashdumps/ without requiring root or changing system config.
-    # Falls back to a plain exec if GDB is not installed.
+    # Kernel core file (apport / systemd-coredump) is always enabled.
+    # The GDB wrapper is opt-in via FINCEPT_GDB=1 — by default we plain-exec
+    # so timing-sensitive subsystems (QtMultimedia FFmpeg pipeline, audio,
+    # GPU sync) don't suffer ptrace overhead on every signal/vfork/thread
+    # event. Use FINCEPT_GDB=1 only when investigating a specific crash.
     local CRASHDUMP_DIR="$SHARE_DIR/crashdumps"
     mkdir -p "$CRASHDUMP_DIR"
-
-    # Allow the kernel to write a core file (used by apport / systemd-coredump
-    # in addition to — or instead of — the GDB log).
     ulimit -c unlimited
 
-    if command -v gdb >/dev/null 2>&1; then
+    if [[ "${FINCEPT_GDB:-0}" == "1" ]] && command -v gdb >/dev/null 2>&1; then
         local GDB_LOG="$CRASHDUMP_DIR/gdb-$(date +%Y%m%d-%H%M%S).log"
         # Pass non-crash signals through to Qt so they are not intercepted.
         exec gdb --batch \
@@ -148,7 +152,6 @@ EOF
             -ex "quit" \
             --args "$FINTERM_BIN" "$@"
     else
-        # Auth runs in-process via AuthService — no stub server needed.
         exec "$FINTERM_BIN" "$@"
     fi
 }
