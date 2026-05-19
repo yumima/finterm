@@ -201,10 +201,12 @@ QString ThemeManager::build_global_qss() const {
         QTabBar::tab:selected {
             background: %11; color: %2; border-bottom: 1px solid %9;
         }
-        QToolTip {
-            background: %5; color: %2; border: 1px solid %6;
-            padding: %7px %8px;
-        }
+        /* QToolTip is re-asserted after the QFrame transparent rule below
+           — QToolTip's internal widget (QTipLabel) inherits from
+           QLabel → QFrame, so the broad `QFrame { background: transparent }`
+           cascades into it and the tooltip renders see-through. We declare
+           the actual QToolTip rule after that broader rule (~line 245)
+           so it wins at same specificity. */
         QCheckBox { color: %10; }
         QCheckBox::indicator {
             width: 12px; height: 12px; border: 1px solid %4; background: %5;
@@ -230,6 +232,14 @@ QString ThemeManager::build_global_qss() const {
         ads--CDockContainerWidget { background: %1; border: none; }
         ads--CDockAreaWidget { background: %1; border: none; }
         ads--CDockWidget { background: %1; border: none; }
+        /* QToolTip re-assert — see the QFrame transparent rule above.
+           Use background-color (not the shorthand) so the rule clearly
+           overrides QFrame's transparent background without being mistaken
+           for a background-image declaration. */
+        QToolTip {
+            background-color: %5; color: %2; border: 1px solid %6;
+            padding: %7px %8px;
+        }
         ads--CDockAreaTitleBar {
             background: %12;
             border-bottom: 1px solid %6;
