@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`9a3ce383`](https://github.com/yumima/finterm/commit/9a3ce383) repo: drop unused root JSONs (funding/package/package-lock)
 - [`05d924d8`](https://github.com/yumima/finterm/commit/05d924d8) screens(portfolio): apply_dropdown_styles() — theme refresh + :focus cues
 - [`7da82180`](https://github.com/yumima/finterm/commit/7da82180) screens(portfolio): coloured outlines on Export/Import dropdown buttons
 - [`945d9943`](https://github.com/yumima/finterm/commit/945d9943) screens(portfolio): icon-based refresh button + surface FFN/Export inline
