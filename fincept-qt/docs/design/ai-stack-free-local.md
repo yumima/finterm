@@ -1,7 +1,7 @@
-# AI Stack — Design and Plan
+# AI Stack — Architecture and Plan
 
 **Status:** Current
-**Date:** 2026-05-19
+**Date:** 2026-05-20
 **Owner:** yumima
 **Canonical tree:** `/home/yma/fin/finterm/fincept-qt/`
 **Related:** `docs/datahub-phases/phase-09-ai-mcp-agents.md`, `docs/agents/datahub-guide.md`
@@ -10,342 +10,569 @@
 
 ## 1. Goal
 
-Two first-class paths, picked per-user via the existing profile system:
+Two first-class agent runtimes, selected per-profile:
 
-- **Local path** — point at a sibling LLM-services project running on
-  `localhost`, OpenAI-compatible. Zero outbound calls, zero commercial
-  keys.
-- **External path** — paste any commercial or free-tier provider key
-  (OpenAI, Anthropic, Gemini, Groq, Cerebras, Mistral, OpenRouter,
-  DeepSeek, etc.). The existing multi-provider `LlmService` already
-  handles all of these; UX makes the choice obvious.
+- **Local path.** A sibling LLM-services project on `localhost`,
+  OpenAI-compatible. Zero outbound calls, zero commercial keys.
+  Driven by a minimal in-process agent loop owned by finterm.
+- **Anthropic path.** Claude via the Anthropic API, driven by the
+  open-source Claude Agent SDK. Pay-per-token; no perpetual free
+  API tier.
 
-Neither path is the default architecturally. On a brand-new install
-with *nothing* configured, the local path is suggested because it
-needs no keys; users override by pasting any external key.
+On a brand-new install with nothing configured, the local path is
+suggested because it works with zero keys. Pasting an Anthropic key
+switches the active profile.
 
-Three install flavours work as peers: local-only, external-only, mixed
-(profile system routes per role).
+The architecture is shaped so that adding a third runtime later
+(Gemini, OpenAI, Groq, etc.) is one adapter; the rest of the system
+— MCP tools, SKILL.md library, storage, UI — is runtime-independent.
+
+### Stance: leverage, do not rebuild
+
+When an AI provider ships a primitive — tool use, prompt caching,
+extended thinking, citations, computer use, code execution, memory
+tool, hooks, sub-agents, files, batch — finterm uses it through the
+provider SDK. We do not build provider-agnostic wrappers around
+these primitives. What finterm owns is the financial domain: data,
+tools, skills, UI, profile management.
+
+Consequence: the Anthropic path has access to the full Claude
+feature surface as it evolves. The local path has a smaller feature
+surface by design, but works offline and at zero cost.
+
+### Cost note on the Claude Agent SDK
+
+The SDK is open source (Apache 2.0), free to install. Running it
+requires Anthropic API credits — pay-per-token with no perpetual
+free tier (signup credits only). Consumer Claude.ai Pro/Max
+subscriptions do not include API access. The local path remains the
+zero-cost option.
 
 ### Non-goals
 
-- Replacing the multi-provider `LlmService` — it already handles both
-  local and external; we configure it, not rewrite it.
-- Forcing users onto one path or the other; finterm must not silently
-  failover between local and external in either direction.
+- Building an MCP **server** so external clients can consume
+  finterm. Internal tools live in `McpProvider` and stay there.
 - Self-hosting embeddings model training or fine-tuning.
 - Installing, supervising, or updating local LLM runtimes (Ollama,
-  vLLM, llama.cpp) — that lives in a sibling project.
-- Joining Anthropic's hosted Managed Agents API (`/v1/agents`) — two
-  paths, not three.
-- Building a new MCP server *inside* finterm to serve finterm to
-  others. Internal tools live in `McpProvider` and stay there.
+  vLLM, llama.cpp) — those live in the sibling project.
+- Anthropic's hosted Managed Agents API (`/v1/agents`). Adopt the
+  open-source Agent SDK instead — two runtimes, not three.
+- Provider-agnostic abstractions over caching, thinking, citations,
+  memory, files, computer use, code execution. Use the SDK on the
+  Anthropic profile; degrade gracefully or omit on the local profile.
 - Replacing QuantLib / Qlib / VectorBT / Agno math engines — AI sits
   next to them, not under them.
 
 ---
 
-## 2. Current state
+## 2. Position vs other AI investment platforms
 
-### 2.1 LLM layer — `src/ai_chat/`
+### 2.1 Where finterm leads
 
-- `LlmService` is a singleton multi-provider client over
-  `QNetworkAccessManager`, with SSE streaming and OpenAI-style tool
-  calling. Eleven providers: OpenAI, Anthropic, Gemini, Groq, DeepSeek,
-  Kimi, MiniMax, xAI, OpenRouter, Ollama, Fincept (hosted, see 2.6).
-- Tool-calling is on by default; per-request disable for surfaces like
-  the floating chat bubble where unintended navigation is hostile.
-  Follow-up loop handles OpenAI-shaped tool calls plus a text-parse
-  fallback for providers/models that emit malformed JSON.
-- `ModelCatalog` caps per-model output tokens — 40+ models across 12
-  providers, last verified 2026-04-28; defaults to 16k when
-  unpublished.
+1. **Pluggable LLM, local OR external, by role.** Bloomberg locks
+   you to their hosted stack. AlphaSense, Hebbia, Rogo don't expose
+   model choice. Anthropic's Managed Agents only run Anthropic
+   models. finterm routes chat / agent / embeddings per profile and
+   includes a free local path.
+2. **MCP-native, three transports, source-prefixed namespace with
+   per-agent allowlists.** Bloomberg uses BLPAPI (proprietary,
+   closed). Hosted-agent products accept MCP but don't give users a
+   marketplace UI with kill-switch and scoping.
+3. **Vendored open methodology.** `anthropics/financial-services`
+   60+ SKILL.md are model-agnostic, readable, forkable. Bloomberg's
+   AI prompting is opaque; AlphaSense's smart-synonym layer is
+   closed.
+4. **Terminal-surface breadth in one binary.** 31 internal tool
+   families spanning Edgar, M&A, alt investments, crypto, paper
+   trade, quant lab, geopolitics, gov data, DBnomics. Research-only
+   products (Rogo, Brightwave, Endex) don't span this.
+5. **Local-first / no-outbound mode.** Compliance environments (PE,
+   HF, sovereign desks) cannot adopt hosted AI products at all.
+   finterm's local profile is uniquely positioned.
+6. **Cost.** $0 (local) or pay-per-token (Anthropic), vs Bloomberg
+   ~$30k/yr/seat, AlphaSense ~$15k/yr/seat.
+7. **Quant integration AI hosted products can't match.** QuantLib
+   (590 endpoints), VectorBT, Backtesting.py, Zipline, RD-Agent
+   autonomous research, Alpha Arena — all in-process and callable
+   by the agent loop.
 
-### 2.2 Profiles — `src/storage/repositories/`
+### 2.2 Where finterm is short
 
-- `LlmProfileRepository` stores named portable configs and resolves
-  them per context: `ai_chat`, `agent`, `agent_default`, `team`,
-  `team_default`, `team_coordinator`. Resolution order is
-  entity-specific → type default → global default → legacy provider.
-- `LlmConfigRepository` is the legacy single-active-provider store,
-  superseded but still read.
-
-### 2.3 MCP layer — `src/mcp/`
-
-- `McpClient` is **stdio-only** JSON-RPC 2.0; per-server subprocess,
-  worker thread, 30s default timeout, last-500-line log capture.
-- `McpProvider` is the **internal** tool registry (in-process, no
-  subprocess). Sync + async handlers, auth hook for destructive ops,
-  per-tool enable/disable.
-- `McpManager` runs lifecycle for external servers: health checks,
-  auto-start, exponential-backoff restart (max 3).
-- `McpService` is the unified entry point; merges internal + external
-  tools with a 5s tool-cache TTL and formats them for OpenAI function
-  calling. Everything in finterm calls `McpService`, not the layers
-  below it.
-- `McpInit.cpp` registers **31 internal tool families** across
-  navigation, markets, watchlist, portfolio, AI chat, Python, system,
-  settings, Edgar, M&A, alt investments, data sources, forum,
-  geopolitics, gov data, DBnomics, equity research, crypto trading,
-  paper trading, agentic memory, meta, quant lab, surface analytics,
-  file manager, report builder, notes. 38 .cpp tool modules under
-  `src/mcp/tools/` (count higher than family count because some
-  families split across partials, e.g. `AgentsTools_Discovery`,
-  `AgentsTools_Execution`, `AgentsTools_Repos`).
-
-### 2.4 Agents — `src/services/agents/` + `scripts/agents/`
-
-Three independent agent runtimes coexist today. **This is the single
-biggest source of complexity in the AI surface.**
-
-- `AgentService` (C++ singleton) delegates to Python through two
-  transports: `PythonRunner` for lightweight calls, a custom
-  `QProcess` + stdin for large payloads. It re-emits results as Qt
-  signals (`stream_token`, `stream_thinking`, `stream_done`).
-- `scripts/agents/finagent_core/main.py` is the actual dispatcher:
-  `agent_loader.py` discovers, `agent_factory.py` instantiates,
-  `core_agent.py` runs the tool-calling loop, `execution_planner.py`
-  does plan-before-execute, `paper_trading_bridge.py` exposes the
-  paper-trade surface.
-- `scripts/agents/deepagents/` is a LangGraph-style runtime with its
-  own provider integration (Anthropic, OpenAI, Groq, DeepSeek). Tool
-  calling native on the first three; rest fall back to prompt-loop
-  text parsing.
-- `scripts/agents/rdagents/` is **autonomous research** —
-  FactorRDLoop / ModelRDLoop / QuantRDLoop run LLM-driven hypothesis
-  generation, accessed through `AIQuantLabService::rd_agent_*` and
-  exposed to other agents via `mcp_server.py` + `mcp_tools.py`.
-- `services/alpha_arena/` is **fully wired** for LLM trading — Agno
-  framework, OpenAI + Anthropic agents, scored leaderboard.
-- `scripts/agents/GeopoliticsAgents/`, `TraderInvestorsAgent/`,
-  `hedgeFundAgents/renaissance*` are config trees and execution
-  shims; no first-class agent loop ties them in.
-
-### 2.5 STT — `src/services/stt/` + `scripts/voice/`
-
-- Strategy pattern with two backends: Google SR (default, outbound,
-  scheduled for removal) and Deepgram (paid, opt-in via
-  `deepgram_stt.py`). `clap_detector.py` is the trigger.
-- Wired into the floating `AiChatBubble` mic button and the chat-mode
-  composer.
-
-### 2.6 UI surfaces — `src/screens/`
-
-Five distinct screens plus a floating bubble:
-
-| Screen | Path | What the user sees |
+| Gap | Bloomberg / AlphaSense / Hebbia / etc. | finterm |
 |---|---|---|
-| **Chat Mode** | `chat_mode/` | Multi-session AI chat. `ChatSessionPanel` list, `ChatMessagePanel` render, `ChatAgentPanel` for picking an agent to drive the turn, `TerminalToolBridge` routes tool calls through `McpService`. Streams tokens + tool-call cards. |
-| **Agent Config** | `agent_config/` | Browse/build agents and teams. `AgentsViewPanel`, `CreateAgentPanel`, `AgentChatPanel`, `ToolsViewPanel`, `TeamsViewPanel`, `WorkflowsViewPanel`, `PlannerViewPanel`, `SystemViewPanel`. |
-| **MCP Servers** | `mcp_servers/` | Add / start / stop / remove external MCP servers, view logs, health status. Backed by `mcp_servers` SQLite table. |
-| **Settings → LLM Config** | `settings/LlmConfigSection.*` | Two tabs. **Providers** — keys, model picker, fetch list, test, globals (temperature, max-tokens, system prompt, tools-enabled). **Profiles** — named profiles bound to context types. |
-| **AI Quant Lab** | `ai_quant_lab/AIQuantLabScreen.*` | 24-module grid launcher. RD-Agent appears as a module (not as a chat surface). |
-| **Floating chat bubble** | `AiChatBubble` (overlay) | Quick-ask anywhere; mic button triggers STT; tool calling deliberately disabled here. |
+| Proprietary data moat (BVAL, BIO, ANR, FIGI, real-time L1/L2) | Yes | No — public APIs only |
+| Earnings + conference transcript corpus | Yes | No — explicit gap; user-self-serve via local Whisper is the bridge |
+| Indexed broker research / IPO prospectus library | Yes (AlphaSense) | No |
+| Long-running hosted agent infra w/ checkpointing | Yes (Anthropic Managed Agents) | Via Agent SDK only when Anthropic profile is active |
+| Team workspaces / multi-user | Yes | No — single-user desktop |
+| Mobile companion | Yes (Bloomberg Anywhere, AlphaSense mobile) | No |
+| Fine-tuning on user corpora | Yes (Hebbia, AlphaSense) | No — explicit non-goal |
+| TTS / voice broker squawk | Yes (Bloomberg) | No |
+| Eval / regression-bench maturity | Yes | Thin (small fixtures, planned) |
 
-### 2.7 Key storage, outbound endpoints
+### 2.3 Where finterm and the AI providers compose
 
-- LLM keys are currently in the plaintext `llm_configs.api_key`
-  column. Schema is already on `SecureStorage` for Databento and
-  Deepgram keys — LLM keys are the holdout.
-- `SecureStorage` backs onto Windows DPAPI, macOS Keychain,
-  libsecret on Linux; degrades to XOR-obfuscated QSettings when
-  libsecret is absent (file header is honest about this).
-- A fresh install with no key configured falls back to the **Fincept
-  hosted endpoint** at `fincept.in/research/llm/async`. Until Track 1
-  cleanup lands, finterm makes an outbound call to a non-user
-  endpoint when a user asks anything before configuring a key.
-
-### 2.8 Data in the agent's reach
-
-| Category | Outside today | In-box today |
-|---|---|---|
-| LLM inference | 10 external providers + `fincept.in` | Ollama (localhost via existing provider entry) |
-| Embeddings | Provider-side (Gemini free, OpenAI, Anthropic) | None natively — `vectordb_registry.py` exists, unconfigured |
-| STT | Google SR (outbound), Deepgram (paid) | None — Whisper local is the plan |
-| TTS | None | None |
-| MCP servers | Anything stdio the user installs | The 31 internal families |
-| Agent reasoning | Provider LLMs through `finagent_core` / `deepagents` | RD-Agent loop bodies live local, each step calls a provider LLM |
-| Tool-call data | Per-tool: Yahoo, Alpha Vantage, FMP, CoinGecko, etc. | Edgar, fiscaldata, EIA, CFTC, akshare (CN), DBnomics, ACLED, etc. |
-
-### 2.9 Quant subsystems — AI status per service
-
-| Subsystem | AI today | UI surface |
-|---|---|---|
-| `services/ai_quant_lab/` | **Partial.** 24 modules; only the RD-Agent / Deep-Agent module (`agents/rdagents/`) is LLM-backed. 23 others are pure Qlib / RL / statsmodels. | `AIQuantLabScreen` — 24-module grid, no chat. |
-| `services/algo_trading/` | **None.** Rule-based indicator engine + scanner + live runner. Backtests return JSON; no narration. | `AlgoTradingScreen` — manual condition builder. |
-| `services/alpha_arena/` | **Fully wired.** Agno-backed LLM agents (OpenAI + Anthropic) per-cycle buy/sell decisions; leaderboard scoring. | `AlphaArenaScreen` — model selector, cycle runner, leaderboard. |
-| `services/backtesting/` | **None.** Six providers (VectorBT, Backtesting.py, FastTrade, Zipline, BT, Fincept). Pure metrics out. | `BacktestingScreen` — provider/strategy picker, results table. |
-| `services/quantlib/` | **None.** 590-endpoint REST client against a localhost QuantLib server. Pricing, Greeks, VaR, vol surface — all numerical. | `QuantLibScreen` — endpoint navigator + param builder. |
+| Anthropic ships | finterm uses it for |
+|---|---|
+| `anthropics/financial-services` skills + slash commands + agents | The methodology layer agents have never had |
+| Claude Agent SDK | The Anthropic-path runtime; no homemade loop |
+| Native MCP client in SDK | Connects the SDK to our internal MCPs and external marketplace |
+| Prompt caching | 90% cost reduction on long SKILL.md system prompts |
+| Extended thinking | Quality on valuation / quant / multi-step reasoning turns |
+| Citations | Per-claim source attribution — the trust unlock |
+| Computer use | Broker portal navigation, paywalled-but-public sources |
+| Code execution | Ad-hoc Python over finterm data ("plot AAPL drawdown last 5y") |
+| Vision + native PDF | Read chart screenshots, 10-K PDFs, broker statements |
+| Memory tool | Cross-session learning of goals, theses, preferences |
+| Hooks | Event-driven workflows (news threshold, schedule, drift) |
+| Subagents | Parallel research workers |
+| Batch API | Overnight portfolio refreshes, eval runs at 50% cost |
+| Web search server-side tool | No separate MCP install for the Anthropic profile |
 
 ---
 
-## 3. Investor needs vs current AI coverage
+## 3. Current AI surface and what powers it
 
-What an investor or analyst expects the terminal's AI to do, and
-where finterm sits. **Covered** = ships and works end-to-end.
-**Partial** = primitives exist but no user-facing flow ties them
-together. **Missing** = no path at all.
-
-### 3.1 Buy-side analyst
-
-| Workflow | Status | Notes |
+| Capability | Behavior | Engine today |
 |---|---|---|
-| Initiate coverage on a name | Missing | Edgar/news/markets tools exist; nothing pulls them together. |
-| Comparable-company analysis (`/comps`) | Missing | No skill, no command. FMP and yfinance can supply data; no methodology layer. |
-| DCF / LBO model build | Missing | Excel-style modelling is also out of scope for a Qt terminal; output substrate would be ReportBuilder. |
-| Earnings preview (consensus, what to listen for) | Missing | News tool can fetch coverage; no agent pre-digests. |
-| Earnings post (call summary, model update, note draft) | Missing | No transcript ingestion. News tool only. |
-| Screen for ideas (factor / thematic) | Partial | `MarketsTools` and equity-research tools can screen on metrics; no LLM-driven thematic screen. |
-| Catalyst calendar / thesis tracking | Missing | Notes service exists; no agent watches the world against an active thesis. |
-| Sector overview / industry map | Partial | DBnomics, gov data, news available; no agent assembles the picture. |
+| AI Chat (Chat Mode, AiChatBubble) | Multi-session chat, SSE streaming, OpenAI-style tool calls + text-parse fallback | `LlmService` (11-provider switch); fresh install falls back to `fincept.in/research/llm/async` |
+| Tool calling | Invokes 31 internal tool families + external stdio MCPs, merged namespace, 5s cache TTL | `McpService` → `McpProvider` (internal) + `McpClient` (stdio JSON-RPC 2.0) |
+| Analytical agents | Plan-before-execute tool-calling loop, streams tokens/thinking/done | `AgentService` (C++) → `finagent_core/core_agent.py` + `execution_planner.py` |
+| LangGraph-style subagents | Subagent spawn, malformed-JSON tool-call fallback | `deepagents/orchestrator.py` |
+| Autonomous quant research | Factor / Model / Quant RD loops | `rdagents/` accessed via `AIQuantLabService::rd_agent_*` |
+| LLM trading competition | Per-cycle buy/sell decisions, leaderboard | `services/alpha_arena/` over Agno framework |
+| Voice input (STT) | Mic → chat composer | Google SR (default, outbound) + Deepgram (paid); `clap_detector.py` triggers |
+| Profile routing | Per-context (chat / agent / team) → provider+model+settings | `LlmProfileRepository` (+ legacy `LlmConfigRepository`) |
+| External MCP management | Add / start / stop / log external MCP servers | `McpManager` + `mcp_servers` SQLite table |
+| Memory | Narrow K/V-style memory tools | `AgenticMemoryTools` (underused) |
+| Embeddings | Not wired end-to-end | `vectordb_registry.py` (unconfigured) |
+| LLM key storage | Plaintext column | `llm_configs.api_key` |
 
-### 3.2 Portfolio manager
-
-| Workflow | Status | Notes |
-|---|---|---|
-| Portfolio review with narrative commentary | Missing | Portfolio screen renders numbers; no agent writes the explanation. |
-| Daily morning meeting note | Missing | News + markets + watchlist tools are present; no scheduled assembly. |
-| Factor attribution / risk-bucket explanation | Partial | QuantLib has the math; nothing narrates. |
-| Rebalance proposal with rationale | Missing | Paper trading tools execute; nothing proposes. |
-| Position-level alerts with action recommendations | Partial | Alerts surface exists; LLM does not enrich them. |
-
-### 3.3 Quant / systematic
-
-| Workflow | Status | Notes |
-|---|---|---|
-| Factor / model hypothesis generation | Covered | RD-Agent loops. The only fully wired AI workflow in quant. |
-| Backtest narration ("why did this go wrong") | Missing | Six engines return JSON metrics; no agent reads them. |
-| Parameter-sweep proposal | Missing | Walk-forward / optimize endpoints exist; no agent picks ranges. |
-| Regime detection narrative | Missing | — |
-| Live anomaly explanation | Missing | — |
-| Alpha-arena competitive LLM trading | Covered | Agno-backed agents, OpenAI + Anthropic, scored leaderboard. |
-
-### 3.4 Crypto / DeFi
-
-| Workflow | Status | Notes |
-|---|---|---|
-| Pool / yield comparison narrative | Missing | `CryptoTradingTools` can pull data; nothing narrates. |
-| Wallet-position commentary | Missing | — |
-| On-chain anomaly explanation | Missing | — |
-
-### 3.5 Compliance / ops
-
-| Workflow | Status | Notes |
-|---|---|---|
-| KYC document parsing | Missing | — |
-| Insider window tracking | Partial | Edgar Form 4 access is there; no policy layer. |
-| Trade-suitability check | Missing | — |
-
-### 3.6 Cross-cutting capabilities the AI lacks
-
-- **No skills / methodology layer.** Agents have a system prompt and
-  tools but no equivalent of `/comps`, `/dcf`, `/earnings`,
-  `/ic-memo` slash-commands or domain SKILL.md guides.
-- **No transcript corpus.** Earnings calls, conference calls, fed
-  speakers — none indexed or callable.
-- **No embeddings + vector store wired end-to-end.** `vectordb_registry.py`
-  exists; nothing populates a corpus.
-- **No scheduled agent runs.** Morning notes, catalyst alerts, KPI
-  watches — all need a background scheduler the agent surface lacks.
-- **No agent-readable history of finterm activity.** What screens did
-  the user open, what positions did they look at, what's in the
-  notebook? `AgenticMemoryTools` exists but is small and underused.
+Missing as primitives: prompt caching, extended thinking, citations,
+vision/PDF, computer use, code-execution sandbox, files API, hooks,
+checkpointing, full MCP spec on internal servers, breadth in memory,
+OAuth for HTTP MCP.
 
 ---
 
-## 4. External AI assets we adopt
+## 4. Target architecture
 
-Two repos under `/home/yma/fin/`. They sit at different layers and
-compose cleanly.
+```
+                  ┌─────────────────────────────────────────┐
+                  │ UI surfaces                              │
+                  │  Workbench · Chat · AiChatBubble ·       │
+                  │  Screens (Portfolio, Quant Lab, etc.)    │
+                  └────────────────────┬────────────────────┘
+                                       │
+                  ┌────────────────────▼────────────────────┐
+                  │ Profile router (LlmProfileRepository)    │
+                  │ chat / agent / agent_default / team /    │
+                  │ team_default / team_coordinator          │
+                  └────────────────────┬────────────────────┘
+                                       │
+                  ┌────────────────────┼────────────────────┐
+                  ▼                                         ▼
+        ┌─────────────────────┐               ┌─────────────────────┐
+        │ Local runtime       │               │ Anthropic runtime   │
+        │ (minimal loop;      │               │ (Claude Agent SDK)  │
+        │  finagent_core slim)│               │                     │
+        │                     │               │ - tool use          │
+        │ - SSE chat          │               │ - prompt caching    │
+        │ - tool loop         │               │ - extended thinking │
+        │ - SKILL composer    │               │ - citations         │
+        │ - slash dispatch    │               │ - vision / PDF      │
+        │                     │               │ - files API         │
+        │ Talks OpenAI-       │               │ - memory tool       │
+        │ compatible API to   │               │ - computer use      │
+        │ `local_llm_base_url`│               │ - code execution    │
+        │                     │               │ - web search        │
+        │                     │               │ - hooks / subagents │
+        │                     │               │ - checkpointing     │
+        │                     │               │ - batch API         │
+        └──────────┬──────────┘               └──────────┬──────────┘
+                   │                                     │
+                   └──────────────────┬──────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────────┐
+              ▼                       ▼                           ▼
+      ┌──────────────┐       ┌───────────────┐         ┌──────────────────┐
+      │ Internal MCP │       │ Stdio MCP     │         │ HTTP MCP         │
+      │ (McpProvider)│       │ (McpClient    │         │ (McpHttpClient,  │
+      │              │       │  per server)  │         │  OAuth+DCR)      │
+      │ 31 families  │       │               │         │                  │
+      │ + full spec: │       │ financial-    │         │ Future hosted    │
+      │  tools       │       │  datasets,    │         │ connectors       │
+      │  resources   │       │  yfinance,    │         │ (Gmail, Drive,   │
+      │  prompts     │       │  fetch,       │         │  GitHub, …)      │
+      │  sampling    │       │  filesystem,  │         │                  │
+      │  elicitation │       │  sqlite,      │         │                  │
+      │  progress    │       │  time,        │         │                  │
+      │  cancel/log  │       │  brave,       │         │                  │
+      │              │       │  playwright   │         │                  │
+      └──────────────┘       └───────────────┘         └──────────────────┘
 
-### 4.1 `financial-datasets` — data layer
+       Both runtimes share:
+       - SKILL.md library (vendored `financial-services` + custom)
+       - Slash command dispatch
+       - Profile / settings / SecureStorage
+       - SQLite (configs, profiles, sessions, memory, evals, audit)
+       - Voice (Whisper local STT) and the sibling local LLM project link
+       - Trace + audit log schema
+```
 
-Three public repos under `github.com/financial-datasets`:
+### 4.1 What finterm owns vs leverages
 
-- **`mcp-server`** (Python, MIT). FastMCP-based **stdio** MCP server
-  wrapping the financialdatasets.ai REST API. Wraps **10 tools**:
+| Owned (built and maintained) | Leveraged (adopted from upstream) |
+|---|---|
+| Internal MCP tool families (31, finance-specific) | Claude Agent SDK (Anthropic profile runtime) |
+| `FinancialDatasetsTools` internal MCP family | `anthropics/financial-services` SKILL.md / commands / agent prompts |
+| Custom SKILL.md (where upstream doesn't fit) | `financial-datasets/mcp-server` (stdio) |
+| Agent identities (system prompts + skill bindings) | Public MCP marketplace servers |
+| Local OpenAI-compatible minimal agent loop | MCP spec (full — all capabilities + transports + auth) |
+| MCP client (`McpClient` / `McpService`) | `SKILL.md` grammar (verbatim) |
+| Profile / SecureStorage / repositories | JSON Schema (tool args, structured outputs) |
+| UI (Workbench, Chat, Screens, AiChatBubble) | Sibling local LLM project (runtime, install, models) |
+| Voice (Whisper local) | Provider-side primitives on the Anthropic path (caching, thinking, citations, vision/PDF, files, batch, computer use, code execution, web search, hooks, subagents, checkpointing, memory tool) |
+| Trace + audit log schema | |
+
+### 4.2 Two runtimes
+
+**Local runtime** — `finagent_core`, slimmed to a minimal
+OpenAI-compatible agent loop. Responsibilities:
+
+- Compose system prompt from `<agent prelude>` + selected SKILL.md
+  bodies.
+- Tool loop: list tools from `McpService::list_tools_for(agent_id)`,
+  send to provider, parse response, dispatch tool calls, feed
+  results back. Loop until model emits no tool calls or budget
+  exhausted.
+- Streaming via SSE; tool-call JSON parsed strictly with text-parse
+  fallback for malformed local-model output.
+- Slash command dispatch: `/comps AAPL` resolves to
+  `(agent="equity_research", skill="comps-analysis",
+  args={ticker:"AAPL"})` and re-enters the same loop with the
+  composed prompt.
+- Budgets: max output tokens, max iterations, max tool calls, max
+  wall time. Configurable per agent identity.
+- Talks to `{local_llm_base_url}/v1/...`.
+
+**Anthropic runtime** — `claude-agent-sdk` (Apache 2.0, OSS).
+Responsibilities:
+
+- We register: our internal MCP server (in-proc bridge), external
+  MCPs from the `mcp_servers` table, SKILL.md library path, agent
+  identity (system prompt + skill bindings + allowed tools).
+- SDK handles: agent loop, MCP client wiring, streaming with typed
+  deltas, tool use, prompt caching, extended thinking, citations,
+  vision/PDF, files, memory tool, computer use, code execution, web
+  search, hooks, subagents, checkpointing.
+- Slash command dispatch in our chat layer; resolved tuple is handed
+  to the SDK as the next user message + agent config.
+- Budgets and trace events bridge into our schema via SDK hooks.
+
+Both runtimes share the **same** MCP tool layer and the **same**
+SKILL.md files. Adding a future runtime (Gemini, OpenAI) is
+implementing one more adapter that loads the same tools and skills.
+
+### 4.3 Shared MCP tool layer (full spec)
+
+Our internal MCP servers (the 31 families + new
+`FinancialDatasetsTools`) implement the **full MCP spec**, not only
+tools:
+
+- **Tools** — already done.
+- **Resources** — typed read-only references (portfolio snapshot,
+  watchlist, current news digest, active thesis). The agent
+  requests them without spending a tool call.
+- **Prompts** — finterm-curated templated prompts surfaced in the
+  SDK's slash menu ("Daily Brief", "Stock Deep Dive", "Sector
+  Pulse").
+- **Sampling** — a tool can request a model completion through the
+  client. Enables tools like "summarize this 50-page filing inside
+  the tool"; cost flows through the user's profile.
+- **Elicitation** — tools ask the user a structured mid-call
+  question. Replaces the auth-hook pattern uniformly.
+- **Progress / cancellation / logging** — long tools (backtests,
+  RD-Agent, screens) emit progress; user can cancel; logs surface
+  in the trace.
+
+External transports:
+
+- **Stdio** — existing `McpClient`. Used by the marketplace seed
+  list and `financial-datasets/mcp-server`.
+- **Streamable HTTP** — new `McpHttpClient`. Supports static bearer
+  / API-key headers and OAuth 2.0 + Dynamic Client Registration.
+  OAuth+DCR is required for hosted connectors (Gmail, Drive,
+  GitHub) that may be enabled later.
+
+Namespace: source-prefixed (`int:`, `fd:`, `ext:`). Per-agent
+allowlists filter `list_tools_for(agent_id)` before either runtime
+sees the catalogue, preventing tool soup.
+
+### 4.4 Shared skills, slash commands, agent identities
+
+Skills live as `SKILL.md` files under
+`scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md`.
+We use the Anthropic SKILL.md grammar verbatim — no fork.
+
+Skills are content. Updates are PRs against the markdown files; no
+Python or C++ change.
+
+Slash commands resolve at the chat layer to `(agent_id, skill, args)`
+tuples. Implementation is shared: same resolution, dispatched to
+whichever runtime the active profile selects.
+
+Agent identities are SQLite-backed (`AgentConfigRepository`) and
+declare: `system_prompt`, `skills: [...]`, `allow_tools: [...]`,
+`runtime_hint` (optional), `budget` (max iterations, tokens, wall
+time, USD).
+
+### 4.5 Memory, files, embeddings
+
+**Memory.** The Anthropic profile uses the SDK's native memory tool
+(scoped, persistent, agent-managed). The local profile uses a
+`MemoryTools` MCP family (we own) backed by sqlite-vec — same API
+shape (`memory.search` / `memory.upsert` / `memory.list`), narrower
+features. Both expose three scopes: per-thesis, per-workspace,
+global. Every entry carries provenance.
+
+**Files.** The Anthropic profile uses the Files API natively via SDK
+(upload PDFs, images, CSVs; reference by handle across turns; native
+PDF + vision). The local profile text-extracts to a local handle.
+
+**Embeddings.** The Anthropic API has no native embeddings endpoint.
+Both profiles use the same local server's `/embeddings` endpoint by
+default (model: `nomic-embed-text` or `bge-m3` in the sibling
+project). When the Anthropic profile is active and the local server
+is unreachable, embeddings fall back to a user-pasted Voyage AI key.
+
+### 4.6 Profile-driven routing
+
+`LlmProfileRepository` resolves a `(role, entity)` query → runtime
++ model + settings. Roles: `ai_chat`, `agent`, `agent_default`,
+`team`, `team_default`, `team_coordinator`. Resolution:
+entity-specific → type default → global default.
+
+A profile points at either `runtime: local` (with
+`local_llm_base_url`, model name, params) or `runtime: anthropic`
+(with API key reference in SecureStorage, model name, params).
+
+No silent failover. If the local server is down and the active
+profile is local, the chat surface shows a banner with a link to the
+sibling project setup docs. If the Anthropic API is reachable but
+the key is invalid, the surface shows the auth error verbatim.
+
+### 4.7 Voice
+
+STT options: local Whisper (default, free, via
+`scripts/voice/whisper_stt.py` using `faster-whisper`, model
+`medium`, with `large-v3` opt-in) and Deepgram (paid, opt-in). Wake
+trigger: `clap_detector.py`. Surfaces: `AiChatBubble` mic + chat
+composer mic.
+
+Google SR removed. TTS remains a gap (Anthropic ships no TTS; a
+future track may add local TTS via Piper / Kokoro).
+
+### 4.8 Storage and keys
+
+`SecureStorage` is the only path for LLM keys, broker keys, Deepgram
+keys, MCP HTTP auth tokens. Backed by Windows DPAPI / macOS Keychain
+/ Linux libsecret; degrades to XOR-obfuscated QSettings when
+libsecret is absent (one-time warning surfaced in Settings).
+
+`llm_configs.api_key` column is NULL across all rows — moved to
+keychain at first run after the migration ships. Column kept for
+schema stability.
+
+The Fincept hosted endpoint (`fincept.in/research/llm/async`) is
+feature-flagged off and removed from the provider dropdown. No-key
+install falls back to the local profile.
+
+### 4.9 Dormant provider adapters
+
+The existing 9 non-local non-Anthropic provider branches in
+`LlmService.cpp` (OpenAI, Gemini, Groq, DeepSeek, Kimi, MiniMax,
+xAI, OpenRouter, Fincept) remain in code as dormant adapters but are
+hidden from the UI dropdown and excluded from default profile
+options. Re-enabling later is a constant flip. The architecture is
+shaped to take additional runtimes (most cleanly via their
+respective SDKs) without refactor.
+
+---
+
+## 5. Capability matrix — what each runtime can do
+
+| Capability | Local profile | Anthropic profile |
+|---|---|---|
+| Chat streaming | Yes | Yes (typed deltas via SDK) |
+| Tool use (parallel calls) | Strict + text-parse fallback | Native via SDK |
+| Prompt caching | n/a (no billing benefit) | Native; long SKILL system prompts cacheable |
+| Extended thinking | Reasoning via system prompt | Native budget-controlled `thinking` |
+| Citations | Tool-result metadata only | Native per-claim, character-offset |
+| Vision | Only if local model supports (e.g., Qwen-VL) | Native |
+| Native PDF | Text-extracted | Native (up to 100 pages) |
+| Files API | Local file refs | Native handles |
+| Memory tool | sqlite-vec MCP family (we own) | SDK-native + optional MCP family |
+| Computer use (browser) | Playwright MCP server | Native server-side tool |
+| Code execution | Local sandbox (we own) | Native server-side Python sandbox |
+| Web search | Brave MCP server | Native server-side tool |
+| Hooks (event-driven) | Limited (via scheduler) | Native SDK hooks |
+| Subagents | Limited | Native via SDK |
+| Checkpointing / resume | No | Native via SDK |
+| Batch (non-real-time, 50% off) | No | Native via SDK |
+| Token pre-flight | Provider-dependent | Native |
+| Internal MCP (31 families + full spec) | Yes | Yes |
+| External stdio MCPs | Yes | Yes |
+| External HTTP MCPs (OAuth+DCR) | Yes | Yes |
+| SKILL.md library | Composed by minimal loop | Loaded by SDK |
+| Slash commands | Dispatched to local loop | Dispatched to SDK |
+
+---
+
+## 6. Investor workflows vs target coverage
+
+The *why* behind the work tracks. Compressed; see prior revisions
+for the long-form needs analysis.
+
+### 6.1 Buy-side analyst
+
+| Workflow | Status | Closed by |
+|---|---|---|
+| Initiate coverage | Will land | `initiating-coverage` skill + Edgar/news/markets tools + Anthropic citations |
+| `/comps` | Will land | `comps-analysis` skill + financial-datasets normalized line items |
+| `/dcf`, `/lbo` | Will land | `dcf-model` / `lbo-model` skills + code execution sandbox (Anthropic profile) |
+| `/earnings`, `/earnings-preview` | Will land | Skills + news/Edgar/financial-datasets tools |
+| Earnings post (call summary) | Partial | Same skill set; transcript-corpus gap remains |
+| Thematic / factor screen | Will land | `idea-generation` skill + screens + financial-datasets |
+| Catalyst / thesis tracking | Will land | `thesis-tracker` skill + scheduler + memory |
+| Sector overview | Will land | `sector-overview` skill + DBnomics / gov data tools |
+
+### 6.2 PM
+
+| Workflow | Status | Closed by |
+|---|---|---|
+| Portfolio review with narrative | Will land | `portfolio-monitoring` skill + portfolio tools + Anthropic citations |
+| Daily morning note | Will land | `morning-note` skill + scheduler + news tools |
+| Factor attribution narrative | Will land | QuantLib + `quant_critic` agent identity |
+| Rebalance proposal | Will land | `portfolio-rebalance` skill + paper trading + code exec |
+| Position-level alerts | Partial | Existing alerts + Anthropic hooks |
+
+### 6.3 Quant
+
+| Workflow | Status | Closed by |
+|---|---|---|
+| Factor / model hypothesis generation | Covered | RD-Agent loops; LLM step routes through active runtime |
+| Backtest narration | Will land | `QuantNarratorTools` + `narrate-backtest` skill |
+| Parameter-sweep proposal | Will land | `propose-param-sweep` tool + Anthropic code execution |
+| Regime detection narrative | Will land | Quant critic agent |
+| Alpha-arena LLM trading | Covered | Migrates onto the two runtimes |
+
+### 6.4 Cross-cutting gaps that remain
+
+- No skills / methodology layer (closed by Track 7).
+- No transcript corpus (open question — see §11).
+- No embeddings + vector store wired end-to-end (closed by Track 9).
+- No scheduled / event-driven agent runs (closed by Track 10).
+- No agent-readable history of finterm activity (partial — closed
+  by `MemoryTools` in Track 9).
+
+---
+
+## 7. Integration components
+
+### 7.1 Anthropic Agent SDK
+
+`claude-agent-sdk` (Apache 2.0, OSS). Free to install via pip;
+pay-per-token Anthropic API credits required to run.
+
+What it gives us:
+
+- Agent loop (chain, parallel, sub-agents, autonomous)
+- Native MCP client (we register our servers)
+- Native tool use with parallel calls + structured output
+- Prompt caching (auto-detected cache breakpoints + manual control)
+- Extended thinking with budget control
+- Citations (per-claim with character offsets)
+- Vision + native PDF
+- Files API
+- Memory tool
+- Computer use, code execution, web search (server-side tools)
+- Hooks (event-driven)
+- Checkpointing / resume
+- Batch API
+- Typed streaming events
+
+What we configure per agent identity: system prompt, skills, allowed
+tools, budget, runtime hint.
+
+### 7.2 financial-datasets — data layer
+
+Three repos under `github.com/financial-datasets`:
+
+- **`mcp-server`** (Python, MIT, FastMCP stdio). 10 tools:
   `get_income_statements`, `get_balance_sheets`,
   `get_cash_flow_statements`, `get_current_stock_price`,
   `get_historical_stock_prices`, `get_company_news`,
   `get_available_crypto_tickers`, `get_crypto_prices`,
-  `get_historical_crypto_prices`, `get_current_crypto_price`.
-  Stdio transport — added to `mcp_servers` table directly; no
-  `mcp-remote` bridge needed.
-- **`web-crawler`**. General crawler. Not directly AI-shaped.
-- **`llm-evaluations`**. Eval harness for LLMs on financial research
-  tasks. Useful as a model-selection blueprint and the seed for
-  finterm's own eval bench.
+  `get_historical_crypto_prices`, `get_current_crypto_price`. Added
+  to the `mcp_servers` table directly.
+- **`web-crawler`** — general crawler. Not directly AI-shaped.
+- **`llm-evaluations`** — eval harness; blueprint for our eval bench.
 
-**Coverage vs finterm's existing data tools.** The MCP wraps a narrow
-slice of the underlying REST API:
+Coverage vs current finterm tools:
 
-| Dataset | MCP exposes? | REST API has it? | Finterm equivalent? |
+| Dataset | mcp-server | REST | finterm today |
 |---|---|---|---|
 | Income / balance / cash flow | yes | yes | FMP, Edgar XBRL |
 | Stock prices (historical + snapshot) | yes | yes | yfinance, Alpha Vantage, FMP |
 | Company news (ticker-tagged) | yes | yes | News service |
-| Crypto prices + tickers | yes | yes | CoinGecko, Kraken WS, akshare |
-| SEC filings (10-K / 10-Q / 8-K, section-level Item 1A / 7) | no | yes | `sec_data.py` + Edgar tools (no section-level) |
-| Insider trades (Form 4) | no | yes | `sec_data.py` (raw) |
-| Institutional holdings (13-F) | no | yes | `sec_data.py` (raw) |
+| Crypto prices | yes | yes | CoinGecko, Kraken, akshare |
+| SEC filings, section-level (Item 1A, 7) | no | yes | sec_data.py (no sections) |
+| Insider trades (Form 4) | no | yes | sec_data.py (raw) |
+| Institutional holdings (13-F) | no | yes | sec_data.py (raw) |
 | Segmented financials | no | yes | XBRL parseable, not first-class |
-| Operational KPIs / guidance / non-GAAP | no | yes | Missing |
-| Earnings (estimates, surprises, history) | no | yes | Partial via FMP |
+| Operational KPIs / non-GAAP | no | yes | Missing |
+| Earnings estimates / surprises | no | yes | Partial via FMP |
 
-What it adds, beyond raw coverage that finterm mostly has:
+What it adds beyond raw coverage:
 
-1. **Unified normalized line-item schema for financials** —
-   `revenue`, `cost_of_revenue`, `operating_income`, … rather than
-   raw XBRL tag soup. This is the real win and is what makes
-   `/comps`-style workflows tractable.
-2. **Hosted-and-maintained.** yfinance is unofficial scrape; FMP free
-   rate-caps at 250/day; financial-datasets is a contracted product.
-3. **LLM-shaped tool descriptions.** Built for tool calling.
-4. **Section-level SEC filing access (REST only, not MCP yet).** The
-   REST API exposes 10-K Item 1A (risk factors), Item 7 (MD&A) as
-   separate endpoints — *we vendor these via an internal MCP*; see
-   Track 6.
-5. **Coverage gaps it does not fix.** No options, economics breadth,
-   China, energy, Treasury, CFTC, geopolitics — those stay on
-   finterm's existing sources. US-only equities, ~27k tickers, 30+
-   years history.
+1. Unified normalized line-item schema for financials. The real win;
+   makes `/comps`-style workflows tractable.
+2. Hosted-and-maintained (vs yfinance scrape, FMP free 250/day caps).
+3. LLM-shaped tool descriptions.
+4. Section-level SEC filing access (REST). We vendor these as
+   `FinancialDatasetsTools` internal MCP (Track 6).
+5. Does not fix: options, economics breadth, China, energy,
+   Treasury, CFTC, geopolitics. Those stay on existing sources.
 
-### 4.2 `financial-services` — methodology + agent layer
+### 7.3 financial-services — methodology layer
 
-Apache-2.0 plugin marketplace under `github.com/anthropics/financial-services`.
-Three things finterm absorbs:
+Apache-2.0 plugin marketplace under
+`github.com/anthropics/financial-services`. finterm absorbs three
+things:
 
-**Skills (markdown methodology) — 60+ files** under
-`plugins/vertical-plugins/<vertical>/skills/<name>/SKILL.md`.
-Verticals: financial-analysis (core), investment-banking,
-equity-research, private-equity, wealth-management, fund-admin,
-operations. Representative skills: `comps-analysis`, `dcf-model`,
-`lbo-model`, `3-statement-model`, `audit-xls`, `earnings-analysis`,
-`earnings-preview`, `initiating-coverage`, `model-update`,
-`morning-note`, `sector-overview`, `thesis-tracker`,
-`catalyst-calendar`, `idea-generation`, `dd-checklist`, `ic-memo`,
+**Skills (60+ markdown).** Verticals: financial-analysis (core),
+investment-banking, equity-research, private-equity, wealth-
+management, fund-admin, operations. Representative skills:
+`comps-analysis`, `dcf-model`, `lbo-model`, `3-statement-model`,
+`earnings-analysis`, `earnings-preview`, `initiating-coverage`,
+`model-update`, `morning-note`, `sector-overview`, `thesis-tracker`,
+`catalyst-calendar`, `idea-generation`, `ic-memo`,
 `portfolio-monitoring`, `value-creation-plan`, `client-review`,
-`financial-plan`, `portfolio-rebalance`, `tax-loss-harvesting`.
+`portfolio-rebalance`, `tax-loss-harvesting`.
 
-These are **plain markdown**, model-agnostic, explicitly constructed
-around MCP-first data-source hierarchies (e.g.
-`comps-analysis/SKILL.md` mandates *"FIRST: Check for MCP data
-sources … NEVER use web search as a primary data source"*). They
-slot into finterm's agent system as system-prompt context for the
-relevant turn.
+Plain markdown, model-agnostic, constructed MCP-first.
 
-**Slash commands — ~30.** `/comps`, `/dcf`, `/lbo`, `/earnings`,
+**Slash commands (~30).** `/comps`, `/dcf`, `/lbo`, `/earnings`,
 `/earnings-preview`, `/initiate`, `/sector`, `/screen`, `/ic-memo`,
-`/morning-note`, `/thesis`, `/catalysts`, `/cim`, `/teaser`,
-`/buyer-list`, `/merger-model`, `/rebalance`, `/tlh`,
-`/client-review`. Map to finterm chat slash-commands or right-click
+`/morning-note`, `/thesis`, `/catalysts`, `/rebalance`, `/tlh`,
+`/client-review`, etc. Map to chat slash commands or right-click
 context actions in screens.
 
-**Agent system prompts — 10 named agents.** Pitch Agent, Meeting Prep,
-Market Researcher, Earnings Reviewer, Model Builder, Valuation
+**Agent system prompts (10 named agents).** Pitch Agent, Meeting
+Prep, Market Researcher, Earnings Reviewer, Model Builder, Valuation
 Reviewer, GL Reconciler, Month-End Closer, Statement Auditor, KYC
-Screener. Each is a system prompt + bundled skills. Direct fit for
-`AgentService` registrations to populate the Agent Config screen.
+Screener. Each is `system_prompt + bundled skills`.
 
 Not absorbed:
 
@@ -353,541 +580,492 @@ Not absorbed:
   Methodology survives; output substrate becomes ReportBuilder.
 - 11 partner MCPs in `.mcp.json` (Daloopa, Morningstar, S&P Kensho,
   FactSet, Moody's, MT Newswires, Aiera, LSEG, PitchBook,
-  Chronograph, Egnyte) — paid. Future marketplace seed list, not free.
-- Managed-agent cookbooks — only matter if finterm adopts a third
-  path (Anthropic-hosted `/v1/agents`). Out of scope per §1.
-- MS 365 add-in install tooling — irrelevant.
+  Chronograph, Egnyte) — paid; future marketplace seed list.
+- Managed-agent cookbooks — non-goal per §1.
+- MS 365 add-in install tooling.
 
-### 4.3 Composition
+### 7.4 MCP marketplace seed list
 
-`financial-datasets` answers *"what's Apple's FCF margin?"*;
-`financial-services` answers *"now build me a comps table around it."*
+| Server | Transport | Purpose | Key needed |
+|---|---|---|---|
+| `mcp-server-fetch` | stdio | Generic URL fetch | No |
+| `mcp-server-filesystem` | stdio | Sandboxed file ops | No |
+| `mcp-server-sqlite` | stdio | Local DB queries | No |
+| `mcp-server-time` | stdio | Time / timezone | No |
+| `mcp-server-sequentialthinking` | stdio | Reasoning aid | No |
+| `mcp-server-brave-search` | stdio | Web search (local profile) | Free Brave key |
+| `mcp-server-playwright` | stdio | Browser automation (local profile) | No |
+| `yfinance-mcp` | stdio | Free quotes / fundamentals | No |
+| `financial-datasets/mcp-server` | stdio | US fundamentals + news + crypto | Free-tier key |
 
-| Gap in finterm | Closed by |
-|---|---|
-| Agent has no methodology / domain knowledge | financial-services skills + slash commands |
-| No out-of-box agent identities | financial-services agent system prompts |
-| XBRL line-item normalization burden | financial-datasets MCP |
-| US fundamentals reliability | financial-datasets MCP |
-| Section-level 10-K access | financial-datasets REST (custom internal MCP, Track 6) |
-| Insider trades, 13-F at LLM-shape | financial-datasets REST (custom internal MCP, Track 6) |
-| Transcript corpus | Neither — still missing; consider a separate provider |
+On the Anthropic profile, some of these are redundant with native
+SDK server-side tools (web search, computer use, code execution),
+but the marketplace stays available for both runtimes.
+
+### 7.5 What it composes to
+
+`financial-datasets` answers *"what's Apple's FCF margin?"*.
+`financial-services` answers *"now build me a comps table around
+it."* Anthropic Agent SDK runs the loop. finterm provides the
+chrome, the local fallback, the additional 31 finance tools, the
+UI, and the storage.
 
 ---
 
-## 5. Target architecture
-
-```
-                   ┌──────────────────────────────────────────────┐
-                   │              UI surfaces                     │
-                   │  Chat Mode · Agent Workbench · MCP Servers   │
-                   │      · Settings · AiChatBubble · Screens     │
-                   └─────────────────┬────────────────────────────┘
-                                     │ (Qt signals + REST-shaped C++ API)
-                   ┌─────────────────▼────────────────────────────┐
-                   │           LLM Router (LlmService)            │
-                   │ profile resolution · streaming · tool-loop · │
-                   │   provider-agnostic OpenAI-compatible        │
-                   └─────────────────┬────────────────────────────┘
-                                     │
-                ┌────────────────────┼────────────────────────────┐
-                │                    │                            │
-       ┌────────▼────────┐  ┌────────▼────────┐         ┌─────────▼─────────┐
-       │  Single Agent   │  │  Skills /        │         │   McpService      │
-       │     Runtime     │  │  Methodology     │         │  (unified tool    │
-       │  (finagent_core)│  │  Library         │         │   namespace)      │
-       │  - core_agent   │  │ - SKILL.md files │         │ - internal (31)   │
-       │  - planner      │  │ - slash commands │         │ - stdio (N)       │
-       │  - team coord   │  │ - agent prompts  │         │ - http (N)        │
-       └────────┬────────┘  └────────┬─────────┘         │ - per-agent scope │
-                │                    │                   └─────────┬─────────┘
-                └────────────────────┴─────────────────────────────┘
-                                     │
-                   ┌─────────────────▼────────────────────────────┐
-                   │              Persistence                     │
-                   │ SecureStorage (keys) · SQLite (configs,      │
-                   │ profiles, sessions, agentic memory, evals)   │
-                   └──────────────────────────────────────────────┘
-```
-
-### 5.1 Design decisions
+## 8. Design decisions
 
 **Routing**
 
-- **D1.** Two first-class paths (local + external), picked by the
-  user via the profile system. No silent failover in either direction.
-  Fresh-install bias: local path is suggested because it works with
-  zero keys.
-- **D2.** Local LLM runtime is link-only, owned by a sibling project.
-  Finterm holds `local_llm_base_url` and talks OpenAI-compatible HTTP;
-  does not install / supervise / update the runtime.
+- **R1.** Two first-class runtimes (local + Anthropic), per-profile.
+  Fresh-install bias: local path suggested because it works with no
+  keys. No silent failover in either direction.
+- **R2.** Other providers (OpenAI, Gemini, Groq, …) remain in
+  `LlmService.cpp` as dormant adapters but hidden from the UI
+  dropdown. Re-enabling later is a constant flip; the architecture
+  takes additional runtimes without refactor.
 
-**Agent runtime**
+**Runtime**
 
-- **D3.** One canonical agent runtime: `finagent_core`. `deepagents`
-  is retired; `alpha_arena` calls into `finagent_core` through a
-  "competitive" team mode. One provider adapter, one tool-calling
-  fallback, one tool namespace.
-- **D4.** Skills/methodology as a first-class data layer. Each agent
-  identity declares which skills it loads; the runtime composes
-  system prompt = `<agent prelude> + <selected SKILL.md bodies>`.
-  Skills are markdown; updates land as PRs, no code change.
-- **D5.** Slash commands are a thin shell. `/comps` resolves to
-  `(agent="equity_research", skill="comps-analysis", args=...)` and
-  hits the same runtime. No per-command Python.
+- **R3.** Anthropic-profile runtime is the open-source
+  `claude-agent-sdk`. We do not wrap it; we configure it.
+- **R4.** Local-profile runtime is `finagent_core` slimmed to a
+  minimal OpenAI-compatible agent loop. `deepagents` retired (its
+  prompt-loop fallback ported into `core_agent.py` first).
+  `alpha_arena` migrated to call into the active runtime via a
+  "competitive" team mode.
+- **R5.** `rdagents` stays as a specialized loop body. Each LLM step
+  routes through the active runtime; it does not own a provider
+  integration.
 
-**MCP**
+**Tools (MCP)**
 
-- **D6.** Three transports, single namespace. Internal via
-  `McpProvider` (in-process). Stdio via `McpClient`. HTTP/SSE added
-  to `McpClient` with static-auth support (`Authorization: Bearer …`,
-  custom headers; **no OAuth** until a target needs it). All three
-  feed `McpService::list_tools()` with source-prefixed names
-  (`fd:get_income_statements`, `int:markets.quote`, `ext:fetch.url`).
-- **D7.** Per-agent tool scoping. Each agent identity declares
+- **R6.** Three transports, single namespace. Internal `McpProvider`
+  (in-process), stdio `McpClient`, HTTP `McpHttpClient`. All feed
+  `McpService::list_tools()` with source-prefixed names. HTTP
+  supports static bearer / API-key headers and OAuth 2.0 + Dynamic
+  Client Registration.
+- **R7.** Per-agent tool scoping. Each identity declares
   `allow_tools: ["fd:*", "int:markets.*", "int:portfolio.peek"]`.
-  `McpService::list_tools_for(agent_id)` filters before the model
-  sees it. Stops the 100-tool soup and the
-  "geopolitics-agent-has-PaperTrading.place_order" foot-gun.
-- **D8.** Data-source hierarchy is config, not code. Per agent, an
-  ordered list: `["fd", "int:edgar", "int:fmp", "int:yfinance"]`.
-  Skill text references "your data hierarchy" instead of naming
-  providers, so swapping `fd` for `int:fd_rest` (the future internal
-  REST wrapper) doesn't touch skills.
+  `McpService::list_tools_for(agent_id)` filters before either
+  runtime sees the catalogue.
+- **R8.** Internal MCP servers implement the **full MCP spec** —
+  tools, resources, prompts, sampling, elicitation, progress,
+  cancellation, logging. This is finterm's differentiation in the
+  MCP ecosystem.
+- **R9.** Data-source hierarchy is per-agent config (ordered list:
+  `["fd", "int:edgar", "int:fmp", "int:yfinance"]`). SKILL.md text
+  references "your data hierarchy," not specific providers, so
+  swapping doesn't touch skills.
+
+**Skills**
+
+- **R10.** Skills as first-class data, not code. Each agent identity
+  declares `skills: [...]`. SKILL.md files vendored from
+  `anthropics/financial-services` + custom. Same files consumed by
+  both runtimes.
+- **R11.** Slash commands resolve to `(agent, skill, args)` at the
+  chat layer and re-enter the active runtime. No per-command Python.
+- **R12.** SKILL.md grammar is Anthropic's verbatim. No fork. Skills
+  authored for finterm work in any Anthropic-compatible client
+  unchanged.
+
+**Memory, files, embeddings**
+
+- **R13.** Anthropic profile uses SDK-native memory tool + Files
+  API. Local profile uses a `MemoryTools` MCP family (we own) over
+  sqlite-vec, same API shape. Both expose per-thesis / per-workspace
+  / global scopes with provenance.
+- **R14.** Embeddings come from `{local_llm_base_url}/embeddings`
+  (default `nomic-embed-text` or `bge-m3`) regardless of which
+  runtime is active. Voyage AI is a paid fallback when local server
+  is unreachable on the Anthropic profile.
 
 **Voice**
 
-- **D9.** Drop Google SR. Once Whisper local lands, STT options are
-  Whisper (free, local, default) and Deepgram (paid, opt-in).
-  Whisper stays in finterm for v1 (self-contained STT means a fresh
-  install has a working mic without depending on the sibling project).
-  `SpeechService` exposes a strategy interface so a future HTTP
-  backend (POST audio → `{local_llm_base_url}/audio/transcriptions`)
-  can slot in.
+- **R15.** STT options: Whisper (local, default, free) and Deepgram
+  (paid, opt-in). Google SR removed. TTS not yet wired.
 
 **Storage and outbound**
 
-- **D10.** SecureStorage migration wipes the plaintext `api_key`
-  column. On first run, move each row to the keychain and NULL the
-  column (keep the column for schema stability). Reasons: personal
-  fork — downgrade isn't a constraint; leaving plaintext defeats the
-  migration; zeroing forces every code path through `SecureStorage`,
-  eliminating a "forgot to migrate this read" bug class.
-- **D11.** Gate the Fincept hosted endpoint. Feature-flag
-  `LlmService::fincept_async_request` off by default; hide "Fincept"
-  from the provider dropdown. No-key fallback moves from Fincept →
-  the local LLM base URL.
+- **R16.** SecureStorage migration NULLs the plaintext
+  `llm_configs.api_key` column at first run. Every read path goes
+  through SecureStorage. Column kept for schema stability.
+- **R17.** Fincept hosted endpoint feature-flagged off and hidden
+  from provider dropdown. No-key fallback is the local profile.
 
 **UI**
 
-- **D12.** Unify into "AI Workbench." Collapse `chat_mode`,
-  `agent_config`, and `mcp_servers` into a single screen with a left
-  nav: Chat, Agents, Teams, Workflows, Tools, Servers, Profiles.
-  Floating `AiChatBubble` and screen-context actions stay as fast
-  paths. Workbench is *the* surface for configuration.
+- **R18.** "AI Workbench" unifies `chat_mode`, `agent_config`, and
+  `mcp_servers` into one screen with left nav: Chat, Agents, Teams,
+  Workflows, Tools, Servers, Profiles, System (traces, evals, costs,
+  kill-switch). Floating `AiChatBubble` and screen-context actions
+  remain fast paths.
 
-**Memory and scheduling**
+**Scheduling**
 
-- **D13.** Embeddings + vector store wired end-to-end. Default vector
-  DB: sqlite-vec (no external service). Embeddings via the configured
-  `local_llm_base_url` or external profile per role. One corpus per
-  workspace: notes, watched-ticker filings, transcripts (when
-  ingested), recent news. Exposed as `MemoryTools` (replaces the
-  narrow `AgenticMemoryTools`).
-- **D14.** Background scheduler in `AgentService`. Cron-shaped
-  scheduler (Qt timer + SQLite-backed queue). "Morning note at
-  6:30am", "catalyst watch every 30 min", "earnings alert on
-  schedule" become declarative `(agent_id, skill, args)` tuples —
-  same machinery as a chat turn.
+- **R19.** `AgentService` cron-shaped scheduler (Qt timer +
+  SQLite-backed queue). Entries: `(agent_id, skill, args, cron)`. On
+  the Anthropic profile, scheduled runs can additionally register
+  native SDK hooks for event triggers.
 
-**Eval, observability, safety**
+**Evals, observability, safety**
 
-- **D15.** Eval harness in-tree. Vendor or interface with
-  `financial-datasets/llm-evaluations` as `scripts/agents/evals/`.
-  Run nightly on a small fixture set to catch model/provider
-  regressions. This is where we measure whether moving the default
-  profile from one provider to another is safe.
-- **D16.** Observability — per-tool, per-agent, per-provider counters
-  (latency, error rate, token cost). Surface in the Workbench's
-  System tab. Mirrors what RDAgent already records for its loops.
-- **D17.** Safety / kill-switch. Trading-adjacent tools
-  (`PaperTradingTools::place_order`, `CryptoTradingTools` paths that
-  touch keys) require an auth hook; `McpProvider` already has the
-  slot. Make the kill-switch user-visible in the Workbench's Servers
-  tab — one toggle disables all destructive tools globally.
+- **R20.** Eval harness in-tree (`scripts/agents/evals/`); vendored
+  or interfacing with `financial-datasets/llm-evaluations`. Nightly
+  fixture run, results persisted in SQLite, surfaced in Workbench →
+  System.
+- **R21.** Per-tool / per-agent / per-runtime counters: latency,
+  error rate, token cost. Recorded in SQLite. Both runtimes write to
+  the same trace + audit log schema.
+- **R22.** Kill-switch in Workbench → Servers — one toggle disables
+  all destructive tools globally. Per-tool gating via MCP
+  elicitation under R8.
+- **R23.** Prompt-injection guards on tool output: tool results
+  tagged as untrusted; system prompt instructs the model to treat
+  tool-content as data, not instructions. Defense-in-depth, not
+  perfect.
+- **R24.** Per-request budget envelope: max output tokens, max
+  iterations, max tool calls, max wall time, max cost-USD. Enforced
+  by the active runtime. UI shows running cost.
 
 ---
 
-## 6. Plan — work tracks
-
-Foundation tracks (1–4) come first; they unblock the rest. Content
-tracks (5–6) and runtime tracks (7–10) can land in parallel once
-foundations ship. Always-on tracks (11–14) close out.
+## 9. Implementation tracks
 
 ### Track 1 — Foundation cleanup
 
-Pre-flight for everything else. Land before exposing anything to end
-users.
+1. SecureStorage migration for LLM keys (R16).
+2. Gate Fincept hosted endpoint, hide from dropdown, repoint no-key
+   fallback to local (R17).
+3. Local Whisper STT, drop Google SR (R15).
+4. Wire embeddings to `{local_llm_base_url}/embeddings` (R14).
 
-1. **SecureStorage migration for LLM keys (D10).** On first run after
-   migration, read `llm_configs.api_key`, write each to keychain
-   (`SecureStorage`), NULL the column.
-2. **Gate the Fincept hosted endpoint (D11).** Feature-flag
-   `LlmService::fincept_async_request` off; hide "Fincept" provider.
-   Default no-key fallback moves to the local LLM base URL.
-3. **Local Whisper STT + drop Google SR (D9).** Add
-   `scripts/voice/whisper_stt.py` (`faster-whisper`, `medium`
-   default, `large-v3` opt-in). Remove Google SR (outbound,
-   unauthenticated). Result: Whisper (default) and Deepgram (opt-in).
-4. **Embeddings via OpenAI-compatible endpoint.** Wire
-   `scripts/agents/finagent_core/vectordb_registry.py` to call
-   `{local_llm_base_url}/embeddings` as the default embeddings
-   provider. Keep `text-embedding-004` (Gemini free) as a cloud
-   option.
+### Track 2 — Local runtime
 
-### Track 2 — Local LLM client
+5. Settings → LLM Config "Local LLM service" section: editable
+   `local_llm_base_url` (suggestion `http://localhost:11434/v1`),
+   Probe button, deep link to sibling project.
+6. Fresh-install fallback flip — local URL becomes the default
+   no-key path; no silent failover.
+7. Generalise the Ollama provider entry to "Local
+   (OpenAI-compatible)" using `/v1/...`.
+8. Slim `finagent_core` to a minimal agent loop; port deepagents'
+   prompt-loop fallback into `core_agent.py`; delete
+   `scripts/agents/deepagents/`.
 
-5. **Settings → LLM Config "Local LLM service" section.** Editable
-   `local_llm_base_url` (suggestion `http://localhost:11434/v1`), a
-   Probe button that hits `GET {base_url}/models`, a "Get started →"
-   deep link to the sibling project.
-6. **Fresh-install fallback flip.** With neither local URL configured
-   nor external key pasted, default no-key fallback is the local URL.
-   On a configured local profile with the service down, surface a
-   "Local LLM service not reachable" banner — **no silent failover**.
-7. **Generalise the Ollama provider entry.** Rename to "Local
-   (OpenAI-compatible)" and switch to `/v1/...` (works for vLLM,
-   llama.cpp, LM Studio, etc.). The OpenAI-compatible path is
-   preferred long-term; the sibling project may not be Ollama.
-8. **Tool-calling reliability flag.** When the active profile points
-   at the local URL, default to the `deepagents/orchestrator.py`
-   prompt-loop path (handles malformed tool-call JSON); expose a
-   "strict tool calling" opt-in toggle.
+### Track 3 — Anthropic runtime
 
-### Track 3 — MCP HTTP transport + marketplace seed list
+9. Add `claude-agent-sdk` integration in
+   `scripts/agents/finagent_core/runtimes/anthropic_runtime.py`.
+10. Profile system gains `runtime: anthropic` option; UI exposes
+    "Anthropic" as a first-class profile choice (alongside "Local").
+11. Wire `McpService::list_tools_for(agent_id)` results into SDK MCP
+    registration.
+12. Wire SKILL.md loading path into SDK.
+13. Bridge SDK streaming events + traces into our chat surface and
+    trace schema.
 
-9. **Add HTTP/SSE transport to `McpClient` (D6).** Sibling
-   `McpHttpClient` class implementing the same JSON-RPC 2.0 surface
-   against streamable HTTP / SSE. New `transport_type` column on
-   `mcp_servers` (default `stdio`). Factory in `McpManager` picks the
-   transport. Static auth only: `Authorization: Bearer …`,
-   `X-API-Key: …`, arbitrary custom headers. Auth value pulled from
-   `SecureStorage` at request time.
-10. **Marketplace seed list.** Seed the `mcp_servers` table with the
-    free / freemium baseline:
+### Track 4 — MCP HTTP transport + marketplace seed
 
-    | Server | Transport | Purpose | Key needed? |
-    |---|---|---|---|
-    | `mcp-server-fetch` | stdio | Generic URL fetch | No |
-    | `mcp-server-filesystem` | stdio | Sandboxed file ops | No |
-    | `mcp-server-sqlite` | stdio | Local DB queries | No |
-    | `mcp-server-time` | stdio | Time / timezone | No |
-    | `mcp-server-sequentialthinking` | stdio | Reasoning aid | No |
-    | `mcp-server-brave-search` | stdio | Web search | Free Brave key |
-    | `mcp-server-playwright` | stdio | Browser automation | No |
-    | `yfinance-mcp` (community) | stdio | Free quotes/fundamentals | No |
-    | `financial-datasets/mcp-server` | stdio | US fundamentals + news + crypto | Free-tier key |
+14. Add HTTP/SSE transport to `McpClient` (R6). New `transport_type`
+    column on `mcp_servers`. Static auth (bearer / API key) + OAuth
+    2.0 + DCR. SecureStorage-backed.
+15. Marketplace seed: insert the 9 servers (§7.4) into `mcp_servers`
+    at first run.
 
-### Track 4 — Free cloud provider deep-links
+### Track 5 — Full MCP spec on internal servers
 
-11. **Surface a "Free providers" group** in Settings → LLM Config
-    with one-line "Get a free key →" deep links for Gemini, Groq,
-    OpenRouter, Cerebras, Mistral. No code change in `LlmService.cpp`
-    — all five are already in the multi-provider switch.
-12. **Seed default profile routing.** If the user pastes a Gemini
-    key, embeddings auto-route to `text-embedding-004` (free) and
-    chat to `gemini-2.x-flash`. No prompt UI prerequisite.
-
-| Provider | Free tier (verify at wire time) | Recommended role |
-|---|---|---|
-| Google Gemini (AI Studio) | Generous RPM/RPD on Gemini 2.x Flash / Flash-Lite; free `text-embedding-004` | Agent reasoning, embeddings |
-| Groq | High tokens/sec on Llama 3.x, Mixtral, Qwen | "Fast chat" lane |
-| Cerebras | Free tier, fast | Alt fast lane |
-| Mistral La Plateforme | Free experimental tier | Optional |
-| OpenRouter | `:free` tagged models | Catch-all |
-| HuggingFace Inference | Rate-limited free | Niche models |
-| Anthropic / OpenAI | No real free API tier — signup credits only | Do not plan around |
-
-### Track 5 — Vendor `financial-services` skills + commands + agent prompts
-
-13. **Skills vendoring.** Copy `financial-services` skills (60+
-    `SKILL.md` files) under
-    `scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md`.
-    Preserve NOTICE / Apache-2.0 attribution.
-14. **Agent identities.** Register the 10 named agents (Pitch,
-    Meeting Prep, Market Researcher, Earnings Reviewer, Model
-    Builder, Valuation Reviewer, GL Reconciler, Month-End Closer,
-    Statement Auditor, KYC Screener) as `finagent_core` agent
-    identities, each binding to its skills.
-15. **Slash commands.** Resolve `/comps`, `/dcf`, `/earnings`,
-    `/ic-memo`, … in chat to `(agent, skill, args)` tuples through
-    `finagent_core`. Implement once at the chat-mode level — no
-    per-command Python.
-16. **Retarget data-source hierarchy.** Patch each `SKILL.md`'s
-    "data source priority" block from upstream partner MCPs (Daloopa,
-    Kensho, FactSet) to `fd:*` (financial-datasets MCP) and `int:*`
-    (finterm internal MCP tools).
+16. Add `resources`, `prompts`, `sampling`, `elicitation`,
+    `progress`, `cancellation`, `logging` to `McpProvider`. Migrate
+    31 tool families to expose appropriate capabilities (e.g.,
+    `PortfolioTools` exposes a `portfolio_snapshot` resource;
+    `NotesTools` exposes templated prompts).
+17. Replace per-tool auth hook with MCP elicitation.
 
 ### Track 6 — `FinancialDatasetsTools` internal MCP
 
-17. **Build a new `src/mcp/tools/FinancialDatasetsTools.cpp` family**
-    that wraps the financialdatasets.ai REST endpoints not exposed by
-    upstream's MCP server:
+18. New `src/mcp/tools/FinancialDatasetsTools.cpp` wrapping
+    financial-datasets REST endpoints not in upstream MCP:
+    - `get_sec_filing_section` (Item 1A, 7, etc.)
+    - `get_insider_trades` (Form 4)
+    - `get_institutional_holdings` (13-F)
+    - `get_segmented_financials`
+    - `get_operational_kpis`
+    - `get_earnings`
 
-    | Tool | REST endpoint | Why |
-    |---|---|---|
-    | `get_sec_filing_section` | 10-K / 10-Q / 8-K with `item=1A`, `item=7`, etc. | Section-level filing access; biggest single differentiator |
-    | `get_insider_trades` | Form 4 | Pre-normalized vs raw SEC |
-    | `get_institutional_holdings` | 13-F | Same |
-    | `get_segmented_financials` | Business + geographic | XBRL parseable but not first-class |
-    | `get_operational_kpis` | KPIs / guidance / non-GAAP | Missing entirely |
-    | `get_earnings` | Estimates, surprises, history | Partial via FMP today |
+    Uses `FINANCIAL_DATASETS_API_KEY` env var. Internal — served
+    through `McpProvider`.
 
-    Uses the same `FINANCIAL_DATASETS_API_KEY` env var as upstream
-    MCP. Tool descriptions tuned for LLM tool calling. Internal —
-    served through `McpProvider`, no subprocess.
+### Track 7 — Skills + slash commands + agent identities
 
-### Track 7 — Consolidate to one agent runtime
+19. Vendor `financial-services` skills under
+    `scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md`.
+    Preserve NOTICE / Apache-2.0.
+20. Register 10 named agents (Pitch, Meeting Prep, Market
+    Researcher, Earnings Reviewer, Model Builder, Valuation
+    Reviewer, GL Reconciler, Month-End Closer, Statement Auditor,
+    KYC Screener) with skill bindings.
+21. Slash command dispatch at chat layer: `/comps`, `/dcf`,
+    `/earnings`, etc. resolve to `(agent, skill, args)` and re-enter
+    the active runtime.
+22. Retarget each SKILL.md data-source-priority block from upstream
+    partner MCPs to `fd:*` + `int:*`.
 
-18. **Keep `finagent_core` as canonical.** Migrate `deepagents`
-    provider-bridge tricks (text-parse tool-call fallback) into
-    `core_agent.py`. Delete `scripts/agents/deepagents/`.
-19. **Migrate `alpha_arena` to call into `finagent_core`** through a
-    "competitive" team mode. `AlphaArenaService` keeps its public
-    C++ surface; internals stop importing `agno` directly.
+### Track 8 — Per-agent tool scoping + namespacing
 
-### Track 8 — Skills system in `core_agent`
+23. Source-prefixed tool names in `McpService::list_tools()`: `fd:`,
+    `int:`, `ext:`.
+24. Per-agent `allow_tools` glob patterns;
+    `list_tools_for(agent_id)` filters before either runtime sees
+    the catalogue.
 
-20. **System-prompt composition.** Each agent identity declares
-    `skills: [...]`; `core_agent.py` composes system prompt =
-    `<agent prelude>` + concatenation of selected SKILL.md bodies.
-    Backwards-compatible: an agent with no skills still works.
-21. **Skill discovery API.** Expose skill list via MCP
-    (`agent.list_skills`, `agent.preview_skill`) so the Workbench
-    can render the catalogue without a separate Python path.
+### Track 9 — Memory + vector store + MemoryTools
 
-### Track 9 — Per-agent tool scoping + namespacing
+25. sqlite-vec as default vector DB (no external service).
+26. Per-workspace corpus seeded with notes, watched-ticker filings,
+    transcripts (when ingested), recent news.
+27. `MemoryTools` MCP family — `memory.search(query, k)`,
+    `memory.upsert(doc)`, `memory.list_collections()`. Per-thesis
+    / per-workspace / global scopes with provenance. Replaces
+    `AgenticMemoryTools` (becomes a thin shim).
+28. On the Anthropic profile, expose the SDK memory tool **and**
+    `MemoryTools` — user picks one as primary per agent identity.
 
-22. **Source-prefixed tool names.** `McpService::list_tools()` returns
-    names prefixed by source: `fd:get_income_statements`,
-    `int:markets.quote`, `ext:fetch.url`.
-23. **Per-agent allowlists.** Each agent declares `allow_tools` (glob
-    patterns); `McpService::list_tools_for(agent_id)` filters before
-    the model sees the catalogue.
+### Track 10 — Background scheduler + hooks
 
-### Track 10 — Embeddings + vector store + `MemoryTools`
-
-24. **sqlite-vec as default vector DB** (no external service).
-    Embeddings via the active embeddings profile.
-25. **Per-workspace corpus** seeded with: notes, watched-ticker
-    filings, transcripts (when ingested), recent news.
-26. **`MemoryTools` MCP family** exposing
-    `memory.search(query, k)`, `memory.upsert(doc)`,
-    `memory.list_collections()`. Replaces `AgenticMemoryTools`
-    (which becomes a thin compatibility shim).
-
-### Track 11 — Background scheduler
-
-27. **`AgentService` cron-shaped scheduler.** Qt timer driving a
-    SQLite-backed queue. Each entry: `(agent_id, skill, args, cron)`.
-    "Morning note at 6:30am", "catalyst watch every 30 min" become
-    declarative. Same machinery as a chat turn.
-28. **Scheduler UI in Workbench** — list runs, view last output, edit
+29. Cron-shaped scheduler in `AgentService` (Qt timer + SQLite
+    queue). Entries: `(agent_id, skill, args, cron)`.
+30. Scheduler UI in Workbench — list runs, view last output, edit
     cadence, pause/resume.
+31. On the Anthropic profile, scheduler entries can additionally
+    register SDK hooks for event triggers (news threshold,
+    portfolio drift, file changed).
 
-### Track 12 — Quant narrator
+### Track 11 — Quant narrator
 
-29. **`QuantNarratorTools.cpp`.** Three MCP tools:
-    `narrate_backtest_result(run_id)`,
-    `propose_param_sweep(run_id)`,
-    `narrate_live_trade(trade_id)`. Stateless — takes structured
-    numeric input from existing services, asks an LLM (per-profile)
-    for English commentary.
-30. **`quant_critic` agent identity** in `finagent_core` —
-    system prompt composed from `earnings-analysis` +
-    `model-update` + quant-specific prelude.
+32. `QuantNarratorTools.cpp`: `narrate_backtest_result(run_id)`,
+    `propose_param_sweep(run_id)`, `narrate_live_trade(trade_id)`.
+    Stateless; consumes existing service outputs, returns
+    commentary.
+33. `quant_critic` agent identity: composed from
+    `earnings-analysis` + `model-update` + quant-specific prelude.
+
+### Track 12 — Migrate alpha_arena to two runtimes
+
+34. `AlphaArenaService` keeps its public C++ surface. Internals stop
+    importing `agno` directly; per-cycle decisions are turns run by
+    the active runtime in a "competitive" team mode.
 
 ### Track 13 — AI Workbench (UI consolidation)
 
-31. **Single screen with left nav** — Chat, Agents, Teams, Workflows,
-    Tools, Servers, Profiles. Replaces `chat_mode`, `agent_config`,
-    `mcp_servers` as standalone screens (they become panels under
-    Workbench). Floating bubble + screen-context actions unchanged.
-32. **Servers tab carries the kill-switch toggle (D17).**
+35. Single screen with left nav: Chat, Agents, Teams, Workflows,
+    Tools, Servers, Profiles, System. Existing `chat_mode`,
+    `agent_config`, `mcp_servers` become panels under Workbench.
+    `AiChatBubble` and screen-context actions unchanged.
+36. System tab: traces, per-tool/per-agent/per-runtime counters,
+    evals, cost meter, kill-switch toggle.
 
-### Track 14 — Evals + observability + kill-switch
+### Track 14 — Evals + observability + audit + safety
 
-33. **`scripts/agents/evals/` directory.** Vendor or interface with
-    `financial-datasets/llm-evaluations`. Nightly fixture run, results
-    persisted to SQLite, surfaced in Workbench → System.
-34. **Per-tool / per-agent / per-provider counters** (latency, error
-    rate, token cost). Recorded in SQLite. Surface in System tab.
-35. **Trading-adjacent tool auth hook.** Every destructive tool
-    (place_order, send_wallet_tx, etc.) gates on the kill-switch
-    state; auth callback prompts the user when armed.
+37. `scripts/agents/evals/` directory. Vendor or interface with
+    `financial-datasets/llm-evaluations`. Nightly fixture run;
+    results in SQLite; surfaced in Workbench → System.
+38. Unified trace + audit schema across both runtimes. Each turn
+    records: prompts, tool calls, tool results, outputs, latency,
+    tokens, cost, runtime, model snapshot.
+39. Per-tool kill-switch armed via Workbench → System (R22).
+    Trading-adjacent tools gate via MCP elicitation under R8 / R17.
+40. Prompt-injection guard: untrusted-content tagging on tool output
+    strings (R23).
+41. Per-request budgets enforced by both runtimes (R24); UI displays
+    running cost.
 
 ---
 
-## 7. Sequencing
+## 10. Sequencing
 
 ```
-   Track 1 (cleanup) ──┬─► Track 2 (local client)  ─┐
+   Track 1 (cleanup) ──┬─► Track 2 (local runtime) ─┐
                        │                             │
-                       ├─► Track 3 (MCP HTTP+seed)──┼─► Track 5 (skills) ──┐
-                       │                             │                       │
-                       └─► Track 4 (free providers)─┘                       │
-                                                                            │
-                                                Track 6 (fd internal MCP) ──┤
-                                                                            │
-                                                Track 7 (one runtime) ──────┤
-                                                Track 8 (skills system) ────┤
-                                                Track 9 (tool scoping) ─────┤
-                                                                            ▼
-                                                              Track 10 (memory)
-                                                              Track 11 (scheduler)
-                                                              Track 12 (quant narrator)
-                                                                            │
-                                                                            ▼
-                                                              Track 13 (AI Workbench)
-                                                              Track 14 (evals/obs)
+                       ├─► Track 3 (Anthropic SDK) ──┤
+                       │                             │
+                       ├─► Track 4 (MCP HTTP+seed) ──┤
+                       │                             │
+                       └─► Track 5 (full MCP spec) ──┤
+                                                     │
+                                Track 6 (fd internal MCP) ──┤
+                                Track 7 (skills + slash) ───┤
+                                Track 8 (tool scoping) ─────┤
+                                                            ▼
+                                            Track 9 (memory)
+                                            Track 10 (scheduler/hooks)
+                                            Track 11 (quant narrator)
+                                            Track 12 (alpha-arena migration)
+                                                            │
+                                                            ▼
+                                            Track 13 (AI Workbench)
+                                            Track 14 (evals/obs/audit/safety)
 ```
 
 Concrete order, smallest user-visible wins first:
 
-- **Week 1.** Track 1 (foundation cleanup). Everything else assumes
-  these.
-- **Week 1.** Track 2 (local LLM client). With the sibling project
-  running, user can chat with no API key.
-- **Week 1–2.** Track 3 (MCP HTTP transport + marketplace seed).
-  Agents gain web/fs/search/finance tools.
-- **Week 2.** Track 4 (free-provider deep links).
-- **Week 2–3.** Track 5 (skills vendoring). Skills available to
-  agents as system-prompt context.
+- **Week 1.** Track 1.
+- **Week 1.** Track 2 (local runtime; with sibling project running,
+  user can chat with no API key).
+- **Week 1–2.** Track 3 (Anthropic SDK; first agent identity runs
+  against Claude via SDK).
+- **Week 2.** Track 4 (MCP HTTP transport + marketplace seed).
+- **Week 2–3.** Track 5 (full MCP spec on internal servers).
 - **Week 3.** Track 6 (`FinancialDatasetsTools` internal MCP).
-  Insider trades, 13-F, section-level filings reach the LLM.
-- **Week 4.** Track 7 (retire `deepagents`, migrate `alpha_arena`).
-- **Week 4.** Track 8 (skills system in `core_agent`).
-- **Week 5.** Track 9 (tool scoping + namespacing).
-- **Week 5–6.** Track 10 (memory).
-- **Week 6.** Track 11 (scheduler).
-- **Week 6.** Track 12 (quant narrator).
-- **Week 7.** Track 13 (AI Workbench).
-- **Week 7–8.** Track 14 (evals + observability + kill-switch).
+- **Week 3–4.** Track 7 (skills vendoring + agent identities + slash
+  commands).
+- **Week 4.** Track 8 (tool scoping + namespacing).
+- **Week 4–5.** Track 9 (memory).
+- **Week 5.** Track 10 (scheduler + hooks).
+- **Week 5–6.** Track 11 (quant narrator).
+- **Week 6.** Track 12 (alpha-arena migration).
+- **Week 6–7.** Track 13 (AI Workbench).
+- **Week 7–8.** Track 14 (evals + observability + audit + safety).
 
 ---
 
-## 8. Risks and mitigations
+## 11. Open questions
+
+Not yet decided; shape later work:
+
+1. **Primary user clamp.** Individual investor vs PM/analyst vs
+   prosumer mix. Affects UI density, onboarding flow, planning
+   depth.
+2. **Transcript corpus.** Self-serve via local Whisper + user-
+   uploaded audio, vs partner (Quartr / SeekingAlpha / Tikr), vs
+   build. Without one, "earnings post" workflows are structurally
+   blocked.
+3. **US-broker connect (read-side first).** Plaid (hosted, monthly
+   cost) vs broker-direct (Alpaca, IBKR, unofficial Robinhood).
+   Affects portfolio narration accuracy.
+4. **Citations on the local profile.** Anthropic citations are
+   native; local has none. Tool-result metadata is the floor;
+   second-pass "ground" call is an option if quality demands.
+5. **Cost ceiling and budget UX.** Per-session / per-day / per-agent
+   cost limits on the Anthropic profile. Hard cap vs warning vs both.
+6. **Skill drift management.** Refresh `financial-services` upstream
+   how often? Manual review of data-source retargeting per refresh?
+7. **MCP HTTP OAuth scope.** Which hosted connectors to wire first
+   (Gmail, Drive, GitHub, Slack), and when?
+8. **Audit log retention + export.** Trades, recommendations, agent
+   decisions — how long, in what format, exportable to where?
+
+---
+
+## 12. Risks and mitigations
 
 - **Local-model tool-calling reliability.** 7–14B models sometimes
-  produce malformed tool-call JSON.
-  *Mitigation:* when the active profile points at the local URL,
-  default to the prompt-loop fallback; expose a "strict tool calling"
-  opt-in toggle. Re-evaluate per model.
-- **Sibling-project unreachable when active profile is local.**
-  *Mitigation:* show a banner pointing at the sibling project's setup
-  docs and **do not silently fail over to any other provider**. If
-  the user wants a fallback to an external provider on local outage,
-  that's an explicit profile choice, not implicit behavior. Symmetric
-  for external 5xx → local: no silent failback.
-- **Endpoint surface drift.** Local runtimes (Ollama, vLLM, llama.cpp,
-  LM Studio) all *claim* OpenAI compatibility but diverge on edge
-  cases (streaming chunk format, tool-call deltas, embeddings
-  response shape).
-  *Mitigation:* small compatibility shim per runtime if needed;
-  document tested runtimes in the sibling project's README, not here.
-- **Free tier drift.** Free quotas / models change without notice.
-  *Mitigation:* deep links point at the provider's own pricing/quota
-  page, not at hardcoded numbers in our UI.
+  produce malformed tool-call JSON. *Mitigation:* prompt-loop
+  fallback in the local runtime; per-model strictness toggle.
+- **Sibling-project unreachable on local profile.** *Mitigation:*
+  banner with sibling-project setup-doc link; no silent failover.
+  Symmetric for Anthropic API outage on the Anthropic profile.
+- **Anthropic API cost surprises.** Long SKILL.md system prompts ×
+  frequent turns × no caching = unbounded bill. *Mitigation:* prompt
+  caching automatic via SDK; per-request budgets enforce a ceiling;
+  cost meter in UI.
+- **Endpoint surface drift across local runtimes.** Ollama, vLLM,
+  llama.cpp, LM Studio all claim OpenAI compatibility but diverge on
+  edge cases. *Mitigation:* small compatibility shim per runtime if
+  needed; tested runtimes documented in sibling project.
 - **SecureStorage Linux fallback.** When `libsecret` is absent the
-  storage degrades to XOR-obfuscated QSettings.
-  *Mitigation:* surface a one-time warning in Settings when on the
-  fallback; do not block.
-- **Fincept endpoint reachability tests.** Any CI / dev tests pointing
-  at fincept.in will break once gated.
-  *Mitigation:* audit during Track 1; remove or repoint at the local
-  stub.
-- **`deepagents` retirement may lose features.** LangGraph subagent
-  spawning and provider-text-parse fallback ride on `deepagents`.
-  *Mitigation:* port the fallback into `core_agent.py` first, verify
-  the alpha-arena migration on a non-tool-calling local model, then
-  delete.
-- **Skill drift.** Vendored `financial-services` skills evolve
-  upstream; our retargeted data-source hierarchies will drift.
-  *Mitigation:* keep skills under `scripts/agents/finagent_core/skills/`
-  as a vendored fork; refresh deliberately, not automatically.
-- **eval-harness signal-to-noise.** Cheap nightly evals on a tiny
-  fixture set will not catch regressions on long-tail tasks.
-  *Mitigation:* start small, expand fixtures when we have a known
-  regression we want guarded against.
+  storage degrades to XOR-obfuscated QSettings. *Mitigation:*
+  one-time warning in Settings; do not block.
+- **`deepagents` retirement may lose features.** Provider-text-parse
+  fallback rides on `deepagents`. *Mitigation:* port the fallback
+  into `core_agent.py` first; verify alpha-arena migration on a
+  non-tool-calling local model; then delete.
+- **Skill drift upstream.** Vendored `financial-services` evolves;
+  retargeted data-source hierarchies will drift. *Mitigation:*
+  vendored fork; refresh deliberately, not automatically.
+- **Eval signal-to-noise.** Small fixture set won't catch long-tail
+  regressions. *Mitigation:* start small; expand fixtures against
+  known regressions.
+- **Anthropic SDK breaking changes.** Adopting the SDK as runtime
+  ties us to its release cycle. *Mitigation:* pin SDK version;
+  upgrade deliberately; eval-bench gates upgrades.
+- **MCP spec evolution.** New capabilities will land. *Mitigation:*
+  our internal servers are versioned; capabilities are additive.
 
 ---
 
-## 9. Acceptance criteria
+## 13. Acceptance criteria
 
-Three install flavours must all pass.
+Two install flavours must pass.
 
-**Flavour A — Local only** (sibling project running, no commercial
-keys configured):
+**Flavour A — Local only** (sibling project running, no Anthropic
+key):
 
 - A1. Settings → LLM Config → confirm/edit `local_llm_base_url` →
-  click Probe → list of models from the sibling project appears.
+  Probe → list of models from the sibling project appears.
 - A2. AI Chat → ask "what's 2+2" → streamed answer from the local
-  model; no network calls leaving the box (verify with `ss -tnp`).
-- A3. Stop the sibling project → reopen Chat → see "Local LLM service
-  not reachable at {url}" banner with a link to the sibling
-  project's docs. No silent failover.
+  model; no outbound traffic (`ss -tnp` verifies).
+- A3. Stop the sibling project → reopen Chat → "Local LLM service
+  not reachable at {url}" banner with link to sibling-project docs.
+  No silent failover.
+- A4. `/comps AAPL` → local agent loads `comps-analysis` skill,
+  calls `fd:get_income_statements` for AAPL and peers via the
+  financial-datasets MCP server, returns a comparable-company table.
 
-**Flavour B — External only** (no sibling project running, one
-commercial / free-tier key pasted):
+**Flavour B — Anthropic** (no sibling project required, Anthropic
+API key configured):
 
-- B1. Paste an Anthropic / OpenAI / Gemini / Groq key → set as active
+- B1. Paste an Anthropic key → set "Anthropic Claude" as the active
   profile.
-- B2. AI Chat → ask "what's 2+2" → streamed answer from that
-  provider. No probe attempts to `localhost`, no "local unreachable"
-  banner.
-- B3. Revoke the key on the provider's dashboard → reopen Chat → see
-  a provider-specific auth error surfaced clearly. No silent
-  failover to local.
+- B2. AI Chat → ask "what's 2+2" → streamed answer from Claude. No
+  probe attempts to `localhost`.
+- B3. Revoke the key → reopen Chat → provider auth error surfaced
+  clearly. No silent failover.
+- B4. `/comps AAPL` → SDK loads `comps-analysis` skill, native MCP
+  client calls our internal MCPs + financial-datasets, returns a
+  comparable-company table with per-claim citations.
+- B5. Long SKILL system prompt is cacheable; second turn shows
+  cache-hit token reduction in the cost meter.
 
-**Flavour C — Mixed** (both configured):
+**Always-on (both flavours):**
 
-- C1. Both local URL and an external key present; profile assignments
-  say chat → Groq, agent → local Qwen, embeddings → Gemini free.
-- C2. Send a chat message → routed to Groq (verify in network panel /
-  logs).
-- C3. Run an agent → reasoning calls hit local Qwen.
-- C4. Trigger a RAG-backed query → embeddings call hits Gemini.
-
-**Always-on (all flavours):**
-
-- D1. MCP Servers tab → seeded list visible → install
+- C1. MCP Servers tab → seeded marketplace list visible → install
   `mcp-server-fetch` → agent can fetch a URL.
-- D2. MCP Servers tab → install `financial-datasets/mcp-server` with
-  a key → agent can call `get_income_statements("AAPL")`.
-- D3. Voice settings → Whisper is the default (Google SR removed);
-  Deepgram is opt-in. Mic → chat input populates, no outbound traffic
-  in Whisper mode.
-- D4. Workbench → Agents → "Equity Researcher" → `/comps AAPL` →
-  agent loads `comps-analysis` skill, calls `fd:get_income_statements`
-  for AAPL and peers, returns a comparable-company table.
-- D5. Workbench → Schedule → "Morning note at 6:30am" → agent runs
-  at the scheduled time, output appears in Workbench → Chat → Daily.
-- D6. Workbench → System → kill-switch armed → agent attempting
-  `paper.place_order` is prompted; user denies; tool returns error
-  to the agent loop without trade.
+- C2. MCP Servers tab → install `financial-datasets/mcp-server` with
+  key → agent can call `get_income_statements("AAPL")`.
+- C3. Voice settings → Whisper is the default (Google SR removed);
+  Deepgram opt-in. Mic → chat input populates; no outbound in
+  Whisper mode.
+- C4. Workbench → Agents → "Equity Researcher" → `/comps AAPL`
+  succeeds end-to-end.
+- C5. Workbench → Schedule → "Morning note at 6:30am" → agent runs
+  at scheduled time; output appears in Workbench → Chat → Daily.
+- C6. Workbench → System → kill-switch armed → agent attempting
+  `paper.place_order` is prompted via MCP elicitation; user denies;
+  tool returns error to the loop without trade.
+- C7. Workbench → System → trace of any turn shows: prompts, tool
+  calls, results, outputs, latency, tokens, cost, runtime, model
+  snapshot.
 
 ---
 
-## Appendix — Recommended local models
+## Appendix A — Recommended local models
 
-Not finterm's job to install; this is guidance for the sibling
-project's README, based on the current dev box (RTX 5070 Ti / 12 GB
-VRAM, Intel Ultra 9 285H, 30 GB RAM):
+Guidance for the sibling project's README, based on the current dev
+box (RTX 5070 Ti / 12 GB VRAM, Intel Ultra 9 285H, 30 GB RAM):
 
 | Role | Suggested model | On-disk | Why |
 |---|---|---|---|
 | Primary chat + MCP tool calling | Qwen 2.5 14B Instruct (Q4/Q5) | ~9 GB | Best OSS function calling at 14B |
-| Fast fallback | Llama 3.1 8B Instruct | ~5 GB | Sub-second TTFT on the 5070 Ti |
-| Coding / ReportBuilder | Qwen 2.5 Coder 14B | ~9 GB | Python/report tools |
-| Embeddings | nomic-embed-text or bge-m3 | ~280 MB / ~2 GB | Served via `/v1/embeddings` |
-| Whisper STT | faster-whisper `medium` or `large-v3` | 1.5–3 GB | OpenAI-compatible `/v1/audio/transcriptions` |
+| Fast fallback | Llama 3.1 8B Instruct | ~5 GB | Sub-second TTFT |
+| Coding / ReportBuilder | Qwen 2.5 Coder 14B | ~9 GB | Python / report tools |
+| Embeddings | `nomic-embed-text` or `bge-m3` | ~280 MB / ~2 GB | Served via `/v1/embeddings` |
+| Whisper STT | `faster-whisper` `medium` or `large-v3` | 1.5–3 GB | OpenAI-compatible `/v1/audio/transcriptions` |
+
+## Appendix B — Embeddings on the Anthropic profile
+
+The Anthropic API has no native embeddings endpoint. Both profiles
+default to the sibling project's `/embeddings`. If the Anthropic
+profile is active and the local server is unreachable, embeddings
+fall back to a user-pasted Voyage AI key (Voyage is Anthropic-
+acquired and commonly recommended for Claude pipelines).
