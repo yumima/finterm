@@ -15,14 +15,17 @@ namespace fincept::screens::widgets {
 
 namespace {
 
-// Fullscreen quad in clip space; UV is flipped on the Y axis so glReadPixels'
-// bottom-up output ends up top-down for QImage without a separate CPU mirror.
+// Fullscreen quad in clip space. UV uses the natural mapping (UV.y tracks
+// clip.y), which intentionally renders the source upside-down to the FBO.
+// glReadPixels then reads the FBO bottom-up into QImage's top-down memory,
+// undoing the flip exactly. Net effect: QImage scanline 0 == source TOP.
+// No CPU mirror needed.
 constexpr float kQuadVerts[] = {
-    // pos.xy        // uv.xy (flipped y)
-    -1.f, -1.f,      0.f, 1.f,
-     1.f, -1.f,      1.f, 1.f,
-    -1.f,  1.f,      0.f, 0.f,
-     1.f,  1.f,      1.f, 0.f,
+    // pos.xy        // uv.xy (natural — flip happens via readback orientation)
+    -1.f, -1.f,      0.f, 0.f,
+     1.f, -1.f,      1.f, 0.f,
+    -1.f,  1.f,      0.f, 1.f,
+     1.f,  1.f,      1.f, 1.f,
 };
 
 constexpr const char* kVertShader = R"(
@@ -265,18 +268,32 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
         return {};
     }
 
-    // Upload Y plane (R8, full resolution).
+    // Upload Y plane (R8, full resolution). Allocate-then-update so the
+    // per-frame cost is just the texel transfer, not a full reallocation.
     fns->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     fns->glPixelStorei(GL_UNPACK_ROW_LENGTH, f.bytesPerLine(0));
     fns->glBindTexture(GL_TEXTURE_2D, y_tex_);
-    fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, src_w, src_h, 0,
-                      GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
+    if (y_tex_size_ != QSize(src_w, src_h)) {
+        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, src_w, src_h, 0,
+                          GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
+        y_tex_size_ = QSize(src_w, src_h);
+    } else {
+        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
+                             GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
+    }
 
     // Upload UV plane (RG8, half resolution — interleaved U,V).
     fns->glPixelStorei(GL_UNPACK_ROW_LENGTH, f.bytesPerLine(1) / 2);
     fns->glBindTexture(GL_TEXTURE_2D, uv_tex_);
-    fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, src_w / 2, src_h / 2, 0,
-                      GL_RG, GL_UNSIGNED_BYTE, f.bits(1));
+    const QSize uv_size(src_w / 2, src_h / 2);
+    if (uv_tex_size_ != uv_size) {
+        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, uv_size.width(), uv_size.height(), 0,
+                          GL_RG, GL_UNSIGNED_BYTE, f.bits(1));
+        uv_tex_size_ = uv_size;
+    } else {
+        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, uv_size.width(), uv_size.height(),
+                             GL_RG, GL_UNSIGNED_BYTE, f.bits(1));
+    }
     fns->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
     f.unmap();
@@ -301,12 +318,15 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
 
     program_.release();
 
-    // Readback. UV is flipped in the vertex shader so we get top-down RGB
-    // directly — no CPU mirror needed.
-    QImage out(out_device, QImage::Format_RGB888);
-    fns->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    // Readback. RGBA (4 bytes/pixel) is always 4-byte row-aligned, which
+    // matches QImage::Format_RGBA8888's row layout regardless of width —
+    // unlike Format_RGB888 which pads rows to 4-byte boundaries and would
+    // slide each row by a few bytes against glReadPixels' tight-packed
+    // output, producing chroma-shifted stripes.
+    QImage out(out_device, QImage::Format_RGBA8888);
+    fns->glPixelStorei(GL_PACK_ALIGNMENT, 4);
     fns->glReadPixels(0, 0, out_device.width(), out_device.height(),
-                      GL_RGB, GL_UNSIGNED_BYTE, out.bits());
+                      GL_RGBA, GL_UNSIGNED_BYTE, out.bits());
 
     fbo_->release();
     fns->glBindTexture(GL_TEXTURE_2D, 0);

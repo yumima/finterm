@@ -100,6 +100,13 @@ class OffscreenVideoScaler {
     unsigned int y_tex_  = 0;  ///< GL_R8  — luma plane, full source resolution
     unsigned int uv_tex_ = 0;  ///< GL_RG8 — chroma plane, half resolution (NV12)
 
+    // Tracked separately from FBO size: source dimensions drive these and
+    // can differ (resolution changes during a stream). When they don't
+    // change frame-to-frame we use glTexSubImage2D instead of a full
+    // glTexImage2D reallocation.
+    QSize y_tex_size_;
+    QSize uv_tex_size_;
+
     int loc_u_y_  = -1;
     int loc_u_uv_ = -1;
 };
