@@ -19,13 +19,11 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
-#include <QPainter>
 #include <QRadioButton>
 #include <QRect>
 #include <QTableWidget>
@@ -39,96 +37,6 @@
 #include <QVBoxLayout>
 
 namespace fincept::screens::widgets {
-
-// ── VideoRenderWidget ─────────────────────────────────────────────────────────
-// Plain QWidget + QPainter. Decoded frames arrive from QVideoSink and are
-// stored as QImage; paintEvent() draws the cached image letter-boxed in the
-// widget. Transient toImage() failures simply skip the present() call and
-// the previous image stays on screen — no black flash, no flicker.
-
-#ifdef HAS_QT_MULTIMEDIA
-
-VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    setAttribute(Qt::WA_OpaquePaintEvent); // we paint the entire surface ourselves
-    setAutoFillBackground(false);
-    QPalette pal = palette();
-    pal.setColor(QPalette::Window, Qt::black);
-    setPalette(pal);
-}
-
-void VideoRenderWidget::clear_frame() {
-    last_image_ = QImage();
-    scaled_image_ = QImage();
-    paint_pending_ = false;
-    update();
-}
-
-void VideoRenderWidget::present(const QVideoFrame& frame) {
-    if (!frame.isValid())
-        return;
-
-    // Backpressure guard: if the previous frame's paintEvent hasn't run yet,
-    // the main thread is behind. Drop this frame instead of queueing another
-    // paint behind whatever is keeping the event loop busy (typing, clicks,
-    // other widget updates). Live tiles trade frame completeness for input
-    // responsiveness — a dropped frame is invisible; queued frames stack
-    // up as visible UI lag.
-    if (paint_pending_)
-        return;
-
-    // Surface a warning if a single frame's worth of conversion + rescale
-    // ever crosses 25 ms — that's already chewing through a 40 ms 25 fps
-    // budget and would explain stutter on the calling thread.
-    FT_TIME_SLOT("VideoRenderWidget.present", 25);
-
-    QImage img = frame.toImage();
-    if (img.isNull())
-        return; // Keep showing the previous frame — no flash.
-    last_image_ = std::move(img);
-    rescale_for_widget();
-    paint_pending_ = true;
-    update();   // schedule a repaint only when we have a new valid frame
-}
-
-void VideoRenderWidget::rescale_for_widget() {
-    if (last_image_.isNull() || size().isEmpty()) {
-        scaled_image_ = QImage();
-        scaled_origin_ = QPoint();
-        return;
-    }
-    // DPR-aware: scale to the *device* pixel size of the letterbox region,
-    // then tag the image with the matching devicePixelRatio. drawImage(QPoint,
-    // QImage) will lay it down 1:1 in device pixels at the logical origin —
-    // crisp on hi-DPI, no additional scaling at paint time. We do this work
-    // once per frame instead of once per paint.
-    const qreal dpr = devicePixelRatioF();
-    const QSize target_logical = last_image_.size().scaled(size(), Qt::KeepAspectRatio);
-    const QSize target_device(qMax(1, static_cast<int>(target_logical.width()  * dpr)),
-                              qMax(1, static_cast<int>(target_logical.height() * dpr)));
-    scaled_image_ = last_image_.scaled(target_device, Qt::KeepAspectRatio,
-                                       Qt::SmoothTransformation);
-    scaled_image_.setDevicePixelRatio(dpr);
-    scaled_origin_ = QPoint((width()  - target_logical.width())  / 2,
-                            (height() - target_logical.height()) / 2);
-}
-
-void VideoRenderWidget::resizeEvent(QResizeEvent* event) {
-    rescale_for_widget();
-    QWidget::resizeEvent(event);
-}
-
-void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
-    paint_pending_ = false;
-    QPainter p(this);
-    p.fillRect(rect(), Qt::black);
-    if (scaled_image_.isNull())
-        return;
-    // Direct blit — no scaling in the paint path, just memcpy-ish. This is
-    // why the present() call did the SmoothTransformation work upstream.
-    p.drawImage(scaled_origin_, scaled_image_);
-}
-#endif
 
 // ── Channel storage ─────────────────────────────────────────────────────────
 //
@@ -529,24 +437,22 @@ void VideoPlayerWidget::build_player_view() {
     vl->setSpacing(0);
 
 #ifdef HAS_QT_MULTIMEDIA
-    // VideoRenderWidget is a plain QWidget — no native Wayland surface.
-    // Mouse events reach the tile's resize grip without any platform tricks.
-    video_widget_ = new VideoRenderWidget(this);
+    // QVideoWidget renders on the GPU via Qt RHI — decoded frames stay in
+    // video memory from NVDEC/VAAPI through present, with no host readback
+    // and no per-frame QPainter blit. This is what setVideoOutput's
+    // QVideoWidget overload is for.
+    video_widget_ = new QVideoWidget(this);
+    video_widget_->setAutoFillBackground(true);
+    QPalette pal = video_widget_->palette();
+    pal.setColor(QPalette::Window, Qt::black);
+    video_widget_->setPalette(pal);
     vl->addWidget(video_widget_, 1);
 
     player_       = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
     player_->setAudioOutput(audio_output_);
-
-    // QVideoSink is the frame delivery pipe: it receives decoded frames from
-    // the multimedia engine and emits videoFrameChanged. The queued connection
-    // crosses from the decode thread to the main thread cleanly.
-    video_sink_ = new QVideoSink(this);
-    player_->setVideoOutput(video_sink_);
-    connect(video_sink_, &QVideoSink::videoFrameChanged,
-            video_widget_, &VideoRenderWidget::present,
-            Qt::QueuedConnection);
+    player_->setVideoOutput(video_widget_);
 
     connect(player_, &QMediaPlayer::errorOccurred, this,
             &VideoPlayerWidget::on_player_error);
@@ -1071,8 +977,10 @@ void VideoPlayerWidget::stop_playback() {
     // no longer pulling from it when we close the listening socket.
     stop_hls_proxy();
     current_is_live_ = false;
-    if (video_widget_)
-        video_widget_->clear_frame();
+    // Clear the source so QVideoWidget releases its last frame to black —
+    // otherwise the previous stream's final frame stays on screen behind
+    // the channel list during the stack switch.
+    player_->setSource(QUrl());
 #endif
     set_loading(false);
     status_label_->hide();
@@ -1085,10 +993,10 @@ void VideoPlayerWidget::on_player_error() {
     const QString err = player_->errorString();
     play_in_progress_ = false;
     current_url_.clear(); // stops refresh_data() from retrying
-    // Stop the render loop — without this, frameSwapped keeps firing 60fps
-    // rendering the last frozen frame behind the error label indefinitely.
-    if (video_widget_)
-        video_widget_->clear_frame();
+    // Clear the source so the frozen last frame disappears behind the error
+    // label — RHI render only fires on new frames so there's no idle CPU/GPU
+    // cost here, this is purely a visual cleanup.
+    player_->setSource(QUrl());
     set_loading(false);
     status_label_->setText("Playback error: " + (err.isEmpty() ? "Unknown" : err.left(120)));
     status_label_->show();
@@ -1203,7 +1111,7 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
 #ifdef HAS_QT_WEBENGINE
     auto* engine_group = new QGroupBox("Streaming engine", dlg);
     auto* engine_h = new QHBoxLayout(engine_group);
-    auto* gl_radio  = new QRadioButton("GL — yt-dlp + QPainter (HLS)", engine_group);
+    auto* gl_radio  = new QRadioButton("GL — yt-dlp + HLS", engine_group);
     auto* web_radio = new QRadioButton("WEB — YouTube iframe (Chromium)", engine_group);
     gl_radio->setToolTip("Works for any public stream. Default — works for CNBC, Yahoo, etc.");
     web_radio->setToolTip("Smoother for plain YouTube videos. Some news channels block embedding.");

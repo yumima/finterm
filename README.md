@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`4ac37578`](https://github.com/yumima/finterm/commit/4ac37578) widgets(video): rebuild audio chain on lock-resume to fix silent video
 - [`9e15a3c7`](https://github.com/yumima/finterm/commit/9e15a3c7) screens(portfolio): clear heatmap metrics on switch — same staleness class as fundamentals
 - [`473c0882`](https://github.com/yumima/finterm/commit/473c0882) screens(portfolio): refresh perf curve + heatmap fundamentals on switch
 - [`6f6e285e`](https://github.com/yumima/finterm/commit/6f6e285e) fork: tier-A — repoint upstream URLs at yumima/finterm
