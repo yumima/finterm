@@ -673,6 +673,12 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     if (heatmap_) {
         heatmap_->set_selected_symbol({});
         heatmap_->clear_fundamentals();
+        // BETA + risk gauge + concentration / volatility also live in the
+        // heatmap analyst panel; their data arrives on a separate signal
+        // (metrics_computed via compute_metrics), so without this they'd
+        // show the prior portfolio's values for ~100-200 ms while the
+        // SPY regression runs.
+        heatmap_->clear_metrics();
     }
     if (blotter_)
         blotter_->set_selected_symbol({});

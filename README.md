@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`473c0882`](https://github.com/yumima/finterm/commit/473c0882) screens(portfolio): refresh perf curve + heatmap fundamentals on switch
 - [`6f6e285e`](https://github.com/yumima/finterm/commit/6f6e285e) fork: tier-A — repoint upstream URLs at yumima/finterm
 - [`1a970335`](https://github.com/yumima/finterm/commit/1a970335) repo: drop fincept_icon.ico — byte-identical duplicate of resources/fincept.ico
 - [`9a3ce383`](https://github.com/yumima/finterm/commit/9a3ce383) repo: drop unused root JSONs (funding/package/package-lock)

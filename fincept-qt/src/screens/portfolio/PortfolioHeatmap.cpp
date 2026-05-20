@@ -689,6 +689,16 @@ void PortfolioHeatmap::clear_fundamentals() {
         update_portfolio_detail();
 }
 
+void PortfolioHeatmap::clear_metrics() {
+    // set_metrics handles risk gauge + concentration + volatility from the
+    // ComputedMetrics. BETA is rendered by update_portfolio_detail() from
+    // metrics_.beta — a default-constructed ComputedMetrics has beta=nullopt,
+    // which hits the "--" branch in update_portfolio_detail.
+    set_metrics(portfolio::ComputedMetrics{});
+    if (selected_symbol_.isEmpty())
+        update_portfolio_detail();
+}
+
 void PortfolioHeatmap::update_risk_gauge() {
     double rs = metrics_.risk_score.value_or(0);
     const char* rs_color = rs < 30 ? ui::colors::POSITIVE : rs < 60 ? ui::colors::WARNING : ui::colors::NEGATIVE;

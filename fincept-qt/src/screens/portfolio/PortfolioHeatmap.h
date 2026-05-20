@@ -20,6 +20,14 @@ class PortfolioHeatmap : public QWidget {
 
     void set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings);
     void set_metrics(const portfolio::ComputedMetrics& metrics);
+    /// Reset BETA / risk gauge / concentration / volatility to placeholders.
+    /// Called on portfolio switch so the analyst panel doesn't briefly show
+    /// the prior portfolio's BETA between the switch and the new metrics
+    /// arriving on metrics_computed (~100-200 ms while compute_metrics +
+    /// SPY regression run). BREADTH is computed from holdings_ in
+    /// update_portfolio_detail() and refreshes naturally once set_holdings
+    /// runs from on_summary_loaded → update_main_view_data.
+    void clear_metrics();
     void set_portfolio_fundamentals(const QString& portfolio_id,
                                     const portfolio::PortfolioFundamentals& f);
     /// Reset analyst-target / P/E / yield / consensus to placeholders.
