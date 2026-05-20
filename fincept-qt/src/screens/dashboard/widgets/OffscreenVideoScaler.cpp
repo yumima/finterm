@@ -231,36 +231,44 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     if (!ensure_initialized()) return {};
     if (!frame_in.isValid() || target_logical_size.isEmpty()) return {};
 
-    // Fast path is NV12 only. Anything else, return null and let the caller
-    // fall back to QVideoFrame::toImage() + QImage::scaled() on CPU.
-    if (frame_in.pixelFormat() != QVideoFrameFormat::Format_NV12) {
-        return {};
-    }
-
-    // Telemetry for the "Depth B" (zero-copy NVDEC → GL handoff) question.
-    // We need to know whether QtMultimedia's FFmpeg backend is producing
-    // GPU-resident frames on this Qt build + driver. RhiTextureHandle means
-    // the backend has the frame in a GPU texture already; NoHandle means
-    // it's CPU-side and would have to be uploaded anyway (i.e. zero-copy is
-    // not reachable without backend reconfiguration). One-shot summary
-    // after a 60-frame warm-up.
+    // Telemetry — counts ALL incoming frames, regardless of whether we end up
+    // engaging the GPU path. The first frame logs immediately so we know the
+    // pixel format the sink is actually delivering; the summary at the
+    // warm-up boundary then tells us whether the GPU path is reachable on
+    // this build (NV12 supported today) and whether hwaccel handles are
+    // exposed (Depth B viability).
     ++frames_seen_;
     if (frame_in.handleType() != QVideoFrame::NoHandle)
         ++frames_with_handle_;
-    if (!diag_logged_ && frames_seen_ >= 60) {
+    if (frame_in.pixelFormat() == QVideoFrameFormat::Format_NV12)
+        ++frames_nv12_;
+
+    if (frames_seen_ == 1) {
         LOG_INFO("VideoScaler",
-                 QString("hwaccel-frame telemetry over first %1 NV12 frames: "
-                         "%2 with RhiTextureHandle, %3 with NoHandle. "
-                         "%4")
+                 QString("first frame: pixelFormat=%1 handleType=%2 size=%3x%4")
+                     .arg(QVideoFrameFormat::pixelFormatToString(frame_in.pixelFormat()))
+                     .arg(int(frame_in.handleType()))
+                     .arg(frame_in.width()).arg(frame_in.height()));
+    }
+    if (!diag_logged_ && frames_seen_ >= 30) {
+        LOG_INFO("VideoScaler",
+                 QString("telemetry over first %1 frames: %2 NV12, %3 other format; "
+                         "%4 with RhiTextureHandle, %5 with NoHandle. "
+                         "GPU fast-path engaging: %6. Depth B reachable: %7.")
                      .arg(frames_seen_)
+                     .arg(frames_nv12_)
+                     .arg(frames_seen_ - frames_nv12_)
                      .arg(frames_with_handle_)
                      .arg(frames_seen_ - frames_with_handle_)
-                     .arg(frames_with_handle_ > 0
-                              ? "Depth B (zero-copy) is viable on this build — "
-                                "QRhi-native scaler would skip the per-frame upload."
-                              : "Depth B unreachable — backend is delivering CPU-side "
-                                "frames; would need Qt FFmpeg hwaccel rebuild or backend swap."));
+                     .arg(frames_nv12_ > 0 ? "yes" : "no — extend scaler to handle the sink's actual format")
+                     .arg(frames_with_handle_ > 0 ? "yes — would need QRhi-native scaler" : "no — frames are CPU-side"));
         diag_logged_ = true;
+    }
+
+    // Fast path is NV12 only today. Anything else, return null and let the
+    // caller fall back to QVideoFrame::toImage() + QImage::scaled() on CPU.
+    if (frame_in.pixelFormat() != QVideoFrameFormat::Format_NV12) {
+        return {};
     }
 
     // QVideoFrame::map is non-const — work on a copy.
