@@ -2,34 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-19)
+## Today's commits (2026-05-20)
 
 Latest first.
 
-- [`7e8e18f9`](https://github.com/yumima/finterm/commit/7e8e18f9) widgets(video): telemetry for Depth B viability — log handleType breakdown
-- [`46c8c840`](https://github.com/yumima/finterm/commit/46c8c840) widgets(video): latch glGetError warning to one per session
-- [`cd44c06a`](https://github.com/yumima/finterm/commit/cd44c06a) widgets(video): fix offscreen scaler — upside-down, stripes, and per-frame realloc
-- [`36a4323f`](https://github.com/yumima/finterm/commit/36a4323f) widgets(video): GPU YUV→RGB + scale via offscreen GL (Wayland-safe)
-- [`df14b142`](https://github.com/yumima/finterm/commit/df14b142) Revert "widgets(video): GPU render path via QVideoWidget — drops ~1 CPU core per stream"
-- [`d0fd71bd`](https://github.com/yumima/finterm/commit/d0fd71bd) widgets(video): GPU render path via QVideoWidget — drops ~1 CPU core per stream
-- [`4ac37578`](https://github.com/yumima/finterm/commit/4ac37578) widgets(video): rebuild audio chain on lock-resume to fix silent video
-- [`9e15a3c7`](https://github.com/yumima/finterm/commit/9e15a3c7) screens(portfolio): clear heatmap metrics on switch — same staleness class as fundamentals
-- [`473c0882`](https://github.com/yumima/finterm/commit/473c0882) screens(portfolio): refresh perf curve + heatmap fundamentals on switch
-- [`6f6e285e`](https://github.com/yumima/finterm/commit/6f6e285e) fork: tier-A — repoint upstream URLs at yumima/finterm
-- [`1a970335`](https://github.com/yumima/finterm/commit/1a970335) repo: drop fincept_icon.ico — byte-identical duplicate of resources/fincept.ico
-- [`9a3ce383`](https://github.com/yumima/finterm/commit/9a3ce383) repo: drop unused root JSONs (funding/package/package-lock)
-- [`05d924d8`](https://github.com/yumima/finterm/commit/05d924d8) screens(portfolio): apply_dropdown_styles() — theme refresh + :focus cues
-- [`7da82180`](https://github.com/yumima/finterm/commit/7da82180) screens(portfolio): coloured outlines on Export/Import dropdown buttons
-- [`945d9943`](https://github.com/yumima/finterm/commit/945d9943) screens(portfolio): icon-based refresh button + surface FFN/Export inline
-- [`c6b41e5a`](https://github.com/yumima/finterm/commit/c6b41e5a) app: sync() after dock-layout writes; remove diagnostic logging
-- [`7c716a75`](https://github.com/yumima/finterm/commit/7c716a75) app(nav): persist last_primary_screen; seed at startup so first switch keeps ER
-- [`2af83886`](https://github.com/yumima/finterm/commit/2af83886) app(nav): skip addDockWidget when target already solo at center
-- [`3530ea8e`](https://github.com/yumima/finterm/commit/3530ea8e) Revert "app(nav): persist per-primary layout snapshots + skip same-primary restore"
-- [`0a20acf1`](https://github.com/yumima/finterm/commit/0a20acf1) Revert "app(diag): log dock manager state at save/restore/unlock phases"
-- [`f05bd0e5`](https://github.com/yumima/finterm/commit/f05bd0e5) app(diag): log dock manager state at save/restore/unlock phases
-- [`50d0c34b`](https://github.com/yumima/finterm/commit/50d0c34b) app(nav): persist per-primary layout snapshots + skip same-primary restore
-- [`cdebdcea`](https://github.com/yumima/finterm/commit/cdebdcea) screens(er): COMP column → explicit QCheckBox, moved to last position
-- [`309e6b12`](https://github.com/yumima/finterm/commit/309e6b12) screens(er): ✓ checkbox in Peers row → toggle comp overlay (two-way)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

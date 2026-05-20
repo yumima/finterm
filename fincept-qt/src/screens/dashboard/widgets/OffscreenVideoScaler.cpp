@@ -231,42 +231,12 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     if (!ensure_initialized()) return {};
     if (!frame_in.isValid() || target_logical_size.isEmpty()) return {};
 
-    // Telemetry — counts ALL incoming frames, regardless of whether we end up
-    // engaging the GPU path. The first frame logs immediately so we know the
-    // pixel format the sink is actually delivering; the summary at the
-    // warm-up boundary then tells us whether the GPU path is reachable on
-    // this build (NV12 supported today) and whether hwaccel handles are
-    // exposed (Depth B viability).
-    ++frames_seen_;
-    if (frame_in.handleType() != QVideoFrame::NoHandle)
-        ++frames_with_handle_;
-    if (frame_in.pixelFormat() == QVideoFrameFormat::Format_NV12)
-        ++frames_nv12_;
-
-    if (frames_seen_ == 1) {
-        LOG_INFO("VideoScaler",
-                 QString("first frame: pixelFormat=%1 handleType=%2 size=%3x%4")
-                     .arg(QVideoFrameFormat::pixelFormatToString(frame_in.pixelFormat()))
-                     .arg(int(frame_in.handleType()))
-                     .arg(frame_in.width()).arg(frame_in.height()));
-    }
-    if (!diag_logged_ && frames_seen_ >= 30) {
-        LOG_INFO("VideoScaler",
-                 QString("telemetry over first %1 frames: %2 NV12, %3 other format; "
-                         "%4 with RhiTextureHandle, %5 with NoHandle. "
-                         "GPU fast-path engaging: %6. Depth B reachable: %7.")
-                     .arg(frames_seen_)
-                     .arg(frames_nv12_)
-                     .arg(frames_seen_ - frames_nv12_)
-                     .arg(frames_with_handle_)
-                     .arg(frames_seen_ - frames_with_handle_)
-                     .arg(frames_nv12_ > 0 ? "yes" : "no — extend scaler to handle the sink's actual format")
-                     .arg(frames_with_handle_ > 0 ? "yes — would need QRhi-native scaler" : "no — frames are CPU-side"));
-        diag_logged_ = true;
-    }
-
-    // Fast path is NV12 only today. Anything else, return null and let the
-    // caller fall back to QVideoFrame::toImage() + QImage::scaled() on CPU.
+    // Fast path is NV12 only. Anything else, return null and let the caller
+    // fall back to QVideoFrame::toImage() + QImage::scaled() on CPU.
+    // (Confirmed via earlier telemetry that Qt's bundled FFmpeg plugin on
+    // this build delivers Format_NV12 with handleType == NoHandle — i.e.
+    // CPU-resident frames, so the upload step is unavoidable here without
+    // rebuilding Qt's multimedia stack against system FFmpeg.)
     if (frame_in.pixelFormat() != QVideoFrameFormat::Format_NV12) {
         return {};
     }

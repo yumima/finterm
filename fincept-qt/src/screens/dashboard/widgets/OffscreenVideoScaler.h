@@ -88,17 +88,6 @@ class OffscreenVideoScaler {
     bool gl_ok_            = false;
     bool gl_err_warned_    = false;  ///< latch: one-shot warn on glGetError, then quiet
 
-    // Diagnostic counters: which pixel format the sink delivers (so we know
-    // whether the NV12 fast path even engages on this build) and whether
-    // hwaccel handles are exposed (so we know whether zero-copy / Depth B
-    // is reachable). All counts increment unconditionally — the format
-    // gate happens *after* counting. First frame logs the format string
-    // immediately; full summary at frames_seen_ >= 30.
-    int  frames_seen_         = 0;
-    int  frames_nv12_         = 0;
-    int  frames_with_handle_  = 0;
-    bool diag_logged_         = false;
-
     QOffscreenSurface*  surface_ = nullptr;
     QOpenGLContext*     context_ = nullptr;
 
