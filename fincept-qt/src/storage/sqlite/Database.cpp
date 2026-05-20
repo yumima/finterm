@@ -50,6 +50,14 @@ bool Database::is_open() const {
 
 Result<QSqlQuery> Database::execute(const QString& sql, const QVariantList& params) {
     QMutexLocker lock(&mutex_);
+    // Early-return before constructing a QSqlQuery against a closed db_.
+    // Qt's QSqlQuery::prepare unconditionally logs "database not open" via
+    // the qt.sql.qsqlquery category — that noise hides real SQL errors at
+    // startup, where SettingsRepository legitimately probes for legacy-
+    // migration state before AuthService opens the user DB. Caller code
+    // already handles the error result.
+    if (!db_.isOpen())
+        return Result<QSqlQuery>::err("database not open");
     QSqlQuery query(db_);
     query.prepare(sql);
     for (int i = 0; i < params.size(); ++i) {
@@ -63,6 +71,8 @@ Result<QSqlQuery> Database::execute(const QString& sql, const QVariantList& para
 
 Result<void> Database::exec(const QString& sql) {
     QMutexLocker lock(&mutex_);
+    if (!db_.isOpen())
+        return Result<void>::err("database not open");
     QSqlQuery query(db_);
     if (!query.exec(sql)) {
         return Result<void>::err(query.lastError().text().toStdString());
@@ -71,6 +81,8 @@ Result<void> Database::exec(const QString& sql) {
 }
 
 Result<void> Database::begin_transaction() {
+    if (!db_.isOpen())
+        return Result<void>::err("database not open");
     QSqlQuery q(db_);
     if (!q.exec("BEGIN IMMEDIATE")) {
         return Result<void>::err(q.lastError().text().toStdString());
@@ -79,6 +91,8 @@ Result<void> Database::begin_transaction() {
 }
 
 Result<void> Database::commit() {
+    if (!db_.isOpen())
+        return Result<void>::err("database not open");
     QSqlQuery q(db_);
     if (!q.exec("COMMIT")) {
         return Result<void>::err(q.lastError().text().toStdString());
@@ -87,6 +101,8 @@ Result<void> Database::commit() {
 }
 
 Result<void> Database::rollback() {
+    if (!db_.isOpen())
+        return Result<void>::err("database not open");
     QSqlQuery q(db_);
     if (!q.exec("ROLLBACK")) {
         return Result<void>::err(q.lastError().text().toStdString());

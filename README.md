@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`3ea4340a`](https://github.com/yumima/finterm/commit/3ea4340a) **docs(ai-stack):** consolidate plan + audit + architecture into one current-state doc
 - [`ceec359b`](https://github.com/yumima/finterm/commit/ceec359b) widgets(video): remove one-shot scaler telemetry — investigation closed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
