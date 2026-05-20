@@ -237,6 +237,32 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
         return {};
     }
 
+    // Telemetry for the "Depth B" (zero-copy NVDEC → GL handoff) question.
+    // We need to know whether QtMultimedia's FFmpeg backend is producing
+    // GPU-resident frames on this Qt build + driver. RhiTextureHandle means
+    // the backend has the frame in a GPU texture already; NoHandle means
+    // it's CPU-side and would have to be uploaded anyway (i.e. zero-copy is
+    // not reachable without backend reconfiguration). One-shot summary
+    // after a 60-frame warm-up.
+    ++frames_seen_;
+    if (frame_in.handleType() != QVideoFrame::NoHandle)
+        ++frames_with_handle_;
+    if (!diag_logged_ && frames_seen_ >= 60) {
+        LOG_INFO("VideoScaler",
+                 QString("hwaccel-frame telemetry over first %1 NV12 frames: "
+                         "%2 with RhiTextureHandle, %3 with NoHandle. "
+                         "%4")
+                     .arg(frames_seen_)
+                     .arg(frames_with_handle_)
+                     .arg(frames_seen_ - frames_with_handle_)
+                     .arg(frames_with_handle_ > 0
+                              ? "Depth B (zero-copy) is viable on this build — "
+                                "QRhi-native scaler would skip the per-frame upload."
+                              : "Depth B unreachable — backend is delivering CPU-side "
+                                "frames; would need Qt FFmpeg hwaccel rebuild or backend swap."));
+        diag_logged_ = true;
+    }
+
     // QVideoFrame::map is non-const — work on a copy.
     QVideoFrame f = frame_in;
     if (!f.map(QVideoFrame::ReadOnly)) return {};

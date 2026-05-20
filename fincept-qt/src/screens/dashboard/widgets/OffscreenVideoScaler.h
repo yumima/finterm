@@ -88,6 +88,17 @@ class OffscreenVideoScaler {
     bool gl_ok_            = false;
     bool gl_err_warned_    = false;  ///< latch: one-shot warn on glGetError, then quiet
 
+    // Diagnostic counters for assessing whether a future zero-copy ("Depth B")
+    // path is even viable on this Qt build / driver combo. The QVideoFrame
+    // public API in Qt 6.8 only tells us NoHandle vs RhiTextureHandle; if all
+    // frames are NoHandle, the FFmpeg backend isn't producing GPU-resident
+    // frames (typical of Qt's bundled FFmpeg without hwaccel enabled at build
+    // time) and zero-copy isn't reachable without rebuilding Qt or porting
+    // the scaler to QRhi. Logged once after a small warm-up window.
+    int  frames_seen_         = 0;
+    int  frames_with_handle_  = 0;
+    bool diag_logged_         = false;
+
     QOffscreenSurface*  surface_ = nullptr;
     QOpenGLContext*     context_ = nullptr;
 
