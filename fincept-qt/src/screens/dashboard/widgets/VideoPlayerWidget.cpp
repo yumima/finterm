@@ -60,6 +60,7 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
 void VideoRenderWidget::clear_frame() {
     last_image_ = QImage();
     scaled_image_ = QImage();
+    last_frame_ = QVideoFrame();
     paint_pending_ = false;
     update();
 }
@@ -82,9 +83,30 @@ void VideoRenderWidget::present(const QVideoFrame& frame) {
     // budget and would explain stutter on the calling thread.
     FT_TIME_SLOT("VideoRenderWidget.present", 25);
 
+    last_frame_ = frame;
+
+    // GPU fast path: NV12 frames go through the offscreen GL scaler, which
+    // does YUV→RGB conversion + scaling in a single shader pass and returns
+    // a widget-sized RGB QImage. ~10-15 ms/frame at 1080p vs ~25-40 ms CPU.
+    QImage gpu_out = scaler_.process(frame, size(), devicePixelRatioF());
+    if (!gpu_out.isNull()) {
+        scaled_image_ = std::move(gpu_out);
+        const qreal dpr = scaled_image_.devicePixelRatio();
+        const QSize logical(int(scaled_image_.width()  / dpr),
+                            int(scaled_image_.height() / dpr));
+        scaled_origin_ = QPoint((width()  - logical.width())  / 2,
+                                (height() - logical.height()) / 2);
+        paint_pending_ = true;
+        update();
+        return;
+    }
+
+    // CPU fallback: non-NV12 frames (most software-decoded paths) or any GL
+    // failure. Identical to the prior all-CPU implementation — keep showing
+    // the previous frame on transient toImage() failure (no flash).
     QImage img = frame.toImage();
     if (img.isNull())
-        return; // Keep showing the previous frame — no flash.
+        return;
     last_image_ = std::move(img);
     rescale_for_widget();
     paint_pending_ = true;
@@ -114,6 +136,22 @@ void VideoRenderWidget::rescale_for_widget() {
 }
 
 void VideoRenderWidget::resizeEvent(QResizeEvent* event) {
+    // Re-process the last frame at the new size. With live playback the next
+    // frame arrives within ~33 ms and would correct the scale anyway, but
+    // paused playback would leave the image at the old size otherwise.
+    if (last_frame_.isValid()) {
+        QImage gpu_out = scaler_.process(last_frame_, size(), devicePixelRatioF());
+        if (!gpu_out.isNull()) {
+            scaled_image_ = std::move(gpu_out);
+            const qreal dpr = scaled_image_.devicePixelRatio();
+            const QSize logical(int(scaled_image_.width()  / dpr),
+                                int(scaled_image_.height() / dpr));
+            scaled_origin_ = QPoint((width()  - logical.width())  / 2,
+                                    (height() - logical.height()) / 2);
+            QWidget::resizeEvent(event);
+            return;
+        }
+    }
     rescale_for_widget();
     QWidget::resizeEvent(event);
 }

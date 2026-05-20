@@ -9,6 +9,8 @@
 #include <QStackedWidget>
 
 #ifdef HAS_QT_MULTIMEDIA
+#    include "screens/dashboard/widgets/OffscreenVideoScaler.h"
+
 #    include <QAudioOutput>
 #    include <QImage>
 #    include <QMediaPlayer>
@@ -72,9 +74,20 @@ class VideoRenderWidget : public QWidget {
     // frame instead of once per paint.
     void rescale_for_widget();
 
-    QImage last_image_;       ///< source frame, kept across transient toImage() failures
-    QImage scaled_image_;     ///< pre-scaled to the current widget rect (letterboxed dst size)
+    QImage last_image_;       ///< CPU-fallback source frame, kept across transient toImage() failures
+    QImage scaled_image_;     ///< pre-scaled / GPU-rendered, letterboxed dst size
     QPoint scaled_origin_;    ///< top-left position to blit scaled_image_ at
+
+    // Last decoded frame, kept so resizeEvent can re-run the GPU scaler at
+    // the new widget size without waiting for the next live frame (matters
+    // when playback is paused). Cheap copy — QVideoFrame is shared-ptr to
+    // the underlying buffer.
+    QVideoFrame last_frame_;
+
+    // GPU YUV→RGB + scale. Owns an offscreen GL context — no wl_subsurface,
+    // so safe on Wayland/Mutter. Returns null on non-NV12 frames or any GL
+    // failure; present() falls back to the CPU toImage() path in that case.
+    OffscreenVideoScaler scaler_;
 
     // Drop-late-frames flag. The decoder can outrun the main thread on weak
     // GPUs / busy event loops. If a frame arrives while we still haven't
