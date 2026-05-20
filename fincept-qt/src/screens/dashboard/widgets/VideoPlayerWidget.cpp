@@ -380,8 +380,18 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                     }
                 } else if (auto_paused_on_lock_) {
                     auto_paused_on_lock_ = false;
-                    if (player_->playbackState() == QMediaPlayer::PausedState)
+                    if (player_->playbackState() == QMediaPlayer::PausedState) {
+                        // Live HLS: the proxy's 6-segment window has rolled
+                        // past our buffered position during the lock. A bare
+                        // play() leaves the audio sink detached on Qt6 FFmpeg
+                        // after the stream-position discontinuity (video
+                        // resumes, no sound). Re-set the same source to
+                        // rebuild the decoder chain and re-attach it to
+                        // audio_output_.
+                        const QUrl src = player_->source();
+                        player_->setSource(src);
                         player_->play();
+                    }
                 }
 #else
                 Q_UNUSED(locked);
