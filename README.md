@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`ceec359b`](https://github.com/yumima/finterm/commit/ceec359b) widgets(video): remove one-shot scaler telemetry — investigation closed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
