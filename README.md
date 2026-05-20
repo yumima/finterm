@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`05d924d8`](https://github.com/yumima/finterm/commit/05d924d8) screens(portfolio): apply_dropdown_styles() — theme refresh + :focus cues
 - [`7da82180`](https://github.com/yumima/finterm/commit/7da82180) screens(portfolio): coloured outlines on Export/Import dropdown buttons
 - [`945d9943`](https://github.com/yumima/finterm/commit/945d9943) screens(portfolio): icon-based refresh button + surface FFN/Export inline
 - [`c6b41e5a`](https://github.com/yumima/finterm/commit/c6b41e5a) app: sync() after dock-layout writes; remove diagnostic logging
@@ -22,16 +23,17 @@ Latest first.
 
 ## What you get
 
-- **Markets / Watchlist / News** — live global quotes, charts, and a two-column news feed with a portfolio filter (PTF) that matches articles by ticker *or* company name, plus an on-demand TL;DR of the visible headlines via your LLM.
-- **Portfolio** — multi-account holdings, performance chart, heatmap, blotter, and an extended-hours sub-view.
-- **Equity Research** — per-ticker dashboard: financials, analyst targets, technicals, peers, news, sentiment.
-- **Futures** — multi-asset-class watchlist with heatmap, term structure, spreads, settlements, and continuous charts.
+- **Markets / Watchlist / News** — live global quotes, charts, and a two-column news feed with a portfolio filter (PTF) that matches articles by ticker *or* company name, plus an on-demand TL;DR of the visible headlines via your LLM. Inline article body via reader-mode extraction.
+- **Portfolio** — multi-account holdings, performance chart, heatmap, blotter, extended-hours sub-view, and CSV/JSON export + JSON import from the selector dropdown.
+- **Equity Research** — per-ticker dashboard: financials, analyst targets, technicals, peers, news, sentiment. Chart adds log scale, volume, SMA, earnings markers, custom date ranges, saved per-ticker views, keyboard shortcuts, and a multi-symbol comparison overlay with hover prices. Live tick push via Finnhub WebSocket when configured.
+- **Futures** — multi-asset-class watchlist with heatmap, term structure, spreads, settlements, and continuous charts. CHINA commodities via akshare with pre-warm + 60 s cache.
 - **Power Trader** — STOCK Act congressional trading analytics with member drawers, signal scores, and side-by-side compare.
-- **Pre-IPO** — private-market cockpit fed by public SEC EDGAR sources (Form D, S-1, mutual-fund N-PORT marks): picks, screener, company dossiers, IPO pipeline.
+- **Pre-IPO** — private-market cockpit fed by public SEC EDGAR sources (Form D, S-1, mutual-fund N-PORT marks): picks, screener, company dossiers, IPO pipeline, and a LOCKUPS lens for post-IPO supply-surge signals (Finnhub).
 - **Knowledge** — markets and quant curriculum with practice tools, formula calculators, and an embedded AI tutor. The quant catalogue ships 47 strategy entries (FX, factor, FI, vol, dispersion, macro, …) with intuition, math, and citations.
+- **Live video** — embedded Bloomberg / CNBC HLS streams with pause/play, auto-pause on terminal lock, and user-pickable max resolution (480/720/1080).
 - **AI chat bubble** — pluggable LLM provider; none wired by default.
-- **Concurrent yfinance daemon** — long-lived Python child runs market-data fetches in parallel over a Unix domain socket; interactive requests are prioritised over background sweeps.
-- **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; `finterm install` registers a desktop launcher.
+- **Concurrent yfinance daemon** — long-lived Python child runs market-data fetches in parallel over a Unix domain socket; interactive requests are prioritised over background sweeps. A local `QueryStore` (SWR + LRU) fronts it for the ER tabs.
+- **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; dock geometry and the last primary screen are restored across launches. `finterm install` registers a desktop launcher.
 
 ## Data flow
 
