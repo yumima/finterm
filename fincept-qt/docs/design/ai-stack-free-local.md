@@ -309,6 +309,10 @@ Namespace: source-prefixed (`int:`, `fd:`, `ext:`). Per-agent
 allowlists filter `list_tools_for(agent_id)` before either runtime
 sees the catalogue, preventing tool soup.
 
+Tool-result caching: `McpService` retains the existing 5s TTL cache
+keyed by call-hash. Both runtimes hit the cache transparently;
+per-call cache-control can disable it for non-idempotent reads.
+
 ### 4.4 Shared skills, slash commands, agent identities
 
 Skills live as `SKILL.md` files under
@@ -390,13 +394,13 @@ install falls back to the local profile.
 
 ### 4.9 Dormant provider adapters
 
-The existing 9 non-local non-Anthropic provider branches in
+The existing 8 non-local non-Anthropic provider branches in
 `LlmService.cpp` (OpenAI, Gemini, Groq, DeepSeek, Kimi, MiniMax,
-xAI, OpenRouter, Fincept) remain in code as dormant adapters but are
-hidden from the UI dropdown and excluded from default profile
-options. Re-enabling later is a constant flip. The architecture is
-shaped to take additional runtimes (most cleanly via their
-respective SDKs) without refactor.
+xAI, OpenRouter) remain in code as dormant adapters but are hidden
+from the UI dropdown and excluded from default profile options.
+Re-enabling later is a constant flip. The architecture is shaped to
+take additional runtimes (most cleanly via their respective SDKs)
+without refactor. (Fincept is not dormant — it is retired per R17.)
 
 ---
 
@@ -412,7 +416,7 @@ respective SDKs) without refactor.
 | Vision | Only if local model supports (e.g., Qwen-VL) | Native |
 | Native PDF | Text-extracted | Native (up to 100 pages) |
 | Files API | Local file refs | Native handles |
-| Memory tool | sqlite-vec MCP family (we own) | SDK-native + optional MCP family |
+| Memory tool | `MemoryTools` MCP family (sqlite-vec) | SDK-native + optional `MemoryTools` |
 | Computer use (browser) | Playwright MCP server | Native server-side tool |
 | Code execution | Local sandbox (we own) | Native server-side Python sandbox |
 | Web search | Brave MCP server | Native server-side tool |
@@ -650,8 +654,11 @@ UI, and the storage.
   runtime sees the catalogue.
 - **R8.** Internal MCP servers implement the **full MCP spec** —
   tools, resources, prompts, sampling, elicitation, progress,
-  cancellation, logging. This is finterm's differentiation in the
-  MCP ecosystem.
+  cancellation, logging. This is what lets the agent read finterm
+  state (portfolio snapshot, watchlist, current news digest, active
+  thesis) without spending tool-call budget on every read, and what
+  enables tools to call the model back, ask the user mid-call, or
+  stream progress on long runs.
 - **R9.** Data-source hierarchy is per-agent config (ordered list:
   `["fd", "int:edgar", "int:fmp", "int:yfinance"]`). SKILL.md text
   references "your data hierarchy," not specific providers, so
@@ -775,12 +782,26 @@ UI, and the storage.
 
 ### Track 5 — Full MCP spec on internal servers
 
-16. Add `resources`, `prompts`, `sampling`, `elicitation`,
-    `progress`, `cancellation`, `logging` to `McpProvider`. Migrate
-    31 tool families to expose appropriate capabilities (e.g.,
-    `PortfolioTools` exposes a `portfolio_snapshot` resource;
-    `NotesTools` exposes templated prompts).
-17. Replace per-tool auth hook with MCP elicitation.
+16. Add spec capabilities to `McpProvider` — `resources`, `prompts`,
+    `sampling`, `elicitation`, `progress`, `cancellation`,
+    `logging`. Wire dispatch, serialization, and capability
+    negotiation in the handshake. Then migrate the 31 internal tool
+    families:
+    - **Resources** on stateful surfaces: `PortfolioTools` →
+      `portfolio_snapshot`; `WatchlistTools` → `watchlist`;
+      `NewsTools` → `current_digest`; `NotesTools` →
+      `active_thesis`.
+    - **Prompts** on workflow surfaces: `NotesTools` →
+      `daily_brief`; `MarketsTools` → `stock_deep_dive`;
+      `GeopoliticsTools` → `sector_pulse`.
+    - **Sampling** for tools that need a model call inside, e.g.
+      `EdgarTools` filing-summarizer pre-step.
+    - **Progress + cancellation** on long-running tools:
+      `QuantLabTools` (backtests, RD-Agent), `AgentsTools` (agent
+      runs), `EquityResearchTools` (deep-research workflows).
+17. Replace per-tool auth hook with MCP elicitation across
+    destructive tools (`PaperTradingTools::place_order`,
+    `CryptoTradingTools` write paths, `SettingsTools` mutators).
 
 ### Track 6 — `FinancialDatasetsTools` internal MCP
 

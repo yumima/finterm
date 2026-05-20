@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`67a3a19c`](https://github.com/yumima/finterm/commit/67a3a19c) **docs(ai-stack):** rewrite as two-runtime architecture (local + Anthropic)
 - [`a3ed86db`](https://github.com/yumima/finterm/commit/a3ed86db) **docs(design):** memo on Qt + FFmpeg hwaccel — findings and viable paths
 - [`a1dde05a`](https://github.com/yumima/finterm/commit/a1dde05a) storage(sqlite): guard Database::{execute,exec,begin,commit,rollback} on closed db
 - [`3ea4340a`](https://github.com/yumima/finterm/commit/3ea4340a) **docs(ai-stack):** consolidate plan + audit + architecture into one current-state doc
