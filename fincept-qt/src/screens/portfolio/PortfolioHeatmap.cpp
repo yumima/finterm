@@ -683,6 +683,12 @@ void PortfolioHeatmap::set_portfolio_fundamentals(const QString& /*portfolio_id*
         update_portfolio_detail();
 }
 
+void PortfolioHeatmap::clear_fundamentals() {
+    fundamentals_ = portfolio::PortfolioFundamentals{};
+    if (selected_symbol_.isEmpty())
+        update_portfolio_detail();
+}
+
 void PortfolioHeatmap::update_risk_gauge() {
     double rs = metrics_.risk_score.value_or(0);
     const char* rs_color = rs < 30 ? ui::colors::POSITIVE : rs < 60 ? ui::colors::WARNING : ui::colors::NEGATIVE;

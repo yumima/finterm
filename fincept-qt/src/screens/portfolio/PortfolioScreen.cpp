@@ -641,6 +641,44 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     if (blotter_)
         blotter_->set_sector_filter({});
 
+    // Reset per-symbol focus from the previous portfolio. This extends the
+    // heatmap "PORTFOLIO" header reset (see lambda below at portfolio_view_
+    // requested) — same clear of selected_symbol_ + perf chart focus +
+    // blotter selection, plus two more things the header reset doesn't need:
+    //   • heatmap_->set_selected_symbol({}) — the header reset doesn't call
+    //     this because the heatmap is the *source* of the action; here the
+    //     dropdown is the source, so we have to push the deselect into the
+    //     heatmap explicitly.
+    //   • order_panel_->set_holding(nullptr) — the order panel holds a raw
+    //     pointer into current_summary_.holdings, which is about to be
+    //     replaced wholesale by on_summary_loaded; the header reset doesn't
+    //     swap summaries so it doesn't need this. Without it, a stale
+    //     pointer can survive between the switch and the panel's next
+    //     interaction.
+    //
+    // The chart bug this addresses: PortfolioPerfChart::update_chart() early-
+    // routes through update_chart_focus() whenever focus_symbol_ is set, so
+    // without clear_focus_symbol() the chart keeps rendering the previous
+    // portfolio's focused-symbol curve even after on_snapshots_loaded()
+    // feeds it new data.
+    //
+    // Heatmap fundamentals (TGT LOW / MEAN / HIGH, P/E, yield, consensus)
+    // are also cleared here so the panel never briefly shows the prior
+    // portfolio's analyst targets between switch and re-emission from
+    // PortfolioService::fetch_portfolio_fundamentals (which now re-emits
+    // the cached value on a repeat visit).
+    selected_symbol_.clear();
+    if (perf_chart_)
+        perf_chart_->clear_focus_symbol();
+    if (heatmap_) {
+        heatmap_->set_selected_symbol({});
+        heatmap_->clear_fundamentals();
+    }
+    if (blotter_)
+        blotter_->set_selected_symbol({});
+    if (order_panel_)
+        order_panel_->set_holding(nullptr);
+
     // New portfolio = different holdings cohort. Drop the cached correlation
     // key so the next summary triggers a fresh fetch_correlation. Benchmark
     // history and risk-free rate are session-scoped (data isn't

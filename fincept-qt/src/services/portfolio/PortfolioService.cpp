@@ -1736,7 +1736,26 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
     // result. Inserting the guard on the first (stale) call would mark the
     // portfolio as fetched even though no fan-out was launched, blocking the
     // second (live) call that actually has MV weights available.
-    if (fundamentals_fetched_.contains(portfolio_id)) return;
+    if (fundamentals_fetched_.contains(portfolio_id)) {
+        // Re-emit the cached fundamentals so the heatmap analyst panel
+        // re-populates on a portfolio switch back to a previously-loaded
+        // portfolio. Without this, the panel would keep showing whichever
+        // portfolio was loaded most recently because the guard above
+        // suppresses the re-fetch and no signal would otherwise fire.
+        portfolio::PortfolioFundamentals cached;
+        bool have_cached = false;
+        {
+            QMutexLocker lock(&cache_mutex_);
+            auto it = fundamentals_cache_.constFind(portfolio_id);
+            if (it != fundamentals_cache_.constEnd()) {
+                cached = it.value();
+                have_cached = true;
+            }
+        }
+        if (have_cached)
+            emit portfolio_fundamentals_loaded(portfolio_id, cached);
+        return;
+    }
 
     // Build per-symbol MV and current-price maps from the cached summary.
     // current_price is needed to convert per-share analyst targets into a
@@ -1866,6 +1885,10 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     else              f.consensus = QStringLiteral("Strong Sell");
                 }
 
+                {
+                    QMutexLocker lock(&self->cache_mutex_);
+                    self->fundamentals_cache_[portfolio_id] = f;
+                }
                 emit self->portfolio_fundamentals_loaded(portfolio_id, f);
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1878,6 +1901,7 @@ void PortfolioService::invalidate_cache(const QString& portfolio_id) {
     QMutexLocker lock(&cache_mutex_);
     summary_cache_.remove(portfolio_id);
     fundamentals_fetched_.remove(portfolio_id);
+    fundamentals_cache_.remove(portfolio_id);
 }
 
 } // namespace fincept::services

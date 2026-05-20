@@ -22,6 +22,11 @@ class PortfolioHeatmap : public QWidget {
     void set_metrics(const portfolio::ComputedMetrics& metrics);
     void set_portfolio_fundamentals(const QString& portfolio_id,
                                     const portfolio::PortfolioFundamentals& f);
+    /// Reset analyst-target / P/E / yield / consensus to placeholders.
+    /// Called on portfolio switch so the panel never briefly shows the prior
+    /// portfolio's targets between the switch and the new fundamentals
+    /// arriving from the service (either via fresh fetch or cached replay).
+    void clear_fundamentals();
     void set_selected_symbol(const QString& symbol);
     void set_currency(const QString& currency);
     void refresh_theme();

@@ -214,6 +214,14 @@ class PortfolioService : public QObject {
     // (invalidate_cache) so a position add/remove re-fetches.
     QSet<QString> fundamentals_fetched_;
 
+    // Last successfully computed fundamentals, keyed by portfolio_id. When
+    // fetch_portfolio_fundamentals short-circuits on the guard above, we
+    // re-emit the cached value so a portfolio switch back to a previously
+    // loaded portfolio re-populates the heatmap analyst panel instead of
+    // leaving it showing whichever portfolio was loaded most recently.
+    // Guarded by cache_mutex_ (same as summary_cache_).
+    QHash<QString, portfolio::PortfolioFundamentals> fundamentals_cache_;
+
     // 1D fan-out epoch: each fetch_*_intraday() call increments its stream's
     // counter and the callback captures the value at submit time. If the
     // user switches periods/tickers before the in-flight request lands, the
