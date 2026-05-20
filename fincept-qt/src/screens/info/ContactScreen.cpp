@@ -93,11 +93,11 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
         };
         const Channel channels[] = {
             {"GitHub Issues", "Bug reports, regressions, reproducible failures",
-             "https://github.com/Fincept-Corporation/FinceptTerminal/issues"},
+             "https://github.com/yumima/finterm/issues"},
             {"GitHub Discussions", "Questions, feature ideas, general help",
-             "https://github.com/Fincept-Corporation/FinceptTerminal/discussions"},
+             "https://github.com/yumima/finterm/discussions"},
             {"Pull Requests", "Patches and improvements — welcome and reviewed",
-             "https://github.com/Fincept-Corporation/FinceptTerminal/pulls"},
+             "https://github.com/yumima/finterm/pulls"},
         };
 
         for (const auto& c : channels) {
