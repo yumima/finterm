@@ -10,8 +10,10 @@
 
 #ifdef HAS_QT_MULTIMEDIA
 #    include <QAudioOutput>
+#    include <QImage>
 #    include <QMediaPlayer>
-#    include <QVideoWidget>
+#    include <QVideoFrame>
+#    include <QVideoSink>
 #endif
 
 #ifdef HAS_QT_WEBENGINE
@@ -25,6 +27,64 @@
 namespace fincept::services::video { class LiveHlsProxy; }
 
 namespace fincept::screens::widgets {
+
+#ifdef HAS_QT_MULTIMEDIA
+/// Video display surface — plain QWidget + QPainter.
+///
+/// The previous QOpenGLWidget implementation suffered from high-frequency
+/// flashing on Wayland because:
+///   1. paintGL() cleared the buffer to BLACK before validating the frame,
+///      so any transient toImage() / decode failure produced a black flash.
+///   2. The QOpenGLWidget FBO → Wayland subsurface compositing path adds
+///      another layer where frame state can desync from the compositor.
+///
+/// QPainter has neither problem:
+///   - We cache the last-good QImage; if a frame fails to convert we just
+///     keep showing the previous image instead of clearing to black.
+///   - QPainter on Wayland uses the compositor's own GPU path. There is no
+///     extra subsurface; no FBO; no `frameSwapped` loop driving paints between
+///     real frame arrivals (which was also paying the cost of re-upload).
+///
+/// NVDEC decode still happens upstream in Qt's FFmpeg backend; the cost we
+/// pay is the GPU→CPU image transfer that toImage() does, ~37 MB/s at 480p30
+/// — negligible. We only repaint when a new frame actually arrives.
+class VideoRenderWidget : public QWidget {
+    Q_OBJECT
+  public:
+    explicit VideoRenderWidget(QWidget* parent = nullptr);
+
+  public slots:
+    /// Receive a decoded frame from the multimedia thread (queued → main thread).
+    void present(const QVideoFrame& frame);
+
+  public:
+    /// Clear the cached frame and repaint to black (called on stop / error).
+    void clear_frame();
+
+  protected:
+    void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+  private:
+    // Pre-scale the cached source frame to fit the current widget size,
+    // letterboxed. Called only on frame arrival or widget resize so the per-
+    // paint cost is just a blit. SmoothTransformation is applied once per
+    // frame instead of once per paint.
+    void rescale_for_widget();
+
+    QImage last_image_;       ///< source frame, kept across transient toImage() failures
+    QImage scaled_image_;     ///< pre-scaled to the current widget rect (letterboxed dst size)
+    QPoint scaled_origin_;    ///< top-left position to blit scaled_image_ at
+
+    // Drop-late-frames flag. The decoder can outrun the main thread on weak
+    // GPUs / busy event loops. If a frame arrives while we still haven't
+    // painted the previous one, we drop it instead of queueing more paint
+    // events behind whatever else the main thread is doing (typing,
+    // clicks). This is the right behaviour for a live tile: latency over
+    // completeness, since dropped frames are imperceptible.
+    bool paint_pending_ = false;
+};
+#endif
 
 /// Inline video/stream player widget.
 /// Plays HLS/MP4 direct streams via Qt Multimedia.
@@ -62,9 +122,10 @@ class VideoPlayerWidget : public BaseWidget {
     QDialog* make_config_dialog(QWidget* parent) override;
     // NB: we intentionally do NOT pause playback on hideEvent. The user
     // relies on the audio continuing while they navigate to other screens.
-    // QVideoWidget's RHI render path only fires for visible surfaces, so
-    // there's no idle GPU paint cost for hidden video either — decode keeps
-    // running (NVDEC is rounding-noise), present is skipped while hidden.
+    // The per-frame cost is bounded by VideoRenderWidget's drop-late-frames
+    // guard — when the widget isn't visible Qt suppresses paintEvent, the
+    // guard never clears, and present() returns early after the first
+    // frame. No paint work happens for hidden video.
 
   private:
     void apply_styles();
@@ -109,8 +170,8 @@ class VideoPlayerWidget : public BaseWidget {
     void            play_web_video_id(const QString& video_id, const QString& title, const QString& source_url);
     void            resolve_live_id_and_play_web(const QString& channel_url, const QString& title);
     void            stop_web();
-    // GL (yt-dlp + QVideoWidget RHI render) is the default — works for any
-    // public stream, including channels that block YouTube iframe embedding.
+    // GL (yt-dlp + QPainter) is the default — works for any public stream,
+    // including channels that block YouTube iframe embedding (CNBC, Yahoo, …).
     // WebEngine remains available via the config dialog for custom YouTube
     // videos. Loaded from SettingsRepository on construct.
     bool            use_web_engine_    = false;
@@ -157,11 +218,8 @@ class VideoPlayerWidget : public BaseWidget {
 
 #ifdef HAS_QT_MULTIMEDIA
     QMediaPlayer*      player_       = nullptr;
-    // QVideoWidget renders decoded frames on the GPU via Qt RHI — frames stay
-    // in video memory, no QImage readback, no QPainter blit. Compare to the
-    // prior QPainter path which burned ~1 CPU core per stream pulling frames
-    // back to host memory.
-    QVideoWidget* video_widget_ = nullptr;
+    VideoRenderWidget* video_widget_ = nullptr; // plain QWidget — no native surface
+    QVideoSink*        video_sink_   = nullptr; // frame delivery pipe
     QAudioOutput*      audio_output_ = nullptr;
     // Local HLS trimming proxy for live streams. Null when no live
     // playback is active. Owned (parented) by this widget — also gets
