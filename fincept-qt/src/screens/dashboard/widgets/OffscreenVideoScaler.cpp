@@ -332,11 +332,17 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     fns->glBindTexture(GL_TEXTURE_2D, 0);
 
     // Surface any GL error from this pass — caller will use CPU fallback.
+    // Latch the warning so a persistent error doesn't spam the log at 30+ fps;
+    // one line per session is enough to know the fast path is degraded.
     const GLenum err = fns->glGetError();
     context_->doneCurrent();
     if (err != GL_NO_ERROR) {
-        LOG_WARN("VideoScaler", QString("glGetError 0x%1; falling back this frame")
-                                    .arg(err, 0, 16));
+        if (!gl_err_warned_) {
+            LOG_WARN("VideoScaler", QString("glGetError 0x%1; CPU fallback engaged "
+                                            "for affected frames (suppressing further warnings)")
+                                        .arg(err, 0, 16));
+            gl_err_warned_ = true;
+        }
         return {};
     }
 

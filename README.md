@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cd44c06a`](https://github.com/yumima/finterm/commit/cd44c06a) widgets(video): fix offscreen scaler — upside-down, stripes, and per-frame realloc
 - [`36a4323f`](https://github.com/yumima/finterm/commit/36a4323f) widgets(video): GPU YUV→RGB + scale via offscreen GL (Wayland-safe)
 - [`df14b142`](https://github.com/yumima/finterm/commit/df14b142) Revert "widgets(video): GPU render path via QVideoWidget — drops ~1 CPU core per stream"
 - [`d0fd71bd`](https://github.com/yumima/finterm/commit/d0fd71bd) widgets(video): GPU render path via QVideoWidget — drops ~1 CPU core per stream

@@ -84,8 +84,9 @@ class OffscreenVideoScaler {
     /// Compile and link the YUV→RGB shader program. Called once during init.
     bool build_shader();
 
-    bool init_attempted_ = false;
-    bool gl_ok_          = false;
+    bool init_attempted_   = false;
+    bool gl_ok_            = false;
+    bool gl_err_warned_    = false;  ///< latch: one-shot warn on glGetError, then quiet
 
     QOffscreenSurface*  surface_ = nullptr;
     QOpenGLContext*     context_ = nullptr;
