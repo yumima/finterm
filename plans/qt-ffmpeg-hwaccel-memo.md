@@ -3,7 +3,7 @@
 **Status:** Investigation paused — pending broader dependency-management decision
 **Date:** 2026-05-20
 **Owner:** yumima
-**Related:** `widgets/VideoPlayerWidget.cpp`, `widgets/OffscreenVideoScaler.{h,cpp}`
+**Related:** `fincept-qt/src/screens/dashboard/widgets/VideoPlayerWidget.cpp`, `fincept-qt/src/screens/dashboard/widgets/OffscreenVideoScaler.{h,cpp}`
 
 ---
 

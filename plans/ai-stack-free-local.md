@@ -4,7 +4,7 @@
 **Date:** 2026-05-20
 **Owner:** yumima
 **Canonical tree:** `/home/yma/fin/finterm/fincept-qt/`
-**Related:** `docs/datahub-phases/phase-09-ai-mcp-agents.md`, `docs/agents/datahub-guide.md`
+**Related:** `fincept-qt/docs/datahub-phases/phase-09-ai-mcp-agents.md`, `fincept-qt/docs/agents/datahub-guide.md`, `plans/local-ai-engine.md`, `plans/testing-strategy.md`
 
 ---
 
@@ -739,6 +739,24 @@ UI, and the storage.
 
 ## 9. Implementation tracks
 
+Each track ships with its e2e fixtures and snapshots — see
+`plans/testing-strategy.md` for the harness, fixture format, and
+per-track fixture inventory. The "iteration loop" becomes
+`fix → /review → fix → build → e2e fixture lands → commit`.
+
+### Track 0 — Testing scaffold (prerequisite)
+
+Lands before Track 3 so every subsequent track can ship with
+fixtures.
+
+- Fixture YAML schema + parser.
+- Headless harness (`evals run`, `evals run-all --parity`).
+- Trace assertion library against the unified trace schema (R21).
+- OpenAI conformance skeleton (grows alongside the local engine).
+- MCP conformance skeleton (grows alongside Track 5).
+- Walking-skeleton fixture (`hello_world`) asserting a single chat
+  turn produces a complete trace on both runtimes.
+
 ### Track 1 — Foundation cleanup
 
 1. SecureStorage migration for LLM keys (R16).
@@ -886,26 +904,35 @@ UI, and the storage.
 36. System tab: traces, per-tool/per-agent/per-runtime counters,
     evals, cost meter, kill-switch toggle.
 
-### Track 14 — Evals + observability + audit + safety
+### Track 14 — Evals + observability + audit + safety + UX
 
-37. `scripts/agents/evals/` directory. Vendor or interface with
-    `financial-datasets/llm-evaluations`. Nightly fixture run;
-    results in SQLite; surfaced in Workbench → System.
+37. `scripts/agents/evals/` directory built up across tracks: e2e
+    fixtures + parity check + OpenAI conformance + MCP conformance
+    + skill-quality bench (vendor or interface with
+    `financial-datasets/llm-evaluations`). Nightly run; results in
+    SQLite; surfaced in Workbench → System.
 38. Unified trace + audit schema across both runtimes. Each turn
     records: prompts, tool calls, tool results, outputs, latency,
-    tokens, cost, runtime, model snapshot.
+    tokens, cost, runtime, model snapshot, citations (where
+    supported).
 39. Per-tool kill-switch armed via Workbench → System (R22).
     Trading-adjacent tools gate via MCP elicitation under R8 / R17.
 40. Prompt-injection guard: untrusted-content tagging on tool output
     strings (R23).
 41. Per-request budgets enforced by both runtimes (R24); UI displays
-    running cost.
+    running cost; cache-hit ratio visible on the Anthropic profile.
+42. UX click-through scripts mapped to §13 acceptance criteria
+    (A1–A4, B1–B5, C1–C7). Qt Test where automatable; screenshot
+    diff for visual regression; manual checklist
+    (`tests/ui/acceptance_checklist.md`) for release sign-off.
 
 ---
 
 ## 10. Sequencing
 
 ```
+   Track 0 (testing scaffold) ──┐
+                                 │
    Track 1 (cleanup) ──┬─► Track 2 (local runtime) ─┐
                        │                             │
                        ├─► Track 3 (Anthropic SDK) ──┤
@@ -925,28 +952,41 @@ UI, and the storage.
                                                             │
                                                             ▼
                                             Track 13 (AI Workbench)
-                                            Track 14 (evals/obs/audit/safety)
+                                            Track 14 (evals/obs/audit/safety/UX)
 ```
 
-Concrete order, smallest user-visible wins first:
+Concrete order, smallest user-visible wins first; every track ships
+with its e2e fixture(s):
 
-- **Week 1.** Track 1.
-- **Week 1.** Track 2 (local runtime; with sibling project running,
-  user can chat with no API key).
+- **Week 1.** Track 0 (testing scaffold) + Track 1 items 1–3
+  (SecureStorage, gate Fincept, local Whisper). Foundation clean;
+  harness exists with a `hello_world` fixture.
 - **Week 1–2.** Track 3 (Anthropic SDK; first agent identity runs
-  against Claude via SDK).
+  against Claude via SDK; first Anthropic-path fixture lands —
+  `comps_aapl.anthropic`).
+- **Week 2.** Engine M1 (separate project; see
+  `plans/local-ai-engine.md`). Once it's reachable, Track 1 item 4
+  + Track 2 (local runtime; first local-path fixture lands —
+  `comps_aapl.local`; parity check turns on).
 - **Week 2.** Track 4 (MCP HTTP transport + marketplace seed).
-- **Week 2–3.** Track 5 (full MCP spec on internal servers).
-- **Week 3.** Track 6 (`FinancialDatasetsTools` internal MCP).
+- **Week 2–3.** Track 5 (full MCP spec on internal servers; MCP
+  conformance suite extended).
+- **Week 3.** Track 6 (`FinancialDatasetsTools` internal MCP;
+  `insider_nvda`, `13f_brk` fixtures).
 - **Week 3–4.** Track 7 (skills vendoring + agent identities + slash
-  commands).
+  commands; one fixture per slash command).
 - **Week 4.** Track 8 (tool scoping + namespacing).
-- **Week 4–5.** Track 9 (memory).
-- **Week 5.** Track 10 (scheduler + hooks).
-- **Week 5–6.** Track 11 (quant narrator).
-- **Week 6.** Track 12 (alpha-arena migration).
-- **Week 6–7.** Track 13 (AI Workbench).
-- **Week 7–8.** Track 14 (evals + observability + audit + safety).
+- **Week 4–5.** Track 9 (memory; `memory_recall`,
+  `thesis_continuity`).
+- **Week 5.** Track 10 (scheduler + hooks;
+  `morning_note_scheduled`).
+- **Week 5–6.** Track 11 (quant narrator; `narrate_backtest`,
+  `propose_sweep`).
+- **Week 6.** Track 12 (alpha-arena migration; `arena_round`).
+- **Week 6–7.** Track 13 (AI Workbench; UX click-through scenarios
+  begin to land).
+- **Week 7–8.** Track 14 (final eval bench, conformance closeout,
+  acceptance checklist signed for release).
 
 ---
 

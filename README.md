@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`3d316b4e`](https://github.com/yumima/finterm/commit/3d316b4e) **docs:** move design plans from fincept-qt/docs/design to repo-root plans/
 - [`f99935d1`](https://github.com/yumima/finterm/commit/f99935d1) **docs(ai-stack):** apply review fixes; add local AI engine vision doc
 - [`67a3a19c`](https://github.com/yumima/finterm/commit/67a3a19c) **docs(ai-stack):** rewrite as two-runtime architecture (local + Anthropic)
 - [`a3ed86db`](https://github.com/yumima/finterm/commit/a3ed86db) **docs(design):** memo on Qt + FFmpeg hwaccel — findings and viable paths
