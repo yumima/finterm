@@ -145,10 +145,13 @@ class VideoPlayerWidget : public BaseWidget {
     void build_channel_list();
     void populate_channel_rows();    // (re)fills channel_rows_layout_ from channels_
     void build_player_view();
-    /// Resume from a paused state, working around Qt6's FFmpeg backend
-    /// detaching the audio sink across pause→play transitions (video
-    /// resumes, no audio).  Re-sets the current source to rebuild the
-    /// decoder chain, then plays.  No-op when not paused.
+    /// Apply the Qt6-FFmpeg audio-detach workaround on the
+    /// Paused→Playing edge: re-set the current source (rebuilds the
+    /// decoder chain so the audio sink reattaches), then play().
+    /// **No-op on Stopped or Playing** — callers that need
+    /// PLAY-after-STOP restart semantics handle that themselves so the
+    /// unlock auto-resume can be a one-liner that honors
+    /// `auto_paused_on_lock_`'s "only resume if still paused" contract.
     void resume_playback();
     void play_url(const QString& url, const QString& title);
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);

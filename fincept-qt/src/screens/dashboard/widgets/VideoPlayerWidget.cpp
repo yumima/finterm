@@ -371,14 +371,22 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         connect(play_pause_btn_, &QPushButton::clicked, this, [this]() {
 #ifdef HAS_QT_MULTIMEDIA
             if (!player_) return;
-            if (player_->playbackState() == QMediaPlayer::PlayingState) {
-                player_->pause();
-            } else {
-                // resume_playback() works around the Qt6 FFmpeg audio-detach
-                // bug on pause→play.  Without the source rebuild, video
-                // resumes but the audio sink stays detached and the user
-                // hears silence.
-                resume_playback();
+            // User explicitly pressed the button — handle each state.
+            // resume_playback() applies the Qt6 FFmpeg audio-detach
+            // workaround on the Paused→Playing edge; on Stopped (e.g.
+            // the stream ended) a bare play() restarts from the current
+            // source, which is what "PLAY pressed on a stopped stream"
+            // intuitively means.
+            switch (player_->playbackState()) {
+                case QMediaPlayer::PlayingState:
+                    player_->pause();
+                    break;
+                case QMediaPlayer::PausedState:
+                    resume_playback();
+                    break;
+                case QMediaPlayer::StoppedState:
+                    player_->play();
+                    break;
             }
             // User pressed the button → not an auto-pause, so clear the
             // latch even if a subsequent unlock fires.
@@ -624,15 +632,21 @@ void VideoPlayerWidget::build_player_view() {
 // cost is a brief re-buffer (~1 s); the alternative is silent video,
 // which is worse.  Tracked alongside the broader Qt + FFmpeg hwaccel
 // memo at plans/qt-ffmpeg-hwaccel-memo.md.
+//
+// Contract: this helper *only* handles the Paused→Playing edge.  It
+// is a no-op on Stopped or Playing.  Callers that want different
+// behavior on Stopped (e.g. PLAY-after-STOP restart) handle that
+// themselves — keeping this helper single-purpose lets the unlock
+// auto-resume be a one-liner with the right safety semantics
+// (auto_paused_on_lock_ contract: "we paused it; resume only if it's
+// still paused; otherwise leave alone").
 void VideoPlayerWidget::resume_playback() {
 #ifdef HAS_QT_MULTIMEDIA
-    if (!player_)
+    if (!player_ || player_->playbackState() != QMediaPlayer::PausedState)
         return;
-    if (player_->playbackState() == QMediaPlayer::PausedState) {
-        const QUrl src = player_->source();
-        if (src.isValid())
-            player_->setSource(src);
-    }
+    const QUrl src = player_->source();
+    if (src.isValid())
+        player_->setSource(src);
     player_->play();
 #endif
 }
