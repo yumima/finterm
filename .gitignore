@@ -117,6 +117,8 @@ fincept-qt/uitest/build/
 lightning_logs/
 *.ckpt
 *.yaml
+# Eval fixtures are version-controlled YAML — exempt the harness tree.
+!fincept-qt/scripts/agents/evals/**/*.yaml
 
 # ── Shell tree output files ───────────────────────────────────
 **/tree

@@ -1,0 +1,35 @@
+# Walking-skeleton fixture for the eval harness (Track 0).
+#
+# Drives a one-turn chat through the active runtime and asserts a
+# complete trace is produced with no errors.  No tool calls are
+# required; no specific output strings are required.  Once Tracks
+# 2 and 3 wire up the runtimes, this fixture should pass on both,
+# demonstrating end-to-end harness wiring.
+
+name: hello_world
+description: |
+  Smoke test for the eval harness.  Drives a one-turn chat through
+  the active runtime and asserts a complete trace is produced with
+  no errors.
+
+input:
+  agent: default
+  message: "Say hello."
+  skills_loaded: []
+
+expected:
+  tool_calls:
+    must_include: []
+    must_not_include: []
+  output:
+    contains_strings: []
+  trace:
+    requires_complete_record: true
+    must_not_error: true
+
+allowed_divergence:
+  text_wording: true
+  citation_presence: any
+  thinking_blocks: any
+  cost_usd: any
+  latency_ms: any
