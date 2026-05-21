@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`21e43750`](https://github.com/yumima/finterm/commit/21e43750) agents(runtimes): ToolBridge — McpService catalog → SDK MCP server (Track 3 #11)
 - [`8728ccc6`](https://github.com/yumima/finterm/commit/8728ccc6) storage(llm-profiles): first-class runtime field (Track 3 #10)
 - [`52b1612b`](https://github.com/yumima/finterm/commit/52b1612b) widgets(video): tighten resume_playback() to Paused-only edge
 - [`4b95aee2`](https://github.com/yumima/finterm/commit/4b95aee2) agents(runtimes): claude-agent-sdk integration shell (Track 3 #9)

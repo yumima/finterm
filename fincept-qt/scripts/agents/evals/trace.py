@@ -64,6 +64,7 @@ class Trace:
     tool_results: list[ToolResult] = field(default_factory=list)
     output: str = ""
     citations: list[Citation] = field(default_factory=list)
+    thinking: list[str] = field(default_factory=list)
     budget: Budget = field(default_factory=Budget)
     latency_ms: float = 0.0
     iterations: int = 0
@@ -230,6 +231,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
             }
             for c in trace.citations
         ],
+        "thinking": list(trace.thinking),
         "budget": {
             "token_in": trace.budget.token_in,
             "token_out": trace.budget.token_out,

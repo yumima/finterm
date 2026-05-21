@@ -15,8 +15,14 @@ Track 3 item 11 — MCP registration:
   in-process SDK MCP server (see mcp_bridge.py).  Default is an
   empty bridge so eval-harness runs without tools still work.
 
-Later items: SKILL.md loading (item 12), full streaming-event
-bridge (item 13).
+Track 3 item 13 — streaming events:
+- Optional `stream_handler` kwarg receives typed events as the turn
+  unfolds (text, thinking, tool_use, tool_result, done).  Default is
+  NoopStreamHandler; production AgentService passes a handler that
+  forwards events as Qt signals to the chat surface.
+- ThinkingBlock content now lands in trace.thinking (was dropped).
+
+Later: SKILL.md loading (item 12).
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .mcp_bridge import EmptyToolBridge, ToolBridge, build_sdk_mcp_server
+from .stream_handler import NoopStreamHandler, StreamHandler
 
 if TYPE_CHECKING:
     from evals.fixture import Fixture
@@ -36,7 +43,12 @@ class AnthropicRuntimeUnavailable(RuntimeError):
     """Raised when the SDK can't be imported or the CLI is missing."""
 
 
-def run_turn(fixture: "Fixture", *, tool_bridge: ToolBridge | None = None) -> "Trace":
+def run_turn(
+    fixture: "Fixture",
+    *,
+    tool_bridge: ToolBridge | None = None,
+    stream_handler: StreamHandler | None = None,
+) -> "Trace":
     """Execute a fixture's input on the Anthropic profile.
 
     Sync wrapper around the async SDK call.  Raises
@@ -48,12 +60,19 @@ def run_turn(fixture: "Fixture", *, tool_bridge: ToolBridge | None = None) -> "T
     so fixtures that don't need tools work without any wiring; tests
     inject a fake bridge to exercise specific tool flows; production
     AgentService passes a bridge backed by the McpService IPC.
+
+    `stream_handler` receives typed events as the turn runs.  Default
+    is NoopStreamHandler (silent); production passes a handler that
+    forwards each event to the chat surface.
     """
     bridge = tool_bridge if tool_bridge is not None else EmptyToolBridge()
-    return asyncio.run(_run_async(fixture, bridge))
+    handler = stream_handler if stream_handler is not None else NoopStreamHandler()
+    return asyncio.run(_run_async(fixture, bridge, handler))
 
 
-async def _run_async(fixture: "Fixture", tool_bridge: ToolBridge) -> "Trace":
+async def _run_async(
+    fixture: "Fixture", tool_bridge: ToolBridge, handler: StreamHandler
+) -> "Trace":
     try:
         from claude_agent_sdk import (
             AssistantMessage,
@@ -102,16 +121,30 @@ async def _run_async(fixture: "Fixture", tool_bridge: ToolBridge) -> "Trace":
             if isinstance(message, AssistantMessage):
                 trace.iterations += 1
                 for block in getattr(message, "content", []):
-                    _absorb_block(block, trace, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock)
+                    _absorb_block(
+                        block, trace, handler,
+                        TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock,
+                    )
             elif isinstance(message, UserMessage):
                 # Tool results often come back as UserMessage blocks.
                 for block in getattr(message, "content", []):
-                    _absorb_block(block, trace, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock)
+                    _absorb_block(
+                        block, trace, handler,
+                        TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock,
+                    )
             elif isinstance(message, SystemMessage):
                 # Currently ignored — system frames don't shape the trace.
                 pass
             elif isinstance(message, ResultMessage):
                 _absorb_result(message, trace)
+            else:
+                # StreamEvent / RateLimitEvent etc. — forward the raw
+                # event payload to the handler so consumers that opt
+                # into include_partial_messages get them.  Trace state
+                # is unaffected at this granularity.
+                payload = getattr(message, "event", None)
+                if isinstance(payload, dict):
+                    handler.on_partial_event(payload)
     except CLINotFoundError as exc:
         raise AnthropicRuntimeUnavailable(
             f"`claude` CLI not on PATH — install Claude Code: {exc}"
@@ -121,39 +154,44 @@ async def _run_async(fixture: "Fixture", tool_bridge: ToolBridge) -> "Trace":
 
     if not trace.finished_at:
         trace.finished_at = datetime.now(timezone.utc).isoformat()
+    handler.on_done(trace)
     return trace
 
 
-def _absorb_block(block, trace, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock) -> None:
-    """Map one SDK content block onto the Trace."""
+def _absorb_block(
+    block, trace, handler, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock,
+) -> None:
+    """Map one SDK content block onto the Trace and notify the handler."""
     from evals.trace import ToolCall, ToolResult
 
     if isinstance(block, TextBlock):
         trace.output += block.text
+        handler.on_text(block.text)
     elif isinstance(block, ToolUseBlock):
-        trace.tool_calls.append(
-            ToolCall(
-                id=getattr(block, "id", ""),
-                name=getattr(block, "name", ""),
-                arguments=dict(getattr(block, "input", {}) or {}),
-            )
+        call = ToolCall(
+            id=getattr(block, "id", ""),
+            name=getattr(block, "name", ""),
+            arguments=dict(getattr(block, "input", {}) or {}),
         )
+        trace.tool_calls.append(call)
+        handler.on_tool_use(call)
     elif isinstance(block, ToolResultBlock):
         output = getattr(block, "content", None)
         error = None
         if getattr(block, "is_error", False):
             error = str(output) if output is not None else "tool error"
-        trace.tool_results.append(
-            ToolResult(
-                call_id=getattr(block, "tool_use_id", ""),
-                output=output,
-                error=error,
-            )
+        result = ToolResult(
+            call_id=getattr(block, "tool_use_id", ""),
+            output=output,
+            error=error,
         )
+        trace.tool_results.append(result)
+        handler.on_tool_result(result)
     elif isinstance(block, ThinkingBlock):
-        # Thinking blocks are dropped from output but counted via iterations.
-        # Track 3 item 13 / Track 14 may surface them in the trace directly.
-        pass
+        text = getattr(block, "thinking", "")
+        if text:
+            trace.thinking.append(text)
+            handler.on_thinking(text)
 
 
 def _absorb_result(message, trace) -> None:
