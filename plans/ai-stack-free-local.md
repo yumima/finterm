@@ -906,7 +906,11 @@ fixtures.
 
 ### Track 15 — Community surface: open feed + closed rooms
 
-Parallel-shippable; not on the AI-stack critical path.  Current
+Parallel-shippable; not on the AI-stack critical path.  Both
+sub-surfaces (15a open feed, 15b closed rooms) render on the
+**same** Community screen — two panels side-by-side, not separate
+screens.  Reuses the existing `forum` slot in the screen registry;
+no new top-level navigation entry.  Current
 state: the `forum` screen, `ForumService`, and `ForumTools` MCP
 family all point at `AppConfig::api_base_url()` (default
 `http://127.0.0.1:8765`).  The bundled local stub server returns
