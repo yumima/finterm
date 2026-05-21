@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`25b2605a`](https://github.com/yumima/finterm/commit/25b2605a) voice(stt): swap Google SR for local Whisper (R15)
 - [`38b20e31`](https://github.com/yumima/finterm/commit/38b20e31) ai_chat(llm): retire Fincept hosted endpoint (R17)
 - [`ed4ad1b5`](https://github.com/yumima/finterm/commit/ed4ad1b5) storage(llm): move api_key columns to SecureStorage (R16)
 - [`108596c9`](https://github.com/yumima/finterm/commit/108596c9) evals: Track 0 testing scaffold

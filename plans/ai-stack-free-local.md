@@ -904,6 +904,43 @@ fixtures.
 36. System tab: traces, per-tool/per-agent/per-runtime counters,
     evals, cost meter, kill-switch toggle.
 
+### Track 15 — Forum → Reddit RSS (read-only)
+
+Parallel-shippable; not on the AI-stack critical path.  Current
+state: the `forum` screen, `ForumService`, and `ForumTools` MCP
+family all point at `AppConfig::api_base_url()` (default
+`http://127.0.0.1:8765`).  The bundled local stub server returns
+empty envelopes for `/forum/*` so the UI doesn't crash but every
+list renders empty.  Originally the forum hit `api.fincept.in`;
+that path is gone in the localhost fork.
+
+Replace with **Reddit RSS** read-only:
+
+- Source: curated finance subreddits — `r/investing`, `r/stocks`,
+  `r/options`, `r/SecurityAnalysis`, `r/wallstreetbets`,
+  `r/CryptoCurrency`, etc.  User-editable list in settings.
+- Transport: `https://www.reddit.com/r/<sub>.rss` (Atom XML).  No
+  auth, no API key, no rate-limit issues for RSS.  Separate from
+  Reddit's paid API.
+- Scope: read-only.  No posting, no voting, no comments — those
+  need OAuth.  Click-through opens the post in the browser.
+- `ForumService` HTTP+JSON client swapped for an RSS feed reader.
+  `ForumTools` MCP family auto-inherits (agents gain
+  `forum.search` / `forum.top_posts` against subreddit feeds).
+- Universality caveat: Reddit is blocked in CN/RU/KP.  Fallback:
+  HackerNews API (`https://hacker-news.firebaseio.com/v0/`,
+  unauthenticated) as a secondary feed.  If both fail, show a
+  "community feed unavailable in your region" message rather than
+  empty lists.
+
+Stages:
+
+1. Read-only RSS reader against a single hardcoded subreddit
+   (`r/investing`) — smoke the feed parsing and UI render.
+2. User-editable subreddit list in settings; multi-feed merge.
+3. HackerNews fallback for regions where Reddit is unreachable.
+4. `ForumTools` MCP family rewritten on top of the new client.
+
 ### Track 14 — Evals + observability + audit + safety + UX
 
 37. `scripts/agents/evals/` directory built up across tracks: e2e
@@ -987,6 +1024,8 @@ with its e2e fixture(s):
   begin to land).
 - **Week 7–8.** Track 14 (final eval bench, conformance closeout,
   acceptance checklist signed for release).
+- **Parallel, any week.** Track 15 (forum → Reddit RSS).  Not on
+  the AI critical path; pick up when bandwidth allows.
 
 ---
 
