@@ -48,12 +48,16 @@ void initialize_all_tools() {
 
     // news
     provider.register_tools(tools::get_news_tools());
+    for (auto& res : tools::get_news_resources())
+        provider.register_resource(std::move(res));
 
     // markets tab (quotes, symbol search)
     provider.register_tools(tools::get_markets_tools());
 
     // watchlist tab
     provider.register_tools(tools::get_watchlist_tools());
+    for (auto& res : tools::get_watchlist_resources())
+        provider.register_resource(std::move(res));
 
     // portfolio tab (holdings + named portfolios/assets/transactions/snapshots)
     provider.register_tools(tools::get_portfolio_tools());
@@ -65,6 +69,8 @@ void initialize_all_tools() {
 
     // notes tab
     provider.register_tools(tools::get_notes_tools());
+    for (auto& res : tools::get_notes_resources())
+        provider.register_resource(std::move(res));
 
     // ai chat tab
     provider.register_tools(tools::get_ai_chat_tools());

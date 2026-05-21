@@ -8,8 +8,11 @@
 #include "services/news/NewsClusterService.h"
 #include "services/news/NewsMonitorService.h"
 #include "services/news/NewsService.h"
+#include "storage/repositories/NewsArticleRepository.h"
 
+#include <QDateTime>
 #include <QEventLoop>
+#include <QJsonDocument>
 #include <QMetaObject>
 #include <QMutex>
 #include <QThread>
@@ -797,6 +800,79 @@ std::vector<ToolDef> get_news_tools() {
     }
 
     return tools;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════════════════
+//
+// finterm://news/digest — last 24h of persisted news articles.  Reads
+// from NewsArticleRepository (already-fetched + cached); does NOT
+// trigger a fresh fetch via NewsService (that path is async and lives
+// in the news tools).  Agents read this for context; tools refresh.
+
+std::vector<Resource> get_news_resources() {
+    std::vector<Resource> resources;
+
+    {
+        Resource r;
+        r.uri = QStringLiteral("finterm://news/digest");
+        r.name = QStringLiteral("News digest (last 24h)");
+        r.description = QStringLiteral(
+            "Persisted news articles from the past 24 hours — headline, "
+            "source, ticker tags, priority, sentiment.  Read this for "
+            "news context; call refresh_news / search_news when fresh "
+            "or filtered results are needed.");
+        r.mime_type = QStringLiteral("application/json");
+        r.handler = []() -> ResourceContent {
+            ResourceContent rc;
+            rc.uri = QStringLiteral("finterm://news/digest");
+            rc.mime_type = QStringLiteral("application/json");
+
+            const qint64 since_ts =
+                QDateTime::currentDateTimeUtc().addSecs(-24 * 3600).toSecsSinceEpoch();
+            auto loaded = NewsArticleRepository::instance().load_recent(since_ts);
+            if (loaded.is_err()) {
+                rc.error = "Failed to load news digest: " +
+                           QString::fromStdString(loaded.error());
+                return rc;
+            }
+
+            QJsonArray arr;
+            for (const auto& a : loaded.value()) {
+                QJsonArray tickers_arr;
+                for (const auto& t : a.tickers)
+                    tickers_arr.append(t);
+                arr.append(QJsonObject{
+                    {"id", a.id},
+                    {"time", a.time},
+                    {"headline", a.headline},
+                    {"summary", a.summary},
+                    {"source", a.source},
+                    {"category", a.category},
+                    {"region", a.region},
+                    {"priority", fincept::services::priority_string(a.priority)},
+                    {"sentiment", fincept::services::sentiment_string(a.sentiment)},
+                    {"impact", fincept::services::impact_string(a.impact)},
+                    {"tickers", tickers_arr},
+                    {"link", a.link},
+                });
+            }
+
+            QJsonObject envelope{
+                {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                {"since_ts", since_ts},
+                {"article_count", arr.size()},
+                {"articles", arr},
+            };
+            rc.text =
+                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            return rc;
+        };
+        resources.push_back(std::move(r));
+    }
+
+    return resources;
 }
 
 } // namespace fincept::mcp::tools

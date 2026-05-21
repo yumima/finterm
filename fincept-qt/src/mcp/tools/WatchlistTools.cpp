@@ -1,4 +1,4 @@
-// WatchlistTools.cpp — Watchlist MCP tools
+// WatchlistTools.cpp — Watchlist MCP tools + resources
 
 #include "mcp/tools/WatchlistTools.h"
 
@@ -6,6 +6,8 @@
 #include "core/logging/Logger.h"
 #include "storage/repositories/WatchlistRepository.h"
 
+#include <QDateTime>
+#include <QJsonDocument>
 #include <QVariantMap>
 
 namespace fincept::mcp::tools {
@@ -184,6 +186,72 @@ std::vector<ToolDef> get_watchlist_tools() {
     }
 
     return tools;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════════════════
+//
+// finterm://watchlist/all — every watchlist + its stocks.  Agents read
+// this at turn start to pick up the user's watched symbols without
+// spending a tool-call turn on get_watchlists.
+
+std::vector<Resource> get_watchlist_resources() {
+    std::vector<Resource> resources;
+
+    {
+        Resource r;
+        r.uri = QStringLiteral("finterm://watchlist/all");
+        r.name = QStringLiteral("All watchlists");
+        r.description = QStringLiteral(
+            "Every configured watchlist with its symbols.  Read this for "
+            "context on the user's tracked tickers; use the get_watchlists "
+            "tool when you need to chain follow-up writes.");
+        r.mime_type = QStringLiteral("application/json");
+        r.handler = []() -> ResourceContent {
+            ResourceContent rc;
+            rc.uri = QStringLiteral("finterm://watchlist/all");
+            rc.mime_type = QStringLiteral("application/json");
+
+            auto& repo = WatchlistRepository::instance();
+            auto lists = repo.list_all();
+            if (lists.is_err()) {
+                rc.error = "Failed to load watchlists: " +
+                           QString::fromStdString(lists.error());
+                return rc;
+            }
+
+            QJsonArray arr;
+            for (const auto& wl : lists.value()) {
+                auto stocks = repo.get_stocks(wl.id);
+                QJsonArray symbols;
+                if (stocks.is_ok()) {
+                    for (const auto& s : stocks.value()) {
+                        symbols.append(QJsonObject{{"symbol", s.symbol},
+                                                   {"name", s.name},
+                                                   {"added_at", s.added_at}});
+                    }
+                }
+                arr.append(QJsonObject{{"id", wl.id},
+                                       {"name", wl.name},
+                                       {"color", wl.color},
+                                       {"description", wl.description},
+                                       {"symbols", symbols}});
+            }
+
+            QJsonObject envelope{
+                {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                {"watchlist_count", arr.size()},
+                {"watchlists", arr},
+            };
+            rc.text =
+                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            return rc;
+        };
+        resources.push_back(std::move(r));
+    }
+
+    return resources;
 }
 
 } // namespace fincept::mcp::tools

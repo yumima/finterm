@@ -1,4 +1,4 @@
-// NotesTools.cpp — Notes tab MCP tools (research notes)
+// NotesTools.cpp — Notes tab MCP tools + resources (research notes)
 
 #include "mcp/tools/NotesTools.h"
 
@@ -6,7 +6,11 @@
 #include "core/logging/Logger.h"
 #include "storage/repositories/NotesRepository.h"
 
+#include <QDateTime>
+#include <QJsonDocument>
 #include <QVariantMap>
+
+#include <algorithm>
 
 namespace fincept::mcp::tools {
 
@@ -114,6 +118,98 @@ std::vector<ToolDef> get_notes_tools() {
     }
 
     return tools;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════════════════
+//
+// finterm://notes/active_thesis — top recent non-archived notes
+// (priority order, then updated_at desc).  Proxy for "what the user
+// is currently thinking about"; a richer "active thesis" first-class
+// concept lands when the agent surface needs it.
+
+namespace {
+int notes_priority_rank(const QString& priority) {
+    const QString p = priority.toUpper();
+    if (p == "CRITICAL") return 0;
+    if (p == "HIGH") return 1;
+    if (p == "MEDIUM") return 2;
+    if (p == "LOW") return 3;
+    return 4;
+}
+} // namespace
+
+std::vector<Resource> get_notes_resources() {
+    std::vector<Resource> resources;
+
+    {
+        Resource r;
+        r.uri = QStringLiteral("finterm://notes/active_thesis");
+        r.name = QStringLiteral("Active thesis (recent notes)");
+        r.description = QStringLiteral(
+            "Top 20 non-archived research notes ordered by priority then "
+            "recency.  Read this to pick up the user's current thinking "
+            "before writing or refining theses.  A first-class 'active "
+            "thesis' object will replace this proxy when the agent surface "
+            "needs explicit thesis-tracking.");
+        r.mime_type = QStringLiteral("application/json");
+        r.handler = []() -> ResourceContent {
+            ResourceContent rc;
+            rc.uri = QStringLiteral("finterm://notes/active_thesis");
+            rc.mime_type = QStringLiteral("application/json");
+
+            auto loaded = NotesRepository::instance().list_all(/*include_archived=*/false);
+            if (loaded.is_err()) {
+                rc.error = "Failed to load notes: " +
+                           QString::fromStdString(loaded.error());
+                return rc;
+            }
+
+            QVector<FinancialNote> notes = loaded.value();
+            std::sort(notes.begin(), notes.end(),
+                      [](const FinancialNote& a, const FinancialNote& b) {
+                          int pa = notes_priority_rank(a.priority);
+                          int pb = notes_priority_rank(b.priority);
+                          if (pa != pb)
+                              return pa < pb;
+                          return a.updated_at > b.updated_at;
+                      });
+
+            constexpr int kMaxNotes = 20;
+            const int take = std::min<int>(notes.size(), kMaxNotes);
+            QJsonArray arr;
+            for (int i = 0; i < take; ++i) {
+                const auto& n = notes[i];
+                arr.append(QJsonObject{
+                    {"id", n.id},
+                    {"title", n.title},
+                    {"content", n.content},
+                    {"category", n.category},
+                    {"priority", n.priority},
+                    {"sentiment", n.sentiment},
+                    {"tickers", n.tickers},
+                    {"tags", n.tags},
+                    {"is_favorite", n.is_favorite},
+                    {"created_at", n.created_at},
+                    {"updated_at", n.updated_at},
+                });
+            }
+
+            QJsonObject envelope{
+                {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                {"note_count", arr.size()},
+                {"total_active", notes.size()},
+                {"notes", arr},
+            };
+            rc.text =
+                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            return rc;
+        };
+        resources.push_back(std::move(r));
+    }
+
+    return resources;
 }
 
 } // namespace fincept::mcp::tools
