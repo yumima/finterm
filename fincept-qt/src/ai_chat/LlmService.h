@@ -33,6 +33,21 @@ inline bool provider_requires_api_key(const QString& provider) {
     return provider != "ollama" && provider != "fincept";
 }
 
+/// Map a provider string to its target agent runtime (R1, R3).
+///   "anthropic" → "anthropic"     (Claude Agent SDK path)
+///   "ollama"    → "local"         (minimal OpenAI-compatible loop)
+///   anything else → "external"    (dormant adapters per R2; legacy
+///                                  config rows continue to load but
+///                                  no agent dispatch is wired)
+inline QString runtime_for_provider(const QString& provider) {
+    const QString p = provider.toLower();
+    if (p == "anthropic")
+        return QStringLiteral("anthropic");
+    if (p == "ollama")
+        return QStringLiteral("local");
+    return QStringLiteral("external");
+}
+
 // ── Data types ────────────────────────────────────────────────────────────────
 
 struct ConversationMessage {

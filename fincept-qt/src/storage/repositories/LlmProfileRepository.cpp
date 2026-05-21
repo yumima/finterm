@@ -2,6 +2,7 @@
 
 #include "storage/repositories/LlmProfileRepository.h"
 
+#include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "storage/secure/LlmSecureKeys.h"
 
@@ -39,12 +40,17 @@ LlmProfile LlmProfileRepository::map_profile(QSqlQuery& q) {
     p.is_default = q.value(9).toBool();
     p.created_at = q.value(10).toString();
     p.updated_at = q.value(11).toString();
+    p.runtime = q.value(12).toString();
+    // Defensive: pre-v023 rows or blank-runtime rows fall back to
+    // derivation from provider so the field is never empty downstream.
+    if (p.runtime.isEmpty())
+        p.runtime = ai_chat::runtime_for_provider(p.provider);
     return p;
 }
 
 static const char* kSelectCols = "SELECT id, name, provider, model_id, api_key, base_url, "
                                  "       temperature, max_tokens, system_prompt, is_default, "
-                                 "       created_at, updated_at "
+                                 "       created_at, updated_at, runtime "
                                  "FROM llm_profiles ";
 
 // ── Profile CRUD ──────────────────────────────────────────────────────────────
@@ -65,12 +71,17 @@ Result<void> LlmProfileRepository::save_profile(const LlmProfile& p) {
         return r;
     }
 
+    // Caller may leave runtime blank — derive from provider so the
+    // saved row always has a usable dispatch tag.
+    const QString runtime =
+        p.runtime.isEmpty() ? ai_chat::runtime_for_provider(p.provider) : p.runtime;
+
     return exec_write("INSERT OR REPLACE INTO llm_profiles "
                       "  (id, name, provider, model_id, api_key, base_url, "
-                      "   temperature, max_tokens, system_prompt, is_default, updated_at) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+                      "   temperature, max_tokens, system_prompt, is_default, runtime, updated_at) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
                       {id, p.name, p.provider, p.model_id, null_text(), p.base_url, p.temperature, p.max_tokens,
-                       p.system_prompt, p.is_default ? 1 : 0});
+                       p.system_prompt, p.is_default ? 1 : 0, runtime});
 }
 
 Result<void> LlmProfileRepository::delete_profile(const QString& id) {
@@ -154,6 +165,7 @@ ResolvedLlmProfile LlmProfileRepository::profile_to_resolved(const LlmProfile& p
     r.temperature = p.temperature;
     r.max_tokens = p.max_tokens;
     r.system_prompt = p.system_prompt;
+    r.runtime = p.runtime.isEmpty() ? ai_chat::runtime_for_provider(p.provider) : p.runtime;
     return r;
 }
 
@@ -174,6 +186,7 @@ ResolvedLlmProfile LlmProfileRepository::legacy_fallback() const {
     rp.api_key = llm_secure_load(llm_secure_key_for_provider(rp.provider));
     rp.base_url = q.value(2).toString();
     rp.model_id = q.value(3).toString();
+    rp.runtime = ai_chat::runtime_for_provider(rp.provider);
 
     // Pull global temperature/max_tokens
     auto gs = db().execute("SELECT temperature, max_tokens FROM llm_global_settings WHERE id = 1");
@@ -224,7 +237,7 @@ ResolvedLlmProfile LlmProfileRepository::resolve_for_context(const QString& cont
     {
         auto r = db().execute("SELECT id, name, provider, model_id, api_key, base_url, "
                               "       temperature, max_tokens, system_prompt, is_default, "
-                              "       created_at, updated_at "
+                              "       created_at, updated_at, runtime "
                               "FROM llm_profiles WHERE is_default = 1 LIMIT 1");
         if (r.is_ok()) {
             auto& q = r.value();

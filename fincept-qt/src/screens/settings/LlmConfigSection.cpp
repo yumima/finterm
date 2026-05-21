@@ -27,11 +27,14 @@ namespace fincept::screens {
 
 static constexpr const char* TAG = "LlmConfigSection";
 
-// "fincept" intentionally omitted — hosted endpoint retired (R17). Legacy
-// rows may still exist in llm_configs; they appear in the saved-providers
-// list view but cannot be re-selected from the Add dropdown.
-const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"openai",  "anthropic", "gemini",   "groq",  "deepseek",
-                                                       "openrouter", "minimax", "kimi", "ollama", "xai"};
+// Per R1 / R2 the UI exposes the two first-class runtimes — Anthropic
+// (claude-agent-sdk path) and the local OpenAI-compatible runtime
+// (currently surfaced as "ollama").  The other adapters (openai,
+// gemini, groq, deepseek, openrouter, minimax, kimi, xai) remain in
+// LlmService.cpp as dormant code; legacy rows that still reference
+// them appear in the saved-providers list view but cannot be added
+// as new providers.  "fincept" was retired in R17.
+const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"anthropic", "ollama"};
 
 QString LlmConfigSection::default_base_url(const QString& provider) {
     const QString p = provider.toLower();

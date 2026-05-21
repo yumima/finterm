@@ -27,6 +27,10 @@ struct LlmProfile {
     int max_tokens = 4096;
     QString system_prompt;
     bool is_default = false;
+    /// Agent dispatch tag — "anthropic", "local", or "external".
+    /// Populated by migration v023 from `provider`; new profiles set
+    /// it explicitly via runtime_for_provider() (see LlmService.h).
+    QString runtime;
     QString created_at;
     QString updated_at;
 };
@@ -43,6 +47,10 @@ struct ResolvedLlmProfile {
     double temperature = 0.7;
     int max_tokens = 4096;
     QString system_prompt;
+    /// "anthropic" → Claude Agent SDK; "local" → minimal OpenAI-compat
+    /// loop; "external" → dormant adapter (R2).  Agent dispatch reads
+    /// this; chat path uses `provider` directly.
+    QString runtime;
 };
 
 // ── Repository ────────────────────────────────────────────────────────────────

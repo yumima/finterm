@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`52b1612b`](https://github.com/yumima/finterm/commit/52b1612b) widgets(video): tighten resume_playback() to Paused-only edge
 - [`4b95aee2`](https://github.com/yumima/finterm/commit/4b95aee2) agents(runtimes): claude-agent-sdk integration shell (Track 3 #9)
 - [`07737672`](https://github.com/yumima/finterm/commit/07737672) widgets(video): fix audio loss on manual pause→play (Qt6 FFmpeg)
 - [`32386deb`](https://github.com/yumima/finterm/commit/32386deb) plans(track-15): both sub-surfaces render on the same screen
