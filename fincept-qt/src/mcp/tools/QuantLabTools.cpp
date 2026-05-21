@@ -260,15 +260,31 @@ void dispatch_quant_async(const QString& module_id, const QString& command,
                           const QJsonObject& params, ToolContext ctx,
                           std::shared_ptr<QPromise<ToolResult>> promise) {
     auto* svc = &services::quant::AIQuantLabService::instance();
+
+    // Track 5 / R8: progress + cancellation primitives for long-running
+    // tools.  AsyncDispatch already polls ctx.is_cancelled() while
+    // waiting on the service signal; we additionally emit a starting
+    // progress note so the agent UI can show activity before the first
+    // result arrives.  AIQuantLabService doesn't yet emit intermediate
+    // progress (no signals between run_module() and result_ready) — when
+    // it does, plumb them into ctx.on_progress here.
+    if (ctx.on_progress) {
+        ctx.on_progress(
+            0.0,
+            QStringLiteral("starting %1:%2…").arg(module_id, command));
+    }
+
     AsyncDispatch::callback_to_promise(
-        svc, std::move(ctx), promise,
-        [svc, module_id, command, params](auto resolve) {
+        svc, ctx, promise,
+        [svc, module_id, command, params, ctx](auto resolve) {
             auto* holder = new QObject(svc);
             QObject::connect(svc, &services::quant::AIQuantLabService::result_ready, holder,
-                              [module_id, command, resolve, holder](QString mid, QString cmd,
-                                                                     QJsonObject data) {
+                              [module_id, command, resolve, holder, ctx](QString mid, QString cmd,
+                                                                          QJsonObject data) {
                                   if (mid != module_id || cmd != command)
                                       return;
+                                  if (ctx.on_progress)
+                                      ctx.on_progress(1.0, QStringLiteral("done"));
                                   resolve(ToolResult::ok_data(data));
                                   holder->deleteLater();
                               });
