@@ -87,8 +87,9 @@ void VoiceConfigSection::build_ui() {
 
     auto* blurb = new QLabel(
         "Configure the speech recognition engine used by the AI chat mic button.\n"
-        "Google is free but unauthenticated and often rate-limited. Deepgram offers "
-        "significantly better accuracy and supports financial keyword boosting.");
+        "Whisper runs locally with no outbound calls — model weights cache on first use. "
+        "Deepgram offers higher accuracy and supports financial keyword boosting, "
+        "but requires an API key and sends audio off-box.");
     blurb->setStyleSheet(label_ss());
     blurb->setWordWrap(true);
     vl->addWidget(blurb);
@@ -101,14 +102,14 @@ void VoiceConfigSection::build_ui() {
     prov_lbl->setStyleSheet(label_ss());
     provider_combo_ = new QComboBox;
     provider_combo_->setStyleSheet(combo_ss());
-    provider_combo_->addItem("Google (free, default)", "google");
+    provider_combo_->addItem("Whisper (local, free, default)", "whisper");
     provider_combo_->addItem("Deepgram (API key required)", "deepgram");
     prov_hl->addWidget(prov_lbl);
     prov_hl->addStretch();
     prov_hl->addWidget(provider_combo_);
     vl->addWidget(prov_row);
 
-    // ── Deepgram group (hidden for Google) ───────────────────────────────────
+    // ── Deepgram group (hidden when provider is Whisper) ──────────────────────
     deepgram_group_ = new QWidget;
     auto* dg_vl = new QVBoxLayout(deepgram_group_);
     dg_vl->setContentsMargins(0, 8, 0, 0);
@@ -233,7 +234,12 @@ void VoiceConfigSection::build_ui() {
 void VoiceConfigSection::reload() {
     auto& cfg = AppConfig::instance();
 
-    const QString provider = cfg.get("voice/provider", "google").toString().toLower();
+    QString provider = cfg.get("voice/provider", "whisper").toString().toLower();
+    // Legacy "google" values map to "whisper" — the Google SR backend has
+    // been removed, so picking it would no-op.  Mapping silently keeps
+    // existing users on the local-free path.
+    if (provider == "google")
+        provider = "whisper";
     const int idx = provider_combo_->findData(provider);
     provider_combo_->setCurrentIndex(idx >= 0 ? idx : 0);
 

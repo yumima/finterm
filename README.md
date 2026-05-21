@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`38b20e31`](https://github.com/yumima/finterm/commit/38b20e31) ai_chat(llm): retire Fincept hosted endpoint (R17)
 - [`ed4ad1b5`](https://github.com/yumima/finterm/commit/ed4ad1b5) storage(llm): move api_key columns to SecureStorage (R16)
 - [`108596c9`](https://github.com/yumima/finterm/commit/108596c9) evals: Track 0 testing scaffold
 - [`04496d5f`](https://github.com/yumima/finterm/commit/04496d5f) plans: add testing strategy; weave Track 0 + UX into ai-stack plan

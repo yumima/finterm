@@ -1,10 +1,10 @@
-// SpeechService.cpp — Pluggable speech-to-text (Google or Deepgram).
+// SpeechService.cpp — Pluggable speech-to-text (Whisper local or Deepgram).
 //
 // Architecture:
 //   SpeechService (public facade)
 //     └── SttProvider (abstract)
 //           ├── PythonSttProvider (shared QProcess + JSON-lines plumbing)
-//           │     ├── GoogleSttProvider   → scripts/voice/speech_to_text.py
+//           │     ├── WhisperSttProvider  → scripts/voice/whisper_stt.py
 //           │     └── DeepgramSttProvider → scripts/voice/deepgram_stt.py
 //
 // Both providers share the same JSON-lines stdout protocol:
@@ -219,20 +219,31 @@ class PythonSttProvider : public SttProvider {
     std::atomic<bool> active_{false};
 };
 
-// ── GoogleSttProvider ────────────────────────────────────────────────────────
+// ── WhisperSttProvider ───────────────────────────────────────────────────────
 //
-// Unauth'd Google Web Speech via Python `speech_recognition`. No API key.
+// Local faster-whisper inference + webrtcvad segmentation.  Zero outbound —
+// model weights cache to ~/.cache/huggingface/hub on first use.  Model size
+// and language come from AppConfig.
 
-class GoogleSttProvider final : public PythonSttProvider {
+class WhisperSttProvider final : public PythonSttProvider {
   public:
     using PythonSttProvider::PythonSttProvider;
 
-    QString name() const override { return QStringLiteral("google"); }
+    QString name() const override { return QStringLiteral("whisper"); }
 
   protected:
     QString script_path() const override {
         return python::PythonRunner::instance().scripts_dir() +
-               QStringLiteral("/voice/speech_to_text.py");
+               QStringLiteral("/voice/whisper_stt.py");
+    }
+
+    void extend_environment(QProcessEnvironment& env) const override {
+        auto& cfg = AppConfig::instance();
+        env.insert("FINCEPT_STT_MODEL", cfg.get("voice/whisper/model", "medium").toString());
+        env.insert("FINCEPT_STT_LANGUAGE", cfg.get("voice/whisper/language", "en").toString());
+        env.insert("FINCEPT_STT_DEVICE", cfg.get("voice/whisper/device", "auto").toString());
+        env.insert("FINCEPT_STT_COMPUTE", cfg.get("voice/whisper/compute", "auto").toString());
+        env.insert("FINCEPT_STT_VAD_AGGR", cfg.get("voice/whisper/vad_aggressiveness", "2").toString());
     }
 };
 
@@ -286,8 +297,13 @@ SpeechService::~SpeechService() {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 QString SpeechService::configured_provider() {
-    const QString v = AppConfig::instance().get("voice/provider", "google").toString().toLower();
-    return (v == "deepgram") ? QStringLiteral("deepgram") : QStringLiteral("google");
+    // Default is local Whisper.  Legacy "google" values silently map to
+    // "whisper" so users with old config don't see the Google SR backend
+    // (which has been removed) — they get the local-free path instead.
+    const QString v = AppConfig::instance().get("voice/provider", "whisper").toString().toLower();
+    if (v == "deepgram")
+        return QStringLiteral("deepgram");
+    return QStringLiteral("whisper");
 }
 
 void SpeechService::start_listening() {
@@ -345,7 +361,7 @@ void SpeechService::install_provider() {
     if (id == QStringLiteral("deepgram"))
         provider_ = std::make_unique<DeepgramSttProvider>(this);
     else
-        provider_ = std::make_unique<GoogleSttProvider>(this);
+        provider_ = std::make_unique<WhisperSttProvider>(this);
 
     connect(provider_.get(), &SttProvider::transcription, this, &SpeechService::transcription_ready);
     connect(provider_.get(), &SttProvider::error, this, &SpeechService::error_occurred);

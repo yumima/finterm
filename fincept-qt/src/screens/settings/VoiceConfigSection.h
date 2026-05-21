@@ -1,7 +1,7 @@
 #pragma once
 // VoiceConfigSection.h — Voice / speech-to-text provider configuration panel.
 //
-// Provider switch (Google free vs Deepgram API) + Deepgram credentials &
+// Provider switch (Whisper local vs Deepgram API) + Deepgram credentials &
 // tuning. Lives alongside LlmConfigSection in the Settings screen.
 
 #include <QCheckBox>
@@ -48,7 +48,7 @@ class VoiceConfigSection : public QWidget {
     QPushButton* test_btn_          = nullptr;
     QLabel*      status_lbl_        = nullptr;
 
-    // Deepgram-only rows, hidden when provider is Google
+    // Deepgram-only rows, hidden when provider is Whisper
     QWidget*     deepgram_group_    = nullptr;
 };
 

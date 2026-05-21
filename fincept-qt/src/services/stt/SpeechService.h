@@ -3,10 +3,10 @@
 //
 // Architecture:
 //   • Public API unchanged: start_listening() / stop_listening() / signals.
-//   • Internally selects a provider (Google or Deepgram) based on AppConfig
-//     key "voice/provider" (default: "google"). Each provider spawns its own
-//     Python script as a long-running QProcess using the same JSON-lines
-//     stdout protocol ({status|text|error|fatal}).
+//   • Internally selects a provider (Whisper local or Deepgram) based on
+//     AppConfig key "voice/provider" (default: "whisper"). Each provider
+//     spawns its own Python script as a long-running QProcess using the same
+//     JSON-lines stdout protocol ({status|text|error|fatal}).
 //   • AiChatBubble never sees the provider — it only sees the three signals.
 //
 // Complies with P1 (never block UI), P6 (service layer), P15 (thread safety).
@@ -65,8 +65,10 @@ class SpeechService : public QObject {
 
     [[nodiscard]] bool is_listening() const noexcept;
 
-    /// Returns the currently active provider id ("google" or "deepgram").
-    /// Reads AppConfig; does not reflect in-flight state.
+    /// Returns the currently active provider id ("whisper" or "deepgram").
+    /// Reads AppConfig; does not reflect in-flight state.  Legacy "google"
+    /// values are mapped to "whisper" — the Google SR backend has been
+    /// removed.
     [[nodiscard]] static QString configured_provider();
 
   signals:
