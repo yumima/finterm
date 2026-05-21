@@ -690,6 +690,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/NewsArticleRepository.cpp
     src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/ChatRepository.cpp
+    src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
     src/storage/repositories/LlmProfileRepository.cpp
     src/storage/repositories/DataSourceRepository.cpp
@@ -740,6 +741,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
     src/storage/sqlite/migrations/v027_agent_schedule.cpp
     src/storage/sqlite/migrations/v028_named_agents.cpp
+    src/storage/sqlite/migrations/v029_agent_traces.cpp
 )
 
 # Python runner
@@ -1759,6 +1761,7 @@ set_source_files_properties(
     src/screens/watchlist/WatchlistScreen.cpp
     # Storage repositories — each defines kCols in namespace fincept
     src/storage/repositories/AgentConfigRepository.cpp
+    src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp
     src/storage/repositories/DashboardLayoutRepository.cpp
@@ -1807,6 +1810,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
     src/storage/sqlite/migrations/v027_agent_schedule.cpp
     src/storage/sqlite/migrations/v028_named_agents.cpp
+    src/storage/sqlite/migrations/v029_agent_traces.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1915,6 +1919,7 @@ set_source_files_properties(
 # Storage repositories: each defines kCols — safe to batch in groups of 3
 set_source_files_properties(
     src/storage/repositories/AgentConfigRepository.cpp
+    src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp
     src/storage/repositories/DashboardLayoutRepository.cpp

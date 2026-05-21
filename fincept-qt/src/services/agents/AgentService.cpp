@@ -6,6 +6,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
 
 #    include "datahub/DataHub.h"
@@ -438,6 +439,21 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
     const QString req_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     LOG_INFO("AgentService", QString("Running agent query [%1]: %2").arg(req_id.left(8), query.left(80)));
 
+    // Track 14 #38 — write an in_progress trace row before dispatch.
+    // The finish() in the callback below transitions it to success / error.
+    {
+        AgentTraceCreate c;
+        c.request_id = req_id;
+        c.agent_id = config.value(QStringLiteral("agent_id")).toString();
+        c.runtime = config.value(QStringLiteral("runtime")).toString();
+        c.source = config.value(QStringLiteral("source")).toString();
+        c.query = query;
+        c.config = config;
+        if (auto r = AgentTraceRepository::instance().create(c); r.is_err())
+            LOG_WARN("AgentService", QString("trace create failed for %1: %2")
+                                         .arg(req_id, QString::fromStdString(r.error())));
+    }
+
     QJsonObject params;
     params["query"] = query;
 
@@ -461,6 +477,32 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
                 r.response = QJsonDocument(result).toJson(QJsonDocument::Indented);
         } else {
             r.error = result["error"].toString("Agent execution failed");
+        }
+
+        // Finish the trace row — pulls token / cost when the python
+        // result reports them; falls back to nullopt otherwise.  Guard
+        // against `null` values too, not just missing keys, so we
+        // don't silently record 0 tokens for a model that returned
+        // {"tokens_in": null}.
+        {
+            AgentTraceFinish f;
+            f.request_id = req_id;
+            f.success = r.success;
+            f.response = r.response;
+            f.error = r.error;
+            f.latency_ms = r.execution_time_ms;
+            const auto v_ti = result.value(QStringLiteral("tokens_in"));
+            if (v_ti.isDouble())
+                f.tokens_in = v_ti.toInt();
+            const auto v_to = result.value(QStringLiteral("tokens_out"));
+            if (v_to.isDouble())
+                f.tokens_out = v_to.toInt();
+            const auto v_cost = result.value(QStringLiteral("cost_usd"));
+            if (v_cost.isDouble())
+                f.cost_usd = v_cost.toDouble();
+            if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
+                LOG_WARN("AgentService", QString("trace finish failed for %1: %2")
+                                             .arg(req_id, QString::fromStdString(fr.error())));
         }
 
         emit self->agent_result(r);
