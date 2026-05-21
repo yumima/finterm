@@ -582,7 +582,14 @@ struct UnifiedTool {
 // Constants
 // ============================================================================
 
-inline constexpr const char* INTERNAL_SERVER_ID = "fincept-terminal";
+// Source-prefix for internal McpProvider tools (Track 8 / R8).  The
+// OpenAI / Anthropic function-call wire name is `<server_id>__<tool>`,
+// so an internal tool surfaces to the agent as e.g. `int__get_holdings`
+// — the short literal matches the design doc's `int:` prefix concept
+// within the constraint that tool-name regex forbids colons.  External
+// servers' own ids serve as their prefixes (`mcp-fetch__fetch`,
+// `mcp-financial-datasets__get_income_statements`).
+inline constexpr const char* INTERNAL_SERVER_ID = "int";
 inline constexpr const char* INTERNAL_SERVER_NAME = "Fincept Terminal";
 
 } // namespace fincept::mcp

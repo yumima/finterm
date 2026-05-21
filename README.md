@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`42fdf5f6`](https://github.com/yumima/finterm/commit/42fdf5f6) plans(status): Track 6 done — FinancialDatasetsTools committed
 - [`32f1927a`](https://github.com/yumima/finterm/commit/32f1927a) mcp(financial-datasets): wrap 6 REST surfaces upstream MCP doesn't (Track 6)
 - [`76fa87cd`](https://github.com/yumima/finterm/commit/76fa87cd) plans: add implementation-status.md for session-resume safety
 - [`a0f75082`](https://github.com/yumima/finterm/commit/a0f75082) mcp: auth gate via ctx.elicit, AuthChecker fallback (Track 5 commit J)
