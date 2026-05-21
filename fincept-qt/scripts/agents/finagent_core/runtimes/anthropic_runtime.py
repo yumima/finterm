@@ -10,8 +10,13 @@ Track 3 item 9 — minimum viable integration:
 - Streams SDK messages, maps content blocks to Trace fields.
 - ResultMessage closes the turn — model id, cost, latency, errors.
 
-Later tracks fill in: MCP registration (item 11), SKILL.md loading
-(item 12), full streaming-event bridge (item 13).
+Track 3 item 11 — MCP registration:
+- Optional `tool_bridge` kwarg supplies the McpService catalog as an
+  in-process SDK MCP server (see mcp_bridge.py).  Default is an
+  empty bridge so eval-harness runs without tools still work.
+
+Later items: SKILL.md loading (item 12), full streaming-event
+bridge (item 13).
 """
 from __future__ import annotations
 
@@ -19,6 +24,8 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from .mcp_bridge import EmptyToolBridge, ToolBridge, build_sdk_mcp_server
 
 if TYPE_CHECKING:
     from evals.fixture import Fixture
@@ -29,17 +36,24 @@ class AnthropicRuntimeUnavailable(RuntimeError):
     """Raised when the SDK can't be imported or the CLI is missing."""
 
 
-def run_turn(fixture: "Fixture") -> "Trace":
+def run_turn(fixture: "Fixture", *, tool_bridge: ToolBridge | None = None) -> "Trace":
     """Execute a fixture's input on the Anthropic profile.
 
     Sync wrapper around the async SDK call.  Raises
     AnthropicRuntimeUnavailable if the SDK or its CLI dependency is
     missing — the eval harness treats that as a skip, not a failure.
+
+    `tool_bridge` exposes finterm's McpService catalog to the SDK as
+    an in-process MCP server.  Default is EmptyToolBridge (no tools),
+    so fixtures that don't need tools work without any wiring; tests
+    inject a fake bridge to exercise specific tool flows; production
+    AgentService passes a bridge backed by the McpService IPC.
     """
-    return asyncio.run(_run_async(fixture))
+    bridge = tool_bridge if tool_bridge is not None else EmptyToolBridge()
+    return asyncio.run(_run_async(fixture, bridge))
 
 
-async def _run_async(fixture: "Fixture") -> "Trace":
+async def _run_async(fixture: "Fixture", tool_bridge: ToolBridge) -> "Trace":
     try:
         from claude_agent_sdk import (
             AssistantMessage,
@@ -70,9 +84,18 @@ async def _run_async(fixture: "Fixture") -> "Trace":
         started_at=datetime.now(timezone.utc).isoformat(),
     )
 
-    options = ClaudeAgentOptions(
-        max_turns=fixture.expected.trace.max_iterations or 10,
-    )
+    # Translate the McpService catalog (via the bridge) into an
+    # in-process SDK MCP server.  Empty catalogs collapse to no
+    # mcp_servers entry so the SDK doesn't register an empty server.
+    mcp_servers: dict = {}
+    sdk_server = build_sdk_mcp_server(tool_bridge, fixture.input.agent)
+    if sdk_server is not None:
+        mcp_servers["finterm"] = sdk_server
+
+    options_kwargs: dict = {"max_turns": fixture.expected.trace.max_iterations or 10}
+    if mcp_servers:
+        options_kwargs["mcp_servers"] = mcp_servers
+    options = ClaudeAgentOptions(**options_kwargs)
 
     try:
         async for message in query(prompt=fixture.input.message, options=options):
