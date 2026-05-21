@@ -20,6 +20,7 @@
 #include "mcp/tools/DataHubTools.h"
 #include "mcp/tools/DataSourcesTools.h"
 #include "mcp/tools/EdgarTools.h"
+#include "mcp/tools/FinancialDatasetsTools.h"
 #include "mcp/tools/FileManagerTools.h"
 #include "mcp/tools/ForumTools.h"
 #include "mcp/tools/MAAnalyticsTools.h"
@@ -85,6 +86,10 @@ void initialize_all_tools() {
 
     // sec edgar (CIK resolution, XBRL financials, filing search)
     provider.register_tools(tools::get_edgar_tools());
+
+    // financial-datasets REST surfaces not exposed by upstream's MCP server
+    // (section-level filings, insider trades, 13-F, segments, KPIs, earnings)
+    provider.register_tools(tools::get_financial_datasets_tools());
 
     // m&a analytics tab
     provider.register_tools(tools::get_ma_analytics_tools());

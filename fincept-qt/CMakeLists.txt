@@ -777,6 +777,7 @@ set(MCP_SOURCES
     src/mcp/tools/CryptoTradingTools.cpp
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/EdgarTools.cpp
+    src/mcp/tools/FinancialDatasetsTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
@@ -1862,6 +1863,7 @@ set_source_files_properties(
     src/mcp/tools/CryptoTradingTools.cpp
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/EdgarTools.cpp
+    src/mcp/tools/FinancialDatasetsTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
