@@ -27,8 +27,11 @@ namespace fincept::screens {
 
 static constexpr const char* TAG = "LlmConfigSection";
 
+// "fincept" intentionally omitted — hosted endpoint retired (R17). Legacy
+// rows may still exist in llm_configs; they appear in the saved-providers
+// list view but cannot be re-selected from the Add dropdown.
 const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"openai",  "anthropic", "gemini",   "groq",  "deepseek",
-                                                       "openrouter", "minimax", "kimi", "ollama", "xai",   "fincept"};
+                                                       "openrouter", "minimax", "kimi", "ollama", "xai"};
 
 QString LlmConfigSection::default_base_url(const QString& provider) {
     const QString p = provider.toLower();

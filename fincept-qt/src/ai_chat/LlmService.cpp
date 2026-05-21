@@ -189,19 +189,28 @@ void LlmService::ensure_config() const {
         }
     }
 
-    // Fallback: if no provider configured, use Fincept with session API key
-    if (provider_.isEmpty()) {
-        provider_ = "fincept";
-        model_ = "MiniMax-M2.7";
-        base_url_ = {};
-        LOG_INFO(TAG, "No LLM provider configured — using Fincept default");
+    // Legacy 'fincept' rows: the hosted endpoint is retired (R17). If the
+    // loaded provider is fincept, clear it so the no-key fallback below
+    // kicks in and the user sees the local-profile path instead of indirect
+    // endpoint failures from build_fincept_request etc.
+    if (provider_ == "fincept") {
+        LOG_WARN(TAG, "Legacy 'fincept' provider in config — falling back to local profile");
+        provider_.clear();
+        api_key_.clear();
+        base_url_.clear();
+        model_.clear();
     }
 
-    // Fincept always resolves API key from session (never stored in llm_configs)
-    if (provider_ == "fincept") {
-        auto stored_key = SettingsRepository::instance().get("fincept_api_key");
-        if (stored_key.is_ok() && !stored_key.value().isEmpty())
-            api_key_ = stored_key.value();
+    // No-key fallback: local OpenAI-compatible service (R17). Defaults to
+    // Ollama-style http://localhost:11434/v1 — Track 2 #5 will expose this
+    // as a configurable "Local LLM service" field. If the local server is
+    // unreachable, do_request surfaces a connection error — no silent
+    // failover to any other provider (R1).
+    if (provider_.isEmpty()) {
+        provider_ = "ollama";
+        base_url_ = "http://localhost:11434/v1";
+        model_ = "llama3.1:8b";
+        LOG_INFO(TAG, "No LLM provider configured — using local profile fallback");
     }
 
     auto gs = LlmConfigRepository::instance().get_global_settings();
@@ -911,11 +920,14 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         // Auth goes via x-goog-api-key header (set by get_headers()).
         // Do not append ?key= to URL — it leaks the key into access logs.
     } else if (provider_ == "fincept") {
-        // Fincept uses two separate endpoints:
-        // Primary response → async (submit + poll, returns richer model output)
-        // Follow-ups (tool results) → sync /research/chat
-        LOG_INFO(TAG, "do_request: routing to fincept_async_request");
-        return fincept_async_request(user_message, history);
+        // Fincept hosted endpoint retired (R17). reload() should already
+        // have rewritten the provider — this branch only fires if a caller
+        // bypassed reload(). Surface a clear error rather than letting the
+        // dead routing path fail indirectly.
+        LlmResponse resp;
+        resp.error = "Fincept hosted endpoint is retired — configure a local or external provider in Settings → LLM.";
+        LOG_WARN(TAG, resp.error);
+        return resp;
     } else {
         req_body = build_openai_request(user_message, history, false, true);
     }
