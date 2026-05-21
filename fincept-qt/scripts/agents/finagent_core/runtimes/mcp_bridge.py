@@ -48,6 +48,25 @@ class ToolDef:
     input_schema: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ResourceDef:
+    """One MCP resource's catalog metadata (no content — read via bridge)."""
+    uri: str
+    name: str
+    description: str = ""
+    mime_type: str = "application/json"
+
+
+@dataclass(frozen=True)
+class ResourceContentData:
+    """Result of reading a resource through the bridge."""
+    uri: str
+    mime_type: str = "application/json"
+    text: str = ""
+    blob: bytes = b""
+    error: str = ""
+
+
 @runtime_checkable
 class ToolBridge(Protocol):
     """Catalog + invocation surface between the SDK and McpService."""
@@ -65,6 +84,23 @@ class ToolBridge(Protocol):
         Raises if the tool isn't in the catalog for this agent or the
         bridge cannot reach McpService.
         """
+
+    def list_resources(self, agent_id: str) -> list[ResourceDef]:
+        """Return the resource catalog visible to this agent.
+
+        Defaults to empty when the bridge doesn't know about resources;
+        production implementations call McpProvider::list_resources()
+        plus the McpClientBase external aggregator.
+        """
+        return []
+
+    async def read_resource(self, uri: str) -> ResourceContentData:
+        """Read a resource by uri.
+
+        Defaults to a missing-uri error; production wires through to
+        McpProvider::read_resource() or the McpClientBase wire call.
+        """
+        return ResourceContentData(uri=uri, error=f"unknown resource: {uri}")
 
 
 class EmptyToolBridge:
@@ -84,6 +120,12 @@ class EmptyToolBridge:
             f"no tool bridge configured — call to {name!r} ignored"
         )
 
+    def list_resources(self, agent_id: str) -> list[ResourceDef]:  # noqa: ARG002
+        return []
+
+    async def read_resource(self, uri: str) -> ResourceContentData:
+        return ResourceContentData(uri=uri, error="no resource bridge configured")
+
 
 def build_sdk_mcp_server(
     bridge: ToolBridge,
@@ -94,22 +136,99 @@ def build_sdk_mcp_server(
 ) -> "McpSdkServerConfig | None":
     """Convert a ToolBridge into an in-process SDK MCP server.
 
-    Returns None when the bridge's catalog for `agent_id` is empty —
-    callers omit the `mcp_servers` entry in that case.
+    Returns None when the bridge has neither tools nor resources to
+    serve — callers omit the `mcp_servers` entry in that case.
 
-    Imports the SDK lazily so this module is importable without
-    claude-agent-sdk installed (matches the eval-harness pattern).
+    After `create_sdk_mcp_server` returns its wrapper config, we reach
+    into the underlying `mcp.server.lowlevel.Server` instance to add
+    resource handlers (the SDK's convenience wrapper only takes
+    `tools=` — resources are registered via the lowlevel decorator
+    surface).
+
+    Imports the SDK and underlying mcp types lazily so this module is
+    importable without either installed.
     """
     from claude_agent_sdk import create_sdk_mcp_server, tool
 
     tool_defs = bridge.list_tools(agent_id)
-    if not tool_defs:
+    # ToolBridge is a structural Protocol — implementations may pre-date
+    # the resources surface and not define list_resources/read_resource.
+    # Treat absence as "no resources" rather than failing.
+    list_resources_fn = getattr(bridge, "list_resources", None)
+    resource_defs = list_resources_fn(agent_id) if list_resources_fn else []
+    if not tool_defs and not resource_defs:
         return None
 
     sdk_tools = [_wrap_tool(td, bridge, tool) for td in tool_defs]
-    return create_sdk_mcp_server(
+    config = create_sdk_mcp_server(
         name=server_name, version=server_version, tools=sdk_tools
     )
+
+    if resource_defs:
+        _attach_resources(config, resource_defs, bridge)
+
+    return config
+
+
+def _attach_resources(config, resource_defs: list[ResourceDef], bridge: ToolBridge) -> None:
+    """Register list_resources + read_resource handlers on the SDK
+    server's underlying mcp.server.lowlevel.Server instance.
+
+    The SDK's `create_sdk_mcp_server(...)` returns an
+    `McpSdkServerConfig` dict-like with `{type, name, instance}`;
+    `.instance` is the lowlevel Server that supports
+    `@server.list_resources()` and `@server.read_resource()`
+    decorators.
+    """
+    from mcp import types as mcp_types
+    from pydantic import AnyUrl
+
+    mcp_server = dict(config).get("instance")
+    if mcp_server is None:
+        return
+
+    # Pre-build the catalog of mcp_types.Resource objects.  Invalid
+    # URIs would raise inside Resource(...); skip those silently
+    # (catalog still works for the valid entries).
+    catalog: list[mcp_types.Resource] = []
+    for rd in resource_defs:
+        try:
+            catalog.append(mcp_types.Resource(
+                name=rd.name,
+                uri=AnyUrl(rd.uri),
+                description=rd.description or None,
+                mimeType=rd.mime_type or None,
+            ))
+        except Exception:  # noqa: BLE001 — bad URI; skip
+            continue
+
+    @mcp_server.list_resources()
+    async def _list_resources():  # noqa: ARG001 — decorator signature
+        return catalog
+
+    # The lowlevel Server's @read_resource() decorator expects the
+    # handler to return Iterable[ReadResourceContents] (helper_types),
+    # not the typed TextResourceContents/BlobResourceContents — the
+    # Server wraps the raw `.content` + `.mime_type` into the typed
+    # contents itself.
+    from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+    @mcp_server.read_resource()
+    async def _read_resource(uri):
+        content = await bridge.read_resource(str(uri))
+        if content.error:
+            # Raising here is the lowlevel-Server-friendly path; the
+            # SDK envelope-wraps it into a JSON-RPC error for the model.
+            raise RuntimeError(content.error)
+        if content.blob:
+            return [ReadResourceContents(
+                content=content.blob,
+                mime_type=content.mime_type or "application/octet-stream",
+            )]
+        return [ReadResourceContents(
+            content=content.text,
+            mime_type=content.mime_type or "text/plain",
+        )]
 
 
 def _wrap_tool(tool_def: ToolDef, bridge: ToolBridge, sdk_tool_decorator):
