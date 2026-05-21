@@ -28,7 +28,7 @@ def test_snapshot_requires_update_flag(capsys) -> None:
     assert "--update is required" in captured.err
 
 
-def test_run_all_under_e2e_skips_cleanly(capsys, tmp_path: Path) -> None:
+def test_run_all_under_e2e_skips_cleanly(capsys, monkeypatch, tmp_path: Path) -> None:
     # Copy the hello_world fixture to a tmp root so run-all has
     # exactly one fixture to discover.
     fixture_dir = tmp_path / "hello_world"
@@ -36,7 +36,21 @@ def test_run_all_under_e2e_skips_cleanly(capsys, tmp_path: Path) -> None:
     (fixture_dir / "fixture.yaml").write_text(
         (_HELLO_WORLD / "fixture.yaml").read_text()
     )
-    exit_code = main(["run-all", str(tmp_path), "--parity"])
+
+    # Force the Anthropic adapter to skip — otherwise it would try to
+    # spawn the `claude` CLI and could hit a paid endpoint. We sabotage
+    # the import inside the lazy load path.
+    import sys
+    real_sdk = sys.modules.pop("claude_agent_sdk", None)
+    monkeypatch.setitem(sys.modules, "claude_agent_sdk", object())
+    try:
+        exit_code = main(["run-all", str(tmp_path), "--parity"])
+    finally:
+        if real_sdk is not None:
+            sys.modules["claude_agent_sdk"] = real_sdk
+        else:
+            sys.modules.pop("claude_agent_sdk", None)
+
     # Skips are not failures; exit code stays 0.
     assert exit_code == 0
     captured = capsys.readouterr()

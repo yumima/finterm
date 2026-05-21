@@ -24,8 +24,11 @@ class RuntimeNotReady(NotImplementedError):
 def run_turn(fixture: Fixture, runtime: Runtime) -> Trace:
     """Execute a fixture's input through the chosen runtime.
 
-    Stub until Tracks 2 and 3 land. The return-type shape here is
-    the contract those tracks implement against.
+    Track 2 (local) still raises RuntimeNotReady.  Track 3 (Anthropic)
+    is wired — dispatches to the claude-agent-sdk adapter.  If the
+    SDK isn't installed or the `claude` CLI is missing, the adapter
+    raises AnthropicRuntimeUnavailable which the harness treats as
+    a skip (exit code 2), not a failure.
     """
     if runtime is Runtime.LOCAL:
         raise RuntimeNotReady(
@@ -33,8 +36,18 @@ def run_turn(fixture: Fixture, runtime: Runtime) -> Trace:
             "plans/ai-stack-free-local.md"
         )
     if runtime is Runtime.ANTHROPIC:
-        raise RuntimeNotReady(
-            "Anthropic runtime not wired yet — see Track 3 in "
-            "plans/ai-stack-free-local.md"
-        )
+        try:
+            from finagent_core.runtimes.anthropic_runtime import (
+                AnthropicRuntimeUnavailable,
+                run_turn as anthropic_run_turn,
+            )
+        except ImportError as exc:
+            raise RuntimeNotReady(
+                f"finagent_core.runtimes.anthropic_runtime import failed: {exc}"
+            ) from exc
+
+        try:
+            return anthropic_run_turn(fixture)
+        except AnthropicRuntimeUnavailable as exc:
+            raise RuntimeNotReady(str(exc)) from exc
     raise ValueError(f"unknown runtime: {runtime!r}")
