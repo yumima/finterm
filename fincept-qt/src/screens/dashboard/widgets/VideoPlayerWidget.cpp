@@ -374,7 +374,11 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             if (player_->playbackState() == QMediaPlayer::PlayingState) {
                 player_->pause();
             } else {
-                player_->play();
+                // resume_playback() works around the Qt6 FFmpeg audio-detach
+                // bug on pause→play.  Without the source rebuild, video
+                // resumes but the audio sink stays detached and the user
+                // hears silence.
+                resume_playback();
             }
             // User pressed the button → not an auto-pause, so clear the
             // latch even if a subsequent unlock fires.
@@ -418,18 +422,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                     }
                 } else if (auto_paused_on_lock_) {
                     auto_paused_on_lock_ = false;
-                    if (player_->playbackState() == QMediaPlayer::PausedState) {
-                        // Live HLS: the proxy's 6-segment window has rolled
-                        // past our buffered position during the lock. A bare
-                        // play() leaves the audio sink detached on Qt6 FFmpeg
-                        // after the stream-position discontinuity (video
-                        // resumes, no sound). Re-set the same source to
-                        // rebuild the decoder chain and re-attach it to
-                        // audio_output_.
-                        const QUrl src = player_->source();
-                        player_->setSource(src);
-                        player_->play();
-                    }
+                    resume_playback();
                 }
 #else
                 Q_UNUSED(locked);
@@ -618,6 +611,30 @@ void VideoPlayerWidget::build_player_view() {
     vl->addWidget(status_label_);
 
     stack_->addWidget(player_page_); // page 1
+}
+
+// Qt6's FFmpeg multimedia backend detaches the audio sink across some
+// pause→play transitions — bare player_->play() resumes video frames
+// but the audio output stays silent.  This shows up reliably on live
+// HLS (the proxy's segment window has rolled past our buffered
+// position during the pause) and intermittently on VOD.
+//
+// Reproducible workaround: re-set the same source before play(), which
+// rebuilds the decoder chain and re-attaches it to audio_output_.  The
+// cost is a brief re-buffer (~1 s); the alternative is silent video,
+// which is worse.  Tracked alongside the broader Qt + FFmpeg hwaccel
+// memo at plans/qt-ffmpeg-hwaccel-memo.md.
+void VideoPlayerWidget::resume_playback() {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_)
+        return;
+    if (player_->playbackState() == QMediaPlayer::PausedState) {
+        const QUrl src = player_->source();
+        if (src.isValid())
+            player_->setSource(src);
+    }
+    player_->play();
+#endif
 }
 
 // ── Page 2: WebEngine player ─────────────────────────────────────────────────

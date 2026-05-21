@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`32386deb`](https://github.com/yumima/finterm/commit/32386deb) plans(track-15): both sub-surfaces render on the same screen
 - [`4ad27d31`](https://github.com/yumima/finterm/commit/4ad27d31) plans(track-15): split forum into open feed + closed rooms
 - [`f854d7c1`](https://github.com/yumima/finterm/commit/f854d7c1) plans: add Track 15 — replace dead forum with Reddit RSS
 - [`25b2605a`](https://github.com/yumima/finterm/commit/25b2605a) voice(stt): swap Google SR for local Whisper (R15)
