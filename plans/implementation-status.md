@@ -38,7 +38,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
 | 10 | Background scheduler + hooks | ⚠ partial | Core scheduler done (60s tick, `@daily HH:MM` / `@every Nm \| Nh`, anacron-style daily catch-up). UI + SDK hook registration deferred to Tracks 13 / 3 follow-up. |
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
-| 12 | Alpha-arena migration to two runtimes | ⏸ pending | Stop importing agno directly |
+| 12 | Alpha-arena migration to two runtimes | ⚠ partial | `finagent_core/__init__.py` now uses PEP 562 lazy `__getattr__`; bare package + `runtimes.*` imports no longer pull agno. 58 eval-harness tests pass even with agno blocked at the import system level. Full migration of `alpha_arena/` callers onto two runtimes still pending. |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
 | 14 | Evals + observability + audit + safety + UX | ⏸ pending | Eval bench expansion + click-through scripts |
 | 15 | Forum → Reddit RSS + Discord deep-link | 📋 filed | Off the AI critical path |
