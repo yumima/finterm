@@ -6,6 +6,7 @@
 #include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
 #include "storage/repositories/AgentConfigRepository.h"
+#include "storage/repositories/ToolKillswitchRepository.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -187,6 +188,23 @@ std::size_t McpService::tool_count() {
 // ============================================================================
 
 ToolResult McpService::execute_tool(const QString& server_id, const QString& tool_name, const QJsonObject& args) {
+    // Track 14 #39 — per-tool kill-switch (R22).  Refuse dispatch
+    // for any wire-form key the user has disabled via the Workbench
+    // System tab.  The check sits ahead of routing so both internal
+    // and external tools are gated identically.  Fails open on a SQL
+    // read error: a transient DB hiccup shouldn't disable every tool.
+    const QString wire_name = server_id + QStringLiteral("__") + tool_name;
+    if (auto names = ToolKillswitchRepository::instance().disabled_names();
+        names.is_ok() && names.value().contains(wire_name)) {
+        QString reason;
+        if (auto rr = ToolKillswitchRepository::instance().reason_for(wire_name); rr.is_ok())
+            reason = rr.value();
+        const QString msg = reason.isEmpty()
+            ? QStringLiteral("Tool '%1' is disabled by the kill-switch").arg(wire_name)
+            : QStringLiteral("Tool '%1' is disabled by the kill-switch: %2").arg(wire_name, reason);
+        return ToolResult::fail(msg);
+    }
+
     // Route to internal provider
     if (server_id == INTERNAL_SERVER_ID)
         return McpProvider::instance().call_tool(tool_name, args);

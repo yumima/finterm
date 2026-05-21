@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`48db15c7`](https://github.com/yumima/finterm/commit/48db15c7) agents: route DB access through Database::execute (/review fix)
 - [`36d073ee`](https://github.com/yumima/finterm/commit/36d073ee) agents(trace): unified trace + audit schema (Track 14 #38)
 - [`c71ec551`](https://github.com/yumima/finterm/commit/c71ec551) agents(finagent_core): PEP 562 lazy package init (Track 12 phase 1)
 - [`51922fb9`](https://github.com/yumima/finterm/commit/51922fb9) skills: starter library + data-source-priority retarget (Track 7 #19/#22)
