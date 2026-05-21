@@ -17,6 +17,11 @@ struct McpServer {
     QString status; // "stopped", "running", "error"
     QString created_at;
     QString updated_at;
+    // HTTP-transport columns (migration v025).  Stdio rows leave these blank.
+    QString transport_type = "stdio"; // "stdio" | "http"
+    QString base_url;                 // HTTP endpoint; empty for stdio
+    QString auth_scheme  = "none";    // "none" | "bearer" | "api_key" | "oauth"
+    QString auth_header;              // header name for api_key (default X-API-Key)
 };
 
 class McpServerRepository : public BaseRepository<McpServer> {

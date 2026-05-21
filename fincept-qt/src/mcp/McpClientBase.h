@@ -48,6 +48,13 @@ struct McpServerConfig {
     ServerStatus status = ServerStatus::Stopped;
     QString created_at;
     QString updated_at;
+
+    // HTTP transport (Track 4 #14a) — migration v025.  Stdio rows
+    // leave these at defaults.
+    QString transport_type = "stdio"; // "stdio" | "http"
+    QString base_url;                 // HTTP endpoint; empty for stdio
+    QString auth_scheme  = "none";    // "none" | "bearer" | "api_key" | "oauth"
+    QString auth_header;              // header name for api_key (default X-API-Key when blank)
 };
 
 // No Q_OBJECT here — McpClientBase is a pure-interface abstract class

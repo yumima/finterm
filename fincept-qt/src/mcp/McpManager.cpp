@@ -49,6 +49,10 @@ void McpManager::initialize() {
         cfg.enabled = srv.enabled;
         cfg.auto_start = srv.auto_start;
         cfg.status = ServerStatus::Stopped;
+        cfg.transport_type = srv.transport_type.isEmpty() ? QStringLiteral("stdio") : srv.transport_type;
+        cfg.base_url = srv.base_url;
+        cfg.auth_scheme = srv.auth_scheme.isEmpty() ? QStringLiteral("none") : srv.auth_scheme;
+        cfg.auth_header = srv.auth_header;
 
         // Parse args: Try JSON array first (supports spaces), fallback to legacy space-split
         bool args_parsed = false;
@@ -115,6 +119,10 @@ Result<void> McpManager::save_server(const McpServerConfig& config) {
     srv.enabled = config.enabled;
     srv.auto_start = config.auto_start;
     srv.status = "stopped";
+    srv.transport_type = config.transport_type.isEmpty() ? QStringLiteral("stdio") : config.transport_type;
+    srv.base_url = config.base_url;
+    srv.auth_scheme = config.auth_scheme.isEmpty() ? QStringLiteral("none") : config.auth_scheme;
+    srv.auth_header = config.auth_header;
 
     // Store args and env as JSON strings to correctly handle spaces and special chars
     QJsonArray args_arr;
