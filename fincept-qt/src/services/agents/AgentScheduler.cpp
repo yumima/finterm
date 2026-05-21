@@ -5,7 +5,6 @@
 #include "storage/sqlite/Database.h"
 
 #include <QJsonDocument>
-#include <QSqlError>
 #include <QSqlQuery>
 #include <QUuid>
 
@@ -194,16 +193,15 @@ void AgentScheduler::run_entry(ScheduleEntry& e) {
     // Persist the new last_run / last_status.  Failures here are
     // logged but not fatal — the next tick will see the same entry
     // due again and retry.
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    q.prepare("UPDATE agent_schedule "
-              "SET last_run_at = datetime('now'), last_status = ?, "
-              "    updated_at = datetime('now') "
-              "WHERE id = ?");
-    q.bindValue(0, status);
-    q.bindValue(1, e.id);
-    if (!q.exec()) {
+    const QString sql = QStringLiteral(
+        "UPDATE agent_schedule "
+        "SET last_run_at = datetime('now'), last_status = ?, "
+        "    updated_at = datetime('now') "
+        "WHERE id = ?");
+    auto r = Database::instance().execute(sql, {status, e.id});
+    if (r.is_err()) {
         LOG_WARN(TAG, QString("failed to write last_run for entry %1: %2")
-                          .arg(e.id, q.lastError().text()));
+                          .arg(e.id, QString::fromStdString(r.error())));
     }
 }
 
@@ -235,11 +233,12 @@ constexpr const char* kCols =
 } // anonymous namespace
 
 Result<QVector<ScheduleEntry>> AgentScheduler::list_entries() {
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    if (!q.exec(QStringLiteral("SELECT %1 FROM agent_schedule ORDER BY id").arg(kCols))) {
-        return Result<QVector<ScheduleEntry>>::err(q.lastError().text().toStdString());
-    }
+    const QString sql = QStringLiteral("SELECT %1 FROM agent_schedule ORDER BY id").arg(kCols);
+    auto r = Database::instance().execute(sql);
+    if (r.is_err())
+        return Result<QVector<ScheduleEntry>>::err(r.error());
     QVector<ScheduleEntry> rows;
+    auto& q = r.value();
     while (q.next())
         rows.append(map_row(q));
     return Result<QVector<ScheduleEntry>>::ok(std::move(rows));
@@ -251,52 +250,46 @@ Result<void> AgentScheduler::save_entry(const ScheduleEntry& e) {
             "invalid cron expression: '" + e.cron.toStdString() +
             "' (expected '@daily HH:MM' or '@every Nm' / '@every Nh')");
     }
-    QSqlQuery q(fincept::Database::instance().raw_db());
     // last_run_at / last_status are preserved across edits — callers
     // pass empty strings unless they explicitly want to overwrite (e.g.
     // an admin "reset history" action).  created_at is preserved by the
     // same COALESCE pattern.
-    q.prepare("INSERT OR REPLACE INTO agent_schedule "
-              "(id, agent_id, skill, args_json, cron, enabled, "
-              " last_run_at, last_status, created_at, updated_at) "
-              "VALUES (?, ?, ?, ?, ?, ?, "
-              "  COALESCE(NULLIF(?, ''), (SELECT last_run_at FROM agent_schedule WHERE id = ?)), "
-              "  COALESCE(NULLIF(?, ''), (SELECT last_status FROM agent_schedule WHERE id = ?)), "
-              "  COALESCE((SELECT created_at FROM agent_schedule WHERE id = ?), datetime('now')), "
-              "  datetime('now'))");
+    const QString sql = QStringLiteral(
+        "INSERT OR REPLACE INTO agent_schedule "
+        "(id, agent_id, skill, args_json, cron, enabled, "
+        " last_run_at, last_status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, "
+        "  COALESCE(NULLIF(?, ''), (SELECT last_run_at FROM agent_schedule WHERE id = ?)), "
+        "  COALESCE(NULLIF(?, ''), (SELECT last_status FROM agent_schedule WHERE id = ?)), "
+        "  COALESCE((SELECT created_at FROM agent_schedule WHERE id = ?), datetime('now')), "
+        "  datetime('now'))");
     const QString id = e.id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : e.id;
-    q.bindValue(0, id);
-    q.bindValue(1, e.agent_id);
-    q.bindValue(2, e.skill);
-    q.bindValue(3, e.args_json);
-    q.bindValue(4, e.cron);
-    q.bindValue(5, e.enabled ? 1 : 0);
-    q.bindValue(6, e.last_run_at);
-    q.bindValue(7, id);
-    q.bindValue(8, e.last_status);
-    q.bindValue(9, id);
-    q.bindValue(10, id);
-    if (!q.exec())
-        return Result<void>::err(q.lastError().text().toStdString());
+    const QVariantList params = {
+        id, e.agent_id, e.skill, e.args_json, e.cron, e.enabled ? 1 : 0,
+        e.last_run_at, id,
+        e.last_status, id,
+        id,
+    };
+    auto r = Database::instance().execute(sql, params);
+    if (r.is_err())
+        return Result<void>::err(r.error());
     return Result<void>::ok();
 }
 
 Result<void> AgentScheduler::remove_entry(const QString& id) {
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    q.prepare("DELETE FROM agent_schedule WHERE id = ?");
-    q.bindValue(0, id);
-    if (!q.exec())
-        return Result<void>::err(q.lastError().text().toStdString());
+    auto r = Database::instance().execute(
+        QStringLiteral("DELETE FROM agent_schedule WHERE id = ?"), {id});
+    if (r.is_err())
+        return Result<void>::err(r.error());
     return Result<void>::ok();
 }
 
 Result<void> AgentScheduler::set_enabled(const QString& id, bool enabled) {
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    q.prepare("UPDATE agent_schedule SET enabled = ?, updated_at = datetime('now') WHERE id = ?");
-    q.bindValue(0, enabled ? 1 : 0);
-    q.bindValue(1, id);
-    if (!q.exec())
-        return Result<void>::err(q.lastError().text().toStdString());
+    auto r = Database::instance().execute(
+        QStringLiteral("UPDATE agent_schedule SET enabled = ?, updated_at = datetime('now') WHERE id = ?"),
+        {enabled ? 1 : 0, id});
+    if (r.is_err())
+        return Result<void>::err(r.error());
     return Result<void>::ok();
 }
 

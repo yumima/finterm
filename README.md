@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`36d073ee`](https://github.com/yumima/finterm/commit/36d073ee) agents(trace): unified trace + audit schema (Track 14 #38)
 - [`c71ec551`](https://github.com/yumima/finterm/commit/c71ec551) agents(finagent_core): PEP 562 lazy package init (Track 12 phase 1)
 - [`51922fb9`](https://github.com/yumima/finterm/commit/51922fb9) skills: starter library + data-source-priority retarget (Track 7 #19/#22)
 - [`f9183006`](https://github.com/yumima/finterm/commit/f9183006) ai_chat: wire slash dispatch into composer (Track 7 #21 part B)

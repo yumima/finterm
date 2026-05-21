@@ -4,7 +4,7 @@
 #include "storage/sqlite/Database.h"
 
 #include <QJsonDocument>
-#include <QSqlError>
+#include <QMetaType>
 #include <QSqlQuery>
 
 namespace fincept {
@@ -43,6 +43,15 @@ constexpr const char* kCols =
     "started_at, finished_at, status, response, error, "
     "latency_ms, tokens_in, tokens_out, cost_usd";
 
+// Wrap an optional<T> into a QVariant that SQL sees as NULL when
+// the optional is empty.  We must use the typed-null QVariant form
+// because bare `QVariant()` is QVariant::Invalid, which Qt's SQL
+// driver may treat as 0 rather than NULL for integer columns.
+template <typename T>
+QVariant null_or(const std::optional<T>& v, QMetaType::Type type) {
+    return v ? QVariant(*v) : QVariant(QMetaType(type));
+}
+
 } // anonymous namespace
 
 AgentTraceRepository& AgentTraceRepository::instance() {
@@ -54,22 +63,25 @@ Result<void> AgentTraceRepository::create(const AgentTraceCreate& c) {
     if (c.request_id.isEmpty())
         return Result<void>::err("AgentTraceRepository::create: empty request_id");
 
-    QSqlQuery q(fincept::Database::instance().raw_db());
     // INSERT OR IGNORE — a duplicate request_id is silently dropped.
     // Real dispatcher uses UUIDs so collisions can't happen; the
     // OR IGNORE is defensive against a buggy caller that retries on
     // dispatch failure with the same id.
-    q.prepare("INSERT OR IGNORE INTO agent_traces "
-              "(request_id, agent_id, runtime, source, query, config_json, status) "
-              "VALUES (?, ?, ?, ?, ?, ?, 'in_progress')");
-    q.bindValue(0, c.request_id);
-    q.bindValue(1, c.agent_id);
-    q.bindValue(2, c.runtime);
-    q.bindValue(3, c.source);
-    q.bindValue(4, c.query);
-    q.bindValue(5, QString::fromUtf8(QJsonDocument(c.config).toJson(QJsonDocument::Compact)));
-    if (!q.exec())
-        return Result<void>::err(q.lastError().text().toStdString());
+    const QString sql = QStringLiteral(
+        "INSERT OR IGNORE INTO agent_traces "
+        "(request_id, agent_id, runtime, source, query, config_json, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'in_progress')");
+    const QVariantList params = {
+        c.request_id,
+        c.agent_id,
+        c.runtime,
+        c.source,
+        c.query,
+        QString::fromUtf8(QJsonDocument(c.config).toJson(QJsonDocument::Compact)),
+    };
+    auto r = Database::instance().execute(sql, params);
+    if (r.is_err())
+        return Result<void>::err(r.error());
     return Result<void>::ok();
 }
 
@@ -77,30 +89,32 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
     if (f.request_id.isEmpty())
         return Result<void>::err("AgentTraceRepository::finish: empty request_id");
 
-    auto& db = fincept::Database::instance().raw_db();
-    QSqlQuery q(db);
-    q.prepare("UPDATE agent_traces SET "
-              "  finished_at = datetime('now'), "
-              "  status = ?, "
-              "  response = COALESCE(NULLIF(?, ''), response), "
-              "  error = COALESCE(NULLIF(?, ''), error), "
-              "  latency_ms = COALESCE(?, latency_ms), "
-              "  tokens_in = COALESCE(?, tokens_in), "
-              "  tokens_out = COALESCE(?, tokens_out), "
-              "  cost_usd = COALESCE(?, cost_usd) "
-              "WHERE request_id = ?");
-    q.bindValue(0, f.success ? QStringLiteral("success") : QStringLiteral("error"));
-    q.bindValue(1, f.response);
-    q.bindValue(2, f.error);
-    q.bindValue(3, f.latency_ms ? QVariant(*f.latency_ms) : QVariant{QMetaType(QMetaType::Int)});
-    q.bindValue(4, f.tokens_in ? QVariant(*f.tokens_in) : QVariant{QMetaType(QMetaType::Int)});
-    q.bindValue(5, f.tokens_out ? QVariant(*f.tokens_out) : QVariant{QMetaType(QMetaType::Int)});
-    q.bindValue(6, f.cost_usd ? QVariant(*f.cost_usd) : QVariant{QMetaType(QMetaType::Double)});
-    q.bindValue(7, f.request_id);
-    if (!q.exec())
-        return Result<void>::err(q.lastError().text().toStdString());
+    const QString sql = QStringLiteral(
+        "UPDATE agent_traces SET "
+        "  finished_at = datetime('now'), "
+        "  status = ?, "
+        "  response = COALESCE(NULLIF(?, ''), response), "
+        "  error = COALESCE(NULLIF(?, ''), error), "
+        "  latency_ms = COALESCE(?, latency_ms), "
+        "  tokens_in = COALESCE(?, tokens_in), "
+        "  tokens_out = COALESCE(?, tokens_out), "
+        "  cost_usd = COALESCE(?, cost_usd) "
+        "WHERE request_id = ?");
+    const QVariantList params = {
+        f.success ? QStringLiteral("success") : QStringLiteral("error"),
+        f.response,
+        f.error,
+        null_or(f.latency_ms, QMetaType::Int),
+        null_or(f.tokens_in, QMetaType::Int),
+        null_or(f.tokens_out, QMetaType::Int),
+        null_or(f.cost_usd, QMetaType::Double),
+        f.request_id,
+    };
+    auto r = Database::instance().execute(sql, params);
+    if (r.is_err())
+        return Result<void>::err(r.error());
 
-    if (q.numRowsAffected() == 0) {
+    if (r.value().numRowsAffected() == 0) {
         // No matching trace row — either the dispatcher forgot to
         // call create(), or this finish() came from a different
         // pipeline.  Warn rather than silently dropping.
@@ -111,24 +125,25 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
 
 Result<QVector<AgentTraceRow>> AgentTraceRepository::list_recent(int limit) {
     const int n = std::clamp(limit, 1, kMaxListLimit);
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    q.prepare(QStringLiteral("SELECT %1 FROM agent_traces "
-                             "ORDER BY started_at DESC LIMIT ?").arg(kCols));
-    q.bindValue(0, n);
-    if (!q.exec())
-        return Result<QVector<AgentTraceRow>>::err(q.lastError().text().toStdString());
+    const QString sql = QStringLiteral(
+        "SELECT %1 FROM agent_traces ORDER BY started_at DESC LIMIT ?").arg(kCols);
+    auto r = Database::instance().execute(sql, {n});
+    if (r.is_err())
+        return Result<QVector<AgentTraceRow>>::err(r.error());
     QVector<AgentTraceRow> rows;
+    auto& q = r.value();
     while (q.next())
         rows.append(map_row(q));
     return Result<QVector<AgentTraceRow>>::ok(std::move(rows));
 }
 
 Result<std::optional<AgentTraceRow>> AgentTraceRepository::get(const QString& request_id) {
-    QSqlQuery q(fincept::Database::instance().raw_db());
-    q.prepare(QStringLiteral("SELECT %1 FROM agent_traces WHERE request_id = ?").arg(kCols));
-    q.bindValue(0, request_id);
-    if (!q.exec())
-        return Result<std::optional<AgentTraceRow>>::err(q.lastError().text().toStdString());
+    const QString sql = QStringLiteral(
+        "SELECT %1 FROM agent_traces WHERE request_id = ?").arg(kCols);
+    auto r = Database::instance().execute(sql, {request_id});
+    if (r.is_err())
+        return Result<std::optional<AgentTraceRow>>::err(r.error());
+    auto& q = r.value();
     if (q.next())
         return Result<std::optional<AgentTraceRow>>::ok(map_row(q));
     return Result<std::optional<AgentTraceRow>>::ok(std::nullopt);
