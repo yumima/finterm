@@ -2,6 +2,8 @@
 
 #include "mcp/McpManager.h"
 
+#include "mcp/McpHttpClient.h"
+
 #include "core/logging/Logger.h"
 #include "storage/repositories/McpServerRepository.h"
 
@@ -189,7 +191,12 @@ Result<void> McpManager::start_server(const QString& id) {
     }
     // mutex released — slow operations below don't block other threads
 
-    auto client = std::make_shared<McpClient>(cfg);
+    std::shared_ptr<McpClientBase> client;
+    if (cfg.transport_type == QStringLiteral("http")) {
+        client = std::make_shared<McpHttpClient>(cfg);
+    } else {
+        client = std::make_shared<McpClient>(cfg);
+    }
 
     auto start_result = client->start();
     if (start_result.is_err()) {

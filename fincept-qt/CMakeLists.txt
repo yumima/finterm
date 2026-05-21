@@ -761,6 +761,7 @@ set(MCP_SOURCES
     src/mcp/McpProvider.cpp
     src/mcp/McpService.cpp
     src/mcp/McpClient.cpp
+    src/mcp/McpHttpClient.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
 
@@ -1847,6 +1848,7 @@ set_source_files_properties(
     src/mcp/McpProvider.cpp
     src/mcp/McpService.cpp
     src/mcp/McpClient.cpp
+    src/mcp/McpHttpClient.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
     src/mcp/tools/NavigationTools.cpp

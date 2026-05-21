@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`417545db`](https://github.com/yumima/finterm/commit/417545db) storage(mcp): HTTP-transport columns on mcp_servers (Track 4 #14a part 2)
 - [`721cc5bf`](https://github.com/yumima/finterm/commit/721cc5bf) mcp: McpClientBase — pure-interface base for transport polymorphism
 - [`ddf442f5`](https://github.com/yumima/finterm/commit/ddf442f5) storage(mcp): seed marketplace MCP servers (Track 4 #15)
 - [`6be58f76`](https://github.com/yumima/finterm/commit/6be58f76) widgets(video): gate full-reset resume on live-proxy host + elapsed
