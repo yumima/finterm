@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f9183006`](https://github.com/yumima/finterm/commit/f9183006) ai_chat: wire slash dispatch into composer (Track 7 #21 part B)
 - [`16f07207`](https://github.com/yumima/finterm/commit/16f07207) agents(slash): SlashCommandService resolver (Track 7 #21 part A)
 - [`d51d457a`](https://github.com/yumima/finterm/commit/d51d457a) agents(seeds): 10 named agent identities (Track 7 #20)
 - [`a0c2bd05`](https://github.com/yumima/finterm/commit/a0c2bd05) agents(scheduler): cron-shaped scheduler for agent runs (Track 10 core)

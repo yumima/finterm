@@ -33,7 +33,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 4.15 | Marketplace seed (9 servers) | ✅ done | v024 migration; `enabled=0` by default |
 | 5.A–J | Full MCP spec on internal servers | ✅ done | See "Track 5 detail" below |
 | 6 | `FinancialDatasetsTools` internal MCP | ✅ done | 6 tools wrapping REST endpoints; commit `32f1927a` |
-| 7 | Skills + slash commands + agent identities | ⏸ pending | Vendoring + 10 named agents + slash dispatch |
+| 7 | Skills + slash commands + agent identities | ⚠ partial | 10 named agents seeded (v028, `d51d457a`). Slash resolver `16f07207` + chat wiring `f9183006`. 3 starter SKILL.md files (morning-note, earnings-analysis, comps-analysis) under skills/. Full upstream `financial-services` vendoring (~60 skills) defers; data-source-priority pattern already set in starters. |
 | 8 | Source-prefixed names + per-agent allowlists | ✅ done | A `98d256d9` (rename INTERNAL_SERVER_ID→"int"); B `00741864` (allow_tools globs) |
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
 | 10 | Background scheduler + hooks | ⚠ partial | Core scheduler done (60s tick, `@daily HH:MM` / `@every Nm \| Nh`, anacron-style daily catch-up). UI + SDK hook registration deferred to Tracks 13 / 3 follow-up. |
@@ -84,8 +84,9 @@ tracks, so a new session can pick up without re-reading every commit.
 | v025 | `mcp_http_transport` | `transport_type` + `base_url` + `auth_scheme` + `auth_header` columns on `mcp_servers` |
 | v026 | `quant_critic_agent` | Seed `agent_configs` row for quant_critic identity |
 | v027 | `agent_schedule` | Table for `AgentScheduler` cron entries (Track 10 core) |
+| v028 | `named_agents` | Seeds 10 named agent identities (Track 7 #20) |
 
-Future migrations should start at **v028**.
+Future migrations should start at **v029**.
 
 ---
 
@@ -104,6 +105,8 @@ Future migrations should start at **v028**.
 - `fincept-qt/src/storage/repositories/LlmProfileRepository.{h,cpp}` — profile CRUD with `runtime` field
 - `fincept-qt/src/screens/dashboard/widgets/VideoPlayerWidget.{h,cpp}` — pause/resume + live-edge restart
 - `fincept-qt/src/services/agents/AgentScheduler.{h,cpp}` — Track 10 cron scheduler (`@daily`, `@every`); pure `parse_cron`/`is_due` for tests
+- `fincept-qt/src/services/agents/SlashCommandService.{h,cpp}` — Track 7 #21 resolver (`/comps AAPL` → agent + skill + args); registry of 13 slash commands
+- `fincept-qt/scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md` — starter methodology library; 3 skills shipped (morning-note, earnings-analysis, comps-analysis); upstream vendoring deferred
 - `fincept-qt/src/screens/settings/LlmConfigSection.cpp` — providers dropdown (anthropic + ollama only)
 - `fincept-qt/src/screens/settings/VoiceConfigSection.cpp` — Whisper + Deepgram only
 - `fincept-qt/src/services/stt/SpeechService.cpp` — WhisperSttProvider (replaces Google SR)
