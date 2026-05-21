@@ -53,6 +53,12 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     void on_toggle_sidebar();
 
   private:
+    /// Handle a slash command typed into the composer.
+    /// Returns true if the input was a slash command (handled or
+    /// rejected with a help bubble); the caller short-circuits LLM
+    /// dispatch in that case.  False = let the LLM see the text.
+    bool handle_slash_command(const QString& text);
+
     // ── Sidebar ──────────────────────────────────────────────────────────
     QWidget* sidebar_ = nullptr;
     QLineEdit* search_edit_ = nullptr;

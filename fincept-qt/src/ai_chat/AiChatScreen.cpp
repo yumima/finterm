@@ -6,6 +6,8 @@
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
 #include "mcp/McpService.h"
+#include "services/agents/AgentService.h"
+#include "services/agents/SlashCommandService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -887,6 +889,15 @@ void AiChatScreen::on_send() {
         add_message_bubble("system", "Failed to create chat session. Please try again.");
         return;
     }
+
+    // Track 7 #21: slash commands resolve to (agent, skill, args) and
+    // re-enter the active runtime via AgentService.  Handled here so
+    // the LLM path below never sees `/`-prefixed input.
+    if (raw_text.startsWith(QLatin1Char('/')) && handle_slash_command(raw_text)) {
+        input_box_->clear();
+        input_box_->setFixedHeight(44);
+        return;
+    }
     if (!ai_chat::LlmService::instance().is_configured()) {
         add_message_bubble("system",
                            "No LLM provider configured. Go to Settings > LLM Configuration to set up a provider.");
@@ -1055,6 +1066,79 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
 
 void AiChatScreen::on_provider_changed() {
     update_stats();
+}
+
+// ── Slash commands ────────────────────────────────────────────────────────────
+
+bool AiChatScreen::handle_slash_command(const QString& text) {
+    auto persist_pair = [this](const QString& user_text, const QString& sys_text) {
+        add_message_bubble("user", user_text);
+        add_message_bubble("system", sys_text);
+        // Persist so the exchange survives a session reload.  History_
+        // intentionally does NOT receive these — they're a parallel
+        // dispatch channel, not LLM conversation context.
+        const auto& llm = ai_chat::LlmService::instance();
+        ChatRepository::instance().add_message(active_session_id_, "user", user_text,
+                                               llm.active_provider(), llm.active_model());
+        ChatRepository::instance().add_message(active_session_id_, "system", sys_text,
+                                               llm.active_provider(), llm.active_model());
+        scroll_to_bottom();
+    };
+
+    // /help — built-in command listing.  Never resolves to an agent.
+    if (text == QStringLiteral("/help") || text.startsWith(QStringLiteral("/help "))) {
+        QString help = QStringLiteral("Available slash commands:\n");
+        for (const auto& spec : fincept::services::SlashCommandService::instance().list_commands()) {
+            QString pos;
+            for (const auto& k : spec.positional)
+                pos += QStringLiteral(" <") + k + QChar('>');
+            help += QStringLiteral("  /%1%2 — %3\n").arg(spec.command, pos, spec.help);
+        }
+        help += QStringLiteral("\nDispatch routes through the active runtime via the named agent.");
+        persist_pair(text, help);
+        return true;
+    }
+
+    auto& slash = fincept::services::SlashCommandService::instance();
+    const auto resolved = slash.resolve(text);
+    if (!resolved) {
+        persist_pair(text, QStringLiteral(
+                               "Unknown slash command. Type /help to see available commands."));
+        return true;
+    }
+
+    QJsonObject config;
+    config[QStringLiteral("agent_id")] = resolved->agent_id;
+    config[QStringLiteral("skill")] = resolved->skill;
+    config[QStringLiteral("args")] = resolved->args;
+    config[QStringLiteral("source")] = QStringLiteral("chat_slash");
+
+    // Synthesize a natural-language query the agent's runtime can act
+    // on even before Track 3 hooks materialise skill content.
+    QString query = QStringLiteral("Run skill `%1`").arg(resolved->skill);
+    if (!resolved->args.isEmpty()) {
+        query += QStringLiteral(" with args ") +
+                 QString::fromUtf8(QJsonDocument(resolved->args).toJson(QJsonDocument::Compact));
+    }
+
+    // AgentService publishes results on `agent:output:*` topics —
+    // wiring those back into the chat bubble is the next iteration
+    // (Track 13 dependency); for now we surface "Dispatched ..." so
+    // the user gets immediate feedback and can watch the agent screen
+    // for output.
+    QString sys_msg;
+    try {
+        const QString request_id =
+            fincept::services::AgentService::instance().run_agent(query, config);
+        sys_msg = QStringLiteral("Dispatched **%1** (skill: `%2`)%3").arg(
+            resolved->agent_id, resolved->skill,
+            request_id.isEmpty() ? QString() : QStringLiteral(" — request ") + request_id);
+    } catch (const std::exception& ex) {
+        sys_msg = QStringLiteral("Failed to dispatch **%1**: %2")
+                      .arg(resolved->agent_id, QString::fromUtf8(ex.what()));
+    }
+    persist_pair(text, sys_msg);
+    return true;
 }
 
 // ── Message bubbles ───────────────────────────────────────────────────────────
