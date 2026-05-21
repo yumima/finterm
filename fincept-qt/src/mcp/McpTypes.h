@@ -88,6 +88,13 @@ using ToolHandler = std::function<ToolResult(const QJsonObject& args)>;
 
 /// Context passed to async handlers. Captured by value into the handler
 /// lambda — safe to copy.
+/// MCP-spec logging levels (RFC 5424 syslog severities — the spec calls
+/// them out by name).  Tool handlers emit structured log events via
+/// ToolContext::on_log; the dispatch forwards to both the app-internal
+/// core Logger and (Track 5 commit H follow-up) the MCP-spec
+/// `notifications/message` channel for the agent runtime.
+enum class LogLevel { Debug, Info, Notice, Warning, Error, Critical, Alert, Emergency };
+
 struct ToolContext {
     /// Optional progress callback. Handlers call this with progress in [0,1]
     /// and a short status message. Safe to call from any thread.
@@ -100,6 +107,12 @@ struct ToolContext {
     /// "never cancelled" in that case.
     std::function<bool()> is_cancelled;
 
+    /// Optional structured-log emitter (MCP spec `notifications/message`).
+    /// Distinct from core Logger which is app-internal — on_log events
+    /// can surface to the agent runtime and UI.  May be null; the helpers
+    /// below short-circuit when so.
+    std::function<void(LogLevel, const QString&)> on_log;
+
     /// Hard timeout in milliseconds. McpProvider arms a timer that
     /// resolves the promise with a timeout error if the handler hasn't
     /// finished by then. Default: 30s; per-tool override via
@@ -108,7 +121,30 @@ struct ToolContext {
 
     /// Convenience — true if cancellation hook is set AND signalled.
     bool cancelled() const { return is_cancelled && is_cancelled(); }
+
+    // Logging convenience.  Branchless when on_log is null.
+    void log_debug(const QString& msg) const { if (on_log) on_log(LogLevel::Debug, msg); }
+    void log_info(const QString& msg) const { if (on_log) on_log(LogLevel::Info, msg); }
+    void log_warn(const QString& msg) const { if (on_log) on_log(LogLevel::Warning, msg); }
+    void log_error(const QString& msg) const { if (on_log) on_log(LogLevel::Error, msg); }
 };
+
+/// Render an MCP LogLevel as the canonical lowercase string the spec
+/// uses for `notifications/message.level` (e.g. "debug", "info",
+/// "warning", "error", …).
+inline const char* log_level_str(LogLevel l) {
+    switch (l) {
+        case LogLevel::Debug: return "debug";
+        case LogLevel::Info: return "info";
+        case LogLevel::Notice: return "notice";
+        case LogLevel::Warning: return "warning";
+        case LogLevel::Error: return "error";
+        case LogLevel::Critical: return "critical";
+        case LogLevel::Alert: return "alert";
+        case LogLevel::Emergency: return "emergency";
+    }
+    return "info";
+}
 
 /// Async handler signature. The handler MUST eventually:
 ///   - call promise->addResult(result) followed by promise->finish(); or

@@ -327,6 +327,35 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
     if (ctx.timeout_ms == 30000) // ToolContext default — not explicitly set
         ctx.timeout_ms = default_timeout_ms;
 
+    // Default log sink — if the caller didn't supply one, forward to
+    // the app-internal core Logger so tool emissions still land in the
+    // finterm log file.  Track 5 follow-up: when McpProvider grows a
+    // pubsub channel for MCP-spec notifications/message, fan out here.
+    if (!ctx.on_log) {
+        const QString tool_name = name;
+        ctx.on_log = [tool_name](LogLevel level, const QString& msg) {
+            const QString tag = QStringLiteral("Tool:%1").arg(tool_name);
+            switch (level) {
+                case LogLevel::Debug:
+                    LOG_DEBUG(tag.toUtf8().constData(), msg);
+                    break;
+                case LogLevel::Info:
+                case LogLevel::Notice:
+                    LOG_INFO(tag.toUtf8().constData(), msg);
+                    break;
+                case LogLevel::Warning:
+                    LOG_WARN(tag.toUtf8().constData(), msg);
+                    break;
+                case LogLevel::Error:
+                case LogLevel::Critical:
+                case LogLevel::Alert:
+                case LogLevel::Emergency:
+                    LOG_ERROR(tag.toUtf8().constData(), msg);
+                    break;
+            }
+        };
+    }
+
     // Async preferred; sync wrapped in a resolved future so call_tool() works
     // uniformly for both shapes.
     if (async_handler) {
