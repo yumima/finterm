@@ -1,6 +1,18 @@
 #include "storage/repositories/LlmConfigRepository.h"
 
+#include "storage/secure/LlmSecureKeys.h"
+
+#include <QVariant>
+
 namespace fincept {
+
+namespace {
+// Typed-NULL QVariant for a TEXT column.  Binding a default-constructed
+// QVariant or an empty QString writes "" — we want NULL.
+QVariant null_text() {
+    return QVariant(QMetaType(QMetaType::QString));
+}
+} // namespace
 
 LlmConfigRepository& LlmConfigRepository::instance() {
     static LlmConfigRepository s;
@@ -8,14 +20,21 @@ LlmConfigRepository& LlmConfigRepository::instance() {
 }
 
 LlmConfig LlmConfigRepository::map_config(QSqlQuery& q) {
-    return {q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
-            q.value(4).toBool(),   q.value(5).toBool(),   q.value(6).toString(), q.value(7).toString()};
+    // Column 1 (api_key) is migrated away from this table — see v022.
+    // Filled in from SecureStorage by the callers below.
+    LlmConfig c{q.value(0).toString(), {},                  q.value(2).toString(), q.value(3).toString(),
+                q.value(4).toBool(),   q.value(5).toBool(), q.value(6).toString(), q.value(7).toString()};
+    c.api_key = llm_secure_load(llm_secure_key_for_provider(c.provider));
+    return c;
 }
 
 LlmModelConfig LlmConfigRepository::map_model(QSqlQuery& q) {
-    return {q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
-            q.value(4).toString(), q.value(5).toString(), q.value(6).toBool(),   q.value(7).toBool(),
-            q.value(8).toString(), q.value(9).toString()};
+    // Column 4 (api_key) is migrated away — see v022.  Filled below.
+    LlmModelConfig m{q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
+                     {},                    q.value(5).toString(), q.value(6).toBool(),   q.value(7).toBool(),
+                     q.value(8).toString(), q.value(9).toString()};
+    m.api_key = llm_secure_load(llm_secure_key_for_model(m.id));
+    return m;
 }
 
 Result<QVector<LlmConfig>> LlmConfigRepository::list_providers() {
@@ -31,10 +50,13 @@ Result<LlmConfig> LlmConfigRepository::get_active_provider() {
 }
 
 Result<void> LlmConfigRepository::save_provider(const LlmConfig& c) {
+    if (auto r = llm_secure_store(llm_secure_key_for_provider(c.provider), c.api_key); r.is_err()) {
+        return r;
+    }
     return exec_write(
         "INSERT OR REPLACE INTO llm_configs (provider, api_key, base_url, model, is_active, tools_enabled, updated_at) "
         "VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-        {c.provider, c.api_key, c.base_url, c.model, c.is_active ? 1 : 0, c.tools_enabled ? 1 : 0});
+        {c.provider, null_text(), c.base_url, c.model, c.is_active ? 1 : 0, c.tools_enabled ? 1 : 0});
 }
 
 Result<void> LlmConfigRepository::set_active(const QString& provider) {
@@ -43,7 +65,12 @@ Result<void> LlmConfigRepository::set_active(const QString& provider) {
 }
 
 Result<void> LlmConfigRepository::delete_provider(const QString& provider) {
-    return exec_write("DELETE FROM llm_configs WHERE provider = ?", {provider});
+    auto r = exec_write("DELETE FROM llm_configs WHERE provider = ?", {provider});
+    // Remove the SecureStorage entry regardless of the SQL outcome — keeping
+    // an orphan keychain entry around after a failed delete is worse than
+    // a momentary inconsistency that the next save would fix anyway.
+    llm_secure_remove(llm_secure_key_for_provider(provider));
+    return r;
 }
 
 Result<LlmGlobalSettings> LlmConfigRepository::get_global_settings() {
@@ -89,15 +116,20 @@ Result<QVector<LlmModelConfig>> LlmConfigRepository::list_models(const QString& 
 }
 
 Result<void> LlmConfigRepository::save_model(const LlmModelConfig& m) {
+    if (auto r = llm_secure_store(llm_secure_key_for_model(m.id), m.api_key); r.is_err()) {
+        return r;
+    }
     return exec_write("INSERT OR REPLACE INTO llm_model_configs "
                       "(id, provider, model_id, display_name, api_key, base_url, is_enabled, is_default, updated_at) "
                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-                      {m.id, m.provider, m.model_id, m.display_name, m.api_key, m.base_url, m.is_enabled ? 1 : 0,
+                      {m.id, m.provider, m.model_id, m.display_name, null_text(), m.base_url, m.is_enabled ? 1 : 0,
                        m.is_default ? 1 : 0});
 }
 
 Result<void> LlmConfigRepository::delete_model(const QString& id) {
-    return exec_write("DELETE FROM llm_model_configs WHERE id = ?", {id});
+    auto r = exec_write("DELETE FROM llm_model_configs WHERE id = ?", {id});
+    llm_secure_remove(llm_secure_key_for_model(id));
+    return r;
 }
 
 } // namespace fincept

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`108596c9`](https://github.com/yumima/finterm/commit/108596c9) evals: Track 0 testing scaffold
 - [`04496d5f`](https://github.com/yumima/finterm/commit/04496d5f) plans: add testing strategy; weave Track 0 + UX into ai-stack plan
 - [`3d316b4e`](https://github.com/yumima/finterm/commit/3d316b4e) **docs:** move design plans from fincept-qt/docs/design to repo-root plans/
 - [`f99935d1`](https://github.com/yumima/finterm/commit/f99935d1) **docs(ai-stack):** apply review fixes; add local AI engine vision doc

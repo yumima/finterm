@@ -3,11 +3,17 @@
 #include "storage/repositories/LlmProfileRepository.h"
 
 #include "core/logging/Logger.h"
+#include "storage/secure/LlmSecureKeys.h"
 
 #include <QSqlQuery>
 #include <QUuid>
+#include <QVariant>
 
 namespace fincept {
+
+namespace {
+QVariant null_text() { return QVariant(QMetaType(QMetaType::QString)); }
+} // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
@@ -24,7 +30,8 @@ LlmProfile LlmProfileRepository::map_profile(QSqlQuery& q) {
     p.name = q.value(1).toString();
     p.provider = q.value(2).toString();
     p.model_id = q.value(3).toString();
-    p.api_key = q.value(4).toString();
+    // Column 4 (api_key) is migrated away — see v022.  Filled from SecureStorage.
+    p.api_key = llm_secure_load(llm_secure_key_for_profile(p.id));
     p.base_url = q.value(5).toString();
     p.temperature = q.value(6).toDouble();
     p.max_tokens = q.value(7).toInt();
@@ -54,17 +61,23 @@ Result<void> LlmProfileRepository::save_profile(const LlmProfile& p) {
     // Generate id if empty (new profile)
     QString id = p.id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : p.id;
 
+    if (auto r = llm_secure_store(llm_secure_key_for_profile(id), p.api_key); r.is_err()) {
+        return r;
+    }
+
     return exec_write("INSERT OR REPLACE INTO llm_profiles "
                       "  (id, name, provider, model_id, api_key, base_url, "
                       "   temperature, max_tokens, system_prompt, is_default, updated_at) "
                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-                      {id, p.name, p.provider, p.model_id, p.api_key, p.base_url, p.temperature, p.max_tokens,
+                      {id, p.name, p.provider, p.model_id, null_text(), p.base_url, p.temperature, p.max_tokens,
                        p.system_prompt, p.is_default ? 1 : 0});
 }
 
 Result<void> LlmProfileRepository::delete_profile(const QString& id) {
     // Assignments cascade-delete via FK ON DELETE CASCADE
-    return exec_write("DELETE FROM llm_profiles WHERE id = ?", {id});
+    auto r = exec_write("DELETE FROM llm_profiles WHERE id = ?", {id});
+    llm_secure_remove(llm_secure_key_for_profile(id));
+    return r;
 }
 
 Result<void> LlmProfileRepository::set_default(const QString& id) {
@@ -157,7 +170,8 @@ ResolvedLlmProfile LlmProfileRepository::legacy_fallback() const {
     rp.profile_id = {};
     rp.profile_name = "Legacy Active";
     rp.provider = q.value(0).toString();
-    rp.api_key = q.value(1).toString();
+    // Column 1 (api_key) is migrated away — see v022.  Pull from SecureStorage.
+    rp.api_key = llm_secure_load(llm_secure_key_for_provider(rp.provider));
     rp.base_url = q.value(2).toString();
     rp.model_id = q.value(3).toString();
 
