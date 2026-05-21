@@ -904,7 +904,7 @@ fixtures.
 36. System tab: traces, per-tool/per-agent/per-runtime counters,
     evals, cost meter, kill-switch toggle.
 
-### Track 15 — Forum → Reddit RSS (read-only)
+### Track 15 — Community surface: open feed + closed rooms
 
 Parallel-shippable; not on the AI-stack critical path.  Current
 state: the `forum` screen, `ForumService`, and `ForumTools` MCP
@@ -914,7 +914,11 @@ empty envelopes for `/forum/*` so the UI doesn't crash but every
 list renders empty.  Originally the forum hit `api.fincept.in`;
 that path is gone in the localhost fork.
 
-Replace with **Reddit RSS** read-only:
+Replace with two side-by-side surfaces, both deep-link based —
+finterm aggregates and links; the actual social platform stays
+external.
+
+#### 15a — Open feed via Reddit RSS (+ HackerNews fallback)
 
 - Source: curated finance subreddits — `r/investing`, `r/stocks`,
   `r/options`, `r/SecurityAnalysis`, `r/wallstreetbets`,
@@ -930,16 +934,40 @@ Replace with **Reddit RSS** read-only:
 - Universality caveat: Reddit is blocked in CN/RU/KP.  Fallback:
   HackerNews API (`https://hacker-news.firebaseio.com/v0/`,
   unauthenticated) as a secondary feed.  If both fail, show a
-  "community feed unavailable in your region" message rather than
-  empty lists.
+  "community feed unavailable in your region" message.
+
+#### 15b — Closed rooms via Discord deep-link (+ Matrix opt-in)
+
+- Primary: **Discord** invite URLs.  finterm stores a user-managed
+  list of named Discord server invites; the UI renders them as
+  cards with "Open in Discord" buttons that hand off to the
+  Discord desktop/web client.  Optional iframe-embed of Discord's
+  server widget (`https://discord.com/widget?id=...`) for a
+  read-only sidebar view.  Why Discord over Slack: workspace-
+  creation friction in Slack is heavy for friends-inviting-friends
+  rooms.  Discord's invite-link model matches the use case.
+- Secondary: **Matrix / Element** for privacy- or federation-
+  minded users.  Same invite-URL pattern (`https://matrix.to/#/...`),
+  same deep-link model.  One-line settings toggle to add a Matrix
+  card alongside Discord cards.
+- Explicitly not embedded: actual chat client (auth, notifications,
+  message state) stays in the user's installed Discord/Matrix app.
+  finterm is the aggregator + launcher, not a chat client.
+- Cross-cutting universality: Discord access varies regionally;
+  Matrix federates and works almost everywhere; Telegram could
+  serve as a third option for users where neither Discord nor
+  Matrix is reachable.
 
 Stages:
 
-1. Read-only RSS reader against a single hardcoded subreddit
-   (`r/investing`) — smoke the feed parsing and UI render.
+1. Read-only RSS reader against `r/investing` — smoke 15a's feed
+   parsing and UI render.
 2. User-editable subreddit list in settings; multi-feed merge.
-3. HackerNews fallback for regions where Reddit is unreachable.
-4. `ForumTools` MCP family rewritten on top of the new client.
+3. HackerNews API fallback for blocked regions.
+4. `ForumTools` MCP family rewritten on top of the new RSS client.
+5. Discord invite-URL list management + "Open" button (15b).
+6. Optional Discord widget iframe embed (read-only sidebar).
+7. Matrix invite-URL support (15b secondary).
 
 ### Track 14 — Evals + observability + audit + safety + UX
 
