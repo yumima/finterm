@@ -95,6 +95,61 @@ using ToolHandler = std::function<ToolResult(const QJsonObject& args)>;
 /// `notifications/message` channel for the agent runtime.
 enum class LogLevel { Debug, Info, Notice, Warning, Error, Critical, Alert, Emergency };
 
+// ============================================================================
+// Sampling — MCP-spec server-side LLM call (sampling/createMessage)
+// ============================================================================
+//
+// A tool whose work needs the model — e.g. an Edgar filing summarizer
+// that wants the LLM to compress a 50-page 10-K before returning —
+// calls ctx.sample(req).  The runtime fans the request out to the
+// active LLM profile, awaits the response, returns it to the tool
+// handler.  Cost flows through the user's profile (same as a normal
+// chat turn).
+//
+// Currently sync from the handler's POV: the runtime is expected to
+// run on its own thread and the handler blocks awaiting the response.
+// When McpProvider grows async-tool support beyond promise-resolution,
+// revisit.
+
+struct SampleRequest {
+    QString prompt;          // user-message content
+    QString system_prompt;   // optional system-message preamble
+    int max_tokens = 512;
+    double temperature = 0.7;
+};
+
+struct SampleResponse {
+    QString text;
+    QString model;           // model id that produced the response (best-effort)
+    QString error;           // empty on success
+};
+
+// ============================================================================
+// Elicitation — MCP-spec server-side structured user prompt
+// ============================================================================
+//
+// A tool that needs disambiguation or a confirmation mid-call asks the
+// user via ctx.elicit(req).  The runtime surfaces the request to the
+// chat UI (modal / inline form), awaits the user's response, returns
+// it to the handler.  The schema is JSON Schema describing the expected
+// answer shape.
+//
+// Common shapes:
+//   - boolean   "Confirm trade?"           {type: "boolean"}
+//   - enum      "Which file did you mean?" {type: "string", enum: [...]}
+//   - object    structured form            {type: "object", properties: ...}
+
+struct ElicitRequest {
+    QString prompt;          // user-visible question
+    QJsonObject schema;      // JSON Schema for the answer
+};
+
+struct ElicitResponse {
+    QJsonValue value;        // user's answer matching the schema
+    bool declined = false;   // true if the user explicitly declined
+    QString error;           // transport / wiring errors only
+};
+
 struct ToolContext {
     /// Optional progress callback. Handlers call this with progress in [0,1]
     /// and a short status message. Safe to call from any thread.
@@ -113,6 +168,18 @@ struct ToolContext {
     /// below short-circuit when so.
     std::function<void(LogLevel, const QString&)> on_log;
 
+    /// Optional server-side LLM sampling (MCP spec `sampling/createMessage`).
+    /// Tool handlers call ctx.sample(req) to ask the runtime to invoke
+    /// the active LLM profile; blocks until the response arrives.  May
+    /// be null — `sample()` below returns an error in that case.
+    std::function<SampleResponse(const SampleRequest&)> on_sample;
+
+    /// Optional server-side structured user prompt (MCP spec
+    /// `elicitation/create`).  Tool handlers call ctx.elicit(req) to
+    /// ask the user mid-call; blocks until the user responds or
+    /// declines.  May be null — `elicit()` below returns an error.
+    std::function<ElicitResponse(const ElicitRequest&)> on_elicit;
+
     /// Hard timeout in milliseconds. McpProvider arms a timer that
     /// resolves the promise with a timeout error if the handler hasn't
     /// finished by then. Default: 30s; per-tool override via
@@ -127,6 +194,24 @@ struct ToolContext {
     void log_info(const QString& msg) const { if (on_log) on_log(LogLevel::Info, msg); }
     void log_warn(const QString& msg) const { if (on_log) on_log(LogLevel::Warning, msg); }
     void log_error(const QString& msg) const { if (on_log) on_log(LogLevel::Error, msg); }
+
+    // Sampling / elicitation convenience.  Return an error response
+    // when the callback isn't wired so the handler can surface the
+    // failure to the model rather than crashing.
+    SampleResponse sample(const SampleRequest& req) const {
+        if (on_sample)
+            return on_sample(req);
+        SampleResponse r;
+        r.error = QStringLiteral("sampling not wired into this runtime");
+        return r;
+    }
+    ElicitResponse elicit(const ElicitRequest& req) const {
+        if (on_elicit)
+            return on_elicit(req);
+        ElicitResponse r;
+        r.error = QStringLiteral("elicitation not wired into this runtime");
+        return r;
+    }
 };
 
 /// Render an MCP LogLevel as the canonical lowercase string the spec
