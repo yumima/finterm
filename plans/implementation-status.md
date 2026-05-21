@@ -34,7 +34,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 5.A–J | Full MCP spec on internal servers | ✅ done | See "Track 5 detail" below |
 | 6 | `FinancialDatasetsTools` internal MCP | ✅ done | 6 tools wrapping REST endpoints; commit `32f1927a` |
 | 7 | Skills + slash commands + agent identities | ⏸ pending | Vendoring + 10 named agents + slash dispatch |
-| 8 | Source-prefixed names + per-agent allowlists | ⏸ pending | `fd:`/`int:`/`ext:` prefixes + `allow_tools` |
+| 8 | Source-prefixed names + per-agent allowlists | ✅ done | A `98d256d9` (rename INTERNAL_SERVER_ID→"int"); B `00741864` (allow_tools globs) |
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
 | 10 | Background scheduler + hooks | ⏸ pending | Cron via Qt timer + SQLite queue |
 | 11 | Quant narrator | ⏸ pending | `QuantNarratorTools` + `quant_critic` identity |
