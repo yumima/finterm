@@ -1,17 +1,16 @@
 #pragma once
 // McpClient.h — JSON-RPC 2.0 over stdio for external MCP servers (Qt port)
 // Spawns an external MCP server process and communicates via stdin/stdout.
+//
+// Inherits from McpClientBase so McpManager can hold heterogeneous
+// transports (stdio + HTTP) in a single shared_ptr<McpClientBase> map.
+// McpServerConfig now lives in McpClientBase.h.
 
-#include "core/result/Result.h"
-#include "mcp/McpTypes.h"
+#include "mcp/McpClientBase.h"
 
 #include <QByteArray>
-#include <QHash>
-#include <QJsonObject>
 #include <QMutex>
 #include <QProcess>
-#include <QString>
-#include <QStringList>
 #include <QThread>
 #include <QWaitCondition>
 
@@ -19,22 +18,7 @@
 
 namespace fincept::mcp {
 
-struct McpServerConfig {
-    QString id;
-    QString name;
-    QString description;
-    QString command; // e.g. "npx", "uvx", "python"
-    QStringList args;
-    QHash<QString, QString> env;
-    QString category;
-    bool enabled = true;
-    bool auto_start = false;
-    ServerStatus status = ServerStatus::Stopped;
-    QString created_at;
-    QString updated_at;
-};
-
-class McpClient : public QObject {
+class McpClient : public McpClientBase {
     Q_OBJECT
   public:
     explicit McpClient(const McpServerConfig& config, QObject* parent = nullptr);
@@ -42,20 +26,20 @@ class McpClient : public QObject {
 
     // Lifecycle
     // NOTE: start() must only be called from a background thread, never the UI thread.
-    Result<void> start();
-    void stop();
-    bool is_running() const;
+    Result<void> start() override;
+    void stop() override;
+    bool is_running() const override;
 
     // MCP protocol methods (blocking, must NOT be called from UI thread)
-    Result<QJsonObject> initialize();
-    Result<std::vector<ExternalTool>> list_tools();
-    Result<QJsonObject> call_tool(const QString& name, const QJsonObject& args);
-    Result<void> ping();
+    Result<QJsonObject> initialize() override;
+    Result<std::vector<ExternalTool>> list_tools() override;
+    Result<QJsonObject> call_tool(const QString& name, const QJsonObject& args) override;
+    Result<void> ping() override;
 
-    const McpServerConfig& config() const { return config_; }
+    const McpServerConfig& config() const override { return config_; }
 
     /// Returns captured stdout/stderr lines (last 500 lines).
-    QStringList get_logs() const;
+    QStringList get_logs() const override;
 
   private:
     struct PendingRequest {

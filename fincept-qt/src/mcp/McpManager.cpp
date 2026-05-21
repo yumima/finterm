@@ -298,7 +298,7 @@ void McpManager::do_health_check() {
         QMutexLocker l(&mutex_);
         if (!clients_.contains(id))
             continue;
-        McpClient* client = clients_[id].get();
+        McpClientBase* client = clients_[id].get();
         l.unlock();
 
         auto r = client->ping();
@@ -338,7 +338,7 @@ std::vector<ExternalTool> McpManager::get_all_external_tools() {
 Result<QJsonObject> McpManager::call_external_tool(const QString& server_id, const QString& tool_name,
                                                    const QJsonObject& args) {
     QMutexLocker lock(&mutex_);
-    McpClient* client = get_client(server_id);
+    McpClientBase* client = get_client(server_id);
     if (!client)
         return Result<QJsonObject>::err("Server not running: " + server_id.toStdString());
     lock.unlock();
@@ -346,7 +346,7 @@ Result<QJsonObject> McpManager::call_external_tool(const QString& server_id, con
     return client->call_tool(tool_name, args);
 }
 
-McpClient* McpManager::get_client(const QString& id) const {
+McpClientBase* McpManager::get_client(const QString& id) const {
     auto it = clients_.find(id);
     if (it == clients_.end())
         return nullptr;
@@ -363,7 +363,7 @@ QStringList McpManager::get_logs(const QString& id) const {
 
 void McpManager::refresh_tools_for(const QString& id) {
     QMutexLocker lock(&mutex_);
-    McpClient* client = get_client(id);
+    McpClientBase* client = get_client(id);
     if (!client)
         return;
     lock.unlock();

@@ -4,6 +4,7 @@
 
 #include "core/result/Result.h"
 #include "mcp/McpClient.h"
+#include "mcp/McpClientBase.h"
 
 #include <QHash>
 #include <QMutex>
@@ -61,7 +62,11 @@ class McpManager : public QObject {
   private:
     McpManager();
 
-    QHash<QString, std::shared_ptr<McpClient>> clients_;
+    /// Per-transport client instances.  Each entry is either an
+    /// McpClient (stdio) or an McpHttpClient (HTTP) — McpManager
+    /// picks the concrete type at start_server() based on the
+    /// transport_type field on the config.
+    QHash<QString, std::shared_ptr<McpClientBase>> clients_;
     QHash<QString, McpServerConfig> configs_;
     QHash<QString, std::vector<ExternalTool>> tool_cache_;
     QHash<QString, int> restart_attempts_;
@@ -71,7 +76,7 @@ class McpManager : public QObject {
 
     static constexpr int MAX_RESTART_ATTEMPTS = 3;
 
-    McpClient* get_client(const QString& id) const;
+    McpClientBase* get_client(const QString& id) const;
     void refresh_tools_for(const QString& id);
 
   private slots:

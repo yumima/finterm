@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`ddf442f5`](https://github.com/yumima/finterm/commit/ddf442f5) storage(mcp): seed marketplace MCP servers (Track 4 #15)
 - [`6be58f76`](https://github.com/yumima/finterm/commit/6be58f76) widgets(video): gate full-reset resume on live-proxy host + elapsed
 - [`cb0044c6`](https://github.com/yumima/finterm/commit/cb0044c6) widgets(video): resume restarts at live edge, not stale segment
 - [`10a64465`](https://github.com/yumima/finterm/commit/10a64465) agents(runtimes): SKILL.md loading path into SDK (Track 3 #12)

@@ -15,7 +15,7 @@ namespace fincept::mcp {
 
 static constexpr const char* TAG = "McpClient";
 
-McpClient::McpClient(const McpServerConfig& config, QObject* parent) : QObject(parent), config_(config) {}
+McpClient::McpClient(const McpServerConfig& config, QObject* parent) : McpClientBase(parent), config_(config) {}
 
 McpClient::~McpClient() {
     stop();
