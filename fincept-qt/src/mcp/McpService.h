@@ -21,6 +21,13 @@ class McpService {
     /// Get all available tools (internal + external, cached 5 s)
     std::vector<UnifiedTool> get_all_tools();
 
+    /// Get tools visible to a specific agent — applies the agent's
+    /// `allow_tools` glob patterns (parsed from AgentConfig.config_json)
+    /// against the wire-form name `<server_id>__<tool_name>`.  Empty
+    /// allowlist or unknown agent → returns get_all_tools() unchanged
+    /// (matches the pre-allowlist default).  See R7 / Track 8.
+    std::vector<UnifiedTool> list_tools_for(const QString& agent_id);
+
     /// Format for OpenAI function calling
     QJsonArray format_tools_for_openai();
 

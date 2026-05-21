@@ -5,8 +5,13 @@
 #include "core/logging/Logger.h"
 #include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
+#include "storage/repositories/AgentConfigRepository.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
+#include <QStringList>
 #include <QThread>
 #include <QTimer>
 
@@ -81,6 +86,68 @@ std::vector<UnifiedTool> McpService::get_all_tools() {
     if (!is_cache_valid())
         refresh_cache();
     return cached_tools_;
+}
+
+namespace {
+/// Convert one glob pattern to an anchored regex.  Only `*` is treated
+/// as a wildcard (matches any string including empty); every other
+/// character is escaped to a literal.  No `?` or character classes —
+/// the spec's example patterns (`int__*`, `mcp-fetch__*`) don't need
+/// them, and the simpler grammar avoids surprise behaviour.
+QRegularExpression glob_to_regex(const QString& pattern) {
+    QString escaped = QRegularExpression::escape(pattern);
+    escaped.replace(QStringLiteral("\\*"), QStringLiteral(".*"));
+    return QRegularExpression("^" + escaped + "$");
+}
+
+bool any_pattern_matches(const QStringList& patterns, const QString& wire_name) {
+    for (const auto& p : patterns) {
+        if (glob_to_regex(p).match(wire_name).hasMatch())
+            return true;
+    }
+    return false;
+}
+} // anonymous namespace
+
+std::vector<UnifiedTool> McpService::list_tools_for(const QString& agent_id) {
+    auto all = get_all_tools();
+    if (agent_id.isEmpty())
+        return all;
+
+    auto agent_r = AgentConfigRepository::instance().get(agent_id);
+    if (agent_r.is_err()) {
+        LOG_DEBUG(TAG, QString("list_tools_for(%1): unknown agent — no filter").arg(agent_id));
+        return all;
+    }
+
+    const QJsonDocument doc = QJsonDocument::fromJson(agent_r.value().config_json.toUtf8());
+    if (!doc.isObject())
+        return all;
+
+    const QJsonArray arr = doc.object().value("allow_tools").toArray();
+    if (arr.isEmpty())
+        return all;
+
+    QStringList patterns;
+    patterns.reserve(arr.size());
+    for (const auto& v : arr) {
+        const QString p = v.toString().trimmed();
+        if (!p.isEmpty())
+            patterns.append(p);
+    }
+    if (patterns.isEmpty())
+        return all;
+
+    std::vector<UnifiedTool> filtered;
+    filtered.reserve(all.size());
+    for (const auto& t : all) {
+        const QString wire = t.server_id + QStringLiteral("__") + t.name;
+        if (any_pattern_matches(patterns, wire))
+            filtered.push_back(t);
+    }
+    LOG_INFO(TAG, QString("list_tools_for(%1): %2/%3 tools allowed by %4 pattern(s)")
+                      .arg(agent_id).arg(filtered.size()).arg(all.size()).arg(patterns.size()));
+    return filtered;
 }
 
 QJsonArray McpService::format_tools_for_openai() {
