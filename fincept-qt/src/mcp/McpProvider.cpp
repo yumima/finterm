@@ -285,31 +285,72 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
             return fail_now("Tool '" + name + "' has no handler");
     }
 
-    // Authorization gate. The app-layer hook (installed via set_auth_checker)
-    // handles the user-visible side. Without a checker we fail closed for
-    // Verified+; lesser levels pass with an advisory log.
+    // Authorization gate.  Two channels, tried in order:
+    //
+    //   1. MCP-spec elicitation (Track 5 commit J).  If the caller wired
+    //      ctx.on_elicit, send a structured boolean prompt; allow only on
+    //      `true`.  This is the preferred path — surfaces a typed UI
+    //      modal and matches the spec's `elicitation/create` flow.
+    //
+    //   2. Legacy AuthChecker callback installed via set_auth_checker.
+    //      Backward-compat path for surfaces that haven't wired the
+    //      elicit channel yet.
+    //
+    // Without either, we fail closed for Verified+ and pass with an
+    // advisory log for purely-destructive lesser-required tools.
     if (auth_required != AuthLevel::None || is_destructive) {
-        AuthChecker checker;
-        {
-            QMutexLocker lock(&mutex_);
-            checker = auth_checker_;
+        bool gated = false;
+        bool allowed = false;
+
+        if (ctx.on_elicit) {
+            ElicitRequest req;
+            req.prompt = QStringLiteral(
+                "%1 is %2authorization-gated.  Allow execution?")
+                .arg(name,
+                     is_destructive ? QStringLiteral("destructive and ")
+                                    : QStringLiteral(""));
+            req.schema = QJsonObject{
+                {"type", "boolean"},
+                {"description", QStringLiteral("True to allow, false to deny")},
+            };
+            const ElicitResponse er = ctx.elicit(req);
+            if (er.error.isEmpty() && !er.declined && er.value.isBool()) {
+                gated = true;
+                allowed = er.value.toBool();
+            }
+            // If the elicit response is malformed / declined, fall
+            // through to the legacy AuthChecker — it might be wired.
         }
-        if (checker) {
-            if (!checker(auth_required, is_destructive)) {
-                LOG_WARN(TAG, QString("Tool '%1' blocked by auth checker (required=%2, destructive=%3)")
+
+        if (!gated) {
+            AuthChecker checker;
+            {
+                QMutexLocker lock(&mutex_);
+                checker = auth_checker_;
+            }
+            if (checker) {
+                gated = true;
+                allowed = checker(auth_required, is_destructive);
+            }
+        }
+
+        if (gated) {
+            if (!allowed) {
+                LOG_WARN(TAG, QString("Tool '%1' denied by auth gate (required=%2, destructive=%3)")
                                   .arg(name, auth_level_str(auth_required))
                                   .arg(is_destructive ? "true" : "false"));
                 return fail_now(
                     QString("Tool '%1' requires user authorization").arg(name));
             }
         } else if (auth_required >= AuthLevel::Verified) {
-            LOG_WARN(TAG, QString("Tool '%1' blocked: no AuthChecker installed (required=%2)")
+            LOG_WARN(TAG, QString("Tool '%1' blocked: no auth gate installed (required=%2)")
                               .arg(name, auth_level_str(auth_required)));
-            return fail_now("Tool requires confirmation but no authorisation hook is installed");
+            return fail_now(
+                "Tool requires confirmation but no authorisation hook is installed");
         } else if (is_destructive) {
-            LOG_INFO(TAG,
-                     QString("Tool '%1' is destructive (advisory; install McpProvider::set_auth_checker to gate)")
-                         .arg(name));
+            LOG_INFO(TAG, QString("Tool '%1' is destructive (advisory; install McpProvider::"
+                                  "set_auth_checker or wire ctx.on_elicit to gate)")
+                              .arg(name));
         }
     }
 

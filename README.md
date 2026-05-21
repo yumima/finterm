@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`b9230565`](https://github.com/yumima/finterm/commit/b9230565) mcp: sampling + elicitation primitives (Track 5 commit I)
 - [`6c055f3f`](https://github.com/yumima/finterm/commit/6c055f3f) mcp: logging primitives on ToolContext (Track 5 commit H)
 - [`cb2ce5ef`](https://github.com/yumima/finterm/commit/cb2ce5ef) mcp(quant_lab): emit progress + use cancellation primitives (Track 5 commit G)
 - [`7de4c285`](https://github.com/yumima/finterm/commit/7de4c285) mcp: McpProvider prompts API + daily_brief (Track 5 commit F)
