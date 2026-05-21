@@ -37,7 +37,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 8 | Source-prefixed names + per-agent allowlists | ✅ done | A `98d256d9` (rename INTERNAL_SERVER_ID→"int"); B `00741864` (allow_tools globs) |
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
 | 10 | Background scheduler + hooks | ⏸ pending | Cron via Qt timer + SQLite queue |
-| 11 | Quant narrator | ⏸ pending | `QuantNarratorTools` + `quant_critic` identity |
+| 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⏸ pending | Stop importing agno directly |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
 | 14 | Evals + observability + audit + safety + UX | ⏸ pending | Eval bench expansion + click-through scripts |
@@ -82,8 +82,9 @@ tracks, so a new session can pick up without re-reading every commit.
 | v023 | `llm_profile_runtime` | `runtime` column on `llm_profiles` (anthropic / local / external) |
 | v024 | `mcp_marketplace_seed` | Insert 9 marketplace MCP server rows (`enabled=0`) |
 | v025 | `mcp_http_transport` | `transport_type` + `base_url` + `auth_scheme` + `auth_header` columns on `mcp_servers` |
+| v026 | `quant_critic_agent` | Seed `agent_configs` row for quant_critic identity |
 
-Future migrations should start at **v026**.
+Future migrations should start at **v027**.
 
 ---
 
