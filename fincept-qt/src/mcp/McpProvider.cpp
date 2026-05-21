@@ -8,6 +8,8 @@
 #include <QApplication>
 #include <QMetaObject>
 #include <QPromise>
+
+#include <algorithm>
 #include <QTimer>
 
 #include <atomic>
@@ -46,6 +48,71 @@ void McpProvider::unregister_tool(const QString& name) {
     QMutexLocker lock(&mutex_);
     tools_.remove(name);
     ++generation_;
+}
+
+// ============================================================================
+// Resources (MCP spec resources)
+// ============================================================================
+
+void McpProvider::register_resource(Resource resource) {
+    QMutexLocker lock(&mutex_);
+    QString uri = resource.uri;
+    resources_.insert(uri, std::move(resource));
+    ++generation_;
+}
+
+void McpProvider::unregister_resource(const QString& uri) {
+    QMutexLocker lock(&mutex_);
+    resources_.remove(uri);
+    ++generation_;
+}
+
+std::vector<Resource> McpProvider::list_resources() const {
+    QMutexLocker lock(&mutex_);
+    std::vector<Resource> result;
+    result.reserve(static_cast<std::size_t>(resources_.size()));
+    for (auto it = resources_.cbegin(); it != resources_.cend(); ++it)
+        result.push_back(it.value());
+    std::sort(result.begin(), result.end(),
+              [](const Resource& a, const Resource& b) { return a.uri < b.uri; });
+    return result;
+}
+
+ResourceContent McpProvider::read_resource(const QString& uri) {
+    ResourceHandler handler;
+    QString default_mime;
+    {
+        QMutexLocker lock(&mutex_);
+        auto it = resources_.constFind(uri);
+        if (it == resources_.cend()) {
+            ResourceContent r;
+            r.uri = uri;
+            r.error = "unknown resource: " + uri;
+            return r;
+        }
+        handler = it.value().handler;
+        default_mime = it.value().mime_type;
+    }
+    // Mutex released before invoking the handler — handlers may take
+    // their own locks (repository singletons) and we don't want to
+    // pin the provider mutex across long calls.
+    if (!handler) {
+        ResourceContent r;
+        r.uri = uri;
+        r.error = "resource has no handler: " + uri;
+        return r;
+    }
+    ResourceContent r = handler();
+    if (r.uri.isEmpty())
+        r.uri = uri;
+    if (r.mime_type.isEmpty())
+        r.mime_type = default_mime;
+    return r;
+}
+
+bool McpProvider::has_resource(const QString& uri) const {
+    QMutexLocker lock(&mutex_);
+    return resources_.contains(uri);
 }
 
 // ============================================================================

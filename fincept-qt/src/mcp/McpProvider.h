@@ -41,6 +41,28 @@ class McpProvider {
     std::size_t tool_count() const;
     bool has_tool(const QString& name) const;
 
+    // ── Resource Registration (MCP spec resources) ─────────────────────────
+
+    /// Register a typed read-only resource.  Resources let the agent read
+    /// state by uri (e.g. "finterm://portfolio/snapshot") without spending
+    /// a tool-call turn on every fetch.  See plans/ai-stack-free-local.md
+    /// R8 / Track 5.
+    void register_resource(Resource resource);
+    void unregister_resource(const QString& uri);
+
+    /// All registered resources, ordered by uri.
+    std::vector<Resource> list_resources() const;
+
+    /// Synchronously invoke the resource handler.  Returns a
+    /// ResourceContent whose `error` is set when the uri is unknown or the
+    /// handler throws.  Safe to call from any thread provided the handler
+    /// is itself thread-safe (handlers are tool-family-supplied closures
+    /// that typically read repository singletons — same constraints as
+    /// tool handlers).
+    ResourceContent read_resource(const QString& uri);
+
+    bool has_resource(const QString& uri) const;
+
     // ── Tool Execution ─────────────────────────────────────────────────────
 
     /// Synchronous entry. Dispatches to whichever shape the ToolDef has set
@@ -97,6 +119,7 @@ class McpProvider {
     mutable QMutex mutex_;
     QHash<QString, ToolDef> tools_;
     QSet<QString> disabled_tools_;
+    QHash<QString, Resource> resources_;
     quint64 generation_ = 0;
     AuthChecker auth_checker_;
 };

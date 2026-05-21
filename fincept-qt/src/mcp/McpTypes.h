@@ -349,6 +349,40 @@ struct ExternalTool {
 };
 
 // ============================================================================
+// Resource — typed, addressable read-only content (MCP spec)
+// ============================================================================
+//
+// Resources let an agent read finterm state (portfolio snapshot, active
+// watchlist, current news digest, …) without spending a tool-call turn
+// on every fetch.  The model addresses a resource by its `uri`; reading
+// it returns the current snapshot via the resource's handler.
+//
+// Dynamic resources (e.g., portfolio_snapshot) build the content fresh
+// on each read; static resources can cache.
+
+/// Result returned by a resource handler.
+struct ResourceContent {
+    QString uri;
+    QString mime_type;     // "application/json", "text/plain", etc.
+    QString text;          // for text-based resources (JSON, markdown, …)
+    QByteArray blob;       // for binary resources (image, pdf, …)
+    QString error;         // empty on success
+};
+
+/// Handler invoked on read_resource(uri).  Synchronous; expected to be
+/// quick (the agent reads resources eagerly).  Long-running fetches
+/// should be tools, not resources.
+using ResourceHandler = std::function<ResourceContent()>;
+
+struct Resource {
+    QString uri;           // e.g., "finterm://portfolio/snapshot"
+    QString name;          // display name
+    QString description;
+    QString mime_type;     // default content type when handler doesn't override
+    ResourceHandler handler;
+};
+
+// ============================================================================
 // Unified Tool — merged view for consumers (Chat, Agents, Node Editor)
 // ============================================================================
 
