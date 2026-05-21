@@ -36,6 +36,10 @@ class McpClient : public McpClientBase {
     Result<QJsonObject> call_tool(const QString& name, const QJsonObject& args) override;
     Result<void> ping() override;
 
+    // MCP resources (Track 5 commit D)
+    Result<std::vector<ExternalResource>> list_resources() override;
+    Result<ResourceContent> read_resource(const QString& uri) override;
+
     const McpServerConfig& config() const override { return config_; }
 
     /// Returns captured stdout/stderr lines (last 500 lines).

@@ -113,6 +113,71 @@ Result<std::vector<ExternalTool>> McpHttpClient::list_tools() {
     return Result<std::vector<ExternalTool>>::ok(std::move(tools));
 }
 
+Result<std::vector<ExternalResource>> McpHttpClient::list_resources() {
+    auto r = send_request(QStringLiteral("resources/list"), {});
+    if (r.is_err())
+        return Result<std::vector<ExternalResource>>::err(r.error());
+
+    const QJsonArray arr = r.value().value("resources").toArray();
+    std::vector<ExternalResource> out;
+    out.reserve(static_cast<std::size_t>(arr.size()));
+    for (const auto& item : arr) {
+        const QJsonObject obj = item.toObject();
+        ExternalResource er;
+        er.server_id = config_.id;
+        er.uri = obj.value("uri").toString();
+        er.name = obj.value("name").toString();
+        er.description = obj.value("description").toString();
+        er.mime_type = obj.value("mimeType").toString();
+        out.push_back(std::move(er));
+    }
+    return Result<std::vector<ExternalResource>>::ok(std::move(out));
+}
+
+Result<ResourceContent> McpHttpClient::read_resource(const QString& uri) {
+    QJsonObject params;
+    params["uri"] = uri;
+    auto r = send_request(QStringLiteral("resources/read"), params);
+    if (r.is_err()) {
+        ResourceContent rc;
+        rc.uri = uri;
+        rc.error = QString::fromStdString(r.error());
+        return Result<ResourceContent>::ok(rc);
+    }
+
+    const QJsonArray contents = r.value().value("contents").toArray();
+    if (contents.isEmpty()) {
+        ResourceContent rc;
+        rc.uri = uri;
+        rc.error = "server returned empty contents";
+        return Result<ResourceContent>::ok(rc);
+    }
+    for (const auto& c : contents) {
+        const QJsonObject obj = c.toObject();
+        if (obj.contains("text")) {
+            ResourceContent rc;
+            rc.uri = obj.value("uri").toString(uri);
+            rc.mime_type = obj.value("mimeType").toString();
+            rc.text = obj.value("text").toString();
+            return Result<ResourceContent>::ok(rc);
+        }
+    }
+    for (const auto& c : contents) {
+        const QJsonObject obj = c.toObject();
+        if (obj.contains("blob")) {
+            ResourceContent rc;
+            rc.uri = obj.value("uri").toString(uri);
+            rc.mime_type = obj.value("mimeType").toString();
+            rc.blob = QByteArray::fromBase64(obj.value("blob").toString().toUtf8());
+            return Result<ResourceContent>::ok(rc);
+        }
+    }
+    ResourceContent rc;
+    rc.uri = uri;
+    rc.error = "server returned contents with no text or blob fields";
+    return Result<ResourceContent>::ok(rc);
+}
+
 Result<QJsonObject> McpHttpClient::call_tool(const QString& name, const QJsonObject& args) {
     QJsonObject params;
     params["name"] = name;

@@ -202,6 +202,80 @@ Result<std::vector<ExternalTool>> McpClient::list_tools() {
     return Result<std::vector<ExternalTool>>::ok(std::move(tools));
 }
 
+Result<std::vector<ExternalResource>> McpClient::list_resources() {
+    auto result = send_request("resources/list", {});
+    if (result.is_err())
+        return Result<std::vector<ExternalResource>>::err(result.error());
+
+    const QJsonObject& data = result.value();
+    const QJsonArray arr = data["resources"].toArray();
+
+    std::vector<ExternalResource> out;
+    out.reserve(static_cast<std::size_t>(arr.size()));
+    for (const auto& item : arr) {
+        const QJsonObject r = item.toObject();
+        ExternalResource er;
+        er.server_id = config_.id;
+        er.uri = r["uri"].toString();
+        er.name = r["name"].toString();
+        er.description = r["description"].toString();
+        // MCP spec uses mimeType (camelCase)
+        er.mime_type = r["mimeType"].toString();
+        out.push_back(std::move(er));
+    }
+    return Result<std::vector<ExternalResource>>::ok(std::move(out));
+}
+
+Result<ResourceContent> McpClient::read_resource(const QString& uri) {
+    QJsonObject params;
+    params["uri"] = uri;
+    auto result = send_request("resources/read", params);
+    if (result.is_err()) {
+        ResourceContent rc;
+        rc.uri = uri;
+        rc.error = QString::fromStdString(result.error());
+        return Result<ResourceContent>::ok(rc);
+    }
+
+    // MCP spec returns { contents: [{uri, mimeType, text|blob}] } — one
+    // resource per uri but the array is allowed to carry multiple
+    // representations.  We surface the first text-bearing block; if
+    // none, the first blob; else an error.
+    const QJsonObject& data = result.value();
+    const QJsonArray contents = data["contents"].toArray();
+    if (contents.isEmpty()) {
+        ResourceContent rc;
+        rc.uri = uri;
+        rc.error = "server returned empty contents";
+        return Result<ResourceContent>::ok(rc);
+    }
+
+    for (const auto& c : contents) {
+        const QJsonObject obj = c.toObject();
+        if (obj.contains("text")) {
+            ResourceContent rc;
+            rc.uri = obj.value("uri").toString(uri);
+            rc.mime_type = obj.value("mimeType").toString();
+            rc.text = obj.value("text").toString();
+            return Result<ResourceContent>::ok(rc);
+        }
+    }
+    for (const auto& c : contents) {
+        const QJsonObject obj = c.toObject();
+        if (obj.contains("blob")) {
+            ResourceContent rc;
+            rc.uri = obj.value("uri").toString(uri);
+            rc.mime_type = obj.value("mimeType").toString();
+            rc.blob = QByteArray::fromBase64(obj.value("blob").toString().toUtf8());
+            return Result<ResourceContent>::ok(rc);
+        }
+    }
+    ResourceContent rc;
+    rc.uri = uri;
+    rc.error = "server returned contents with no text or blob fields";
+    return Result<ResourceContent>::ok(rc);
+}
+
 Result<QJsonObject> McpClient::call_tool(const QString& name, const QJsonObject& args) {
     QJsonObject params;
     params["name"] = name;

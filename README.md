@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`2447805e`](https://github.com/yumima/finterm/commit/2447805e) mcp(watchlist+news+notes): resources for the four primary surfaces (Track 5 commit C)
 - [`54236b37`](https://github.com/yumima/finterm/commit/54236b37) mcp(portfolio): expose portfolio_snapshot resource (Track 5 commit B)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

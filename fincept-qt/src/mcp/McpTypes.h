@@ -348,6 +348,18 @@ struct ExternalTool {
     QJsonObject input_schema;
 };
 
+/// Wire-shape Resource — what we get back from `resources/list` against
+/// an external MCP server.  Differs from the internal `Resource` struct
+/// below: no handler closure, just metadata.  Content is fetched via
+/// `read_resource(uri)` which returns a `ResourceContent`.
+struct ExternalResource {
+    QString server_id;
+    QString uri;
+    QString name;
+    QString description;
+    QString mime_type;
+};
+
 // ============================================================================
 // Resource — typed, addressable read-only content (MCP spec)
 // ============================================================================

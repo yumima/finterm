@@ -81,6 +81,21 @@ class McpClientBase : public QObject {
     virtual Result<QJsonObject> call_tool(const QString& name, const QJsonObject& args) = 0;
     virtual Result<void> ping() = 0;
 
+    // Resources (MCP spec).  Servers that don't implement resources
+    // return an empty list / a method-not-found error which we surface
+    // unchanged.  Default implementations return empty / error so
+    // subclasses can opt out cheaply — but the stdio and HTTP clients
+    // shipped here both override with real RPC calls.
+    virtual Result<std::vector<ExternalResource>> list_resources() {
+        return Result<std::vector<ExternalResource>>::ok({});
+    }
+    virtual Result<ResourceContent> read_resource(const QString& uri) {
+        ResourceContent rc;
+        rc.uri = uri;
+        rc.error = "list_resources/read_resource not implemented by this transport";
+        return Result<ResourceContent>::ok(rc);
+    }
+
     virtual const McpServerConfig& config() const = 0;
 
     /// Returns captured stdout/stderr lines (stdio) or request/response
