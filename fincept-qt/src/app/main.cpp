@@ -24,6 +24,7 @@
 #include "python/PythonSetupManager.h"
 #include "python/PythonWorker.h"
 #include "screens/setup/SetupScreen.h"
+#include "services/agents/AgentScheduler.h"
 #include "services/agents/AgentService.h"
 #include "services/dbnomics/DBnomicsService.h"
 #include "services/economics/EconomicsService.h"
@@ -203,6 +204,9 @@ int main(int argc, char* argv[]) {
     fincept::services::ma::MAAnalyticsService::instance().ensure_registered_with_hub();
     // Phase 9: AgentService as agent:* push-only producer (output/stream/status/routing/error).
     fincept::services::AgentService::instance().ensure_registered_with_hub();
+    // Track 10: cron-shaped scheduler for agent runs.  Reads agent_schedule
+    // on each 60s tick; no-op until the user adds entries.
+    fincept::services::AgentScheduler::instance().start();
     // F&O: option:chain:* / option:tick:* fed by the active broker. OISnapshotter
     // subscribes to option:chain:* and persists per-minute OI snapshots for the
     // OI Buildup tab. FiiDiiService (upstream's India-specific FII/DII feed) is
@@ -363,6 +367,7 @@ int main(int argc, char* argv[]) {
     fincept::register_migration_v024();
     fincept::register_migration_v025();
     fincept::register_migration_v026();
+    fincept::register_migration_v027();
 
     // Open cache database (non-fatal if fails)
     QString cache_path = fincept::AppPaths::data() + "/cache.db";

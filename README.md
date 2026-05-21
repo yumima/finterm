@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`93f58392`](https://github.com/yumima/finterm/commit/93f58392) plans(status): Track 11 done — quant narrator + quant_critic
 - [`c3c95681`](https://github.com/yumima/finterm/commit/c3c95681) mcp(quant-narrator): tools + quant_critic agent identity (Track 11)
 - [`8bf477cc`](https://github.com/yumima/finterm/commit/8bf477cc) plans(status): Track 8 done — source prefixes + allowlists
 - [`00741864`](https://github.com/yumima/finterm/commit/00741864) mcp: per-agent allow_tools allowlists (Track 8 commit B)

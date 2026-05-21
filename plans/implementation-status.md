@@ -36,7 +36,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 7 | Skills + slash commands + agent identities | ⏸ pending | Vendoring + 10 named agents + slash dispatch |
 | 8 | Source-prefixed names + per-agent allowlists | ✅ done | A `98d256d9` (rename INTERNAL_SERVER_ID→"int"); B `00741864` (allow_tools globs) |
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
-| 10 | Background scheduler + hooks | ⏸ pending | Cron via Qt timer + SQLite queue |
+| 10 | Background scheduler + hooks | ⚠ partial | Core scheduler done (60s tick, `@daily HH:MM` / `@every Nm \| Nh`, anacron-style daily catch-up). UI + SDK hook registration deferred to Tracks 13 / 3 follow-up. |
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⏸ pending | Stop importing agno directly |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
@@ -83,8 +83,9 @@ tracks, so a new session can pick up without re-reading every commit.
 | v024 | `mcp_marketplace_seed` | Insert 9 marketplace MCP server rows (`enabled=0`) |
 | v025 | `mcp_http_transport` | `transport_type` + `base_url` + `auth_scheme` + `auth_header` columns on `mcp_servers` |
 | v026 | `quant_critic_agent` | Seed `agent_configs` row for quant_critic identity |
+| v027 | `agent_schedule` | Table for `AgentScheduler` cron entries (Track 10 core) |
 
-Future migrations should start at **v027**.
+Future migrations should start at **v028**.
 
 ---
 
@@ -102,6 +103,7 @@ Future migrations should start at **v027**.
 - `fincept-qt/src/storage/secure/LlmSecureKeys.{h,cpp}` — naming convention for SecureStorage
 - `fincept-qt/src/storage/repositories/LlmProfileRepository.{h,cpp}` — profile CRUD with `runtime` field
 - `fincept-qt/src/screens/dashboard/widgets/VideoPlayerWidget.{h,cpp}` — pause/resume + live-edge restart
+- `fincept-qt/src/services/agents/AgentScheduler.{h,cpp}` — Track 10 cron scheduler (`@daily`, `@every`); pure `parse_cron`/`is_due` for tests
 - `fincept-qt/src/screens/settings/LlmConfigSection.cpp` — providers dropdown (anthropic + ollama only)
 - `fincept-qt/src/screens/settings/VoiceConfigSection.cpp` — Whisper + Deepgram only
 - `fincept-qt/src/services/stt/SpeechService.cpp` — WhisperSttProvider (replaces Google SR)

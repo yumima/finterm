@@ -738,6 +738,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v024_mcp_marketplace_seed.cpp
     src/storage/sqlite/migrations/v025_mcp_http_transport.cpp
     src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
+    src/storage/sqlite/migrations/v027_agent_schedule.cpp
 )
 
 # Python runner
@@ -892,6 +893,7 @@ set(SERVICE_SOURCES
     src/services/options/StrategyTemplates.cpp
     src/services/economics/EconomicsService.cpp
     src/services/agents/AgentService.cpp
+    src/services/agents/AgentScheduler.cpp
     src/services/file_manager/FileManagerService.cpp
 
     # Wallet (Phase 1 — Solana wallet identity + balance display)
@@ -1801,6 +1803,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v024_mcp_marketplace_seed.cpp
     src/storage/sqlite/migrations/v025_mcp_http_transport.cpp
     src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
+    src/storage/sqlite/migrations/v027_agent_schedule.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
