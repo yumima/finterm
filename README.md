@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cb0044c6`](https://github.com/yumima/finterm/commit/cb0044c6) widgets(video): resume restarts at live edge, not stale segment
 - [`10a64465`](https://github.com/yumima/finterm/commit/10a64465) agents(runtimes): SKILL.md loading path into SDK (Track 3 #12)
 - [`98c08428`](https://github.com/yumima/finterm/commit/98c08428) agents(runtimes): StreamHandler — typed event bridge (Track 3 #13)
 - [`21e43750`](https://github.com/yumima/finterm/commit/21e43750) agents(runtimes): ToolBridge — McpService catalog → SDK MCP server (Track 3 #11)

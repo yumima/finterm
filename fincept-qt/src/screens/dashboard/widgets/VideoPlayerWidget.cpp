@@ -593,6 +593,11 @@ void VideoPlayerWidget::build_player_view() {
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::PlayingState)
                     play_in_progress_ = false;
+                // Record the pause moment so resume_playback() can pick
+                // between the cheap and the heavy recovery — both manual
+                // pause and lock-auto-pause flow through this signal.
+                if (s == QMediaPlayer::PausedState)
+                    paused_at_ = QDateTime::currentDateTime();
                 // Reflect state on the pause/play button. StoppedState falls
                 // through to "PAUSE" since the controls bar is hidden then
                 // anyway (stop_playback returns the user to the channel list).
@@ -621,34 +626,29 @@ void VideoPlayerWidget::build_player_view() {
     stack_->addWidget(player_page_); // page 1
 }
 
-// Resume from a paused live stream by restarting at the current live
-// edge — matches live-TV semantics where a "resume" is really a
-// "rejoin the broadcast now," not "play back the gap that built up
-// while paused."
+// Resume from a paused stream by picking the lightest correct
+// recovery for the situation:
 //
-// Why a full reset and not just setSource(same)?  Two real bugs
-// stack on a Qt6 FFmpeg + live-HLS combo:
+//   • Short pauses (<= kPauseLiveResetThresholdSec) and VOD sources
+//     use a setSource(same) workaround — rebuilds the decoder chain
+//     (fixes Qt6 FFmpeg's audio-sink detach on pause→play) without
+//     losing the buffered position or paying the ~1 s playlist
+//     re-fetch.
 //
-//   1. Audio-sink detach across pause→play (video frames resume,
-//      audio stays silent).  setSource(same) by itself rebuilds the
-//      decoder chain and reattaches audio.
+//   • Long pauses on the local trimming-proxy URL trigger a full
+//     reset (stop → clear source → re-set source → defensively
+//     re-attach outputs → play).  This is the only path that
+//     escapes the freeze where Qt tries to resume from a segment
+//     that has fallen out of the proxy's ~6-segment window — and
+//     it matches live-TV semantics ("rejoin the broadcast now"
+//     rather than "play back the gap").
 //
-//   2. The trimming proxy in front of YouTube's live playlists only
-//      keeps ~6 segments.  After a long pause, the segment Qt was
-//      reading from has fallen out of that window.  setSource(same)
-//      reloads the playlist but Qt remembers the old time cursor
-//      and tries to fetch a dead segment — the decoder hangs, the
-//      player appears frozen.
-//
-// The full reset (stop → clear source → re-set source → play) drops
-// the stale cursor.  After the second setSource(src) the player
-// starts at the live edge of the freshly-fetched playlist, which is
-// exactly what the user expects when they press PLAY on a live
-// stream.
-//
-// Cost: VOD position is also lost, but this widget is "LIVE TV /
-// STREAMS" first — live is the dominant case, and the alternative
-// for live is a frozen player.
+// The threshold is conservative: HLS segments are typically 5–10s,
+// the proxy keeps ~6, so the cursor can stay valid for ~30s in
+// theory.  In practice we go full-reset after 5s of pause on the
+// proxy URL — small enough that the user rarely runs into the
+// freeze, large enough that genuine "click PAUSE then immediately
+// click PLAY" stays on the cheap path.
 //
 // Contract: this helper *only* handles the Paused→Playing edge.  It
 // is a no-op on Stopped or Playing.  Callers that want different
@@ -666,12 +666,42 @@ void VideoPlayerWidget::resume_playback() {
         player_->play();
         return;
     }
-    // Order matters — without the explicit empty setSource() between
-    // stop() and setSource(src), Qt may treat the re-set as a seek
-    // and reuse the stale cursor.
-    player_->stop();
-    player_->setSource(QUrl{});
-    player_->setSource(src);
+
+    constexpr qint64 kPauseLiveResetThresholdSec = 5;
+    // LiveHlsProxy binds 127.0.0.1 but the player URL may be constructed
+    // with either the literal or the hostname depending on call site —
+    // accept both so we don't silently fall onto the cheap path for a
+    // local-proxy URL and risk the long-pause freeze.
+    const QString host = src.host();
+    const bool is_live_proxy =
+        host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost");
+    const qint64 elapsed_sec =
+        paused_at_.isValid() ? paused_at_.secsTo(QDateTime::currentDateTime()) : 0;
+    const bool needs_full_reset =
+        is_live_proxy && elapsed_sec > kPauseLiveResetThresholdSec;
+
+    if (needs_full_reset) {
+        // Order matters — without the explicit empty setSource() between
+        // stop() and setSource(src), Qt may treat the re-set as a seek
+        // and reuse the stale cursor.
+        player_->stop();
+        player_->setSource(QUrl{});
+        player_->setSource(src);
+        // Defensive output re-attach.  Per Qt docs setSource() shouldn't
+        // touch the configured outputs, but the Qt6 FFmpeg backend has
+        // been buggy enough on this surface that two no-op-when-already-
+        // attached calls are cheap insurance against the silent-video
+        // bug (07737672) regressing.
+        if (audio_output_)
+            player_->setAudioOutput(audio_output_);
+        if (video_sink_)
+            player_->setVideoOutput(video_sink_);
+    } else {
+        // Cheap path: rebuild decoder chain via setSource(same).  Fixes
+        // the audio-sink detach without losing the cursor or paying
+        // playlist re-fetch.
+        player_->setSource(src);
+    }
     player_->play();
 #endif
 }

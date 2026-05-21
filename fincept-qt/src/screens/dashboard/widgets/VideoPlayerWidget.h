@@ -1,6 +1,7 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
 
+#include <QDateTime>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProcess>
@@ -145,16 +146,16 @@ class VideoPlayerWidget : public BaseWidget {
     void build_channel_list();
     void populate_channel_rows();    // (re)fills channel_rows_layout_ from channels_
     void build_player_view();
-    /// Resume from Paused by restarting at the current live edge —
-    /// the live-TV "rejoin the broadcast now" model rather than
-    /// "replay the gap that built up while paused".  Full reset
-    /// (stop → clear source → re-set source → play) fixes both
-    /// the Qt6-FFmpeg audio-sink detach and the long-pause freeze
-    /// where Qt tries to resume from a segment that has since
-    /// fallen out of the trimming proxy's window.  **No-op on
-    /// Stopped or Playing** — callers that want PLAY-after-STOP
-    /// restart semantics handle that themselves so the unlock
-    /// auto-resume can be a one-liner that honors
+    /// Resume from Paused, picking the lightest correct recovery:
+    ///   - short pauses & VOD: setSource(same) rebuilds the decoder
+    ///     chain (Qt6 FFmpeg audio-detach fix) and keeps the cursor;
+    ///   - long pauses on the live-proxy URL: full reset (stop →
+    ///     clear source → re-set source → defensive output re-attach
+    ///     → play) lands at the live edge, since the buffered
+    ///     segment has rolled out of the proxy's window.
+    /// **No-op on Stopped or Playing** — callers that want
+    /// PLAY-after-STOP restart semantics handle that themselves so
+    /// the unlock auto-resume can be a one-liner that honors
     /// `auto_paused_on_lock_`'s "only resume if still paused"
     /// contract.
     void resume_playback();
@@ -239,6 +240,13 @@ class VideoPlayerWidget : public BaseWidget {
     /// follow-up unlock can resume only when we'd been the ones to pause it
     /// — never resume a user-initiated pause.
     bool                 auto_paused_on_lock_      = false;
+    /// Recorded by the playbackStateChanged lambda whenever the player
+    /// enters PausedState (manual or auto).  resume_playback() compares
+    /// this against now to pick between the cheap setSource(same)
+    /// workaround (short pauses, VOD) and the full reset (long pauses
+    /// on the live-proxy URL where the buffered segment has rolled out
+    /// of the proxy's window).
+    QDateTime            paused_at_;
 
     QVector<ChannelDef> channels_;
 
