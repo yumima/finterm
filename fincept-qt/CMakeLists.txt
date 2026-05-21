@@ -737,6 +737,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v023_llm_profile_runtime.cpp
     src/storage/sqlite/migrations/v024_mcp_marketplace_seed.cpp
     src/storage/sqlite/migrations/v025_mcp_http_transport.cpp
+    src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
 )
 
 # Python runner
@@ -778,6 +779,7 @@ set(MCP_SOURCES
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/EdgarTools.cpp
     src/mcp/tools/FinancialDatasetsTools.cpp
+    src/mcp/tools/QuantNarratorTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
@@ -1798,6 +1800,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v023_llm_profile_runtime.cpp
     src/storage/sqlite/migrations/v024_mcp_marketplace_seed.cpp
     src/storage/sqlite/migrations/v025_mcp_http_transport.cpp
+    src/storage/sqlite/migrations/v026_quant_critic_agent.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1864,6 +1867,7 @@ set_source_files_properties(
     src/mcp/tools/PaperTradingTools.cpp
     src/mcp/tools/EdgarTools.cpp
     src/mcp/tools/FinancialDatasetsTools.cpp
+    src/mcp/tools/QuantNarratorTools.cpp
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp

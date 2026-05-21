@@ -21,6 +21,7 @@
 #include "mcp/tools/DataSourcesTools.h"
 #include "mcp/tools/EdgarTools.h"
 #include "mcp/tools/FinancialDatasetsTools.h"
+#include "mcp/tools/QuantNarratorTools.h"
 #include "mcp/tools/FileManagerTools.h"
 #include "mcp/tools/ForumTools.h"
 #include "mcp/tools/MAAnalyticsTools.h"
@@ -140,6 +141,9 @@ void initialize_all_tools() {
 
     // ai_quant_lab — factor models, backtests, attribution
     provider.register_tools(tools::get_quant_lab_tools());
+
+    // quant narrator — LLM-driven commentary on backtests + trades (Track 11)
+    provider.register_tools(tools::get_quant_narrator_tools());
 
     // surface analytics — options vol surface (Databento-backed)
     provider.register_tools(tools::get_surface_analytics_tools());

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`8bf477cc`](https://github.com/yumima/finterm/commit/8bf477cc) plans(status): Track 8 done — source prefixes + allowlists
 - [`00741864`](https://github.com/yumima/finterm/commit/00741864) mcp: per-agent allow_tools allowlists (Track 8 commit B)
 - [`98d256d9`](https://github.com/yumima/finterm/commit/98d256d9) mcp: rename INTERNAL_SERVER_ID to "int" (Track 8 commit A)
 - [`42fdf5f6`](https://github.com/yumima/finterm/commit/42fdf5f6) plans(status): Track 6 done — FinancialDatasetsTools committed
