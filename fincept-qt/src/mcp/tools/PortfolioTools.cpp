@@ -1,4 +1,4 @@
-// PortfolioTools.cpp — Portfolio tab MCP tools
+// PortfolioTools.cpp — Portfolio tab MCP tools + resources
 // Merges flat holdings (PortfolioHoldingsRepository) + full CRUD (PortfolioRepository)
 
 #include "mcp/tools/PortfolioTools.h"
@@ -6,6 +6,9 @@
 #include "core/logging/Logger.h"
 #include "storage/repositories/PortfolioHoldingsRepository.h"
 #include "storage/repositories/PortfolioRepository.h"
+
+#include <QDateTime>
+#include <QJsonDocument>
 
 namespace fincept::mcp::tools {
 
@@ -476,6 +479,67 @@ std::vector<ToolDef> get_portfolio_tools() {
     }
 
     return tools;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Resources
+// ════════════════════════════════════════════════════════════════════
+//
+// portfolio_snapshot — the current flat-holdings view, addressable by
+// uri so an agent can read it cheaply (no tool-call turn) at the start
+// of a turn that needs portfolio context.  Content mirrors the
+// `get_holdings` tool's payload plus a snapshot timestamp; the tool
+// version is preserved for cases where the agent wants to write or
+// drive a follow-up flow.
+
+std::vector<Resource> get_portfolio_resources() {
+    std::vector<Resource> resources;
+
+    {
+        Resource r;
+        r.uri = QStringLiteral("finterm://portfolio/snapshot");
+        r.name = QStringLiteral("Portfolio snapshot");
+        r.description = QStringLiteral(
+            "Current portfolio holdings — symbol, name, shares, avg cost — "
+            "with a snapshot timestamp.  Read this at the start of a turn "
+            "that needs portfolio context instead of calling get_holdings.");
+        r.mime_type = QStringLiteral("application/json");
+        r.handler = []() -> ResourceContent {
+            ResourceContent rc;
+            rc.uri = QStringLiteral("finterm://portfolio/snapshot");
+            rc.mime_type = QStringLiteral("application/json");
+
+            auto result = PortfolioHoldingsRepository::instance().get_active();
+            if (result.is_err()) {
+                rc.error = "Failed to load holdings: " +
+                           QString::fromStdString(result.error());
+                return rc;
+            }
+
+            QJsonArray arr;
+            for (const auto& h : result.value()) {
+                arr.append(QJsonObject{{"id", h.id},
+                                       {"symbol", h.symbol},
+                                       {"name", h.name},
+                                       {"shares", h.shares},
+                                       {"avg_cost", h.avg_cost},
+                                       {"added_at", h.added_at},
+                                       {"updated_at", h.updated_at}});
+            }
+
+            QJsonObject envelope{
+                {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                {"holdings_count", arr.size()},
+                {"holdings", arr},
+            };
+            rc.text =
+                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            return rc;
+        };
+        resources.push_back(std::move(r));
+    }
+
+    return resources;
 }
 
 } // namespace fincept::mcp::tools

@@ -57,6 +57,11 @@ void initialize_all_tools() {
 
     // portfolio tab (holdings + named portfolios/assets/transactions/snapshots)
     provider.register_tools(tools::get_portfolio_tools());
+    // Resources for the portfolio surface — first migration under
+    // Track 5 / R8.  Agents read finterm://portfolio/snapshot to pick
+    // up holdings without spending tool-call budget per turn.
+    for (auto& res : tools::get_portfolio_resources())
+        provider.register_resource(std::move(res));
 
     // notes tab
     provider.register_tools(tools::get_notes_tools());

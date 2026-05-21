@@ -2,38 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-20)
+## Today's commits (2026-05-21)
 
 Latest first.
 
-- [`bf04cd22`](https://github.com/yumima/finterm/commit/bf04cd22) mcp: McpHttpClient — JSON-RPC over HTTP transport (Track 4 #14a)
-- [`417545db`](https://github.com/yumima/finterm/commit/417545db) storage(mcp): HTTP-transport columns on mcp_servers (Track 4 #14a part 2)
-- [`721cc5bf`](https://github.com/yumima/finterm/commit/721cc5bf) mcp: McpClientBase — pure-interface base for transport polymorphism
-- [`ddf442f5`](https://github.com/yumima/finterm/commit/ddf442f5) storage(mcp): seed marketplace MCP servers (Track 4 #15)
-- [`6be58f76`](https://github.com/yumima/finterm/commit/6be58f76) widgets(video): gate full-reset resume on live-proxy host + elapsed
-- [`cb0044c6`](https://github.com/yumima/finterm/commit/cb0044c6) widgets(video): resume restarts at live edge, not stale segment
-- [`10a64465`](https://github.com/yumima/finterm/commit/10a64465) agents(runtimes): SKILL.md loading path into SDK (Track 3 #12)
-- [`98c08428`](https://github.com/yumima/finterm/commit/98c08428) agents(runtimes): StreamHandler — typed event bridge (Track 3 #13)
-- [`21e43750`](https://github.com/yumima/finterm/commit/21e43750) agents(runtimes): ToolBridge — McpService catalog → SDK MCP server (Track 3 #11)
-- [`8728ccc6`](https://github.com/yumima/finterm/commit/8728ccc6) storage(llm-profiles): first-class runtime field (Track 3 #10)
-- [`52b1612b`](https://github.com/yumima/finterm/commit/52b1612b) widgets(video): tighten resume_playback() to Paused-only edge
-- [`4b95aee2`](https://github.com/yumima/finterm/commit/4b95aee2) agents(runtimes): claude-agent-sdk integration shell (Track 3 #9)
-- [`07737672`](https://github.com/yumima/finterm/commit/07737672) widgets(video): fix audio loss on manual pause→play (Qt6 FFmpeg)
-- [`32386deb`](https://github.com/yumima/finterm/commit/32386deb) plans(track-15): both sub-surfaces render on the same screen
-- [`4ad27d31`](https://github.com/yumima/finterm/commit/4ad27d31) plans(track-15): split forum into open feed + closed rooms
-- [`f854d7c1`](https://github.com/yumima/finterm/commit/f854d7c1) plans: add Track 15 — replace dead forum with Reddit RSS
-- [`25b2605a`](https://github.com/yumima/finterm/commit/25b2605a) voice(stt): swap Google SR for local Whisper (R15)
-- [`38b20e31`](https://github.com/yumima/finterm/commit/38b20e31) ai_chat(llm): retire Fincept hosted endpoint (R17)
-- [`ed4ad1b5`](https://github.com/yumima/finterm/commit/ed4ad1b5) storage(llm): move api_key columns to SecureStorage (R16)
-- [`108596c9`](https://github.com/yumima/finterm/commit/108596c9) evals: Track 0 testing scaffold
-- [`04496d5f`](https://github.com/yumima/finterm/commit/04496d5f) plans: add testing strategy; weave Track 0 + UX into ai-stack plan
-- [`3d316b4e`](https://github.com/yumima/finterm/commit/3d316b4e) **docs:** move design plans from fincept-qt/docs/design to repo-root plans/
-- [`f99935d1`](https://github.com/yumima/finterm/commit/f99935d1) **docs(ai-stack):** apply review fixes; add local AI engine vision doc
-- [`67a3a19c`](https://github.com/yumima/finterm/commit/67a3a19c) **docs(ai-stack):** rewrite as two-runtime architecture (local + Anthropic)
-- [`a3ed86db`](https://github.com/yumima/finterm/commit/a3ed86db) **docs(design):** memo on Qt + FFmpeg hwaccel — findings and viable paths
-- [`a1dde05a`](https://github.com/yumima/finterm/commit/a1dde05a) storage(sqlite): guard Database::{execute,exec,begin,commit,rollback} on closed db
-- [`3ea4340a`](https://github.com/yumima/finterm/commit/3ea4340a) **docs(ai-stack):** consolidate plan + audit + architecture into one current-state doc
-- [`ceec359b`](https://github.com/yumima/finterm/commit/ceec359b) widgets(video): remove one-shot scaler telemetry — investigation closed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
