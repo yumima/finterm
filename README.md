@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`10a64465`](https://github.com/yumima/finterm/commit/10a64465) agents(runtimes): SKILL.md loading path into SDK (Track 3 #12)
 - [`98c08428`](https://github.com/yumima/finterm/commit/98c08428) agents(runtimes): StreamHandler — typed event bridge (Track 3 #13)
 - [`21e43750`](https://github.com/yumima/finterm/commit/21e43750) agents(runtimes): ToolBridge — McpService catalog → SDK MCP server (Track 3 #11)
 - [`8728ccc6`](https://github.com/yumima/finterm/commit/8728ccc6) storage(llm-profiles): first-class runtime field (Track 3 #10)

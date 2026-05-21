@@ -145,13 +145,18 @@ class VideoPlayerWidget : public BaseWidget {
     void build_channel_list();
     void populate_channel_rows();    // (re)fills channel_rows_layout_ from channels_
     void build_player_view();
-    /// Apply the Qt6-FFmpeg audio-detach workaround on the
-    /// Paused→Playing edge: re-set the current source (rebuilds the
-    /// decoder chain so the audio sink reattaches), then play().
-    /// **No-op on Stopped or Playing** — callers that need
-    /// PLAY-after-STOP restart semantics handle that themselves so the
-    /// unlock auto-resume can be a one-liner that honors
-    /// `auto_paused_on_lock_`'s "only resume if still paused" contract.
+    /// Resume from Paused by restarting at the current live edge —
+    /// the live-TV "rejoin the broadcast now" model rather than
+    /// "replay the gap that built up while paused".  Full reset
+    /// (stop → clear source → re-set source → play) fixes both
+    /// the Qt6-FFmpeg audio-sink detach and the long-pause freeze
+    /// where Qt tries to resume from a segment that has since
+    /// fallen out of the trimming proxy's window.  **No-op on
+    /// Stopped or Playing** — callers that want PLAY-after-STOP
+    /// restart semantics handle that themselves so the unlock
+    /// auto-resume can be a one-liner that honors
+    /// `auto_paused_on_lock_`'s "only resume if still paused"
+    /// contract.
     void resume_playback();
     void play_url(const QString& url, const QString& title);
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);

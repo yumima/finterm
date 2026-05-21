@@ -621,32 +621,57 @@ void VideoPlayerWidget::build_player_view() {
     stack_->addWidget(player_page_); // page 1
 }
 
-// Qt6's FFmpeg multimedia backend detaches the audio sink across some
-// pause→play transitions — bare player_->play() resumes video frames
-// but the audio output stays silent.  This shows up reliably on live
-// HLS (the proxy's segment window has rolled past our buffered
-// position during the pause) and intermittently on VOD.
+// Resume from a paused live stream by restarting at the current live
+// edge — matches live-TV semantics where a "resume" is really a
+// "rejoin the broadcast now," not "play back the gap that built up
+// while paused."
 //
-// Reproducible workaround: re-set the same source before play(), which
-// rebuilds the decoder chain and re-attaches it to audio_output_.  The
-// cost is a brief re-buffer (~1 s); the alternative is silent video,
-// which is worse.  Tracked alongside the broader Qt + FFmpeg hwaccel
-// memo at plans/qt-ffmpeg-hwaccel-memo.md.
+// Why a full reset and not just setSource(same)?  Two real bugs
+// stack on a Qt6 FFmpeg + live-HLS combo:
+//
+//   1. Audio-sink detach across pause→play (video frames resume,
+//      audio stays silent).  setSource(same) by itself rebuilds the
+//      decoder chain and reattaches audio.
+//
+//   2. The trimming proxy in front of YouTube's live playlists only
+//      keeps ~6 segments.  After a long pause, the segment Qt was
+//      reading from has fallen out of that window.  setSource(same)
+//      reloads the playlist but Qt remembers the old time cursor
+//      and tries to fetch a dead segment — the decoder hangs, the
+//      player appears frozen.
+//
+// The full reset (stop → clear source → re-set source → play) drops
+// the stale cursor.  After the second setSource(src) the player
+// starts at the live edge of the freshly-fetched playlist, which is
+// exactly what the user expects when they press PLAY on a live
+// stream.
+//
+// Cost: VOD position is also lost, but this widget is "LIVE TV /
+// STREAMS" first — live is the dominant case, and the alternative
+// for live is a frozen player.
 //
 // Contract: this helper *only* handles the Paused→Playing edge.  It
 // is a no-op on Stopped or Playing.  Callers that want different
 // behavior on Stopped (e.g. PLAY-after-STOP restart) handle that
 // themselves — keeping this helper single-purpose lets the unlock
 // auto-resume be a one-liner with the right safety semantics
-// (auto_paused_on_lock_ contract: "we paused it; resume only if it's
-// still paused; otherwise leave alone").
+// (auto_paused_on_lock_ contract: "we paused it; resume only if
+// it's still paused; otherwise leave alone").
 void VideoPlayerWidget::resume_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     if (!player_ || player_->playbackState() != QMediaPlayer::PausedState)
         return;
     const QUrl src = player_->source();
-    if (src.isValid())
-        player_->setSource(src);
+    if (!src.isValid()) {
+        player_->play();
+        return;
+    }
+    // Order matters — without the explicit empty setSource() between
+    // stop() and setSource(src), Qt may treat the re-set as a seek
+    // and reuse the stale cursor.
+    player_->stop();
+    player_->setSource(QUrl{});
+    player_->setSource(src);
     player_->play();
 #endif
 }
