@@ -22,7 +22,12 @@ Track 3 item 13 — streaming events:
   forwards events as Qt signals to the chat surface.
 - ThinkingBlock content now lands in trace.thinking (was dropped).
 
-Later: SKILL.md loading (item 12).
+Track 3 item 12 — SKILL.md loading:
+- fixture.input.skills_loaded names flow into ClaudeAgentOptions
+  .skills after being filtered through skills_loader.resolve_skills
+  (drops unknown names rather than letting them confuse the SDK).
+- Track 7 vendors the actual SKILL.md content; until then the
+  resolution returns [] and the SDK option is omitted.
 """
 from __future__ import annotations
 
@@ -32,6 +37,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .mcp_bridge import EmptyToolBridge, ToolBridge, build_sdk_mcp_server
+from .skills_loader import list_available_skills, resolve_skills
 from .stream_handler import NoopStreamHandler, StreamHandler
 
 if TYPE_CHECKING:
@@ -111,9 +117,17 @@ async def _run_async(
     if sdk_server is not None:
         mcp_servers["finterm"] = sdk_server
 
+    # Filter the fixture's requested skills to only ones we can
+    # actually serve — keeps the SDK from logging warnings about
+    # unknown skill names.  Empty list collapses to no option set.
+    available = list_available_skills()
+    skills = resolve_skills(list(fixture.input.skills_loaded), available)
+
     options_kwargs: dict = {"max_turns": fixture.expected.trace.max_iterations or 10}
     if mcp_servers:
         options_kwargs["mcp_servers"] = mcp_servers
+    if skills:
+        options_kwargs["skills"] = skills
     options = ClaudeAgentOptions(**options_kwargs)
 
     try:
