@@ -32,7 +32,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 4.14b | OAuth 2.0 + DCR | ⏸ pending | Reserved as `auth_scheme='oauth'`; rejected by McpHttpClient |
 | 4.15 | Marketplace seed (9 servers) | ✅ done | v024 migration; `enabled=0` by default |
 | 5.A–J | Full MCP spec on internal servers | ✅ done | See "Track 5 detail" below |
-| 6 | `FinancialDatasetsTools` internal MCP | 🚧 in progress | 6 tools wrapping REST endpoints |
+| 6 | `FinancialDatasetsTools` internal MCP | ✅ done | 6 tools wrapping REST endpoints; commit `32f1927a` |
 | 7 | Skills + slash commands + agent identities | ⏸ pending | Vendoring + 10 named agents + slash dispatch |
 | 8 | Source-prefixed names + per-agent allowlists | ⏸ pending | `fd:`/`int:`/`ext:` prefixes + `allow_tools` |
 | 9 | Memory + sqlite-vec + MemoryTools | ⏸ pending | Embeddings dependency (Track 1#4 / Engine M1) |
@@ -96,7 +96,8 @@ Future migrations should start at **v026**.
 - `fincept-qt/src/mcp/McpHttpClient.{h,cpp}` — HTTP JSON-RPC client (static auth)
 - `fincept-qt/src/mcp/McpManager.{h,cpp}` — transport dispatch + lifecycle
 - `fincept-qt/src/mcp/McpTypes.h` — `Resource`, `Prompt`, `LogLevel`, `SampleRequest/Response`, `ElicitRequest/Response`, `ToolContext`
-- `fincept-qt/src/mcp/tools/*.cpp` — 31 tool families; resources on Portfolio/Watchlist/News/Notes; prompts on Notes
+- `fincept-qt/src/mcp/tools/*.cpp` — 32 tool families (was 31, +FinancialDatasetsTools); resources on Portfolio/Watchlist/News/Notes; prompts on Notes
+- `fincept-qt/src/mcp/tools/FinancialDatasetsTools.{h,cpp}` — Track 6; 6 REST-only tools; API key in SecureStorage under `mcp.tools.financial-datasets`
 - `fincept-qt/src/storage/secure/LlmSecureKeys.{h,cpp}` — naming convention for SecureStorage
 - `fincept-qt/src/storage/repositories/LlmProfileRepository.{h,cpp}` — profile CRUD with `runtime` field
 - `fincept-qt/src/screens/dashboard/widgets/VideoPlayerWidget.{h,cpp}` — pause/resume + live-edge restart
