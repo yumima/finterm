@@ -895,6 +895,7 @@ set(SERVICE_SOURCES
     src/services/economics/EconomicsService.cpp
     src/services/agents/AgentService.cpp
     src/services/agents/AgentScheduler.cpp
+    src/services/agents/SlashCommandService.cpp
     src/services/file_manager/FileManagerService.cpp
 
     # Wallet (Phase 1 — Solana wallet identity + balance display)
