@@ -372,6 +372,54 @@ struct ExternalResource {
 // Dynamic resources (e.g., portfolio_snapshot) build the content fresh
 // on each read; static resources can cache.
 
+// ============================================================================
+// Prompts — MCP spec templated prompts surfaced in the slash menu
+// ============================================================================
+//
+// A Prompt is a named, user-invokable template that produces one or
+// more chat messages.  The model never sees prompts directly — the
+// user picks a prompt from the slash menu (`/daily-brief`), supplies
+// the named arguments, the server expands the template, and finterm
+// injects the resulting messages into the next turn.
+//
+// In finterm: matches Track 5 / Track 7 — slash commands resolve to
+// `(agent, skill, args)` tuples; prompts are the MCP-spec channel
+// for surfacing those resolutions to the model.
+
+struct PromptArgument {
+    QString name;        // e.g. "date", "ticker"
+    QString description;
+    bool required = false;
+};
+
+/// Message emitted by a prompt expansion.  Role is "system" | "user" |
+/// "assistant" (matches MCP spec).  Content is plain text in the v1
+/// surface; richer content types (image, tool-result) deferred.
+struct PromptMessage {
+    QString role;        // "system" | "user" | "assistant"
+    QString text;
+};
+
+/// Result of expanding a prompt template — list of messages to feed
+/// into the next chat turn.
+struct PromptResult {
+    QString description;          // optional human-readable description
+    std::vector<PromptMessage> messages;
+    QString error;                // empty on success
+};
+
+/// Handler invoked by McpProvider::get_prompt.  Receives the user-
+/// supplied argument map (string→string).  Synchronous; expected to
+/// be fast (template expansion + maybe a repository read).
+using PromptHandler = std::function<PromptResult(const QHash<QString, QString>&)>;
+
+struct Prompt {
+    QString name;        // user-visible identifier (slash-command stem)
+    QString description;
+    std::vector<PromptArgument> arguments;
+    PromptHandler handler;
+};
+
 /// Result returned by a resource handler.
 struct ResourceContent {
     QString uri;

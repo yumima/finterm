@@ -71,6 +71,8 @@ void initialize_all_tools() {
     provider.register_tools(tools::get_notes_tools());
     for (auto& res : tools::get_notes_resources())
         provider.register_resource(std::move(res));
+    for (auto& pr : tools::get_notes_prompts())
+        provider.register_prompt(std::move(pr));
 
     // ai chat tab
     provider.register_tools(tools::get_ai_chat_tools());

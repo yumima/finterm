@@ -63,6 +63,25 @@ class McpProvider {
 
     bool has_resource(const QString& uri) const;
 
+    // ── Prompt Registration (MCP spec prompts) ─────────────────────────────
+
+    /// Register a templated prompt — user-invokable from the slash menu,
+    /// expanded by the handler into chat messages.  See Track 5 / R8 and
+    /// Track 7's slash-command dispatch.
+    void register_prompt(Prompt prompt);
+    void unregister_prompt(const QString& name);
+
+    /// All registered prompts, ordered by name.
+    std::vector<Prompt> list_prompts() const;
+
+    /// Invoke the prompt handler with a user-supplied argument map.
+    /// Returns a PromptResult; `error` is set when the name is unknown
+    /// or the handler fails.  Mutex released before calling the handler
+    /// (same pattern as read_resource / call_tool).
+    PromptResult get_prompt(const QString& name, const QHash<QString, QString>& args);
+
+    bool has_prompt(const QString& name) const;
+
     // ── Tool Execution ─────────────────────────────────────────────────────
 
     /// Synchronous entry. Dispatches to whichever shape the ToolDef has set
@@ -120,6 +139,7 @@ class McpProvider {
     QHash<QString, ToolDef> tools_;
     QSet<QString> disabled_tools_;
     QHash<QString, Resource> resources_;
+    QHash<QString, Prompt> prompts_;
     quint64 generation_ = 0;
     AuthChecker auth_checker_;
 };

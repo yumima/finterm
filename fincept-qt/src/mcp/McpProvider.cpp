@@ -116,6 +116,59 @@ bool McpProvider::has_resource(const QString& uri) const {
 }
 
 // ============================================================================
+// Prompts (MCP spec prompts)
+// ============================================================================
+
+void McpProvider::register_prompt(Prompt prompt) {
+    QMutexLocker lock(&mutex_);
+    QString name = prompt.name;
+    prompts_.insert(name, std::move(prompt));
+    ++generation_;
+}
+
+void McpProvider::unregister_prompt(const QString& name) {
+    QMutexLocker lock(&mutex_);
+    prompts_.remove(name);
+    ++generation_;
+}
+
+std::vector<Prompt> McpProvider::list_prompts() const {
+    QMutexLocker lock(&mutex_);
+    std::vector<Prompt> result;
+    result.reserve(static_cast<std::size_t>(prompts_.size()));
+    for (auto it = prompts_.cbegin(); it != prompts_.cend(); ++it)
+        result.push_back(it.value());
+    std::sort(result.begin(), result.end(),
+              [](const Prompt& a, const Prompt& b) { return a.name < b.name; });
+    return result;
+}
+
+PromptResult McpProvider::get_prompt(const QString& name, const QHash<QString, QString>& args) {
+    PromptHandler handler;
+    {
+        QMutexLocker lock(&mutex_);
+        auto it = prompts_.constFind(name);
+        if (it == prompts_.cend()) {
+            PromptResult r;
+            r.error = "unknown prompt: " + name;
+            return r;
+        }
+        handler = it.value().handler;
+    }
+    if (!handler) {
+        PromptResult r;
+        r.error = "prompt has no handler: " + name;
+        return r;
+    }
+    return handler(args);
+}
+
+bool McpProvider::has_prompt(const QString& name) const {
+    QMutexLocker lock(&mutex_);
+    return prompts_.contains(name);
+}
+
+// ============================================================================
 // Enable / Disable
 // ============================================================================
 

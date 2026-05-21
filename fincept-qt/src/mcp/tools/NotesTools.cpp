@@ -212,4 +212,71 @@ std::vector<Resource> get_notes_resources() {
     return resources;
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Prompts
+// ════════════════════════════════════════════════════════════════════
+//
+// daily_brief — user-invokable from the slash menu; expands into a
+// short system + user message pair that asks the agent to draft a
+// morning brief covering portfolio, watchlist, and a one-paragraph
+// digest of the user's active thesis notes.  Uses the finterm://
+// resources (portfolio_snapshot, watchlist/all, news/digest,
+// notes/active_thesis) — the agent can read those directly without
+// spending tool-call budget.
+
+std::vector<Prompt> get_notes_prompts() {
+    std::vector<Prompt> prompts;
+
+    {
+        Prompt p;
+        p.name = QStringLiteral("daily_brief");
+        p.description = QStringLiteral(
+            "Draft a morning brief: portfolio summary, watchlist moves, "
+            "headline news digest, and a one-paragraph synthesis of the "
+            "user's active thesis notes.");
+        p.arguments = {
+            {QStringLiteral("focus"),
+             QStringLiteral(
+                 "Optional focus area — e.g. 'risk', 'macro', 'AAPL'.  "
+                 "Defaults to a general portfolio + market brief."),
+             /*required=*/false},
+        };
+        p.handler = [](const QHash<QString, QString>& args) -> PromptResult {
+            PromptResult r;
+            r.description = QStringLiteral("Daily brief draft");
+
+            const QString focus = args.value(QStringLiteral("focus")).trimmed();
+            const QString focus_clause = focus.isEmpty()
+                ? QStringLiteral("a general portfolio + market view")
+                : QStringLiteral("a focus on %1").arg(focus);
+
+            PromptMessage sys;
+            sys.role = QStringLiteral("system");
+            sys.text = QStringLiteral(
+                "You are drafting the user's daily morning brief.  Pull "
+                "context from the finterm:// resources before writing:\n"
+                "  - finterm://portfolio/snapshot   current holdings\n"
+                "  - finterm://watchlist/all        watched symbols\n"
+                "  - finterm://news/digest          last 24h news\n"
+                "  - finterm://notes/active_thesis  the user's thinking\n"
+                "Write four short sections (Portfolio / Watchlist / News / "
+                "Thesis synthesis), <= 60 words each.  Cite sources from "
+                "the news digest where claims rest on a specific article.");
+            r.messages.push_back(std::move(sys));
+
+            PromptMessage user;
+            user.role = QStringLiteral("user");
+            user.text = QStringLiteral(
+                "Draft my morning brief with %1.  Skip preamble; start "
+                "directly with the Portfolio section.").arg(focus_clause);
+            r.messages.push_back(std::move(user));
+
+            return r;
+        };
+        prompts.push_back(std::move(p));
+    }
+
+    return prompts;
+}
+
 } // namespace fincept::mcp::tools
