@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`20f4caba`](https://github.com/yumima/finterm/commit/20f4caba) video(spotify): accept Spotify show/episode/playlist embeds
 - [`91ad30df`](https://github.com/yumima/finterm/commit/91ad30df) mcp: wire-level prompts/list + prompts/get on McpClientBase
 - [`fed8519c`](https://github.com/yumima/finterm/commit/fed8519c) runtime(local): OpenAI-style tool-use loop
 - [`901655a9`](https://github.com/yumima/finterm/commit/901655a9) mcp(memory): memory_delete tool

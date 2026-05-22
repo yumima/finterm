@@ -67,6 +67,37 @@ class ResourceContentData:
     error: str = ""
 
 
+@dataclass(frozen=True)
+class PromptArgDef:
+    """One named argument on a prompt template."""
+    name: str
+    description: str = ""
+    required: bool = False
+
+
+@dataclass(frozen=True)
+class PromptDef:
+    """One MCP prompt's catalog metadata (no expansion — done via bridge)."""
+    name: str
+    description: str = ""
+    arguments: tuple[PromptArgDef, ...] = ()
+
+
+@dataclass(frozen=True)
+class PromptMessageData:
+    """One message in an expanded prompt."""
+    role: str          # "system" | "user" | "assistant"
+    text: str
+
+
+@dataclass(frozen=True)
+class PromptResultData:
+    """Result of expanding a prompt template through the bridge."""
+    description: str = ""
+    messages: tuple[PromptMessageData, ...] = ()
+    error: str = ""
+
+
 @runtime_checkable
 class ToolBridge(Protocol):
     """Catalog + invocation surface between the SDK and McpService."""
@@ -101,6 +132,22 @@ class ToolBridge(Protocol):
         McpProvider::read_resource() or the McpClientBase wire call.
         """
         return ResourceContentData(uri=uri, error=f"unknown resource: {uri}")
+
+    def list_prompts(self, agent_id: str) -> list[PromptDef]:
+        """Return the prompt catalog visible to this agent.
+
+        Defaults to empty.  Production wires through to
+        McpProvider::list_prompts() + the McpClientBase wire call.
+        """
+        return []
+
+    async def get_prompt(self, name: str, args: dict[str, str]) -> PromptResultData:
+        """Expand a prompt template by name + arguments.
+
+        Defaults to an unknown-name error; production wires through to
+        McpProvider::get_prompt() or the McpClientBase wire call.
+        """
+        return PromptResultData(error=f"unknown prompt: {name}")
 
 
 class EmptyToolBridge:
@@ -152,11 +199,13 @@ def build_sdk_mcp_server(
 
     tool_defs = bridge.list_tools(agent_id)
     # ToolBridge is a structural Protocol — implementations may pre-date
-    # the resources surface and not define list_resources/read_resource.
-    # Treat absence as "no resources" rather than failing.
+    # the resources / prompts surfaces.  Treat absence as "no entries"
+    # rather than failing.
     list_resources_fn = getattr(bridge, "list_resources", None)
     resource_defs = list_resources_fn(agent_id) if list_resources_fn else []
-    if not tool_defs and not resource_defs:
+    list_prompts_fn = getattr(bridge, "list_prompts", None)
+    prompt_defs = list_prompts_fn(agent_id) if list_prompts_fn else []
+    if not tool_defs and not resource_defs and not prompt_defs:
         return None
 
     sdk_tools = [_wrap_tool(td, bridge, tool) for td in tool_defs]
@@ -166,6 +215,8 @@ def build_sdk_mcp_server(
 
     if resource_defs:
         _attach_resources(config, resource_defs, bridge)
+    if prompt_defs:
+        _attach_prompts(config, prompt_defs, bridge)
 
     return config
 
@@ -229,6 +280,62 @@ def _attach_resources(config, resource_defs: list[ResourceDef], bridge: ToolBrid
             content=content.text,
             mime_type=content.mime_type or "text/plain",
         )]
+
+
+def _attach_prompts(config, prompt_defs: list[PromptDef], bridge: ToolBridge) -> None:
+    """Register list_prompts + get_prompt handlers on the SDK server's
+    underlying mcp.server.lowlevel.Server instance.
+
+    Mirrors `_attach_resources` — reaches into the lowlevel server to
+    use the `@server.list_prompts()` + `@server.get_prompt()`
+    decorators, since the SDK's `create_sdk_mcp_server` wrapper only
+    accepts `tools=`.
+    """
+    from mcp import types as mcp_types
+
+    mcp_server = dict(config).get("instance")
+    if mcp_server is None:
+        return
+
+    catalog: list[mcp_types.Prompt] = []
+    for pd in prompt_defs:
+        try:
+            catalog.append(mcp_types.Prompt(
+                name=pd.name,
+                description=pd.description or None,
+                arguments=[
+                    mcp_types.PromptArgument(
+                        name=arg.name,
+                        description=arg.description or None,
+                        required=arg.required,
+                    )
+                    for arg in pd.arguments
+                ],
+            ))
+        except Exception:  # noqa: BLE001 — defensive against bad metadata
+            continue
+
+    @mcp_server.list_prompts()
+    async def _list_prompts():  # noqa: ARG001 — decorator signature
+        return catalog
+
+    @mcp_server.get_prompt()
+    async def _get_prompt(name, arguments=None):
+        args = dict(arguments or {})
+        result = await bridge.get_prompt(name, args)
+        if result.error:
+            raise RuntimeError(result.error)
+        messages = [
+            mcp_types.PromptMessage(
+                role=msg.role,
+                content=mcp_types.TextContent(type="text", text=msg.text),
+            )
+            for msg in result.messages
+        ]
+        return mcp_types.GetPromptResult(
+            description=result.description or None,
+            messages=messages,
+        )
 
 
 def _wrap_tool(tool_def: ToolDef, bridge: ToolBridge, sdk_tool_decorator):
