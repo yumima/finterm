@@ -37,6 +37,7 @@ class AiSystemSection : public QWidget {
     void on_refresh();
     void on_disable_tool();
     void on_enable_tool();
+    void on_trace_double_clicked(int row, int column);
 
   private:
     QLabel* spend_total_lbl_ = nullptr;

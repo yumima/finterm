@@ -4,9 +4,12 @@
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
 
+#include <QDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QJsonDocument>
+#include <QPlainTextEdit>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -60,6 +63,9 @@ void AiSystemSection::build_ui() {
     traces_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     traces_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     traces_table_->verticalHeader()->setVisible(false);
+    traces_table_->setToolTip(QStringLiteral("Double-click a row to see the full trace."));
+    connect(traces_table_, &QTableWidget::cellDoubleClicked,
+            this, &AiSystemSection::on_trace_double_clicked);
     root->addWidget(traces_table_, 2);
 
     // ── Tool kill-switch ─────────────────────────────────────────────
@@ -144,7 +150,12 @@ void AiSystemSection::load_traces(const Result<QVector<AgentTraceRow>>& r) {
     traces_table_->setRowCount(rows.size());
     for (int i = 0; i < rows.size(); ++i) {
         const auto& t = rows[i];
-        traces_table_->setItem(i, 0, new QTableWidgetItem(t.started_at));
+        auto* started = new QTableWidgetItem(t.started_at);
+        // Stash the request_id on the first cell's UserRole so the
+        // double-click handler can fetch the full trace without
+        // re-scanning the table.
+        started->setData(Qt::UserRole, t.request_id);
+        traces_table_->setItem(i, 0, started);
         traces_table_->setItem(i, 1, new QTableWidgetItem(t.agent_id));
         traces_table_->setItem(i, 2, new QTableWidgetItem(t.status));
         traces_table_->setItem(i, 3, new QTableWidgetItem(
@@ -211,6 +222,98 @@ void AiSystemSection::on_enable_tool() {
     }
     show_status(QStringLiteral("Re-enabled %1").arg(tool));
     load_killswitch();
+}
+
+void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
+    auto* item = traces_table_->item(row, 0);
+    if (!item)
+        return;
+    const QString request_id = item->data(Qt::UserRole).toString();
+    if (request_id.isEmpty())
+        return;
+
+    auto r = AgentTraceRepository::instance().get(request_id);
+    if (r.is_err() || !r.value().has_value()) {
+        show_status(QStringLiteral("Failed to load trace %1: %2")
+                        .arg(request_id.left(8),
+                             r.is_err() ? QString::fromStdString(r.error())
+                                        : QStringLiteral("(not found)")),
+                    true);
+        return;
+    }
+    const AgentTraceRow t = *r.value();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Trace ") + t.request_id.left(8));
+    dlg.resize(720, 580);
+    auto* root = new QVBoxLayout(&dlg);
+    root->setContentsMargins(16, 16, 16, 16);
+    root->setSpacing(8);
+
+    auto add_kv = [&](const QString& label, const QString& value) {
+        if (value.isEmpty())
+            return;
+        auto* row_w = new QWidget;
+        auto* hl = new QHBoxLayout(row_w);
+        hl->setContentsMargins(0, 0, 0, 0);
+        auto* k = new QLabel(QStringLiteral("<b>%1</b>").arg(label));
+        k->setFixedWidth(110);
+        auto* v = new QLabel(value.toHtmlEscaped());
+        v->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        v->setWordWrap(true);
+        hl->addWidget(k);
+        hl->addWidget(v, 1);
+        root->addWidget(row_w);
+    };
+
+    add_kv(QStringLiteral("Request ID"), t.request_id);
+    add_kv(QStringLiteral("Agent"), t.agent_id);
+    add_kv(QStringLiteral("Runtime"), t.runtime);
+    add_kv(QStringLiteral("Source"), t.source);
+    add_kv(QStringLiteral("Status"), t.status);
+    add_kv(QStringLiteral("Started"), t.started_at);
+    add_kv(QStringLiteral("Finished"), t.finished_at);
+    if (t.latency_ms)
+        add_kv(QStringLiteral("Latency"), format_ms(*t.latency_ms));
+    if (t.tokens_in)
+        add_kv(QStringLiteral("Tokens in"), QString::number(*t.tokens_in));
+    if (t.tokens_out)
+        add_kv(QStringLiteral("Tokens out"), QString::number(*t.tokens_out));
+    if (t.cost_usd)
+        add_kv(QStringLiteral("Cost"), format_usd(*t.cost_usd));
+
+    auto add_text_block = [&](const QString& label, const QString& text) {
+        if (text.isEmpty())
+            return;
+        root->addSpacing(8);
+        root->addWidget(new QLabel(QStringLiteral("<b>%1</b>").arg(label)));
+        auto* edit = new QPlainTextEdit;
+        edit->setReadOnly(true);
+        edit->setPlainText(text);
+        edit->setMinimumHeight(80);
+        root->addWidget(edit, 1);
+    };
+    add_text_block(QStringLiteral("Query"), t.query);
+    add_text_block(QStringLiteral("Response"), t.response);
+    add_text_block(QStringLiteral("Error"), t.error);
+    if (!t.config_json.isEmpty()) {
+        // Pretty-print for readability.  Failure (malformed JSON) falls
+        // back to the raw string.
+        const QJsonDocument doc = QJsonDocument::fromJson(t.config_json.toUtf8());
+        const QString pretty = doc.isObject() || doc.isArray()
+            ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented))
+            : t.config_json;
+        add_text_block(QStringLiteral("Config"), pretty);
+    }
+
+    auto* close_btn = new QPushButton(QStringLiteral("Close"));
+    connect(close_btn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    auto* btn_row = new QHBoxLayout;
+    btn_row->addStretch();
+    btn_row->addWidget(close_btn);
+    root->addLayout(btn_row);
+
+    dlg.exec();
 }
 
 void AiSystemSection::show_status(const QString& msg, bool error) {

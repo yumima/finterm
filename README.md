@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`853c1e95`](https://github.com/yumima/finterm/commit/853c1e95) **ci(ai):** nightly SDK eval + vendor-skills diff (Track 1C)
 - [`7e6d6957`](https://github.com/yumima/finterm/commit/7e6d6957) ai(capabilities): declarative capability matrix + generator (Track 1A)
 - [`839d9461`](https://github.com/yumima/finterm/commit/839d9461) mcp: server-initiated notification dispatch on McpClient (stdio)
 - [`37f5af04`](https://github.com/yumima/finterm/commit/37f5af04) agents(elicit): cross-thread modal bridge for MCP elicitation
