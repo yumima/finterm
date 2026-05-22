@@ -275,71 +275,88 @@ Result<QJsonObject> McpHttpClient::send_request(const QString& method,
         envelope["params"] = params;
     const QByteArray body = QJsonDocument(envelope).toJson(QJsonDocument::Compact);
 
-    QNetworkRequest req(QUrl(config_.base_url));
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    req.setRawHeader("Accept", "application/json");
-    if (!apply_auth(req)) {
-        return Result<QJsonObject>::err("auth setup failed (see logs)");
-    }
+    // OAuth: retry once on 401 after invalidating the cached token.
+    // For other schemes this is a normal single-shot request.
+    const bool retry_eligible = (config_.auth_scheme == QStringLiteral("oauth"));
+    bool retried = false;
 
-    append_log(QStringLiteral("→ %1 %2").arg(method, QString::fromUtf8(body)).left(MAX_LOG_LINES));
+    while (true) {
+        QNetworkRequest req(QUrl(config_.base_url));
+        req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+        req.setRawHeader("Accept", "application/json");
+        if (!apply_auth(req)) {
+            return Result<QJsonObject>::err("auth setup failed (see logs)");
+        }
 
-    QNetworkReply* reply = nam_->post(req, body);
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    bool timed_out = false;
-    QObject::connect(&timer, &QTimer::timeout, &loop, [&] {
-        timed_out = true;
-        loop.quit();
-    });
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timer.start(timeout_ms);
-    loop.exec();
+        append_log(QStringLiteral("→ %1 %2").arg(method, QString::fromUtf8(body)).left(MAX_LOG_LINES));
 
-    if (timed_out) {
-        reply->abort();
+        QNetworkReply* reply = nam_->post(req, body);
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        bool timed_out = false;
+        QObject::connect(&timer, &QTimer::timeout, &loop, [&] {
+            timed_out = true;
+            loop.quit();
+        });
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        timer.start(timeout_ms);
+        loop.exec();
+
+        if (timed_out) {
+            reply->abort();
+            reply->deleteLater();
+            const QString msg = QStringLiteral("timeout after %1 ms on %2").arg(timeout_ms).arg(method);
+            append_log(msg);
+            return Result<QJsonObject>::err(msg.toStdString());
+        }
+
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray response_body = reply->readAll();
+        const QNetworkReply::NetworkError err = reply->error();
         reply->deleteLater();
-        const QString msg = QStringLiteral("timeout after %1 ms on %2").arg(timeout_ms).arg(method);
-        append_log(msg);
-        return Result<QJsonObject>::err(msg.toStdString());
-    }
 
-    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QByteArray response_body = reply->readAll();
-    const QNetworkReply::NetworkError err = reply->error();
-    reply->deleteLater();
+        // 401 retry path — invalidate the cached OAuth token and try
+        // exactly once more.  A stale token (server rotated keys, scope
+        // changed, etc.) recovers without manual intervention.
+        if (status == 401 && retry_eligible && !retried) {
+            append_log(QStringLiteral("401 on %1; invalidating OAuth cache and retrying").arg(method));
+            McpOAuth::invalidate_cache(config_.id);
+            retried = true;
+            continue;
+        }
 
-    if (err != QNetworkReply::NoError) {
-        const QString msg = QStringLiteral("network error %1 (status=%2): %3")
-                                .arg(static_cast<int>(err))
-                                .arg(status)
-                                .arg(QString::fromUtf8(response_body).left(200));
-        append_log(msg);
-        return Result<QJsonObject>::err(msg.toStdString());
-    }
+        if (err != QNetworkReply::NoError) {
+            const QString msg = QStringLiteral("network error %1 (status=%2): %3")
+                                    .arg(static_cast<int>(err))
+                                    .arg(status)
+                                    .arg(QString::fromUtf8(response_body).left(200));
+            append_log(msg);
+            return Result<QJsonObject>::err(msg.toStdString());
+        }
 
-    QJsonParseError parse_err;
-    const QJsonDocument doc = QJsonDocument::fromJson(response_body, &parse_err);
-    if (parse_err.error != QJsonParseError::NoError || !doc.isObject()) {
-        const QString msg = QStringLiteral("invalid JSON response: %1").arg(parse_err.errorString());
-        append_log(msg);
-        return Result<QJsonObject>::err(msg.toStdString());
-    }
-    const QJsonObject obj = doc.object();
-    append_log(QStringLiteral("← %1 (status=%2, %3 bytes)")
-                   .arg(method)
-                   .arg(status)
-                   .arg(response_body.size()));
+        QJsonParseError parse_err;
+        const QJsonDocument doc = QJsonDocument::fromJson(response_body, &parse_err);
+        if (parse_err.error != QJsonParseError::NoError || !doc.isObject()) {
+            const QString msg = QStringLiteral("invalid JSON response: %1").arg(parse_err.errorString());
+            append_log(msg);
+            return Result<QJsonObject>::err(msg.toStdString());
+        }
+        const QJsonObject obj = doc.object();
+        append_log(QStringLiteral("← %1 (status=%2, %3 bytes)")
+                       .arg(method)
+                       .arg(status)
+                       .arg(response_body.size()));
 
-    if (obj.contains("error")) {
-        const QJsonObject ej = obj.value("error").toObject();
-        const QString msg = QStringLiteral("server error %1: %2")
-                                .arg(ej.value("code").toInt())
-                                .arg(ej.value("message").toString());
-        return Result<QJsonObject>::err(msg.toStdString());
+        if (obj.contains("error")) {
+            const QJsonObject ej = obj.value("error").toObject();
+            const QString msg = QStringLiteral("server error %1: %2")
+                                    .arg(ej.value("code").toInt())
+                                    .arg(ej.value("message").toString());
+            return Result<QJsonObject>::err(msg.toStdString());
+        }
+        return Result<QJsonObject>::ok(obj.value("result").toObject());
     }
-    return Result<QJsonObject>::ok(obj.value("result").toObject());
 }
 
 bool McpHttpClient::apply_auth(QNetworkRequest& req) {

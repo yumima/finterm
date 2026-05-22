@@ -38,6 +38,48 @@ void put_secure(const QString& key, const QString& value) {
                           .arg(key, QString::fromStdString(r.error())));
 }
 
+/// Sync GET.  Used for `.well-known` discovery — small responses,
+/// short timeout.  Same translation contract as http_post.
+Result<QJsonObject> http_get(const QUrl& url, int timeout_ms = 5000) {
+    QNetworkAccessManager nam;
+    QNetworkRequest req(url);
+    req.setRawHeader("Accept", "application/json");
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+
+    QNetworkReply* reply = nam.get(req);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timeout.start(timeout_ms);
+    loop.exec();
+
+    if (timeout.isActive()) {
+        timeout.stop();
+    } else {
+        reply->abort();
+        reply->deleteLater();
+        return Result<QJsonObject>::err("oauth: discovery request timed out");
+    }
+    const QByteArray response = reply->readAll();
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const auto err = reply->error();
+    reply->deleteLater();
+
+    if (err != QNetworkReply::NoError) {
+        return Result<QJsonObject>::err(
+            QString("oauth: discovery HTTP error %1 (status %2)").arg(static_cast<int>(err)).arg(status).toStdString());
+    }
+    QJsonParseError perr;
+    QJsonDocument doc = QJsonDocument::fromJson(response, &perr);
+    if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
+        return Result<QJsonObject>::err(
+            QString("oauth: discovery returned non-JSON (status %1): %2").arg(status).arg(perr.errorString()).toStdString());
+    }
+    return Result<QJsonObject>::ok(doc.object());
+}
+
 /// Run a sync POST.  Caller is expected to be on a non-UI thread —
 /// McpHttpClient already enforces that for its own JSON-RPC calls.
 Result<QJsonObject> http_post(const QUrl& url,
@@ -177,9 +219,32 @@ void McpOAuth::invalidate_cache(const QString& server_id) {
 Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
     if (cfg.token_url.isEmpty())
         return Result<QString>::err("oauth: token_url is required");
-    const QString grant = cfg.grant_type.isEmpty()
+
+    // RFC 8414 discovery — when token_url is actually pointing at
+    // `.well-known/oauth-authorization-server`, fetch the metadata and
+    // resolve to the real token_endpoint + registration_endpoint
+    // (when present).  We rebuild the effective config rather than
+    // mutating the caller's struct so this stays a pure operation.
+    OAuthConfig effective = cfg;
+    if (cfg.token_url.endsWith(QStringLiteral("/.well-known/oauth-authorization-server"))) {
+        LOG_INFO(TAG, QString("Fetching OAuth discovery at %1").arg(cfg.token_url));
+        auto disc = http_get(QUrl(cfg.token_url));
+        if (disc.is_err())
+            return Result<QString>::err(disc.error());
+        const QJsonObject d = disc.value();
+        const QString token = d.value(QStringLiteral("token_endpoint")).toString();
+        if (token.isEmpty())
+            return Result<QString>::err(
+                "oauth: discovery document missing token_endpoint");
+        effective.token_url = token;
+        const QString reg = d.value(QStringLiteral("registration_endpoint")).toString();
+        if (!reg.isEmpty() && effective.registration_url.isEmpty())
+            effective.registration_url = reg;
+    }
+
+    const QString grant = effective.grant_type.isEmpty()
                               ? QStringLiteral("client_credentials")
-                              : cfg.grant_type;
+                              : effective.grant_type;
     if (grant != QStringLiteral("client_credentials"))
         return Result<QString>::err(
             QString("oauth: grant_type '%1' not implemented in this build "
@@ -197,26 +262,26 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
     }
 
     // Resolve client credentials, doing DCR if needed.
-    QString client_id = get_secure(secure_key_client_id(cfg.server_id));
-    QString client_secret = get_secure(secure_key_client_secret(cfg.server_id));
+    QString client_id = get_secure(secure_key_client_id(effective.server_id));
+    QString client_secret = get_secure(secure_key_client_secret(effective.server_id));
     if (client_id.isEmpty()) {
-        if (cfg.registration_url.isEmpty())
+        if (effective.registration_url.isEmpty())
             return Result<QString>::err(
                 "oauth: no client_id in SecureStorage and no registration_url "
                 "configured — set mcp.oauth.<server>.client_id manually or "
                 "configure DCR");
-        LOG_INFO(TAG, QString("Running DCR against %1").arg(cfg.registration_url));
-        auto dcr = do_dcr(cfg);
+        LOG_INFO(TAG, QString("Running DCR against %1").arg(effective.registration_url));
+        auto dcr = do_dcr(effective);
         if (dcr.is_err())
             return Result<QString>::err(dcr.error());
         client_id = dcr.value().first;
         client_secret = dcr.value().second;
-        put_secure(secure_key_client_id(cfg.server_id), client_id);
+        put_secure(secure_key_client_id(effective.server_id), client_id);
         if (!client_secret.isEmpty())
-            put_secure(secure_key_client_secret(cfg.server_id), client_secret);
+            put_secure(secure_key_client_secret(effective.server_id), client_secret);
     }
 
-    auto token_r = request_client_credentials(cfg, client_id, client_secret);
+    auto token_r = request_client_credentials(effective, client_id, client_secret);
     if (token_r.is_err())
         return Result<QString>::err(token_r.error());
     const QJsonObject obj = token_r.value();
@@ -227,12 +292,12 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
 
     // Cache the token + expiry.  Refresh tokens (when present) are
     // recorded too; the authorization_code grant uses them later.
-    put_secure(secure_key_access_token(cfg.server_id), access);
-    put_secure(secure_key_expires_at(cfg.server_id),
+    put_secure(secure_key_access_token(effective.server_id), access);
+    put_secure(secure_key_expires_at(effective.server_id),
                QString::number(QDateTime::currentSecsSinceEpoch() + expires_in));
     const QString refresh = obj.value("refresh_token").toString();
     if (!refresh.isEmpty())
-        put_secure(secure_key_refresh_token(cfg.server_id), refresh);
+        put_secure(secure_key_refresh_token(effective.server_id), refresh);
 
     return Result<QString>::ok(access);
 }
