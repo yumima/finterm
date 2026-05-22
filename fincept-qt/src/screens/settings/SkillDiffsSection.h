@@ -35,6 +35,7 @@ class SkillDiffsSection : public QWidget {
     void on_view_diff();
     void on_accept_upstream();
     void on_selection_changed();
+    void on_diff_finished(int exit_code);
 
   private:
     QLineEdit* upstream_edit_      = nullptr;
@@ -46,6 +47,7 @@ class SkillDiffsSection : public QWidget {
     QLabel* status_lbl_             = nullptr;
     QLabel* hint_lbl_               = nullptr;
     QJsonObject last_report_;       // raw output of vendor_skills_diff.py
+    class QProcess* diff_proc_     = nullptr;   // null when no diff is running
 
     void build_ui();
     void load_upstream_path();
@@ -54,9 +56,10 @@ class SkillDiffsSection : public QWidget {
     void show_status(const QString& msg, bool error = false);
 
     /// Resolve the row's local + upstream SKILL.md path pair.  Empty
-    /// strings on failure (also surfaces to status).  Reads the
-    /// per-row `local_path` / `upstream_path` we stashed at populate
-    /// time via Qt::UserRole.
+    /// strings on failure (also surfaces to status).  Both paths are
+    /// canonicalised and required to live under an allow-list root
+    /// (local: the vendored skills tree; upstream: the configured
+    /// upstream clone) to defeat path-traversal via tampered JSON.
     struct Paths { QString local; QString upstream; QString name; };
     Paths paths_for_row(int row);
 };

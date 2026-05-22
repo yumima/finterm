@@ -50,6 +50,23 @@ QString resolve_script_path() {
     return {};
 }
 
+/// The vendored skills tree — local SKILL.md writes must canonicalise
+/// underneath this.  Same candidate search as resolve_script_path so
+/// dev + installed layouts both work.  Returns canonical path or
+/// empty.
+QString resolve_local_skills_root() {
+    const QString app = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        app + "/scripts/agents/finagent_core/skills",
+        app + "/../fincept-qt/scripts/agents/finagent_core/skills",
+    };
+    for (const auto& p : candidates) {
+        if (QFileInfo(p).isDir())
+            return QFileInfo(p).canonicalFilePath();
+    }
+    return {};
+}
+
 } // anonymous namespace
 
 SkillDiffsSection::SkillDiffsSection(QWidget* parent) : QWidget(parent) {
@@ -147,6 +164,10 @@ void SkillDiffsSection::on_browse() {
 }
 
 void SkillDiffsSection::on_run_diff() {
+    if (diff_proc_) {
+        show_status(QStringLiteral("Diff already in progress…"), true);
+        return;
+    }
     const QString upstream = upstream_edit_->text().trimmed();
     if (upstream.isEmpty()) {
         show_status(QStringLiteral("Configure the upstream path first."), true);
@@ -165,27 +186,35 @@ void SkillDiffsSection::on_run_diff() {
     // Persist now so the next launch already has the path.
     save_upstream_path(upstream);
 
-    QProcess proc;
-    proc.setProgram(QStringLiteral("python3"));
-    proc.setArguments({script, "--upstream", upstream, "--json"});
-    show_status(QStringLiteral("Running diff…"));
-    QApplication::processEvents();  // flush the status label before blocking
-    proc.start();
-    if (!proc.waitForStarted(2000)) {
-        show_status(QStringLiteral("Failed to start python3: %1").arg(proc.errorString()), true);
+    // Async: spawn QProcess, wire the finished signal to drive the
+    // result handler off the UI event loop.  The synchronous
+    // waitForFinished pattern was freezing the GUI for up to 30s
+    // (Mutter started painting the "not responding" overlay), and
+    // a single processEvents() pre-flush before the wait only
+    // covered the queued repaints, not the long tail.
+    diff_proc_ = new QProcess(this);
+    diff_proc_->setProgram(QStringLiteral("python3"));
+    diff_proc_->setArguments({script, "--upstream", upstream, "--json"});
+    connect(diff_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            this, [this](int code, QProcess::ExitStatus) { on_diff_finished(code); });
+    run_btn_->setEnabled(false);
+    show_status(QStringLiteral("Running diff… (async)"));
+    diff_proc_->start();
+}
+
+void SkillDiffsSection::on_diff_finished(int exit_code) {
+    if (!diff_proc_)
         return;
-    }
-    if (!proc.waitForFinished(30000)) {
-        proc.kill();
-        show_status(QStringLiteral("Diff timed out after 30s — kill_ed."), true);
-        return;
-    }
-    const QByteArray out = proc.readAllStandardOutput();
-    const QByteArray err = proc.readAllStandardError();
-    if (proc.exitCode() != 0 && proc.exitCode() != 1) {
+    const QByteArray out = diff_proc_->readAllStandardOutput();
+    const QByteArray err = diff_proc_->readAllStandardError();
+    diff_proc_->deleteLater();
+    diff_proc_ = nullptr;
+    run_btn_->setEnabled(true);
+
+    if (exit_code != 0 && exit_code != 1) {
         // 0 = clean, 1 = drift (still produces valid JSON), 2 = setup error.
         show_status(QStringLiteral("Diff failed (exit %1): %2")
-                        .arg(proc.exitCode()).arg(QString::fromUtf8(err).left(300)), true);
+                        .arg(exit_code).arg(QString::fromUtf8(err).left(300)), true);
         return;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(out);
@@ -261,12 +290,15 @@ SkillDiffsSection::Paths SkillDiffsSection::paths_for_row(int row) {
         return out;
     out.name = name_item->text();
     const QString rel_local = name_item->data(Qt::UserRole).toString();
-    out.upstream = name_item->data(Qt::UserRole + 1).toString();
+    const QString raw_upstream = name_item->data(Qt::UserRole + 1).toString();
 
-    if (!rel_local.isEmpty()) {
-        // The script emits paths relative to REPO_ROOT (parent of
-        // fincept-qt).  Resolve against applicationDirPath()'s
-        // grandparent — works for both dev and installed layouts.
+    // Local-path allow-list — refuse any candidate whose canonical
+    // resolution escapes the vendored skills tree.  Defends against a
+    // tampered JSON report whose local_path is "../../../etc/passwd"
+    // that happens to exist; without this the Accept-upstream flow
+    // would overwrite arbitrary user-readable files.
+    const QString local_root = resolve_local_skills_root();
+    if (!rel_local.isEmpty() && !local_root.isEmpty()) {
         const QString app = QCoreApplication::applicationDirPath();
         const QStringList candidates = {
             app + "/" + rel_local,
@@ -274,10 +306,34 @@ SkillDiffsSection::Paths SkillDiffsSection::paths_for_row(int row) {
             app + "/../../" + rel_local,
         };
         for (const auto& c : candidates) {
-            if (QFileInfo::exists(c)) {
-                out.local = QFileInfo(c).canonicalFilePath();
+            if (!QFileInfo::exists(c))
+                continue;
+            const QString canon = QFileInfo(c).canonicalFilePath();
+            if (canon.isEmpty())
+                continue;
+            // Must live under local_root with a trailing slash so
+            // "skills_other/foo" doesn't prefix-match "skills/".
+            if (canon.startsWith(local_root + QLatin1Char('/'))) {
+                out.local = canon;
                 break;
             }
+        }
+    }
+
+    // Upstream-path allow-list — must canonicalise under the
+    // configured upstream root from the last report.  Same defense
+    // as above; without this Accept-upstream could read arbitrary
+    // files (e.g. /etc/shadow) into a SKILL.md.
+    if (!raw_upstream.isEmpty()) {
+        const QString up_root_raw =
+            last_report_.value(QStringLiteral("upstream_root")).toString();
+        const QString up_root = up_root_raw.isEmpty()
+            ? QString()
+            : QFileInfo(up_root_raw).canonicalFilePath();
+        const QString up_canon = QFileInfo(raw_upstream).canonicalFilePath();
+        if (!up_canon.isEmpty() && !up_root.isEmpty()
+            && up_canon.startsWith(up_root + QLatin1Char('/'))) {
+            out.upstream = up_canon;
         }
     }
     return out;
