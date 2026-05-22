@@ -1066,6 +1066,7 @@ set(SCREEN_SOURCES
     src/screens/chat_mode/ChatMessagePanel.cpp
     src/screens/chat_mode/ChatAgentPanel.cpp
     src/screens/chat_mode/ChatModeScreen.cpp
+    src/screens/workbench/WorkbenchScreen.cpp
     src/screens/chat_mode/TerminalToolBridge.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/info/ContactScreen.cpp

@@ -29,6 +29,7 @@
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
 #include "screens/chat_mode/ChatModeScreen.h"
+#include "screens/workbench/WorkbenchScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
 #include "screens/crypto_trading/CryptoTradingScreen.h"
 #include "screens/dashboard/DashboardScreen.h"
@@ -254,6 +255,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     master_stack->addWidget(chat_mode_screen_);             // index 2
     connect(chat_mode_screen_, &chat_mode::ChatModeScreen::exit_requested, this, &MainWindow::toggle_chat_mode);
 
+    // ── AI Workbench (Track 13) ──────────────────────────────────────────────
+    workbench_screen_ = new screens::WorkbenchScreen;
+    master_stack->addWidget(workbench_screen_);             // index 3
+    connect(workbench_screen_, &screens::WorkbenchScreen::exit_requested,
+            this, &MainWindow::toggle_workbench);
+
     // ── Lock Screen ─────────────────────────────────────────────────────────
     // The lock screen and master_stack share cell (0,0) in a zero-margin
     // QGridLayout. Qt's layout manager keeps both widgets sized to the
@@ -388,6 +395,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     });
 
     connect(toolbar, &ui::ToolBar::chat_mode_toggled, this, &MainWindow::toggle_chat_mode);
+    connect(toolbar, &ui::ToolBar::workbench_toggled, this, &MainWindow::toggle_workbench);
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
         if (locked_) return;
         // Smart navigate — preserve any existing split when the target is
@@ -954,6 +962,9 @@ void MainWindow::toggle_chat_mode() {
     chat_mode_ = !chat_mode_;
 
     if (chat_mode_) {
+        // Mirror image of toggle_workbench — modes are mutually
+        // exclusive.
+        workbench_mode_ = false;
         if (dock_toolbar_)
             dock_toolbar_->setVisible(false);
         if (dock_status_bar_)
@@ -983,6 +994,48 @@ void MainWindow::toggle_chat_mode() {
             }
         }
         LOG_INFO("MainWindow", "Exited Chat Mode");
+    }
+}
+
+void MainWindow::toggle_workbench() {
+    if (locked_)
+        return;
+    workbench_mode_ = !workbench_mode_;
+
+    if (workbench_mode_) {
+        // Chat and Workbench are mutually exclusive fullscreen modes.
+        // Clear chat_mode_ if it was on so a later toggle_chat_mode
+        // doesn't think we're still in chat mode.
+        chat_mode_ = false;
+
+        if (dock_toolbar_)
+            dock_toolbar_->setVisible(false);
+        if (dock_status_bar_)
+            dock_status_bar_->setVisible(false);
+        if (pushpin_toolbar_)
+            pushpin_toolbar_->setVisible(false);
+        if (chat_bubble_)
+            chat_bubble_->setVisible(false);
+        stack_->setCurrentIndex(3);
+        LOG_INFO("MainWindow", "Entered AI Workbench");
+    } else {
+        stack_->setCurrentIndex(1);
+        if (dock_toolbar_)
+            dock_toolbar_->setVisible(true);
+        if (dock_status_bar_)
+            dock_status_bar_->setVisible(true);
+        if (pushpin_toolbar_)
+            pushpin_toolbar_->setVisible(true);
+        if (chat_bubble_) {
+            auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
+            const bool show = !r.is_ok() || r.value() != "false";
+            chat_bubble_->setVisible(show);
+            if (show) {
+                chat_bubble_->reposition();
+                chat_bubble_->raise();
+            }
+        }
+        LOG_INFO("MainWindow", "Exited AI Workbench");
     }
 }
 

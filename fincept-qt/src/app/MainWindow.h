@@ -26,6 +26,7 @@ class ChatModeScreen;
 }
 namespace fincept::screens {
 class LockScreen;
+class WorkbenchScreen;
 }
 
 namespace fincept {
@@ -101,6 +102,10 @@ class MainWindow : public QMainWindow {
     // Chat mode
     chat_mode::ChatModeScreen* chat_mode_screen_ = nullptr;
 
+    // AI Workbench (Track 13)
+    screens::WorkbenchScreen* workbench_screen_ = nullptr;
+    bool workbench_mode_ = false;
+
     // Lock/PIN screen
     screens::LockScreen* lock_screen_ = nullptr;
 
@@ -111,6 +116,7 @@ class MainWindow : public QMainWindow {
     void setup_navigation();
     void on_auth_state_changed();
     void toggle_chat_mode();
+    void toggle_workbench();
     void show_lock_screen();
     void show_lock_overlay(); // show lock screen as overlay; shell stays at index 1
     void hide_lock_overlay(); // hide overlay; no page switch needed

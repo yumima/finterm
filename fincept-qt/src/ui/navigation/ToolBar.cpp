@@ -138,6 +138,15 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     hl->addWidget(chat_mode_btn_);
     sep();
 
+    workbench_btn_ = new QPushButton(QString::fromUtf8("⬡ WORK"));
+    workbench_btn_->setFixedHeight(20);
+    workbench_btn_->setCursor(Qt::PointingHandCursor);
+    workbench_btn_->setToolTip("Open AI Workbench — agents, tools, traces, scheduler");
+    workbench_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(workbench_btn_, &QPushButton::clicked, this, &ToolBar::workbench_toggled);
+    hl->addWidget(workbench_btn_);
+    sep();
+
     logout_btn_ = new QPushButton("LOGOUT");
     logout_btn_->setFixedHeight(20);
     logout_btn_->setCursor(Qt::PointingHandCursor);
