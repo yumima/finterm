@@ -1,11 +1,12 @@
 # finterm
 
-A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
+A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
 ## Today's commits (2026-05-22)
 
 Latest first.
 
+- [`40be8222`](https://github.com/yumima/finterm/commit/40be8222) video: click-to-pause/replay on the render surface (YouTube-style)
 - [`1fe856e2`](https://github.com/yumima/finterm/commit/1fe856e2) review fixes: Track 7C — atomic write, symlink guard, watcher order
 - [`513808c8`](https://github.com/yumima/finterm/commit/513808c8) agents: SKILL.md edit proposal flow on wrong-verdict traces (Track 7C)
 - [`10899101`](https://github.com/yumima/finterm/commit/10899101) review fix: extract shared constants for suggested-chip persistence
