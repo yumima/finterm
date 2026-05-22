@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`4cb80356`](https://github.com/yumima/finterm/commit/4cb80356) mcp(oauth): RFC 8414 discovery + auto-401 retry (Track 4A)
 - [`1a1a9945`](https://github.com/yumima/finterm/commit/1a1a9945) ai_chat: @-mention resolver for shared-state context (Track 3B)
 - [`d79cdcc7`](https://github.com/yumima/finterm/commit/d79cdcc7) ai_chat: runtime toggle pill on composer header (Track 3A)
 - [`7937ec11`](https://github.com/yumima/finterm/commit/7937ec11) settings(ai-system): trace drill-down dialog (Track 2)

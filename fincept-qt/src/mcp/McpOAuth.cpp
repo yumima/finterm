@@ -1,6 +1,7 @@
 #include "mcp/McpOAuth.h"
 
 #include "core/logging/Logger.h"
+#include "mcp/McpOAuthAuthCode.h"
 #include "storage/secure/SecureStorage.h"
 
 #include <QDateTime>
@@ -245,11 +246,6 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
     const QString grant = effective.grant_type.isEmpty()
                               ? QStringLiteral("client_credentials")
                               : effective.grant_type;
-    if (grant != QStringLiteral("client_credentials"))
-        return Result<QString>::err(
-            QString("oauth: grant_type '%1' not implemented in this build "
-                    "(only client_credentials; authorization_code defers)")
-                .arg(grant).toStdString());
 
     // Cached path — return the access_token while it's still good.
     const QString cached = get_secure(secure_key_access_token(cfg.server_id));
@@ -260,6 +256,33 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
         if (expires > now + kClockSkewSeconds)
             return Result<QString>::ok(cached);
     }
+
+    // authorization_code grant — try refresh first (silent, no
+    // browser), fall back to the full browser-redirect flow when
+    // there's no refresh_token or the refresh fails.
+    if (grant == QStringLiteral("authorization_code")) {
+        AuthCodeConfig ac;
+        ac.server_id = effective.server_id;
+        ac.authorization_url = effective.authorization_url;
+        ac.token_url = effective.token_url;
+        ac.registration_url = effective.registration_url;
+        ac.scope = effective.scope;
+        ac.callback_port = effective.callback_port > 0 ? effective.callback_port : 47823;
+
+        if (!get_secure(secure_key_refresh_token(ac.server_id)).isEmpty()) {
+            auto r = McpOAuthAuthCode::refresh(ac);
+            if (r.is_ok())
+                return r;
+            LOG_WARN(TAG, QString("oauth: refresh failed, falling back to full flow: %1")
+                              .arg(QString::fromStdString(r.error())));
+        }
+        return McpOAuthAuthCode::run_flow(ac);
+    }
+
+    if (grant != QStringLiteral("client_credentials"))
+        return Result<QString>::err(
+            QString("oauth: grant_type '%1' not implemented (supported: "
+                    "client_credentials, authorization_code)").arg(grant).toStdString());
 
     // Resolve client credentials, doing DCR if needed.
     QString client_id = get_secure(secure_key_client_id(effective.server_id));

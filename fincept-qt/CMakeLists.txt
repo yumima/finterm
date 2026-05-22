@@ -773,6 +773,7 @@ set(MCP_SOURCES
     src/mcp/McpClient.cpp
     src/mcp/McpHttpClient.cpp
     src/mcp/McpOAuth.cpp
+    src/mcp/McpOAuthAuthCode.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
     src/mcp/UntrustedContent.cpp
@@ -1884,6 +1885,7 @@ set_source_files_properties(
     src/mcp/McpClient.cpp
     src/mcp/McpHttpClient.cpp
     src/mcp/McpOAuth.cpp
+    src/mcp/McpOAuthAuthCode.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
     src/mcp/UntrustedContent.cpp

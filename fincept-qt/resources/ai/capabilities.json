@@ -169,12 +169,12 @@
     },
     {
       "id": "oauth_dcr",
-      "label": "OAuth 2.0 + DCR (client_credentials)",
-      "description": "Hosted MCP servers authenticate via client_credentials grant with Dynamic Client Registration.",
+      "label": "OAuth 2.0 + DCR",
+      "description": "Hosted MCP servers authenticate via OAuth. client_credentials and authorization_code grants both supported; RFC 8414 discovery, RFC 7591 dynamic client registration, RFC 7636 PKCE on authorization_code.",
       "anthropic": "supported",
       "local": "supported",
-      "ui_surface": ["McpOAuth"],
-      "notes": "authorization_code grant (browser-redirect) defers."
+      "ui_surface": ["McpOAuth", "McpOAuthAuthCode"],
+      "notes": "authorization_code flow uses a localhost callback server (default port 47823) + the user's browser; client_id must be set in SecureStorage out-of-band (DCR for browser-flow clients is rare and not auto-wired)."
     }
   ]
 }
