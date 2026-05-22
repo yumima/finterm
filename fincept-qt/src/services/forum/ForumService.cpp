@@ -4,6 +4,7 @@
 #include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/repositories/SettingsRepository.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -33,11 +34,22 @@ QString ForumService::api_key() const {
     return auth::AuthManager::instance().session().api_key;
 }
 
+QString ForumService::base_url() {
+    // Re-read every call so the user can change it in Settings without
+    // an app restart.  SettingsRepository caches under the hood; cost
+    // is a handful of microseconds per fetch.
+    auto r = SettingsRepository::instance().get(QString::fromUtf8(kBaseUrlSettingsKey));
+    if (r.is_err())
+        return {};
+    return r.value().trimmed();
+}
+
 // ── Low-level HTTP helpers ────────────────────────────────────────────────────
 
 void ForumService::get(const QString& path, std::function<void(bool, QJsonObject)> cb) {
-    if (!*BASE) { cb(false, {}); return; } // forum backend removed
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    const QString base = base_url();
+    if (base.isEmpty()) { cb(false, {}); return; }  // forum disabled (no URL configured)
+    QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setRawHeader("Accept", "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);
@@ -62,8 +74,9 @@ void ForumService::get(const QString& path, std::function<void(bool, QJsonObject
 }
 
 void ForumService::post_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
-    if (!*BASE) { cb(false, {}); return; }
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    const QString base = base_url();
+    if (base.isEmpty()) { cb(false, {}); return; }
+    QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);
@@ -83,8 +96,9 @@ void ForumService::post_req(const QString& path, const QJsonObject& body, std::f
 }
 
 void ForumService::put_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
-    if (!*BASE) { cb(false, {}); return; }
-    QNetworkRequest req(QUrl(QString(BASE) + path));
+    const QString base = base_url();
+    if (base.isEmpty()) { cb(false, {}); return; }
+    QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setTransferTimeout(kTransferTimeoutMs);

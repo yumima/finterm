@@ -63,7 +63,18 @@ class ForumService : public QObject {
     static ForumProfile parse_profile(const QJsonObject& o);
 
     QNetworkAccessManager* nam_ = nullptr;
-    static constexpr const char* BASE = ""; // forum backend removed with stub server
+
+    /// Base URL for the forum backend (e.g. https://forum.fincept.com).
+    /// Read from `forum.base_url` in SettingsRepository so the user can
+    /// point at any compatible backend — or leave empty to keep the
+    /// surface disabled until a finterm-hosted forum lands.
+    static QString base_url();
+
+  public:
+    /// SettingsRepository key the user configures via Settings → Forum
+    /// (or the empty-state hint on the forum screen).  Exposed so the
+    /// settings UI can reference it without re-spelling.
+    static constexpr const char* kBaseUrlSettingsKey = "forum.base_url";
 };
 
 } // namespace fincept::services

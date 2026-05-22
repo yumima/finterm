@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`7a3044f5`](https://github.com/yumima/finterm/commit/7a3044f5) ai_chat: suggested follow-ups after slash dispatch (Track 5C)
 - [`cea6d060`](https://github.com/yumima/finterm/commit/cea6d060) settings(artefacts): UI panel for chat_artefacts (Track 5B)
 - [`5869ca96`](https://github.com/yumima/finterm/commit/5869ca96) mcp(artefacts): chat_artefacts foundation + emit_artefact tool (Track 5A)
 - [`23599dbe`](https://github.com/yumima/finterm/commit/23599dbe) review fixes: ElicitBridge spurious-wakeup loop + caveats documented
