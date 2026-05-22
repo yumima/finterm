@@ -691,6 +691,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
     src/storage/repositories/LlmProfileRepository.cpp
@@ -747,6 +748,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
     src/storage/sqlite/migrations/v032_memory_entries.cpp
     src/storage/sqlite/migrations/v033_mcp_oauth.cpp
+    src/storage/sqlite/migrations/v034_chat_artefacts.cpp
 )
 
 # Python runner
@@ -784,6 +786,7 @@ set(MCP_SOURCES
     src/mcp/tools/WatchlistTools.cpp
     src/mcp/tools/NewsTools.cpp
     src/mcp/tools/MemoryTools.cpp
+    src/mcp/tools/ArtefactTools.cpp
     src/mcp/tools/NotesTools.cpp
     src/mcp/tools/FileManagerTools.cpp
     src/mcp/tools/AiChatTools.cpp
@@ -1778,6 +1781,7 @@ set_source_files_properties(
     # Storage repositories — each defines kCols in namespace fincept
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp
@@ -1832,6 +1836,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
     src/storage/sqlite/migrations/v032_memory_entries.cpp
     src/storage/sqlite/migrations/v033_mcp_oauth.cpp
+    src/storage/sqlite/migrations/v034_chat_artefacts.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1894,6 +1899,7 @@ set_source_files_properties(
     src/mcp/tools/WatchlistTools.cpp
     src/mcp/tools/NewsTools.cpp
     src/mcp/tools/MemoryTools.cpp
+    src/mcp/tools/ArtefactTools.cpp
     src/mcp/tools/NotesTools.cpp
     src/mcp/tools/FileManagerTools.cpp
     src/mcp/tools/AiChatTools.cpp
@@ -1945,6 +1951,7 @@ set_source_files_properties(
 set_source_files_properties(
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp

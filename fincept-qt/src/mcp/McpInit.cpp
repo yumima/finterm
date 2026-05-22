@@ -20,6 +20,7 @@
 #include "mcp/tools/DataHubTools.h"
 #include "mcp/tools/DataSourcesTools.h"
 #include "mcp/tools/EdgarTools.h"
+#include "mcp/tools/ArtefactTools.h"
 #include "mcp/tools/FinancialDatasetsTools.h"
 #include "mcp/tools/MemoryTools.h"
 #include "mcp/tools/QuantNarratorTools.h"
@@ -149,6 +150,11 @@ void initialize_all_tools() {
     // memory — local-profile MemoryTools (Track 9 stub; sqlite-vec
     // upgrade is a follow-up).
     provider.register_tools(tools::get_memory_tools());
+
+    // artefacts — typed slash output (table / model / memo / report).
+    // Agents call `emit_artefact` instead of dumping structured
+    // content into chat; the Workbench panel renders + manages.
+    provider.register_tools(tools::get_artefact_tools());
 
     // surface analytics — options vol surface (Databento-backed)
     provider.register_tools(tools::get_surface_analytics_tools());

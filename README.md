@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`23599dbe`](https://github.com/yumima/finterm/commit/23599dbe) review fixes: ElicitBridge spurious-wakeup loop + caveats documented
 - [`10c2192c`](https://github.com/yumima/finterm/commit/10c2192c) runtime(local): streaming tool-use via run_with_tools_stream (Track 4D)
 - [`a57c4982`](https://github.com/yumima/finterm/commit/a57c4982) mcp: server-initiated request dispatch end-to-end (Track 4C)
 - [`30018ea7`](https://github.com/yumima/finterm/commit/30018ea7) mcp(oauth): authorization_code grant with PKCE + refresh (Track 4B)
