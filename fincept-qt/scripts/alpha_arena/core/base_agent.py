@@ -30,6 +30,53 @@ from alpha_arena.utils.logging import get_logger
 logger = get_logger("base_agent")
 
 
+# ── Track 12 (full) — runtime selection helpers ──────────────────────────────
+# Module-level pure functions so the mapping is testable in isolation
+# and changing it doesn't require touching the BaseAgent class.
+
+_OPENAI_COMPAT_PROVIDERS = frozenset(
+    {"openai", "ollama", "groq", "google", "gemini", "deepseek", "openrouter"}
+)
+
+def _default_runtime_for_provider(provider: str) -> str:
+    """Map provider to the runtime that should drive it by default.
+
+    Returns one of: "anthropic", "local", "agno".  Anthropic gets its
+    native SDK path.  Anything OpenAI-compatible routes through the
+    local runtime adapter, which speaks plain OpenAI chat completions
+    and works against Ollama, vLLM, llama.cpp, LM Studio, and the
+    OpenAI / Groq / Gemini / DeepSeek / OpenRouter endpoints.
+    Anything else falls back to the legacy agno path.
+    """
+    if provider == "anthropic":
+        return "anthropic"
+    if provider in _OPENAI_COMPAT_PROVIDERS:
+        return "local"
+    return "agno"
+
+
+def _provider_to_local_base_url(provider: str) -> str:
+    """Map provider to the OpenAI-compat base URL the local runtime
+    will POST against.  Falls through to local_runtime's default
+    (Ollama) when the provider isn't recognised — the agent's
+    LocalRuntimeUnavailable then surfaces the misconfiguration."""
+    if provider == "openai":
+        return "https://api.openai.com/v1"
+    if provider in ("google", "gemini"):
+        return "https://generativelanguage.googleapis.com/v1beta/openai"
+    if provider == "deepseek":
+        return "https://api.deepseek.com/v1"
+    if provider == "groq":
+        return "https://api.groq.com/openai/v1"
+    if provider == "openrouter":
+        return "https://openrouter.ai/api/v1"
+    if provider == "ollama":
+        return "http://localhost:11434/v1"
+    # Returning empty string lets local_runtime.run_text pick its
+    # configured default (env var or DEFAULT_BASE_URL).
+    return ""
+
+
 # Import features pipeline (optional)
 try:
     from alpha_arena.core.features_pipeline import (
@@ -452,19 +499,35 @@ class LLMTradingAgent(BaseTradingAgent):
         return getattr(self, '_init_error', None)
 
     async def _create_llm(self):
-        """Create the LLM instance based on provider.
+        """Create the LLM instance based on provider + runtime hint.
 
-        Track 12 phase 2: when advanced_config.runtime == "anthropic"
-        the agent is built on the new two-runtime path
-        (finagent_core.runtimes.anthropic_runtime), bypassing agno
-        entirely.  Default ("agno" / unset) keeps the legacy
-        agno.agent.Agent path so existing competitions don't change
-        behaviour.  Local runtime ("local") routes to a sibling
-        OpenAI-compatible server once Track 2 lands.
+        Track 12 (full): the two-runtime path is the DEFAULT now.
+
+          - `advanced_config.runtime == "anthropic"`  →  claude-agent-sdk
+            via finagent_core.runtimes.anthropic_runtime  (default
+            when provider == "anthropic")
+          - `advanced_config.runtime == "local"`       →  OpenAI-compat
+            local server via finagent_core.runtimes.local_runtime
+            (default when provider matches one of the OpenAI-compat
+            endpoints: openai / ollama / groq / gemini / deepseek /
+            openrouter)
+          - `advanced_config.runtime == "agno"`        →  legacy
+            agno-based path (opt-in; preserved so existing
+            competitions can pin to the prior behaviour while they
+            migrate)
+
+        Unset `runtime` resolves via the provider mapping above.
         """
-        runtime_hint = (self.advanced_config or {}).get("runtime", "agno")
+        runtime_hint = (self.advanced_config or {}).get("runtime")
+        if runtime_hint is None:
+            runtime_hint = _default_runtime_for_provider(self.provider)
+
         if runtime_hint == "anthropic":
             return self._create_anthropic_runtime_llm()
+        if runtime_hint == "local":
+            return self._create_local_runtime_llm()
+        # Fall through to the legacy agno path for runtime_hint == "agno"
+        # or any unknown value (matches the prior default).
 
         try:
             from agno.agent import Agent
@@ -567,6 +630,76 @@ class LLMTradingAgent(BaseTradingAgent):
         except ImportError as e:
             logger.warning(f"Agno not available, using mock agent: {e}")
             return None
+
+    def _create_local_runtime_llm(self):
+        """Build an agno-shaped adapter that routes through the local
+        OpenAI-compatible runtime (finagent_core.runtimes.local_runtime).
+
+        Same shape as `_create_anthropic_runtime_llm` — returns an
+        object whose `.run(prompt)` produces `.content`.  The provider
+        URL / model / API key come from this BaseAgent's existing
+        configuration; the runtime is just the transport.
+        """
+        try:
+            import sys
+            from pathlib import Path
+            agents_root = (
+                Path(__file__).resolve().parents[2] / "agents"
+            )
+            if str(agents_root) not in sys.path:
+                sys.path.insert(0, str(agents_root))
+            from finagent_core.runtimes.local_runtime import (
+                LocalRuntimeUnavailable,
+                run_text,
+            )
+        except ImportError as e:
+            logger.error(f"Local runtime unavailable for '{self.name}': {e}")
+            self._init_error = f"local runtime unavailable: {e}"
+            return None
+
+        # Map the alpha_arena provider field to a sensible base_url.
+        # User-supplied advanced_config["local_base_url"] always wins.
+        base_url = (self.advanced_config or {}).get("local_base_url")
+        if not base_url:
+            base_url = _provider_to_local_base_url(self.provider)
+
+        system_prompt = "\n".join(self._get_mode_instructions())
+        agent_name = self.name
+        model_id = self.model_id
+        api_key = self.api_key
+
+        class _RunResult:
+            __slots__ = ("content",)
+            def __init__(self, content: str):
+                self.content = content
+
+        class _LocalLlmAdapter:
+            def __init__(self):
+                self.name = agent_name
+                self.provider = "local"
+                self.model_id = model_id
+
+            def run(self, prompt: str):
+                try:
+                    text = run_text(
+                        prompt,
+                        system_prompt=system_prompt,
+                        base_url=base_url,
+                        model=model_id,
+                        api_key=api_key,
+                    )
+                except LocalRuntimeUnavailable as exc:
+                    return _RunResult(
+                        content=f'{{"action": "hold", '
+                                f'"reasoning": "local runtime unavailable: {exc}"}}'
+                    )
+                return _RunResult(content=text)
+
+        logger.info(
+            f"Created local-runtime LLM agent '{self.name}' "
+            f"(provider: {self.provider}, model: {self.model_id}, base_url: {base_url})"
+        )
+        return _LocalLlmAdapter()
 
     def _create_anthropic_runtime_llm(self):
         """Build an agno-shaped adapter that routes through the new

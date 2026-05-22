@@ -58,6 +58,7 @@ def run_text(
     system_prompt: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
+    api_key: str | None = None,
     max_tokens: int = 1024,
     temperature: float = 0.7,
     timeout_s: float = 60.0,
@@ -74,6 +75,7 @@ def run_text(
     """
     url = (base_url or os.environ.get("FINCEPT_LOCAL_BASE_URL") or DEFAULT_BASE_URL).rstrip("/")
     model_id = model or os.environ.get("FINCEPT_LOCAL_MODEL") or DEFAULT_MODEL
+    key = api_key or os.environ.get("FINCEPT_LOCAL_API_KEY") or "sk-no-key"
 
     messages: list[dict[str, str]] = []
     if system_prompt:
@@ -94,9 +96,9 @@ def run_text(
         headers={
             "Content-Type": "application/json",
             # Some servers (Ollama) ignore Authorization; others (vLLM
-            # behind an API gateway) require it.  Pass an env-supplied
-            # key if present so both work.
-            "Authorization": f"Bearer {os.environ.get('FINCEPT_LOCAL_API_KEY', 'sk-no-key')}",
+            # behind an API gateway) require it.  Passed key wins over
+            # env var so concurrent callers don't race on global state.
+            "Authorization": f"Bearer {key}",
         },
         method="POST",
     )
