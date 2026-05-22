@@ -178,6 +178,68 @@ Result<ResourceContent> McpHttpClient::read_resource(const QString& uri) {
     return Result<ResourceContent>::ok(rc);
 }
 
+Result<std::vector<ExternalPrompt>> McpHttpClient::list_prompts() {
+    auto r = send_request(QStringLiteral("prompts/list"), {});
+    if (r.is_err())
+        return Result<std::vector<ExternalPrompt>>::err(r.error());
+
+    const QJsonArray arr = r.value().value("prompts").toArray();
+    std::vector<ExternalPrompt> out;
+    out.reserve(static_cast<std::size_t>(arr.size()));
+    for (const auto& item : arr) {
+        const QJsonObject p = item.toObject();
+        ExternalPrompt ep;
+        ep.server_id = config_.id;
+        ep.name = p.value("name").toString();
+        ep.description = p.value("description").toString();
+        for (const auto& a : p.value("arguments").toArray()) {
+            const QJsonObject obj = a.toObject();
+            PromptArgument pa;
+            pa.name = obj.value("name").toString();
+            pa.description = obj.value("description").toString();
+            pa.required = obj.value("required").toBool(false);
+            ep.arguments.push_back(std::move(pa));
+        }
+        out.push_back(std::move(ep));
+    }
+    return Result<std::vector<ExternalPrompt>>::ok(std::move(out));
+}
+
+Result<PromptResult> McpHttpClient::get_prompt(const QString& name,
+                                               const QHash<QString, QString>& args) {
+    QJsonObject params;
+    params["name"] = name;
+    if (!args.isEmpty()) {
+        QJsonObject jargs;
+        for (auto it = args.constBegin(); it != args.constEnd(); ++it)
+            jargs[it.key()] = it.value();
+        params["arguments"] = jargs;
+    }
+    auto r = send_request(QStringLiteral("prompts/get"), params);
+    if (r.is_err()) {
+        PromptResult pr;
+        pr.error = QString::fromStdString(r.error());
+        return Result<PromptResult>::ok(pr);
+    }
+
+    PromptResult pr;
+    const QJsonObject data = r.value();
+    pr.description = data.value("description").toString();
+    for (const auto& m : data.value("messages").toArray()) {
+        const QJsonObject obj = m.toObject();
+        PromptMessage pm;
+        pm.role = obj.value("role").toString();
+        const auto content = obj.value("content");
+        if (content.isString()) {
+            pm.text = content.toString();
+        } else if (content.isObject()) {
+            pm.text = content.toObject().value("text").toString();
+        }
+        pr.messages.push_back(std::move(pm));
+    }
+    return Result<PromptResult>::ok(pr);
+}
+
 Result<QJsonObject> McpHttpClient::call_tool(const QString& name, const QJsonObject& args) {
     QJsonObject params;
     params["name"] = name;

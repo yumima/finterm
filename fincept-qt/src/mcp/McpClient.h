@@ -40,6 +40,11 @@ class McpClient : public McpClientBase {
     Result<std::vector<ExternalResource>> list_resources() override;
     Result<ResourceContent> read_resource(const QString& uri) override;
 
+    // MCP prompts
+    Result<std::vector<ExternalPrompt>> list_prompts() override;
+    Result<PromptResult> get_prompt(const QString& name,
+                                    const QHash<QString, QString>& args) override;
+
     const McpServerConfig& config() const override { return config_; }
 
     /// Returns captured stdout/stderr lines (last 500 lines).

@@ -541,6 +541,17 @@ struct Prompt {
     PromptHandler handler;
 };
 
+/// External MCP prompt — the wire shape returned by `prompts/list`.
+/// Metadata only (no handler).  When the user picks a prompt the
+/// client issues `prompts/get` and the expanded PromptResult flows
+/// back.  Mirrors the ExternalResource pattern.
+struct ExternalPrompt {
+    QString server_id;
+    QString name;
+    QString description;
+    std::vector<PromptArgument> arguments;
+};
+
 /// Result returned by a resource handler.
 struct ResourceContent {
     QString uri;

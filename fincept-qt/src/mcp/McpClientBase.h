@@ -96,6 +96,19 @@ class McpClientBase : public QObject {
         return Result<ResourceContent>::ok(rc);
     }
 
+    // Prompts (MCP spec).  Same opt-in pattern as resources — default
+    // returns an empty list / errored result, real transports override.
+    virtual Result<std::vector<ExternalPrompt>> list_prompts() {
+        return Result<std::vector<ExternalPrompt>>::ok({});
+    }
+    virtual Result<PromptResult> get_prompt(const QString& name,
+                                            const QHash<QString, QString>& args) {
+        (void)args;
+        PromptResult pr;
+        pr.error = QString("prompts/get not implemented by this transport (name=%1)").arg(name);
+        return Result<PromptResult>::ok(pr);
+    }
+
     virtual const McpServerConfig& config() const = 0;
 
     /// Returns captured stdout/stderr lines (stdio) or request/response
