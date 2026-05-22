@@ -64,7 +64,16 @@ class VideoRenderWidget : public QWidget {
     /// Clear the cached frame and repaint to black (called on stop / error).
     void clear_frame();
 
+  signals:
+    /// User left-clicked on the video surface — owner connects to a
+    /// play/pause toggle so the YouTube-style "click anywhere to
+    /// pause" gesture works without going up to the controls bar.
+    /// Not emitted for non-left buttons (right/middle stay free for
+    /// context menus / other handlers).
+    void clicked();
+
   protected:
+    void mousePressEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 

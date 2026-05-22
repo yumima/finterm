@@ -25,6 +25,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QRadioButton>
 #include <QRect>
@@ -55,6 +56,19 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
     QPalette pal = palette();
     pal.setColor(QPalette::Window, Qt::black);
     setPalette(pal);
+    // Pointer cursor on hover signals "this surface is interactive"
+    // — same affordance as YouTube's player.  The owner connects
+    // the `clicked` signal to the play/pause toggle.
+    setCursor(Qt::PointingHandCursor);
+}
+
+void VideoRenderWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void VideoRenderWidget::clear_frame() {
@@ -633,6 +647,17 @@ void VideoPlayerWidget::build_player_view() {
     // Mouse events reach the tile's resize grip without any platform tricks.
     video_widget_ = new VideoRenderWidget(this);
     vl->addWidget(video_widget_, 1);
+
+    // YouTube-style click-to-toggle: route the surface click through the
+    // existing pause button click handler so both paths share one source
+    // of truth.  The button is hidden in WebEngine mode (cross-origin
+    // iframe), but it still exists — clicking it programmatically is a
+    // no-op when player_ is null, which is the only state where this
+    // would fire wrong.
+    connect(video_widget_, &VideoRenderWidget::clicked, this, [this]() {
+        if (play_pause_btn_)
+            play_pause_btn_->click();
+    });
 
     player_       = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
