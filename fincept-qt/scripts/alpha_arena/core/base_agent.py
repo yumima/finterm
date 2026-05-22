@@ -452,7 +452,20 @@ class LLMTradingAgent(BaseTradingAgent):
         return getattr(self, '_init_error', None)
 
     async def _create_llm(self):
-        """Create the LLM instance based on provider."""
+        """Create the LLM instance based on provider.
+
+        Track 12 phase 2: when advanced_config.runtime == "anthropic"
+        the agent is built on the new two-runtime path
+        (finagent_core.runtimes.anthropic_runtime), bypassing agno
+        entirely.  Default ("agno" / unset) keeps the legacy
+        agno.agent.Agent path so existing competitions don't change
+        behaviour.  Local runtime ("local") routes to a sibling
+        OpenAI-compatible server once Track 2 lands.
+        """
+        runtime_hint = (self.advanced_config or {}).get("runtime", "agno")
+        if runtime_hint == "anthropic":
+            return self._create_anthropic_runtime_llm()
+
         try:
             from agno.agent import Agent
             from agno.models.openai import OpenAIChat
@@ -554,6 +567,72 @@ class LLMTradingAgent(BaseTradingAgent):
         except ImportError as e:
             logger.warning(f"Agno not available, using mock agent: {e}")
             return None
+
+    def _create_anthropic_runtime_llm(self):
+        """Build an agno-shaped adapter that routes through the new
+        two-runtime Anthropic path (finagent_core.runtimes.anthropic_runtime).
+
+        The adapter exposes a synchronous `run(prompt)` that returns
+        a `_RunResult` with a `.content` attribute — matching what
+        `_extract_content` already handles for agno's RunOutput.  All
+        the existing decision-parsing / memory / metrics machinery
+        keeps working unchanged.
+        """
+        try:
+            # Add finagent_core's parent to sys.path lazily — agents repo
+            # isn't on the Python path during alpha_arena runs by default.
+            import sys
+            from pathlib import Path
+            agents_root = (
+                Path(__file__).resolve().parents[2] / "agents"
+            )
+            if str(agents_root) not in sys.path:
+                sys.path.insert(0, str(agents_root))
+            from finagent_core.runtimes.anthropic_runtime import (
+                AnthropicRuntimeUnavailable,
+                run_text,
+            )
+        except ImportError as e:
+            logger.error(f"Anthropic runtime unavailable for '{self.name}': {e}")
+            self._init_error = (
+                f"anthropic runtime unavailable — install claude-agent-sdk: {e}"
+            )
+            return None
+
+        # Build the combined system prompt up front so .run() is cheap.
+        system_prompt = "\n".join(self._get_mode_instructions())
+
+        agent_name = self.name
+        agent_provider = self.provider
+        agent_model = self.model_id
+
+        class _RunResult:
+            """Mimics agno's RunOutput.content shape."""
+            __slots__ = ("content",)
+            def __init__(self, content: str):
+                self.content = content
+
+        class _AnthropicLlmAdapter:
+            def __init__(self, sys_prompt: str):
+                self._system_prompt = sys_prompt
+                self.name = agent_name
+                self.provider = agent_provider
+                self.model_id = agent_model
+
+            def run(self, prompt: str):
+                try:
+                    text = run_text(prompt, system_prompt=self._system_prompt)
+                except AnthropicRuntimeUnavailable as exc:
+                    # Surface as a string the legacy error path
+                    # (`_extract_content`) understands.  Caller logs.
+                    return _RunResult(content=f'{{"action": "hold", '
+                                              f'"reasoning": "anthropic runtime unavailable: {exc}"}}')
+                return _RunResult(content=text)
+
+        logger.info(
+            f"Created anthropic-runtime LLM agent '{self.name}' (model: {self.model_id})"
+        )
+        return _AnthropicLlmAdapter(system_prompt)
 
     def _get_mode_instructions(self) -> List[str]:
         """Get instructions based on competition mode, trading style, and advanced config."""

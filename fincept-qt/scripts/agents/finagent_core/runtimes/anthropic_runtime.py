@@ -76,6 +76,62 @@ def run_turn(
     return asyncio.run(_run_async(fixture, bridge, handler))
 
 
+def run_text(
+    prompt: str,
+    *,
+    system_prompt: str | None = None,
+    max_turns: int = 10,
+) -> str:
+    """Production-shaped entry point: text-in / text-out.
+
+    The eval harness uses run_turn(fixture, …) to capture a full
+    Trace.  Production callers (alpha_arena BaseAgent, future
+    AgentService consumers) want the simpler text/text shape and
+    don't need the fixture machinery.
+
+    Same SDK + skill discovery + MCP-bridge plumbing as run_turn;
+    just unwrapped at the boundary.  Raises AnthropicRuntimeUnavailable
+    when the SDK or CLI is missing — caller decides whether to fall
+    back to a different runtime.
+    """
+    return asyncio.run(_run_text_async(prompt, system_prompt, max_turns))
+
+
+async def _run_text_async(prompt: str, system_prompt: str | None, max_turns: int) -> str:
+    try:
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            CLINotFoundError,
+            TextBlock,
+            query,
+        )
+    except ImportError as exc:
+        raise AnthropicRuntimeUnavailable(
+            "claude-agent-sdk not installed — run `pip install claude-agent-sdk`"
+        ) from exc
+
+    options_kwargs: dict = {"max_turns": max_turns}
+    if system_prompt:
+        options_kwargs["system_prompt"] = system_prompt
+    options = ClaudeAgentOptions(**options_kwargs)
+
+    pieces: list[str] = []
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in getattr(message, "content", []):
+                    if isinstance(block, TextBlock):
+                        text = getattr(block, "text", "")
+                        if text:
+                            pieces.append(text)
+    except CLINotFoundError as exc:
+        raise AnthropicRuntimeUnavailable(
+            f"`claude` CLI not on PATH — install Claude Code: {exc}"
+        ) from exc
+    return "\n".join(pieces)
+
+
 async def _run_async(
     fixture: "Fixture", tool_bridge: ToolBridge, handler: StreamHandler
 ) -> "Trace":
