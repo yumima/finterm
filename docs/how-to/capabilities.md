@@ -30,6 +30,7 @@ Glyphs:
 | **Cron-shaped scheduler** | ✓ | ✓ | @daily / @every entries fire scheduled agent runs. |
 | **Slash command dispatch** | ✓ | ✓ | /comps, /dcf, /earnings, … route to named agents with resolved args. |
 | **OAuth 2.0 + DCR** | ✓ | ✓ | Hosted MCP servers authenticate via OAuth. client_credentials and authorization_code grants both supported; RFC 8414 discovery, RFC 7591 dynamic client registration, RFC 7636 PKCE on authorization_code. |
+| **Text-to-speech** | ◐ | ◐ | Read agent output aloud via a local TTS engine. |
 
 ## Notes
 
@@ -71,4 +72,8 @@ Glyphs:
 ### OAuth 2.0 + DCR
 
 - authorization_code flow uses a localhost callback server (default port 47823) + the user's browser; client_id must be set in SecureStorage out-of-band (DCR for browser-flow clients is rare and not auto-wired).
+
+### Text-to-speech
+
+- Same TtsService drives either runtime — runtime choice doesn't matter for output.  User installs Piper (`pip install piper-tts`) and downloads a voice .onnx file, then points `tts.model_path` at it via Settings.
 

@@ -983,6 +983,9 @@ set(SERVICE_SOURCES
     # Speech-to-text service (Python speech_recognition + Google API)
     src/services/stt/SpeechService.cpp
 
+    # Text-to-speech service (local Piper)
+    src/services/tts/TtsService.cpp
+
     # Modular notification system — service + 15 providers
     src/services/notifications/NotificationService.cpp
     src/services/notifications/providers/TelegramProvider.cpp
