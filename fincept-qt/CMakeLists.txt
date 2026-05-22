@@ -692,6 +692,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
+    src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/LlmConfigRepository.cpp
     src/storage/repositories/LlmProfileRepository.cpp
@@ -749,6 +750,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v032_memory_entries.cpp
     src/storage/sqlite/migrations/v033_mcp_oauth.cpp
     src/storage/sqlite/migrations/v034_chat_artefacts.cpp
+    src/storage/sqlite/migrations/v035_agent_feedback.cpp
 )
 
 # Python runner
@@ -1788,6 +1790,7 @@ set_source_files_properties(
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
+    src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp
@@ -1843,6 +1846,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v032_memory_entries.cpp
     src/storage/sqlite/migrations/v033_mcp_oauth.cpp
     src/storage/sqlite/migrations/v034_chat_artefacts.cpp
+    src/storage/sqlite/migrations/v035_agent_feedback.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1958,6 +1962,7 @@ set_source_files_properties(
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
+    src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/ContextRecordingRepository.cpp

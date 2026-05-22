@@ -1,6 +1,7 @@
 #include "screens/settings/AiSystemSection.h"
 
 #include "services/agents/BudgetService.h"
+#include "storage/repositories/AgentFeedbackRepository.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
 
@@ -306,9 +307,60 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
         add_text_block(QStringLiteral("Config"), pretty);
     }
 
+    // Feedback row — capture user judgement on this turn.  Note is
+    // optional; verdict is mandatory.  Track 7B writes to
+    // agent_feedback; Track 7C will read the wrong-marked rows to
+    // propose SKILL.md edits.  Show any existing feedback first so
+    // the user sees what they already said.
+    {
+        auto prior = AgentFeedbackRepository::instance().list_by_request(t.request_id);
+        if (prior.is_ok() && !prior.value().isEmpty()) {
+            root->addWidget(new QLabel(QStringLiteral("<b>Prior feedback</b>")));
+            QStringList parts;
+            for (const auto& f : prior.value()) {
+                parts.append(QStringLiteral("%1: %2%3")
+                                 .arg(f.created_at, f.verdict,
+                                      f.note.isEmpty() ? QString()
+                                                       : QStringLiteral(" — ") + f.note));
+            }
+            auto* p = new QLabel(parts.join("\n"));
+            p->setWordWrap(true);
+            p->setStyleSheet(QStringLiteral("color: #888; font-size: 11px;"));
+            root->addWidget(p);
+        }
+    }
+
+    auto* mark_wrong = new QPushButton(QStringLiteral("👎 Mark wrong"));
+    auto* mark_right = new QPushButton(QStringLiteral("👍 Mark right"));
     auto* close_btn = new QPushButton(QStringLiteral("Close"));
     connect(close_btn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    auto record_feedback = [this, &dlg, &t](const QString& verdict) {
+        bool ok = false;
+        const QString note = QInputDialog::getText(
+            &dlg, QStringLiteral("Mark ") + verdict,
+            QStringLiteral("Optional note (what was wrong / right):"),
+            QLineEdit::Normal, QString(), &ok);
+        if (!ok)
+            return;
+        auto r = AgentFeedbackRepository::instance().create(t.request_id, verdict, note);
+        if (r.is_err()) {
+            show_status(QStringLiteral("Failed to save feedback: %1")
+                            .arg(QString::fromStdString(r.error())), true);
+            return;
+        }
+        show_status(QStringLiteral("Recorded %1 for %2").arg(verdict, t.request_id.left(8)));
+        dlg.accept();
+    };
+    connect(mark_wrong, &QPushButton::clicked, this, [record_feedback]() {
+        record_feedback(QStringLiteral("wrong"));
+    });
+    connect(mark_right, &QPushButton::clicked, this, [record_feedback]() {
+        record_feedback(QStringLiteral("right"));
+    });
+
     auto* btn_row = new QHBoxLayout;
+    btn_row->addWidget(mark_wrong);
+    btn_row->addWidget(mark_right);
     btn_row->addStretch();
     btn_row->addWidget(close_btn);
     root->addLayout(btn_row);
