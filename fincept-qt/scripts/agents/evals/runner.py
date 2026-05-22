@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .fixture import Fixture, load_fixture
 from .parity import ParityReport, compare_traces
+from .result_store import record_run
 from .runtime_adapter import Runtime, RuntimeNotReady, run_turn
 from .trace import Trace, TraceAssertions, trace_to_dict
 
@@ -35,6 +36,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         trace = run_turn(fixture, runtime)
     except RuntimeNotReady as exc:
         print(f"[skip] {fixture.name} ({runtime.value}): {exc}", file=sys.stderr)
+        record_run(
+            trace=None, runtime=runtime.value,
+            fixture_path=str(args.fixture), status="skip",
+            failed_assertions=[str(exc)],
+        )
         return _EXIT_SKIP
 
     failed = [r for r in TraceAssertions(trace, fixture.expected).check_all() if not r]
@@ -42,11 +48,20 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"[fail] {fixture.name} ({runtime.value}):")
         for r in failed:
             print(f"  - {r.message}")
+        record_run(
+            trace=trace, runtime=runtime.value,
+            fixture_path=str(args.fixture), status="fail",
+            failed_assertions=[r.message for r in failed],
+        )
         return _EXIT_FAIL
 
     if args.write_snapshot:
         _write_snapshot(fixture, trace, runtime)
     print(f"[ok] {fixture.name} ({runtime.value})")
+    record_run(
+        trace=trace, runtime=runtime.value,
+        fixture_path=str(args.fixture), status="ok",
+    )
     return _EXIT_OK
 
 
@@ -70,6 +85,11 @@ def cmd_run_all(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 skipped = True
+                record_run(
+                    trace=None, runtime=runtime.value,
+                    fixture_path=fixture.name, status="skip",
+                    failed_assertions=[str(exc)],
+                )
 
         for runtime, trace in per_runtime.items():
             if trace is None:
@@ -83,6 +103,16 @@ def cmd_run_all(args: argparse.Namespace) -> int:
                 for r in failed:
                     print(f"  - {r.message}")
                 exit_code = _EXIT_FAIL
+                record_run(
+                    trace=trace, runtime=runtime.value,
+                    fixture_path=fixture.name, status="fail",
+                    failed_assertions=[r.message for r in failed],
+                )
+            else:
+                record_run(
+                    trace=trace, runtime=runtime.value,
+                    fixture_path=fixture.name, status="ok",
+                )
 
         if args.parity and not skipped:
             local_trace = per_runtime[Runtime.LOCAL]

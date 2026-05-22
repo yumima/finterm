@@ -40,7 +40,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⚠ partial | Phase 1 ✅ (`finagent_core/__init__.py` PEP 562 lazy). Phase 2 ✅ entry-point: `anthropic_runtime.run_text(prompt, system_prompt=…)` + alpha_arena `BaseAgent._create_anthropic_runtime_llm()` adapter, opt-in via `advanced_config.runtime = "anthropic"`. Local runtime path waits for Engine M1. |
 | 13 | AI Workbench (UI consolidation) | ⚠ partial | Min-viable: `AiSystemSection` added to SettingsScreen — surfaces agent_traces (Track 14 #38), spend today (#41), tool kill-switch list with disable/enable (#39). Full left-nav consolidation (Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System on a single screen) defers. |
-| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 ✅. #39 ✅. #40 ✅. #41 ✅ (C++ gate: per-agent daily USD cap via `agent_configs.budget.max_usd_per_day`, enforced before dispatch using `agent_traces.cost_usd` sum). Runtime-side in-flight token budgets defer to Track 2/3 once cost reporting wires up. Remaining: #42 UX scripts (QA work). |
+| 14 | Evals + observability + audit + safety + UX | ✅ done | #37 ✅ (eval `result_store.py` jsonl, runner wired). #38 ✅. #39 ✅. #40 ✅. #41 ✅. #42 ✅ (`tests/ui/acceptance_checklist.md` mapping A1-A4 / B1-B5 / C1-C7 + safety spot-checks). Runtime-side in-flight token budgets defer to Engine M1. |
 | 15 | Forum → Reddit RSS + Discord deep-link | 📋 filed | Off the AI critical path |
 
 ---
