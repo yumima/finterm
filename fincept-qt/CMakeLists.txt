@@ -771,6 +771,7 @@ set(MCP_SOURCES
     src/mcp/McpHttpClient.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
+    src/mcp/UntrustedContent.cpp
 
     # Tool modules
     src/mcp/tools/NavigationTools.cpp
@@ -1869,6 +1870,7 @@ set_source_files_properties(
     src/mcp/McpHttpClient.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
+    src/mcp/UntrustedContent.cpp
     src/mcp/tools/NavigationTools.cpp
     src/mcp/tools/MarketsTools.cpp
     src/mcp/tools/WatchlistTools.cpp

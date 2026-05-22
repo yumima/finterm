@@ -4,6 +4,7 @@
 
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
+#include "mcp/UntrustedContent.h"
 #include "mcp/tools/ThreadHelper.h"
 #include "services/news/NewsClusterService.h"
 #include "services/news/NewsMonitorService.h"
@@ -124,9 +125,14 @@ static QVector<NewsArticle> filter_articles(const QVector<NewsArticle>& articles
 }
 
 static QJsonObject article_to_json(const NewsArticle& a) {
+    // R23 — wrap externally-sourced text with prompt-injection guards.
+    // Headlines and summaries are the highest-risk fields: they come
+    // verbatim from external feeds and reach the model unmediated.
+    // Other fields (source, category, region, etc.) are taxonomy
+    // values, not free text — safe to pass through.
     return QJsonObject{{"id", a.id},
-                       {"headline", a.headline},
-                       {"summary", a.summary},
+                       {"headline", mcp::UntrustedContent::wrap(a.headline)},
+                       {"summary", mcp::UntrustedContent::wrap(a.summary)},
                        {"source", a.source},
                        {"category", a.category},
                        {"region", a.region},

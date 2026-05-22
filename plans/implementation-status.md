@@ -40,7 +40,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⚠ partial | `finagent_core/__init__.py` now uses PEP 562 lazy `__getattr__`; bare package + `runtimes.*` imports no longer pull agno. 58 eval-harness tests pass even with agno blocked at the import system level. Full migration of `alpha_arena/` callers onto two runtimes still pending. |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
-| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 (trace + audit schema) done: v029 + `AgentTraceRepository` + `AgentService::run_agent` wiring. #39 (per-tool kill-switch) done: v030 `tool_killswitch` table + `ToolKillswitchRepository` + `McpService::execute_tool` gate. Remaining: #40 prompt-injection guard, #41 per-request budgets, #42 UX scripts. |
+| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 (trace + audit schema) ✅. #39 (per-tool kill-switch) ✅. #40 (prompt-injection guard) partial: `mcp::UntrustedContent::wrap` helper + applied to NewsTools (headline + summary); broad rollout + system-prompt update pending. Remaining: #41 per-request budgets, #42 UX scripts. |
 | 15 | Forum → Reddit RSS + Discord deep-link | 📋 filed | Off the AI critical path |
 
 ---
@@ -110,6 +110,7 @@ Future migrations should start at **v031**.
 - `fincept-qt/src/services/agents/SlashCommandService.{h,cpp}` — Track 7 #21 resolver (`/comps AAPL` → agent + skill + args); registry of 13 slash commands
 - `fincept-qt/src/storage/repositories/AgentTraceRepository.{h,cpp}` — Track 14 #38 create/finish/list_recent over `agent_traces` (v029)
 - `fincept-qt/src/storage/repositories/ToolKillswitchRepository.{h,cpp}` — Track 14 #39 disabled-set / disable / enable over `tool_killswitch` (v030); `McpService::execute_tool` gates on this
+- `fincept-qt/src/mcp/UntrustedContent.{h,cpp}` — Track 14 #40 prompt-injection guard; wraps text with `<untrusted>` markers and entity-encodes `<`/`>` to prevent escape; applied to NewsTools (headline + summary)
 - `fincept-qt/scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md` — starter methodology library; 3 skills shipped (morning-note, earnings-analysis, comps-analysis); upstream vendoring deferred
 - `fincept-qt/src/screens/settings/LlmConfigSection.cpp` — providers dropdown (anthropic + ollama only)
 - `fincept-qt/src/screens/settings/VoiceConfigSection.cpp` — Whisper + Deepgram only
