@@ -4,6 +4,7 @@
 #include "mcp/tools/ForumTools.h"
 
 #include "core/logging/Logger.h"
+#include "mcp/UntrustedContent.h"
 #include "mcp/tools/ThreadHelper.h"
 #include "services/forum/ForumModels.h"
 #include "services/forum/ForumService.h"
@@ -32,15 +33,19 @@ static QJsonObject category_to_json(const ForumCategory& c) {
 }
 
 static QJsonObject post_to_json(const ForumPost& p) {
+    // R23 — every user-authored field is wrapped.  Even "innocuous"
+    // identifiers (author, display name) can carry injection payloads
+    // since the user picks them freely.  Numeric counts and timestamps
+    // pass through.
     return QJsonObject{
         {"uuid", p.post_uuid},
-        {"title", p.title},
-        {"content", p.content},
+        {"title", mcp::UntrustedContent::wrap(p.title)},
+        {"content", mcp::UntrustedContent::wrap(p.content)},
         {"views", p.views},
         {"likes", p.likes},
         {"reply_count", p.reply_count},
-        {"author", p.author_name},
-        {"author_display_name", p.author_display_name},
+        {"author", mcp::UntrustedContent::wrap(p.author_name)},
+        {"author_display_name", mcp::UntrustedContent::wrap(p.author_display_name)},
         {"category", p.category_name},
         {"category_color", p.category_color},
         {"user_vote", p.user_vote},
@@ -52,11 +57,11 @@ static QJsonObject post_to_json(const ForumPost& p) {
 static QJsonObject comment_to_json(const ForumComment& c) {
     return QJsonObject{
         {"uuid", c.comment_uuid},
-        {"content", c.content},
+        {"content", mcp::UntrustedContent::wrap(c.content)},
         {"likes", c.likes},
         {"dislikes", c.dislikes},
-        {"author", c.author_name},
-        {"author_display_name", c.author_display_name},
+        {"author", mcp::UntrustedContent::wrap(c.author_name)},
+        {"author_display_name", mcp::UntrustedContent::wrap(c.author_display_name)},
         {"parent_comment_id", c.parent_comment_id},
         {"user_vote", c.user_vote},
         {"created_at", c.created_at},
@@ -69,11 +74,11 @@ static QJsonObject profile_to_json(const ForumProfile& p) {
         recent.append(post_to_json(rp));
     return QJsonObject{
         {"user_id", p.user_id},
-        {"username", p.username},
-        {"display_name", p.display_name},
-        {"bio", p.bio},
+        {"username", mcp::UntrustedContent::wrap(p.username)},
+        {"display_name", mcp::UntrustedContent::wrap(p.display_name)},
+        {"bio", mcp::UntrustedContent::wrap(p.bio)},
         {"avatar_color", p.avatar_color},
-        {"signature", p.signature},
+        {"signature", mcp::UntrustedContent::wrap(p.signature)},
         {"reputation", p.reputation},
         {"posts_count", p.posts_count},
         {"comments_count", p.comments_count},

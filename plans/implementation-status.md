@@ -40,7 +40,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⚠ partial | `finagent_core/__init__.py` now uses PEP 562 lazy `__getattr__`; bare package + `runtimes.*` imports no longer pull agno. 58 eval-harness tests pass even with agno blocked at the import system level. Full migration of `alpha_arena/` callers onto two runtimes still pending. |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
-| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 (trace + audit schema) ✅. #39 (per-tool kill-switch) ✅. #40 (prompt-injection guard) partial: `mcp::UntrustedContent::wrap` helper + applied to NewsTools (headline + summary); broad rollout + system-prompt update pending. Remaining: #41 per-request budgets, #42 UX scripts. |
+| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 ✅. #39 ✅. #40 ✅ (helper + NewsTools + ForumTools rollout + v031 `<untrusted>` directive injected into every agent's system prompt). Remaining: #41 per-request budgets, #42 UX scripts. |
 | 15 | Forum → Reddit RSS + Discord deep-link | 📋 filed | Off the AI critical path |
 
 ---
@@ -87,8 +87,9 @@ tracks, so a new session can pick up without re-reading every commit.
 | v028 | `named_agents` | Seeds 10 named agent identities (Track 7 #20) |
 | v029 | `agent_traces` | Unified trace + audit schema (Track 14 #38) |
 | v030 | `tool_killswitch` | Per-tool kill-switch (Track 14 #39 / R22) |
+| v031 | `untrusted_directive` | Prepend `<untrusted>`-aware preamble to every agent's system_prompt (Track 14 #40 / R23) |
 
-Future migrations should start at **v031**.
+Future migrations should start at **v032**.
 
 ---
 

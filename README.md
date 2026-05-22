@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cf1adf0a`](https://github.com/yumima/finterm/commit/cf1adf0a) mcp(safety): prompt-injection guard helper + NewsTools rollout (Track 14 #40 / R23)
 - [`d9e0e2b9`](https://github.com/yumima/finterm/commit/d9e0e2b9) mcp(killswitch): per-tool kill-switch at dispatch chokepoint (Track 14 #39)
 - [`48db15c7`](https://github.com/yumima/finterm/commit/48db15c7) agents: route DB access through Database::execute (/review fix)
 - [`36d073ee`](https://github.com/yumima/finterm/commit/36d073ee) agents(trace): unified trace + audit schema (Track 14 #38)
