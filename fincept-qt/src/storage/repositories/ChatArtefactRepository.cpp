@@ -149,9 +149,16 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     if (a.source_skill.isEmpty())
         return Out::ok(QVector<ChatArtefactRow>{a});
 
+    // SQLite `IS` (a.k.a. IS NOT DISTINCT FROM) treats NULL as equal
+    // to NULL and behaves like `=` for non-NULL values.  The schema
+    // (v034) allows the three identity columns to be NULL — current
+    // producers write empty strings, but legacy / externally-inserted
+    // rows could have NULL.  `=` would evaluate UNKNOWN there and
+    // exclude the seed row from its own lineage; `IS` groups
+    // correctly.
     const QString sql = QStringLiteral(
         "SELECT %1 FROM chat_artefacts "
-        "WHERE source_agent_id = ? AND source_skill = ? AND source_args_json = ? "
+        "WHERE source_agent_id IS ? AND source_skill IS ? AND source_args_json IS ? "
         "ORDER BY created_at DESC").arg(kCols);
     auto r = Database::instance().execute(sql, {
         a.source_agent_id, a.source_skill, a.source_args_json});
