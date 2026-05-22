@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`839d9461`](https://github.com/yumima/finterm/commit/839d9461) mcp: server-initiated notification dispatch on McpClient (stdio)
 - [`37f5af04`](https://github.com/yumima/finterm/commit/37f5af04) agents(elicit): cross-thread modal bridge for MCP elicitation
 - [`f2c8d009`](https://github.com/yumima/finterm/commit/f2c8d009) runtime(local): SSE streaming via run_text_stream
 - [`fc48604d`](https://github.com/yumima/finterm/commit/fc48604d) **docs:** how-to/ user guides + blocked-item categorisation

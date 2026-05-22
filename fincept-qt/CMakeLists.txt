@@ -906,6 +906,7 @@ set(SERVICE_SOURCES
     src/services/agents/AgentService.cpp
     src/services/agents/AgentScheduler.cpp
     src/services/agents/BudgetService.cpp
+    src/services/agents/CapabilityRegistry.cpp
     src/services/agents/ElicitBridge.cpp
     src/services/agents/SlashCommandService.cpp
     src/services/file_manager/FileManagerService.cpp
@@ -2487,6 +2488,11 @@ add_custom_command(TARGET FinceptTerminal POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/component_catalog.json"
         "$<TARGET_FILE_DIR:FinceptTerminal>/resources/component_catalog.json"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/ai"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/ai/capabilities.json"
+        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/ai/capabilities.json"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

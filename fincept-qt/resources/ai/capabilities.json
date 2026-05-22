@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "finterm AI capability matrix. Drives the generated docs/how-to/capabilities.md table and runtime feature gating via CapabilityRegistry. Per-runtime values: 'supported' | 'unsupported' | 'partial' | 'planned'.",
+  "version": 1,
+  "runtimes": ["anthropic", "local"],
+  "capabilities": [
+    {
+      "id": "streaming",
+      "label": "Token-by-token streaming",
+      "description": "Stream response tokens to the chat surface as they arrive.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["AiChatScreen composer"]
+    },
+    {
+      "id": "tool_calling",
+      "label": "MCP tool calling",
+      "description": "Agents call MCP tools (internal int__* + external <server>__*) mid-turn.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["Slash dispatch", "Workbench → System"]
+    },
+    {
+      "id": "mcp_resources",
+      "label": "MCP resources",
+      "description": "Typed read-only refs (finterm://portfolio/snapshot etc.) the agent reads without spending a tool call.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["AgentService", "mcp_bridge"]
+    },
+    {
+      "id": "mcp_prompts",
+      "label": "MCP prompts",
+      "description": "Templated prompts surfaced in the slash menu.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["AgentService", "mcp_bridge"]
+    },
+    {
+      "id": "mcp_sampling",
+      "label": "MCP sampling primitive",
+      "description": "Tools request an LLM completion via ctx.sample().",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["McpProvider default handler → LlmService"]
+    },
+    {
+      "id": "mcp_elicitation",
+      "label": "MCP elicitation primitive",
+      "description": "Tools ask the user a structured mid-call question.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["ElicitBridge → AiChatScreen modal"]
+    },
+    {
+      "id": "skills_loading",
+      "label": "SKILL.md skill loading",
+      "description": "Agents load SKILL.md methodology files into context.",
+      "anthropic": "supported",
+      "local": "unsupported",
+      "ui_surface": ["agent_configs.config_json.skills[]"],
+      "notes_local": "Would require an SKILL.md → system-prompt injector on the local side; deferred."
+    },
+    {
+      "id": "prompt_caching",
+      "label": "Prompt caching",
+      "description": "Long system prompts cached for input-token savings on subsequent turns.",
+      "anthropic": "supported",
+      "local": "partial",
+      "ui_surface": ["Cost meter in Workbench → System"],
+      "notes_local": "Server-dependent (Ollama 0.5+ KV cache, vLLM prefix cache); finterm doesn't introspect cache hits."
+    },
+    {
+      "id": "memory_tool",
+      "label": "Persistent memory",
+      "description": "Agents store + recall durable state across turns / sessions.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["MemoryTools MCP family"],
+      "notes_anthropic": "SDK-native memory tool.",
+      "notes_local": "finterm MemoryTools (memory_upsert/search/list/delete) backed by SQLite; sqlite-vec semantic search defers to Engine M1."
+    },
+    {
+      "id": "files_api",
+      "label": "Files API (PDF / images)",
+      "description": "Upload PDFs / images / CSVs by handle, reference across turns.",
+      "anthropic": "unsupported",
+      "local": "unsupported",
+      "ui_surface": [],
+      "notes_anthropic": "Not exposed in claude-agent-sdk 0.2.83; revisit on SDK upgrade.",
+      "notes_local": "Not part of OpenAI-compat spec; per-server vision support varies."
+    },
+    {
+      "id": "citations",
+      "label": "Per-claim citations",
+      "description": "Agent output carries source citations alongside text.",
+      "anthropic": "unsupported",
+      "local": "unsupported",
+      "ui_surface": [],
+      "notes_anthropic": "Not exposed in claude-agent-sdk 0.2.83.",
+      "notes_local": "Not in OpenAI-compat spec."
+    },
+    {
+      "id": "computer_use",
+      "label": "Computer use (screen control)",
+      "description": "Agent controls a virtual desktop / browser.",
+      "anthropic": "planned",
+      "local": "unsupported",
+      "ui_surface": [],
+      "notes_anthropic": "SDK exposes the primitive on Claude 3.5+; finterm doesn't wire the UI surface yet."
+    },
+    {
+      "id": "sub_agents",
+      "label": "Sub-agents",
+      "description": "Coordinator agent spawns child agents with their own context.",
+      "anthropic": "planned",
+      "local": "unsupported",
+      "ui_surface": [],
+      "notes_anthropic": "SDK supports it; finterm's named-agent layer doesn't expose the team primitive yet."
+    },
+    {
+      "id": "untrusted_content_guard",
+      "label": "Prompt-injection guard",
+      "description": "External text wrapped with <untrusted> markers; system prompt tells the model not to follow.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["NewsTools", "ForumTools", "v031 system-prompt directive"]
+    },
+    {
+      "id": "kill_switch",
+      "label": "Per-tool kill-switch",
+      "description": "User can disable any tool system-wide; refusal wins over per-agent allowlists.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["Settings → AI System", "Workbench → System"]
+    },
+    {
+      "id": "agent_traces",
+      "label": "Audit-grade trace log",
+      "description": "Every agent dispatch lands in agent_traces with prompts, latency, tokens, cost, status.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["Settings → AI System", "AgentTraceRepository"]
+    },
+    {
+      "id": "daily_budget",
+      "label": "Per-agent daily USD cap",
+      "description": "Budget gate refuses dispatch before any LLM tokens are consumed.",
+      "anthropic": "supported",
+      "local": "partial",
+      "ui_surface": ["agent_configs.config_json.budget"],
+      "notes_local": "Budget enforcement works on both, but cost-attribution accuracy depends on the runtime reporting cost_usd back. Local servers usually don't."
+    },
+    {
+      "id": "scheduler",
+      "label": "Cron-shaped scheduler",
+      "description": "@daily / @every entries fire scheduled agent runs.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["Settings → Scheduler", "Workbench → System"]
+    },
+    {
+      "id": "slash_commands",
+      "label": "Slash command dispatch",
+      "description": "/comps, /dcf, /earnings, … route to named agents with resolved args.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["AiChatScreen", "SlashCommandService"]
+    },
+    {
+      "id": "oauth_dcr",
+      "label": "OAuth 2.0 + DCR (client_credentials)",
+      "description": "Hosted MCP servers authenticate via client_credentials grant with Dynamic Client Registration.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["McpOAuth"],
+      "notes": "authorization_code grant (browser-redirect) defers."
+    }
+  ]
+}

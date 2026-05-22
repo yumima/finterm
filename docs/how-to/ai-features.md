@@ -216,23 +216,20 @@ finterm registers automatically the first time it connects.
 
 Tap the mic icon in the chat composer to dictate.
 
-## 8. Anthropic-only conveniences
+## 8. What works on which runtime
 
-The Anthropic profile inherits a few SDK-native features that
-local runtimes can't match yet:
+Both runtimes share the same slash surface, agents, skills, MCP
+tools, and safety primitives.  Where they differ — Files API,
+citations, computer use, sub-agents, SDK-native memory vs the
+local MemoryTools — is laid out in the **[capability matrix
+table](capabilities.md)** generated from the same source the C++
+gating layer reads.
 
-- **Skills** — the SDK loads SKILL.md files when an agent's
-  config lists them.  finterm ships 3 starter skills
-  (`morning-note`, `earnings-analysis`, `comps-analysis`); the
-  full `anthropics/financial-services` library is the vendoring
-  target.
-- **Prompt caching** — long system prompts (skills, agent
-  identities) cache automatically.  Look for reduced
-  input-token cost on the second turn against the same agent.
-- **Server-side memory tool** — the SDK exposes a persistent
-  memory primitive that scoping-respects threads.  Local profile
-  uses our `MemoryTools` MCP family instead — same shape
-  (`memory_upsert / search / list / delete`), narrower features.
+Source of truth:
+[`fincept-qt/resources/ai/capabilities.json`](../../fincept-qt/resources/ai/capabilities.json).
+When a runtime adds a capability, change the JSON, re-run
+`fincept-qt/scripts/gen_capabilities_doc.py`, commit both — UI
+gating + docs update together.
 
 ## 9. Configure once vs configure-per-agent
 
