@@ -22,6 +22,11 @@ struct McpServer {
     QString base_url;                 // HTTP endpoint; empty for stdio
     QString auth_scheme  = "none";    // "none" | "bearer" | "api_key" | "oauth"
     QString auth_header;              // header name for api_key (default X-API-Key)
+
+    // OAuth columns (migration v033).  Only meaningful when auth_scheme == "oauth".
+    QString auth_token_url;           // OAuth token endpoint
+    QString auth_scope;               // space-separated scopes
+    QString oauth_grant_type;         // "client_credentials" | (future) "authorization_code"
 };
 
 class McpServerRepository : public BaseRepository<McpServer> {

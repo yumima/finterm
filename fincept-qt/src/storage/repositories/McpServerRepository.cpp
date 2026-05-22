@@ -21,12 +21,17 @@ McpServer McpServerRepository::map_row(QSqlQuery& q) {
     QString as = q.value(15).toString();
     s.auth_scheme    = as.isEmpty() ? QStringLiteral("none") : as;
     s.auth_header    = q.value(16).toString();
+    // v033 columns — defensive default for pre-v033 rows.
+    s.auth_token_url = q.value(17).toString();
+    s.auth_scope     = q.value(18).toString();
+    s.oauth_grant_type = q.value(19).toString();
     return s;
 }
 
 static const char* kCols = "id, name, description, command, args, env, category, icon, enabled, "
                            "auto_start, status, created_at, updated_at, "
-                           "transport_type, base_url, auth_scheme, auth_header";
+                           "transport_type, base_url, auth_scheme, auth_header, "
+                           "auth_token_url, auth_scope, oauth_grant_type";
 
 Result<QVector<McpServer>> McpServerRepository::list_all() {
     return query_list(QString("SELECT %1 FROM mcp_servers ORDER BY name").arg(kCols), {}, map_row);
@@ -40,14 +45,16 @@ Result<void> McpServerRepository::save(const McpServer& s) {
     return exec_write(
         "INSERT OR REPLACE INTO mcp_servers "
         "(id, name, description, command, args, env, category, icon, enabled, auto_start, status, "
-        " transport_type, base_url, auth_scheme, auth_header, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        " transport_type, base_url, auth_scheme, auth_header, "
+        " auth_token_url, auth_scope, oauth_grant_type, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
         {s.id, s.name, s.description, s.command, s.args, s.env, s.category, s.icon, s.enabled ? 1 : 0,
          s.auto_start ? 1 : 0, s.status,
          s.transport_type.isEmpty() ? QStringLiteral("stdio") : s.transport_type,
          s.base_url,
          s.auth_scheme.isEmpty() ? QStringLiteral("none") : s.auth_scheme,
-         s.auth_header});
+         s.auth_header,
+         s.auth_token_url, s.auth_scope, s.oauth_grant_type});
 }
 
 Result<void> McpServerRepository::remove(const QString& id) {

@@ -55,6 +55,15 @@ struct McpServerConfig {
     QString base_url;                 // HTTP endpoint; empty for stdio
     QString auth_scheme  = "none";    // "none" | "bearer" | "api_key" | "oauth"
     QString auth_header;              // header name for api_key (default X-API-Key when blank)
+
+    // OAuth 2.0 + DCR (Track 4 #14b) — migration v033.  Populated only
+    // when auth_scheme == "oauth".  Credentials (client_id, client_secret,
+    // access_token, refresh_token, expires_at) live in SecureStorage,
+    // not in this struct.
+    QString auth_token_url;           // token endpoint
+    QString auth_registration_url;    // optional RFC 7591 DCR endpoint
+    QString auth_scope;               // space-separated scopes
+    QString oauth_grant_type = "client_credentials"; // grant type; "client_credentials" only today
 };
 
 // No Q_OBJECT here — McpClientBase is a pure-interface abstract class

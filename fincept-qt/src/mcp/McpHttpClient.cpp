@@ -1,5 +1,7 @@
 #include "mcp/McpHttpClient.h"
 
+#include "mcp/McpOAuth.h"
+
 #include "core/logging/Logger.h"
 #include "storage/secure/SecureStorage.h"
 
@@ -42,10 +44,10 @@ Result<void> McpHttpClient::start() {
         return Result<void>::err("HTTP MCP server has an invalid base_url: " +
                                  config_.base_url.toStdString());
     }
-    if (config_.auth_scheme == QStringLiteral("oauth")) {
+    if (config_.auth_scheme == QStringLiteral("oauth")
+        && config_.auth_token_url.isEmpty()) {
         return Result<void>::err(
-            "auth_scheme='oauth' not supported in this build — Track 4 #14b "
-            "lands OAuth+DCR");
+            "auth_scheme='oauth' requires auth_token_url to be configured");
     }
 
     if (!nam_)
@@ -347,8 +349,20 @@ bool McpHttpClient::apply_auth(QNetworkRequest& req) {
         return true;
 
     if (scheme == QStringLiteral("oauth")) {
-        append_log(QStringLiteral("oauth scheme requested but not supported in 14a"));
-        return false;
+        OAuthConfig oc;
+        oc.server_id = config_.id;
+        oc.token_url = config_.auth_token_url;
+        oc.registration_url = config_.auth_registration_url;
+        oc.scope = config_.auth_scope;
+        oc.grant_type = config_.oauth_grant_type;
+        auto token_r = McpOAuth::ensure_access_token(oc);
+        if (token_r.is_err()) {
+            append_log(QStringLiteral("oauth: %1")
+                           .arg(QString::fromStdString(token_r.error())));
+            return false;
+        }
+        req.setRawHeader("Authorization", ("Bearer " + token_r.value()).toUtf8());
+        return true;
     }
 
     // Pull the auth value from SecureStorage at request time.

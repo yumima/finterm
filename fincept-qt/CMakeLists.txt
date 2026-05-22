@@ -746,6 +746,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v030_tool_killswitch.cpp
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
     src/storage/sqlite/migrations/v032_memory_entries.cpp
+    src/storage/sqlite/migrations/v033_mcp_oauth.cpp
 )
 
 # Python runner
@@ -771,6 +772,7 @@ set(MCP_SOURCES
     src/mcp/McpService.cpp
     src/mcp/McpClient.cpp
     src/mcp/McpHttpClient.cpp
+    src/mcp/McpOAuth.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
     src/mcp/UntrustedContent.cpp
@@ -1825,6 +1827,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v030_tool_killswitch.cpp
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
     src/storage/sqlite/migrations/v032_memory_entries.cpp
+    src/storage/sqlite/migrations/v033_mcp_oauth.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1877,6 +1880,7 @@ set_source_files_properties(
     src/mcp/McpService.cpp
     src/mcp/McpClient.cpp
     src/mcp/McpHttpClient.cpp
+    src/mcp/McpOAuth.cpp
     src/mcp/McpManager.cpp
     src/mcp/McpInit.cpp
     src/mcp/UntrustedContent.cpp
