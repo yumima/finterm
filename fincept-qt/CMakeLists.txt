@@ -1067,6 +1067,7 @@ set(SCREEN_SOURCES
     src/screens/settings/VoiceConfigSection.cpp
     src/screens/settings/AiSystemSection.cpp
     src/screens/settings/SchedulerSection.cpp
+    src/screens/settings/ArtefactsSection.cpp
     src/screens/about/AboutScreen.cpp
     src/screens/support/SupportScreen.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
