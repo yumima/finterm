@@ -54,6 +54,23 @@ static constexpr const char* TAG = "AiChatScreen";
 namespace fnt = fincept::ui::fonts;
 namespace col = fincept::ui::colors;
 
+// Shared between the slash-dispatch follow-up writer and the
+// load_messages chip-restore reader.  Drift between the two
+// silently breaks chip rendering on session reload, so both sides
+// reference these single sources of truth.
+static const QString& suggest_chip_label() {
+    static const QString s = QStringLiteral("Suggested next");
+    return s;
+}
+static const QString& suggest_persist_prefix() {
+    static const QString s = QStringLiteral("**Suggested next:** ");
+    return s;
+}
+static const QString& suggest_persist_separator() {
+    static const QString s = QStringLiteral(" · ");
+    return s;
+}
+
 // ── Bubble sizing ─────────────────────────────────────────────────────────────
 //
 // Approach: QLabel with setWordWrap(true) + setMaximumWidth(N). QLabel's
@@ -833,26 +850,21 @@ void AiChatScreen::load_messages(const QString& session_id) {
     const int total = static_cast<int>(msgs.size());
     const int start = std::max(0, total - kMaxVisibleBubbles);
     // System messages of the form "**Suggested next:** /a · /b · /c"
-    // were written by the slash-dispatch follow-up code (handle_slash_command)
-    // as a plain-text mirror of the in-bubble chip row.  Detect those
-    // here and rebuild the chip row instead of rendering as a bubble —
-    // otherwise on reload they show as ordinary text and lose
-    // clickability.
-    static const QString kSuggestPrefix = QStringLiteral("**Suggested next:** ");
+    // were written by the slash-dispatch follow-up code as a
+    // plain-text mirror of the in-bubble chip row.  Detect them here
+    // and rebuild the chip row instead of rendering as a bubble.
     for (int i = start; i < total; ++i) {
         const auto& msg = msgs[i];
-        if (msg.role == "system" && msg.content.startsWith(kSuggestPrefix)) {
-            const QString body = msg.content.mid(kSuggestPrefix.size());
+        if (msg.role == "system" && msg.content.startsWith(suggest_persist_prefix())) {
+            const QString body = msg.content.mid(suggest_persist_prefix().size());
             QStringList cmds;
-            for (const QString& part : body.split(QStringLiteral(" · "), Qt::SkipEmptyParts)) {
+            for (const QString& part : body.split(suggest_persist_separator(), Qt::SkipEmptyParts)) {
                 const QString trimmed = part.trimmed();
                 if (!trimmed.isEmpty())
                     cmds.append(trimmed);
             }
             if (!cmds.isEmpty())
-                add_chip_row("Suggested next", cmds);
-            // Don't fall through to add_message_bubble — we've
-            // already represented this message in the UI.
+                add_chip_row(suggest_chip_label(), cmds);
             total_tokens_ += msg.tokens_used;
             continue;
         }
@@ -1268,13 +1280,12 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
             for (const QString& tmpl : spec_opt->follow_ups)
                 rendered.append(fincept::services::SlashCommandService::render_follow_up(
                     tmpl, resolved->args));
-            add_chip_row("Suggested next", rendered);
+            add_chip_row(suggest_chip_label(), rendered);
             // Persist a plain-text mirror so the suggestions show up
-            // when the session is reloaded later (chips re-render
-            // dynamically from the saved text on load — see
-            // load_messages).
-            const QString suggest = QStringLiteral("**Suggested next:** ")
-                                    + rendered.join(QStringLiteral(" · "));
+            // when the session is reloaded later — load_messages
+            // detects the prefix and rebuilds the chip row.
+            const QString suggest = suggest_persist_prefix()
+                                    + rendered.join(suggest_persist_separator());
             ChatRepository::instance().add_message(
                 active_session_id_, "system", suggest,
                 ai_chat::LlmService::instance().active_provider(),
