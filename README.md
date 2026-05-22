@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f2c8d009`](https://github.com/yumima/finterm/commit/f2c8d009) runtime(local): SSE streaming via run_text_stream
 - [`fc48604d`](https://github.com/yumima/finterm/commit/fc48604d) **docs:** how-to/ user guides + blocked-item categorisation
 - [`f5a7421e`](https://github.com/yumima/finterm/commit/f5a7421e) agents(ctx): wire process-wide default on_sample / on_elicit / on_log
 - [`b37772cd`](https://github.com/yumima/finterm/commit/b37772cd) settings(credentials): gut unused keys, point users at the right surfaces

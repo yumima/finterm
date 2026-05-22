@@ -906,6 +906,7 @@ set(SERVICE_SOURCES
     src/services/agents/AgentService.cpp
     src/services/agents/AgentScheduler.cpp
     src/services/agents/BudgetService.cpp
+    src/services/agents/ElicitBridge.cpp
     src/services/agents/SlashCommandService.cpp
     src/services/file_manager/FileManagerService.cpp
 

@@ -7,6 +7,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "mcp/McpService.h"
 #include "services/agents/AgentService.h"
+#include "services/agents/ElicitBridge.h"
 #include "services/agents/SlashCommandService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "ui/theme/Theme.h"
@@ -24,6 +25,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QMessageBox>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
@@ -132,6 +134,14 @@ AiChatScreen::AiChatScreen(QWidget* parent) : QWidget(parent) {
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
             [this](const ui::ThemeTokens&) { refresh_theme(); });
+
+    // MCP elicitation modal — a tool calling ctx.elicit() lands here
+    // via ElicitBridge.  Worker thread is blocked while we render
+    // the dialog; resolve() unblocks it with the user's answer.
+    connect(&fincept::services::ElicitBridge::instance(),
+            &fincept::services::ElicitBridge::request_received,
+            this, &AiChatScreen::on_elicit_request,
+            Qt::QueuedConnection);
 }
 
 void AiChatScreen::refresh_theme() {
@@ -1066,6 +1076,57 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
 
 void AiChatScreen::on_provider_changed() {
     update_stats();
+}
+
+void AiChatScreen::on_elicit_request(const QString& token,
+                                     const fincept::mcp::ElicitRequest& req) {
+    // We're on the main thread (queued connection from the worker
+    // tool handler).  Block-on-modal is fine here — the bridge owns
+    // the cross-thread wait, this dialog just gathers the answer.
+    //
+    // Modal shape based on the request's JSON-Schema.  Three common
+    // shapes we recognise; everything else falls back to a free-text
+    // entry that the schema validator on the caller side enforces.
+    const QString type = req.schema.value(QStringLiteral("type")).toString();
+    fincept::mcp::ElicitResponse response;
+
+    if (type == QStringLiteral("boolean")) {
+        const auto btn = QMessageBox::question(this, QStringLiteral("Tool prompt"),
+                                               req.prompt,
+                                               QMessageBox::Yes | QMessageBox::No
+                                                   | QMessageBox::Cancel,
+                                               QMessageBox::Cancel);
+        if (btn == QMessageBox::Cancel) {
+            response.declined = true;
+        } else {
+            response.value = (btn == QMessageBox::Yes);
+        }
+    } else if (req.schema.contains(QStringLiteral("enum"))) {
+        QStringList items;
+        for (const auto& v : req.schema.value(QStringLiteral("enum")).toArray())
+            items.append(v.toString());
+        bool ok = false;
+        const QString choice = QInputDialog::getItem(this, QStringLiteral("Tool prompt"),
+                                                     req.prompt, items, 0, false, &ok);
+        if (!ok || choice.isEmpty()) {
+            response.declined = true;
+        } else {
+            response.value = choice;
+        }
+    } else {
+        // Free-text fallback — caller is expected to validate against
+        // the schema on the other side.
+        bool ok = false;
+        const QString text = QInputDialog::getMultiLineText(
+            this, QStringLiteral("Tool prompt"), req.prompt, QString(), &ok);
+        if (!ok) {
+            response.declined = true;
+        } else {
+            response.value = text;
+        }
+    }
+
+    fincept::services::ElicitBridge::instance().resolve(token, response);
 }
 
 // ── Slash commands ────────────────────────────────────────────────────────────

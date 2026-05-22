@@ -7,6 +7,7 @@
 #include "mcp/McpProvider.h"
 #include "python/PythonRunner.h"
 #include "services/agents/BudgetService.h"
+#include "services/agents/ElicitBridge.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
@@ -1774,17 +1775,14 @@ void AgentService::install_default_tool_handlers() {
             return out;
         });
 
-    // on_elicit — default that surfaces an error pointing the caller
-    // at the chat-surface wiring.  The AiChatScreen installs a real
-    // handler when mounted (a modal dialog awaiting user response);
-    // this default fires only when no chat is active.
+    // on_elicit — routes to ElicitBridge which blocks the worker
+    // thread until AiChatScreen (or another subscriber) shows a modal
+    // and resolves the request.  When no surface is attached the
+    // bridge itself returns the "no surface mounted" error, so we
+    // get one code path for both cases.
     mcp::McpProvider::instance().set_default_elicit_handler(
         [](const mcp::ElicitRequest& req) -> mcp::ElicitResponse {
-            (void)req;
-            mcp::ElicitResponse out;
-            out.error = "no elicitation surface mounted — open the chat screen "
-                        "to enable interactive tool prompts";
-            return out;
+            return ElicitBridge::instance().request(req);
         });
 
     LOG_INFO("AgentService", "Installed default on_sample / on_elicit handlers");

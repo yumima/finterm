@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ai_chat/LlmService.h"
+#include "mcp/McpTypes.h"
 #include "screens/IStatefulScreen.h"
 
 #include <QLabel>
@@ -41,6 +42,7 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
   private slots:
     void on_send();
     void on_attach_file();
+    void on_elicit_request(const QString& token, const fincept::mcp::ElicitRequest& req);
     void on_new_session();
     void on_session_selected(int row);
     void on_delete_session();
