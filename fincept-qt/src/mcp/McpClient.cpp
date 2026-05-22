@@ -450,6 +450,16 @@ void McpClient::handle_line(const QByteArray& line) {
     // Common methods:
     //   `sampling/createMessage`  — server wants client to invoke LLM
     //   `elicitation/create`      — server wants client to ask user
+    //
+    // Threading caveat: the handler runs synchronously on the QProcess
+    // read-loop thread.  A slow handler (e.g. LlmService::chat doing
+    // a multi-second LLM round-trip) blocks parsing of subsequent
+    // messages from this server for the duration.  In practice the
+    // server is also blocked waiting for our response, so this isn't
+    // a deadlock — just a latency cost on side-channel notifications
+    // (progress, log lines) from the same server.  If that latency
+    // becomes a problem, dispatch the handler via QtConcurrent and
+    // ferry the response back via QueuedConnection.
     if (obj.contains("method")) {
         const QString method = obj.value("method").toString();
         const QJsonObject params = obj.value("params").toObject();

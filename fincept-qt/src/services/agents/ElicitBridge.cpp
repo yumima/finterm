@@ -64,15 +64,20 @@ mcp::ElicitResponse ElicitBridge::request(const mcp::ElicitRequest& req, int tim
     emit request_received(token, req);
     LOG_INFO(kElicitTag, QString("elicit request emitted (token=%1)").arg(token.left(8)));
 
-    // Block until UI resolves or timeout.  Releases mutex during wait
-    // so the UI thread can call resolve().
-    const bool signalled = cv_.wait(&mutex_, timeout_ms);
-    if (!signalled || !response_ready_) {
-        out.error = signalled ? "elicit resolve fired without response"
-                              : "elicit request timed out";
-        pending_token_.clear();
-        response_ready_ = false;
-        return out;
+    // Block until UI resolves or the deadline elapses.  Loop on
+    // `response_ready_` rather than treating any wakeup as success —
+    // QWaitCondition can return spuriously, and a stale signal from
+    // a previous resolve cycle (theoretical but documented in Qt)
+    // shouldn't be misread as the current cycle's answer.
+    QDeadlineTimer deadline(timeout_ms);
+    while (!response_ready_) {
+        if (!cv_.wait(&mutex_, deadline)) {
+            // Timeout — no resolver fired in time.
+            out.error = "elicit request timed out";
+            pending_token_.clear();
+            response_ready_ = false;
+            return out;
+        }
     }
 
     out = pending_response_;

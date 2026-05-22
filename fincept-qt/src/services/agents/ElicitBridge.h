@@ -27,6 +27,7 @@
 
 #include "mcp/McpTypes.h"
 
+#include <QDeadlineTimer>
 #include <QHash>
 #include <QMutex>
 #include <QObject>

@@ -109,6 +109,14 @@ def _stream_chat_completions(url: str, key: str, payload: dict,
     sync helper.  Iterator-shaped so the caller controls buffering
     (UI streams chunks straight to the chat surface; CLI buffers
     into a single string).
+
+    Known limitation: `timeout_s` is the *connect* timeout only.
+    Once the stream is open, urllib's per-line iteration has no
+    per-read deadline — a server that holds the connection open
+    without emitting events will hang this generator until the caller
+    aborts the iteration or the OS socket buffers force a TCP-level
+    timeout.  Adding a per-line deadline (select / asyncio shim)
+    is a follow-up.
     """
     payload = dict(payload)
     payload["stream"] = True
