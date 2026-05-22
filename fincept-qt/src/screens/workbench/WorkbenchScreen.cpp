@@ -1,11 +1,17 @@
 #include "screens/workbench/WorkbenchScreen.h"
 
+#include "mcp/McpService.h"
 #include "screens/settings/AiSystemSection.h"
 #include "screens/settings/SchedulerSection.h"
+#include "storage/repositories/ToolKillswitchRepository.h"
 
+#include <QColor>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QScrollArea>
+#include <QSet>
+#include <QTableWidget>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -185,13 +191,71 @@ QWidget* WorkbenchScreen::build_workflows_section() {
 }
 
 QWidget* WorkbenchScreen::build_tools_section() {
-    return build_section_placeholder(
-        QStringLiteral("Tools"),
-        QStringLiteral("Internal MCP tool catalog (32 families: portfolio, "
-                       "news, financial-datasets, quant lab, paper trading, "
-                       "…) plus external server tools.  Per-agent allowlists "
-                       "filter what each named agent can see."),
-        QStringLiteral("Today: browse via Settings → MCP Servers → Tools tab."));
+    // Real catalog table.  Each row: wire-form name, category,
+    // description, kill-switch status.  Refresh re-reads McpService;
+    // the table is read-only — disable/enable still lives in the
+    // System section's kill-switch UI so the destructive action has
+    // one home, not two.
+    auto* w = new QWidget;
+    auto* layout = new QVBoxLayout(w);
+    layout->setContentsMargins(40, 40, 40, 40);
+    layout->setSpacing(12);
+
+    auto* title = new QLabel(QStringLiteral("<h2>Tools</h2>"));
+    auto* desc = new QLabel(QStringLiteral(
+        "Every MCP tool the active runtime can call.  Internal tools "
+        "(prefixed <code>int__</code>) ship with finterm; external "
+        "tools come from MCP servers you've enabled in <b>Settings → "
+        "MCP Servers</b>.  Disable / re-enable any tool from "
+        "<b>Settings → AI System</b>."));
+    desc->setWordWrap(true);
+    desc->setStyleSheet(QStringLiteral("color: #aaa;"));
+    layout->addWidget(title);
+    layout->addWidget(desc);
+
+    auto* refresh_btn = new QPushButton(QStringLiteral("Refresh"));
+    layout->addWidget(refresh_btn);
+
+    auto* table = new QTableWidget;
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels(
+        {QStringLiteral("Tool"), QStringLiteral("Category"),
+         QStringLiteral("Description"), QStringLiteral("Kill-switch")});
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->verticalHeader()->setVisible(false);
+    layout->addWidget(table, 1);
+
+    auto reload = [table]() {
+        const auto tools = mcp::McpService::instance().get_all_tools();
+        QSet<QString> disabled;
+        auto kr = ToolKillswitchRepository::instance().disabled_names();
+        if (kr.is_ok())
+            disabled = kr.value();
+        table->setRowCount(static_cast<int>(tools.size()));
+        for (std::size_t i = 0; i < tools.size(); ++i) {
+            const auto& t = tools[i];
+            const QString wire = t.server_id + QStringLiteral("__") + t.name;
+            const int row = static_cast<int>(i);
+            table->setItem(row, 0, new QTableWidgetItem(wire));
+            table->setItem(row, 1, new QTableWidgetItem(t.category.isEmpty()
+                                                            ? QStringLiteral("—")
+                                                            : t.category));
+            auto* desc_item = new QTableWidgetItem(t.description);
+            desc_item->setToolTip(t.description);
+            table->setItem(row, 2, desc_item);
+            auto* ks_item = new QTableWidgetItem(
+                disabled.contains(wire) ? QStringLiteral("disabled") : QStringLiteral("active"));
+            if (disabled.contains(wire))
+                ks_item->setForeground(QColor("#c33"));
+            table->setItem(row, 3, ks_item);
+        }
+    };
+    QObject::connect(refresh_btn, &QPushButton::clicked, table, reload);
+    reload();
+    return w;
 }
 
 QWidget* WorkbenchScreen::build_servers_section() {
