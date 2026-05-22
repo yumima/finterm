@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`a57c4982`](https://github.com/yumima/finterm/commit/a57c4982) mcp: server-initiated request dispatch end-to-end (Track 4C)
 - [`30018ea7`](https://github.com/yumima/finterm/commit/30018ea7) mcp(oauth): authorization_code grant with PKCE + refresh (Track 4B)
 - [`4cb80356`](https://github.com/yumima/finterm/commit/4cb80356) mcp(oauth): RFC 8414 discovery + auto-401 retry (Track 4A)
 - [`1a1a9945`](https://github.com/yumima/finterm/commit/1a1a9945) ai_chat: @-mention resolver for shared-state context (Track 3B)

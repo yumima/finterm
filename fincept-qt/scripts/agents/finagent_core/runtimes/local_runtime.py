@@ -376,6 +376,151 @@ def run_with_tools(
     )
 
 
+def run_with_tools_stream(
+    prompt: str,
+    *,
+    tools: list[dict],
+    tool_dispatcher: Callable[[str, dict[str, Any]], Any],
+    system_prompt: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.7,
+    timeout_s: float = 120.0,
+    max_turns: int = 10,
+) -> Iterator[dict]:
+    """Streaming variant of run_with_tools.
+
+    Yields events as the model produces them:
+
+      {"type": "content", "text": "..."}   — text chunk
+      {"type": "tool_call", "id": "...",
+       "name": "...", "args": {...}}       — tool invocation request
+      {"type": "tool_result", "id": "...",
+       "name": "...", "result": ...}       — dispatcher result
+      {"type": "turn_end",
+       "finish_reason": "stop"|...}        — one round finished
+
+    Caller streams `content` events to the chat surface for the
+    typewriter effect.  `tool_call` / `tool_result` events let the
+    surface render a "agent is using <tool>" indicator.  `turn_end`
+    fires after each LLM round; the iterator continues into the next
+    round if the model called tools.
+
+    OpenAI's streaming `delta.tool_calls` format carries fragments
+    indexed by position — same call's name/arguments arrive in
+    multiple deltas — so we accumulate by index and only fire the
+    `tool_call` event once the stream finishes the round.
+
+    Same auth / endpoint / failure-mode contract as `run_with_tools`.
+    """
+    url, model_id, key = _resolve_endpoint(base_url, model, api_key)
+
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    for _turn in range(max_turns):
+        # Per-turn accumulators for the tool_calls fragments.
+        # `pending[index]` is the in-progress tool call; arguments
+        # JSON is built up across deltas.
+        pending: dict[int, dict[str, Any]] = {}
+        finish_reason: str | None = None
+        assistant_content_parts: list[str] = []
+
+        for event in _stream_chat_completions(url, key, {
+            "model": model_id,
+            "messages": messages,
+            "tools": tools,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }, timeout_s):
+            choices = event.get("choices") or []
+            if not choices:
+                continue
+            first = choices[0]
+            if not isinstance(first, dict):
+                continue
+            fr = first.get("finish_reason")
+            if isinstance(fr, str):
+                finish_reason = fr
+
+            delta = first.get("delta") or {}
+            content = delta.get("content")
+            if isinstance(content, str) and content:
+                assistant_content_parts.append(content)
+                yield {"type": "content", "text": content}
+
+            for tc_frag in (delta.get("tool_calls") or []):
+                if not isinstance(tc_frag, dict):
+                    continue
+                idx = tc_frag.get("index", 0)
+                slot = pending.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                if isinstance(tc_frag.get("id"), str):
+                    slot["id"] = tc_frag["id"]
+                fn = tc_frag.get("function") or {}
+                if isinstance(fn.get("name"), str):
+                    slot["name"] = slot["name"] + fn["name"]
+                if isinstance(fn.get("arguments"), str):
+                    slot["arguments"] = slot["arguments"] + fn["arguments"]
+
+        # End of stream for this turn.  Three branches:
+        #   1. Model called tools — dispatch each, append tool_result
+        #      messages, loop into the next turn.
+        #   2. Model produced final text — yield turn_end + return.
+        #   3. Neither (degenerate) — return what we have.
+
+        if pending:
+            # Build the assistant message with tool_calls for the
+            # provider's bookkeeping, then dispatch.
+            tool_calls_msg = []
+            for idx in sorted(pending.keys()):
+                p = pending[idx]
+                tool_calls_msg.append({
+                    "id": p["id"],
+                    "type": "function",
+                    "function": {"name": p["name"], "arguments": p["arguments"]},
+                })
+            assistant_msg: dict[str, Any] = {"role": "assistant", "tool_calls": tool_calls_msg}
+            joined_content = "".join(assistant_content_parts)
+            if joined_content:
+                assistant_msg["content"] = joined_content
+            messages.append(assistant_msg)
+
+            for idx in sorted(pending.keys()):
+                p = pending[idx]
+                try:
+                    args = json.loads(p["arguments"]) if p["arguments"] else {}
+                except json.JSONDecodeError:
+                    args = {}
+                yield {"type": "tool_call", "id": p["id"], "name": p["name"], "args": args}
+                try:
+                    result = tool_dispatcher(p["name"], args if isinstance(args, dict) else {})
+                except Exception as exc:  # noqa: BLE001
+                    result = {"error": f"{type(exc).__name__}: {exc}"}
+                yield {"type": "tool_result", "id": p["id"], "name": p["name"], "result": result}
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": p["id"],
+                    "name": p["name"],
+                    "content": (
+                        json.dumps(result, default=str)
+                        if isinstance(result, (dict, list)) else str(result)
+                    ),
+                })
+            yield {"type": "turn_end", "finish_reason": finish_reason or "tool_calls"}
+            continue  # loop into next turn
+
+        yield {"type": "turn_end", "finish_reason": finish_reason or "stop"}
+        return
+
+    raise LocalRuntimeUnavailable(
+        f"local runtime streaming tool loop exceeded max_turns={max_turns} at {url}"
+    )
+
+
 def probe(base_url: str | None = None, timeout_s: float = 5.0) -> list[str]:
     """List models available at the local server.  Used by the chat
     UI's "Probe" button (Settings → LLM Config) and by the
