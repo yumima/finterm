@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`168e6a3c`](https://github.com/yumima/finterm/commit/168e6a3c) alpha_arena: opt-in two-runtime path for BaseAgent (Track 12 phase 2)
 - [`6561eec5`](https://github.com/yumima/finterm/commit/6561eec5) agents(budget): per-agent daily USD cap (Track 14 #41 / R24)
 - [`f4e87111`](https://github.com/yumima/finterm/commit/f4e87111) mcp(safety): broad UntrustedContent rollout + system-prompt directive (Track 14 #40 finish)
 - [`cf1adf0a`](https://github.com/yumima/finterm/commit/cf1adf0a) mcp(safety): prompt-injection guard helper + NewsTools rollout (Track 14 #40 / R23)
