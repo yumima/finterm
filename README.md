@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`513808c8`](https://github.com/yumima/finterm/commit/513808c8) agents: SKILL.md edit proposal flow on wrong-verdict traces (Track 7C)
 - [`10899101`](https://github.com/yumima/finterm/commit/10899101) review fix: extract shared constants for suggested-chip persistence
 - [`a803b1ef`](https://github.com/yumima/finterm/commit/a803b1ef) ai_chat: restore suggested-follow-up chips on session reload
 - [`cc843511`](https://github.com/yumima/finterm/commit/cc843511) workbench: real Chat/Agents/Workflows/Servers/Profiles catalog tables

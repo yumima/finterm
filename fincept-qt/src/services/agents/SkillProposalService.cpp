@@ -94,11 +94,27 @@ QString SkillProposalService::resolve_skill_path(const QString& skill_name) cons
     if (root.isEmpty())
         return {};
 
+    // Resolve the root to its canonical form so we can check
+    // candidates haven't escaped via symlink.  Without this a
+    // symlinked SKILL.md inside the skills tree could resolve to
+    // an arbitrary write target outside it.
+    const QString canonical_root = QFileInfo(root).canonicalFilePath();
+    if (canonical_root.isEmpty())
+        return {};
+    const QString root_prefix = canonical_root + QLatin1Char('/');
+
+    auto accept = [&root_prefix](const QString& candidate) -> bool {
+        const QString c = QFileInfo(candidate).canonicalFilePath();
+        return !c.isEmpty() && c.startsWith(root_prefix);
+    };
+
     QDirIterator it(root, {QStringLiteral("SKILL.md")},
                     QDir::Files, QDirIterator::Subdirectories);
     QString fallback;
     while (it.hasNext()) {
         const QString path = it.next();
+        if (!accept(path))
+            continue;
         const QString name = read_frontmatter_name(path);
         if (name == skill_name)
             return path;

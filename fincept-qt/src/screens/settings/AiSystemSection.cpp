@@ -436,12 +436,15 @@ void AiSystemSection::on_propose_skill_fix(const AgentTraceRow& trace) {
     QPointer<QDialog> progress = progress_raw;
     connect(watcher, &QFutureWatcher<Result<services::SkillProposal>>::finished, this,
             [self, watcher, progress]() {
+                // Read the result BEFORE scheduling deletion — the
+                // current event loop iteration still has the watcher
+                // live, but reordering reads more obviously safe.
+                const auto r = watcher->result();
                 watcher->deleteLater();
                 if (progress)
                     progress->close();
-                if (!self)
-                    return;
-                self->show_proposal_dialog(watcher->result());
+                if (self)
+                    self->show_proposal_dialog(r);
             });
     auto future = QtConcurrent::run([trace, note]() {
         return services::SkillProposalService::instance().propose(trace, note);
@@ -504,13 +507,34 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
             QLineEdit::Normal, QString(), &ok);
         if (!ok || typed != QStringLiteral("overwrite"))
             return;
-        QFile f(p.skill_path);
-        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-            show_status(QStringLiteral("Write failed: %1").arg(f.errorString()), true);
+        // Atomic write: write to <path>.tmp then rename over the
+        // original.  Avoids the "truncate succeeded, write failed,
+        // SKILL.md is now empty" failure mode.
+        const QString tmp_path = p.skill_path + QStringLiteral(".tmp");
+        QFile tmp(tmp_path);
+        if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            show_status(QStringLiteral("Write failed (open .tmp): %1").arg(tmp.errorString()), true);
             return;
         }
-        f.write(p.proposed_content.toUtf8());
-        f.close();
+        const QByteArray bytes = p.proposed_content.toUtf8();
+        if (tmp.write(bytes) != bytes.size() || !tmp.flush()) {
+            const QString err = tmp.errorString();
+            tmp.close();
+            QFile::remove(tmp_path);
+            show_status(QStringLiteral("Write failed (write/flush): %1").arg(err), true);
+            return;
+        }
+        tmp.close();
+        // QFile::rename fails if the destination exists on some
+        // platforms — remove first, accept the tiny window where
+        // the original is gone before .tmp moves into place (the
+        // .tmp still holds the new content so recovery is possible).
+        QFile::remove(p.skill_path);
+        if (!QFile::rename(tmp_path, p.skill_path)) {
+            QFile::remove(tmp_path);
+            show_status(QStringLiteral("Write failed (rename): could not move .tmp into place"), true);
+            return;
+        }
         show_status(QStringLiteral("Overwrote %1").arg(p.skill_path));
         dlg->accept();
     });
