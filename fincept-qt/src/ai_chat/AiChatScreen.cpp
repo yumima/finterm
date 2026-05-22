@@ -8,6 +8,7 @@
 #include "mcp/McpService.h"
 #include "services/agents/AgentService.h"
 #include "services/agents/ElicitBridge.h"
+#include "services/agents/MentionResolverService.h"
 #include "services/agents/SlashCommandService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
@@ -953,6 +954,17 @@ void AiChatScreen::on_send() {
             attach_badge_->setVisible(false);
         if (attach_btn_)
             attach_btn_->setProperty("active", false);
+    }
+
+    // Track 3B — @-mention resolution.  Scans the raw user text for
+    // `@portfolio`, `@watchlist`, `@news`, `@thesis` references and
+    // prepends the resolved resource snapshots so the agent has
+    // shared-state context without a follow-up tool call.  No-op when
+    // the text contains no known mentions.
+    if (raw_text.contains(QLatin1Char('@'))) {
+        const auto mentions = fincept::services::MentionResolverService::instance().resolve(raw_text);
+        if (mentions.any_resolved)
+            text = mentions.context_block + text;
     }
 
     input_box_->clear();

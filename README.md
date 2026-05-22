@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`d79cdcc7`](https://github.com/yumima/finterm/commit/d79cdcc7) ai_chat: runtime toggle pill on composer header (Track 3A)
 - [`7937ec11`](https://github.com/yumima/finterm/commit/7937ec11) settings(ai-system): trace drill-down dialog (Track 2)
 - [`853c1e95`](https://github.com/yumima/finterm/commit/853c1e95) **ci(ai):** nightly SDK eval + vendor-skills diff (Track 1C)
 - [`7e6d6957`](https://github.com/yumima/finterm/commit/7e6d6957) ai(capabilities): declarative capability matrix + generator (Track 1A)
