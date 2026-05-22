@@ -269,13 +269,12 @@ void ArtefactsSection::on_rerun() {
         return;
     }
 
-    // Mark predecessor as superseded; the next emit_artefact will
-    // create the replacement row.  History stays auditable.
-    auto sup = ChatArtefactRepository::instance().mark_superseded(a.id);
-    if (sup.is_err())
-        show_status(QStringLiteral("Note: failed to mark predecessor superseded: %1")
-                        .arg(QString::fromStdString(sup.error())), false);
-
+    // Build dispatch payload first.  We mark the predecessor
+    // superseded ONLY after run_agent succeeds — otherwise a dispatch
+    // failure (or a model that fails to call emit_artefact later)
+    // leaves the user with a superseded predecessor and no
+    // replacement.  Better to over-conserve here: failed re-run keeps
+    // the original visible, user retries.
     QJsonObject config;
     config[QStringLiteral("agent_id")] = a.source_agent_id;
     config[QStringLiteral("skill")] = a.source_skill;
@@ -291,12 +290,33 @@ void ArtefactsSection::on_rerun() {
                  QString::fromUtf8(QJsonDocument(args_doc.object()).toJson(QJsonDocument::Compact));
     }
 
+    QString req_id;
     try {
-        const QString req_id = services::AgentService::instance().run_agent(query, config);
-        show_status(QStringLiteral("Re-running %1 (request %2)").arg(a.title, req_id.left(8)));
+        req_id = services::AgentService::instance().run_agent(query, config);
     } catch (const std::exception& ex) {
-        show_status(QStringLiteral("Re-run dispatch failed: %1")
+        show_status(QStringLiteral("Re-run dispatch failed: %1 — predecessor "
+                                   "left active for retry")
                         .arg(QString::fromUtf8(ex.what())), true);
+        return;
+    }
+
+    // Dispatch accepted (request_id assigned).  Now safe to mark
+    // predecessor superseded; the new emit_artefact (when the agent
+    // runs it) will land as the replacement.  Note: if the agent
+    // doesn't call emit_artefact at all, the user is left with a
+    // superseded predecessor + no new artefact.  Documented behaviour;
+    // user can still see the predecessor in the table and manually
+    // un-supersede via the row's "status" cell once we wire editing
+    // there.
+    if (auto sup = ChatArtefactRepository::instance().mark_superseded(a.id);
+        sup.is_err()) {
+        show_status(QStringLiteral("Re-running %1 (request %2) — note: "
+                                   "failed to mark predecessor superseded: %3")
+                        .arg(a.title, req_id.left(8),
+                             QString::fromStdString(sup.error())), false);
+    } else {
+        show_status(QStringLiteral("Re-running %1 (request %2)")
+                        .arg(a.title, req_id.left(8)));
     }
     reload();
 }
