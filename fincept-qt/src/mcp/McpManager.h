@@ -52,6 +52,13 @@ class McpManager : public QObject {
     /// Returns captured log lines for a running server (empty if not running).
     QStringList get_logs(const QString& id) const;
 
+    /// Install a process-wide default server-request handler that
+    /// every freshly-started McpClient inherits.  Routes server-side
+    /// `sampling/createMessage` and `elicitation/create` requests to
+    /// whichever callbacks the caller wires up.  Called once from
+    /// `AgentService::install_default_tool_handlers`.
+    void set_default_server_request_handler(McpClientBase::ServerRequestHandler handler);
+
     McpManager(const McpManager&) = delete;
     McpManager& operator=(const McpManager&) = delete;
 
@@ -70,6 +77,7 @@ class McpManager : public QObject {
     QHash<QString, McpServerConfig> configs_;
     QHash<QString, std::vector<ExternalTool>> tool_cache_;
     QHash<QString, int> restart_attempts_;
+    McpClientBase::ServerRequestHandler default_server_request_handler_;
 
     QTimer* health_timer_ = nullptr;
     mutable QMutex mutex_;

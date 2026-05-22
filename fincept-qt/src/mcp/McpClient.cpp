@@ -444,6 +444,41 @@ void McpClient::handle_line(const QByteArray& line) {
         return;
     }
 
+    // JSON-RPC request from the server (has `id` + `method`) — distinct
+    // from responses (which have `id` + `result` / `error`).  Route
+    // through the handler, send the response back on the same pipe.
+    // Common methods:
+    //   `sampling/createMessage`  — server wants client to invoke LLM
+    //   `elicitation/create`      — server wants client to ask user
+    if (obj.contains("method")) {
+        const QString method = obj.value("method").toString();
+        const QJsonObject params = obj.value("params").toObject();
+        const QJsonValue req_id = obj.value("id");
+
+        QJsonObject response;
+        response["jsonrpc"] = QStringLiteral("2.0");
+        response["id"] = req_id;
+        if (server_request_handler_) {
+            auto r = server_request_handler_(method, params);
+            if (r.is_ok()) {
+                response["result"] = r.value();
+            } else {
+                QJsonObject err;
+                err["code"] = -32603;  // Internal error
+                err["message"] = QString::fromStdString(r.error());
+                response["error"] = err;
+            }
+        } else {
+            QJsonObject err;
+            err["code"] = -32601;  // Method not found
+            err["message"] = QString("no server-request handler registered for %1").arg(method);
+            response["error"] = err;
+        }
+        const QByteArray line = QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n";
+        QMetaObject::invokeMethod(process_, [this, line]() { process_->write(line); }, Qt::QueuedConnection);
+        return;
+    }
+
     int id = obj["id"].toInt(-1);
     if (id < 0)
         return;

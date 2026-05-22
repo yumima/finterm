@@ -204,6 +204,12 @@ Result<void> McpManager::start_server(const QString& id) {
     } else {
         client = std::make_shared<McpClient>(cfg);
     }
+    // Inherit the process-wide server-request handler so the server
+    // can fire sampling / elicitation back at finterm.  Empty handler
+    // (no AgentService::install_default_tool_handlers yet) is fine —
+    // server gets method-not-found, same as before this commit.
+    if (default_server_request_handler_)
+        client->set_server_request_handler(default_server_request_handler_);
 
     auto start_result = client->start();
     if (start_result.is_err()) {
@@ -366,6 +372,19 @@ Result<QJsonObject> McpManager::call_external_tool(const QString& server_id, con
     lock.unlock();
 
     return client->call_tool(tool_name, args);
+}
+
+void McpManager::set_default_server_request_handler(McpClientBase::ServerRequestHandler handler) {
+    QMutexLocker lock(&mutex_);
+    default_server_request_handler_ = handler;
+    // Also retrofit any clients already started so the wiring lands
+    // immediately on startup-order: AgentService installs the handler
+    // late (after McpManager::initialize) and previously-started
+    // marketplace servers would otherwise miss out.
+    for (auto it = clients_.begin(); it != clients_.end(); ++it) {
+        if (it.value())
+            it.value()->set_server_request_handler(handler);
+    }
 }
 
 McpClientBase* McpManager::get_client(const QString& id) const {

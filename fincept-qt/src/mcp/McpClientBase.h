@@ -145,8 +145,31 @@ class McpClientBase : public QObject {
         notification_handler_ = std::move(handler);
     }
 
+    // Server-initiated requests — JSON-RPC messages with both an `id`
+    // and a `method` field.  Server expects a response on the same
+    // connection.  Used for `sampling/createMessage` and
+    // `elicitation/create` (server asks client to invoke LLM / prompt
+    // user).
+    //
+    // Handler returns:
+    //   - Result<QJsonObject>::ok(result)   → success, result becomes
+    //                                          the JSON-RPC `result`
+    //   - Result<QJsonObject>::err(message) → failure, message becomes
+    //                                          the JSON-RPC `error.message`
+    //
+    // Default returns method-not-found.  AgentService installs handlers
+    // that route to LlmService (sampling) + ElicitBridge (elicitation).
+
+    using ServerRequestHandler =
+        std::function<Result<QJsonObject>(const QString& method, const QJsonObject& params)>;
+
+    void set_server_request_handler(ServerRequestHandler handler) {
+        server_request_handler_ = std::move(handler);
+    }
+
   protected:
     NotificationHandler notification_handler_;
+    ServerRequestHandler server_request_handler_;
 };
 
 } // namespace fincept::mcp

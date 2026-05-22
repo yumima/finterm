@@ -4,6 +4,7 @@
 #include "ai_chat/LlmService.h"
 #include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
+#include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
 #include "python/PythonRunner.h"
 #include "services/agents/BudgetService.h"
@@ -1785,7 +1786,73 @@ void AgentService::install_default_tool_handlers() {
             return ElicitBridge::instance().request(req);
         });
 
-    LOG_INFO("AgentService", "Installed default on_sample / on_elicit handlers");
+    // Server-initiated MCP requests (Track 4C).  External MCP servers
+    // can fire `sampling/createMessage` and `elicitation/create` at us
+    // — McpManager installs this handler on every freshly-started
+    // client so the routing applies system-wide.
+    mcp::McpManager::instance().set_default_server_request_handler(
+        [](const QString& method, const QJsonObject& params) -> Result<QJsonObject> {
+            if (method == QStringLiteral("sampling/createMessage")) {
+                // Map MCP sampling/createMessage params into the
+                // existing on_sample contract.  The MCP spec carries
+                // a `messages` array; we collapse to a single user
+                // prompt by joining for v1 (per-role passthrough is
+                // a follow-up when LlmService grows a multi-turn
+                // sync API).
+                mcp::SampleRequest req;
+                const QJsonArray msgs = params.value(QStringLiteral("messages")).toArray();
+                QStringList parts;
+                for (const auto& m : msgs) {
+                    const QJsonObject mo = m.toObject();
+                    const QString role = mo.value(QStringLiteral("role")).toString();
+                    const QString text = mo.value(QStringLiteral("content"))
+                                             .toObject()
+                                             .value(QStringLiteral("text"))
+                                             .toString();
+                    if (!text.isEmpty())
+                        parts.append("[" + role + "] " + text);
+                }
+                req.prompt = parts.join("\n\n");
+                req.system_prompt = params.value(QStringLiteral("systemPrompt")).toString();
+                req.max_tokens = params.value(QStringLiteral("maxTokens")).toInt(512);
+                req.temperature = params.value(QStringLiteral("temperature")).toDouble(0.7);
+
+                auto& llm = ai_chat::LlmService::instance();
+                if (!llm.is_configured())
+                    return Result<QJsonObject>::err("no LLM configured");
+                std::vector<ai_chat::ConversationMessage> history;
+                if (!req.system_prompt.isEmpty())
+                    history.push_back({"system", req.system_prompt});
+                auto resp = llm.chat(req.prompt, history, /*use_tools=*/false);
+                if (!resp.error.isEmpty())
+                    return Result<QJsonObject>::err(resp.error.toStdString());
+                QJsonObject out;
+                out["role"] = QStringLiteral("assistant");
+                out["content"] = QJsonObject{
+                    {"type", "text"},
+                    {"text", resp.content},
+                };
+                out["model"] = llm.active_model();
+                return Result<QJsonObject>::ok(out);
+            }
+            if (method == QStringLiteral("elicitation/create")) {
+                mcp::ElicitRequest req;
+                req.prompt = params.value(QStringLiteral("message")).toString();
+                req.schema = params.value(QStringLiteral("requestedSchema")).toObject();
+                auto resp = ElicitBridge::instance().request(req);
+                if (!resp.error.isEmpty())
+                    return Result<QJsonObject>::err(resp.error.toStdString());
+                QJsonObject out;
+                out["action"] = resp.declined ? QStringLiteral("decline") : QStringLiteral("accept");
+                if (!resp.declined)
+                    out["content"] = resp.value;
+                return Result<QJsonObject>::ok(out);
+            }
+            return Result<QJsonObject>::err(
+                ("server-request method not supported by finterm: " + method).toStdString());
+        });
+
+    LOG_INFO("AgentService", "Installed default on_sample / on_elicit + server-request handlers");
 }
 
 void AgentService::publish_agent_result(const AgentExecutionResult& r, bool final) {
