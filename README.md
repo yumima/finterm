@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`7e6d6957`](https://github.com/yumima/finterm/commit/7e6d6957) ai(capabilities): declarative capability matrix + generator (Track 1A)
 - [`839d9461`](https://github.com/yumima/finterm/commit/839d9461) mcp: server-initiated notification dispatch on McpClient (stdio)
 - [`37f5af04`](https://github.com/yumima/finterm/commit/37f5af04) agents(elicit): cross-thread modal bridge for MCP elicitation
 - [`f2c8d009`](https://github.com/yumima/finterm/commit/f2c8d009) runtime(local): SSE streaming via run_text_stream
@@ -30,11 +31,31 @@ Latest first.
 
 ## AI / MCP / agentic stack
 
-finterm ships a complete agentic chat surface — slash commands,
-named agents, scheduled runs, kill-switches, prompt-injection
-guards, per-agent budgets — backed by two runtimes (Anthropic
-via claude-agent-sdk, or any OpenAI-compatible local server like
-Ollama / vLLM / llama.cpp) and 32+ internal MCP tool families.
+A power user can run `claude` + the `financial-services` MCPs
+standalone and get part of what finterm offers.  Bundling them
+into the terminal earns its weight on **four properties** the CLI
+can't promise:
+
+1. **Shared state surface.**  The agent sees the *same* watchlist,
+   portfolio, paper-trade book, scheduler, and kill-switch you
+   edit.  No "paste your CSV" tax — your positions are an MCP
+   resource the agent reads directly.
+2. **Audit + safety as product.**  Every dispatch lands in
+   `agent_traces` with prompts, tokens, cost, status.  Per-tool
+   kill-switch refuses problem tools system-wide.  Per-agent
+   daily USD cap refuses dispatch before tokens are spent.
+   `<untrusted>` wrapping + a system-prompt directive teach the
+   model to treat external news / forum text as data.
+3. **Local-first switch.**  One profile flip from Anthropic to a
+   local OpenAI-compatible server (Ollama, vLLM, llama.cpp, LM
+   Studio).  When positions can't leave the box, the local profile
+   is *the* differentiator.  No silent failover — you choose.
+4. **Deterministic across runtimes.**  Same slash commands,
+   same named agents, same SKILL.md methodology, same tool
+   catalog on Anthropic or local.  Swap the runtime; the surface
+   doesn't move.  What *does* differ — Files API, citations,
+   computer use, sub-agents — is laid out in the [capability
+   matrix](docs/how-to/capabilities.md).
 
 **Quick start (users):**
 - [docs/how-to/ai-features.md](docs/how-to/ai-features.md) —
