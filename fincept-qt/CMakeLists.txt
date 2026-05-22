@@ -745,6 +745,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v029_agent_traces.cpp
     src/storage/sqlite/migrations/v030_tool_killswitch.cpp
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
+    src/storage/sqlite/migrations/v032_memory_entries.cpp
 )
 
 # Python runner
@@ -779,6 +780,7 @@ set(MCP_SOURCES
     src/mcp/tools/MarketsTools.cpp
     src/mcp/tools/WatchlistTools.cpp
     src/mcp/tools/NewsTools.cpp
+    src/mcp/tools/MemoryTools.cpp
     src/mcp/tools/NotesTools.cpp
     src/mcp/tools/FileManagerTools.cpp
     src/mcp/tools/AiChatTools.cpp
@@ -1822,6 +1824,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v029_agent_traces.cpp
     src/storage/sqlite/migrations/v030_tool_killswitch.cpp
     src/storage/sqlite/migrations/v031_untrusted_directive.cpp
+    src/storage/sqlite/migrations/v032_memory_entries.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1881,6 +1884,7 @@ set_source_files_properties(
     src/mcp/tools/MarketsTools.cpp
     src/mcp/tools/WatchlistTools.cpp
     src/mcp/tools/NewsTools.cpp
+    src/mcp/tools/MemoryTools.cpp
     src/mcp/tools/NotesTools.cpp
     src/mcp/tools/FileManagerTools.cpp
     src/mcp/tools/AiChatTools.cpp

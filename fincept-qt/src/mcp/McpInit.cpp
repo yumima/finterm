@@ -21,6 +21,7 @@
 #include "mcp/tools/DataSourcesTools.h"
 #include "mcp/tools/EdgarTools.h"
 #include "mcp/tools/FinancialDatasetsTools.h"
+#include "mcp/tools/MemoryTools.h"
 #include "mcp/tools/QuantNarratorTools.h"
 #include "mcp/tools/FileManagerTools.h"
 #include "mcp/tools/ForumTools.h"
@@ -144,6 +145,10 @@ void initialize_all_tools() {
 
     // quant narrator — LLM-driven commentary on backtests + trades (Track 11)
     provider.register_tools(tools::get_quant_narrator_tools());
+
+    // memory — local-profile MemoryTools (Track 9 stub; sqlite-vec
+    // upgrade is a follow-up).
+    provider.register_tools(tools::get_memory_tools());
 
     // surface analytics — options vol surface (Databento-backed)
     provider.register_tools(tools::get_surface_analytics_tools());

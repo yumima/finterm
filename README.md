@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`d899e008`](https://github.com/yumima/finterm/commit/d899e008) screens(workbench): single-screen left-nav consolidation (Track 13 full)
 - [`1b28bf33`](https://github.com/yumima/finterm/commit/1b28bf33) alpha_arena: flip BaseAgent default to two-runtime path (Track 12 full)
 - [`c4db8060`](https://github.com/yumima/finterm/commit/c4db8060) runtime(local): OpenAI-compat local runtime adapter (Track 2)
 - [`0ffa338a`](https://github.com/yumima/finterm/commit/0ffa338a) settings(ai-system): share one trace fetch across spend + table (/review fix)
