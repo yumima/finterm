@@ -10,6 +10,7 @@
 #include "services/agents/ElicitBridge.h"
 #include "services/agents/MentionResolverService.h"
 #include "services/agents/SlashCommandService.h"
+#include "services/tts/TtsService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
 #include "ui/theme/Theme.h"
@@ -1348,6 +1349,26 @@ void AiChatScreen::add_message_bubble(const QString& role, const QString& conten
             QTimer::singleShot(1500, copy_btn, [copy_btn]() { copy_btn->setText("Copy"); });
         });
         fhl->addWidget(copy_btn);
+
+        // 🔊 button — TTS read-aloud.  Only mounted when
+        // TtsService is configured + the binary is on PATH so we
+        // don't show a button that errors on every click.
+        if (fincept::services::TtsService::instance().is_available()) {
+            auto* tts_btn = new QPushButton(QStringLiteral("🔊"));
+            tts_btn->setFixedHeight(20);
+            tts_btn->setCursor(Qt::PointingHandCursor);
+            tts_btn->setToolTip(QStringLiteral("Read aloud"));
+            tts_btn->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                                           "border-radius:0px;padding:0 8px;font-size:%3px;}"
+                                           "QPushButton:hover{background:%2;color:%4;}")
+                                       .arg(col::TEXT_DIM(), col::BORDER_MED())
+                                       .arg(fnt::TINY)
+                                       .arg(col::TEXT_PRIMARY()));
+            connect(tts_btn, &QPushButton::clicked, this, [plain]() {
+                fincept::services::TtsService::instance().speak(plain);
+            });
+            fhl->addWidget(tts_btn);
+        }
     }
 
     if (is_user)

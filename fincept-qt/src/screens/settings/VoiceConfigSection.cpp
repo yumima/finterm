@@ -4,10 +4,13 @@
 
 #include "core/config/AppConfig.h"
 #include "core/logging/Logger.h"
+#include "services/tts/TtsService.h"
+#include "storage/repositories/SettingsRepository.h"
 #include "storage/secure/SecureStorage.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -196,6 +199,9 @@ void VoiceConfigSection::build_ui() {
 
     vl->addWidget(deepgram_group_);
 
+    // ── TTS (output) ────────────────────────────────────────────────────────
+    build_tts_ui(vl);
+
     // ── Save / Test row ─────────────────────────────────────────────────────
     auto* btn_row = new QWidget;
     auto* btn_hl = new QHBoxLayout(btn_row);
@@ -356,6 +362,129 @@ void VoiceConfigSection::set_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
     status_lbl_->setStyleSheet(QString("color:%1;background:transparent;")
                                    .arg(error ? ui::colors::NEGATIVE() : ui::colors::POSITIVE()));
+}
+
+// ── TTS (output) ────────────────────────────────────────────────────────────
+
+void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
+    // Visual separator from the STT group above.  No new section
+    // widget — the existing scroll area handles the full column.
+    auto* divider = new QFrame;
+    divider->setFrameShape(QFrame::HLine);
+    divider->setStyleSheet(QString("color:%1;background:%1;max-height:1px;")
+                               .arg(ui::colors::BORDER_DIM()));
+    parent_layout->addSpacing(16);
+    parent_layout->addWidget(divider);
+    parent_layout->addSpacing(8);
+
+    auto* hdr = new QLabel(QStringLiteral(
+        "<b>Text-to-speech</b> (output) — read agent replies aloud.  "
+        "Install <code>piper-tts</code> via pip, download a voice .onnx "
+        "from <a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a>, "
+        "point Model below at it."));
+    hdr->setTextFormat(Qt::RichText);
+    hdr->setOpenExternalLinks(true);
+    hdr->setWordWrap(true);
+    hdr->setStyleSheet(QString("color:%1;background:transparent;")
+                           .arg(ui::colors::TEXT_SECONDARY()));
+    parent_layout->addWidget(hdr);
+
+    auto* form = new QFormLayout;
+    form->setSpacing(8);
+
+    tts_provider_combo_ = new QComboBox;
+    tts_provider_combo_->addItem(QStringLiteral("None (TTS disabled)"), "none");
+    tts_provider_combo_->addItem(QStringLiteral("Piper (local)"), "piper");
+    form->addRow(QStringLiteral("Provider"), tts_provider_combo_);
+
+    auto* model_row = new QWidget;
+    auto* model_hl = new QHBoxLayout(model_row);
+    model_hl->setContentsMargins(0, 0, 0, 0);
+    tts_model_edit_ = new QLineEdit;
+    tts_model_edit_->setPlaceholderText(QStringLiteral("/path/to/en_US-amy-medium.onnx"));
+    tts_browse_btn_ = new QPushButton(QStringLiteral("Browse…"));
+    model_hl->addWidget(tts_model_edit_, 1);
+    model_hl->addWidget(tts_browse_btn_);
+    form->addRow(QStringLiteral("Model"), model_row);
+
+    tts_length_edit_ = new QLineEdit;
+    tts_length_edit_->setPlaceholderText(QStringLiteral("1.0  (lower = faster)"));
+    form->addRow(QStringLiteral("Length scale"), tts_length_edit_);
+
+    tts_noise_edit_ = new QLineEdit;
+    tts_noise_edit_->setPlaceholderText(QStringLiteral("0.667  (controls expressiveness)"));
+    form->addRow(QStringLiteral("Noise scale"), tts_noise_edit_);
+
+    parent_layout->addLayout(form);
+
+    auto* btn_row = new QWidget;
+    auto* btn_hl = new QHBoxLayout(btn_row);
+    btn_hl->setContentsMargins(0, 4, 0, 0);
+    tts_save_btn_ = new QPushButton(QStringLiteral("Save TTS"));
+    tts_test_btn_ = new QPushButton(QStringLiteral("Test TTS"));
+    btn_hl->addWidget(tts_save_btn_);
+    btn_hl->addWidget(tts_test_btn_);
+    btn_hl->addStretch();
+    parent_layout->addWidget(btn_row);
+
+    tts_status_lbl_ = new QLabel;
+    tts_status_lbl_->setWordWrap(true);
+    parent_layout->addWidget(tts_status_lbl_);
+
+    connect(tts_browse_btn_, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Pick a Piper voice"),
+            tts_model_edit_->text(),
+            QStringLiteral("Piper voices (*.onnx);;All files (*)"));
+        if (!path.isEmpty())
+            tts_model_edit_->setText(path);
+    });
+    connect(tts_save_btn_, &QPushButton::clicked, this,
+            &VoiceConfigSection::save_tts_settings);
+    connect(tts_test_btn_, &QPushButton::clicked, this,
+            &VoiceConfigSection::test_tts);
+
+    load_tts_settings();
+}
+
+void VoiceConfigSection::load_tts_settings() {
+    auto get = [](const char* key) {
+        auto r = SettingsRepository::instance().get(QString::fromUtf8(key));
+        return r.is_ok() ? r.value() : QString();
+    };
+    const QString provider = get("tts.provider");
+    const int idx = tts_provider_combo_->findData(provider.isEmpty() ? "none" : provider);
+    tts_provider_combo_->setCurrentIndex(idx >= 0 ? idx : 0);
+    tts_model_edit_->setText(get("tts.model_path"));
+    tts_length_edit_->setText(get("tts.length"));
+    tts_noise_edit_->setText(get("tts.noise"));
+}
+
+void VoiceConfigSection::save_tts_settings() {
+    auto set = [](const char* key, const QString& val) {
+        SettingsRepository::instance().set(QString::fromUtf8(key), val, "voice");
+    };
+    set("tts.provider", tts_provider_combo_->currentData().toString());
+    set("tts.model_path", tts_model_edit_->text().trimmed());
+    set("tts.length", tts_length_edit_->text().trimmed());
+    set("tts.noise", tts_noise_edit_->text().trimmed());
+
+    tts_status_lbl_->setText(QStringLiteral("Saved.  Chat 🔊 button appears when provider != none + model file exists."));
+    tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::POSITIVE()));
+}
+
+void VoiceConfigSection::test_tts() {
+    save_tts_settings();
+    auto& tts = services::TtsService::instance();
+    if (!tts.is_available()) {
+        tts_status_lbl_->setText(QStringLiteral(
+            "TTS not available — check `pip install piper-tts` + that the model path exists."));
+        tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::NEGATIVE()));
+        return;
+    }
+    tts.speak(QStringLiteral("Hello from finterm.  Text to speech is configured."));
+    tts_status_lbl_->setText(QStringLiteral("Playing test phrase…"));
+    tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::POSITIVE()));
 }
 
 } // namespace fincept::screens

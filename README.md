@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`ea8e1e03`](https://github.com/yumima/finterm/commit/ea8e1e03) review fix: don't supersede predecessor before re-run dispatch lands
 - [`6ec439a0`](https://github.com/yumima/finterm/commit/6ec439a0) agents(feedback): mark-wrong / mark-right capture (Track 7B)
 - [`d1c111e4`](https://github.com/yumima/finterm/commit/d1c111e4) settings(activity): in-flight + recent task tray (Track 7A)
 - [`8b8405d3`](https://github.com/yumima/finterm/commit/8b8405d3) workbench(tools): real catalog table replacing placeholder (Track 6C)

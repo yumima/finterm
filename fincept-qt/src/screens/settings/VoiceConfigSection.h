@@ -50,6 +50,21 @@ class VoiceConfigSection : public QWidget {
 
     // Deepgram-only rows, hidden when provider is Whisper
     QWidget*     deepgram_group_    = nullptr;
+
+    // ── TTS (output) — separate group below the STT (input) group ─────
+    QComboBox*   tts_provider_combo_ = nullptr;
+    QLineEdit*   tts_model_edit_     = nullptr;
+    QPushButton* tts_browse_btn_     = nullptr;
+    QLineEdit*   tts_length_edit_    = nullptr;
+    QLineEdit*   tts_noise_edit_     = nullptr;
+    QPushButton* tts_save_btn_       = nullptr;
+    QPushButton* tts_test_btn_       = nullptr;
+    QLabel*      tts_status_lbl_     = nullptr;
+
+    void build_tts_ui(class QVBoxLayout* parent_layout);
+    void load_tts_settings();
+    void save_tts_settings();
+    void test_tts();
 };
 
 } // namespace fincept::screens
