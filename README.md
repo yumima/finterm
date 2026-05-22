@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`0ffa338a`](https://github.com/yumima/finterm/commit/0ffa338a) settings(ai-system): share one trace fetch across spend + table (/review fix)
 - [`f0225111`](https://github.com/yumima/finterm/commit/f0225111) settings(scheduler): UI for agent_schedule entries (Track 10 finish)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
