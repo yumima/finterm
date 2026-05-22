@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`fc48604d`](https://github.com/yumima/finterm/commit/fc48604d) **docs:** how-to/ user guides + blocked-item categorisation
 - [`f5a7421e`](https://github.com/yumima/finterm/commit/f5a7421e) agents(ctx): wire process-wide default on_sample / on_elicit / on_log
 - [`b37772cd`](https://github.com/yumima/finterm/commit/b37772cd) settings(credentials): gut unused keys, point users at the right surfaces
 - [`f36caa4e`](https://github.com/yumima/finterm/commit/f36caa4e) mcp(http): OAuth 2.0 + DCR with client_credentials grant (Track 4 #14b)
@@ -32,10 +33,17 @@ guards, per-agent budgets — backed by two runtimes (Anthropic
 via claude-agent-sdk, or any OpenAI-compatible local server like
 Ollama / vLLM / llama.cpp) and 32+ internal MCP tool families.
 
-📖 **[plans/ai-stack.md](plans/ai-stack.md)** is the single
-current-state reference for the AI architecture: runtimes, MCP
-surface, agents, skills, scheduler, safety + observability,
-storage, UI, track status, and open work.
+**Quick start (users):**
+- [docs/how-to/ai-features.md](docs/how-to/ai-features.md) —
+  configure a runtime, use slash commands, schedule agents,
+  manage spend + kill-switches
+- [docs/how-to/quant-features.md](docs/how-to/quant-features.md)
+  — AI Quant Lab, paper trading, the quant_critic agent
+
+**Architecture (engineers):**
+- [plans/ai-stack.md](plans/ai-stack.md) — single current-state
+  reference: runtimes, MCP surface, agents, skills, scheduler,
+  safety + observability, storage, UI, track status, open work
 
 [All commits →](https://github.com/yumima/finterm/commits/main)
 
