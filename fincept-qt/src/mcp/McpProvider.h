@@ -111,6 +111,24 @@ class McpProvider {
     using AuthChecker = std::function<bool(AuthLevel required, bool is_destructive)>;
     void set_auth_checker(AuthChecker checker);
 
+    // ── Default ToolContext handlers (Track 5 production wiring) ───────────
+    //
+    // ToolContext is per-call — callers (chat surface, AgentService,
+    // scheduler) can supply on_sample / on_elicit / on_log inline.  When
+    // they don't, McpProvider falls back to these process-wide defaults.
+    //
+    // AgentService::initialize() sets the sample handler to call the
+    // active LLM profile via LlmService, and (when the chat surface is
+    // mounted) sets the elicit handler to a modal-aware bridge.
+
+    using SampleHandler = std::function<SampleResponse(const SampleRequest&)>;
+    using ElicitHandler = std::function<ElicitResponse(const ElicitRequest&)>;
+    using LogHandler = std::function<void(LogLevel, const QString&)>;
+
+    void set_default_sample_handler(SampleHandler handler);
+    void set_default_elicit_handler(ElicitHandler handler);
+    void set_default_log_handler(LogHandler handler);
+
     // ── LLM Integration ────────────────────────────────────────────────────
 
     /// Format all enabled tools for OpenAI function calling
@@ -142,6 +160,9 @@ class McpProvider {
     QHash<QString, Prompt> prompts_;
     quint64 generation_ = 0;
     AuthChecker auth_checker_;
+    SampleHandler default_sample_handler_;
+    ElicitHandler default_elicit_handler_;
+    LogHandler default_log_handler_;
 };
 
 } // namespace fincept::mcp

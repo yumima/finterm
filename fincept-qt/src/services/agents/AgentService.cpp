@@ -4,6 +4,7 @@
 #include "ai_chat/LlmService.h"
 #include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
+#include "mcp/McpProvider.h"
 #include "python/PythonRunner.h"
 #include "services/agents/BudgetService.h"
 #include "storage/cache/CacheManager.h"
@@ -1735,6 +1736,58 @@ void AgentService::ensure_registered_with_hub() {
 
     hub_registered_ = true;
     LOG_INFO("AgentService", "Registered with DataHub (agent:*)");
+
+    // Track 5 follow-up — install process-wide default on_sample /
+    // on_elicit handlers on McpProvider.  Tools that ask for sampling
+    // / elicitation now route through the active LLM profile (sample)
+    // and the elicit-callback wired by the chat surface (elicit).
+    install_default_tool_handlers();
+}
+
+void AgentService::install_default_tool_handlers() {
+    // on_sample — synchronous LLM completion via the active profile.
+    // Tool handlers run on a worker thread; calling LlmService::chat
+    // blocks that thread, which is what the ctx.sample() contract
+    // promises.
+    mcp::McpProvider::instance().set_default_sample_handler(
+        [](const mcp::SampleRequest& req) -> mcp::SampleResponse {
+            mcp::SampleResponse out;
+            auto& llm = ai_chat::LlmService::instance();
+            if (!llm.is_configured()) {
+                out.error = "no LLM configured (Settings → LLM Config)";
+                return out;
+            }
+            // Map the request into LlmService::chat's shape.  System
+            // prompt becomes a synthesised history; the request prompt
+            // is the user message.
+            std::vector<ai_chat::ConversationMessage> history;
+            if (!req.system_prompt.isEmpty())
+                history.push_back({"system", req.system_prompt});
+
+            ai_chat::LlmResponse resp = llm.chat(req.prompt, history, /*use_tools=*/false);
+            if (!resp.error.isEmpty()) {
+                out.error = resp.error;
+                return out;
+            }
+            out.text = resp.content;
+            out.model = llm.active_model();
+            return out;
+        });
+
+    // on_elicit — default that surfaces an error pointing the caller
+    // at the chat-surface wiring.  The AiChatScreen installs a real
+    // handler when mounted (a modal dialog awaiting user response);
+    // this default fires only when no chat is active.
+    mcp::McpProvider::instance().set_default_elicit_handler(
+        [](const mcp::ElicitRequest& req) -> mcp::ElicitResponse {
+            (void)req;
+            mcp::ElicitResponse out;
+            out.error = "no elicitation surface mounted — open the chat screen "
+                        "to enable interactive tool prompts";
+            return out;
+        });
+
+    LOG_INFO("AgentService", "Installed default on_sample / on_elicit handlers");
 }
 
 void AgentService::publish_agent_result(const AgentExecutionResult& r, bool final) {

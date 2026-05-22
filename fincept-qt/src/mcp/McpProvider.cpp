@@ -368,13 +368,29 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
     if (ctx.timeout_ms == 30000) // ToolContext default — not explicitly set
         ctx.timeout_ms = default_timeout_ms;
 
-    // Default log sink — if the caller didn't supply one, forward to
-    // the app-internal core Logger so tool emissions still land in the
-    // finterm log file.  Track 5 follow-up: when McpProvider grows a
-    // pubsub channel for MCP-spec notifications/message, fan out here.
+    // Snapshot the default handlers once (mutex held).  Per-call ctx
+    // fields win; defaults fall through where the caller didn't set
+    // anything.  Production wiring (AgentService::initialize) populates
+    // the defaults so chat-surface tools can sample / elicit without
+    // every caller threading the handlers manually.
+    SampleHandler default_sample;
+    ElicitHandler default_elicit;
+    LogHandler default_log;
+    {
+        QMutexLocker lock(&mutex_);
+        default_sample = default_sample_handler_;
+        default_elicit = default_elicit_handler_;
+        default_log = default_log_handler_;
+    }
+
     if (!ctx.on_log) {
         const QString tool_name = name;
-        ctx.on_log = [tool_name](LogLevel level, const QString& msg) {
+        // If caller didn't supply a log sink AND there's a process-wide
+        // default, fan out to BOTH the default and the core Logger.
+        // Otherwise just core Logger.  This lets the chat surface attach
+        // a default that streams to the UI while the file log still
+        // captures everything.
+        ctx.on_log = [tool_name, default_log](LogLevel level, const QString& msg) {
             const QString tag = QStringLiteral("Tool:%1").arg(tool_name);
             switch (level) {
                 case LogLevel::Debug:
@@ -394,8 +410,15 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
                     LOG_ERROR(tag.toUtf8().constData(), msg);
                     break;
             }
+            if (default_log)
+                default_log(level, msg);
         };
     }
+
+    if (!ctx.on_sample && default_sample)
+        ctx.on_sample = default_sample;
+    if (!ctx.on_elicit && default_elicit)
+        ctx.on_elicit = default_elicit;
 
     // Async preferred; sync wrapped in a resolved future so call_tool() works
     // uniformly for both shapes.
@@ -468,6 +491,21 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
 void McpProvider::set_auth_checker(AuthChecker checker) {
     QMutexLocker lock(&mutex_);
     auth_checker_ = std::move(checker);
+}
+
+void McpProvider::set_default_sample_handler(SampleHandler handler) {
+    QMutexLocker lock(&mutex_);
+    default_sample_handler_ = std::move(handler);
+}
+
+void McpProvider::set_default_elicit_handler(ElicitHandler handler) {
+    QMutexLocker lock(&mutex_);
+    default_elicit_handler_ = std::move(handler);
+}
+
+void McpProvider::set_default_log_handler(LogHandler handler) {
+    QMutexLocker lock(&mutex_);
+    default_log_handler_ = std::move(handler);
 }
 
 // ============================================================================

@@ -127,6 +127,10 @@ class AgentService : public QObject
     explicit AgentService(QObject* parent = nullptr);
     Q_DISABLE_COPY(AgentService)
 
+    /// Installs the process-wide default on_sample / on_elicit handlers
+    /// on McpProvider.  Called once from ensure_registered_with_hub.
+    void install_default_tool_handlers();
+
     // ── Python execution helpers ─────────────────────────────────────────────
     void run_python_light(const QString& action, const QJsonObject& params,
                           std::function<void(bool, QJsonObject)> on_result);
