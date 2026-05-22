@@ -40,7 +40,7 @@ tracks, so a new session can pick up without re-reading every commit.
 | 11 | Quant narrator | ✅ done | `c3c95681` — 3 tools + quant_critic agent identity (v026 seed) |
 | 12 | Alpha-arena migration to two runtimes | ⚠ partial | `finagent_core/__init__.py` now uses PEP 562 lazy `__getattr__`; bare package + `runtimes.*` imports no longer pull agno. 58 eval-harness tests pass even with agno blocked at the import system level. Full migration of `alpha_arena/` callers onto two runtimes still pending. |
 | 13 | AI Workbench (UI consolidation) | ⏸ pending | Chat / Agents / Teams / Workflows / Tools / Servers / Profiles / System |
-| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 ✅. #39 ✅. #40 ✅ (helper + NewsTools + ForumTools rollout + v031 `<untrusted>` directive injected into every agent's system prompt). Remaining: #41 per-request budgets, #42 UX scripts. |
+| 14 | Evals + observability + audit + safety + UX | ⚠ partial | #38 ✅. #39 ✅. #40 ✅. #41 ✅ (C++ gate: per-agent daily USD cap via `agent_configs.budget.max_usd_per_day`, enforced before dispatch using `agent_traces.cost_usd` sum). Runtime-side in-flight token budgets defer to Track 2/3 once cost reporting wires up. Remaining: #42 UX scripts (QA work). |
 | 15 | Forum → Reddit RSS + Discord deep-link | 📋 filed | Off the AI critical path |
 
 ---
@@ -111,7 +111,8 @@ Future migrations should start at **v032**.
 - `fincept-qt/src/services/agents/SlashCommandService.{h,cpp}` — Track 7 #21 resolver (`/comps AAPL` → agent + skill + args); registry of 13 slash commands
 - `fincept-qt/src/storage/repositories/AgentTraceRepository.{h,cpp}` — Track 14 #38 create/finish/list_recent over `agent_traces` (v029)
 - `fincept-qt/src/storage/repositories/ToolKillswitchRepository.{h,cpp}` — Track 14 #39 disabled-set / disable / enable over `tool_killswitch` (v030); `McpService::execute_tool` gates on this
-- `fincept-qt/src/mcp/UntrustedContent.{h,cpp}` — Track 14 #40 prompt-injection guard; wraps text with `<untrusted>` markers and entity-encodes `<`/`>` to prevent escape; applied to NewsTools (headline + summary)
+- `fincept-qt/src/mcp/UntrustedContent.{h,cpp}` — Track 14 #40 prompt-injection guard; wraps text with `<untrusted>` markers and entity-encodes `<`/`>` to prevent escape; applied to NewsTools + ForumTools
+- `fincept-qt/src/services/agents/BudgetService.{h,cpp}` — Track 14 #41 per-agent daily USD cap; reads from `agent_traces.cost_usd`; `check_dispatch` runs ahead of every `AgentService::run_agent` call
 - `fincept-qt/scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md` — starter methodology library; 3 skills shipped (morning-note, earnings-analysis, comps-analysis); upstream vendoring deferred
 - `fincept-qt/src/screens/settings/LlmConfigSection.cpp` — providers dropdown (anthropic + ollama only)
 - `fincept-qt/src/screens/settings/VoiceConfigSection.cpp` — Whisper + Deepgram only

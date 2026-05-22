@@ -5,6 +5,7 @@
 #include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/agents/BudgetService.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
@@ -438,6 +439,28 @@ void AgentService::discover_agents() {
 QString AgentService::run_agent(const QString& query, const QJsonObject& config) {
     const QString req_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     LOG_INFO("AgentService", QString("Running agent query [%1]: %2").arg(req_id.left(8), query.left(80)));
+
+    // Track 14 #41 — per-agent daily USD budget cap (R24).  Refuses
+    // dispatch before any python work happens.  Synthesize an
+    // AgentExecutionResult so the caller's existing error path fires
+    // exactly as it would for any other dispatch failure.
+    const QString agent_id = config.value(QStringLiteral("agent_id")).toString();
+    if (auto bcheck = BudgetService::instance().check_dispatch(agent_id); bcheck.is_err()) {
+        const QString reason = QString::fromStdString(bcheck.error());
+        LOG_WARN("AgentService", QString("budget refusal [%1]: %2").arg(req_id.left(8), reason));
+        QPointer<AgentService> self = this;
+        QMetaObject::invokeMethod(this, [self, req_id, reason]() {
+            if (!self)
+                return;
+            AgentExecutionResult r;
+            r.request_id = req_id;
+            r.success = false;
+            r.error = reason;
+            emit self->agent_result(r);
+            self->publish_agent_result(r, /*final=*/true);
+        }, Qt::QueuedConnection);
+        return req_id;
+    }
 
     // Track 14 #38 — write an in_progress trace row before dispatch.
     // The finish() in the callback below transitions it to success / error.
