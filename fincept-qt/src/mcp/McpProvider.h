@@ -45,7 +45,7 @@ class McpProvider {
 
     /// Register a typed read-only resource.  Resources let the agent read
     /// state by uri (e.g. "finterm://portfolio/snapshot") without spending
-    /// a tool-call turn on every fetch.  See plans/ai-stack-free-local.md
+    /// a tool-call turn on every fetch.  See plans/ai-stack.md
     /// R8 / Track 5.
     void register_resource(Resource resource);
     void unregister_resource(const QString& uri);

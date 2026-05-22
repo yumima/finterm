@@ -1,5 +1,5 @@
 // v024_mcp_marketplace_seed — Seed the mcp_servers table with the
-// marketplace baseline from plans/ai-stack-free-local.md §7.4.
+// marketplace baseline from plans/ai-stack.md §7.4.
 //
 // All rows insert with enabled=0 so users opt-in via Settings → MCP
 // Servers after reviewing each entry's command + env requirements.

@@ -19,7 +19,7 @@
 // than a binding error.  A future migration can drop them once every
 // read path is verified off the column.
 //
-// Per R16 in plans/ai-stack-free-local.md.
+// Per R16 in plans/ai-stack.md.
 
 #include "core/logging/Logger.h"
 #include "storage/secure/LlmSecureKeys.h"

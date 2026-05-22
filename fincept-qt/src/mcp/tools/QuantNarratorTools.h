@@ -5,7 +5,7 @@
 
 // QuantNarratorTools — LLM-driven commentary on quant outputs.
 //
-// Three stateless tools per Track 11 / plans/ai-stack-free-local.md
+// Three stateless tools per Track 11 / plans/ai-stack.md
 // item 32:
 //   narrate_backtest_result   English commentary on a backtest run
 //   propose_param_sweep       Suggested parameter ranges for a re-run

@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`4fd77d24`](https://github.com/yumima/finterm/commit/4fd77d24) mcp(memory): local-profile MemoryTools stub (Track 9)
 - [`d899e008`](https://github.com/yumima/finterm/commit/d899e008) screens(workbench): single-screen left-nav consolidation (Track 13 full)
 - [`1b28bf33`](https://github.com/yumima/finterm/commit/1b28bf33) alpha_arena: flip BaseAgent default to two-runtime path (Track 12 full)
 - [`c4db8060`](https://github.com/yumima/finterm/commit/c4db8060) runtime(local): OpenAI-compat local runtime adapter (Track 2)
@@ -13,6 +14,22 @@ Latest first.
 - [`f0225111`](https://github.com/yumima/finterm/commit/f0225111) settings(scheduler): UI for agent_schedule entries (Track 10 finish)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
+
+
+## AI / MCP / agentic stack
+
+finterm ships a complete agentic chat surface — slash commands,
+named agents, scheduled runs, kill-switches, prompt-injection
+guards, per-agent budgets — backed by two runtimes (Anthropic
+via claude-agent-sdk, or any OpenAI-compatible local server like
+Ollama / vLLM / llama.cpp) and 32+ internal MCP tool families.
+
+📖 **[plans/ai-stack.md](plans/ai-stack.md)** is the single
+current-state reference for the AI architecture: runtimes, MCP
+surface, agents, skills, scheduler, safety + observability,
+storage, UI, track status, and open work.
+
+[All commits →](https://github.com/yumima/finterm/commits/main)
 
 ## What you get
 

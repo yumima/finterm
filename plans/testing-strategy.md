@@ -3,7 +3,7 @@
 **Status:** Current
 **Date:** 2026-05-20
 **Owner:** yumima
-**Related:** `plans/ai-stack-free-local.md`, `plans/local-ai-engine.md`
+**Related:** `plans/ai-stack.md`, `plans/local-ai-engine.md`
 
 ---
 
@@ -205,7 +205,7 @@ change is a behavioural regression to investigate, not auto-update.
   tools.
 - Executes the input as a chat turn.
 - Captures the trace via the unified trace schema (see
-  `ai-stack-free-local.md` R21).
+  `ai-stack.md` R21).
 - Compares against the fixture's assertions.
 - Writes the new snapshot to disk; reports diff vs the prior
   snapshot.
@@ -256,7 +256,7 @@ marketplace seed list (Track 4) to catch upstream breakage.
 
 ## 7. Trace assertions
 
-The unified trace (R21 in `ai-stack-free-local.md`) records per
+The unified trace (R21 in `ai-stack.md`) records per
 turn: prompts, tool calls, tool results, outputs, latency, tokens,
 cost, runtime, model snapshot.
 
@@ -317,7 +317,7 @@ Cost note for nightly: Anthropic-profile e2e burns tokens. Budget:
 
 ## 10. Per-track requirement
 
-Every PR closing a track item in `ai-stack-free-local.md` §9 ships
+Every PR closing a track item in `ai-stack.md` §9 ships
 its e2e fixture(s) and updated snapshot(s). The iteration loop
 becomes:
 

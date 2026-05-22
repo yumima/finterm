@@ -4,7 +4,7 @@
 // the minimal local OpenAI-compatible loop) without re-deriving it
 // from the legacy `provider` string at every call site.
 //
-// Per R1 / R3 in plans/ai-stack-free-local.md.
+// Per R1 / R3 in plans/ai-stack.md.
 //
 // Backfill from existing provider values:
 //   provider = 'anthropic' → runtime = 'anthropic'

@@ -5,7 +5,7 @@
 **Owner:** yumima
 **Working name:** `finterm-localai` (placeholder; see §6 Open
 questions)
-**Related:** `plans/ai-stack-free-local.md` (finterm's side of the
+**Related:** `plans/ai-stack.md` (finterm's side of the
 contract)
 
 ---
