@@ -197,6 +197,23 @@ class VideoPlayerWidget : public BaseWidget {
     void            play_web_video_id(const QString& video_id, const QString& title, const QString& source_url);
     void            resolve_live_id_and_play_web(const QString& channel_url, const QString& title);
     void            stop_web();
+    /// Render a Spotify show / episode / playlist / track / album via the
+    /// official open.spotify.com/embed/<type>/<id> iframe in QWebEngineView.
+    /// No yt-dlp, no QMediaPlayer — Spotify's embed owns the playback UI and
+    /// auth (free-tier preview vs Premium full-play). Routed through this
+    /// widget so the title bar, lock-pause hook, and theme integration still
+    /// apply.
+    void            play_spotify_embed(const QString& type, const QString& id,
+                                       const QString& title, const QString& source_url);
+    /// True while the WebEngine surface is showing a Spotify embed (vs the
+    /// YouTube iframe path). Drives the lock-auto-pause / unlock-resume
+    /// branch in the terminal_locked_changed handler and the visibility of
+    /// the GL pause button. Cleared in stop_playback().
+    bool            web_is_spotify_    = false;
+    /// True if the Spotify embed was auto-paused by terminal-lock. Mirrors
+    /// the GL pipeline's auto_paused_on_lock_ contract — we only resume
+    /// what we paused, never undo a user-initiated pause.
+    bool            spotify_auto_paused_on_lock_ = false;
     // GL (yt-dlp + QPainter) is the default — works for any public stream,
     // including channels that block YouTube iframe embedding (CNBC, Yahoo, …).
     // WebEngine remains available via the config dialog for custom YouTube

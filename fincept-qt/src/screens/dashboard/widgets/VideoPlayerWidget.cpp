@@ -329,6 +329,35 @@ static QString extract_youtube_id(const QString& url) {
     return m.hasMatch() ? m.captured(1) : QString();
 }
 
+// Parse a Spotify public URL into a (type, id) pair if it looks like one of the
+// embeddable resource forms (show / episode / playlist / track / album). The id
+// is a 22-character base62 string assigned by Spotify; the regex is intentionally
+// loose on length so a future format bump doesn't silently drop matches — the
+// embed iframe itself is the source of truth for whether the id resolves.
+//
+// Returns {} if the URL is not a Spotify resource we can embed (including the
+// already-/embed/ form, which we leave alone so we don't re-wrap it). The host
+// check accepts both "open.spotify.com" and the rare "play.spotify.com" alias.
+static std::pair<QString, QString> spotify_resource(const QString& url) {
+    const QUrl u(url);
+    const QString host = u.host().toLower();
+    if (host != QStringLiteral("open.spotify.com") &&
+        host != QStringLiteral("play.spotify.com"))
+        return {};
+    // Match /<type>/<id>, where <type> is one of the embeddable kinds.
+    // The path may have a trailing slash or further segments (Spotify
+    // appends a locale prefix like /intl-en/ for some routes — strip it).
+    QString path = u.path();
+    static const QRegularExpression locale_re(QStringLiteral(R"(^/intl-[a-z]{2,3}/)"));
+    path.replace(locale_re, QStringLiteral("/"));
+    static const QRegularExpression re(
+        QStringLiteral(R"(^/(show|episode|playlist|track|album)/([A-Za-z0-9]+))"));
+    auto m = re.match(path);
+    if (!m.hasMatch())
+        return {};
+    return {m.captured(1), m.captured(2)};
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / STREAMS", parent, ui::colors::AMBER()) {
@@ -421,6 +450,38 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
     connect(&auth::InactivityGuard::instance(),
             &auth::InactivityGuard::terminal_locked_changed, this,
             [this](bool locked) {
+#ifdef HAS_QT_WEBENGINE
+                // Spotify-embed branch. The embed iframe is cross-origin, so
+                // we can't poke at its DOM directly; the contract is
+                // postMessage to https://open.spotify.com. The embed
+                // controller accepts {command: 'pause'} and {command: 'resume'}
+                // as distinct verbs, so we can mirror the GL pipeline's
+                // "pause iff playing" contract: only set the latch when we
+                // pause, only resume what we paused. Best-effort: if the
+                // embed isn't yet hooked up (still loading), the message is
+                // dropped silently — the worst case is the embed keeps
+                // playing while the lock screen is up, no harder failure.
+                if (web_is_spotify_ && web_view_) {
+                    auto post = [this](const char* cmd) {
+                        // QStringLiteral wants a literal; build the snippet
+                        // with a single arg() so the verb is the only thing
+                        // that varies between the two call sites.
+                        const QString js = QStringLiteral(
+                            "(function(){var f=document.querySelector('iframe');"
+                            "if(!f||!f.contentWindow)return;"
+                            "f.contentWindow.postMessage({command:'%1'},"
+                            "'https://open.spotify.com');})();").arg(QLatin1String(cmd));
+                        web_view_->page()->runJavaScript(js);
+                    };
+                    if (locked) {
+                        post("pause");
+                        spotify_auto_paused_on_lock_ = true;
+                    } else if (spotify_auto_paused_on_lock_) {
+                        spotify_auto_paused_on_lock_ = false;
+                        post("resume");
+                    }
+                }
+#endif
 #ifdef HAS_QT_MULTIMEDIA
                 if (!player_) return;
                 if (locked) {
@@ -480,7 +541,7 @@ void VideoPlayerWidget::build_channel_list() {
     irl->setSpacing(4);
 
     url_input_ = new QLineEdit;
-    url_input_->setPlaceholderText("YouTube URL, HLS (.m3u8), MP4, or direct stream...");
+    url_input_->setPlaceholderText("YouTube / Spotify / HLS (.m3u8) / MP4 URL...");
     connect(url_input_, &QLineEdit::returnPressed, this, &VideoPlayerWidget::play_custom_url);
     irl->addWidget(url_input_, 1);
 
@@ -492,7 +553,7 @@ void VideoPlayerWidget::build_channel_list() {
 
     vl->addWidget(input_row);
 
-    helper_label_ = new QLabel("YouTube streams resolved via yt-dlp and played inline.");
+    helper_label_ = new QLabel("YouTube via yt-dlp; Spotify shows / episodes / playlists via embed iframe.");
     vl->addWidget(helper_label_);
 
     vl->addStretch();
@@ -747,6 +808,14 @@ void VideoPlayerWidget::build_web_view() {
 void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString& title,
                                           const QString& source_url) {
     if (!web_view_) build_web_view();
+    // Clear Spotify-mode latches in case the user switched from a Spotify
+    // embed straight to a YouTube URL without hitting BACK. Without this the
+    // lock handler would keep posting Spotify-targeted messages to a YouTube
+    // iframe (harmless — wrong origin — but the visibility latch on
+    // play_pause_btn_ would also stay stuck off).
+    web_is_spotify_              = false;
+    spotify_auto_paused_on_lock_ = false;
+    if (play_pause_btn_) play_pause_btn_->setVisible(!use_web_engine_);
 
     const QString embed_url = QString("https://www.youtube-nocookie.com/embed/%1"
                                       "?autoplay=1&controls=1&rel=0"
@@ -855,6 +924,63 @@ void VideoPlayerWidget::play_web(const QString& channel_url, const QString& titl
 
 void VideoPlayerWidget::stop_web() {
     if (web_view_) web_view_->setUrl(QUrl("about:blank"));
+    // Clear Spotify-specific latches so a subsequent unlock or refresh doesn't
+    // try to resume something we already tore down.
+    web_is_spotify_ = false;
+    spotify_auto_paused_on_lock_ = false;
+}
+
+// Render a Spotify resource via the official embed iframe.
+//
+// We load https://open.spotify.com/embed/<type>/<id>?utm_source=generator
+// directly into QWebEngineView. No HTML wrapper — Spotify's embed page is
+// already a chromeless player, and loading it as the top-level document means
+// the page's own origin (open.spotify.com) hosts the iframe-API JS. That
+// matters because some of the embed's internal navigation (Premium upsell,
+// "Listen in app") only renders when the page origin matches the embed's
+// expectations.
+//
+// Hard-strip any query the user pasted (typically `?si=…` share tokens). The
+// embed only needs `utm_source=generator` for analytics; passing through
+// arbitrary query state has occasionally surfaced inconsistent embed UI.
+void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& id,
+                                            const QString& title, const QString& source_url) {
+    if (!web_view_) build_web_view();
+
+    // Tear down any GL pipeline that was running — otherwise the user would
+    // hear the previous stream alongside the Spotify embed with no obvious
+    // way to silence it (the GL pause button gets hidden below). Symmetric
+    // with play_via_proxy() / play_direct(), which stop their own pipelines
+    // before swapping pages.
+#ifdef HAS_QT_MULTIMEDIA
+    if (player_) {
+        player_->stop();
+        if (video_widget_) video_widget_->clear_frame();
+    }
+    stop_hls_proxy();
+    current_is_live_     = false;
+    auto_paused_on_lock_ = false;
+#endif
+
+    const QString embed_url = QStringLiteral("https://open.spotify.com/embed/%1/%2?utm_source=generator")
+                                  .arg(type, id);
+    web_view_->setUrl(QUrl(embed_url));
+
+    web_is_spotify_              = true;
+    spotify_auto_paused_on_lock_ = false;
+    play_in_progress_            = false;
+    current_url_                 = source_url;
+    current_title_               = title;
+    now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
+    set_title("LIVE TV — " + title.toUpper());
+    status_label_->hide();
+    controls_->show();
+    // Spotify's iframe owns the transport UI — its play/pause is reachable
+    // inside the embed. Hide our pause button so users don't expect it to
+    // drive the embed (cross-origin postMessage is best-effort; the visible
+    // controls live inside the iframe).
+    if (play_pause_btn_) play_pause_btn_->setVisible(false);
+    stack_->setCurrentIndex(2);
 }
 #endif
 
@@ -865,6 +991,14 @@ void VideoPlayerWidget::play_preset(int index) {
         return;
     const auto& ch = channels_[index];
 #ifdef HAS_QT_WEBENGINE
+    // Spotify presets ride the iframe path regardless of the GL/WEB engine
+    // toggle — there is no GL pipeline for Spotify (no public stream URL,
+    // DRM'd audio). The toggle only chooses between yt-dlp+QPainter and the
+    // YouTube iframe for *YouTube* URLs.
+    if (auto [type, id] = spotify_resource(ch.url); !type.isEmpty()) {
+        play_spotify_embed(type, id, ch.name, ch.url);
+        return;
+    }
     if (use_web_engine_) {
         play_web(ch.url, ch.name);
         return;
@@ -881,6 +1015,16 @@ void VideoPlayerWidget::play_custom_url() {
         url.prepend("https://");
 
 #ifdef HAS_QT_WEBENGINE
+    // Spotify URLs (show / episode / playlist / track / album) bypass GL
+    // entirely — there is no public stream we can hand to QMediaPlayer, only
+    // the official embed iframe. Detect first so it wins regardless of the
+    // GL/WEB toggle.
+    if (auto [type, id] = spotify_resource(url); !type.isEmpty()) {
+        // Title format mirrors the YouTube "Custom: <id>" pattern so the
+        // status bar stays consistent across custom-URL embed kinds.
+        play_spotify_embed(type, id, QStringLiteral("Spotify %1: %2").arg(type, id), url);
+        return;
+    }
     // For YouTube URLs, extract the video ID and embed via WebEngine iframe.
     // This avoids the GL render-loop flashing and works for any public video.
     if (use_web_engine_ && is_youtube_url(url)) {
@@ -931,6 +1075,13 @@ void VideoPlayerWidget::refresh_data() {
     // would call setSource() on a mid-transition player.
     if (play_in_progress_)
         return;
+#ifdef HAS_QT_WEBENGINE
+    // Spotify embeds keep playing in the iframe; refresh is a no-op there.
+    // Routing through play_url() would hand a Spotify URL to yt-dlp and
+    // surface a confusing "yt-dlp error" status, so short-circuit here.
+    if (web_is_spotify_)
+        return;
+#endif
 #ifdef HAS_QT_MULTIMEDIA
     // Live streams play continuously — nothing to refresh while playing.
     if (player_ && player_->playbackState() == QMediaPlayer::PlayingState)
@@ -1188,6 +1339,11 @@ void VideoPlayerWidget::stop_playback() {
     stack_->setCurrentIndex(0);
 #ifdef HAS_QT_WEBENGINE
     stop_web();
+    // stop_web() cleared web_is_spotify_; restore the pause button to match
+    // the currently selected engine so the next GL playback gets its control
+    // back (Spotify-mode hides it because the embed owns its own transport).
+    if (play_pause_btn_)
+        play_pause_btn_->setVisible(!use_web_engine_);
 #endif
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
