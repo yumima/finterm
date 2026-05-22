@@ -832,8 +832,30 @@ void AiChatScreen::load_messages(const QString& session_id) {
     // remain accurate so the header reflects the whole session.
     const int total = static_cast<int>(msgs.size());
     const int start = std::max(0, total - kMaxVisibleBubbles);
+    // System messages of the form "**Suggested next:** /a · /b · /c"
+    // were written by the slash-dispatch follow-up code (handle_slash_command)
+    // as a plain-text mirror of the in-bubble chip row.  Detect those
+    // here and rebuild the chip row instead of rendering as a bubble —
+    // otherwise on reload they show as ordinary text and lose
+    // clickability.
+    static const QString kSuggestPrefix = QStringLiteral("**Suggested next:** ");
     for (int i = start; i < total; ++i) {
         const auto& msg = msgs[i];
+        if (msg.role == "system" && msg.content.startsWith(kSuggestPrefix)) {
+            const QString body = msg.content.mid(kSuggestPrefix.size());
+            QStringList cmds;
+            for (const QString& part : body.split(QStringLiteral(" · "), Qt::SkipEmptyParts)) {
+                const QString trimmed = part.trimmed();
+                if (!trimmed.isEmpty())
+                    cmds.append(trimmed);
+            }
+            if (!cmds.isEmpty())
+                add_chip_row("Suggested next", cmds);
+            // Don't fall through to add_message_bubble — we've
+            // already represented this message in the UI.
+            total_tokens_ += msg.tokens_used;
+            continue;
+        }
         add_message_bubble(msg.role, msg.content, msg.timestamp);
         if (msg.role != "system")
             history_.push_back({msg.role, msg.content});

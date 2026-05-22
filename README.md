@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cc843511`](https://github.com/yumima/finterm/commit/cc843511) workbench: real Chat/Agents/Workflows/Servers/Profiles catalog tables
 - [`a1255e87`](https://github.com/yumima/finterm/commit/a1255e87) review fixes: surface SettingsRepository + index-create failures
 - [`31347e87`](https://github.com/yumima/finterm/commit/31347e87) review fix: TtsService shutdown safety + drop stale player pointers
 - [`6d0c1165`](https://github.com/yumima/finterm/commit/6d0c1165) ai_chat: @-mention ticker resolution
