@@ -8,6 +8,7 @@
 #include "mcp/McpService.h"
 #include "services/agents/AgentService.h"
 #include "services/agents/ElicitBridge.h"
+#include "services/agents/InlineCompletionController.h"
 #include "services/agents/MentionResolverService.h"
 #include "services/agents/SlashCommandService.h"
 #include "services/tts/TtsService.h"
@@ -650,6 +651,17 @@ QWidget* AiChatScreen::build_input_area() {
         ScreenStateManager::instance().notify_changed(this);
     });
     hl->addWidget(input_box_, 1);
+
+    // Inline-completion scaffold (Track 8 — gated by capability flag).
+    // The controller installs its own event filter on input_box_ for
+    // Tab-to-accept; that filter must run AFTER ours so we can still
+    // own Enter / Shift-Enter.  Qt delivers eventFilter() to filters
+    // in reverse install order — installing the controller's filter
+    // AFTER `installEventFilter(this)` above means the controller
+    // sees the event FIRST, which is what we want (it returns false
+    // for everything except Tab-on-pending, letting our filter run
+    // afterwards).
+    inline_completion_ = new fincept::services::InlineCompletionController(input_box_, this);
 
     // Attach file button
     attach_btn_ = new QPushButton("⊕");

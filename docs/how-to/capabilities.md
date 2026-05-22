@@ -30,6 +30,7 @@ Glyphs:
 | **Cron-shaped scheduler** | ✓ | ✓ | @daily / @every entries fire scheduled agent runs. |
 | **Slash command dispatch** | ✓ | ✓ | /comps, /dcf, /earnings, … route to named agents with resolved args. |
 | **OAuth 2.0 + DCR** | ✓ | ✓ | Hosted MCP servers authenticate via OAuth. client_credentials and authorization_code grants both supported; RFC 8414 discovery, RFC 7591 dynamic client registration, RFC 7636 PKCE on authorization_code. |
+| **Inline completion** | ◐ | ◐ | Ghost-text suggestions in the chat composer + memo editors (think IDE autocomplete).  Debounced + LRU-cached; user accepts with Tab, dismisses with any other key. |
 | **Text-to-speech** | ◐ | ◐ | Read agent output aloud via a local TTS engine. |
 
 ## Notes
@@ -72,6 +73,10 @@ Glyphs:
 ### OAuth 2.0 + DCR
 
 - authorization_code flow uses a localhost callback server (default port 47823) + the user's browser; client_id must be set in SecureStorage out-of-band (DCR for browser-flow clients is rare and not auto-wired).
+
+### Inline completion
+
+- Off by default — `inline_completion.enabled = true` in Settings turns it on.  Latency is API-bound until Engine M1 lands a fast local model; the UX is honest about the wait.  No streaming on the suggestion itself (whole completion arrives at once).
 
 ### Text-to-speech
 

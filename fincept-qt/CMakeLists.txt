@@ -914,6 +914,7 @@ set(SERVICE_SOURCES
     src/services/agents/BudgetService.cpp
     src/services/agents/CapabilityRegistry.cpp
     src/services/agents/ElicitBridge.cpp
+    src/services/agents/InlineCompletionController.cpp
     src/services/agents/MentionResolverService.cpp
     src/services/agents/SkillProposalService.cpp
     src/services/agents/SlashCommandService.cpp

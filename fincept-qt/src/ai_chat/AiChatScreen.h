@@ -19,6 +19,8 @@
 
 #include <vector>
 
+namespace fincept::services { class InlineCompletionController; }
+
 namespace fincept::screens {
 
 class AiChatScreen : public QWidget, public IStatefulScreen {
@@ -105,6 +107,11 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     QPushButton* attach_btn_ = nullptr;
     QLabel* attach_badge_ = nullptr; // shows attached file name
     QString attached_file_path_;
+
+    // Track 8 inline-completion controller; lifetime tied to `this`.
+    // Created in the composer build path; off-by-default via
+    // SettingsRepository(`inline_completion.enabled`).
+    fincept::services::InlineCompletionController* inline_completion_ = nullptr;
 
     // ── Typing indicator ─────────────────────────────────────────────────
     QWidget* typing_indicator_ = nullptr;

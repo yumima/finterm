@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e6180c77`](https://github.com/yumima/finterm/commit/e6180c77) review fixes: SkillDiffsSection — async subprocess + path-traversal guards
 - [`9c8c881e`](https://github.com/yumima/finterm/commit/9c8c881e) settings: vendor-skill drift review panel (Track 1C UI counterpart)
 - [`6c4b3674`](https://github.com/yumima/finterm/commit/6c4b3674) review fix: lineage query uses SQLite IS (handles NULL identity columns)
 - [`19a6e40c`](https://github.com/yumima/finterm/commit/19a6e40c) settings(artefacts): lineage view — re-run chain visible from one click
