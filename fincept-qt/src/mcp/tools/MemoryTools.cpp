@@ -103,6 +103,30 @@ ToolResult tool_search(const QJsonObject& args) {
     return ToolResult::ok(QStringLiteral("Found %1 match(es)").arg(rows.size()), data);
 }
 
+ToolResult tool_delete(const QJsonObject& args) {
+    const QString scope = req_string(args, "scope");
+    const QString key = req_string(args, "key");
+    if (scope.isEmpty() || key.isEmpty())
+        return ToolResult::fail("memory_delete requires non-empty `scope` and `key`");
+
+    auto r = Database::instance().execute(
+        QStringLiteral("DELETE FROM memory_entries WHERE scope = ? AND key = ?"),
+        {scope, key});
+    if (r.is_err())
+        return ToolResult::fail(QString::fromStdString(r.error()));
+
+    const int affected = r.value().numRowsAffected();
+    QJsonObject data;
+    data["scope"] = scope;
+    data["key"] = key;
+    data["deleted"] = affected;
+    return ToolResult::ok(
+        affected > 0
+            ? QStringLiteral("Deleted memory entry (%1, %2)").arg(scope, key)
+            : QStringLiteral("No entry matched (%1, %2)").arg(scope, key),
+        data);
+}
+
 ToolResult tool_list(const QJsonObject& args) {
     const QString scope = req_string(args, "scope");
     if (scope.isEmpty())
@@ -149,7 +173,7 @@ ToolSchema schema_with_scope(const QJsonObject& extra_props,
 
 std::vector<ToolDef> get_memory_tools() {
     std::vector<ToolDef> tools;
-    tools.reserve(3);
+    tools.reserve(4);
 
     {
         ToolDef t;
@@ -208,6 +232,25 @@ std::vector<ToolDef> get_memory_tools() {
             },
             {});
         t.handler = tool_list;
+        tools.push_back(std::move(t));
+    }
+
+    {
+        ToolDef t;
+        t.name = "memory_delete";
+        t.description =
+            "Remove an entry from the agent's persistent memory.  No-op "
+            "(returns deleted=0) when no entry matches — caller can treat "
+            "that as success.  Destructive, so the auth gate fires.";
+        t.category = "memory";
+        t.is_destructive = true;
+        t.input_schema = schema_with_scope(
+            QJsonObject{
+                {"key", QJsonObject{{"type", "string"},
+                                    {"description", "Stable identifier of the entry to delete"}}},
+            },
+            {"key"});
+        t.handler = tool_delete;
         tools.push_back(std::move(t));
     }
 
