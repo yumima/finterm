@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`901655a9`](https://github.com/yumima/finterm/commit/901655a9) mcp(memory): memory_delete tool
 - [`5bc77ca3`](https://github.com/yumima/finterm/commit/5bc77ca3) **docs:** consolidate AI-stack plan + status into one current-state file
 - [`4fd77d24`](https://github.com/yumima/finterm/commit/4fd77d24) mcp(memory): local-profile MemoryTools stub (Track 9)
 - [`d899e008`](https://github.com/yumima/finterm/commit/d899e008) screens(workbench): single-screen left-nav consolidation (Track 13 full)
