@@ -2,6 +2,7 @@
 
 #include "services/agents/AgentService.h"
 
+#include <QColor>
 #include <QDialog>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -115,10 +116,12 @@ void ArtefactsSection::build_ui() {
     rerun_btn_ = new QPushButton(QStringLiteral("Re-run"));
     export_btn_ = new QPushButton(QStringLiteral("Export…"));
     supersede_btn_ = new QPushButton(QStringLiteral("Mark superseded"));
+    lineage_btn_ = new QPushButton(QStringLiteral("Lineage…"));
     refresh_btn_ = new QPushButton(QStringLiteral("Refresh"));
     btn_row->addWidget(rerun_btn_);
     btn_row->addWidget(export_btn_);
     btn_row->addWidget(supersede_btn_);
+    btn_row->addWidget(lineage_btn_);
     btn_row->addStretch();
     btn_row->addWidget(refresh_btn_);
     root->addLayout(btn_row);
@@ -126,6 +129,7 @@ void ArtefactsSection::build_ui() {
     connect(rerun_btn_, &QPushButton::clicked, this, &ArtefactsSection::on_rerun);
     connect(export_btn_, &QPushButton::clicked, this, &ArtefactsSection::on_export);
     connect(supersede_btn_, &QPushButton::clicked, this, &ArtefactsSection::on_supersede);
+    connect(lineage_btn_, &QPushButton::clicked, this, &ArtefactsSection::on_lineage);
     connect(refresh_btn_, &QPushButton::clicked, this, &ArtefactsSection::on_refresh);
 
     table_ = new QTableWidget(this);
@@ -191,6 +195,7 @@ void ArtefactsSection::on_selection_changed() {
     rerun_btn_->setEnabled(has);
     export_btn_->setEnabled(has);
     supersede_btn_->setEnabled(has);
+    lineage_btn_->setEnabled(has);
 }
 
 QString ArtefactsSection::selected_id() const {
@@ -368,6 +373,74 @@ void ArtefactsSection::on_supersede() {
     }
     show_status(QStringLiteral("Superseded %1").arg(id.left(8)));
     reload();
+}
+
+void ArtefactsSection::on_lineage() {
+    const QString id = selected_id();
+    if (id.isEmpty())
+        return;
+    auto r = ChatArtefactRepository::instance().list_lineage_for(id);
+    if (r.is_err()) {
+        show_status(QString::fromStdString(r.error()), true);
+        return;
+    }
+    const auto rows = r.value();
+    if (rows.isEmpty()) {
+        show_status(QStringLiteral("Lineage empty for %1").arg(id.left(8)), true);
+        return;
+    }
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Lineage — %1").arg(rows.first().title));
+    dlg.resize(720, 420);
+    auto* layout = new QVBoxLayout(&dlg);
+    layout->setContentsMargins(16, 16, 16, 16);
+
+    auto* meta = new QLabel(QStringLiteral(
+        "Artefacts produced by the same dispatch identity "
+        "(<b>agent</b> · <b>skill</b> · <b>args</b>), newest first.  "
+        "The selected artefact is highlighted; previous runs (typically "
+        "<code>superseded</code>) trail underneath."));
+    meta->setWordWrap(true);
+    meta->setStyleSheet(QStringLiteral("color:#aaa;"));
+    layout->addWidget(meta);
+
+    auto* tbl = new QTableWidget;
+    tbl->setColumnCount(4);
+    tbl->setHorizontalHeaderLabels(
+        {QStringLiteral("ID"), QStringLiteral("Status"),
+         QStringLiteral("Created"), QStringLiteral("Title")});
+    tbl->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    tbl->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tbl->verticalHeader()->setVisible(false);
+    tbl->setRowCount(rows.size());
+    for (int i = 0; i < rows.size(); ++i) {
+        const auto& a = rows[i];
+        auto* id_item = new QTableWidgetItem(a.id.left(8));
+        id_item->setToolTip(a.id);
+        tbl->setItem(i, 0, id_item);
+        auto* status_item = new QTableWidgetItem(a.status);
+        if (a.status == QStringLiteral("superseded"))
+            status_item->setForeground(QColor("#888"));
+        tbl->setItem(i, 1, status_item);
+        tbl->setItem(i, 2, new QTableWidgetItem(a.created_at));
+        tbl->setItem(i, 3, new QTableWidgetItem(a.title));
+        if (a.id == id) {
+            for (int c = 0; c < 4; ++c)
+                tbl->item(i, c)->setBackground(QColor(60, 90, 130));
+        }
+    }
+    layout->addWidget(tbl, 1);
+
+    auto* close_btn = new QPushButton(QStringLiteral("Close"));
+    connect(close_btn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    auto* br = new QHBoxLayout;
+    br->addStretch();
+    br->addWidget(close_btn);
+    layout->addLayout(br);
+    dlg.exec();
 }
 
 void ArtefactsSection::show_status(const QString& msg, bool error) {

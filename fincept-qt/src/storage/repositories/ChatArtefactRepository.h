@@ -62,6 +62,19 @@ class ChatArtefactRepository {
     Result<QVector<ChatArtefactRow>> list_by_request(const QString& request_id);
     Result<std::optional<ChatArtefactRow>> get(const QString& id);
 
+    /// Returns the lineage chain for an artefact — every chat_artefact
+    /// row sharing the same (source_agent_id, source_skill, source_args_json)
+    /// triple, ordered by created_at DESC.  The first row is the most
+    /// recent run; predecessors (typically marked `superseded`) follow.
+    ///
+    /// Identity is derived from the dispatch identity, not from an
+    /// explicit predecessor column — `emit_artefact` doesn't carry a
+    /// predecessor pointer, so chronological grouping by the
+    /// re-runnable handle is the available signal.  Artefacts created
+    /// without a source_skill (e.g. one-off MCP tool dumps) return
+    /// just the artefact itself.
+    Result<QVector<ChatArtefactRow>> list_lineage_for(const QString& artefact_id);
+
     ChatArtefactRepository(const ChatArtefactRepository&) = delete;
     ChatArtefactRepository& operator=(const ChatArtefactRepository&) = delete;
 

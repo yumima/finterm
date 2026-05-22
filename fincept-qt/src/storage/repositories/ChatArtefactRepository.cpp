@@ -133,4 +133,35 @@ Result<std::optional<ChatArtefactRow>> ChatArtefactRepository::get(const QString
     return Result<std::optional<ChatArtefactRow>>::ok(std::nullopt);
 }
 
+Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const QString& artefact_id) {
+    using Out = Result<QVector<ChatArtefactRow>>;
+    if (artefact_id.isEmpty())
+        return Out::err("list_lineage_for: empty id");
+    auto seed = get(artefact_id);
+    if (seed.is_err())
+        return Out::err(seed.error());
+    if (!seed.value().has_value())
+        return Out::err("list_lineage_for: artefact not found");
+    const auto& a = *seed.value();
+
+    // No source_skill ⇒ standalone artefact; lineage is just self.
+    // Avoids returning every other source_skill='' row in the table.
+    if (a.source_skill.isEmpty())
+        return Out::ok(QVector<ChatArtefactRow>{a});
+
+    const QString sql = QStringLiteral(
+        "SELECT %1 FROM chat_artefacts "
+        "WHERE source_agent_id = ? AND source_skill = ? AND source_args_json = ? "
+        "ORDER BY created_at DESC").arg(kCols);
+    auto r = Database::instance().execute(sql, {
+        a.source_agent_id, a.source_skill, a.source_args_json});
+    if (r.is_err())
+        return Out::err(r.error());
+    QVector<ChatArtefactRow> rows;
+    auto& q = r.value();
+    while (q.next())
+        rows.append(map_row(q));
+    return Out::ok(std::move(rows));
+}
+
 } // namespace fincept

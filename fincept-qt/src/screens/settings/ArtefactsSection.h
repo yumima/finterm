@@ -38,6 +38,7 @@ class ArtefactsSection : public QWidget {
     void on_rerun();
     void on_export();
     void on_supersede();
+    void on_lineage();
     void on_selection_changed();
 
   private:
@@ -46,6 +47,7 @@ class ArtefactsSection : public QWidget {
     QPushButton* rerun_btn_ = nullptr;
     QPushButton* export_btn_ = nullptr;
     QPushButton* supersede_btn_ = nullptr;
+    QPushButton* lineage_btn_ = nullptr;
     QLabel* status_lbl_ = nullptr;
 
     void build_ui();
