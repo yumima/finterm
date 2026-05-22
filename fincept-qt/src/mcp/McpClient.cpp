@@ -428,8 +428,21 @@ void McpClient::handle_line(const QByteArray& line) {
         return;
 
     QJsonObject obj = doc.object();
-    if (!obj.contains("id"))
-        return; // Notification — ignored for now
+    if (!obj.contains("id")) {
+        // JSON-RPC notification — no `id`, no response expected.  Route
+        // to the registered handler if any.  Common methods:
+        //   `notifications/message`  — server-side structured log
+        //   `notifications/resources/list_changed`
+        //   `notifications/tools/list_changed`
+        //   `notifications/prompts/list_changed`
+        //   `notifications/progress`  — progress updates for in-flight calls
+        if (notification_handler_) {
+            const QString method = obj.value("method").toString();
+            const QJsonObject params = obj.value("params").toObject();
+            notification_handler_(method, params);
+        }
+        return;
+    }
 
     int id = obj["id"].toInt(-1);
     if (id < 0)

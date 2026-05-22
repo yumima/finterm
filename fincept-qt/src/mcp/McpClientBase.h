@@ -123,6 +123,30 @@ class McpClientBase : public QObject {
     /// Returns captured stdout/stderr lines (stdio) or request/response
     /// log lines (http).  Last 500 lines max.
     virtual QStringList get_logs() const = 0;
+
+    // ── Server-initiated notifications ─────────────────────────────────
+    //
+    // Servers can fire JSON-RPC notifications (messages without an
+    // `id` field) at the client — `notifications/message` for
+    // structured logs, plus the various `notifications/*/changed`
+    // signals for resource / tool / prompt list updates.  The default
+    // handler is a no-op; concrete transports route incoming
+    // notifications through it.
+    //
+    // Server-initiated *requests* (sampling/createMessage,
+    // elicitation/create) are a separate primitive — they expect a
+    // response.  Stdio implements them via the same dispatcher;
+    // McpHttpClient currently can't (HTTP is request-response).
+
+    using NotificationHandler =
+        std::function<void(const QString& method, const QJsonObject& params)>;
+
+    void set_notification_handler(NotificationHandler handler) {
+        notification_handler_ = std::move(handler);
+    }
+
+  protected:
+    NotificationHandler notification_handler_;
 };
 
 } // namespace fincept::mcp
