@@ -55,10 +55,21 @@ TtsService& TtsService::instance() {
     return s;
 }
 
-TtsService::TtsService() = default;
+TtsService::TtsService() {
+    // Hook shutdown into aboutToQuit so the QProcess + QMediaPlayer
+    // tear down while the event loop is still alive.  The destructor
+    // of this function-local static runs after main() returns and
+    // after QApplication is gone — calling Qt at that point is
+    // unsafe.
+    if (auto* app = QCoreApplication::instance()) {
+        connect(app, &QCoreApplication::aboutToQuit, this, &TtsService::stop);
+    }
+}
 
 TtsService::~TtsService() {
-    stop();
+    // Best-effort: aboutToQuit should have already run, so proc_ /
+    // player_ are nullptr.  If somehow not, this is a no-op-friendly
+    // path since stop() handles null members.
     cleanup_temp_file();
 }
 
@@ -177,6 +188,17 @@ void TtsService::on_proc_finished(int exit_code) {
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::StoppedState) {
                     cleanup_temp_file();
+                    // Drop the player + audio output too — leaving
+                    // stale pointers around invites use-after-free
+                    // on the next speak() call's stop() codepath.
+                    if (player_) {
+                        player_->deleteLater();
+                        player_ = nullptr;
+                    }
+                    if (audio_) {
+                        audio_->deleteLater();
+                        audio_ = nullptr;
+                    }
                     emit state_changed(false);
                 }
             });

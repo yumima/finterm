@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`6d0c1165`](https://github.com/yumima/finterm/commit/6d0c1165) ai_chat: @-mention ticker resolution
 - [`91e770f8`](https://github.com/yumima/finterm/commit/91e770f8) ai_chat: clickable suggested-follow-up chips
 - [`1adf2e46`](https://github.com/yumima/finterm/commit/1adf2e46) voice(tts): UI wiring — Settings → Voice TTS group + chat 🔊 button
 - [`ea8e1e03`](https://github.com/yumima/finterm/commit/ea8e1e03) review fix: don't supersede predecessor before re-run dispatch lands
