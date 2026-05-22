@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`8b8405d3`](https://github.com/yumima/finterm/commit/8b8405d3) workbench(tools): real catalog table replacing placeholder (Track 6C)
 - [`665c4091`](https://github.com/yumima/finterm/commit/665c4091) voice(tts): local Piper text-to-speech (Track 6A)
 - [`8c65f39d`](https://github.com/yumima/finterm/commit/8c65f39d) forum(config): user-configurable backend URL (Track 6B)
 - [`7a3044f5`](https://github.com/yumima/finterm/commit/7a3044f5) ai_chat: suggested follow-ups after slash dispatch (Track 5C)

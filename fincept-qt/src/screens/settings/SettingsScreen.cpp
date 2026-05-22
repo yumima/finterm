@@ -15,6 +15,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "screens/devtools/DataHubInspector.h"
 #include "screens/settings/AiSystemSection.h"
+#include "screens/settings/ActivityPanelSection.h"
 #include "screens/settings/ArtefactsSection.h"
 #include "screens/settings/ForumConfigSection.h"
 #include "screens/settings/KeybindingsSection.h"
@@ -182,6 +183,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_->addWidget(new SchedulerSection);   // 15
     sections_->addWidget(new ArtefactsSection);   // 16
     sections_->addWidget(new ForumConfigSection); // 17
+    sections_->addWidget(new ActivityPanelSection); // 18
 
     QList<QPushButton*> nav_btns;
     auto make_btn = [&](const QString& text, int idx) {
@@ -223,6 +225,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     make_btn("Scheduler", 15);
     make_btn("Artefacts", 16);
     make_btn("Forum", 17);
+    make_btn("Activity", 18);
 
     first->setChecked(true);
 
