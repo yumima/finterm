@@ -91,14 +91,18 @@ void AiSystemSection::build_ui() {
 }
 
 void AiSystemSection::reload() {
-    load_spend();
-    load_traces();
+    // One trace fetch fuels both the per-agent spend breakdown and
+    // the traces table.  Earlier revisions called list_recent twice
+    // per reload — wasted SQL on a hot UI path.
+    auto traces = AgentTraceRepository::instance().list_recent(kRecentTracesLimit);
+    load_spend(traces);
+    load_traces(traces);
     load_killswitch();
 }
 
 void AiSystemSection::on_refresh() { reload(); }
 
-void AiSystemSection::load_spend() {
+void AiSystemSection::load_spend(const Result<QVector<AgentTraceRow>>& traces) {
     auto& budget = services::BudgetService::instance();
     auto total = budget.spend_today_total();
     if (total.is_ok()) {
@@ -109,10 +113,9 @@ void AiSystemSection::load_spend() {
             QStringLiteral("Today's total spend: <i>(unavailable)</i>"));
     }
 
-    // Per-agent breakdown — derived from the recent-trace list to
-    // avoid a second SQL aggregate.  Approximate for very long
-    // histories; over the trace tail window it's exact.
-    auto traces = AgentTraceRepository::instance().list_recent(kRecentTracesLimit);
+    // Per-agent breakdown — derived from the trace tail (passed in by
+    // reload() so we don't query the DB twice).  Approximate for very
+    // long histories; over the recent-trace window it's exact.
     if (traces.is_err()) {
         spend_by_agent_lbl_->setText(QStringLiteral("By agent: <i>(unavailable)</i>"));
         return;
@@ -131,8 +134,7 @@ void AiSystemSection::load_spend() {
             : QStringLiteral("By agent (recent): ") + parts.join(QStringLiteral(", ")));
 }
 
-void AiSystemSection::load_traces() {
-    auto r = AgentTraceRepository::instance().list_recent(kRecentTracesLimit);
+void AiSystemSection::load_traces(const Result<QVector<AgentTraceRow>>& r) {
     if (r.is_err()) {
         show_status(QStringLiteral("Failed to load traces: %1")
                         .arg(QString::fromStdString(r.error())), true);

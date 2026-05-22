@@ -12,9 +12,13 @@
 // dedicated Workbench screen with left-nav consolidation is the
 // follow-up.
 
+#include "core/result/Result.h"
+#include "storage/repositories/AgentTraceRepository.h"
+
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
+#include <QVector>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -45,8 +49,10 @@ class AiSystemSection : public QWidget {
     QLabel* status_lbl_ = nullptr;
 
     void build_ui();
-    void load_spend();
-    void load_traces();
+    /// Both `load_spend` and `load_traces` take the same shared trace
+    /// fetch from `reload()` — avoids a duplicate SQL read.
+    void load_spend(const Result<QVector<AgentTraceRow>>& traces);
+    void load_traces(const Result<QVector<AgentTraceRow>>& traces);
     void load_killswitch();
     void show_status(const QString& msg, bool error = false);
 };

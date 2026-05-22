@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f0225111`](https://github.com/yumima/finterm/commit/f0225111) settings(scheduler): UI for agent_schedule entries (Track 10 finish)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
