@@ -21,6 +21,10 @@
 #include <QVector>
 #include <QWidget>
 
+namespace fincept::services {
+struct SkillProposal;
+}
+
 namespace fincept::screens {
 
 class AiSystemSection : public QWidget {
@@ -56,6 +60,12 @@ class AiSystemSection : public QWidget {
     void load_traces(const Result<QVector<AgentTraceRow>>& traces);
     void load_killswitch();
     void show_status(const QString& msg, bool error = false);
+
+    /// Track 7C — propose a SKILL.md revision based on a turn the
+    /// user has reviewed.  Spawns a background QtConcurrent::run
+    /// for the LLM call so the UI thread stays responsive.
+    void on_propose_skill_fix(const AgentTraceRow& trace);
+    void show_proposal_dialog(const Result<services::SkillProposal>& r);
 };
 
 } // namespace fincept::screens

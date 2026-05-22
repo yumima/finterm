@@ -1,16 +1,24 @@
 #include "screens/settings/AiSystemSection.h"
 
 #include "services/agents/BudgetService.h"
+#include "services/agents/SkillProposalService.h"
 #include "storage/repositories/AgentFeedbackRepository.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
 
+#include <QApplication>
+#include <QClipboard>
 #include <QDialog>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QJsonDocument>
 #include <QPlainTextEdit>
+#include <QPointer>
+#include <QProgressBar>
+#include <QtConcurrent/QtConcurrent>
+#include <QFutureWatcher>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -358,14 +366,163 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
         record_feedback(QStringLiteral("right"));
     });
 
+    // Track 7C — "Propose SKILL.md fix" closes the feedback loop.
+    // Shown only when the trace was a slash-dispatched skill turn
+    // (config_json has a "skill" key); otherwise there's nothing
+    // for the proposal flow to edit.
+    QPushButton* propose_btn = nullptr;
+    {
+        const QJsonDocument cd = QJsonDocument::fromJson(t.config_json.toUtf8());
+        const QString skill = cd.isObject()
+                                  ? cd.object().value(QStringLiteral("skill")).toString()
+                                  : QString();
+        if (!skill.isEmpty()) {
+            propose_btn = new QPushButton(QStringLiteral("🧠 Propose SKILL.md fix"));
+            propose_btn->setToolTip(
+                QStringLiteral("Send this turn + the current SKILL.md to the "
+                               "active LLM and ask for a proposed revision.  "
+                               "Output is shown for review — nothing is written "
+                               "to disk automatically."));
+            connect(propose_btn, &QPushButton::clicked, this, [this, t]() {
+                on_propose_skill_fix(t);
+            });
+        }
+    }
+
     auto* btn_row = new QHBoxLayout;
     btn_row->addWidget(mark_wrong);
     btn_row->addWidget(mark_right);
+    if (propose_btn)
+        btn_row->addWidget(propose_btn);
     btn_row->addStretch();
     btn_row->addWidget(close_btn);
     root->addLayout(btn_row);
 
     dlg.exec();
+}
+
+void AiSystemSection::on_propose_skill_fix(const AgentTraceRow& trace) {
+    // The user gets one optional note when first marking wrong;
+    // re-prompt here so they can sharpen their critique before the
+    // model sees it.  Empty note is fine — the model still has the
+    // full query + response.
+    bool ok = false;
+    const QString note = QInputDialog::getText(
+        this, QStringLiteral("Propose SKILL.md fix"),
+        QStringLiteral("What went wrong? (one line, optional):"),
+        QLineEdit::Normal, QString(), &ok);
+    if (!ok)
+        return;
+
+    // Modal "working…" dialog so the user knows the click landed.
+    // QPointer because WA_DeleteOnClose means the user closing the
+    // dialog (X button) frees it before the finished handler runs.
+    auto* progress_raw = new QDialog(this);
+    progress_raw->setWindowTitle(QStringLiteral("Proposing fix…"));
+    progress_raw->setModal(true);
+    progress_raw->setAttribute(Qt::WA_DeleteOnClose);
+    auto* pl = new QVBoxLayout(progress_raw);
+    pl->addWidget(new QLabel(QStringLiteral(
+        "Sending the trace + current SKILL.md to the active LLM…\n"
+        "This usually takes 5-15 seconds.")));
+    auto* bar = new QProgressBar;
+    bar->setRange(0, 0);
+    pl->addWidget(bar);
+    progress_raw->resize(420, 120);
+    progress_raw->show();
+
+    auto* watcher = new QFutureWatcher<Result<services::SkillProposal>>(this);
+    QPointer<AiSystemSection> self = this;
+    QPointer<QDialog> progress = progress_raw;
+    connect(watcher, &QFutureWatcher<Result<services::SkillProposal>>::finished, this,
+            [self, watcher, progress]() {
+                watcher->deleteLater();
+                if (progress)
+                    progress->close();
+                if (!self)
+                    return;
+                self->show_proposal_dialog(watcher->result());
+            });
+    auto future = QtConcurrent::run([trace, note]() {
+        return services::SkillProposalService::instance().propose(trace, note);
+    });
+    watcher->setFuture(future);
+}
+
+void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>& r) {
+    if (r.is_err()) {
+        show_status(QStringLiteral("Propose-fix failed: %1")
+                        .arg(QString::fromStdString(r.error())), true);
+        return;
+    }
+    const auto& p = r.value();
+
+    auto* dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle(QStringLiteral("Proposed SKILL.md — %1").arg(p.skill_name));
+    dlg->resize(800, 700);
+
+    auto* root = new QVBoxLayout(dlg);
+    auto* header = new QLabel(QStringLiteral("<b>Skill:</b> %1<br><b>Path:</b> <code>%2</code>")
+                                  .arg(p.skill_name, p.skill_path));
+    header->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    root->addWidget(header);
+
+    if (!p.rationale.isEmpty()) {
+        root->addWidget(new QLabel(QStringLiteral("<b>Rationale</b>")));
+        auto* rat = new QLabel(p.rationale);
+        rat->setWordWrap(true);
+        rat->setStyleSheet(QStringLiteral("color: #888;"));
+        root->addWidget(rat);
+    }
+
+    root->addWidget(new QLabel(QStringLiteral("<b>Proposed SKILL.md</b>")));
+    auto* edit = new QPlainTextEdit;
+    edit->setReadOnly(true);
+    edit->setPlainText(p.proposed_content);
+    edit->setStyleSheet(QStringLiteral("font-family: monospace;"));
+    root->addWidget(edit, 1);
+
+    auto* copy_btn = new QPushButton(QStringLiteral("Copy to clipboard"));
+    auto* save_btn = new QPushButton(QStringLiteral("Overwrite SKILL.md…"));
+    auto* close_btn = new QPushButton(QStringLiteral("Close"));
+    connect(copy_btn, &QPushButton::clicked, dlg, [p]() {
+        QApplication::clipboard()->setText(p.proposed_content);
+    });
+    connect(save_btn, &QPushButton::clicked, dlg, [this, p, dlg]() {
+        // Hard confirm before any disk write — SKILL.md is a
+        // checked-in file and an accidental overwrite is annoying
+        // to undo without git.
+        const QString confirm = QStringLiteral(
+            "Overwrite %1?\n\nThe current SKILL.md will be replaced "
+            "with the proposed content.  Recover with `git diff` / "
+            "`git checkout` if needed.").arg(p.skill_path);
+        bool ok = false;
+        const QString typed = QInputDialog::getText(
+            dlg, QStringLiteral("Confirm overwrite"),
+            confirm + QStringLiteral("\n\nType 'overwrite' to confirm:"),
+            QLineEdit::Normal, QString(), &ok);
+        if (!ok || typed != QStringLiteral("overwrite"))
+            return;
+        QFile f(p.skill_path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            show_status(QStringLiteral("Write failed: %1").arg(f.errorString()), true);
+            return;
+        }
+        f.write(p.proposed_content.toUtf8());
+        f.close();
+        show_status(QStringLiteral("Overwrote %1").arg(p.skill_path));
+        dlg->accept();
+    });
+    connect(close_btn, &QPushButton::clicked, dlg, &QDialog::accept);
+    auto* btn_row = new QHBoxLayout;
+    btn_row->addWidget(copy_btn);
+    btn_row->addWidget(save_btn);
+    btn_row->addStretch();
+    btn_row->addWidget(close_btn);
+    root->addLayout(btn_row);
+
+    dlg->show();
 }
 
 void AiSystemSection::show_status(const QString& msg, bool error) {
