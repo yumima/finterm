@@ -119,28 +119,24 @@ static QString check_ss() {
 // ── Credential key definitions ────────────────────────────────────────────────
 
 using CredDef = QPair<QString, QString>; // {env_key, display_name}
+
+// Data-source API keys finterm actually consumes.  Keys for features
+// that aren't shipped (NewsAPI / IEX Cloud / Quandl / Binance / Kraken /
+// Polymarket auth) used to live here but were dead env-passthroughs —
+// removed to keep the Settings surface honest.
+//
+// What does NOT live in this list:
+//   - LLM provider keys (Anthropic, OpenAI) → Settings → LLM Config
+//   - MCP server / tool keys → Settings → MCP Servers (per-server)
+//   - Voice provider keys (Whisper local, Deepgram opt-in) → Settings → Voice
 static const QList<CredDef> CRED_KEYS = {
+    {"FRED_API_KEY", "FRED (Federal Reserve)"},
+    {"FINNHUB_API_KEY", "Finnhub"},
+    {"DATABENTO_API_KEY", "Databento"},
+    {"CONGRESS_GOV_API_KEY", "Congress.gov (Power Trader)"},
     {"ALPHA_VANTAGE_API_KEY", "Alpha Vantage"},
     {"POLYGON_API_KEY", "Polygon.io"},
-    {"DATABENTO_API_KEY", "Databento"},
-    {"FRED_API_KEY", "FRED (Federal Reserve)"},
-    {"NEWSAPI_KEY", "NewsAPI"},
-    {"BINANCE_API_KEY", "Binance API Key"},
-    {"BINANCE_SECRET_KEY", "Binance Secret Key"},
-    {"KRAKEN_API_KEY", "Kraken API Key"},
-    {"KRAKEN_SECRET_KEY", "Kraken Secret Key"},
-    {"IEX_CLOUD_TOKEN", "IEX Cloud Token"},
-    {"FINNHUB_API_KEY", "Finnhub API Key"},
-    {"TIINGO_API_KEY", "Tiingo API Key"},
-    {"QUANDL_API_KEY", "Quandl"},
-    {"POLYMARKET_API_KEY", "Polymarket API Key"},
-    {"POLYMARKET_SECRET", "Polymarket Secret"},
-    {"POLYMARKET_PASSPHRASE", "Polymarket Passphrase"},
-    {"POLYMARKET_WALLET", "Polymarket Wallet Address"},
-    // Power Trader / GovData. Stored under the same SecureStorage key the
-    // Power Trader DataSourceDialog already writes ("CONGRESS_GOV_API_KEY"),
-    // so a key set there shows up here with "Saved ✓" without migration.
-    {"CONGRESS_GOV_API_KEY", "Congress.gov (Power Trader)"},
+    {"TIINGO_API_KEY", "Tiingo"},
 };
 
 // ── Construction ──────────────────────────────────────────────────────────────
@@ -325,7 +321,13 @@ QWidget* SettingsScreen::build_credentials() {
     vl->addSpacing(4);
 
     auto* info =
-        new QLabel("Store API keys securely in the OS keychain. Keys are never written to disk in plain text.");
+        new QLabel("Data-source API keys.  Stored in the OS keychain — "
+                   "never written to disk in plain text.  "
+                   "LLM provider keys live under <b>LLM Config</b>; "
+                   "MCP server keys are managed per-server in "
+                   "<b>MCP Servers</b>; voice provider keys (Deepgram) "
+                   "live under <b>Voice</b>.");
+    info->setTextFormat(Qt::RichText);
     info->setWordWrap(true);
     info->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(info);
