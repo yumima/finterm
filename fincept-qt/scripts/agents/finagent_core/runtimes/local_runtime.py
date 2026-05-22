@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 from urllib import error, request
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,69 @@ def _post_chat_completions(url: str, key: str, payload: dict, timeout_s: float) 
         ) from exc
 
 
+def _stream_chat_completions(url: str, key: str, payload: dict,
+                              timeout_s: float) -> Iterator[dict]:
+    """Stream a chat-completions response, yielding parsed SSE event
+    bodies (each a `dict`) one at a time.
+
+    Handles the OpenAI SSE shape:
+        data: {"choices":[{"delta":{"content":"..."}}]}
+        data: [DONE]
+
+    Failures translate to `LocalRuntimeUnavailable`, matching the
+    sync helper.  Iterator-shaped so the caller controls buffering
+    (UI streams chunks straight to the chat surface; CLI buffers
+    into a single string).
+    """
+    payload = dict(payload)
+    payload["stream"] = True
+    body = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        f"{url}/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+            # Accept SSE so middleboxes don't try to buffer; some
+            # gateways (Cloudflare) require this hint.
+            "Accept": "text/event-stream",
+        },
+        method="POST",
+    )
+    try:
+        resp = request.urlopen(req, timeout=timeout_s)
+    except error.URLError as exc:
+        raise LocalRuntimeUnavailable(
+            f"local LLM server not reachable at {url}: {exc.reason}"
+        ) from exc
+    except (TimeoutError, OSError) as exc:
+        raise LocalRuntimeUnavailable(
+            f"local LLM server timed out at {url}: {exc}"
+        ) from exc
+
+    try:
+        for raw in resp:
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            if not line:
+                continue
+            # SSE field — `data: ...` lines carry payload.  Comments
+            # (`: keep-alive`) + other fields ignored.
+            if not line.startswith("data:"):
+                continue
+            data_str = line[5:].lstrip()
+            if data_str == "[DONE]":
+                return
+            try:
+                event = json.loads(data_str)
+            except json.JSONDecodeError:
+                # Servers sometimes interleave non-JSON keepalives;
+                # skip rather than fail the stream.
+                continue
+            yield event
+    finally:
+        resp.close()
+
+
 def _first_message(url: str, data: dict) -> dict:
     """Extract `choices[0].message` defensively.  Servers vary in what
     they return when no choices come back — surface that as
@@ -158,6 +221,59 @@ def run_text(
     msg = _first_message(url, data)
     content = msg.get("content")
     return content if isinstance(content, str) else ""
+
+
+def run_text_stream(
+    prompt: str,
+    *,
+    system_prompt: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    max_tokens: int = 1024,
+    temperature: float = 0.7,
+    timeout_s: float = 120.0,
+) -> Iterator[str]:
+    """Stream text chunks token-by-token.  Returns an iterator over
+    content strings; the caller concatenates them into the final
+    response (or feeds them straight into a UI sink).
+
+    Same auth / endpoint / failure-mode contract as `run_text`.  The
+    timeout is the *initial-connect* timeout; once the stream is open
+    the server can take as long as it wants between chunks (caller
+    enforces a higher-level deadline if needed).
+
+    Local-runtime equivalent of anthropic_runtime's streaming path
+    when finterm's chat surface drives the local profile.  The
+    Anthropic SDK manages its own streaming under run_turn —
+    callers don't need a separate stream entry point there.
+    """
+    url, model_id, key = _resolve_endpoint(base_url, model, api_key)
+
+    messages: list[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    payload = {
+        "model": model_id,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    for event in _stream_chat_completions(url, key, payload, timeout_s):
+        choices = event.get("choices") or []
+        if not choices:
+            continue
+        first = choices[0]
+        if not isinstance(first, dict):
+            continue
+        delta = first.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            yield content
 
 
 def run_with_tools(
