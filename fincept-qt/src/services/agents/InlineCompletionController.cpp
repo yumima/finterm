@@ -166,6 +166,14 @@ void InlineCompletionController::on_completion_arrived() {
     // for, the suggestion is stale — drop it.
     if (current_prefix_for_completion() != pending_prefix_)
         return;
+
+    // If the user is mid-selection (drag / shift-arrow), don't
+    // interrupt — Cursor / Copilot suppress in this state too.
+    // setTextCursor with a collapsed cursor would clobber the
+    // selection and there's no undo for cursor moves.
+    if (editor_->textCursor().hasSelection())
+        return;
+
     show_ghost(completion);
 }
 
@@ -248,8 +256,13 @@ QString InlineCompletionController::current_prefix_for_completion() const {
 }
 
 void InlineCompletionController::cache_put(const QString& prefix, const QString& completion) {
-    if (!cache_.contains(prefix))
-        cache_order_.append(prefix);
+    // True LRU on update — demote the existing entry to the back
+    // before re-appending.  Without this, a re-cache for the same
+    // prefix updates the value but leaves the order stale, so
+    // eviction can drop the most-recently-touched entry.
+    if (cache_.contains(prefix))
+        cache_order_.removeOne(prefix);
+    cache_order_.append(prefix);
     cache_[prefix] = completion;
     while (cache_order_.size() > kInlineCacheCap) {
         const QString evicted = cache_order_.takeFirst();

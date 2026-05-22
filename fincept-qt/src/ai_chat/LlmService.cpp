@@ -2149,39 +2149,36 @@ void LlmService::fetch_models(const QString& provider, const QString& api_key, c
 
 LlmResponse LlmService::chat(const QString& user_message, const std::vector<ConversationMessage>& history,
                              bool use_tools) {
+    // Hold the mutex across the entire do_request call to prevent
+    // member-config tearing under concurrent callers.
+    //
+    // History: chat() used to snapshot config under lock, unlock,
+    // then re-write the snapshot into members and call do_request
+    // unlocked.  The unlocked re-write was a race the moment a
+    // second concurrent caller existed — and once Track 8 (inline
+    // completion) shipped, two callers became routine (inline
+    // controller fires alongside the user's send-message worker).
+    // Result: torn provider / api_key / tools_enabled across the
+    // two requests.
+    //
+    // Trade-off: concurrent chats now serialize.  Acceptable since
+    // there's at most one user-initiated chat and one auto-fired
+    // inline completion in flight at any moment; for higher
+    // concurrency this needs a proper RequestConfig refactor
+    // (logged as follow-up tech debt — not blocking).
     QMutexLocker lock(&mutex_);
     ensure_config();
 
     if (provider_.isEmpty())
         return LlmResponse{.content = {}, .error = "No LLM provider configured"};
 
-    // Take config snapshot — release lock before blocking network call
-    QString p = provider_, k = api_key_, b = base_url_, m = model_, sp = system_prompt_;
-    double t = temperature_;
-    int mx = max_tokens_;
+    // Per-request tools override; restored before return.
     const bool saved_tools = tools_enabled_;
-    lock.unlock();
-
-    // Restore snapshot into members for use by helper methods
-    // (helpers read member variables, so we need them set)
-    // This is safe because chat() is always called from a background thread.
-    provider_ = p;
-    api_key_ = k;
-    base_url_ = b;
-    model_ = m;
-    system_prompt_ = sp;
-    temperature_ = t;
-    max_tokens_ = mx;
-
-    // Override tools_enabled_ for this request scope if caller disabled tools
     if (!use_tools)
         tools_enabled_ = false;
 
     auto resp = do_request(user_message, history);
-
-    // Restore tools_enabled_ to saved value
     tools_enabled_ = saved_tools;
-
     return resp;
 }
 
