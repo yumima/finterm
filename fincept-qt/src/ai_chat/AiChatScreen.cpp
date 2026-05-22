@@ -1246,8 +1246,13 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
             for (const QString& tmpl : spec_opt->follow_ups)
                 rendered.append(fincept::services::SlashCommandService::render_follow_up(
                     tmpl, resolved->args));
-            QString suggest = QStringLiteral("**Suggested next:** ") + rendered.join(QStringLiteral(" · "));
-            add_message_bubble("system", suggest);
+            add_chip_row("Suggested next", rendered);
+            // Persist a plain-text mirror so the suggestions show up
+            // when the session is reloaded later (chips re-render
+            // dynamically from the saved text on load — see
+            // load_messages).
+            const QString suggest = QStringLiteral("**Suggested next:** ")
+                                    + rendered.join(QStringLiteral(" · "));
             ChatRepository::instance().add_message(
                 active_session_id_, "system", suggest,
                 ai_chat::LlmService::instance().active_provider(),
@@ -1256,6 +1261,49 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
         }
     }
     return true;
+}
+
+void AiChatScreen::add_chip_row(const QString& prefix, const QStringList& slash_commands) {
+    if (slash_commands.isEmpty())
+        return;
+
+    auto* row = new QWidget;
+    row->setStyleSheet("background:transparent;");
+    auto* rl = new QHBoxLayout(row);
+    rl->setContentsMargins(0, 4, 0, 4);
+    rl->setSpacing(8);
+
+    auto* lbl = new QLabel(QStringLiteral("<b>%1:</b>").arg(prefix));
+    lbl->setTextFormat(Qt::RichText);
+    lbl->setStyleSheet(QString("color:%1;background:transparent;font-size:%2px;")
+                           .arg(col::TEXT_SECONDARY()).arg(fnt::SMALL));
+    rl->addWidget(lbl);
+
+    for (const QString& cmd : slash_commands) {
+        auto* btn = new QPushButton(cmd);
+        btn->setFixedHeight(24);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(QString(
+            "QPushButton{background:transparent;color:%1;border:1px solid %2;"
+            "border-radius:0px;padding:2px 10px;font-size:%3px;}"
+            "QPushButton:hover{background:%2;color:%4;}")
+                               .arg(col::AMBER(), col::BORDER_MED())
+                               .arg(fnt::SMALL)
+                               .arg(col::TEXT_PRIMARY()));
+        // Capture by value — the lambda outlives the local `cmd`
+        // reference once the loop body returns.
+        const QString slash = cmd;
+        connect(btn, &QPushButton::clicked, this, [this, slash]() {
+            // Re-enter the slash path with the chip's text.  Goes
+            // through the same handle_slash_command pipeline so all
+            // the safety + persistence + follow-up rendering apply.
+            handle_slash_command(slash);
+        });
+        rl->addWidget(btn);
+    }
+    rl->addStretch();
+    messages_layout_->insertWidget(messages_layout_->count() - 1, row);
+    evict_oldest_bubble_if_needed();
 }
 
 // ── Message bubbles ───────────────────────────────────────────────────────────

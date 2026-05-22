@@ -62,6 +62,12 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     /// dispatch in that case.  False = let the LLM see the text.
     bool handle_slash_command(const QString& text);
 
+    /// Render a "Suggested next: [chip] [chip] [chip]" row below the
+    /// most recent bubble.  Each chip is a clickable QPushButton that
+    /// re-enters `handle_slash_command` with its label as the slash
+    /// command.
+    void add_chip_row(const QString& prefix, const QStringList& slash_commands);
+
     // ── Sidebar ──────────────────────────────────────────────────────────
     QWidget* sidebar_ = nullptr;
     QLineEdit* search_edit_ = nullptr;
