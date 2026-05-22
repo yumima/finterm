@@ -16,6 +16,7 @@
 #include "screens/devtools/DataHubInspector.h"
 #include "screens/settings/AiSystemSection.h"
 #include "screens/settings/KeybindingsSection.h"
+#include "screens/settings/SchedulerSection.h"
 #include "screens/settings/LlmConfigSection.h"
 #include "screens/settings/McpServersSection.h"
 #include "screens/settings/PythonEnvSection.h"
@@ -180,6 +181,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_->addWidget(build_developer());     // 12
     sections_->addWidget(new VoiceConfigSection); // 13
     sections_->addWidget(new AiSystemSection);    // 14
+    sections_->addWidget(new SchedulerSection);   // 15
 
     QList<QPushButton*> nav_btns;
     auto make_btn = [&](const QString& text, int idx) {
@@ -218,6 +220,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     make_btn("Developer", 12);
     make_btn("Voice", 13);
     make_btn("AI System", 14);
+    make_btn("Scheduler", 15);
 
     first->setChecked(true);
 

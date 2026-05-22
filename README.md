@@ -2,41 +2,10 @@
 
 A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs you explicitly use.
 
-## Today's commits (2026-05-21)
+## Today's commits (2026-05-22)
 
 Latest first.
 
-- [`4e680bdc`](https://github.com/yumima/finterm/commit/4e680bdc) settings(ai-system): surface traces / spend / kill-switch (Track 13 min)
-- [`168e6a3c`](https://github.com/yumima/finterm/commit/168e6a3c) alpha_arena: opt-in two-runtime path for BaseAgent (Track 12 phase 2)
-- [`6561eec5`](https://github.com/yumima/finterm/commit/6561eec5) agents(budget): per-agent daily USD cap (Track 14 #41 / R24)
-- [`f4e87111`](https://github.com/yumima/finterm/commit/f4e87111) mcp(safety): broad UntrustedContent rollout + system-prompt directive (Track 14 #40 finish)
-- [`cf1adf0a`](https://github.com/yumima/finterm/commit/cf1adf0a) mcp(safety): prompt-injection guard helper + NewsTools rollout (Track 14 #40 / R23)
-- [`d9e0e2b9`](https://github.com/yumima/finterm/commit/d9e0e2b9) mcp(killswitch): per-tool kill-switch at dispatch chokepoint (Track 14 #39)
-- [`48db15c7`](https://github.com/yumima/finterm/commit/48db15c7) agents: route DB access through Database::execute (/review fix)
-- [`36d073ee`](https://github.com/yumima/finterm/commit/36d073ee) agents(trace): unified trace + audit schema (Track 14 #38)
-- [`c71ec551`](https://github.com/yumima/finterm/commit/c71ec551) agents(finagent_core): PEP 562 lazy package init (Track 12 phase 1)
-- [`51922fb9`](https://github.com/yumima/finterm/commit/51922fb9) skills: starter library + data-source-priority retarget (Track 7 #19/#22)
-- [`f9183006`](https://github.com/yumima/finterm/commit/f9183006) ai_chat: wire slash dispatch into composer (Track 7 #21 part B)
-- [`16f07207`](https://github.com/yumima/finterm/commit/16f07207) agents(slash): SlashCommandService resolver (Track 7 #21 part A)
-- [`d51d457a`](https://github.com/yumima/finterm/commit/d51d457a) agents(seeds): 10 named agent identities (Track 7 #20)
-- [`a0c2bd05`](https://github.com/yumima/finterm/commit/a0c2bd05) agents(scheduler): cron-shaped scheduler for agent runs (Track 10 core)
-- [`93f58392`](https://github.com/yumima/finterm/commit/93f58392) plans(status): Track 11 done — quant narrator + quant_critic
-- [`c3c95681`](https://github.com/yumima/finterm/commit/c3c95681) mcp(quant-narrator): tools + quant_critic agent identity (Track 11)
-- [`8bf477cc`](https://github.com/yumima/finterm/commit/8bf477cc) plans(status): Track 8 done — source prefixes + allowlists
-- [`00741864`](https://github.com/yumima/finterm/commit/00741864) mcp: per-agent allow_tools allowlists (Track 8 commit B)
-- [`98d256d9`](https://github.com/yumima/finterm/commit/98d256d9) mcp: rename INTERNAL_SERVER_ID to "int" (Track 8 commit A)
-- [`42fdf5f6`](https://github.com/yumima/finterm/commit/42fdf5f6) plans(status): Track 6 done — FinancialDatasetsTools committed
-- [`32f1927a`](https://github.com/yumima/finterm/commit/32f1927a) mcp(financial-datasets): wrap 6 REST surfaces upstream MCP doesn't (Track 6)
-- [`76fa87cd`](https://github.com/yumima/finterm/commit/76fa87cd) plans: add implementation-status.md for session-resume safety
-- [`a0f75082`](https://github.com/yumima/finterm/commit/a0f75082) mcp: auth gate via ctx.elicit, AuthChecker fallback (Track 5 commit J)
-- [`b9230565`](https://github.com/yumima/finterm/commit/b9230565) mcp: sampling + elicitation primitives (Track 5 commit I)
-- [`6c055f3f`](https://github.com/yumima/finterm/commit/6c055f3f) mcp: logging primitives on ToolContext (Track 5 commit H)
-- [`cb2ce5ef`](https://github.com/yumima/finterm/commit/cb2ce5ef) mcp(quant_lab): emit progress + use cancellation primitives (Track 5 commit G)
-- [`7de4c285`](https://github.com/yumima/finterm/commit/7de4c285) mcp: McpProvider prompts API + daily_brief (Track 5 commit F)
-- [`ce053c9e`](https://github.com/yumima/finterm/commit/ce053c9e) mcp_bridge: resources → in-process SDK MCP server (Track 5 commit E)
-- [`1033e5b7`](https://github.com/yumima/finterm/commit/1033e5b7) mcp: wire-level resources/list + resources/read (Track 5 commit D)
-- [`2447805e`](https://github.com/yumima/finterm/commit/2447805e) mcp(watchlist+news+notes): resources for the four primary surfaces (Track 5 commit C)
-- [`54236b37`](https://github.com/yumima/finterm/commit/54236b37) mcp(portfolio): expose portfolio_snapshot resource (Track 5 commit B)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
