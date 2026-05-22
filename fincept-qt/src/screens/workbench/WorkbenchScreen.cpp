@@ -3,7 +3,12 @@
 #include "mcp/McpService.h"
 #include "screens/settings/AiSystemSection.h"
 #include "screens/settings/SchedulerSection.h"
+#include "storage/repositories/AgentConfigRepository.h"
+#include "storage/repositories/ChatRepository.h"
+#include "storage/repositories/LlmProfileRepository.h"
+#include "storage/repositories/McpServerRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
+#include "storage/repositories/WorkflowRepository.h"
 
 #include <QColor>
 #include <QHBoxLayout>
@@ -13,6 +18,8 @@
 #include <QSet>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+#include <functional>
 
 namespace fincept::screens {
 
@@ -119,6 +126,52 @@ void WorkbenchScreen::build_ui() {
     root->addWidget(sections_, 1);
 }
 
+namespace {
+
+/// Shared layout for read-only catalog tables (Chat, Agents, Tools,
+/// Workflows, Servers, Profiles).  Caller provides headers, a
+/// stretch-target column index, and a reload functor; this returns a
+/// fully-wired QWidget with title / description / Refresh / table.
+QWidget* build_table_section(const QString& title_text,
+                             const QString& description_html,
+                             const QStringList& column_headers,
+                             int stretch_col,
+                             std::function<void(QTableWidget*)> reload) {
+    auto* w = new QWidget;
+    auto* layout = new QVBoxLayout(w);
+    layout->setContentsMargins(40, 40, 40, 40);
+    layout->setSpacing(12);
+
+    auto* title = new QLabel(QStringLiteral("<h2>%1</h2>").arg(title_text));
+    auto* desc = new QLabel(description_html);
+    desc->setWordWrap(true);
+    desc->setStyleSheet(QStringLiteral("color: #aaa;"));
+    layout->addWidget(title);
+    layout->addWidget(desc);
+
+    auto* refresh_btn = new QPushButton(QStringLiteral("Refresh"));
+    layout->addWidget(refresh_btn);
+
+    auto* table = new QTableWidget;
+    table->setColumnCount(column_headers.size());
+    table->setHorizontalHeaderLabels(column_headers);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    if (stretch_col >= 0 && stretch_col < column_headers.size())
+        table->horizontalHeader()->setSectionResizeMode(stretch_col, QHeaderView::Stretch);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->verticalHeader()->setVisible(false);
+    layout->addWidget(table, 1);
+
+    auto reload_fn = std::move(reload);
+    QObject::connect(refresh_btn, &QPushButton::clicked, table,
+                     [table, reload_fn]() { reload_fn(table); });
+    reload_fn(table);
+    return w;
+}
+
+} // anonymous namespace
+
 QWidget* WorkbenchScreen::build_section_placeholder(const QString& name,
                                                     const QString& description,
                                                     const QString& cta_text) {
@@ -147,47 +200,115 @@ QWidget* WorkbenchScreen::build_section_placeholder(const QString& name,
 }
 
 QWidget* WorkbenchScreen::build_chat_section() {
-    return build_section_placeholder(
+    // Recent chat sessions, newest first.  Read-only — opening or
+    // resuming a session still goes through the dedicated Chat
+    // screen (single owner for chat lifecycle).
+    auto reload = [](QTableWidget* table) {
+        auto r = ChatRepository::instance().list_sessions();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto sessions = r.value();
+        table->setRowCount(sessions.size());
+        for (int i = 0; i < sessions.size(); ++i) {
+            const auto& s = sessions[i];
+            table->setItem(i, 0, new QTableWidgetItem(s.title.isEmpty()
+                                                         ? QStringLiteral("(untitled)")
+                                                         : s.title));
+            table->setItem(i, 1, new QTableWidgetItem(
+                                     QStringLiteral("%1 / %2").arg(s.provider, s.model)));
+            table->setItem(i, 2, new QTableWidgetItem(QString::number(s.message_count)));
+            table->setItem(i, 3, new QTableWidgetItem(s.updated_at));
+        }
+    };
+    return build_table_section(
         QStringLiteral("Chat"),
-        QStringLiteral("AI Chat with streaming, tool calls, slash commands "
-                       "(`/help`, `/comps`, `/dcf`, …), and the active LLM "
-                       "profile."),
-        QStringLiteral("Today: open the dedicated Chat screen from the "
-                       "main toolbar.  Embedding here is the next step."));
+        QStringLiteral("Recent chat sessions across all profiles.  "
+                       "Open or resume from the dedicated Chat screen — "
+                       "this view is read-only."),
+        {QStringLiteral("Title"), QStringLiteral("Provider / Model"),
+         QStringLiteral("Msgs"), QStringLiteral("Updated")},
+        /*stretch_col=*/0, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_agents_section() {
-    return build_section_placeholder(
+    auto reload = [](QTableWidget* table) {
+        auto r = AgentConfigRepository::instance().list_all();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto agents = r.value();
+        table->setRowCount(agents.size());
+        for (int i = 0; i < agents.size(); ++i) {
+            const auto& a = agents[i];
+            table->setItem(i, 0, new QTableWidgetItem(a.name));
+            table->setItem(i, 1, new QTableWidgetItem(a.category.isEmpty()
+                                                         ? QStringLiteral("—")
+                                                         : a.category));
+            auto* d = new QTableWidgetItem(a.description);
+            d->setToolTip(a.description);
+            table->setItem(i, 2, d);
+            QStringList flags;
+            if (a.is_default) flags << QStringLiteral("default");
+            if (a.is_active)  flags << QStringLiteral("active");
+            table->setItem(i, 3, new QTableWidgetItem(flags.join(QStringLiteral(", "))));
+        }
+    };
+    return build_table_section(
         QStringLiteral("Agents"),
-        QStringLiteral("Named agent identities — Pitch Agent, Meeting Prep, "
-                       "Market Researcher, Earnings Reviewer, Model Builder, "
-                       "Valuation Reviewer, GL Reconciler, Month-End Closer, "
-                       "Statement Auditor, KYC Screener.  Each carries a "
-                       "system prompt, skills list, and per-agent tool "
-                       "allowlist."),
-        QStringLiteral("Today: edit via Settings → Profiles.  Direct edit "
-                       "of agent_configs.config_json works in any SQLite browser."));
+        QStringLiteral("Named agent identities — each carries a system "
+                       "prompt, skill list, and per-agent tool allowlist.  "
+                       "Edit via <b>Settings → Profiles</b>."),
+        {QStringLiteral("Name"), QStringLiteral("Category"),
+         QStringLiteral("Description"), QStringLiteral("Flags")},
+        /*stretch_col=*/2, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_teams_section() {
+    // No teams_repo backing this yet — the team coordinator design
+    // hasn't shipped.  Keep the placeholder honest rather than fake
+    // a table of zero rows.
     return build_section_placeholder(
         QStringLiteral("Teams"),
         QStringLiteral("Multi-agent teams — coordinator + member agents "
                        "running shared context and turn-taking strategies."),
-        QStringLiteral("Coming soon.  The Anthropic SDK's sub-agent + the "
-                       "local runtime's planner give us the primitives; the "
-                       "team UI is the wrapper."));
+        QStringLiteral("Not implemented yet.  Primitives (Anthropic SDK "
+                       "sub-agents + local-runtime planner) exist; the "
+                       "team-config table + UI is the next port."));
 }
 
 QWidget* WorkbenchScreen::build_workflows_section() {
-    return build_section_placeholder(
+    auto reload = [](QTableWidget* table) {
+        auto r = WorkflowRepository::instance().list_all();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto wfs = r.value();
+        table->setRowCount(wfs.size());
+        for (int i = 0; i < wfs.size(); ++i) {
+            const auto& w = wfs[i];
+            table->setItem(i, 0, new QTableWidgetItem(w.name));
+            table->setItem(i, 1, new QTableWidgetItem(w.status.isEmpty()
+                                                         ? QStringLiteral("—")
+                                                         : w.status));
+            auto* d = new QTableWidgetItem(w.description);
+            d->setToolTip(w.description);
+            table->setItem(i, 2, d);
+            table->setItem(i, 3, new QTableWidgetItem(w.updated_at));
+        }
+    };
+    return build_table_section(
         QStringLiteral("Workflows"),
-        QStringLiteral("Node-graph workflows that chain tool calls + LLM "
-                       "steps into a repeatable pipeline.  Powers the "
-                       "scheduled-run bodies and the `/morning-note` "
-                       "skill output."),
-        QStringLiteral("Today: open the existing Workflows screen "
-                       "from the main toolbar."));
+        QStringLiteral("Node-graph pipelines chaining tool calls + LLM "
+                       "steps.  Powers scheduled runs and "
+                       "<code>/morning-note</code>.  Edit via the "
+                       "dedicated Workflows screen."),
+        {QStringLiteral("Name"), QStringLiteral("Status"),
+         QStringLiteral("Description"), QStringLiteral("Updated")},
+        /*stretch_col=*/2, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_tools_section() {
@@ -259,23 +380,71 @@ QWidget* WorkbenchScreen::build_tools_section() {
 }
 
 QWidget* WorkbenchScreen::build_servers_section() {
-    return build_section_placeholder(
+    auto reload = [](QTableWidget* table) {
+        auto r = McpServerRepository::instance().list_all();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto servers = r.value();
+        table->setRowCount(servers.size());
+        for (int i = 0; i < servers.size(); ++i) {
+            const auto& s = servers[i];
+            table->setItem(i, 0, new QTableWidgetItem(s.name));
+            table->setItem(i, 1, new QTableWidgetItem(s.transport_type));
+            auto* st = new QTableWidgetItem(s.status.isEmpty()
+                                                ? QStringLiteral("stopped")
+                                                : s.status);
+            if (s.status == QStringLiteral("error"))
+                st->setForeground(QColor("#c33"));
+            else if (s.status == QStringLiteral("running"))
+                st->setForeground(QColor("#3a3"));
+            table->setItem(i, 2, st);
+            table->setItem(i, 3, new QTableWidgetItem(s.enabled
+                                                         ? QStringLiteral("enabled")
+                                                         : QStringLiteral("disabled")));
+        }
+    };
+    return build_table_section(
         QStringLiteral("Servers"),
-        QStringLiteral("External MCP servers (stdio + HTTP).  Marketplace "
-                       "seed list: mcp-server-fetch, filesystem, sqlite, "
-                       "time, sequentialthinking, brave-search, playwright, "
-                       "yfinance, financial-datasets/mcp-server."),
-        QStringLiteral("Today: open Settings → MCP Servers."));
+        QStringLiteral("External MCP servers (stdio + HTTP).  Enable / "
+                       "configure via <b>Settings → MCP Servers</b>."),
+        {QStringLiteral("Name"), QStringLiteral("Transport"),
+         QStringLiteral("Status"), QStringLiteral("Enabled")},
+        /*stretch_col=*/0, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_profiles_section() {
-    return build_section_placeholder(
+    auto reload = [](QTableWidget* table) {
+        auto r = LlmProfileRepository::instance().list_profiles();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto profiles = r.value();
+        table->setRowCount(profiles.size());
+        for (int i = 0; i < profiles.size(); ++i) {
+            const auto& p = profiles[i];
+            table->setItem(i, 0, new QTableWidgetItem(p.name));
+            table->setItem(i, 1, new QTableWidgetItem(p.provider));
+            table->setItem(i, 2, new QTableWidgetItem(p.model_id));
+            table->setItem(i, 3, new QTableWidgetItem(p.runtime.isEmpty()
+                                                         ? QStringLiteral("—")
+                                                         : p.runtime));
+            table->setItem(i, 4, new QTableWidgetItem(p.is_default
+                                                         ? QStringLiteral("default")
+                                                         : QString()));
+        }
+    };
+    return build_table_section(
         QStringLiteral("Profiles"),
-        QStringLiteral("LLM profiles (Anthropic / local) — each carries a "
-                       "runtime, model, base URL, API-key reference, and "
-                       "max-tokens default.  Profile selection drives every "
-                       "agent dispatch."),
-        QStringLiteral("Today: edit via Settings → LLM Config."));
+        QStringLiteral("LLM profiles (Anthropic / local / external).  "
+                       "Profile selection drives every agent dispatch.  "
+                       "Edit via <b>Settings → LLM Config</b>."),
+        {QStringLiteral("Name"), QStringLiteral("Provider"),
+         QStringLiteral("Model"), QStringLiteral("Runtime"),
+         QStringLiteral("Default")},
+        /*stretch_col=*/0, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_system_section() {
