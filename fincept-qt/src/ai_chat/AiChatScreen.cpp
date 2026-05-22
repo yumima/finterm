@@ -1221,17 +1221,39 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
     // the user gets immediate feedback and can watch the agent screen
     // for output.
     QString sys_msg;
+    bool dispatched_ok = false;
     try {
         const QString request_id =
             fincept::services::AgentService::instance().run_agent(query, config);
         sys_msg = QStringLiteral("Dispatched **%1** (skill: `%2`)%3").arg(
             resolved->agent_id, resolved->skill,
             request_id.isEmpty() ? QString() : QStringLiteral(" — request ") + request_id);
+        dispatched_ok = true;
     } catch (const std::exception& ex) {
         sys_msg = QStringLiteral("Failed to dispatch **%1**: %2")
                       .arg(resolved->agent_id, QString::fromUtf8(ex.what()));
     }
     persist_pair(text, sys_msg);
+
+    // Suggested follow-ups (Track 5C) — render the slash command's
+    // configured next-steps as markdown links the user can click.
+    // We intentionally don't auto-dispatch; user picks.
+    if (dispatched_ok) {
+        const auto spec_opt = slash.spec_for(resolved->command);
+        if (spec_opt && !spec_opt->follow_ups.isEmpty()) {
+            QStringList rendered;
+            for (const QString& tmpl : spec_opt->follow_ups)
+                rendered.append(fincept::services::SlashCommandService::render_follow_up(
+                    tmpl, resolved->args));
+            QString suggest = QStringLiteral("**Suggested next:** ") + rendered.join(QStringLiteral(" · "));
+            add_message_bubble("system", suggest);
+            ChatRepository::instance().add_message(
+                active_session_id_, "system", suggest,
+                ai_chat::LlmService::instance().active_provider(),
+                ai_chat::LlmService::instance().active_model());
+            scroll_to_bottom();
+        }
+    }
     return true;
 }
 

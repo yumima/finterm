@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`cea6d060`](https://github.com/yumima/finterm/commit/cea6d060) settings(artefacts): UI panel for chat_artefacts (Track 5B)
 - [`5869ca96`](https://github.com/yumima/finterm/commit/5869ca96) mcp(artefacts): chat_artefacts foundation + emit_artefact tool (Track 5A)
 - [`23599dbe`](https://github.com/yumima/finterm/commit/23599dbe) review fixes: ElicitBridge spurious-wakeup loop + caveats documented
 - [`10c2192c`](https://github.com/yumima/finterm/commit/10c2192c) runtime(local): streaming tool-use via run_with_tools_stream (Track 4D)

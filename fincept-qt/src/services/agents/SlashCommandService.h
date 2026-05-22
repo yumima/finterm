@@ -43,6 +43,11 @@ struct SlashCommandSpec {
     QString skill;
     QStringList positional;   ///< ordered arg keys for positional tokens
     QString help;             ///< one-line user-facing description
+    /// Suggested follow-up commands (each one a template the user
+    /// can run next).  The chat surface renders these as clickable
+    /// chips after a successful dispatch.  Use `{ticker}` etc. as
+    /// placeholders — the resolver fills them from the just-run args.
+    QStringList follow_ups;
 };
 
 class SlashCommandService {
@@ -69,6 +74,11 @@ class SlashCommandService {
 
     /// Look up a single spec by command name (no leading "/").
     std::optional<SlashCommandSpec> spec_for(const QString& command) const;
+
+    /// Render a follow-up template with the resolved args (e.g.
+    /// `/catalysts {ticker}` + `{ticker: AAPL}` → `/catalysts AAPL`).
+    /// Used by the chat surface after a successful dispatch.
+    static QString render_follow_up(const QString& tmpl, const QJsonObject& args);
 
     SlashCommandService(const SlashCommandService&) = delete;
     SlashCommandService& operator=(const SlashCommandService&) = delete;
