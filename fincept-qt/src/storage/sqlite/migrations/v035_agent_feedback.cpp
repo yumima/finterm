@@ -46,12 +46,19 @@ static Result<void> apply_v035(QSqlDatabase& db) {
             ")"); r.is_err()) {
         return r;
     }
-    sql(db, "CREATE INDEX IF NOT EXISTS idx_agent_feedback_request_id "
-            "ON agent_feedback(request_id)");
-    sql(db, "CREATE INDEX IF NOT EXISTS idx_agent_feedback_created_at "
-            "ON agent_feedback(created_at DESC)");
-    sql(db, "CREATE INDEX IF NOT EXISTS idx_agent_feedback_verdict "
-            "ON agent_feedback(verdict)");
+    // Indexes are nice-to-have, not load-bearing — but a silent skip
+    // would leave a slow agent_feedback table in production with no
+    // signal of what went wrong.  Warn but don't fail the migration.
+    auto warn_on_fail = [&db](const char* stmt) {
+        if (auto r = sql(db, stmt); r.is_err())
+            LOG_WARN(kTag, QString("index create failed: %1").arg(QString::fromStdString(r.error())));
+    };
+    warn_on_fail("CREATE INDEX IF NOT EXISTS idx_agent_feedback_request_id "
+                 "ON agent_feedback(request_id)");
+    warn_on_fail("CREATE INDEX IF NOT EXISTS idx_agent_feedback_created_at "
+                 "ON agent_feedback(created_at DESC)");
+    warn_on_fail("CREATE INDEX IF NOT EXISTS idx_agent_feedback_verdict "
+                 "ON agent_feedback(verdict)");
     LOG_INFO(kTag, "agent_feedback table ready");
     return Result<void>::ok();
 }

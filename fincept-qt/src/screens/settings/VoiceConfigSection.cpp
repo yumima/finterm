@@ -461,14 +461,23 @@ void VoiceConfigSection::load_tts_settings() {
 }
 
 void VoiceConfigSection::save_tts_settings() {
-    auto set = [](const char* key, const QString& val) {
-        SettingsRepository::instance().set(QString::fromUtf8(key), val, "voice");
+    QString first_error;
+    auto set = [&first_error](const char* key, const QString& val) {
+        auto r = SettingsRepository::instance().set(QString::fromUtf8(key), val, "voice");
+        if (r.is_err() && first_error.isEmpty())
+            first_error = QString("%1: %2").arg(QString::fromUtf8(key),
+                                                QString::fromStdString(r.error()));
     };
     set("tts.provider", tts_provider_combo_->currentData().toString());
     set("tts.model_path", tts_model_edit_->text().trimmed());
     set("tts.length", tts_length_edit_->text().trimmed());
     set("tts.noise", tts_noise_edit_->text().trimmed());
 
+    if (!first_error.isEmpty()) {
+        tts_status_lbl_->setText(QStringLiteral("Failed to save: %1").arg(first_error));
+        tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::NEGATIVE()));
+        return;
+    }
     tts_status_lbl_->setText(QStringLiteral("Saved.  Chat 🔊 button appears when provider != none + model file exists."));
     tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::POSITIVE()));
 }
