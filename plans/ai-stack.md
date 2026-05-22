@@ -445,14 +445,14 @@ current truth; older history lives in `git log`.
 |---|---|---|---|
 | 0 | Testing scaffold | ✅ | `scripts/agents/evals/` |
 | 1 | Foundation cleanup | ✅ | KNOWN_PROVIDERS trimmed; Google SR removed |
-| 2 | Local runtime | ✅ | `local_runtime.run_text` + `probe`. Tool-use loop defers to Track 9. |
+| 2 | Local runtime | ✅ | `local_runtime.run_text` + `run_with_tools` + `probe` |
 | 3 | Anthropic runtime | ✅ | `anthropic_runtime.run_turn` + `run_text` |
-| 4 | MCP HTTP transport + marketplace | ✅ | OAuth 2.0 + DCR is the deferred sub-item |
-| 5 | Full MCP spec on internal servers | ✅ | resources / prompts / sampling / elicitation / progress / logging / auth |
+| 4 | MCP HTTP transport + marketplace | ✅ | OAuth 2.0 + DCR (client_credentials) shipped; authorization_code grant still deferred |
+| 5 | Full MCP spec on internal servers | ✅ | resources / prompts (wire-level + bridge) / sampling / elicitation / progress / logging / auth; production AgentService defaults installed |
 | 6 | `FinancialDatasetsTools` | ✅ | 6 REST tools |
 | 7 | Skills + slash + agent identities | ✅ | 10 agents (v028) + slash service + 3 starter SKILL.md files |
 | 8 | Per-agent tool scoping + namespacing | ✅ | `int__` prefix + `allow_tools` glob patterns |
-| 9 | Memory + vector store | ⚠ stub | `MemoryTools` over plain SQLite; sqlite-vec upgrade pending |
+| 9 | Memory + vector store | ⚠ stub | `MemoryTools` over plain SQLite (upsert/search/list/delete); sqlite-vec upgrade pending Engine M1 |
 | 10 | Scheduler + hooks | ⚠ partial | Core + UI ✅; SDK hook registration on Anthropic profile defers |
 | 11 | Quant narrator | ✅ | `QuantNarratorTools` + `quant_critic` agent |
 | 12 | Alpha-arena migration | ✅ | Default flipped to two-runtime path; agno stays as opt-in legacy |
@@ -464,48 +464,59 @@ current truth; older history lives in `git log`.
 
 ## 10. Open work
 
-Tracked here so it's visible without scrolling git log. Anything
-on this list either depends on something outside this repo or
-deliberately defers until a clearer requirement lands.
+Categorised by why each item isn't done yet.  Anything that says
+"BLOCKED ON" cannot be finished from this repo alone.
 
-- **Engine M1 (sibling repo).** The `local-ai-engine` project
-  packages a curated local stack (Ollama / vLLM, embeddings,
-  Whisper, sqlite-vec). finterm's local-runtime adapter is
-  ready; the sibling repo's first milestone is its own
-  deliverable.
-- **OAuth 2.0 + DCR on MCP HTTP transport.** Reserved as
-  `auth_scheme="oauth"`; rejected by `McpHttpClient` today.
-- **Tool-use loop in `local_runtime`.** Today the local path
-  supports plain chat completion. Adding OpenAI-style function
-  calling (tools=[…] in the request, parsing tool_calls[],
-  echoing tool_result messages) parityifies with the Anthropic
-  side.
-- **sqlite-vec for MemoryTools.** Schema is forward-compatible:
-  add an `embedding` column + an FTS5 / vec table and switch
-  `memory_search` from LIKE to cosine. API stays unchanged.
-- **`memory_delete`.** Round out the MemoryTools surface.
+### Blocked on Engine M1 (sibling repo)
+
+- **Engine M1 — `local-ai-engine` packaging.** Curated bundle of
+  Ollama / vLLM / faster-whisper / sqlite-vec behind one
+  OpenAI-compatible service.  finterm's local-runtime adapter
+  already works against any OpenAI-compat server today; this is
+  the opinionated install path.  See `plans/local-ai-engine.md`.
+- **sqlite-vec semantic search in MemoryTools.** Schema is
+  forward-compatible — add an `embedding` column + a vec table
+  and switch `memory_search` from LIKE to cosine.  Tool API stays
+  unchanged.  Blocked because finterm doesn't ship the sqlite-vec
+  extension; Engine M1 will.
+
+### Blocked on Anthropic SDK
+
+- **Files API + per-claim citations.** `claude-agent-sdk` 0.2.83
+  doesn't expose either; revisit on SDK upgrade.
+- **In-flight token budget (abort mid-stream).** The C++ gate
+  ("refuse if already overspent today") is in place.  Aborting a
+  call mid-response needs runtime-side enforcement inside the SDK
+  + local runtime — separate work.
+
+### Workable in finterm — scoped follow-ups
+
+- **OAuth `authorization_code` grant (browser-redirect flow).**
+  `client_credentials` grant + DCR shipped.  Adding the user-
+  consent flow needs a localhost callback server + browser
+  launch.
+- **`.well-known/oauth-authorization-server` discovery.** Today
+  the token URL must be set explicitly.
+- **Automatic 401 retry on OAuth.** Caller can use
+  `McpOAuth::invalidate_cache` after a 401 then re-call;
+  auto-retry on top would tighten the contract.
+- **Server-initiated MCP notifications** (`sampling/createMessage`,
+  `elicitation/create`, `notifications/message`) on
+  `McpClientBase` + `mcp_bridge`.  Outbound prompts ship; the
+  reverse direction (server → finterm) needs a notification
+  dispatcher in the stdio + HTTP transports.
+- **Real on_elicit modal in AiChatScreen.** Default handler
+  currently errors with a hint; chat-surface wiring (modal +
+  worker-thread sync primitive) finishes it.
+- **Streaming response parsing in `local_runtime`.** Today's
+  loop uses `stream=False`.  SSE parsing is its own thing.
 - **Workbench panel ports.** Move chat_mode, agent_config, and
-  mcp_servers widgets into Workbench sections. Per-screen
+  mcp_servers widgets into Workbench sections.  Per-screen
   refactor to preserve each widget's lifecycle assumptions.
-- **In-flight token budget.** Today's budget gate is "refuse if
-  already overspent today" (C++). Aborting mid-stream requires
-  runtime-side enforcement in claude-agent-sdk + the local
-  runtime's tool loop.
-- **Wire-level `prompts/list`, `prompts/get`, sampling +
-  elicitation + logging notifications on McpClientBase.** Mirror
-  of the resources work for those capabilities.
-- **Python mcp_bridge forwards prompts / sampling / elicitation
-  / logging to the SDK MCP server.** Mirror of the resources
-  forwarding for those capabilities.
-- **Production AgentService wires `ctx.on_sample`,
-  `ctx.on_elicit`, `ctx.on_log` to the chat UI and active LLM
-  profile.**
-- **Files + citations.** Anthropic SDK 0.2.83 doesn't expose
-  Files API or per-claim citations; revisit when the SDK does.
-- **TTS.** Anthropic ships no TTS. Local Piper / Kokoro is the
+- **TTS.** Anthropic ships no TTS.  Local Piper / Kokoro is the
   candidate.
 - **Track 15 forum.** Reddit RSS open feed + Discord deep-link
-  closed rooms. Filed; off the AI critical path.
+  closed rooms.  Filed; off the AI critical path.
 
 ---
 

@@ -1,12 +1,31 @@
 # Local AI Engine — Vision, Requirements, Architecture
 
-**Status:** Proposal
-**Date:** 2026-05-20
+**Status:** Proposal — sibling project, separate repo. Not blocking
+finterm shipping; finterm's local-runtime adapter
+(`finagent_core.runtimes.local_runtime`) already talks to any
+OpenAI-compatible server, so users can point at vanilla Ollama / vLLM
+/ llama.cpp / LM Studio today.  This document describes the
+opinionated bundle we'd publish as a one-click install.
+
 **Owner:** yumima
 **Working name:** `finterm-localai` (placeholder; see §6 Open
 questions)
 **Related:** `plans/ai-stack.md` (finterm's side of the
 contract)
+
+**Finterm-side readiness:**
+
+| Piece | State |
+|---|---|
+| `local_runtime.run_text` (single-shot completion) | ✅ shipped |
+| `local_runtime.run_with_tools` (OpenAI tool-calling loop) | ✅ shipped |
+| `local_runtime.probe` (`/v1/models` discovery) | ✅ shipped |
+| LlmConfigRepository `local_llm_base_url` setting | ✅ shipped |
+| Settings → LLM Config → Probe button | ✅ shipped |
+| MemoryTools (local profile) backed by SQLite keyword search | ✅ shipped (sqlite-vec upgrade pending Engine M1) |
+| BaseAgent default `local` runtime for OpenAI-compat providers | ✅ shipped |
+
+All work below is in the **sibling** repo, not finterm.
 
 ---
 

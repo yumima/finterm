@@ -6,6 +6,7 @@ A local-first, **offline-capable** financial-research terminal. Qt6/C++ desktop 
 
 Latest first.
 
+- [`f5a7421e`](https://github.com/yumima/finterm/commit/f5a7421e) agents(ctx): wire process-wide default on_sample / on_elicit / on_log
 - [`b37772cd`](https://github.com/yumima/finterm/commit/b37772cd) settings(credentials): gut unused keys, point users at the right surfaces
 - [`f36caa4e`](https://github.com/yumima/finterm/commit/f36caa4e) mcp(http): OAuth 2.0 + DCR with client_credentials grant (Track 4 #14b)
 - [`a46fb477`](https://github.com/yumima/finterm/commit/a46fb477) mcp_bridge: forward prompts/list + prompts/get to the SDK (Track 5 follow-up)
