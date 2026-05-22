@@ -18,6 +18,7 @@
 #include "screens/settings/ActivityPanelSection.h"
 #include "screens/settings/ArtefactsSection.h"
 #include "screens/settings/ForumConfigSection.h"
+#include "screens/settings/SkillDiffsSection.h"
 #include "screens/settings/KeybindingsSection.h"
 #include "screens/settings/SchedulerSection.h"
 #include "screens/settings/LlmConfigSection.h"
@@ -184,6 +185,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_->addWidget(new ArtefactsSection);   // 16
     sections_->addWidget(new ForumConfigSection); // 17
     sections_->addWidget(new ActivityPanelSection); // 18
+    sections_->addWidget(new SkillDiffsSection);  // 19
 
     QList<QPushButton*> nav_btns;
     auto make_btn = [&](const QString& text, int idx) {
@@ -226,6 +228,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     make_btn("Artefacts", 16);
     make_btn("Forum", 17);
     make_btn("Activity", 18);
+    make_btn("Skill diffs", 19);
 
     first->setChecked(true);
 

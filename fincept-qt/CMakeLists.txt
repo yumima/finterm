@@ -1076,6 +1076,7 @@ set(SCREEN_SOURCES
     src/screens/settings/ArtefactsSection.cpp
     src/screens/settings/ForumConfigSection.cpp
     src/screens/settings/ActivityPanelSection.cpp
+    src/screens/settings/SkillDiffsSection.cpp
     src/screens/about/AboutScreen.cpp
     src/screens/support/SupportScreen.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
