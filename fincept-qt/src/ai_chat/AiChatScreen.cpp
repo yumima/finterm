@@ -10,6 +10,7 @@
 #include "services/agents/ElicitBridge.h"
 #include "services/agents/SlashCommandService.h"
 #include "storage/repositories/ChatRepository.h"
+#include "storage/repositories/LlmProfileRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -466,6 +467,26 @@ QWidget* AiChatScreen::build_header_bar() {
     div->setFixedWidth(1);
     div->setStyleSheet(QString("background:%1;").arg(col::BORDER_DIM()));
     hl->addWidget(div);
+
+    // Runtime toggle pill — click cycles between Anthropic and a
+    // local-runtime profile.  Replaces the "go hunt in Settings → LLM
+    // Config" mental model with a single visible chip.  Disabled
+    // (greyed) when there's no profile of the other runtime to switch
+    // to; tooltip explains why.
+    runtime_toggle_btn_ = new QPushButton(QStringLiteral("—"));
+    runtime_toggle_btn_->setCursor(Qt::PointingHandCursor);
+    runtime_toggle_btn_->setStyleSheet(
+        QString("QPushButton{color:%1;font-size:%2px;background:%3;border:1px solid %4;"
+                "border-radius:0px;padding:2px 8px;}"
+                "QPushButton:hover:enabled{color:%5;border-color:%5;}"
+                "QPushButton:disabled{color:%6;}")
+            .arg(col::TEXT_SECONDARY())
+            .arg(fnt::TINY)
+            .arg(col::BG_BASE(), col::BORDER_MED(),
+                 col::AMBER(), col::TEXT_DIM()));
+    connect(runtime_toggle_btn_, &QPushButton::clicked, this,
+            &AiChatScreen::on_toggle_runtime);
+    hl->addWidget(runtime_toggle_btn_);
 
     // Active model pill
     hdr_model_lbl_ = new QLabel("No model");
@@ -1503,6 +1524,97 @@ void AiChatScreen::update_stats() {
         model_lbl_->setStyleSheet(QString("color:%1;font-size:%2px;").arg(col::TEXT_DIM()).arg(fnt::TINY));
         hdr_model_lbl_->setText("No model");
     }
+
+    refresh_runtime_toggle();
+}
+
+void AiChatScreen::refresh_runtime_toggle() {
+    if (!runtime_toggle_btn_)
+        return;
+    const auto resolved =
+        LlmProfileRepository::instance().resolve_for_context(QStringLiteral("ai_chat"));
+    const QString current_runtime = resolved.runtime.isEmpty()
+                                        ? QStringLiteral("local")
+                                        : resolved.runtime;
+    const QString other_runtime = (current_runtime == QStringLiteral("anthropic"))
+                                      ? QStringLiteral("local")
+                                      : QStringLiteral("anthropic");
+
+    // Label shows the current runtime — clicking flips it.  Underscore-
+    // style reads better at small sizes than mixed case for two-state
+    // toggles.
+    runtime_toggle_btn_->setText(current_runtime == QStringLiteral("anthropic")
+                                     ? QStringLiteral("⚡ Anthropic")
+                                     : QStringLiteral("🏠 Local"));
+
+    // Disable when no profile of the other runtime exists — flipping
+    // would have nowhere to go.  Tooltip says why.
+    auto profiles_r = LlmProfileRepository::instance().list_profiles();
+    bool other_available = false;
+    if (profiles_r.is_ok()) {
+        for (const auto& p : profiles_r.value()) {
+            if (p.runtime == other_runtime) {
+                other_available = true;
+                break;
+            }
+        }
+    }
+    runtime_toggle_btn_->setEnabled(other_available);
+    runtime_toggle_btn_->setToolTip(
+        other_available
+            ? QStringLiteral("Switch to %1 — click to flip the active profile").arg(other_runtime)
+            : QStringLiteral("No %1 profile configured.  Settings → LLM Config to add one.")
+                  .arg(other_runtime));
+}
+
+void AiChatScreen::on_toggle_runtime() {
+    auto& repo = LlmProfileRepository::instance();
+    const auto current =
+        repo.resolve_for_context(QStringLiteral("ai_chat"));
+    const QString current_runtime = current.runtime.isEmpty()
+                                        ? QStringLiteral("local")
+                                        : current.runtime;
+    const QString target_runtime = (current_runtime == QStringLiteral("anthropic"))
+                                       ? QStringLiteral("local")
+                                       : QStringLiteral("anthropic");
+
+    auto profiles_r = repo.list_profiles();
+    if (profiles_r.is_err())
+        return;
+
+    // Pick the default profile of the target runtime if there is one,
+    // else the first profile of that runtime.  Two passes — defaults
+    // win.
+    QString chosen_id;
+    for (const auto& p : profiles_r.value()) {
+        if (p.runtime == target_runtime && p.is_default) {
+            chosen_id = p.id;
+            break;
+        }
+    }
+    if (chosen_id.isEmpty()) {
+        for (const auto& p : profiles_r.value()) {
+            if (p.runtime == target_runtime) {
+                chosen_id = p.id;
+                break;
+            }
+        }
+    }
+    if (chosen_id.isEmpty())
+        return; // No target profile (button should have been disabled)
+
+    auto r = repo.assign_profile(QStringLiteral("ai_chat"), QString(), chosen_id);
+    if (r.is_err()) {
+        add_message_bubble("system",
+                           QStringLiteral("Failed to switch runtime: %1")
+                               .arg(QString::fromStdString(r.error())));
+        return;
+    }
+
+    ai_chat::LlmService::instance().reload_config();
+    update_stats();
+    add_message_bubble("system",
+                       QStringLiteral("Switched to **%1**").arg(target_runtime));
 }
 
 void AiChatScreen::show_welcome(bool show) {

@@ -43,6 +43,7 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     void on_send();
     void on_attach_file();
     void on_elicit_request(const QString& token, const fincept::mcp::ElicitRequest& req);
+    void on_toggle_runtime();
     void on_new_session();
     void on_session_selected(int row);
     void on_delete_session();
@@ -84,6 +85,8 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     QLabel* hdr_status_lbl_ = nullptr;
     QLabel* hdr_session_lbl_ = nullptr;
     QLabel* hdr_model_lbl_ = nullptr;
+    QPushButton* runtime_toggle_btn_ = nullptr;
+    void refresh_runtime_toggle();
     QLabel* hdr_tokens_lbl_ = nullptr;
 
     // ── Chat area ────────────────────────────────────────────────────────
