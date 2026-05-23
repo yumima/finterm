@@ -204,35 +204,37 @@ Anchors:
 
 ## 5. Prioritised roadmap
 
-Ordered. Dependencies inline.
+Ordered. Dependencies inline.  **All 12 items shipped** — see the
+state column for the commit that landed each, and `plans/ai-stack.md`
+section 9 for the per-track current truth.
 
-1. **(S) Reframe README** around the four-pillar value prop.
-   Sets the frame.
-2. **(XS) Replace "Anthropic-only conveniences" prose** with a
-   generated capability table. Forces matrix shape definition.
-3. **(M) Capability matrix + `CapabilityRegistry`.** Depends on
-   (2). Unblocks every "ship behind a flag" item.
-4. **(S) Trace drill-down UI** (P4). Standalone; ships fast;
-   pays for the audit-pillar pitch in (1).
-5. **(S) Local-first toggle on composer header.** Same week as
-   (4).
-6. **(M) `@`-mention resolver** (P1). No deps. Foundation for
-   every entity-aware feature after.
-7. **(M) Artefact type system** (P2, P5). Depends on (6) for
-   addressability and (3) for capability gating. Biggest single
-   multiplier.
-8. **(M) Suggested follow-ups + inline actions.** Depends on
-   (7) — follow-ups operate on artefacts.
-9. **(S) Nightly SDK-head eval CI** + **(S) vendor-skill diff
-   tool.** Independent of UI; parallel from week 1.
-10. **(L) Long-running task tray** (P3 partial). Depends on (7)
-    for in-tray artefact preview.
-11. **(S) "Mark turn wrong" → SKILL.md proposal** (P7). Depends
-    on (4) and (9).
-12. **(L) Inline-completion tier** (P3 full). Last, because it
-    needs a local model fast enough to be honest about — Engine
-    M1 dependency (`plans/local-ai-engine.md`).
+1. ✅ **(S) Reframe README** around the four-pillar value prop.
+   `8b75432b` + later README updates that fold in Teams + the audit pillar.
+2. ✅ **(XS) Replace "Anthropic-only conveniences" prose** with a
+   generated capability table.  `7e6d6957`.
+3. ✅ **(M) Capability matrix + `CapabilityRegistry`.**  `7e6d6957`.
+4. ✅ **(S) Trace drill-down UI** (P4).  `7937ec11`; extended in
+   Track 96 (`00a81d7a`) with the per-turn tool-call timeline.
+5. ✅ **(S) Local-first toggle on composer header.**  `d79cdcc7`.
+6. ✅ **(M) `@`-mention resolver** (P1).  `1a1a9945` + ticker mentions in `6d0c1165`.
+7. ✅ **(M) Artefact type system** (P2, P5).  `5869ca96` + `cea6d060`;
+   explicit lineage chain in v039 (`1b323715`).
+8. ✅ **(M) Suggested follow-ups + inline actions.**  `7a3044f5` +
+   clickable chips in `91e770f8` + session-reload restore in `a803b1ef`.
+9. ✅ **(S) Nightly SDK-head eval CI** + **(S) vendor-skill diff
+   tool.**  `853c1e95` (CI) + `9c8c881e` (in-app review panel).
+10. ✅ **(L) Long-running task tray** (P3 partial).  `d1c111e4`.
+11. ✅ **(S) "Mark turn wrong" → SKILL.md proposal** (P7).
+    `6ec439a0` (capture) + `513808c8` (propose-fix flow).
+12. ✅ scaffold **(L) Inline-completion tier** (P3 full).  `bede4569`;
+    capability-gated, Settings toggle in `f7be1ed1`.  Quality story
+    still depends on Engine M1's fast local model — over
+    Anthropic/OpenAI round-trips the latency is honest-but-slow.
 
-Items 1-6 (6-8 weeks) move finterm from "chat surface that
+Plus shipped beyond the roadmap, as the work surfaced what was
+missing: **multi-agent teams** (Track 98 — `e1063b67` + `79353059`)
+landed as the headline of the four-pillar audit pitch.
+
+Items 1-6 (6-8 weeks) moved finterm from "chat surface that
 bundles MCPs" to "agent participates in primary surfaces."
-Items 7-12 (next quarter) make the "AI-native" claim defensible.
+Items 7-12 (next quarter) made the "AI-native" claim defensible.

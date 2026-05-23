@@ -445,20 +445,28 @@ current truth; older history lives in `git log`.
 |---|---|---|---|
 | 0 | Testing scaffold | ✅ | `scripts/agents/evals/` |
 | 1 | Foundation cleanup | ✅ | KNOWN_PROVIDERS trimmed; Google SR removed |
-| 2 | Local runtime | ✅ | `local_runtime.run_text` + `run_with_tools` + `probe` |
+| 1A-C | Framing + capabilities | ✅ | Capability matrix (JSON + generator + `CapabilityRegistry`); README four-pillar value prop; nightly SDK eval + vendor-skill diff CI |
+| 2 | Local runtime | ✅ | `run_text` + `run_with_tools` + SSE streaming (`run_text_stream`, `run_with_tools_stream`) + `probe` |
 | 3 | Anthropic runtime | ✅ | `anthropic_runtime.run_turn` + `run_text` |
-| 4 | MCP HTTP transport + marketplace | ✅ | OAuth 2.0 + DCR (client_credentials) shipped; authorization_code grant still deferred |
-| 5 | Full MCP spec on internal servers | ✅ | resources / prompts (wire-level + bridge) / sampling / elicitation / progress / logging / auth; production AgentService defaults installed |
+| 3A-B | Composer + entity refs | ✅ | Runtime toggle pill on chat composer; `@`-mention resolver (resources + tickers); session-reload chip restore |
+| 4 | MCP HTTP transport + marketplace | ✅ | OAuth 2.0 + DCR — both `client_credentials` and `authorization_code` (PKCE + RFC 8414 discovery + auto-401 retry); server-initiated request dispatch end-to-end |
+| 5 | Full MCP spec + artefacts | ✅ | resources / prompts / sampling / elicitation / progress / logging / auth; `chat_artefacts` foundation + `emit_artefact` tool + Artefacts panel + Lineage view (explicit `supersedes_id` chain, v039) + suggested follow-ups |
 | 6 | `FinancialDatasetsTools` | ✅ | 6 REST tools |
+| 6A-C | Voice + Forum + Workbench port | ✅ | Local Piper TTS (incl. Settings → Voice TTS + chat 🔊 button); user-configurable forum URL; Workbench tools/chat/agents/workflows/servers/profiles/teams panels all real |
 | 7 | Skills + slash + agent identities | ✅ | 10 agents (v028) + slash service + 3 starter SKILL.md files |
+| 7A-C | Task tray + feedback loop | ✅ | In-flight + recent task tray; mark-wrong / mark-right capture; SKILL.md propose-fix flow (Track 7C) with type-to-confirm overwrite |
 | 8 | Per-agent tool scoping + namespacing | ✅ | `int__` prefix + `allow_tools` glob patterns |
+| 8 (inline) | Inline completion scaffold | ✅ scaffold | `InlineCompletionController` capability-gated; Settings checkbox + LRU cache + slash-prefix guard.  Latency API-bound until Engine M1 lands a fast local model |
 | 9 | Memory + vector store | ⚠ stub | `MemoryTools` over plain SQLite (upsert/search/list/delete); sqlite-vec upgrade pending Engine M1 |
 | 10 | Scheduler + hooks | ⚠ partial | Core + UI ✅; SDK hook registration on Anthropic profile defers |
 | 11 | Quant narrator | ✅ | `QuantNarratorTools` + `quant_critic` agent |
 | 12 | Alpha-arena migration | ✅ | Default flipped to two-runtime path; agno stays as opt-in legacy |
-| 13 | AI Workbench | ✅ | WorkbenchScreen scaffold + System section populated; placeholders for Chat/Agents/Teams/Workflows/Tools/Servers/Profiles |
-| 14 | Evals + obs + audit + safety + UX | ✅ | #37 result store, #38 traces, #39 kill-switch, #40 prompt-injection, #41 budgets, #42 acceptance checklist |
-| 15 | Community surface | 📋 filed | Off the AI critical path |
+| 13 | AI Workbench | ✅ | WorkbenchScreen scaffold + every panel populated (real catalog tables for Chat/Agents/Workflows/Tools/Servers/Profiles + full Teams create/edit/delete + System) |
+| 14 | Evals + obs + audit + safety + UX | ✅ | #37 result store, #38 traces (incl. v036 tool-call timeline), #39 kill-switch, #40 prompt-injection, #41 budgets (incl. per-agent USD cap), #42 acceptance checklist |
+| 15 | Community surface | ⚠ partial | Forum URL configurable; Reddit RSS / Discord deep-link still off the critical path |
+| 96 | Tool-call timeline | ✅ | v036 `agent_traces.tool_calls_json`; renders in trace drill-down for non-streaming + team paths (streaming proper requires StreamingCoreAgent to expose RunOutput — deferred) |
+| 98 | Multi-agent teams | ✅ | v037 schema + v038 mode rename; `TeamRepository`; Workbench Teams panel with full CRUD + agno mode dropdown (coordinate / route / collaborate); `/team <name> <query>` slash dispatch with response delivery via filtered `agent_stream_done` |
+| 100 | Vendor-skill drift review | ✅ | `SkillDiffsSection` — runs `vendor_skills_diff.py` async, displays drift inbox, atomic overwrite with path-traversal guards |
 
 ---
 
@@ -479,6 +487,12 @@ Categorised by why each item isn't done yet.  Anything that says
   and switch `memory_search` from LIKE to cosine.  Tool API stays
   unchanged.  Blocked because finterm doesn't ship the sqlite-vec
   extension; Engine M1 will.
+- **Fast-local inline completion.** Scaffold shipped (Track 8 /
+  Settings → AI System checkbox); the controller works against
+  any configured runtime.  Quality story (sub-300ms ghost text)
+  needs Engine M1's fast local model — over Anthropic/OpenAI
+  round-trips the UX feels slow, which is honest behaviour but
+  not the headline feel.
 
 ### Blocked on Anthropic SDK
 
@@ -488,35 +502,35 @@ Categorised by why each item isn't done yet.  Anything that says
   ("refuse if already overspent today") is in place.  Aborting a
   call mid-response needs runtime-side enforcement inside the SDK
   + local runtime — separate work.
+- **Anthropic-runtime tool-call timeline.** Track 96 surfaces
+  tool calls from agno's `RunOutput.tools` (local runtime); the
+  SDK's tool loop isn't exposed equivalently.  Trace dialog shows
+  the table for local/agno turns and falls back to "(no tool
+  log)" for Anthropic-direct dispatches.
 
 ### Workable in finterm — scoped follow-ups
 
-- **OAuth `authorization_code` grant (browser-redirect flow).**
-  `client_credentials` grant + DCR shipped.  Adding the user-
-  consent flow needs a localhost callback server + browser
-  launch.
-- **`.well-known/oauth-authorization-server` discovery.** Today
-  the token URL must be set explicitly.
-- **Automatic 401 retry on OAuth.** Caller can use
-  `McpOAuth::invalidate_cache` after a 401 then re-call;
-  auto-retry on top would tighten the contract.
-- **Server-initiated MCP notifications** (`sampling/createMessage`,
-  `elicitation/create`, `notifications/message`) on
-  `McpClientBase` + `mcp_bridge`.  Outbound prompts ship; the
-  reverse direction (server → finterm) needs a notification
-  dispatcher in the stdio + HTTP transports.
-- **Real on_elicit modal in AiChatScreen.** Default handler
-  currently errors with a hint; chat-surface wiring (modal +
-  worker-thread sync primitive) finishes it.
-- **Streaming response parsing in `local_runtime`.** Today's
-  loop uses `stream=False`.  SSE parsing is its own thing.
-- **Workbench panel ports.** Move chat_mode, agent_config, and
-  mcp_servers widgets into Workbench sections.  Per-screen
-  refactor to preserve each widget's lifecycle assumptions.
-- **TTS.** Anthropic ships no TTS.  Local Piper / Kokoro is the
-  candidate.
-- **Track 15 forum.** Reddit RSS open feed + Discord deep-link
-  closed rooms.  Filed; off the AI critical path.
+- **StreamingCoreAgent tool-log surfacing.**  The non-streaming
+  `run` path attaches `RunOutput.tools` to the result via
+  `_attach_tool_calls()` (Track 96).  The streaming path yields
+  chunks rather than returning a RunOutput; surfacing tool calls
+  there would need StreamingCoreAgent to expose the final
+  RunOutput at end-of-stream.  Today the streaming fallback
+  (when StreamingCoreAgent itself errors) does get the tool log
+  via `core_agent.run()`'s response.
+- **Per-artefact `supersedes_id` for multi-artefact turns.**
+  Today `latest_for_request` links only the most-recent artefact
+  back to the predecessor.  An agent that emits N artefacts in
+  one turn leaves N-1 unlinked.  Proper per-artefact tracking
+  needs the `emit_artefact` tool to accept an optional
+  `predecessor_id` arg that the dispatch config seeds.
+- **LlmService `RequestConfig` refactor.**  Documented as
+  accepted design choice for now (band-aid mutex held across
+  full request).  Revisit if a future surface starts firing
+  multiple concurrent chats routinely.
+- **Reddit RSS / Discord deep-link forum surfaces.**  Forum URL
+  config shipped (Track 6B); the rich client surfaces are still
+  filed.  Off the AI critical path.
 
 ---
 

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`290d6544`](https://github.com/yumima/finterm/commit/290d6544) review fixes (T2): robustness sweep
 - [`fa73513f`](https://github.com/yumima/finterm/commit/fa73513f) review fixes (T2): tool-call timeline + trace row for team / streaming paths
 - [`f7be1ed1`](https://github.com/yumima/finterm/commit/f7be1ed1) review fixes (T1): inline UI toggle, /team response delivery, accept_pending latch
 - [`1b323715`](https://github.com/yumima/finterm/commit/1b323715) artefacts: explicit supersedes_id chain replaces identity inference
