@@ -18,7 +18,7 @@ struct TeamRow {
     QString id;
     QString name;
     QString coordinator_agent_id;
-    QString strategy;          ///< "sequential" | "parallel"
+    QString mode;              ///< agno coordination mode: "coordinate" | "route" | "collaborate"
     QString description;
     QString created_at;
     QString updated_at;
@@ -29,7 +29,7 @@ struct TeamCreate {
     QString id;            ///< kebab-case slug; required
     QString name;
     QString coordinator_agent_id;
-    QString strategy = "sequential";
+    QString mode = "coordinate";
     QString description;
     QStringList member_agent_ids;
 };

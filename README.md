@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`53a17373`](https://github.com/yumima/finterm/commit/53a17373) **docs(llm):** recategorise chat() mutex as accepted design choice
 - [`5df26cdf`](https://github.com/yumima/finterm/commit/5df26cdf) **docs:** how-tos + README reflect Teams / inline / tool-log / lineage / drift
 - [`49ce07fa`](https://github.com/yumima/finterm/commit/49ce07fa) review fixes: Teams — atomicity, name UNIQUE, honest strategy label
 - [`e1063b67`](https://github.com/yumima/finterm/commit/e1063b67) agents: multi-agent teams — schema + repo + Workbench panel + /team dispatch

@@ -9,14 +9,14 @@ namespace fincept {
 namespace {
 
 constexpr const char* kTeamCols =
-    "id, name, coordinator_agent_id, strategy, description, created_at, updated_at";
+    "id, name, coordinator_agent_id, mode, description, created_at, updated_at";
 
 TeamRow map_row(QSqlQuery& q) {
     TeamRow t;
     t.id = q.value(0).toString();
     t.name = q.value(1).toString();
     t.coordinator_agent_id = q.value(2).toString();
-    t.strategy = q.value(3).toString();
+    t.mode = q.value(3).toString();
     t.description = q.value(4).toString();
     t.created_at = q.value(5).toString();
     t.updated_at = q.value(6).toString();
@@ -83,10 +83,10 @@ Result<void> TeamRepository::create(const TeamCreate& c) {
     if (c.id.isEmpty() || c.name.isEmpty() || c.coordinator_agent_id.isEmpty())
         return Result<void>::err("TeamRepository::create: id / name / coordinator are required");
     auto r = Database::instance().execute(
-        QStringLiteral("INSERT INTO teams (id, name, coordinator_agent_id, strategy, description) "
+        QStringLiteral("INSERT INTO teams (id, name, coordinator_agent_id, mode, description) "
                        "VALUES (?, ?, ?, ?, ?)"),
         {c.id, c.name, c.coordinator_agent_id,
-         c.strategy.isEmpty() ? QStringLiteral("sequential") : c.strategy,
+         c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode,
          c.description});
     if (r.is_err())
         return Result<void>::err(r.error());
@@ -107,11 +107,11 @@ Result<void> TeamRepository::update(const TeamCreate& c) {
         return Result<void>::err("TeamRepository::update: empty id");
     auto r = Database::instance().execute(
         QStringLiteral("UPDATE teams SET "
-                       "  name = ?, coordinator_agent_id = ?, strategy = ?, "
+                       "  name = ?, coordinator_agent_id = ?, mode = ?, "
                        "  description = ?, updated_at = datetime('now') "
                        "WHERE id = ?"),
         {c.name, c.coordinator_agent_id,
-         c.strategy.isEmpty() ? QStringLiteral("sequential") : c.strategy,
+         c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode,
          c.description, c.id});
     if (r.is_err())
         return Result<void>::err(r.error());

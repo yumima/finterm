@@ -256,9 +256,15 @@ the coordinator synthesises a unified answer.
   dispatch resolves teams by name).
 - **Coordinator** — dropdown of every agent in `agent_configs`.
   Runs after the members and synthesises.
-- **Strategy** — currently *persisted but not yet routed* through
-  to agno (sequential / parallel labels are honest about that
-  scope).
+- **Mode** — agno's coordination mode, read by
+  `TeamModule.from_config`:
+  - `coordinate` — leader routes work to members, synthesises a
+    single answer (default; closest fit for "members weigh in,
+    coordinator merges").
+  - `route` — leader picks the best member, returns its answer
+    verbatim (no synthesis).
+  - `collaborate` — members work the problem together; the leader
+    merges contributions (looser coordination).
 - **Members** — checked agents weigh in.  The coordinator can
   also appear as a member; agno treats `leader_index=0` as the
   leader of the group.

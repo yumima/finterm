@@ -1264,11 +1264,15 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
         team_config[QStringLiteral("name")] = t.name;
         if (!t.description.isEmpty())
             team_config[QStringLiteral("description")] = t.description;
-        team_config[QStringLiteral("mode")] = QStringLiteral("coordinate");
+        // Pass through the team's configured agno mode (coordinate /
+        // route / collaborate) — read by TeamModule.from_config and
+        // shapes how agents are dispatched.  Default-to-coordinate if
+        // somehow empty (legacy rows already remapped in v038).
+        team_config[QStringLiteral("mode")] =
+            t.mode.isEmpty() ? QStringLiteral("coordinate") : t.mode;
         team_config[QStringLiteral("members")] = members_arr;
         team_config[QStringLiteral("agents")] = members_arr;  // agno accepts either key
         team_config[QStringLiteral("leader_index")] = 0;
-        team_config[QStringLiteral("strategy")] = t.strategy;
         // run_team doesn't throw — it returns a req_id synchronously
         // and surfaces dispatch failures via agent_stream_done /
         // publish_agent_result on the request_id.  The chat surface

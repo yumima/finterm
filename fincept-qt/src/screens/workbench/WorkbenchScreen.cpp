@@ -305,22 +305,24 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
         if (a.id == draft.coordinator_agent_id)
             coordinator_combo->setCurrentIndex(coordinator_combo->count() - 1);
     }
-    auto* strategy_combo = new QComboBox;
-    // v037 stores the strategy column but agno's TeamModule.from_config
-    // only reads name/description/mode/leader_index/roles — strategy
-    // is not yet honored at the runtime layer.  Label honestly so the
-    // user doesn't think they're configuring real behavior.  Mapping
-    // to agno's `mode` is a follow-up.
-    strategy_combo->addItem(QStringLiteral("sequential (persisted, not yet routed)"), "sequential");
-    strategy_combo->addItem(QStringLiteral("parallel (persisted, not yet routed)"), "parallel");
-    if (draft.strategy == QStringLiteral("parallel"))
-        strategy_combo->setCurrentIndex(1);
+    // v038 renamed the column from `strategy` to `mode` — these are
+    // agno's actual coordination modes, read by TeamModule.from_config.
+    auto* mode_combo = new QComboBox;
+    mode_combo->addItem(QStringLiteral("coordinate — leader routes work, synthesises a single answer"), "coordinate");
+    mode_combo->addItem(QStringLiteral("route — leader picks the best member, returns its answer"), "route");
+    mode_combo->addItem(QStringLiteral("collaborate — members work the problem together, leader merges"), "collaborate");
+    for (int i = 0; i < mode_combo->count(); ++i) {
+        if (mode_combo->itemData(i).toString() == draft.mode) {
+            mode_combo->setCurrentIndex(i);
+            break;
+        }
+    }
 
     form->addRow(QStringLiteral("ID"), id_edit);
     form->addRow(QStringLiteral("Name"), name_edit);
     form->addRow(QStringLiteral("Description"), desc_edit);
     form->addRow(QStringLiteral("Coordinator"), coordinator_combo);
-    form->addRow(QStringLiteral("Strategy"), strategy_combo);
+    form->addRow(QStringLiteral("Mode"), mode_combo);
     root->addLayout(form);
 
     auto* members_lbl = new QLabel(QStringLiteral("<b>Members</b> (checked agents weigh in; the coordinator synthesises):"));
@@ -355,7 +357,7 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
     draft.name = name;
     draft.description = desc_edit->text().trimmed();
     draft.coordinator_agent_id = coordinator_combo->currentData().toString();
-    draft.strategy = strategy_combo->currentData().toString();
+    draft.mode = mode_combo->currentData().toString();
     draft.member_agent_ids.clear();
     for (int i = 0; i < members_list->count(); ++i) {
         auto* item = members_list->item(i);
@@ -405,7 +407,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
     table->setHorizontalHeaderLabels(
         {QStringLiteral("ID"), QStringLiteral("Name"),
          QStringLiteral("Coordinator"), QStringLiteral("Members"),
-         QStringLiteral("Strategy")});
+         QStringLiteral("Mode")});
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -430,7 +432,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
             table->setItem(i, 1, new QTableWidgetItem(t.name));
             table->setItem(i, 2, new QTableWidgetItem(t.coordinator_agent_id));
             table->setItem(i, 3, new QTableWidgetItem(QString::number(t.member_agent_ids.size())));
-            table->setItem(i, 4, new QTableWidgetItem(t.strategy));
+            table->setItem(i, 4, new QTableWidgetItem(t.mode));
         }
     };
 
@@ -451,7 +453,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
         c.id = draft.id;
         c.name = draft.name;
         c.coordinator_agent_id = draft.coordinator_agent_id;
-        c.strategy = draft.strategy;
+        c.mode = draft.mode;
         c.description = draft.description;
         c.member_agent_ids = draft.member_agent_ids;
         auto r = TeamRepository::instance().create(c);
@@ -476,7 +478,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
         c.id = draft.id;
         c.name = draft.name;
         c.coordinator_agent_id = draft.coordinator_agent_id;
-        c.strategy = draft.strategy;
+        c.mode = draft.mode;
         c.description = draft.description;
         c.member_agent_ids = draft.member_agent_ids;
         auto ur = TeamRepository::instance().update(c);
