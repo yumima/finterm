@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`43252a19`](https://github.com/yumima/finterm/commit/43252a19) review fixes: Track 8 — LlmService::chat race + LRU + selection guard
 - [`bede4569`](https://github.com/yumima/finterm/commit/bede4569) ai_chat: inline completion scaffold (Track 8 — capability-gated)
 - [`e6180c77`](https://github.com/yumima/finterm/commit/e6180c77) review fixes: SkillDiffsSection — async subprocess + path-traversal guards
 - [`9c8c881e`](https://github.com/yumima/finterm/commit/9c8c881e) settings: vendor-skill drift review panel (Track 1C UI counterpart)

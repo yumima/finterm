@@ -315,6 +315,38 @@ def dispatch_action(
             response = agent.run(query, full_config, session_id, stream)
             result = {"success": True, "response": agent.get_response_content(response)}
 
+            # Surface tool invocations for the C++ trace drill-down
+            # (v036 `agent_traces.tool_calls_json`).  agno's
+            # RunOutput.tools is a List[ToolExecution] with name +
+            # args + result + ok flag + metrics.  We compact each into
+            # the minimum the UI needs and clip the result preview to
+            # keep the JSON small.
+            tool_calls_log = []
+            try:
+                tools_list = getattr(response, "tools", None) or []
+                for te in tools_list:
+                    raw_result = getattr(te, "result", None)
+                    preview = ""
+                    if raw_result is not None:
+                        preview = str(raw_result)[:300]
+                    metrics = getattr(te, "metrics", None)
+                    duration_ms = None
+                    if metrics is not None:
+                        dur = getattr(metrics, "duration", None) or getattr(metrics, "time", None)
+                        if isinstance(dur, (int, float)):
+                            duration_ms = int(dur * 1000) if dur < 1000 else int(dur)
+                    tool_calls_log.append({
+                        "name": getattr(te, "tool_name", None) or "",
+                        "args": getattr(te, "tool_args", None) or {},
+                        "ok": not bool(getattr(te, "tool_call_error", False)),
+                        "result_preview": preview,
+                        "duration_ms": duration_ms,
+                    })
+            except Exception as _e:  # never fail the run for trace data
+                logger.warning(f"tool_calls log extraction failed: {_e}")
+            if tool_calls_log:
+                result["tool_calls"] = tool_calls_log
+
             # Check guardrails on output if enabled
             if agent._guardrails:
                 output_check = agent.check_output(result)

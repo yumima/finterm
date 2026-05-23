@@ -526,6 +526,16 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
             const auto v_cost = result.value(QStringLiteral("cost_usd"));
             if (v_cost.isDouble())
                 f.cost_usd = v_cost.toDouble();
+            // v036: capture per-turn tool log when the runtime
+            // surfaces it.  Stored as compact JSON in
+            // agent_traces.tool_calls_json so the trace drill-down
+            // can render a timeline.  Empty / missing key leaves
+            // the column NULL (UI shows "(no tool log)").
+            const auto v_tc = result.value(QStringLiteral("tool_calls"));
+            if (v_tc.isArray()) {
+                f.tool_calls_json = QString::fromUtf8(
+                    QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
+            }
             if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
                 LOG_WARN("AgentService", QString("trace finish failed for %1: %2")
                                              .arg(req_id, QString::fromStdString(fr.error())));

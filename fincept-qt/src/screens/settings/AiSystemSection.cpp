@@ -13,6 +13,8 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
+#include <QColor>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QPlainTextEdit>
 #include <QPointer>
@@ -313,6 +315,48 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
             ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented))
             : t.config_json;
         add_text_block(QStringLiteral("Config"), pretty);
+    }
+
+    // Tool-call timeline (Track 96 — v036).  Populated by the Python
+    // runtime from agno's RunOutput.tools.  Empty / NULL for older
+    // rows + runtimes that don't surface the tool loop.  Render as a
+    // small read-only table directly under the response so the user
+    // can audit "what did the agent actually call".
+    if (!t.tool_calls_json.isEmpty()) {
+        const QJsonDocument tc_doc = QJsonDocument::fromJson(t.tool_calls_json.toUtf8());
+        if (tc_doc.isArray()) {
+            const QJsonArray tcs = tc_doc.array();
+            root->addSpacing(8);
+            root->addWidget(new QLabel(QStringLiteral("<b>Tool calls (%1)</b>").arg(tcs.size())));
+            auto* tbl = new QTableWidget;
+            tbl->setColumnCount(4);
+            tbl->setHorizontalHeaderLabels(
+                {QStringLiteral("#"), QStringLiteral("Tool"),
+                 QStringLiteral("Duration"), QStringLiteral("Result preview")});
+            tbl->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+            tbl->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+            tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
+            tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
+            tbl->verticalHeader()->setVisible(false);
+            tbl->setRowCount(tcs.size());
+            for (int i = 0; i < tcs.size(); ++i) {
+                const QJsonObject tc = tcs[i].toObject();
+                tbl->setItem(i, 0, new QTableWidgetItem(QString::number(i + 1)));
+                tbl->setItem(i, 1, new QTableWidgetItem(tc.value(QStringLiteral("name")).toString()));
+                const auto dur = tc.value(QStringLiteral("duration_ms"));
+                tbl->setItem(i, 2, new QTableWidgetItem(
+                                       dur.isDouble() ? format_ms(dur.toInt())
+                                                      : QStringLiteral("—")));
+                const QString preview = tc.value(QStringLiteral("result_preview")).toString();
+                auto* prev_item = new QTableWidgetItem(preview);
+                prev_item->setToolTip(preview);
+                if (!tc.value(QStringLiteral("ok")).toBool(true))
+                    prev_item->setForeground(QColor("#c33"));
+                tbl->setItem(i, 3, prev_item);
+            }
+            tbl->setMinimumHeight(qMin(40 + 24 * static_cast<int>(tcs.size()), 220));
+            root->addWidget(tbl);
+        }
     }
 
     // Feedback row — capture user judgement on this turn.  Note is

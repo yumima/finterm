@@ -35,13 +35,14 @@ AgentTraceRow map_row(QSqlQuery& q) {
         r.tokens_out = q.value(14).toInt();
     if (!q.value(15).isNull())
         r.cost_usd = q.value(15).toDouble();
+    r.tool_calls_json = q.value(16).toString();
     return r;
 }
 
 constexpr const char* kCols =
     "id, request_id, agent_id, runtime, source, query, config_json, "
     "started_at, finished_at, status, response, error, "
-    "latency_ms, tokens_in, tokens_out, cost_usd";
+    "latency_ms, tokens_in, tokens_out, cost_usd, tool_calls_json";
 
 // Wrap an optional<T> into a QVariant that SQL sees as NULL when
 // the optional is empty.  We must use the typed-null QVariant form
@@ -98,7 +99,8 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
         "  latency_ms = COALESCE(?, latency_ms), "
         "  tokens_in = COALESCE(?, tokens_in), "
         "  tokens_out = COALESCE(?, tokens_out), "
-        "  cost_usd = COALESCE(?, cost_usd) "
+        "  cost_usd = COALESCE(?, cost_usd), "
+        "  tool_calls_json = COALESCE(NULLIF(?, ''), tool_calls_json) "
         "WHERE request_id = ?");
     const QVariantList params = {
         f.success ? QStringLiteral("success") : QStringLiteral("error"),
@@ -108,6 +110,7 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
         null_or(f.tokens_in, QMetaType::Int),
         null_or(f.tokens_out, QMetaType::Int),
         null_or(f.cost_usd, QMetaType::Double),
+        f.tool_calls_json,
         f.request_id,
     };
     auto r = Database::instance().execute(sql, params);

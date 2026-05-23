@@ -34,6 +34,11 @@ struct AgentTraceRow {
     std::optional<int> tokens_in;
     std::optional<int> tokens_out;
     std::optional<double> cost_usd;
+    /// v036: JSON array of tool invocations recorded during the
+    /// turn.  Each element: {name, args, duration_ms, ok,
+    /// result_preview}.  Empty / NULL on runtimes that don't surface
+    /// the tool loop (e.g. Anthropic SDK paths today).
+    QString tool_calls_json;
 };
 
 /// Args for create().  Pass an aggregate so the call site stays
@@ -58,6 +63,9 @@ struct AgentTraceFinish {
     std::optional<int> tokens_in;
     std::optional<int> tokens_out;
     std::optional<double> cost_usd;
+    /// JSON array of tool invocations — see AgentTraceRow::tool_calls_json.
+    /// Empty string leaves the column NULL.
+    QString tool_calls_json;
 };
 
 class AgentTraceRepository {
