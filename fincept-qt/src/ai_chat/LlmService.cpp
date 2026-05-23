@@ -2161,11 +2161,22 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
     // Result: torn provider / api_key / tools_enabled across the
     // two requests.
     //
-    // Trade-off: concurrent chats now serialize.  Acceptable since
-    // there's at most one user-initiated chat and one auto-fired
-    // inline completion in flight at any moment; for higher
-    // concurrency this needs a proper RequestConfig refactor
-    // (logged as follow-up tech debt — not blocking).
+    // This is an ACCEPTED design choice, not pending tech debt:
+    //   - The "right" fix is a RequestConfig refactor passed through
+    //     do_request + do_tool_loop + do_streaming_request + every
+    //     helper they call (get_endpoint_url / get_headers /
+    //     build_*_request / parse_usage / …).  Radius is ~70+ member
+    //     reads across the file.
+    //   - The trade-off is serialization of *concurrent* chats.  The
+    //     only concurrent-chat path today is user-send + auto-fired
+    //     inline completion; inline completion is off-by-default and
+    //     gated on a settings flag.  Worst-case behaviour is the
+    //     inline suggestion waiting for the user's send to finish —
+    //     no UX regression.
+    //   - If a future surface starts firing multiple concurrent
+    //     chats routinely (multi-pane workspace, background agents
+    //     polling), revisit and do the refactor.  Until then, the
+    //     lock-held-across-network-IO cost is invisible.
     QMutexLocker lock(&mutex_);
     ensure_config();
 
