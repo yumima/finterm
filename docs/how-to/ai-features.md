@@ -239,7 +239,147 @@ skills, allow_tools, budget).  Per-agent settings live in
 `agent_configs.config_json` — edit via SQLite browser or wait for
 the **Workbench → Agents** editor port.
 
-## 10. Acceptance checks before relying on a new setup
+## 10. Multi-agent teams
+
+A **team** is a named group of agents that run together on one
+query: a **coordinator** plus N **members**.  Members each
+contribute their lens (sector, quant, macro, earnings, …);
+the coordinator synthesises a unified answer.
+
+### Create a team
+
+**Workbench → Teams → New team**.  A modal opens with:
+
+- **ID** — kebab-case slug used by the dispatch handle (immutable
+  after create).
+- **Name** — display label.  Unique across teams (the slash
+  dispatch resolves teams by name).
+- **Coordinator** — dropdown of every agent in `agent_configs`.
+  Runs after the members and synthesises.
+- **Strategy** — currently *persisted but not yet routed* through
+  to agno (sequential / parallel labels are honest about that
+  scope).
+- **Members** — checked agents weigh in.  The coordinator can
+  also appear as a member; agno treats `leader_index=0` as the
+  leader of the group.
+
+### Dispatch a team
+
+From the chat composer:
+
+```
+/team morning-note-team summarise what changed overnight for my watchlist
+```
+
+The slash handler resolves the team by name, builds the agno
+`team_config` (coordinator prepended to members, `mode="coordinate"`,
+`leader_index=0`), and dispatches via `AgentService::run_team` →
+Python `run_team` action.  Trace / budget / kill-switch / feedback
+all apply — a team turn writes one `agent_traces` row like any other
+dispatch.
+
+### Edit / delete
+
+Workbench → Teams → select a row → **Edit** or **Delete**.
+Delete cascades to `team_members` rows; agent_configs themselves
+are untouched.
+
+## 11. Inline completion (off by default)
+
+IDE-style ghost-text suggestions in the chat composer.  After ~450ms
+idle, finterm sends the preceding text to the active LLM and
+displays the continuation inline (grayed italic).  **Tab** accepts;
+any other key dismisses.
+
+### Enable
+
+Off by default — the latency is API-bound until a fast local model
+lands.  To turn it on:
+
+1. **Settings → LLM Config** — make sure a profile is configured.
+2. From a SQLite browser (no UI surface yet), set:
+
+   ```sql
+   INSERT INTO settings (key, value, category)
+   VALUES ('inline_completion.enabled', 'true', 'ai')
+   ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+   ```
+
+3. Restart finterm; the controller installs on the composer's
+   QPlainTextEdit at construction.
+
+### Behavior
+
+- ~450 ms debounce so casual typing doesn't ping the model.
+- 8-character minimum prefix so the model has something to ride
+  on.
+- 50-entry LRU cache keyed on the prefix → suggestion mapping —
+  re-typing the same prefix after a dismiss returns the cached
+  suggestion instantly.
+- Suppressed while you have a text selection (drag / shift-arrow)
+  — same UX as Cursor / Copilot.
+- API-bound latency: an Anthropic round-trip lands a suggestion
+  in ~1-3 s.  This will feel native once Engine M1 ships a fast
+  local model.
+
+## 12. Audit pillar: tool-call timeline
+
+When a slash dispatch finishes, the trace dialog (**Settings → AI
+System → double-click a row**) shows a **Tool calls** table
+between the Config and Feedback rows.  Each row: index, tool name,
+duration, result preview (red foreground for errors).  Source:
+v036 `agent_traces.tool_calls_json`, populated from agno's
+`RunOutput.tools` in the Python runtime.
+
+Combined with the existing trace columns (latency, tokens, cost,
+status) and the per-turn feedback verdict (right / wrong /
+unsure), you get a complete per-dispatch audit record: what was
+asked, what the agent called, what came back, what the user
+thought of it.
+
+Anthropic SDK runs don't surface tool calls yet (no clean way to
+introspect that loop today); those traces render without the
+Tool calls table.
+
+## 13. Artefact lineage
+
+The Workbench Artefacts panel (**Settings → Artefacts**) shows
+typed slash output — comps tables, models, memos, reports.  Each
+row has a **Lineage…** button that opens a modal listing every
+artefact sharing the same `(source_agent_id, source_skill,
+source_args_json)` identity, newest first.  The currently-selected
+row is highlighted; predecessors (typically `status='superseded'`)
+trail beneath.
+
+Use it to answer "what came before this version?" without
+scrolling through chat history — re-runs of the same skill chain
+up as a single lineage.  Standalone artefacts (no source_skill)
+return just themselves.
+
+## 14. Vendor skill drift review
+
+**Settings → Skill diffs.**  Pair to the nightly CI PR-comment flow
+(commit `853c1e95`) — runs `vendor_skills_diff.py` from inside the
+app against a local clone of
+[`anthropics/financial-services`](https://github.com/anthropics/financial-services)
+and surfaces the drift in an inbox-style table.
+
+1. Configure the upstream path (persists to SettingsRepository).
+2. **Run diff** — spawns the script asynchronously; the table
+   populates with diverged + new-upstream rows.
+3. **View diff** — side-by-side `QPlainTextEdit` of local vs
+   upstream `SKILL.md`.
+4. **Accept upstream** — atomic `.tmp` + rename overwrite, gated
+   behind a `QMessageBox` confirm.  Local + upstream paths are
+   both canonicalised and required to live under their allow-list
+   roots (vendored skills tree / configured upstream root) so a
+   tampered JSON report can't write outside.
+
+`new_upstream` rows surface for awareness; per-row actions are
+disabled because the script doesn't carry a target path for skills
+that don't exist locally yet.
+
+## 15. Acceptance checks before relying on a new setup
 
 Run through `fincept-qt/tests/ui/acceptance_checklist.md` after
 any LLM-Config / MCP-Servers / Voice change.  It's a 14-item

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`49ce07fa`](https://github.com/yumima/finterm/commit/49ce07fa) review fixes: Teams — atomicity, name UNIQUE, honest strategy label
 - [`e1063b67`](https://github.com/yumima/finterm/commit/e1063b67) agents: multi-agent teams — schema + repo + Workbench panel + /team dispatch
 - [`3686ae8c`](https://github.com/yumima/finterm/commit/3686ae8c) review fixes: Track 96 — duration units + tool_args bloat + doc lie
 - [`00a81d7a`](https://github.com/yumima/finterm/commit/00a81d7a) audit: tool-call timeline in trace drill-down (Track 96 — v036)
@@ -79,20 +80,27 @@ can't promise:
    edit.  No "paste your CSV" tax — your positions are an MCP
    resource the agent reads directly.
 2. **Audit + safety as product.**  Every dispatch lands in
-   `agent_traces` with prompts, tokens, cost, status.  Per-tool
-   kill-switch refuses problem tools system-wide.  Per-agent
-   daily USD cap refuses dispatch before tokens are spent.
-   `<untrusted>` wrapping + a system-prompt directive teach the
-   model to treat external news / forum text as data.
+   `agent_traces` with prompts, tokens, cost, status, *and a
+   per-turn tool-call timeline* (which tools the agent invoked,
+   with duration + result preview).  Per-tool kill-switch refuses
+   problem tools system-wide.  Per-agent daily USD cap refuses
+   dispatch before tokens are spent.  `<untrusted>` wrapping + a
+   system-prompt directive teach the model to treat external news /
+   forum text as data.  Mark a turn *wrong* and finterm drafts a
+   `SKILL.md` patch you review and apply — feedback closes the loop
+   instead of evaporating.
 3. **Local-first switch.**  One profile flip from Anthropic to a
    local OpenAI-compatible server (Ollama, vLLM, llama.cpp, LM
    Studio).  When positions can't leave the box, the local profile
    is *the* differentiator.  No silent failover — you choose.
 4. **Deterministic across runtimes.**  Same slash commands,
    same named agents, same SKILL.md methodology, same tool
-   catalog on Anthropic or local.  Swap the runtime; the surface
-   doesn't move.  What *does* differ — Files API, citations,
-   computer use, sub-agents — is laid out in the [capability
+   catalog, same **multi-agent teams** on Anthropic or local.
+   Define a team (one coordinator + N members), dispatch with
+   `/team <name> <query>`, and the coordinator synthesises the
+   members' lenses into one answer.  Swap the runtime; the
+   surface doesn't move.  What *does* differ — Files API,
+   citations, computer use — is laid out in the [capability
    matrix](docs/how-to/capabilities.md).
 
 **Quick start (users):**
