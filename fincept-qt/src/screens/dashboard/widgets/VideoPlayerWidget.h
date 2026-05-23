@@ -12,8 +12,10 @@
 #ifdef HAS_QT_MULTIMEDIA
 #    include "screens/dashboard/widgets/OffscreenVideoScaler.h"
 
+#    include <QAudioDevice>
 #    include <QAudioOutput>
 #    include <QImage>
+#    include <QMediaDevices>
 #    include <QMediaPlayer>
 #    include <QVideoFrame>
 #    include <QVideoSink>
@@ -185,6 +187,18 @@ class VideoPlayerWidget : public BaseWidget {
 
   private:
     void apply_styles();
+#ifdef HAS_QT_MULTIMEDIA
+    /// Refresh audio_output_ to the current system default sink and
+    /// re-attach it to the player. Single source of truth for the
+    /// "follow the default sink" behavior: called at construction,
+    /// from the QMediaDevices::audioOutputsChanged signal, and on
+    /// every resume so a sink change during pause is picked up.
+    /// setDevice() is a no-op when the device is unchanged; the
+    /// re-attach is also a no-op-when-already-attached but doubles
+    /// as the workaround for Qt6 FFmpeg's audio-sink detach across
+    /// pause→play (07737672).
+    void refresh_audio_output();
+#endif
     /// Toggle fullscreen on whichever surface is currently active —
     /// VideoRenderWidget for GL playback, QWebEngineView for WEB
     /// playback. Reparenting the surface (not the whole tile) keeps
@@ -341,6 +355,15 @@ class VideoPlayerWidget : public BaseWidget {
     VideoRenderWidget* video_widget_ = nullptr; // plain QWidget — no native surface
     QVideoSink*        video_sink_   = nullptr; // frame delivery pipe
     QAudioOutput*      audio_output_ = nullptr;
+    /// Watches for system audio-device changes so audio_output_ can
+    /// migrate to the new default sink (headset plug/unplug, BT
+    /// connect, "Set as default" in pavucontrol). Without this Qt
+    /// captures the default device at QAudioOutput construction and
+    /// PulseAudio's stream-restore module re-pins the per-app
+    /// routing — finterm gets stuck on whichever sink it first
+    /// landed on, while Chrome/YouTube migrate because they specify
+    /// the default sink on each stream creation. We mirror that.
+    QMediaDevices*     media_devices_ = nullptr;
     // Local HLS trimming proxy for live streams. Null when no live
     // playback is active. Owned (parented) by this widget — also gets
     // cleaned up automatically on destruction.

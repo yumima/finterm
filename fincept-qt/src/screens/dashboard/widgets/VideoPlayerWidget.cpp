@@ -739,7 +739,25 @@ void VideoPlayerWidget::build_player_view() {
     player_       = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
-    player_->setAudioOutput(audio_output_);
+    // Pin to the *current* system default sink. Without an explicit
+    // setDevice() Qt's PulseAudio/PipeWire backend creates the stream
+    // without specifying a target sink, which lets PA's
+    // stream-restore module reroute it to whichever sink finterm
+    // most recently used by application-name — switching the system
+    // default from speakers to a headset moves Chrome/YouTube but
+    // leaves finterm pinned to the speakers. Naming the target sink
+    // up-front bypasses stream-restore because PA only consults it
+    // when no target is named.
+    refresh_audio_output();
+
+    // Migrate to the new default whenever the device list changes —
+    // headset plug/unplug, Bluetooth connect, pavucontrol "Set as
+    // default". audioOutputsChanged() is the closest Qt6 gives us;
+    // it fires on device add/remove and on default-sink swaps in
+    // the PA / PipeWire backend.
+    media_devices_ = new QMediaDevices(this);
+    connect(media_devices_, &QMediaDevices::audioOutputsChanged,
+            this, &VideoPlayerWidget::refresh_audio_output);
 
     // QVideoSink is the frame delivery pipe: it receives decoded frames from
     // the multimedia engine and emits videoFrameChanged. The queued connection
@@ -805,6 +823,23 @@ void VideoPlayerWidget::build_player_view() {
     });
 #endif
 }
+
+#ifdef HAS_QT_MULTIMEDIA
+void VideoPlayerWidget::refresh_audio_output() {
+    if (!player_ || !audio_output_) return;
+    // setDevice() to the current system default is a no-op when
+    // unchanged and a stream migration when it differs (headset
+    // plug/unplug, BT connect, pavucontrol default swap). Naming the
+    // sink also bypasses PA's stream-restore module, which would
+    // otherwise re-pin finterm by application-name to whichever sink
+    // it last used.
+    audio_output_->setDevice(QMediaDevices::defaultAudioOutput());
+    // Re-attach so a player_ that quietly dropped its output across
+    // a source reset (Qt6 FFmpeg backend, 07737672) picks it back
+    // up. No-op when already attached.
+    player_->setAudioOutput(audio_output_);
+}
+#endif
 
 // Resume from a paused stream by picking the lightest correct
 // recovery for the situation:
@@ -875,9 +910,10 @@ void VideoPlayerWidget::resume_playback() {
         // Defensive output re-attach AFTER setSource() — the Qt6
         // FFmpeg backend has been buggy enough to drop outputs across
         // source resets, and no-op-when-already-attached calls are
-        // cheap insurance.
-        if (audio_output_) player_->setAudioOutput(audio_output_);
-        if (video_sink_)   player_->setVideoOutput(video_sink_);
+        // cheap insurance. refresh_audio_output() also picks up any
+        // system-default sink change that happened while paused.
+        refresh_audio_output();
+        if (video_sink_) player_->setVideoOutput(video_sink_);
         player_->play();
         return;
     }
@@ -893,12 +929,13 @@ void VideoPlayerWidget::resume_playback() {
     //
     // The original setSource(same) workaround (07737672) was intended
     // to fix a Qt6 FFmpeg audio-sink detach across pause→play.
-    // setAudioOutput(audio_output_) achieves the same re-attach
-    // without the source reload — it's a documented API call to
-    // (re)bind the audio chain, completes synchronously, no race.
-    // setVideoOutput is symmetric insurance.
-    if (audio_output_) player_->setAudioOutput(audio_output_);
-    if (video_sink_)   player_->setVideoOutput(video_sink_);
+    // refresh_audio_output() achieves the same re-attach without the
+    // source reload — it's a documented API call to (re)bind the
+    // audio chain, completes synchronously, no race — and as a bonus
+    // picks up any system-default sink change that happened while
+    // paused. setVideoOutput is symmetric insurance.
+    refresh_audio_output();
+    if (video_sink_) player_->setVideoOutput(video_sink_);
     player_->play();
 #endif
 }

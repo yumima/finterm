@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`51a7294b`](https://github.com/yumima/finterm/commit/51a7294b) widgets(video): fullscreen + Spacebar + fix resume-doesn't-play
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
