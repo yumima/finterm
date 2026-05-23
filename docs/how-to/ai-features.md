@@ -352,15 +352,23 @@ Tool calls table.
 The Workbench Artefacts panel (**Settings → Artefacts**) shows
 typed slash output — comps tables, models, memos, reports.  Each
 row has a **Lineage…** button that opens a modal listing every
-artefact sharing the same `(source_agent_id, source_skill,
-source_args_json)` identity, newest first.  The currently-selected
+artefact in the re-run chain, newest first.  The currently-selected
 row is highlighted; predecessors (typically `status='superseded'`)
 trail beneath.
 
-Use it to answer "what came before this version?" without
-scrolling through chat history — re-runs of the same skill chain
-up as a single lineage.  Standalone artefacts (no source_skill)
-return just themselves.
+Lineage is resolved in two layers:
+
+1. **Explicit chain** (preferred, v039+).  Re-run dispatches set
+   `supersedes_id` on the freshly-emitted artefact via the
+   dispatch-finish callback — no model cooperation needed.  The
+   lineage walker follows pointers backward and forward across the
+   chain, handling branched re-runs (multiple successors of the
+   same predecessor) correctly.
+2. **Identity-based fallback** (legacy rows).  Artefacts emitted
+   before v039 don't carry `supersedes_id`; the walker groups
+   them by `(source_agent_id, source_skill, source_args_json)` and
+   orders by `created_at` DESC.  Standalone artefacts (no
+   source_skill) return just themselves.
 
 ## 14. Vendor skill drift review
 

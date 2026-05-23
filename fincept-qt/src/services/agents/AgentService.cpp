@@ -11,6 +11,7 @@
 #include "services/agents/ElicitBridge.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/AgentTraceRepository.h"
+#include "storage/repositories/ChatArtefactRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
 
 #    include "datahub/DataHub.h"
@@ -483,8 +484,14 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
     QJsonObject params;
     params["query"] = query;
 
+    // Capture predecessor_id once so the finish callback can wire
+    // the supersedes_id link on the freshly-emitted artefact (Track
+    // 106).  Empty for non-rerun dispatches.
+    const QString predecessor_id =
+        config.value(QStringLiteral("artefact_predecessor_id")).toString();
+
     QPointer<AgentService> self = this;
-    run_python_stdin("run", params, config, [self, req_id](bool ok, QJsonObject result) {
+    run_python_stdin("run", params, config, [self, req_id, predecessor_id](bool ok, QJsonObject result) {
         if (!self)
             return;
         AgentExecutionResult r;
@@ -539,6 +546,25 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
             if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
                 LOG_WARN("AgentService", QString("trace finish failed for %1: %2")
                                              .arg(req_id, QString::fromStdString(fr.error())));
+        }
+
+        // Track 106: if this was a re-run dispatch, find the most
+        // recently-emitted artefact for the request and set its
+        // supersedes_id to the predecessor.  Best-effort — if the
+        // agent didn't call emit_artefact, latest_for_request
+        // returns nullopt and we just skip.
+        if (r.success && !predecessor_id.isEmpty()) {
+            auto latest = fincept::ChatArtefactRepository::instance()
+                              .latest_for_request(req_id);
+            if (latest.is_ok() && latest.value().has_value()) {
+                const QString new_id = latest.value()->id;
+                if (auto sr = fincept::ChatArtefactRepository::instance()
+                                  .set_supersedes(new_id, predecessor_id);
+                    sr.is_err()) {
+                    LOG_WARN("AgentService", QString("set_supersedes failed for %1: %2")
+                                                 .arg(new_id, QString::fromStdString(sr.error())));
+                }
+            }
         }
 
         emit self->agent_result(r);

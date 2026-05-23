@@ -755,6 +755,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v036_agent_trace_tool_calls.cpp
     src/storage/sqlite/migrations/v037_teams.cpp
     src/storage/sqlite/migrations/v038_team_mode.cpp
+    src/storage/sqlite/migrations/v039_artefact_supersedes.cpp
 )
 
 # Python runner
@@ -1858,6 +1859,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v036_agent_trace_tool_calls.cpp
     src/storage/sqlite/migrations/v037_teams.cpp
     src/storage/sqlite/migrations/v038_team_mode.cpp
+    src/storage/sqlite/migrations/v039_artefact_supersedes.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp

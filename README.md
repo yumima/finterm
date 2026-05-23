@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`79353059`](https://github.com/yumima/finterm/commit/79353059) teams: rename strategy → mode, wire to agno's actual coordination modes
 - [`53a17373`](https://github.com/yumima/finterm/commit/53a17373) **docs(llm):** recategorise chat() mutex as accepted design choice
 - [`5df26cdf`](https://github.com/yumima/finterm/commit/5df26cdf) **docs:** how-tos + README reflect Teams / inline / tool-log / lineage / drift
 - [`49ce07fa`](https://github.com/yumima/finterm/commit/49ce07fa) review fixes: Teams — atomicity, name UNIQUE, honest strategy label

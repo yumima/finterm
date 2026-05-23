@@ -27,6 +27,7 @@ struct ChatArtefactRow {
     QString source_skill;
     QString source_args_json;
     QString status;                  ///< "final" | "draft" | "superseded"
+    QString supersedes_id;           ///< v039: explicit predecessor link (empty/NULL for standalone or legacy rows)
     QString created_at;
     QString updated_at;
 };
@@ -57,6 +58,19 @@ class ChatArtefactRepository {
     /// a new artefact + supersede the predecessor so history stays
     /// auditable.
     Result<void> mark_superseded(const QString& id);
+
+    /// v039: explicit predecessor link.  Sets supersedes_id on the
+    /// given artefact row.  Used by the re-run dispatch path to
+    /// link the freshly-emitted artefact back to the row the user
+    /// asked to re-run, so the lineage view doesn't have to infer
+    /// the chain from dispatch identity.
+    Result<void> set_supersedes(const QString& artefact_id, const QString& predecessor_id);
+
+    /// Find the most recently-created artefact for a given
+    /// agent_traces.request_id.  Used by the dispatch-finish
+    /// callback to wire supersedes_id when re-running.  Returns
+    /// nullopt if no artefacts were emitted during that request.
+    Result<std::optional<ChatArtefactRow>> latest_for_request(const QString& request_id);
 
     Result<QVector<ChatArtefactRow>> list_recent(int limit = 50);
     Result<QVector<ChatArtefactRow>> list_by_request(const QString& request_id);
