@@ -2,76 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-05-22)
+## Today's commits (2026-05-23)
 
 Latest first.
 
-- [`290d6544`](https://github.com/yumima/finterm/commit/290d6544) review fixes (T2): robustness sweep
-- [`fa73513f`](https://github.com/yumima/finterm/commit/fa73513f) review fixes (T2): tool-call timeline + trace row for team / streaming paths
-- [`f7be1ed1`](https://github.com/yumima/finterm/commit/f7be1ed1) review fixes (T1): inline UI toggle, /team response delivery, accept_pending latch
-- [`1b323715`](https://github.com/yumima/finterm/commit/1b323715) artefacts: explicit supersedes_id chain replaces identity inference
-- [`79353059`](https://github.com/yumima/finterm/commit/79353059) teams: rename strategy → mode, wire to agno's actual coordination modes
-- [`53a17373`](https://github.com/yumima/finterm/commit/53a17373) **docs(llm):** recategorise chat() mutex as accepted design choice
-- [`5df26cdf`](https://github.com/yumima/finterm/commit/5df26cdf) **docs:** how-tos + README reflect Teams / inline / tool-log / lineage / drift
-- [`49ce07fa`](https://github.com/yumima/finterm/commit/49ce07fa) review fixes: Teams — atomicity, name UNIQUE, honest strategy label
-- [`e1063b67`](https://github.com/yumima/finterm/commit/e1063b67) agents: multi-agent teams — schema + repo + Workbench panel + /team dispatch
-- [`3686ae8c`](https://github.com/yumima/finterm/commit/3686ae8c) review fixes: Track 96 — duration units + tool_args bloat + doc lie
-- [`00a81d7a`](https://github.com/yumima/finterm/commit/00a81d7a) audit: tool-call timeline in trace drill-down (Track 96 — v036)
-- [`43252a19`](https://github.com/yumima/finterm/commit/43252a19) review fixes: Track 8 — LlmService::chat race + LRU + selection guard
-- [`bede4569`](https://github.com/yumima/finterm/commit/bede4569) ai_chat: inline completion scaffold (Track 8 — capability-gated)
-- [`e6180c77`](https://github.com/yumima/finterm/commit/e6180c77) review fixes: SkillDiffsSection — async subprocess + path-traversal guards
-- [`9c8c881e`](https://github.com/yumima/finterm/commit/9c8c881e) settings: vendor-skill drift review panel (Track 1C UI counterpart)
-- [`6c4b3674`](https://github.com/yumima/finterm/commit/6c4b3674) review fix: lineage query uses SQLite IS (handles NULL identity columns)
-- [`19a6e40c`](https://github.com/yumima/finterm/commit/19a6e40c) settings(artefacts): lineage view — re-run chain visible from one click
-- [`40be8222`](https://github.com/yumima/finterm/commit/40be8222) video: click-to-pause/replay on the render surface (YouTube-style)
-- [`1fe856e2`](https://github.com/yumima/finterm/commit/1fe856e2) review fixes: Track 7C — atomic write, symlink guard, watcher order
-- [`513808c8`](https://github.com/yumima/finterm/commit/513808c8) agents: SKILL.md edit proposal flow on wrong-verdict traces (Track 7C)
-- [`10899101`](https://github.com/yumima/finterm/commit/10899101) review fix: extract shared constants for suggested-chip persistence
-- [`a803b1ef`](https://github.com/yumima/finterm/commit/a803b1ef) ai_chat: restore suggested-follow-up chips on session reload
-- [`cc843511`](https://github.com/yumima/finterm/commit/cc843511) workbench: real Chat/Agents/Workflows/Servers/Profiles catalog tables
-- [`a1255e87`](https://github.com/yumima/finterm/commit/a1255e87) review fixes: surface SettingsRepository + index-create failures
-- [`31347e87`](https://github.com/yumima/finterm/commit/31347e87) review fix: TtsService shutdown safety + drop stale player pointers
-- [`6d0c1165`](https://github.com/yumima/finterm/commit/6d0c1165) ai_chat: @-mention ticker resolution
-- [`91e770f8`](https://github.com/yumima/finterm/commit/91e770f8) ai_chat: clickable suggested-follow-up chips
-- [`1adf2e46`](https://github.com/yumima/finterm/commit/1adf2e46) voice(tts): UI wiring — Settings → Voice TTS group + chat 🔊 button
-- [`ea8e1e03`](https://github.com/yumima/finterm/commit/ea8e1e03) review fix: don't supersede predecessor before re-run dispatch lands
-- [`6ec439a0`](https://github.com/yumima/finterm/commit/6ec439a0) agents(feedback): mark-wrong / mark-right capture (Track 7B)
-- [`d1c111e4`](https://github.com/yumima/finterm/commit/d1c111e4) settings(activity): in-flight + recent task tray (Track 7A)
-- [`8b8405d3`](https://github.com/yumima/finterm/commit/8b8405d3) workbench(tools): real catalog table replacing placeholder (Track 6C)
-- [`665c4091`](https://github.com/yumima/finterm/commit/665c4091) voice(tts): local Piper text-to-speech (Track 6A)
-- [`8c65f39d`](https://github.com/yumima/finterm/commit/8c65f39d) forum(config): user-configurable backend URL (Track 6B)
-- [`7a3044f5`](https://github.com/yumima/finterm/commit/7a3044f5) ai_chat: suggested follow-ups after slash dispatch (Track 5C)
-- [`cea6d060`](https://github.com/yumima/finterm/commit/cea6d060) settings(artefacts): UI panel for chat_artefacts (Track 5B)
-- [`5869ca96`](https://github.com/yumima/finterm/commit/5869ca96) mcp(artefacts): chat_artefacts foundation + emit_artefact tool (Track 5A)
-- [`23599dbe`](https://github.com/yumima/finterm/commit/23599dbe) review fixes: ElicitBridge spurious-wakeup loop + caveats documented
-- [`10c2192c`](https://github.com/yumima/finterm/commit/10c2192c) runtime(local): streaming tool-use via run_with_tools_stream (Track 4D)
-- [`a57c4982`](https://github.com/yumima/finterm/commit/a57c4982) mcp: server-initiated request dispatch end-to-end (Track 4C)
-- [`30018ea7`](https://github.com/yumima/finterm/commit/30018ea7) mcp(oauth): authorization_code grant with PKCE + refresh (Track 4B)
-- [`4cb80356`](https://github.com/yumima/finterm/commit/4cb80356) mcp(oauth): RFC 8414 discovery + auto-401 retry (Track 4A)
-- [`1a1a9945`](https://github.com/yumima/finterm/commit/1a1a9945) ai_chat: @-mention resolver for shared-state context (Track 3B)
-- [`d79cdcc7`](https://github.com/yumima/finterm/commit/d79cdcc7) ai_chat: runtime toggle pill on composer header (Track 3A)
-- [`7937ec11`](https://github.com/yumima/finterm/commit/7937ec11) settings(ai-system): trace drill-down dialog (Track 2)
-- [`853c1e95`](https://github.com/yumima/finterm/commit/853c1e95) **ci(ai):** nightly SDK eval + vendor-skills diff (Track 1C)
-- [`7e6d6957`](https://github.com/yumima/finterm/commit/7e6d6957) ai(capabilities): declarative capability matrix + generator (Track 1A)
-- [`839d9461`](https://github.com/yumima/finterm/commit/839d9461) mcp: server-initiated notification dispatch on McpClient (stdio)
-- [`37f5af04`](https://github.com/yumima/finterm/commit/37f5af04) agents(elicit): cross-thread modal bridge for MCP elicitation
-- [`f2c8d009`](https://github.com/yumima/finterm/commit/f2c8d009) runtime(local): SSE streaming via run_text_stream
-- [`fc48604d`](https://github.com/yumima/finterm/commit/fc48604d) **docs:** how-to/ user guides + blocked-item categorisation
-- [`f5a7421e`](https://github.com/yumima/finterm/commit/f5a7421e) agents(ctx): wire process-wide default on_sample / on_elicit / on_log
-- [`b37772cd`](https://github.com/yumima/finterm/commit/b37772cd) settings(credentials): gut unused keys, point users at the right surfaces
-- [`f36caa4e`](https://github.com/yumima/finterm/commit/f36caa4e) mcp(http): OAuth 2.0 + DCR with client_credentials grant (Track 4 #14b)
-- [`a46fb477`](https://github.com/yumima/finterm/commit/a46fb477) mcp_bridge: forward prompts/list + prompts/get to the SDK (Track 5 follow-up)
-- [`20f4caba`](https://github.com/yumima/finterm/commit/20f4caba) video(spotify): accept Spotify show/episode/playlist embeds
-- [`91ad30df`](https://github.com/yumima/finterm/commit/91ad30df) mcp: wire-level prompts/list + prompts/get on McpClientBase
-- [`fed8519c`](https://github.com/yumima/finterm/commit/fed8519c) runtime(local): OpenAI-style tool-use loop
-- [`901655a9`](https://github.com/yumima/finterm/commit/901655a9) mcp(memory): memory_delete tool
-- [`5bc77ca3`](https://github.com/yumima/finterm/commit/5bc77ca3) **docs:** consolidate AI-stack plan + status into one current-state file
-- [`4fd77d24`](https://github.com/yumima/finterm/commit/4fd77d24) mcp(memory): local-profile MemoryTools stub (Track 9)
-- [`d899e008`](https://github.com/yumima/finterm/commit/d899e008) screens(workbench): single-screen left-nav consolidation (Track 13 full)
-- [`1b28bf33`](https://github.com/yumima/finterm/commit/1b28bf33) alpha_arena: flip BaseAgent default to two-runtime path (Track 12 full)
-- [`c4db8060`](https://github.com/yumima/finterm/commit/c4db8060) runtime(local): OpenAI-compat local runtime adapter (Track 2)
-- [`0ffa338a`](https://github.com/yumima/finterm/commit/0ffa338a) settings(ai-system): share one trace fetch across spend + table (/review fix)
-- [`f0225111`](https://github.com/yumima/finterm/commit/f0225111) settings(scheduler): UI for agent_schedule entries (Track 10 finish)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

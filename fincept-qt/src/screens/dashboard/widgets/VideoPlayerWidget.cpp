@@ -7,6 +7,7 @@
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
+#include <QEvent>
 #include <QResizeEvent>
 
 #include <QComboBox>
@@ -23,6 +24,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -34,6 +36,7 @@
 #include <algorithm>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QShortcut>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUrlQuery>
@@ -69,6 +72,15 @@ void VideoRenderWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
     QWidget::mousePressEvent(event);
+}
+
+void VideoRenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        emit doubleClicked();
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 void VideoRenderWidget::clear_frame() {
@@ -179,6 +191,29 @@ void VideoRenderWidget::paintEvent(QPaintEvent* /*event*/) {
     // Direct blit — no scaling in the paint path, just memcpy-ish. This is
     // why the present() call did the SmoothTransformation work upstream.
     p.drawImage(scaled_origin_, scaled_image_);
+}
+
+void VideoRenderWidget::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::ParentChange) {
+        // The native window backing this widget was just destroyed
+        // (setParent(nullptr) for fullscreen, or insertWidget()
+        // back into the layout). Any paint event we previously
+        // scheduled via update() from present() was tied to that
+        // dead window and will never fire on the new one. Without
+        // resetting the flag, present()'s backpressure guard would
+        // drop every subsequent frame indefinitely — the user sees
+        // "video stuck on the last paused frame after fullscreen
+        // and back" even though the decoder is happily producing
+        // frames and videoFrameChanged is firing.
+        paint_pending_ = false;
+        // Force a fresh paint at the new size — scaled_image_ is
+        // still the pre-reparent letterbox, which would otherwise
+        // sit unchanged until the next live frame arrives. Matters
+        // most for paused playback where there IS no next live
+        // frame.
+        update();
+    }
+    QWidget::changeEvent(event);
 }
 #endif
 
@@ -438,6 +473,18 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         });
         cl->addWidget(play_pause_btn_);
 
+        // Fullscreen toggle. Works for both GL (reparents
+        // video_widget_) and WEB (reparents web_view_). Exit via
+        // clicking the button again, pressing Esc, or — in WEB mode —
+        // using YouTube's own fullscreen control.
+        fullscreen_btn_ = new QPushButton(QString(QChar(0x26F6)) + " FULLSCREEN");
+        fullscreen_btn_->setCursor(Qt::PointingHandCursor);
+        fullscreen_btn_->setFixedHeight(20);
+        fullscreen_btn_->setToolTip("Toggle fullscreen (Esc to exit)");
+        connect(fullscreen_btn_, &QPushButton::clicked,
+                this, &VideoPlayerWidget::toggle_fullscreen);
+        cl->addWidget(fullscreen_btn_);
+
         stop_btn_ = new QPushButton(QString(QChar(0x25A0)) + " BACK");
         stop_btn_->setCursor(Qt::PointingHandCursor);
         stop_btn_->setFixedHeight(20);
@@ -658,6 +705,36 @@ void VideoPlayerWidget::build_player_view() {
         if (play_pause_btn_)
             play_pause_btn_->click();
     });
+    // YouTube-style double-click → fullscreen. Qt's event sequence
+    // delivers a mousePressEvent before mouseDoubleClickEvent on a
+    // dblclick, so the first click already fired `clicked` above and
+    // toggled play/pause. Reverse that toggle here so the user's
+    // pre-dblclick state survives the fullscreen entry — without
+    // this, dblclicking a playing video drops into fullscreen
+    // *paused* and the controls bar (where PAUSE/PLAY lives) is
+    // hidden behind the fullscreen window, forcing the user to Esc
+    // out just to resume.
+    //
+    // We bypass resume_playback() / play_pause_btn_->click(): the
+    // player was running (or just paused) a frame ago, so no audio
+    // re-attach or decoder rebuild is needed — a plain play()/pause()
+    // pair suffices and is synchronous, so the state matches reality
+    // by the time toggle_fullscreen() runs.
+    connect(video_widget_, &VideoRenderWidget::doubleClicked, this, [this]() {
+#ifdef HAS_QT_MULTIMEDIA
+        if (player_) {
+            // StoppedState is left alone on purpose — it only occurs
+            // after EOF or error, in which case the first click of
+            // the dblclick already called player_->play() to restart
+            // and there's nothing to reverse.
+            if (player_->playbackState() == QMediaPlayer::PausedState)
+                player_->play();
+            else if (player_->playbackState() == QMediaPlayer::PlayingState)
+                player_->pause();
+        }
+#endif
+        toggle_fullscreen();
+    });
 
     player_       = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
@@ -710,6 +787,23 @@ void VideoPlayerWidget::build_player_view() {
     vl->addWidget(status_label_);
 
     stack_->addWidget(player_page_); // page 1
+
+#ifdef HAS_QT_MULTIMEDIA
+    // Space-bar pause/resume on the GL player. QShortcut scoped to
+    // player_page_ with WidgetWithChildrenShortcut so it only fires
+    // when the player page (not the channel list) has focus and
+    // doesn't steal Space from any QLineEdit / QTextEdit elsewhere
+    // in the app. Routes through play_pause_btn_->click() so the
+    // existing state machine (PausedState → resume_playback,
+    // PlayingState → pause, StoppedState → play, auto-pause-lock
+    // latch clear) stays the single source of truth.
+    auto* space_sc = new QShortcut(QKeySequence(Qt::Key_Space), player_page_);
+    space_sc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(space_sc, &QShortcut::activated, this, [this]() {
+        if (play_pause_btn_ && play_pause_btn_->isVisible())
+            play_pause_btn_->click();
+    });
+#endif
 }
 
 // Resume from a paused stream by picking the lightest correct
@@ -756,7 +850,7 @@ void VideoPlayerWidget::resume_playback() {
     constexpr qint64 kPauseLiveResetThresholdSec = 5;
     // LiveHlsProxy binds 127.0.0.1 but the player URL may be constructed
     // with either the literal or the hostname depending on call site —
-    // accept both so we don't silently fall onto the cheap path for a
+    // accept both so we don't silently fall onto the heavy path for a
     // local-proxy URL and risk the long-pause freeze.
     const QString host = src.host();
     const bool is_live_proxy =
@@ -767,27 +861,44 @@ void VideoPlayerWidget::resume_playback() {
         is_live_proxy && elapsed_sec > kPauseLiveResetThresholdSec;
 
     if (needs_full_reset) {
-        // Order matters — without the explicit empty setSource() between
-        // stop() and setSource(src), Qt may treat the re-set as a seek
-        // and reuse the stale cursor.
+        // Live HLS, paused long enough that the proxy's 6-segment
+        // window has rolled past our buffered position. Only path
+        // where setSource() is justified: we MUST re-fetch a fresh
+        // playlist to land at the live edge.
+        //
+        // Order matters — without the explicit empty setSource()
+        // between stop() and setSource(src), Qt may treat the re-set
+        // as a seek and reuse the stale cursor.
         player_->stop();
         player_->setSource(QUrl{});
         player_->setSource(src);
-        // Defensive output re-attach.  Per Qt docs setSource() shouldn't
-        // touch the configured outputs, but the Qt6 FFmpeg backend has
-        // been buggy enough on this surface that two no-op-when-already-
-        // attached calls are cheap insurance against the silent-video
-        // bug (07737672) regressing.
-        if (audio_output_)
-            player_->setAudioOutput(audio_output_);
-        if (video_sink_)
-            player_->setVideoOutput(video_sink_);
-    } else {
-        // Cheap path: rebuild decoder chain via setSource(same).  Fixes
-        // the audio-sink detach without losing the cursor or paying
-        // playlist re-fetch.
-        player_->setSource(src);
+        // Defensive output re-attach AFTER setSource() — the Qt6
+        // FFmpeg backend has been buggy enough to drop outputs across
+        // source resets, and no-op-when-already-attached calls are
+        // cheap insurance.
+        if (audio_output_) player_->setAudioOutput(audio_output_);
+        if (video_sink_)   player_->setVideoOutput(video_sink_);
+        player_->play();
+        return;
     }
+
+    // Cheap path — short pauses (VOD always, and live ≤5s). DO NOT
+    // call setSource(same) here: it tears down the decoder chain and
+    // races with the immediate play() below, leaving the player in a
+    // half-loaded state where playbackState transitions to Playing
+    // (the button text flips correctly) but the new decoder has not
+    // yet emitted frames. On a live stream the playlist re-fetch can
+    // take seconds — "paused for long time" — and intermittently
+    // fails entirely if the stream is mid-rollover.
+    //
+    // The original setSource(same) workaround (07737672) was intended
+    // to fix a Qt6 FFmpeg audio-sink detach across pause→play.
+    // setAudioOutput(audio_output_) achieves the same re-attach
+    // without the source reload — it's a documented API call to
+    // (re)bind the audio chain, completes synchronously, no race.
+    // setVideoOutput is symmetric insurance.
+    if (audio_output_) player_->setAudioOutput(audio_output_);
+    if (video_sink_)   player_->setVideoOutput(video_sink_);
     player_->play();
 #endif
 }
@@ -822,6 +933,23 @@ void VideoPlayerWidget::build_web_view() {
                     t == PT::DesktopVideoCapture      ||
                     t == PT::DesktopAudioVideoCapture)
                     permission.grant();
+            });
+
+    // Honor HTML5 fullscreen requests from the YouTube iframe (the ⛶
+    // button inside its own player chrome). Without accept() the
+    // request is denied by default and the iframe stays embedded. We
+    // mirror the toggle into our own reparent path so the QWebEngineView
+    // also fills the screen — accepting alone only sizes the <video>
+    // to the view's bounds, not the display.
+    connect(web_view_->page(), &QWebEnginePage::fullScreenRequested,
+            this, [this](QWebEngineFullScreenRequest request) {
+                request.accept();
+                if (request.toggleOn() && !fullscreen_target_) {
+                    fullscreen_via_web_request_ = true;
+                    enter_fullscreen();
+                } else if (!request.toggleOn() && fullscreen_target_) {
+                    exit_fullscreen();
+                }
             });
 
     stack_->addWidget(web_view_); // page 2
@@ -1008,6 +1136,28 @@ void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& i
     stack_->setCurrentIndex(2);
 }
 #endif
+
+VideoPlayerWidget::~VideoPlayerWidget() {
+    // If we're being destroyed mid-fullscreen, the reparented surface
+    // is no longer in Qt's parent-child chain (setParent(nullptr) ran
+    // in enter_fullscreen). Without explicit cleanup it leaks; worse,
+    // the qApp event filter we installed still points at this dying
+    // QObject and the next key press anywhere in the app would
+    // dispatch into freed memory.
+    //
+    // Order matters: remove the filter first so no event can reach a
+    // half-destroyed `this`, then delete the orphan. The player_ /
+    // video_sink_ are still children of `this` and will be torn down
+    // by Qt's normal child-destruction immediately after this body
+    // returns — any in-flight queued frames whose receiver
+    // (video_widget_) we just deleted are discarded by Qt's
+    // dead-receiver check on QueuedConnection delivery.
+    if (fullscreen_target_) {
+        QCoreApplication::instance()->removeEventFilter(this);
+        delete fullscreen_target_;
+        fullscreen_target_ = nullptr;
+    }
+}
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -1352,7 +1502,123 @@ void VideoPlayerWidget::stop_hls_proxy() {
 #endif
 }
 
+// ── Fullscreen ───────────────────────────────────────────────────────────────
+//
+// Entry points:
+//   • FULLSCREEN button on the controls bar (both engines)
+//   • Double-click on the GL video surface
+//   • YouTube iframe's own ⛶ button (WEB engine, via
+//     QWebEnginePage::fullScreenRequested)
+//
+// Exit points:
+//   • FULLSCREEN button again
+//   • Esc (handled by the qApp event filter we install only while
+//     fullscreen is active)
+//   • YouTube iframe's exit-fullscreen (WEB only, same signal as entry)
+//   • stop_playback() — exits fullscreen first so the surface is back
+//     inside the tile before we hide the controls bar
+//
+// We reparent the *surface* (VideoRenderWidget or QWebEngineView) to
+// top-level, not the whole VideoPlayerWidget. The media stack
+// (QMediaPlayer, QVideoSink, QWebEnginePage) is unchanged, so playback
+// continues without a source reset.
+
+void VideoPlayerWidget::toggle_fullscreen() {
+    if (fullscreen_target_) exit_fullscreen();
+    else                    enter_fullscreen();
+}
+
+void VideoPlayerWidget::enter_fullscreen() {
+    if (fullscreen_target_) return;
+    QWidget* target = nullptr;
+#ifdef HAS_QT_WEBENGINE
+    if (stack_->currentIndex() == 2 && web_view_) {
+        target = web_view_;
+    } else
+#endif
+#ifdef HAS_QT_MULTIMEDIA
+    if (stack_->currentIndex() == 1 && video_widget_) {
+        target = video_widget_;
+    }
+#endif
+    if (!target) return;
+
+    fullscreen_target_ = target;
+    // setParent(nullptr) reparents out of the layout and implicitly
+    // makes the widget a top-level window. setWindowTitle gives it a
+    // sensible window-list entry in case the compositor shows one.
+    target->setParent(nullptr);
+    target->setWindowTitle(current_title_.isEmpty() ? QStringLiteral("Fincept — Video")
+                                                    : current_title_);
+    target->showFullScreen();
+    target->setFocus();
+    // App-wide filter so Esc fires no matter which descendant of
+    // target_ owns focus — QWebEngineView routes keys to its
+    // RenderWidgetHostViewQtDelegateWidget child, which doesn't
+    // forward to filters installed on the QWebEngineView itself.
+    QCoreApplication::instance()->installEventFilter(this);
+    // We intentionally don't flip the FULLSCREEN button text to
+    // something like "EXIT FULL" — once the surface fills the screen
+    // it covers the controls bar entirely, so a state-toggle label
+    // would never be visible to the user. Esc is the documented exit.
+}
+
+void VideoPlayerWidget::exit_fullscreen() {
+    if (!fullscreen_target_) return;
+    QCoreApplication::instance()->removeEventFilter(this);
+    QWidget* target = fullscreen_target_;
+    fullscreen_target_ = nullptr;
+    fullscreen_via_web_request_ = false;
+
+#ifdef HAS_QT_WEBENGINE
+    if (target == web_view_) {
+        // Re-insert at the same stack slot (page 2). insertWidget
+        // reparents internally; explicit setParent is redundant.
+        stack_->insertWidget(2, web_view_);
+        stack_->setCurrentIndex(2);
+        web_view_->showNormal();
+        return;
+    }
+#endif
+#ifdef HAS_QT_MULTIMEDIA
+    if (target == video_widget_) {
+        // video_widget_ was the first child of player_page_'s
+        // QVBoxLayout (status_label_ is the second). Insert at 0 with
+        // stretch 1 to match build_player_view(). player_page_ is
+        // unconditionally created in build_player_view() so we don't
+        // null-check it here.
+        if (auto* vl = qobject_cast<QVBoxLayout*>(player_page_->layout()))
+            vl->insertWidget(0, video_widget_, 1);
+        stack_->setCurrentIndex(1);
+        video_widget_->showNormal();
+    }
+#endif
+}
+
+bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
+    if (fullscreen_target_ && event->type() == QEvent::KeyPress) {
+        auto* ke = static_cast<QKeyEvent*>(event);
+        if (ke->key() == Qt::Key_Escape) {
+            // If WEB fullscreen was started by the iframe's own
+            // requestFullscreen(), let Chromium handle Esc — it'll
+            // emit fullScreenRequested(toggleOn=false) which routes
+            // back through our signal handler and calls exit_fullscreen
+            // cleanly. Intercepting here would leave the page stuck in
+            // HTML5 fullscreen state with the view reparented out.
+            if (fullscreen_via_web_request_) return false;
+            exit_fullscreen();
+            return true;
+        }
+    }
+    return BaseWidget::eventFilter(obj, event);
+}
+
 void VideoPlayerWidget::stop_playback() {
+    // Bring the surface back into the tile before tearing playback
+    // down — otherwise the user gets a momentarily-visible fullscreen
+    // window with a stopped (black) frame.
+    if (fullscreen_target_) exit_fullscreen();
+
     // Clear current_url_ FIRST so any in-flight yt-dlp resolver (web ID lookup
     // or HLS extraction) sees the mismatch in its finished callback and bails
     // out before it can re-show the player after the user clicked BACK.
@@ -1470,11 +1736,29 @@ void VideoPlayerWidget::apply_styles() {
     now_playing_->setStyleSheet(
         QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;").arg(ui::colors::AMBER()));
 
-    stop_btn_->setStyleSheet(QString("QPushButton { background: %1; border: 1px solid %2; color: %3; "
-                                     "font-size: 9px; font-weight: bold; padding: 0 10px; border-radius: 2px; }"
-                                     "QPushButton:hover { background: %4; color: %5; }")
-                                 .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
-                                      ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
+    // Three control-bar buttons (PAUSE/PLAY, FULLSCREEN, BACK) share
+    // one base look — same font size, weight, padding, border, radius —
+    // so they don't visually disagree on the same toolbar. Hover color
+    // is the only knob we vary, and only to encode meaning:
+    //   • BACK  → NEGATIVE (red): destructive, exits playback
+    //   • PAUSE / FULLSCREEN → TEXT_PRIMARY: neutral, non-destructive
+    const QString btn_base = QStringLiteral(
+        "QPushButton { background: %1; border: 1px solid %2; color: %3; "
+        "font-size: 9px; font-weight: bold; padding: 0 10px; border-radius: 2px; }"
+        "QPushButton:hover { background: %4; color: %5; }");
+    if (play_pause_btn_) {
+        play_pause_btn_->setStyleSheet(btn_base.arg(
+            ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
+            ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY()));
+    }
+    if (fullscreen_btn_) {
+        fullscreen_btn_->setStyleSheet(btn_base.arg(
+            ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
+            ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY()));
+    }
+    stop_btn_->setStyleSheet(btn_base.arg(
+        ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
+        ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
 }
 
 void VideoPlayerWidget::on_theme_changed() {

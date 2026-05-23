@@ -25,6 +25,7 @@
 #    include <QtWebEngineCore/QWebEngineProfile>
 #    include <QtWebEngineCore/QWebEnginePage>
 #    include <QtWebEngineCore/QWebEnginePermission>
+#    include <QtWebEngineCore/QWebEngineFullScreenRequest>
 #endif
 
 namespace fincept::services::video { class LiveHlsProxy; }
@@ -71,11 +72,30 @@ class VideoRenderWidget : public QWidget {
     /// Not emitted for non-left buttons (right/middle stay free for
     /// context menus / other handlers).
     void clicked();
+    /// User double-clicked — owner toggles fullscreen, matching the
+    /// YouTube gesture. Qt delivers mousePress + mouseDoubleClick for
+    /// a dblclick, so the first half already fired `clicked` and
+    /// toggled play/pause; the owner's doubleClicked handler reverses
+    /// that toggle to keep playback state stable across the
+    /// fullscreen transition.
+    void doubleClicked();
 
   protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    /// Reset the drop-late-frames flag whenever the widget's parent
+    /// changes. The TRUE root cause of "video stuck after fullscreen
+    /// and back": setParent(nullptr) destroys the underlying native
+    /// window, invalidating any paint event queued by a prior
+    /// present() call. paintEvent never fires, paint_pending_ stays
+    /// stuck `true`, and every subsequent frame is dropped at
+    /// present()'s backpressure guard — the decoder is producing
+    /// frames, the signal is firing, but this widget silently
+    /// refuses to render them. Resetting on ParentChange clears the
+    /// stale flag before the new window's first paintEvent.
+    void changeEvent(QEvent* event) override;
 
   private:
     // Pre-scale the cached source frame to fit the current widget size,
@@ -130,6 +150,13 @@ class VideoPlayerWidget : public BaseWidget {
     };
 
     explicit VideoPlayerWidget(QWidget* parent = nullptr);
+    /// Cleans up fullscreen state if the widget is destroyed while a
+    /// surface is reparented to top-level. Without this the orphan
+    /// (video_widget_ or web_view_) leaks — Qt's parent-child chain
+    /// doesn't own it once setParent(nullptr) ran — and the qApp
+    /// event filter is left pointing at freed memory, which crashes
+    /// on the next key press anywhere in the app.
+    ~VideoPlayerWidget() override;
 
   private slots:
     void play_preset(int index);
@@ -143,6 +170,12 @@ class VideoPlayerWidget : public BaseWidget {
   protected:
     void on_theme_changed() override;
     QDialog* make_config_dialog(QWidget* parent) override;
+    /// Application-wide event filter installed only while
+    /// fullscreen_target_ is non-null. Catches Esc and ends fullscreen
+    /// no matter which child of the fullscreen surface owns the focus
+    /// (relevant for QWebEngineView, which routes keys to an internal
+    /// render-process proxy widget that ignores filters on the view).
+    bool eventFilter(QObject* obj, QEvent* event) override;
     // NB: we intentionally do NOT pause playback on hideEvent. The user
     // relies on the audio continuing while they navigate to other screens.
     // The per-frame cost is bounded by VideoRenderWidget's drop-late-frames
@@ -152,6 +185,15 @@ class VideoPlayerWidget : public BaseWidget {
 
   private:
     void apply_styles();
+    /// Toggle fullscreen on whichever surface is currently active —
+    /// VideoRenderWidget for GL playback, QWebEngineView for WEB
+    /// playback. Reparenting the surface (not the whole tile) keeps
+    /// the media stack alive across the transition: no source reset,
+    /// no playlist re-fetch, audio continues uninterrupted. No-op
+    /// when stack_ is on the channel list.
+    void toggle_fullscreen();
+    void enter_fullscreen();
+    void exit_fullscreen();
     void build_channel_list();
     void populate_channel_rows();    // (re)fills channel_rows_layout_ from channels_
     void build_player_view();
@@ -262,6 +304,24 @@ class VideoPlayerWidget : public BaseWidget {
     /// pause via JS is unreliable). Text flips between "⏸ PAUSE" and
     /// "▶ PLAY" via the player's playbackStateChanged signal.
     QPushButton*         play_pause_btn_           = nullptr;
+    /// Fullscreen toggle. Visible in both GL and WEB modes — entry is
+    /// always via reparent-to-top-level, exit via the same button, Esc,
+    /// or (WEB only) YouTube's own player chrome.
+    QPushButton*         fullscreen_btn_           = nullptr;
+    /// Currently-fullscreened surface (video_widget_ in GL mode,
+    /// web_view_ in WEB mode). Null when not in fullscreen — also acts
+    /// as the predicate the qApp event filter uses to short-circuit
+    /// when fullscreen is inactive.
+    QWidget*             fullscreen_target_        = nullptr;
+    /// True when WEB fullscreen was initiated via the iframe's own
+    /// requestFullscreen() (the HTML5 path, signalled by
+    /// QWebEnginePage::fullScreenRequested(toggleOn=true)). In that
+    /// mode Chromium handles Esc itself and emits the matching
+    /// toggleOn=false back to us — so our qApp filter must NOT
+    /// intercept Esc, or the page would stay in HTML5 fullscreen
+    /// state with the view yanked out from under it, desyncing the
+    /// next iframe-side toggle.
+    bool                 fullscreen_via_web_request_ = false;
     /// True if the GL player was auto-paused by terminal-lock so that the
     /// follow-up unlock can resume only when we'd been the ones to pause it
     /// — never resume a user-initiated pause.
