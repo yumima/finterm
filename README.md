@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`00a81d7a`](https://github.com/yumima/finterm/commit/00a81d7a) audit: tool-call timeline in trace drill-down (Track 96 — v036)
 - [`43252a19`](https://github.com/yumima/finterm/commit/43252a19) review fixes: Track 8 — LlmService::chat race + LRU + selection guard
 - [`bede4569`](https://github.com/yumima/finterm/commit/bede4569) ai_chat: inline completion scaffold (Track 8 — capability-gated)
 - [`e6180c77`](https://github.com/yumima/finterm/commit/e6180c77) review fixes: SkillDiffsSection — async subprocess + path-traversal guards

@@ -64,7 +64,8 @@ struct AgentTraceFinish {
     std::optional<int> tokens_out;
     std::optional<double> cost_usd;
     /// JSON array of tool invocations — see AgentTraceRow::tool_calls_json.
-    /// Empty string leaves the column NULL.
+    /// Empty string preserves the existing column value (no-op update);
+    /// pass a non-empty JSON array to overwrite.
     QString tool_calls_json;
 };
 

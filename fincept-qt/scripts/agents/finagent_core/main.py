@@ -329,15 +329,31 @@ def dispatch_action(
                     preview = ""
                     if raw_result is not None:
                         preview = str(raw_result)[:300]
+                    # agno's ToolCallMetrics.duration is Timer.elapsed —
+                    # a perf_counter delta in seconds.  Always convert
+                    # to ms.  The previous heuristic (×1000 if <1000
+                    # else as-is) silently truncated calls ≥ ~16 min
+                    # to "1000 ms".
                     metrics = getattr(te, "metrics", None)
                     duration_ms = None
                     if metrics is not None:
-                        dur = getattr(metrics, "duration", None) or getattr(metrics, "time", None)
+                        dur = getattr(metrics, "duration", None)
                         if isinstance(dur, (int, float)):
-                            duration_ms = int(dur * 1000) if dur < 1000 else int(dur)
+                            duration_ms = int(dur * 1000)
+                    # tool_args is LLM-supplied dict; can be multi-KB
+                    # for code-exec / file-write tools.  Clip the
+                    # serialised form so a chatty turn doesn't bloat
+                    # agent_traces rows (which list_recent reads in
+                    # full).
+                    try:
+                        args_str = json.dumps(getattr(te, "tool_args", None) or {}, default=str)
+                    except Exception:
+                        args_str = "{}"
+                    if len(args_str) > 2000:
+                        args_str = args_str[:2000] + "…"
                     tool_calls_log.append({
                         "name": getattr(te, "tool_name", None) or "",
-                        "args": getattr(te, "tool_args", None) or {},
+                        "args": args_str,
                         "ok": not bool(getattr(te, "tool_call_error", False)),
                         "result_preview": preview,
                         "duration_ms": duration_ms,
