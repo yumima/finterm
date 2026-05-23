@@ -306,8 +306,13 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
             coordinator_combo->setCurrentIndex(coordinator_combo->count() - 1);
     }
     auto* strategy_combo = new QComboBox;
-    strategy_combo->addItem(QStringLiteral("sequential — members run one after another"), "sequential");
-    strategy_combo->addItem(QStringLiteral("parallel — members run concurrently"), "parallel");
+    // v037 stores the strategy column but agno's TeamModule.from_config
+    // only reads name/description/mode/leader_index/roles — strategy
+    // is not yet honored at the runtime layer.  Label honestly so the
+    // user doesn't think they're configuring real behavior.  Mapping
+    // to agno's `mode` is a follow-up.
+    strategy_combo->addItem(QStringLiteral("sequential (persisted, not yet routed)"), "sequential");
+    strategy_combo->addItem(QStringLiteral("parallel (persisted, not yet routed)"), "parallel");
     if (draft.strategy == QStringLiteral("parallel"))
         strategy_combo->setCurrentIndex(1);
 

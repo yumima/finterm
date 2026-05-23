@@ -1269,14 +1269,12 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
         team_config[QStringLiteral("agents")] = members_arr;  // agno accepts either key
         team_config[QStringLiteral("leader_index")] = 0;
         team_config[QStringLiteral("strategy")] = t.strategy;
-        QString req_id;
-        try {
-            req_id = fincept::services::AgentService::instance().run_team(team_query, team_config);
-        } catch (const std::exception& ex) {
-            persist_pair(text, QStringLiteral("Team dispatch failed: %1")
-                                   .arg(QString::fromUtf8(ex.what())));
-            return true;
-        }
+        // run_team doesn't throw — it returns a req_id synchronously
+        // and surfaces dispatch failures via agent_stream_done /
+        // publish_agent_result on the request_id.  The chat surface
+        // already subscribes to those, so the user will see a
+        // failure message in-stream without us double-reporting.
+        const QString req_id = fincept::services::AgentService::instance().run_team(team_query, team_config);
         persist_pair(text, QStringLiteral(
                                "Dispatched team **%1** (%2 members + coordinator `%3`) — request %4")
                                .arg(t.name).arg(t.member_agent_ids.size())

@@ -51,7 +51,7 @@ static Result<void> apply_v037(QSqlDatabase& db) {
     if (auto r = sql(db,
             "CREATE TABLE IF NOT EXISTS teams ("
             "  id TEXT PRIMARY KEY,"
-            "  name TEXT NOT NULL,"
+            "  name TEXT NOT NULL UNIQUE,"
             "  coordinator_agent_id TEXT NOT NULL,"
             "  strategy TEXT NOT NULL DEFAULT 'sequential',"
             "  description TEXT,"

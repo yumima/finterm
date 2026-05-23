@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e1063b67`](https://github.com/yumima/finterm/commit/e1063b67) agents: multi-agent teams — schema + repo + Workbench panel + /team dispatch
 - [`3686ae8c`](https://github.com/yumima/finterm/commit/3686ae8c) review fixes: Track 96 — duration units + tool_args bloat + doc lie
 - [`00a81d7a`](https://github.com/yumima/finterm/commit/00a81d7a) audit: tool-call timeline in trace drill-down (Track 96 — v036)
 - [`43252a19`](https://github.com/yumima/finterm/commit/43252a19) review fixes: Track 8 — LlmService::chat race + LRU + selection guard
