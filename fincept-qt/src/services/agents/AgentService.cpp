@@ -241,18 +241,24 @@ void AgentService::run_python_stdin(const QString& action, const QJsonObject& pa
 #endif
     QPointer<AgentService> self = this;
     auto timer = std::make_shared<QElapsedTimer>();
+    // QProcess can emit errorOccurred followed by finished (e.g.
+    // FailedToStart → Crashed).  Without a guard, on_result fires
+    // twice with conflicting outcomes and the second invocation
+    // touches a deleted proc.  Mirror the streaming sibling.
+    auto done_emitted = std::make_shared<bool>(false);
     timer->start();
 
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [self, proc, action, on_result, timer](int exit_code, QProcess::ExitStatus) {
+            [self, proc, action, on_result, timer, done_emitted](int exit_code, QProcess::ExitStatus) {
                 int elapsed = timer->elapsed();
 
                 QString stdout_str = QString::fromUtf8(proc->readAllStandardOutput());
                 QString stderr_str = QString::fromUtf8(proc->readAllStandardError());
                 proc->deleteLater();
 
-                if (!self)
+                if (!self || *done_emitted)
                     return;
+                *done_emitted = true;
 
                 // Extract JSON from output
                 QString json_str = python::extract_json(stdout_str);
@@ -278,11 +284,13 @@ void AgentService::run_python_stdin(const QString& action, const QJsonObject& pa
                 on_result(true, result);
             });
 
-    connect(proc, &QProcess::errorOccurred, this, [self, proc, action, on_result, timer](QProcess::ProcessError) {
+    connect(proc, &QProcess::errorOccurred, this,
+            [self, proc, action, on_result, timer, done_emitted](QProcess::ProcessError) {
         QString err = proc->errorString();
         proc->deleteLater();
-        if (!self)
+        if (!self || *done_emitted)
             return;
+        *done_emitted = true;
         LOG_ERROR("AgentService", QString("%1 process error: %2").arg(action, err));
         on_result(false, QJsonObject{{"error", "Process error: " + err}});
     });

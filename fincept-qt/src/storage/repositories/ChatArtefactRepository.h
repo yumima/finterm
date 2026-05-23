@@ -70,6 +70,13 @@ class ChatArtefactRepository {
     /// agent_traces.request_id.  Used by the dispatch-finish
     /// callback to wire supersedes_id when re-running.  Returns
     /// nullopt if no artefacts were emitted during that request.
+    ///
+    /// Caveat: if the agent emits MULTIPLE artefacts in one turn
+    /// (current emit_artefact tool doesn't forbid this), only the
+    /// most-recent one is linked back to the predecessor — the
+    /// others end up unlinked.  Document the assumption rather than
+    /// trying to map each one; per-artefact predecessor tracking
+    /// would require the tool API to carry the link directly.
     Result<std::optional<ChatArtefactRow>> latest_for_request(const QString& request_id);
 
     Result<QVector<ChatArtefactRow>> list_recent(int limit = 50);

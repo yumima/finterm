@@ -397,9 +397,11 @@ void ArtefactsSection::on_lineage() {
     layout->setContentsMargins(16, 16, 16, 16);
 
     auto* meta = new QLabel(QStringLiteral(
-        "Artefacts produced by the same dispatch identity "
-        "(<b>agent</b> · <b>skill</b> · <b>args</b>), newest first.  "
-        "The selected artefact is highlighted; previous runs (typically "
+        "Re-run chain for this artefact, newest first.  Resolved by "
+        "explicit <code>supersedes_id</code> link when present (v039+), "
+        "with a fallback to grouping by dispatch identity "
+        "(<b>agent</b> · <b>skill</b> · <b>args</b>) for legacy rows.  "
+        "The selected artefact is highlighted; predecessors (typically "
         "<code>superseded</code>) trail underneath."));
     meta->setWordWrap(true);
     meta->setStyleSheet(QStringLiteral("color:#aaa;"));

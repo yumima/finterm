@@ -12,6 +12,7 @@
 #include "services/agents/MentionResolverService.h"
 #include "services/agents/SlashCommandService.h"
 #include "services/tts/TtsService.h"
+#include "storage/repositories/AgentConfigRepository.h"
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
 #include "storage/repositories/TeamRepository.h"
@@ -39,6 +40,7 @@
 #include <QRandomGenerator>
 #include <QResizeEvent>
 #include <QScrollBar>
+#include <QSet>
 #include <QShowEvent>
 #include <QSizePolicy>
 #include <QTextStream>
@@ -1232,25 +1234,76 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
     // and dispatches via AgentService::run_team.  Distinct from the
     // static slash commands (which target one named agent) because
     // teams are user-created and runtime-dynamic.
-    if (text.startsWith(QStringLiteral("/team "))) {
-        const QString tail = text.mid(QStringLiteral("/team ").size()).trimmed();
-        const int sp = tail.indexOf(QLatin1Char(' '));
-        if (sp <= 0) {
-            persist_pair(text, QStringLiteral(
-                                   "Usage: `/team <name> <query>` — see Workbench → Teams "
-                                   "for the list of teams you've configured."));
-            return true;
-        }
-        const QString team_name = tail.left(sp).trimmed();
-        const QString team_query = tail.mid(sp + 1).trimmed();
-        auto tr = fincept::TeamRepository::instance().get_by_name(team_name);
-        if (tr.is_err() || !tr.value().has_value()) {
-            persist_pair(text, QStringLiteral(
-                                   "No team named **%1** — create one under "
-                                   "Workbench → Teams.").arg(team_name));
-            return true;
-        }
-        const auto t = *tr.value();
+    {
+        // Robust /team parsing: tolerate any whitespace (single
+        // space, tabs, double space, after-/team newlines), and
+        // resolve team name case-insensitively against the
+        // repository.  Use a regex split rather than indexOf(' ')
+        // which fails on "/team\tfoo …" or "/team  foo …".
+        static const QRegularExpression slash_team_re(
+            QStringLiteral("^/team\\b\\s*"), QRegularExpression::CaseInsensitiveOption);
+        const auto slash_team_match = slash_team_re.match(text);
+        if (slash_team_match.hasMatch()) {
+            const QString tail = text.mid(slash_team_match.capturedLength()).trimmed();
+            static const QRegularExpression ws_re(QStringLiteral("\\s+"));
+            const QStringList parts = tail.split(ws_re, Qt::SkipEmptyParts);
+            if (parts.size() < 2) {
+                persist_pair(text, QStringLiteral(
+                                       "Usage: `/team <name> <query>` — see Workbench → Teams "
+                                       "for the list of teams you've configured."));
+                return true;
+            }
+            const QString team_name = parts.first();
+            const QString team_query = QStringList(parts.mid(1)).join(QLatin1Char(' '));
+            auto tr = fincept::TeamRepository::instance().get_by_name(team_name);
+            if (tr.is_err() || !tr.value().has_value()) {
+                // Second-chance: case-insensitive lookup.  list_all
+                // gives us every team to scan.  Small N (tens at
+                // most); cost is fine.
+                auto all = fincept::TeamRepository::instance().list_all();
+                std::optional<fincept::TeamRow> found;
+                if (all.is_ok()) {
+                    for (const auto& cand : all.value()) {
+                        if (cand.name.compare(team_name, Qt::CaseInsensitive) == 0) {
+                            found = cand;
+                            break;
+                        }
+                    }
+                }
+                if (!found.has_value()) {
+                    persist_pair(text, QStringLiteral(
+                                           "No team named **%1** — create one under "
+                                           "Workbench → Teams.").arg(team_name));
+                    return true;
+                }
+                tr = fincept::Result<std::optional<fincept::TeamRow>>::ok(found);
+            }
+            const auto t = *tr.value();
+
+            // Validate that the coordinator + every member resolves
+            // to an existing agent_configs row.  Otherwise the agno
+            // dispatch would throw an opaque traceback when it tries
+            // to instantiate a missing agent.
+            auto agents = fincept::AgentConfigRepository::instance().list_all();
+            QSet<QString> known;
+            if (agents.is_ok()) {
+                for (const auto& a : agents.value())
+                    known.insert(a.id);
+            }
+            QStringList missing;
+            if (!known.contains(t.coordinator_agent_id))
+                missing.append(QStringLiteral("coordinator `%1`").arg(t.coordinator_agent_id));
+            for (const QString& m : t.member_agent_ids) {
+                if (!known.contains(m))
+                    missing.append(QStringLiteral("member `%1`").arg(m));
+            }
+            if (!missing.isEmpty()) {
+                persist_pair(text, QStringLiteral(
+                                       "Team **%1** references missing agents: %2.  "
+                                       "Fix via Workbench → Teams (Edit) before re-dispatching.")
+                                       .arg(t.name, missing.join(QStringLiteral(", "))));
+                return true;
+            }
         // Build agno team_config — agno's TeamModule.from_config wants
         // {name, description, mode, members: [{agent_id}…], roles}.
         // We map coordinator + members from the schema by prepending
@@ -1307,7 +1360,8 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
                     llm.active_provider(), llm.active_model());
                 self_ptr->scroll_to_bottom();
             });
-        return true;
+            return true;
+        }
     }
 
     // /help — built-in command listing.  Never resolves to an agent.

@@ -564,7 +564,13 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     connect(copy_btn, &QPushButton::clicked, dlg, [p]() {
         QApplication::clipboard()->setText(p.proposed_content);
     });
-    connect(save_btn, &QPushButton::clicked, dlg, [this, p, dlg]() {
+    // Capture `this` via QPointer — the dialog has WA_DeleteOnClose
+    // and can outlive a screen tab-switch that destroys this section.
+    // Calling show_status() through a dangling raw `this` would
+    // dereference freed memory.  The propose_fix watcher above
+    // already uses this idiom — carry it through to the save handler.
+    QPointer<AiSystemSection> self_save = this;
+    connect(save_btn, &QPushButton::clicked, dlg, [self_save, p, dlg]() {
         // Hard confirm before any disk write — SKILL.md is a
         // checked-in file and an accidental overwrite is annoying
         // to undo without git.
@@ -585,7 +591,8 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
         const QString tmp_path = p.skill_path + QStringLiteral(".tmp");
         QFile tmp(tmp_path);
         if (!tmp.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-            show_status(QStringLiteral("Write failed (open .tmp): %1").arg(tmp.errorString()), true);
+            if (self_save)
+                self_save->show_status(QStringLiteral("Write failed (open .tmp): %1").arg(tmp.errorString()), true);
             return;
         }
         const QByteArray bytes = p.proposed_content.toUtf8();
@@ -593,7 +600,8 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
             const QString err = tmp.errorString();
             tmp.close();
             QFile::remove(tmp_path);
-            show_status(QStringLiteral("Write failed (write/flush): %1").arg(err), true);
+            if (self_save)
+                self_save->show_status(QStringLiteral("Write failed (write/flush): %1").arg(err), true);
             return;
         }
         tmp.close();
@@ -604,10 +612,12 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
         QFile::remove(p.skill_path);
         if (!QFile::rename(tmp_path, p.skill_path)) {
             QFile::remove(tmp_path);
-            show_status(QStringLiteral("Write failed (rename): could not move .tmp into place"), true);
+            if (self_save)
+                self_save->show_status(QStringLiteral("Write failed (rename): could not move .tmp into place"), true);
             return;
         }
-        show_status(QStringLiteral("Overwrote %1").arg(p.skill_path));
+        if (self_save)
+            self_save->show_status(QStringLiteral("Overwrote %1").arg(p.skill_path));
         dlg->accept();
     });
     connect(close_btn, &QPushButton::clicked, dlg, &QDialog::accept);
