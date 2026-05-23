@@ -790,6 +790,26 @@ QString AgentService::run_team(const QString& query, const QJsonObject& team_con
         return req_id;
     }
 
+    // Track 107: team dispatches now write an agent_traces row so they
+    // appear in Settings → AI System alongside regular agent runs.
+    // agent_id is "team:<name>" to distinguish from single-agent rows;
+    // the trace drill-down (and the Track 96 tool-call timeline) work
+    // identically for both.
+    {
+        const QString team_name = team_config.value(QStringLiteral("name")).toString();
+        AgentTraceCreate c;
+        c.request_id = req_id;
+        c.agent_id = team_name.isEmpty() ? QStringLiteral("team:unknown")
+                                         : (QStringLiteral("team:") + team_name);
+        c.runtime = QStringLiteral("agno");
+        c.source = QStringLiteral("chat_team");
+        c.query = query;
+        c.config = team_config;
+        if (auto r = AgentTraceRepository::instance().create(c); r.is_err())
+            LOG_WARN("AgentService", QString("trace create failed for team %1: %2")
+                                         .arg(req_id, QString::fromStdString(r.error())));
+    }
+
     QJsonObject params;
     params["query"] = query;
     params["team_config"] = team_config;
@@ -908,6 +928,35 @@ QString AgentService::run_team(const QString& query, const QJsonObject& team_con
                 }
 
                 LOG_INFO("AgentService", QString("Team completed in %1ms").arg(elapsed));
+
+                // Finish the trace row + propagate tool_calls_json
+                // (Track 96 parity for team dispatches).
+                {
+                    AgentTraceFinish f;
+                    f.request_id = req_id;
+                    f.success = r.success;
+                    f.response = r.response;
+                    f.error = r.error;
+                    f.latency_ms = elapsed;
+                    if (!doc.isNull()) {
+                        const QJsonObject obj = doc.object();
+                        const auto v_ti = obj.value(QStringLiteral("tokens_in"));
+                        if (v_ti.isDouble()) f.tokens_in = v_ti.toInt();
+                        const auto v_to = obj.value(QStringLiteral("tokens_out"));
+                        if (v_to.isDouble()) f.tokens_out = v_to.toInt();
+                        const auto v_cost = obj.value(QStringLiteral("cost_usd"));
+                        if (v_cost.isDouble()) f.cost_usd = v_cost.toDouble();
+                        const auto v_tc = obj.value(QStringLiteral("tool_calls"));
+                        if (v_tc.isArray()) {
+                            f.tool_calls_json = QString::fromUtf8(
+                                QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
+                        }
+                    }
+                    if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
+                        LOG_WARN("AgentService", QString("trace finish failed for team %1: %2")
+                                                     .arg(req_id, QString::fromStdString(fr.error())));
+                }
+
                 emit self->agent_stream_done(r);
                 self->publish_agent_result(r, /*final=*/true);
             });

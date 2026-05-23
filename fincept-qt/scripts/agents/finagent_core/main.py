@@ -90,6 +90,51 @@ def _extract_workflow_response(result: Any) -> str:
     return str(result)
 
 
+def _attach_tool_calls(result: Dict[str, Any], response: Any) -> None:
+    """Lift agno's RunOutput.tools into result["tool_calls"] for the C++
+    trace drill-down (v036 `agent_traces.tool_calls_json`).  Best-effort
+    — wrapped in try/except so a malformed ToolExecution can't fail the
+    run for trace-only data.  Called from the run / run_team / streaming
+    branches so the trace dialog renders the same way for every
+    dispatch path."""
+    tool_calls_log = []
+    try:
+        tools_list = getattr(response, "tools", None) or []
+        for te in tools_list:
+            raw_result = getattr(te, "result", None)
+            preview = ""
+            if raw_result is not None:
+                preview = str(raw_result)[:300]
+            # agno's ToolCallMetrics.duration is Timer.elapsed —
+            # always a perf_counter delta in seconds.  Convert to ms.
+            metrics = getattr(te, "metrics", None)
+            duration_ms = None
+            if metrics is not None:
+                dur = getattr(metrics, "duration", None)
+                if isinstance(dur, (int, float)):
+                    duration_ms = int(dur * 1000)
+            # tool_args is LLM-supplied dict; can be multi-KB for
+            # code-exec / file-write tools.  Clip the serialised form
+            # so a chatty turn doesn't bloat agent_traces rows.
+            try:
+                args_str = json.dumps(getattr(te, "tool_args", None) or {}, default=str)
+            except Exception:
+                args_str = "{}"
+            if len(args_str) > 2000:
+                args_str = args_str[:2000] + "…"
+            tool_calls_log.append({
+                "name": getattr(te, "tool_name", None) or "",
+                "args": args_str,
+                "ok": not bool(getattr(te, "tool_call_error", False)),
+                "result_preview": preview,
+                "duration_ms": duration_ms,
+            })
+    except Exception as _e:  # never fail the run for trace data
+        logger.warning(f"tool_calls log extraction failed: {_e}")
+    if tool_calls_log:
+        result["tool_calls"] = tool_calls_log
+
+
 def _setup_agent_modules(agent, config: Dict[str, Any], params: Dict[str, Any]):
     """
     Setup ALL optional CoreAgent modules from config/params.
@@ -315,53 +360,7 @@ def dispatch_action(
             response = agent.run(query, full_config, session_id, stream)
             result = {"success": True, "response": agent.get_response_content(response)}
 
-            # Surface tool invocations for the C++ trace drill-down
-            # (v036 `agent_traces.tool_calls_json`).  agno's
-            # RunOutput.tools is a List[ToolExecution] with name +
-            # args + result + ok flag + metrics.  We compact each into
-            # the minimum the UI needs and clip the result preview to
-            # keep the JSON small.
-            tool_calls_log = []
-            try:
-                tools_list = getattr(response, "tools", None) or []
-                for te in tools_list:
-                    raw_result = getattr(te, "result", None)
-                    preview = ""
-                    if raw_result is not None:
-                        preview = str(raw_result)[:300]
-                    # agno's ToolCallMetrics.duration is Timer.elapsed —
-                    # a perf_counter delta in seconds.  Always convert
-                    # to ms.  The previous heuristic (×1000 if <1000
-                    # else as-is) silently truncated calls ≥ ~16 min
-                    # to "1000 ms".
-                    metrics = getattr(te, "metrics", None)
-                    duration_ms = None
-                    if metrics is not None:
-                        dur = getattr(metrics, "duration", None)
-                        if isinstance(dur, (int, float)):
-                            duration_ms = int(dur * 1000)
-                    # tool_args is LLM-supplied dict; can be multi-KB
-                    # for code-exec / file-write tools.  Clip the
-                    # serialised form so a chatty turn doesn't bloat
-                    # agent_traces rows (which list_recent reads in
-                    # full).
-                    try:
-                        args_str = json.dumps(getattr(te, "tool_args", None) or {}, default=str)
-                    except Exception:
-                        args_str = "{}"
-                    if len(args_str) > 2000:
-                        args_str = args_str[:2000] + "…"
-                    tool_calls_log.append({
-                        "name": getattr(te, "tool_name", None) or "",
-                        "args": args_str,
-                        "ok": not bool(getattr(te, "tool_call_error", False)),
-                        "result_preview": preview,
-                        "duration_ms": duration_ms,
-                    })
-            except Exception as _e:  # never fail the run for trace data
-                logger.warning(f"tool_calls log extraction failed: {_e}")
-            if tool_calls_log:
-                result["tool_calls"] = tool_calls_log
+            _attach_tool_calls(result, response)
 
             # Check guardrails on output if enabled
             if agent._guardrails:
@@ -393,7 +392,9 @@ def dispatch_action(
                 return {"success": False, "error": "Input rejected by guardrails", "violations": guard_result["violations"]}
             query = guard_result["text"]
         response = agent.run_team(query, team_config, params.get("session_id"))
-        return {"success": True, "response": agent.get_response_content(response)}
+        result = {"success": True, "response": agent.get_response_content(response)}
+        _attach_tool_calls(result, response)
+        return result
 
     if action == "run_workflow":
         from finagent_core.core_agent import CoreAgent
@@ -1025,6 +1026,14 @@ def dispatch_action_streaming(
 
             session_id = params.get("session_id")
 
+            # `fallback_response` is captured only when the streaming
+            # path raises and we fall back to core_agent.run(), which
+            # returns a RunOutput with `.tools`.  The streaming path
+            # itself yields chunks — surfacing tool calls there would
+            # need StreamingCoreAgent to expose the underlying
+            # RunOutput, deferred.
+            fallback_response = None
+            except_fallback = False
             # Use StreamingCoreAgent for real streaming
             try:
                 streaming_agent = StreamingCoreAgent(
@@ -1032,18 +1041,20 @@ def dispatch_action_streaming(
                     user_id=params.get("user_id"),
                     stream_callback=lambda ct, c, m=None: stream_print(ct, c),
                 )
-                # run_streaming returns a generator — must be iterated to drive
-                # the stream_callback and emit TOKEN lines to stdout.
+                # run_streaming returns a generator — must be iterated
+                # to drive the stream_callback and emit TOKEN lines.
                 resp_content = ""
                 for chunk in streaming_agent.run_streaming(query, full_config, session_id):
                     if isinstance(chunk, dict) and chunk.get("type") == "token":
                         resp_content += chunk.get("content", "")
             except Exception:
+                except_fallback = True
+            if except_fallback:
                 # Fallback to regular run with simulated streaming
                 resp_content = ""
                 try:
-                    response = core_agent.run(query, full_config, session_id, stream=False)
-                    resp_content = core_agent.get_response_content(response) or ""
+                    fallback_response = core_agent.run(query, full_config, session_id, stream=False)
+                    resp_content = core_agent.get_response_content(fallback_response) or ""
                     if resp_content:
                         words = resp_content.split()
                         chunk_size = 5
@@ -1057,7 +1068,10 @@ def dispatch_action_streaming(
                 core_agent.end_trace()
 
             stream_print("done", "completed")
-            return {"success": True, "response": resp_content}
+            result = {"success": True, "response": resp_content}
+            if fallback_response is not None:
+                _attach_tool_calls(result, fallback_response)
+            return result
 
         except Exception as e:
             if core_agent._tracing:
@@ -1105,7 +1119,9 @@ def dispatch_action_streaming(
                     stream_print("token", chunk)
 
             stream_print("done", "completed")
-            return {"success": True, "response": content}
+            result = {"success": True, "response": content}
+            _attach_tool_calls(result, response)
+            return result
 
         except Exception as e:
             stream_print("error", str(e))
