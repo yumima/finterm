@@ -1273,16 +1273,40 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
         team_config[QStringLiteral("members")] = members_arr;
         team_config[QStringLiteral("agents")] = members_arr;  // agno accepts either key
         team_config[QStringLiteral("leader_index")] = 0;
-        // run_team doesn't throw — it returns a req_id synchronously
-        // and surfaces dispatch failures via agent_stream_done /
-        // publish_agent_result on the request_id.  The chat surface
-        // already subscribes to those, so the user will see a
-        // failure message in-stream without us double-reporting.
+        // run_team is asynchronous — returns a req_id immediately,
+        // emits agent_stream_done on completion (or failure).  We
+        // print a "Dispatched…" stub right now, then set up a
+        // one-shot connection filtered on this req_id that appends
+        // the real response (or error) as a system bubble when it
+        // lands.  Without this wire, /team would silently swallow
+        // the team's actual answer.
         const QString req_id = fincept::services::AgentService::instance().run_team(team_query, team_config);
         persist_pair(text, QStringLiteral(
-                               "Dispatched team **%1** (%2 members + coordinator `%3`) — request %4")
+                               "Dispatched team **%1** (%2 members + coordinator `%3`) — request %4 — waiting for response…")
                                .arg(t.name).arg(t.member_agent_ids.size())
                                .arg(t.coordinator_agent_id, req_id.left(8)));
+        auto* svc = &fincept::services::AgentService::instance();
+        QPointer<AiChatScreen> self_ptr = this;
+        auto conn = std::make_shared<QMetaObject::Connection>();
+        const auto team_name_copy = t.name;
+        *conn = QObject::connect(svc, &fincept::services::AgentService::agent_stream_done, this,
+            [self_ptr, conn, req_id, team_name_copy](const fincept::services::AgentExecutionResult& r) {
+                if (r.request_id != req_id)
+                    return;  // not our dispatch — keep listening
+                QObject::disconnect(*conn);
+                if (!self_ptr)
+                    return;
+                const QString body = r.success
+                    ? QStringLiteral("Team **%1** answered:\n\n%2").arg(team_name_copy, r.response)
+                    : QStringLiteral("Team **%1** failed: %2").arg(team_name_copy,
+                          r.error.isEmpty() ? QStringLiteral("unknown error") : r.error);
+                self_ptr->add_message_bubble("system", body);
+                const auto& llm = ai_chat::LlmService::instance();
+                ChatRepository::instance().add_message(
+                    self_ptr->active_session_id_, "system", body,
+                    llm.active_provider(), llm.active_model());
+                self_ptr->scroll_to_bottom();
+            });
         return true;
     }
 

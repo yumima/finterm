@@ -106,6 +106,14 @@ void InlineCompletionController::on_idle_timeout() {
     const QString prefix = current_prefix_for_completion();
     if (prefix.size() < kMinPrefixChars)
         return;
+    // Don't auto-complete slash commands — the user typed `/team
+    // foo bar` because they want to dispatch a team, not because
+    // they want the model to "continue" with `… and write a
+    // report.`  Accepting that Tab-suggestion would also corrupt
+    // the command.  Mirror IDE behaviour where completion suppresses
+    // inside known-prefix tokens.
+    if (prefix.startsWith(QLatin1Char('/')))
+        return;
 
     // Cache hit — render immediately without round-tripping.
     if (const QString hit = cache_get(prefix); !hit.isEmpty()) {
@@ -208,15 +216,21 @@ void InlineCompletionController::accept_pending() {
     if (!editor_ || pending_len_ <= 0)
         return;
     // Strip the grayed format from the pending range — text stays,
-    // visual treatment becomes normal.
+    // visual treatment becomes normal.  clearForeground / clearProperty
+    // are the correct idiom (setForeground(QBrush()) sets an *invalid*
+    // brush, which some Qt versions render as gray-on-darker-gray).
     auto* doc = editor_->document();
     QTextCursor cursor(doc);
     cursor.setPosition(pending_anchor_);
     cursor.setPosition(pending_anchor_ + pending_len_, QTextCursor::KeepAnchor);
     QTextCharFormat fmt;
-    fmt.setForeground(QBrush());  // default
-    fmt.setFontItalic(false);
-    ignore_next_change_ = true;
+    fmt.clearForeground();
+    fmt.clearProperty(QTextFormat::FontItalic);
+    // mergeCharFormat changes formatting only, not document text —
+    // QPlainTextEdit::textChanged does NOT fire for pure-format edits.
+    // The previous code set ignore_next_change_ here, which then
+    // stuck `true` and silently swallowed the FIRST keystroke the
+    // user typed after Tab-accepting.  No suppression needed.
     cursor.mergeCharFormat(fmt);
 
     // Place the editing cursor at the end of the accepted text.
