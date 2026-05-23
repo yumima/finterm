@@ -7,8 +7,18 @@
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
 #include "storage/repositories/McpServerRepository.h"
+#include "storage/repositories/TeamRepository.h"
 #include "storage/repositories/ToolKillswitchRepository.h"
 #include "storage/repositories/WorkflowRepository.h"
+
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMessageBox>
 
 #include <QColor>
 #include <QHBoxLayout>
@@ -266,17 +276,233 @@ QWidget* WorkbenchScreen::build_agents_section() {
         /*stretch_col=*/2, std::move(reload));
 }
 
+namespace {
+
+/// Modal create/edit dialog for a team.  Caller passes in either an
+/// existing TeamRow (edit) or an empty struct (create).  Returns true
+/// on save.  Membership is a multi-select list of agent_configs rows;
+/// coordinator is a dropdown of the same.
+bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
+    auto agents_res = AgentConfigRepository::instance().list_all();
+    QVector<AgentConfig> agents = agents_res.is_ok() ? agents_res.value() : QVector<AgentConfig>{};
+
+    QDialog dlg(parent);
+    dlg.setWindowTitle(is_new ? QStringLiteral("New team") : QStringLiteral("Edit team — ") + draft.name);
+    dlg.resize(560, 520);
+    auto* root = new QVBoxLayout(&dlg);
+
+    auto* form = new QFormLayout;
+    auto* id_edit = new QLineEdit(draft.id);
+    id_edit->setPlaceholderText(QStringLiteral("kebab-case-id"));
+    if (!is_new)
+        id_edit->setReadOnly(true);   // primary key — immutable post-create
+    auto* name_edit = new QLineEdit(draft.name);
+    auto* desc_edit = new QLineEdit(draft.description);
+    desc_edit->setPlaceholderText(QStringLiteral("Optional one-line description"));
+    auto* coordinator_combo = new QComboBox;
+    for (const auto& a : agents) {
+        coordinator_combo->addItem(QStringLiteral("%1 — %2").arg(a.id, a.name), a.id);
+        if (a.id == draft.coordinator_agent_id)
+            coordinator_combo->setCurrentIndex(coordinator_combo->count() - 1);
+    }
+    auto* strategy_combo = new QComboBox;
+    strategy_combo->addItem(QStringLiteral("sequential — members run one after another"), "sequential");
+    strategy_combo->addItem(QStringLiteral("parallel — members run concurrently"), "parallel");
+    if (draft.strategy == QStringLiteral("parallel"))
+        strategy_combo->setCurrentIndex(1);
+
+    form->addRow(QStringLiteral("ID"), id_edit);
+    form->addRow(QStringLiteral("Name"), name_edit);
+    form->addRow(QStringLiteral("Description"), desc_edit);
+    form->addRow(QStringLiteral("Coordinator"), coordinator_combo);
+    form->addRow(QStringLiteral("Strategy"), strategy_combo);
+    root->addLayout(form);
+
+    auto* members_lbl = new QLabel(QStringLiteral("<b>Members</b> (checked agents weigh in; the coordinator synthesises):"));
+    members_lbl->setWordWrap(true);
+    root->addWidget(members_lbl);
+    auto* members_list = new QListWidget;
+    members_list->setSelectionMode(QAbstractItemView::NoSelection);
+    for (const auto& a : agents) {
+        auto* item = new QListWidgetItem(QStringLiteral("%1 — %2").arg(a.id, a.name), members_list);
+        item->setData(Qt::UserRole, a.id);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(draft.member_agent_ids.contains(a.id) ? Qt::Checked : Qt::Unchecked);
+    }
+    root->addWidget(members_list, 1);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    root->addWidget(buttons);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+
+    const QString id = id_edit->text().trimmed();
+    const QString name = name_edit->text().trimmed();
+    if (id.isEmpty() || name.isEmpty() || coordinator_combo->currentData().toString().isEmpty()) {
+        QMessageBox::warning(parent, QStringLiteral("Save team"),
+            QStringLiteral("ID, name, and coordinator are required."));
+        return false;
+    }
+    draft.id = id;
+    draft.name = name;
+    draft.description = desc_edit->text().trimmed();
+    draft.coordinator_agent_id = coordinator_combo->currentData().toString();
+    draft.strategy = strategy_combo->currentData().toString();
+    draft.member_agent_ids.clear();
+    for (int i = 0; i < members_list->count(); ++i) {
+        auto* item = members_list->item(i);
+        if (item->checkState() == Qt::Checked)
+            draft.member_agent_ids.append(item->data(Qt::UserRole).toString());
+    }
+    return true;
+}
+
+} // anonymous namespace
+
 QWidget* WorkbenchScreen::build_teams_section() {
-    // No teams_repo backing this yet — the team coordinator design
-    // hasn't shipped.  Keep the placeholder honest rather than fake
-    // a table of zero rows.
-    return build_section_placeholder(
-        QStringLiteral("Teams"),
-        QStringLiteral("Multi-agent teams — coordinator + member agents "
-                       "running shared context and turn-taking strategies."),
-        QStringLiteral("Not implemented yet.  Primitives (Anthropic SDK "
-                       "sub-agents + local-runtime planner) exist; the "
-                       "team-config table + UI is the next port."));
+    // Track 98 — real teams panel.  Read-only list + per-row New /
+    // Edit / Delete actions.  Dispatch happens via the AI Chat
+    // slash command `/team <name> …` (single source of truth — same
+    // pattern as `/comps`).
+    auto* w = new QWidget;
+    auto* layout = new QVBoxLayout(w);
+    layout->setContentsMargins(40, 40, 40, 40);
+    layout->setSpacing(12);
+
+    auto* title = new QLabel(QStringLiteral("<h2>Teams</h2>"));
+    auto* desc = new QLabel(QStringLiteral(
+        "Multi-agent teams: one <b>coordinator</b> plus N <b>members</b>.  "
+        "Members each weigh in (their lens — sector, quant, macro, …); the "
+        "coordinator synthesises a unified answer.  Dispatch via "
+        "<code>/team &lt;name&gt; &lt;query&gt;</code> in chat."));
+    desc->setWordWrap(true);
+    desc->setStyleSheet(QStringLiteral("color: #aaa;"));
+    layout->addWidget(title);
+    layout->addWidget(desc);
+
+    auto* btn_row = new QHBoxLayout;
+    auto* new_btn = new QPushButton(QStringLiteral("New team…"));
+    auto* edit_btn = new QPushButton(QStringLiteral("Edit"));
+    auto* delete_btn = new QPushButton(QStringLiteral("Delete"));
+    auto* refresh_btn = new QPushButton(QStringLiteral("Refresh"));
+    btn_row->addWidget(new_btn);
+    btn_row->addWidget(edit_btn);
+    btn_row->addWidget(delete_btn);
+    btn_row->addStretch();
+    btn_row->addWidget(refresh_btn);
+    layout->addLayout(btn_row);
+
+    auto* table = new QTableWidget;
+    table->setColumnCount(5);
+    table->setHorizontalHeaderLabels(
+        {QStringLiteral("ID"), QStringLiteral("Name"),
+         QStringLiteral("Coordinator"), QStringLiteral("Members"),
+         QStringLiteral("Strategy")});
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->verticalHeader()->setVisible(false);
+    layout->addWidget(table, 1);
+
+    auto reload = [table]() {
+        auto r = TeamRepository::instance().list_all();
+        if (r.is_err()) {
+            table->setRowCount(0);
+            return;
+        }
+        const auto teams = r.value();
+        table->setRowCount(teams.size());
+        for (int i = 0; i < teams.size(); ++i) {
+            const auto& t = teams[i];
+            auto* id_item = new QTableWidgetItem(t.id);
+            id_item->setData(Qt::UserRole, t.id);
+            table->setItem(i, 0, id_item);
+            table->setItem(i, 1, new QTableWidgetItem(t.name));
+            table->setItem(i, 2, new QTableWidgetItem(t.coordinator_agent_id));
+            table->setItem(i, 3, new QTableWidgetItem(QString::number(t.member_agent_ids.size())));
+            table->setItem(i, 4, new QTableWidgetItem(t.strategy));
+        }
+    };
+
+    auto selected_id = [table]() -> QString {
+        const auto sel = table->selectionModel()->selectedRows();
+        if (sel.isEmpty())
+            return {};
+        auto* item = table->item(sel.first().row(), 0);
+        return item ? item->data(Qt::UserRole).toString() : QString();
+    };
+
+    QObject::connect(refresh_btn, &QPushButton::clicked, table, reload);
+    QObject::connect(new_btn, &QPushButton::clicked, w, [w, reload]() {
+        TeamRow draft;
+        if (!show_team_edit_dialog(w, draft, /*is_new=*/true))
+            return;
+        TeamCreate c;
+        c.id = draft.id;
+        c.name = draft.name;
+        c.coordinator_agent_id = draft.coordinator_agent_id;
+        c.strategy = draft.strategy;
+        c.description = draft.description;
+        c.member_agent_ids = draft.member_agent_ids;
+        auto r = TeamRepository::instance().create(c);
+        if (r.is_err()) {
+            QMessageBox::warning(w, QStringLiteral("Create team"),
+                                 QString::fromStdString(r.error()));
+            return;
+        }
+        reload();
+    });
+    QObject::connect(edit_btn, &QPushButton::clicked, w, [w, selected_id, reload]() {
+        const QString id = selected_id();
+        if (id.isEmpty())
+            return;
+        auto r = TeamRepository::instance().get(id);
+        if (r.is_err() || !r.value().has_value())
+            return;
+        TeamRow draft = *r.value();
+        if (!show_team_edit_dialog(w, draft, /*is_new=*/false))
+            return;
+        TeamCreate c;
+        c.id = draft.id;
+        c.name = draft.name;
+        c.coordinator_agent_id = draft.coordinator_agent_id;
+        c.strategy = draft.strategy;
+        c.description = draft.description;
+        c.member_agent_ids = draft.member_agent_ids;
+        auto ur = TeamRepository::instance().update(c);
+        if (ur.is_err()) {
+            QMessageBox::warning(w, QStringLiteral("Update team"),
+                                 QString::fromStdString(ur.error()));
+            return;
+        }
+        reload();
+    });
+    QObject::connect(delete_btn, &QPushButton::clicked, w, [w, selected_id, reload]() {
+        const QString id = selected_id();
+        if (id.isEmpty())
+            return;
+        const auto choice = QMessageBox::question(
+            w, QStringLiteral("Delete team"),
+            QStringLiteral("Delete team <b>%1</b>?\nMembership rows are cascade-deleted; "
+                           "agents themselves are untouched.").arg(id),
+            QMessageBox::Yes | QMessageBox::No);
+        if (choice != QMessageBox::Yes)
+            return;
+        auto r = TeamRepository::instance().delete_(id);
+        if (r.is_err()) {
+            QMessageBox::warning(w, QStringLiteral("Delete team"),
+                                 QString::fromStdString(r.error()));
+            return;
+        }
+        reload();
+    });
+    reload();
+    return w;
 }
 
 QWidget* WorkbenchScreen::build_workflows_section() {

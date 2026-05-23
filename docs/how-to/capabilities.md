@@ -22,7 +22,7 @@ Glyphs:
 | **Files API (PDF / images)** | — | — | Upload PDFs / images / CSVs by handle, reference across turns. |
 | **Per-claim citations** | — | — | Agent output carries source citations alongside text. |
 | **Computer use (screen control)** | … | — | Agent controls a virtual desktop / browser. |
-| **Sub-agents** | … | — | Coordinator agent spawns child agents with their own context. |
+| **Multi-agent teams** | ✓ | ✓ | Named team = one coordinator + N members; members weigh in, coordinator synthesises.  Dispatch via /team <name> <query> in chat or Workbench → Teams. |
 | **Prompt-injection guard** | ✓ | ✓ | External text wrapped with <untrusted> markers; system prompt tells the model not to follow. |
 | **Per-tool kill-switch** | ✓ | ✓ | User can disable any tool system-wide; refusal wins over per-agent allowlists. |
 | **Audit-grade trace log** | ✓ | ✓ | Every agent dispatch lands in agent_traces with prompts, latency, tokens, cost, status. |
@@ -62,9 +62,9 @@ Glyphs:
 
 - *Anthropic*: SDK exposes the primitive on Claude 3.5+; finterm doesn't wire the UI surface yet.
 
-### Sub-agents
+### Multi-agent teams
 
-- *Anthropic*: SDK supports it; finterm's named-agent layer doesn't expose the team primitive yet.
+- Backed by agno's TeamModule (coordinate mode).  v037 schema persists teams + team_members; dispatch flows through AgentService::run_team → Python `run_team` action.
 
 ### Per-agent daily USD cap
 

@@ -111,12 +111,12 @@
     },
     {
       "id": "sub_agents",
-      "label": "Sub-agents",
-      "description": "Coordinator agent spawns child agents with their own context.",
-      "anthropic": "planned",
-      "local": "unsupported",
-      "ui_surface": [],
-      "notes_anthropic": "SDK supports it; finterm's named-agent layer doesn't expose the team primitive yet."
+      "label": "Multi-agent teams",
+      "description": "Named team = one coordinator + N members; members weigh in, coordinator synthesises.  Dispatch via /team <name> <query> in chat or Workbench → Teams.",
+      "anthropic": "supported",
+      "local": "supported",
+      "ui_surface": ["Workbench → Teams", "AiChatScreen `/team` slash dispatch"],
+      "notes": "Backed by agno's TeamModule (coordinate mode).  v037 schema persists teams + team_members; dispatch flows through AgentService::run_team → Python `run_team` action."
     },
     {
       "id": "untrusted_content_guard",

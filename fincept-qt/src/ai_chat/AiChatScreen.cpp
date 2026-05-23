@@ -14,6 +14,7 @@
 #include "services/tts/TtsService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
+#include "storage/repositories/TeamRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -1225,6 +1226,63 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
                                                llm.active_provider(), llm.active_model());
         scroll_to_bottom();
     };
+
+    // /team <name> <query…> — multi-agent dispatch.  Resolves a
+    // team by name from TeamRepository, builds the agno team_config,
+    // and dispatches via AgentService::run_team.  Distinct from the
+    // static slash commands (which target one named agent) because
+    // teams are user-created and runtime-dynamic.
+    if (text.startsWith(QStringLiteral("/team "))) {
+        const QString tail = text.mid(QStringLiteral("/team ").size()).trimmed();
+        const int sp = tail.indexOf(QLatin1Char(' '));
+        if (sp <= 0) {
+            persist_pair(text, QStringLiteral(
+                                   "Usage: `/team <name> <query>` — see Workbench → Teams "
+                                   "for the list of teams you've configured."));
+            return true;
+        }
+        const QString team_name = tail.left(sp).trimmed();
+        const QString team_query = tail.mid(sp + 1).trimmed();
+        auto tr = fincept::TeamRepository::instance().get_by_name(team_name);
+        if (tr.is_err() || !tr.value().has_value()) {
+            persist_pair(text, QStringLiteral(
+                                   "No team named **%1** — create one under "
+                                   "Workbench → Teams.").arg(team_name));
+            return true;
+        }
+        const auto t = *tr.value();
+        // Build agno team_config — agno's TeamModule.from_config wants
+        // {name, description, mode, members: [{agent_id}…], roles}.
+        // We map coordinator + members from the schema by prepending
+        // the coordinator and setting leader_index=0 so agno treats
+        // the coordinator as the leader of the group.
+        QJsonArray members_arr;
+        members_arr.append(QJsonObject{{"agent_id", t.coordinator_agent_id}});
+        for (const QString& m : t.member_agent_ids)
+            members_arr.append(QJsonObject{{"agent_id", m}});
+        QJsonObject team_config;
+        team_config[QStringLiteral("name")] = t.name;
+        if (!t.description.isEmpty())
+            team_config[QStringLiteral("description")] = t.description;
+        team_config[QStringLiteral("mode")] = QStringLiteral("coordinate");
+        team_config[QStringLiteral("members")] = members_arr;
+        team_config[QStringLiteral("agents")] = members_arr;  // agno accepts either key
+        team_config[QStringLiteral("leader_index")] = 0;
+        team_config[QStringLiteral("strategy")] = t.strategy;
+        QString req_id;
+        try {
+            req_id = fincept::services::AgentService::instance().run_team(team_query, team_config);
+        } catch (const std::exception& ex) {
+            persist_pair(text, QStringLiteral("Team dispatch failed: %1")
+                                   .arg(QString::fromUtf8(ex.what())));
+            return true;
+        }
+        persist_pair(text, QStringLiteral(
+                               "Dispatched team **%1** (%2 members + coordinator `%3`) — request %4")
+                               .arg(t.name).arg(t.member_agent_ids.size())
+                               .arg(t.coordinator_agent_id, req_id.left(8)));
+        return true;
+    }
 
     // /help — built-in command listing.  Never resolves to an agent.
     if (text == QStringLiteral("/help") || text.startsWith(QStringLiteral("/help "))) {

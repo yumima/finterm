@@ -691,6 +691,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/TeamRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
@@ -752,6 +753,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v034_chat_artefacts.cpp
     src/storage/sqlite/migrations/v035_agent_feedback.cpp
     src/storage/sqlite/migrations/v036_agent_trace_tool_calls.cpp
+    src/storage/sqlite/migrations/v037_teams.cpp
 )
 
 # Python runner
@@ -1793,6 +1795,7 @@ set_source_files_properties(
     # Storage repositories — each defines kCols in namespace fincept
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/TeamRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
@@ -1852,6 +1855,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v034_chat_artefacts.cpp
     src/storage/sqlite/migrations/v035_agent_feedback.cpp
     src/storage/sqlite/migrations/v036_agent_trace_tool_calls.cpp
+    src/storage/sqlite/migrations/v037_teams.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -1966,6 +1970,7 @@ set_source_files_properties(
 set_source_files_properties(
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
+    src/storage/repositories/TeamRepository.cpp
     src/storage/repositories/ChatArtefactRepository.cpp
     src/storage/repositories/AgentFeedbackRepository.cpp
     src/storage/repositories/ToolKillswitchRepository.cpp
