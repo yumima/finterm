@@ -126,29 +126,6 @@ int main(int argc, char* argv[]) {
     // Desktop-entry / WM_CLASS (X11) / app_id (Wayland) association — matches the
     // installed finterm.desktop so the taskbar groups windows under the brand.
     app.setDesktopFileName(fincept::AppIdentity::kDisplayName);
-
-    // ── One-time settings-store migration ────────────────────────────────────
-    // The QSettings *application* name was rebranded FinceptTerminal -> finterm
-    // (AppIdentity::kApp). The organization ("Fincept") and the on-disk data root
-    // (com.fincept.terminal) are unchanged, so portfolio/auth/secrets are
-    // untouched — only the settings .conf basename moved. Copy the legacy store
-    // into the new one once, when the new store has no keys yet. Idempotent: a
-    // second run finds the new store populated and does nothing.
-    {
-        const auto migrate_settings = [](const char* new_app, const char* old_app) {
-            QSettings dst(fincept::AppIdentity::kOrg, new_app);
-            if (!dst.allKeys().isEmpty())
-                return;  // already populated — never clobber existing settings
-            QSettings src(fincept::AppIdentity::kOrg, old_app);
-            const QStringList keys = src.allKeys();
-            for (const QString& k : keys)
-                dst.setValue(k, src.value(k));
-            if (!keys.isEmpty())
-                dst.sync();
-        };
-        migrate_settings(fincept::AppIdentity::kApp,       fincept::AppIdentity::kAppLegacy);
-        migrate_settings(fincept::AppIdentity::kAppSecure, fincept::AppIdentity::kAppSecureLegacy);
-    }
 #ifndef FINCEPT_VERSION_STRING
 #    define FINCEPT_VERSION_STRING "0.0.0-dev"
 #endif
@@ -167,6 +144,30 @@ int main(int argc, char* argv[]) {
     }
 
     // ── Primary instance from here on ────────────────────────────────────────
+
+    // ── One-time settings-store migration (primary only) ─────────────────────
+    // The QSettings *application* name was rebranded FinceptTerminal -> finterm
+    // (AppIdentity::kApp). The organization ("Fincept") and the on-disk data root
+    // (com.fincept.terminal) are unchanged, so portfolio/auth/secrets are
+    // untouched — only the settings .conf basename moved. Copy the legacy store
+    // into the new one once, when the new store has no keys yet. Idempotent: a
+    // second run finds the new store populated and does nothing. Secondary
+    // instances return above before reaching here, so they skip this entirely.
+    {
+        const auto migrate_settings = [](const char* new_app, const char* old_app) {
+            QSettings dst(fincept::AppIdentity::kOrg, new_app);
+            if (!dst.allKeys().isEmpty())
+                return;  // already populated — never clobber existing settings
+            QSettings src(fincept::AppIdentity::kOrg, old_app);
+            const QStringList keys = src.allKeys();
+            for (const QString& k : keys)
+                dst.setValue(k, src.value(k));
+            if (!keys.isEmpty())
+                dst.sync();
+        };
+        migrate_settings(fincept::AppIdentity::kApp,       fincept::AppIdentity::kAppLegacy);
+        migrate_settings(fincept::AppIdentity::kAppSecure, fincept::AppIdentity::kAppSecureLegacy);
+    }
 
     // Register DataHub payload meta-types (QuoteData, HistoryPoint, InfoData,
     // NewsArticle, EconomicsResult) so they can flow through QVariant-keyed

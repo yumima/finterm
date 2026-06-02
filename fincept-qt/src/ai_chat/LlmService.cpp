@@ -870,14 +870,14 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
             // Check for text-based tool calls in the response.
             // The model may have emitted <tool_call>...</tool_call> blocks.
             if (!resp.content.isEmpty()) {
-                LOG_INFO(TAG, "Fincept: checking response for text-based tool calls");
+                LOG_INFO(TAG, "finterm: checking response for text-based tool calls");
                 // Use the sync /research/chat endpoint for follow-up after tool execution
                 QString followup_url = get_endpoint_url();
                 auto followup_hdr = get_headers();
                 auto tool_result =
                     try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
                 if (tool_result.has_value()) {
-                    LOG_INFO(TAG, "Fincept: text tool calls detected and executed");
+                    LOG_INFO(TAG, "finterm: text tool calls detected and executed");
                     return tool_result.value();
                 }
             }

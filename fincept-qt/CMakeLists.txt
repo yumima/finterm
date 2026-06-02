@@ -137,7 +137,7 @@ if(APPLE)
     # produce bundles that require that newer host OS at runtime.
     if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
         set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING
-            "Minimum macOS version supported by Fincept Terminal" FORCE)
+            "Minimum macOS version supported by finterm" FORCE)
     endif()
     set(CMAKE_MACOSX_RPATH ON)
     set(CMAKE_INSTALL_RPATH "@executable_path/../Frameworks;@executable_path/../lib")
