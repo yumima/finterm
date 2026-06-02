@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`aeee406a`](https://github.com/yumima/finterm/commit/aeee406a) rebrand: docs, .gitignore, updates.json visible refs -> finterm
 - [`c1704953`](https://github.com/yumima/finterm/commit/c1704953) rebrand: docs, launchers, packaging visible refs -> finterm
 - [`63e28c93`](https://github.com/yumima/finterm/commit/63e28c93) rebrand: visible strings -> finterm; migrate settings store
 - [`b9e0ae98`](https://github.com/yumima/finterm/commit/b9e0ae98) build,launcher: emit binary as finterm.bin; brand desktop association

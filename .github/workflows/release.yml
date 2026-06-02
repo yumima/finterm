@@ -17,7 +17,7 @@ env:
   QT_MODULES: "qtcharts qtwebsockets qtmultimedia"
   QT_IFW_VERSION: "4.7"
   QT_IFW_TOOL: "tools_ifw"
-  APP_NAME: FinceptTerminal
+  APP_NAME: finterm
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -219,13 +219,13 @@ jobs:
 
       # ── Upload ────────────────────────────────────────────────────────────
       # Narrow the glob to the installer output — the broader `*.exe` pattern
-      # would also catch the main FinceptTerminal.exe binary, which we don't
+      # would also catch the main finterm.exe binary, which we don't
       # want to publish as a release asset (users should run the installer).
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-Windows-x64-installer
-          path: fincept-qt/build/FinceptTerminal-*-windows-x64-setup.exe
+          name: finterm-Windows-x64-installer
+          path: fincept-qt/build/finterm-*-windows-x64-setup.exe
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -317,7 +317,7 @@ jobs:
       - name: Verify binary
         working-directory: fincept-qt
         run: |
-          BINARY="build/${{ env.APP_NAME }}"
+          BINARY="build/${{ env.APP_NAME }}.bin"
           [ -f "$BINARY" ] || { echo "::error::Binary not found"; exit 1; }
           echo "Binary: $BINARY ($(du -sh "$BINARY" | cut -f1))"
           file "$BINARY"
@@ -344,13 +344,13 @@ jobs:
           mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps"
 
           # Stage binary + desktop entry + icon
-          cp "build/${{ env.APP_NAME }}" "${APPDIR}/usr/bin/"
-          chmod +x "${APPDIR}/usr/bin/${{ env.APP_NAME }}"
+          cp "build/${{ env.APP_NAME }}.bin" "${APPDIR}/usr/bin/"
+          chmod +x "${APPDIR}/usr/bin/${{ env.APP_NAME }}.bin"
 
           cat > "${APPDIR}/usr/share/applications/fincept-terminal.desktop" <<'EOF'
           [Desktop Entry]
-          Name=Fincept Terminal
-          Exec=FinceptTerminal
+          Name=finterm
+          Exec=finterm.bin
           Icon=fincept-terminal
           Type=Application
           Categories=Finance;
@@ -433,11 +433,11 @@ jobs:
           fi
 
           # Filename must match the regex in update-manifest:
-          #   FinceptTerminal-<version>-linux-x64-setup.run
+          #   finterm-<version>-linux-x64-setup.run
           # where <version> is CMAKE_PROJECT_VERSION (e.g. 4.0.2), NOT the
           # tag (v4.0.2). Parse project() VERSION from CMakeLists.txt so we
           # stay in sync even when triggered via workflow_dispatch (no tag).
-          VERSION=$(grep -Po 'project\(FinceptTerminal VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
+          VERSION=$(grep -Po 'project\(finterm VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
           if [ -z "${VERSION}" ]; then
             echo "::error::Could not parse project VERSION from CMakeLists.txt"
             exit 1
@@ -449,8 +449,8 @@ jobs:
           # in addition to the core Qt libs. UPDATE_INFORMATION embeds the
           # zsync update URL so AppImageUpdate can fetch deltas later.
           export QMAKE="${QT_ROOT_DIR}/bin/qmake"
-          export OUTPUT="FinceptTerminal-${VERSION}-linux-x64-setup.run"
-          export UPDATE_INFORMATION="gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|FinceptTerminal-*-linux-x64-setup.run.zsync"
+          export OUTPUT="finterm-${VERSION}-linux-x64-setup.run"
+          export UPDATE_INFORMATION="gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|finterm-*-linux-x64-setup.run.zsync"
 
           ./linuxdeploy-x86_64.AppImage \
             --appdir "${APPDIR}" \
@@ -500,10 +500,10 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-Linux-x64-installer
+          name: finterm-Linux-x64-installer
           path: |
-            fincept-qt/build/FinceptTerminal-*-linux-x64-setup.run
-            fincept-qt/build/FinceptTerminal-*-linux-x64-setup.run.zsync
+            fincept-qt/build/finterm-*-linux-x64-setup.run
+            fincept-qt/build/finterm-*-linux-x64-setup.run.zsync
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -631,9 +631,9 @@ jobs:
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
-            <key>CFBundleExecutable</key><string>FinceptTerminal</string>
+            <key>CFBundleExecutable</key><string>finterm</string>
             <key>CFBundleIdentifier</key><string>com.fincept.terminal</string>
-            <key>CFBundleName</key><string>FinceptTerminal</string>
+            <key>CFBundleName</key><string>finterm</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>4.0.2</string>
             <key>CFBundleVersion</key><string>4.0.2</string>
@@ -984,10 +984,10 @@ jobs:
         run: |
           set -euo pipefail
           # Parse project() VERSION so the DMG filename matches the regex in
-          # update-manifest: FinceptTerminal-<version>-macos-arm64-setup.dmg
-          VERSION=$(grep -Eo 'project\(FinceptTerminal VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $3}')
+          # update-manifest: finterm-<version>-macos-arm64-setup.dmg
+          VERSION=$(grep -Eo 'project\(finterm VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | awk '{print $3}')
           [ -n "${VERSION}" ] || { echo "::error::Could not parse VERSION from CMakeLists.txt"; exit 1; }
-          DMG_NAME="FinceptTerminal-${VERSION}-macos-arm64-setup.dmg"
+          DMG_NAME="finterm-${VERSION}-macos-arm64-setup.dmg"
           echo "DMG target: ${DMG_NAME}"
 
           STAGING="$(mktemp -d)/dmg_staging"
@@ -1008,8 +1008,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FinceptTerminal-macOS-arm64-installer
-          path: fincept-qt/build/FinceptTerminal-*-macos-arm64-setup.dmg
+          name: finterm-macOS-arm64-installer
+          path: fincept-qt/build/finterm-*-macos-arm64-setup.dmg
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1037,19 +1037,19 @@ jobs:
       - name: Download Windows installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-Windows-x64-installer
+          name: finterm-Windows-x64-installer
           path: dist/windows
 
       - name: Download Linux installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-Linux-x64-installer
+          name: finterm-Linux-x64-installer
           path: dist/linux
 
       - name: Download macOS installer
         uses: actions/download-artifact@v4
         with:
-          name: FinceptTerminal-macOS-arm64-installer
+          name: finterm-macOS-arm64-installer
           path: dist/macos
 
       - name: List release assets
@@ -1059,9 +1059,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "Fincept Terminal ${{ github.ref_name }}"
+          name: "finterm ${{ github.ref_name }}"
           body: |
-            ## Fincept Terminal ${{ github.ref_name }}
+            ## finterm ${{ github.ref_name }}
 
             Native C++20 financial intelligence terminal — Qt6, embedded Python analytics, 50+ screens.
 
@@ -1069,9 +1069,9 @@ jobs:
 
             | Platform | File | Notes |
             |----------|------|-------|
-            | **Windows x64** | `FinceptTerminal-*-setup*.exe` | Run installer → `FinceptTerminal.exe` |
-            | **Linux x64** | `FinceptTerminal-*.run` | `chmod +x` → run installer |
-            | **macOS Apple Silicon** | `FinceptTerminal-*.dmg` or setup | Open DMG → drag to Applications |
+            | **Windows x64** | `finterm-*-setup*.exe` | Run installer → `finterm.exe` |
+            | **Linux x64** | `finterm-*.run` | `chmod +x` → run installer |
+            | **macOS Apple Silicon** | `finterm-*.dmg` or setup | Open DMG → drag to Applications |
 
             ### Requirements
             - Windows 10/11 x64
@@ -1106,7 +1106,7 @@ jobs:
 #    match UpdateService::current_platform_key()
 #    (windows-x64 / windows-arm64 / linux-x64 / macos-arm64 / macos-x64).
 #    Asset filenames must match CPACK_PACKAGE_FILE_NAME in CMakeLists.txt:
-#    FinceptTerminal-<version>-<platform>-<arch>-setup.<ext>
+#    finterm-<version>-<platform>-<arch>-setup.<ext>
 # ═════════════════════════════════════════════════════════════════════════════
   update-repo-metadata:
     name: Update README + updates.json on main
@@ -1221,9 +1221,9 @@ jobs:
 
           | Platform | Download | Run |
           |----------|----------|-----|
-          | **Windows x64** | [FinceptTerminal-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`FinceptTerminal.exe\` |
-          | **Linux x64** | [FinceptTerminal-Linux-x64.run](${LIN_URL}) | \`chmod +x\` → run installer |
-          | **macOS Apple Silicon** | [FinceptTerminal-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
+          | **Windows x64** | [finterm-Windows-x64-setup.exe](${WIN_URL}) | Run installer → launch \`finterm.exe\` |
+          | **Linux x64** | [finterm-Linux-x64.run](${LIN_URL}) | \`chmod +x\` → run installer |
+          | **macOS Apple Silicon** | [finterm-macOS-arm64.dmg](${MAC_URL}) | Open DMG → drag to Applications |
           ${END_MARKER}"
 
           README="README.md"
@@ -1250,7 +1250,7 @@ jobs:
 
           WORK="$(mktemp -d)"
           echo "Downloading release assets to ${WORK}..."
-          gh release download "${TAG}" --dir "${WORK}" --pattern "FinceptTerminal-*setup*" || true
+          gh release download "${TAG}" --dir "${WORK}" --pattern "finterm-*setup*" || true
 
           # Export shell-side vars so the embedded python can read them via os.environ
           export WORK VERSION TAG REPO

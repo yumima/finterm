@@ -34,13 +34,13 @@ def main() -> int:
 
     # Platform key → filename regex. Order matters: more specific keys first.
     platforms = [
-        ("windows-x64",     re.compile(rf"FinceptTerminal-{re.escape(version)}-windows-x64-setup\.exe$")),
-        ("windows-arm64",   re.compile(rf"FinceptTerminal-{re.escape(version)}-windows-arm64-setup\.exe$")),
-        ("linux-x64",       re.compile(rf"FinceptTerminal-{re.escape(version)}-linux-x64-setup\.run$")),
-        ("linux-arm64",     re.compile(rf"FinceptTerminal-{re.escape(version)}-linux-arm64-setup\.run$")),
-        ("macos-arm64",     re.compile(rf"FinceptTerminal-{re.escape(version)}-macos-arm64-setup\.(dmg|exe)$")),
-        ("macos-x64",       re.compile(rf"FinceptTerminal-{re.escape(version)}-macos-x64-setup\.(dmg|exe)$")),
-        ("macos-universal", re.compile(rf"FinceptTerminal-{re.escape(version)}-macos-universal-setup\.(dmg|exe)$")),
+        ("windows-x64",     re.compile(rf"finterm-{re.escape(version)}-windows-x64-setup\.exe$")),
+        ("windows-arm64",   re.compile(rf"finterm-{re.escape(version)}-windows-arm64-setup\.exe$")),
+        ("linux-x64",       re.compile(rf"finterm-{re.escape(version)}-linux-x64-setup\.run$")),
+        ("linux-arm64",     re.compile(rf"finterm-{re.escape(version)}-linux-arm64-setup\.run$")),
+        ("macos-arm64",     re.compile(rf"finterm-{re.escape(version)}-macos-arm64-setup\.(dmg|exe)$")),
+        ("macos-x64",       re.compile(rf"finterm-{re.escape(version)}-macos-x64-setup\.(dmg|exe)$")),
+        ("macos-universal", re.compile(rf"finterm-{re.escape(version)}-macos-universal-setup\.(dmg|exe)$")),
     ]
 
     if not work.is_dir():

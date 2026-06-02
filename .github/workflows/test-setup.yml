@@ -72,11 +72,11 @@ jobs:
 
       - name: Verify binary
         run: |
-          EXE="fincept-qt/build/FinceptTerminal"
-          if [ ! -f "$EXE" ] && [ ! -d "fincept-qt/build/FinceptTerminal.app" ]; then
+          EXE="fincept-qt/build/finterm.bin"
+          if [ ! -f "$EXE" ] && [ ! -d "fincept-qt/build/finterm.app" ]; then
             echo "ERROR: binary not found"
-            find fincept-qt/build -maxdepth 3 -name "FinceptTerminal*" || true
+            find fincept-qt/build -maxdepth 3 -name "finterm*" || true
             exit 1
           fi
           echo "Build succeeded"
-          file "$EXE" 2>/dev/null || file "fincept-qt/build/FinceptTerminal.app/Contents/MacOS/FinceptTerminal"
+          file "$EXE" 2>/dev/null || file "fincept-qt/build/finterm.app/Contents/MacOS/finterm"
