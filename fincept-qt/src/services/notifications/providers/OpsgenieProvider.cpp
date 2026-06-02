@@ -41,7 +41,7 @@ void OpsgenieProvider::send(const NotificationRequest& req, std::function<void(b
     body["message"] = req.title;
     body["description"] = req.message;
     body["priority"] = priority;
-    body["source"] = "Fincept Terminal";
+    body["source"] = "finterm";
 
     HttpClient::instance().post(url, body, [cb](Result<QJsonDocument> res) {
         if (res.is_err()) {

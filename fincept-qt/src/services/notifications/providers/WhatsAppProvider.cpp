@@ -30,7 +30,7 @@ void WhatsAppProvider::send(const NotificationRequest& req, std::function<void(b
     // Twilio WhatsApp API endpoint
     const QString url = QString("https://api.twilio.com/2010-04-01/Accounts/%1/Messages.json").arg(account_sid_);
 
-    const QString msg = QString("[Fincept] %1\n%2").arg(req.title, req.message);
+    const QString msg = QString("[finterm] %1\n%2").arg(req.title, req.message);
 
     // Twilio accepts form-encoded POST — encode as JSON fields for our HttpClient
     // Note: Twilio's API actually needs application/x-www-form-urlencoded;

@@ -167,7 +167,7 @@ Result<QJsonObject> McpClient::initialize() {
     params["protocolVersion"] = "2024-11-05";
 
     QJsonObject client_info;
-    client_info["name"] = "FinceptTerminal";
+    client_info["name"] = "finterm";
     client_info["version"] = "4.0.2";
     params["clientInfo"] = client_info;
 

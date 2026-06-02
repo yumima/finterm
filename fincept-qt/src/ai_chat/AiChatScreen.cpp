@@ -287,7 +287,7 @@ void AiChatScreen::build_sidebar() {
     icon->setStyleSheet(QString("color:%1;font-size:22px;").arg(col::TEXT_PRIMARY()));
     hhl->addWidget(icon);
 
-    auto* title = new QLabel("Fincept AI");
+    auto* title = new QLabel("finterm AI");
     title->setStyleSheet(QString("color:%1;font-size:%2px;font-weight:700;").arg(col::TEXT_PRIMARY()).arg(fnt::BODY));
     hhl->addWidget(title, 1);
 
@@ -638,7 +638,7 @@ QWidget* AiChatScreen::build_input_area() {
     hl->setSpacing(10);
 
     input_box_ = new QPlainTextEdit;
-    input_box_->setPlaceholderText("Message Fincept AI...");
+    input_box_->setPlaceholderText("Message finterm AI...");
     input_box_->setFixedHeight(44);
     input_box_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     input_box_->setStyleSheet(QString("QPlainTextEdit{background:%1;color:%2;border:1px solid %3;"
@@ -1777,10 +1777,10 @@ void AiChatScreen::update_stats() {
         const bool is_fincept = (provider_raw.toLower() == "fincept");
 
         // Display names
-        const QString prov_display = is_fincept ? "Fincept LLM" : provider_raw.toUpper();
+        const QString prov_display = is_fincept ? "finterm LLM" : provider_raw.toUpper();
         const QString model_raw = llm.active_model();
         // For fincept, don't expose internal model name
-        const QString model_display = is_fincept ? "Fincept LLM" : model_raw;
+        const QString model_display = is_fincept ? "finterm LLM" : model_raw;
         QString model_short = model_display;
         if (model_short.length() > 24)
             model_short = model_short.left(22) + "..";
@@ -1789,14 +1789,14 @@ void AiChatScreen::update_stats() {
         provider_lbl_->setText(prov_display);
         provider_lbl_->setStyleSheet(
             QString("color:%1;font-size:%2px;font-weight:600;").arg(col::AMBER()).arg(fnt::SMALL));
-        model_lbl_->setText(is_fincept ? "Managed by Fincept" : model_short);
-        model_lbl_->setToolTip(is_fincept ? "Fincept LLM — managed AI service" : model_raw);
+        model_lbl_->setText(is_fincept ? "Managed by finterm" : model_short);
+        model_lbl_->setToolTip(is_fincept ? "finterm LLM — managed AI service" : model_raw);
         model_lbl_->setStyleSheet(QString("color:%1;font-size:%2px;").arg(col::TEXT_SECONDARY()).arg(fnt::TINY));
 
         // Header model pill — show "Provider / Model" for clarity
         if (is_fincept) {
-            hdr_model_lbl_->setText("Fincept LLM");
-            hdr_model_lbl_->setToolTip("Fincept managed AI service\n\nChange in Settings > LLM Configuration");
+            hdr_model_lbl_->setText("finterm LLM");
+            hdr_model_lbl_->setToolTip("finterm managed AI service\n\nChange in Settings > LLM Configuration");
         } else {
             hdr_model_lbl_->setText(provider_raw.left(1).toUpper() + provider_raw.mid(1) + " / " + model_short);
             hdr_model_lbl_->setToolTip("Provider: " + prov_display + "\nModel: " + model_raw +

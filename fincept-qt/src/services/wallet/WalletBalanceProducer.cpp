@@ -376,7 +376,7 @@ void WalletBalanceProducer::seed_stream_state(const QString& pubkey) {
                 fincept::wallet::TokenHolding t;
                 t.mint = fncpt_mint;
                 t.symbol = QStringLiteral("$FNCPT");
-                t.name = QStringLiteral("FinceptTerminal");
+                t.name = QStringLiteral("finterm");
                 t.amount_raw = QString::number(total);
                 t.decimals = decimals > 0 ? decimals : 6;
                 s->latest.tokens.append(std::move(t));

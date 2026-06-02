@@ -829,7 +829,7 @@ void ProfileScreen::show_delete_account_dialog() {
     // First confirmation
     auto first = QMessageBox::warning(
         this, "Delete Account",
-        QString("This will permanently delete your Fincept account (%1) and all associated data.\n\n"
+        QString("This will permanently delete your finterm account (%1) and all associated data.\n\n"
                 "This action CANNOT be undone. Are you sure?").arg(email),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (first != QMessageBox::Yes)

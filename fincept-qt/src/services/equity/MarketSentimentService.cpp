@@ -76,7 +76,7 @@ MarketSentimentService::ConnectionConfig MarketSentimentService::load_connection
 QNetworkRequest MarketSentimentService::build_request(const QUrl& url, const QString& api_key) const {
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setHeader(QNetworkRequest::UserAgentHeader, "FinceptTerminal/4.0");
+    request.setHeader(QNetworkRequest::UserAgentHeader, "finterm/4.0");
     request.setRawHeader("X-API-Key", api_key.toUtf8());
     return request;
 }

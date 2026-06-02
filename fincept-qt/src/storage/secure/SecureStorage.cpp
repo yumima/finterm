@@ -219,7 +219,7 @@ Result<void> SecureStorage::store(const QString& key, const QString& value) {
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
     const QByteArray val_bytes = value.toUtf8();
-    const QByteArray label = ("Fincept Terminal: " + key).toUtf8();
+    const QByteArray label = ("finterm: " + key).toUtf8();
 
     secret_password_store_sync(
         fincept_schema(),

@@ -22,7 +22,7 @@ void register_integration_nodes(NodeRegistry& registry) {
         .type_id = "mcp.tool_call",
         .display_name = "MCP Tool",
         .category = "MCP",
-        .description = "Call any Fincept internal MCP tool by name",
+        .description = "Call any finterm internal MCP tool by name",
         .icon_text = "M",
         .accent_color = "#6366f1",
         .version = 2,

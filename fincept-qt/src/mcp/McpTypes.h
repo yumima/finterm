@@ -601,6 +601,6 @@ struct UnifiedTool {
 // servers' own ids serve as their prefixes (`mcp-fetch__fetch`,
 // `mcp-financial-datasets__get_income_statements`).
 inline constexpr const char* INTERNAL_SERVER_ID = "int";
-inline constexpr const char* INTERNAL_SERVER_NAME = "Fincept Terminal";
+inline constexpr const char* INTERNAL_SERVER_NAME = "finterm";
 
 } // namespace fincept::mcp

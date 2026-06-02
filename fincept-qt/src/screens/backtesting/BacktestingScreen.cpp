@@ -418,7 +418,7 @@ QWidget* BacktestingScreen::build_center_panel() {
 
     // Initial hint
     auto* hint = new QLabel("Select a provider, command, and strategy, then click RUN to execute.\n\n"
-                            "Supported providers: VectorBT, Backtesting.py, FastTrade, Zipline, BT, Fincept\n"
+                            "Supported providers: VectorBT, Backtesting.py, FastTrade, Zipline, BT, finterm\n"
                             "Commands: Backtest, Optimize, Walk-Forward, Indicators, ML Labels, CV Splits, Returns");
     hint->setWordWrap(true);
     hint->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; line-height:1.6;"

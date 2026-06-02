@@ -235,7 +235,7 @@ void register_agent_nodes(NodeRegistry& registry) {
                     tool_list += QString("- %1: %2\n").arg(t.name, t.description);
                 }
 
-                QString system_prompt = "You are a tool-selection assistant for the Fincept Terminal.\n"
+                QString system_prompt = "You are a tool-selection assistant for the finterm.\n"
                                         "Given a user request, choose the single best tool from the list below "
                                         "and return ONLY a JSON object with this exact shape:\n"
                                         "{\"tool\": \"<tool_name>\", \"args\": {<required args as key/value>}}\n"

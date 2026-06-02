@@ -226,7 +226,7 @@ void LlmService::ensure_config() const {
     // rather than declining requests it can actually fulfil via a tool call.
     if (system_prompt_.trimmed().isEmpty()) {
         system_prompt_ =
-            "You are Fincept AI, the intelligent assistant embedded inside the Fincept Terminal — "
+            "You are finterm AI, the intelligent assistant embedded inside the finterm — "
             "a professional desktop financial intelligence application. You have access to tools that "
             "let you interact with the terminal directly: navigate screens, fetch live market data, "
             "manage watchlists, query portfolios, paper-trade, run Python analytics, search SEC Edgar "
@@ -254,7 +254,7 @@ void LlmService::ensure_config() const {
             "  - For charts, pass config={'chart_type':'bar'|'line'|'pie','title':...,'data':'1,2,3',"
             "    'labels':'Q1,Q2,Q3'}.\n"
             "  - Set proper metadata FIRST via report_set_metadata: title (e.g. 'Tesla Equity Research "
-            "    Report'), author (e.g. 'Fincept Research'), company, and date. Don't leave 'Analyst' "
+            "    Report'), author (e.g. 'finterm Research'), company, and date. Don't leave 'Analyst' "
             "    or 'Untitled Report' defaults.\n"
             "  - Avoid one-line ramblings. Each text component should be a tight paragraph.\n"
             "• Python scripts: ONLY pass script names returned by list_python_scripts. Never invent or "
@@ -439,7 +439,7 @@ QMap<QString, QString> LlmService::get_headers() const {
         if (tok.is_ok() && !tok.value().isEmpty())
             h["X-Session-Token"] = tok.value();
         // Cloudflare requires a User-Agent header
-        h["User-Agent"] = "FinceptTerminal/4.0";
+        h["User-Agent"] = "finterm/4.0";
     } else {
         // OpenAI-compatible
         if (!api_key_.isEmpty())
@@ -793,7 +793,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
     const QString async_url = {};
     const QString status_base = {};
 
-    LOG_INFO(TAG, QString("Fincept async: submitting to %1 (api_key=%2, prompt_len=%3)")
+    LOG_INFO(TAG, QString("finterm async: submitting to %1 (api_key=%2, prompt_len=%3)")
                       .arg(async_url)
                       .arg(api_key_.isEmpty() ? "EMPTY" : api_key_.left(12) + "...")
                       .arg(prompt.length()));
@@ -801,14 +801,14 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
     QByteArray json_data = QJsonDocument(submit_body).toJson(QJsonDocument::Compact);
     auto submit = eventloop_request("POST", async_url, json_data, hdr, 30000);
     if (!submit.success) {
-        resp.error = "Fincept async submit failed: " + submit.error;
+        resp.error = "finterm async submit failed: " + submit.error;
         LOG_ERROR(TAG, resp.error);
         return resp;
     }
 
     auto submit_doc = QJsonDocument::fromJson(submit.body);
     if (submit_doc.isNull()) {
-        resp.error = "Fincept async: failed to parse submit response";
+        resp.error = "finterm async: failed to parse submit response";
         return resp;
     }
 
@@ -818,10 +818,10 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
     if (task_id.isEmpty())
         task_id = sj["data"].toObject()["task_id"].toString();
     if (task_id.isEmpty()) {
-        resp.error = "Fincept async: no task_id in submit response";
+        resp.error = "finterm async: no task_id in submit response";
         return resp;
     }
-    LOG_INFO(TAG, "Fincept async task_id: " + task_id);
+    LOG_INFO(TAG, "finterm async task_id: " + task_id);
 
     // Poll every 3 seconds, up to 120 seconds total
     const QString poll_url = status_base + task_id;
@@ -831,7 +831,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
 
         auto poll = eventloop_request("GET", poll_url, {}, hdr, 15000);
         if (!poll.success) {
-            LOG_WARN(TAG, "Fincept async poll failed: " + poll.error);
+            LOG_WARN(TAG, "finterm async poll failed: " + poll.error);
             continue;
         }
 
@@ -845,7 +845,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
         if (status.isEmpty())
             status = data_obj["status"].toString();
 
-        LOG_INFO(TAG, QString("Fincept async poll %1 status=%2").arg(i + 1).arg(status));
+        LOG_INFO(TAG, QString("finterm async poll %1 status=%2").arg(i + 1).arg(status));
 
         if (status == "completed") {
             // data.data.response
@@ -853,8 +853,8 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
             if (response.isEmpty())
                 response = data_obj["response"].toString();
             if (response.isEmpty()) {
-                resp.error = "Fincept async completed but response is empty";
-                LOG_WARN(TAG, "Fincept async task completed with empty response field");
+                resp.error = "finterm async completed but response is empty";
+                LOG_WARN(TAG, "finterm async task completed with empty response field");
                 return resp;
             }
             resp.content = response;
@@ -888,12 +888,12 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
             QString err = pj["error"].toString();
             if (err.isEmpty())
                 err = data_obj["error"].toString();
-            resp.error = "Fincept async task failed: " + (err.isEmpty() ? "unknown error" : err);
+            resp.error = "finterm async task failed: " + (err.isEmpty() ? "unknown error" : err);
             return resp;
         }
     }
 
-    resp.error = "Fincept async timed out waiting for response";
+    resp.error = "finterm async timed out waiting for response";
     return resp;
 }
 
@@ -925,7 +925,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         // bypassed reload(). Surface a clear error rather than letting the
         // dead routing path fail indirectly.
         LlmResponse resp;
-        resp.error = "Fincept hosted endpoint is retired — configure a local or external provider in Settings → LLM.";
+        resp.error = "finterm hosted endpoint is retired — configure a local or external provider in Settings → LLM.";
         LOG_WARN(TAG, resp.error);
         return resp;
     } else {
@@ -1135,8 +1135,8 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             resp.content = extract_openai_message_text(choices[0].toObject()["message"].toObject());
         // API returned success=true but empty response text — treat as soft error
         if (resp.content.isEmpty()) {
-            resp.error = "Fincept LLM returned an empty response. Please try again.";
-            LOG_WARN(TAG, "Fincept /research/chat returned empty choices or content");
+            resp.error = "finterm LLM returned an empty response. Please try again.";
+            LOG_WARN(TAG, "finterm /research/chat returned empty choices or content");
             return resp;
         }
 

@@ -111,7 +111,7 @@ void WorkspaceOpenDialog::load_workspaces() {
 
 void WorkspaceOpenDialog::browse_for_file() {
     QString path =
-        QFileDialog::getOpenFileName(this, "Open Workspace File", {}, "Fincept Workspace (*.fwsp);;All Files (*)");
+        QFileDialog::getOpenFileName(this, "Open Workspace File", {}, "finterm Workspace (*.fwsp);;All Files (*)");
     if (path.isEmpty())
         return;
     selected_path_ = path;

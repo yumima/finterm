@@ -26,7 +26,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Minidump writer for Windows.
 //
-// When FinceptTerminal.exe crashes (access violation, stack overflow,
+// When finterm.exe crashes (access violation, stack overflow,
 // FAST_FAIL_STACK_COOKIE_CHECK_FAILURE, etc.) the default behaviour is that
 // Windows Error Reporting writes a dump to AppData\CrashDumps — BUT only if
 // the user has WER enabled, and WER strips user data and is hard to retrieve.

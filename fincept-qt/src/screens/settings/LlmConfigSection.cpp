@@ -565,7 +565,7 @@ void LlmConfigSection::load_providers() {
     if (result.is_ok()) {
         for (const auto& p : result.value()) {
             bool is_fincept = (p.provider.toLower() == "fincept");
-            QString display = is_fincept ? "Fincept LLM" : p.provider;
+            QString display = is_fincept ? "finterm LLM" : p.provider;
             if (p.is_active) {
                 display += "  ✓";
                 active_provider = p.provider;
@@ -654,9 +654,9 @@ void LlmConfigSection::populate_form(const QString& provider) {
                 auto stored = SettingsRepository::instance().get("fincept_api_key");
                 if (stored.is_ok() && !stored.value().isEmpty()) {
                     QString masked = stored.value().left(8) + "...";
-                    api_key_edit_->setPlaceholderText("Linked to your Fincept account: " + masked);
+                    api_key_edit_->setPlaceholderText("Linked to your finterm account: " + masked);
                 } else {
-                    api_key_edit_->setPlaceholderText("Login to your Fincept account to enable");
+                    api_key_edit_->setPlaceholderText("Login to your finterm account to enable");
                 }
                 api_key_edit_->setEnabled(false);
                 // Fincept is a managed service — hide model/base_url/fetch
@@ -684,9 +684,9 @@ void LlmConfigSection::populate_form(const QString& provider) {
     if (is_fincept) {
         auto stored = SettingsRepository::instance().get("fincept_api_key");
         if (stored.is_ok() && !stored.value().isEmpty())
-            api_key_edit_->setPlaceholderText("Linked to your Fincept account: " + stored.value().left(8) + "...");
+            api_key_edit_->setPlaceholderText("Linked to your finterm account: " + stored.value().left(8) + "...");
         else
-            api_key_edit_->setPlaceholderText("Login to your Fincept account to enable");
+            api_key_edit_->setPlaceholderText("Login to your finterm account to enable");
         model_combo_->setVisible(false);
         fetch_btn_->setVisible(false);
         base_url_edit_->setVisible(false);
@@ -794,7 +794,7 @@ void LlmConfigSection::on_delete_provider() {
     QString provider = provider_list_->item(row)->data(Qt::UserRole).toString();
 
     if (provider.toLower() == "fincept") {
-        show_status("Cannot remove built-in Fincept provider", true);
+        show_status("Cannot remove built-in finterm provider", true);
         return;
     }
 
@@ -836,9 +836,9 @@ void LlmConfigSection::on_test_connection() {
         // Fincept is a managed service — verify API key exists
         auto stored = SettingsRepository::instance().get("fincept_api_key");
         if (stored.is_ok() && !stored.value().isEmpty())
-            show_status("Fincept connected — API key active", false);
+            show_status("finterm connected — API key active", false);
         else
-            show_status("Not connected — login to your Fincept account first", true);
+            show_status("Not connected — login to your finterm account first", true);
         return;
     }
 
@@ -880,7 +880,7 @@ void LlmConfigSection::on_fetch_models() {
     }
 
     if (provider == "fincept") {
-        show_status("Fincept manages models automatically", false);
+        show_status("finterm manages models automatically", false);
         return;
     }
 

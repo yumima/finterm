@@ -562,7 +562,7 @@ QMenu* ToolBar::build_view_menu() {
 QMenu* ToolBar::build_help_menu() {
     auto* m = new QMenu("Help", this);
     m->setStyleSheet(popup_ss());
-    m->addAction("About Fincept", this, [this]() { emit navigate_to("about"); });
+    m->addAction("About finterm", this, [this]() { emit navigate_to("about"); });
     m->addAction("Help Center", this, [this]() { emit navigate_to("help"); });
     m->addSeparator();
     m->addAction("Check for Updates", this, [this]() { emit action_triggered("check_updates"); });

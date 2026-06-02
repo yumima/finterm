@@ -155,7 +155,7 @@ int MainWindow::next_window_id() {
 MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), window_id_(window_id) {
     // Window title format: "finterm @ <hostname>" — makes it obvious which
     // box you're on when running multiple instances over SSH/VNC and
-    // distinguishes this fork from upstream "Fincept Terminal" branding.
+    // distinguishes this fork from upstream "finterm" branding.
     setWindowTitle(app_title_base());
     // Load icon from the embedded Windows resource (IDI_ICON1 in app.rc).
     // Falls back to the .ico beside the executable on other platforms.
@@ -780,12 +780,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             dlg->deleteLater();
         } else if (action == "import_data") {
             QString path =
-                QFileDialog::getOpenFileName(this, "Import Workspace", QDir::homePath(), "Fincept Workspace (*.fwsp)");
+                QFileDialog::getOpenFileName(this, "Import Workspace", QDir::homePath(), "finterm Workspace (*.fwsp)");
             if (!path.isEmpty())
                 WorkspaceManager::instance().import_workspace(path);
         } else if (action == "export_data") {
             QString path =
-                QFileDialog::getSaveFileName(this, "Export Workspace", QDir::homePath(), "Fincept Workspace (*.fwsp)");
+                QFileDialog::getSaveFileName(this, "Export Workspace", QDir::homePath(), "finterm Workspace (*.fwsp)");
             if (!path.isEmpty())
                 WorkspaceManager::instance().export_workspace(path);
         } else if (action == "screenshot") {

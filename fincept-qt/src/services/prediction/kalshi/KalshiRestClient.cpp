@@ -154,7 +154,7 @@ QString KalshiRestClient::absolute_url(const QString& path) const {
 
 void KalshiRestClient::get_json(const QString& path, JsonCallback on_success, const QString& error_ctx) {
     QNetworkRequest req{QUrl(absolute_url(path))};
-    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("FinceptTerminal/4.0"));
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("finterm/4.0"));
     auto* reply = nam_->get(req);
     QPointer<KalshiRestClient> self = this;
     connect(reply, &QNetworkReply::finished, this, [self, reply, on_success, error_ctx]() {

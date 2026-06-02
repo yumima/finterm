@@ -1585,7 +1585,7 @@ void VideoPlayerWidget::enter_fullscreen() {
     // makes the widget a top-level window. setWindowTitle gives it a
     // sensible window-list entry in case the compositor shows one.
     target->setParent(nullptr);
-    target->setWindowTitle(current_title_.isEmpty() ? QStringLiteral("Fincept — Video")
+    target->setWindowTitle(current_title_.isEmpty() ? QStringLiteral("finterm — Video")
                                                     : current_title_);
     target->showFullScreen();
     target->setFocus();

@@ -41,7 +41,7 @@ namespace {
 
 constexpr qsizetype kMaxRowsRendered = 5000; // safety cap for very large tables
 constexpr qsizetype kMaxHtmlBytes = 10 * 1024 * 1024;
-const char* kDefaultUA = "FinceptTerminal/1.0 (compatible; WebScraperWidget)";
+const char* kDefaultUA = "finterm/1.0 (compatible; WebScraperWidget)";
 
 // Decode common HTML entities + numeric char refs. Not exhaustive but covers
 // the overwhelming majority of real-world tables.

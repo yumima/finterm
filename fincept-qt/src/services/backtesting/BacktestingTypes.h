@@ -32,7 +32,7 @@ inline QVector<Provider> all_providers() {
          QColor("#FF3B8E"),
          {"backtest", "optimize", "walk_forward", "indicator", "indicator_signals"}},
         {"bt", "BT", QColor("#FF6B35"), {"backtest", "optimize", "walk_forward", "indicator", "indicator_signals"}},
-        {"fincept", "Fincept", QColor("#d97706"), {"backtest", "optimize", "walk_forward"}},
+        {"fincept", "finterm", QColor("#d97706"), {"backtest", "optimize", "walk_forward"}},
     };
 }
 

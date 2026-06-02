@@ -1125,7 +1125,7 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
 // ── SEC EDGAR ──────────────────────────────────────────────────────────────
 // SEC requires a `User-Agent: <organization> <email>` header. We send a
 // stable identifier so they can throttle us instead of blocking the IP.
-static const char* kSecUserAgent = "FinceptTerminal admin@hanlexon.com";
+static const char* kSecUserAgent = "finterm admin@hanlexon.com";
 
 void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallback cb) {
     if (ticker.isEmpty()) { cb(false, {}); return; }

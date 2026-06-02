@@ -397,7 +397,7 @@ void CommandBar::build_commands() {
         // Community / Info
         {"about",
          "About",
-         "About Fincept Terminal",
+         "About finterm",
          {"about", "info", "version"},
          "",
          {"about", "information", "version"}},

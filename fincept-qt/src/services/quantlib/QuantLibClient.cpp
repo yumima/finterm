@@ -67,7 +67,7 @@ static QNetworkRequest build_request(const QString& endpoint, const QJsonObject&
     QNetworkRequest req{QUrl(url)};
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "FinceptTerminal/4.0.0");
+    req.setRawHeader("User-Agent", "finterm/4.0.0");
 
     auto& auth_mgr = auth::AuthManager::instance();
     if (auth_mgr.is_authenticated())

@@ -29,7 +29,7 @@ QByteArray random_token_hex(int n_bytes) {
 
 QByteArray load_connect_html() {
     // Resources are copied beside the executable at build time:
-    //   $<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/connect.html
+    //   $<TARGET_FILE_DIR:finterm>/resources/wallet/connect.html
     const QString path =
         QCoreApplication::applicationDirPath() + QStringLiteral("/resources/wallet/connect.html");
     QFile f(path);

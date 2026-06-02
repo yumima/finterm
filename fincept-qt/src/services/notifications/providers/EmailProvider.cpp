@@ -43,7 +43,7 @@ void EmailProvider::send(const NotificationRequest& req, std::function<void(bool
     QJsonObject body;
     body["to"] = to_addr_;
     body["from"] = from_addr_.isEmpty() ? smtp_user_ : from_addr_;
-    body["subject"] = QString("[Fincept] %1").arg(req.title);
+    body["subject"] = QString("[finterm] %1").arg(req.title);
     body["body"] =
         QString("%1\n\n%2\n\nSent: %3").arg(req.title, req.message, req.timestamp.toString("yyyy-MM-dd hh:mm:ss"));
     body["auth"] = auth;

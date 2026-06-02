@@ -218,7 +218,7 @@ EOF
         fi
     fi
 
-    # Strip Qt window/toolbar/dock-layout state from FinceptTerminal.conf
+    # Strip Qt window/toolbar/dock-layout state from finterm.conf
     # so every launch starts with a clean default layout. Surgical —
     # preserves portfolio, workspaces, theme, component-usage stats, and
     # every other setting. Set FINCEPT_KEEP_WINDOW=1 to skip.
@@ -390,10 +390,10 @@ kill_app() {
 }
 
 # Surgical: strip ONLY the window/toolbar/dock-layout state from
-# FinceptTerminal.conf. Leaves portfolio, workspaces, theme, component
+# finterm.conf. Leaves portfolio, workspaces, theme, component
 # usage stats, and every other setting alone. Safe to run every launch.
 do_window_only_reset() {
-    local conf="$CONFIG_DIR/FinceptTerminal.conf"
+    local conf="$CONFIG_DIR/finterm.conf"
     if [[ ! -f "$conf" ]]; then
         return 0  # nothing to do (first launch — no config yet)
     fi
@@ -423,7 +423,7 @@ _snapshot_data() {
     mkdir -p "$dest/config" "$dest/data" "$dest/workspaces"
     # Settings: Linux keeps .conf files in ~/.config/Fincept; macOS keeps a
     # QSettings plist under ~/Library/Preferences (filename varies by Qt).
-    for f in FinceptTerminal.conf FinceptTerminal-Secure.conf Terminal.conf; do
+    for f in finterm.conf finterm-Secure.conf Terminal.conf FinceptTerminal.conf FinceptTerminal-Secure.conf; do
         [[ -f "$CONFIG_DIR/$f" ]] && cp -p "$CONFIG_DIR/$f" "$dest/config/"
     done
     if [[ "$FINCEPT_OS" == "macos" ]]; then

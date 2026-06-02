@@ -7,7 +7,7 @@ DockToolBar::DockToolBar(QWidget* parent) : QToolBar("Main Toolbar", parent) {
     // to match the saved toolbar state back to this widget. Without it,
     // Qt logs `'objectName' not set for QToolBar ... 'Main Toolbar'` and
     // restored floating-toolbar state ends up as an orphan top-level
-    // window titled "Fincept Terminal" — exactly the multi-window
+    // window titled "finterm" — exactly the multi-window
     // visual bug we saw in practice.
     setObjectName("mainDockToolbar");
     setMovable(false);

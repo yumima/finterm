@@ -1435,7 +1435,7 @@ QWidget* QuantModulePanel::build_rd_agent_tab(QComboBox* llm_combo) {
     auto* mcp_btn = new QPushButton("MCP TOOLS", status_bar);
     mcp_btn->setCursor(Qt::PointingHandCursor);
     mcp_btn->setCheckable(true);
-    mcp_btn->setToolTip("Start/stop the Fincept MCP tool server\n"
+    mcp_btn->setToolTip("Start/stop the finterm MCP tool server\n"
                         "Gives RD-Agent loops access to market data,\n"
                         "financial news and economics tools.");
     mcp_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
