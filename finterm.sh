@@ -42,14 +42,16 @@ esac
 if [[ "$FINCEPT_OS" == "macos" ]]; then
     BUILD_PRESET="macos-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
-    FINTERM_BIN="$BUILD_DIR/FinceptTerminal.app/Contents/MacOS/FinceptTerminal"
+    FINTERM_BIN="$BUILD_DIR/finterm.app/Contents/MacOS/finterm"
+    FINTERM_PROC="finterm.app/Contents/MacOS"   # pgrep/pkill match (binary path; never matches finterm.sh)
     SHARE_DIR="$HOME/Library/Application Support/com.fincept.terminal"
     CONFIG_DIR="$HOME/Library/Preferences"   # SHARED dir — QSettings writes a plist here
     BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/Library/Application Support/finterm-backups}"
 else
     BUILD_PRESET="linux-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
-    FINTERM_BIN="$BUILD_DIR/FinceptTerminal"
+    FINTERM_BIN="$BUILD_DIR/finterm.bin"
+    FINTERM_PROC="finterm.bin"                  # pgrep/pkill match (never matches finterm.sh)
     SHARE_DIR="$HOME/.local/share/com.fincept.terminal"
     CONFIG_DIR="$HOME/.config/Fincept"       # app-specific dir (safe to wipe wholesale)
     BACKUP_DIR="${FINCEPT_BACKUP_DIR:-$HOME/.local/share/finterm-backups}"
@@ -80,7 +82,7 @@ confirm() {
 
 usage() {
     cat <<'EOF'
-finterm — local Fincept Terminal management
+finterm — local terminal management
 
 USAGE
     finterm <subcommand> [subcommand-flags...]
@@ -171,7 +173,7 @@ RESET
     recoverable — but if you just want to fix a problem, use `repair` instead.
 
 STOP
-    pkill the FinceptTerminal binary.
+    pkill the finterm binary.
 
 STATUS
     Show whether the Qt binary and the data daemon are running.
@@ -379,11 +381,11 @@ EOF
 # ── Reset helpers (inlined; previously tools/reset.sh) ───────────────────────
 
 kill_app() {
-    pkill -9 -f FinceptTerminal 2>/dev/null || true
+    pkill -9 -f "$FINTERM_PROC" 2>/dev/null || true
     pkill -9 -f "yfinance_data.py --daemon" 2>/dev/null || true
     sleep 1
-    if pgrep -f FinceptTerminal >/dev/null 2>&1; then
-        echo "WARN: FinceptTerminal still running after kill — proceeding anyway." >&2
+    if pgrep -f "$FINTERM_PROC" >/dev/null 2>&1; then
+        echo "WARN: finterm still running after kill — proceeding anyway." >&2
     fi
 }
 
@@ -544,11 +546,11 @@ cmd_reset() {
 
 cmd_stop() {
     local stopped=0
-    if pgrep -f FinceptTerminal >/dev/null; then
-        pkill -f FinceptTerminal && echo "Stopped FinceptTerminal" && stopped=1
+    if pgrep -f "$FINTERM_PROC" >/dev/null; then
+        pkill -f "$FINTERM_PROC" && echo "Stopped finterm" && stopped=1
     fi
     if [[ "$stopped" == 0 ]]; then
-        echo "Nothing to stop — FinceptTerminal is not running."
+        echo "Nothing to stop — finterm is not running."
     fi
 }
 
@@ -557,11 +559,11 @@ cmd_stop() {
 cmd_status() {
     local app daemon
 
-    if app=$(pgrep -af FinceptTerminal); then
-        echo "● FinceptTerminal:"
+    if app=$(pgrep -af "$FINTERM_PROC"); then
+        echo "● finterm:"
         echo "$app" | sed 's/^/    /'
     else
-        echo "○ FinceptTerminal: not running"
+        echo "○ finterm: not running"
     fi
 
     if daemon=$(pgrep -af "yfinance_data.py --daemon"); then
@@ -597,7 +599,7 @@ cmd_setup() {
 
     echo ""
     echo "================================================"
-    echo "  Fincept Terminal — Setup"
+    echo "  finterm — Setup"
     echo "  Qt >= ${QT_VERSION%.*} (system) | CMake ${CMAKE_MIN}+ | Python ${PYTHON_MIN}+"
     [ "$CI_MODE" = true ] && echo "  (CI mode — skipping interactive steps)"
     echo "================================================"
@@ -843,8 +845,8 @@ cmd_setup() {
     ok
 
     # ── Done ────────────────────────────────────────────────────
-    local BIN="$SETUP_BUILD_DIR/FinceptTerminal"
-    [ "$PLATFORM" = "macos" ] && BIN="$SETUP_BUILD_DIR/FinceptTerminal.app/Contents/MacOS/FinceptTerminal"
+    local BIN="$SETUP_BUILD_DIR/finterm.bin"
+    [ "$PLATFORM" = "macos" ] && BIN="$SETUP_BUILD_DIR/finterm.app/Contents/MacOS/finterm"
 
     echo ""
     echo "================================================"
@@ -872,16 +874,16 @@ cmd_setup() {
 
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 DESKTOP_FILE="$DESKTOP_DIR/finterm.desktop"
-MACOS_APP_LINK="$HOME/Applications/FinceptTerminal.app"
+MACOS_APP_LINK="$HOME/Applications/finterm.app"
 
 cmd_install() {
     if [[ "$FINCEPT_OS" == "macos" ]]; then
-        local app="$BUILD_DIR/FinceptTerminal.app"
+        local app="$BUILD_DIR/finterm.app"
         [[ -d "$app" ]] || { echo "Error: app bundle not found at $app — run 'finterm setup' first." >&2; exit 1; }
         mkdir -p "$HOME/Applications"
         ln -sfn "$app" "$MACOS_APP_LINK"
         echo "Installed: $MACOS_APP_LINK → $app"
-        echo "Find \"FinceptTerminal\" in Launchpad / ~/Applications (drag to the Dock to pin)."
+        echo "Find \"finterm\" in Launchpad / ~/Applications (drag to the Dock to pin)."
         return 0
     fi
     local icon="$REPO_DIR/finterm-icon.png"
@@ -901,7 +903,7 @@ Exec=$REPO_DIR/finterm.sh
 Icon=$icon
 Terminal=false
 Categories=Office;Finance;
-StartupWMClass=FinceptTerminal
+StartupWMClass=finterm
 StartupNotify=true
 EOF
     if command -v update-desktop-database >/dev/null 2>&1; then

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4ba16b03`](https://github.com/yumima/finterm/commit/4ba16b03) core: centralize app identity into AppIdentity, add display brand
 - [`51682abb`](https://github.com/yumima/finterm/commit/51682abb) pre_ipo: fix ambiguous ColorToken .arg() on Qt 6.10
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

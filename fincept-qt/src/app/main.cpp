@@ -122,6 +122,9 @@ int main(int argc, char* argv[]) {
     // above, so the app can be rebranded without moving any on-disk data or
     // settings (see core/config/AppIdentity.h).
     app.setApplicationDisplayName(fincept::AppIdentity::kDisplayName);
+    // Desktop-entry / WM_CLASS (X11) / app_id (Wayland) association — matches the
+    // installed finterm.desktop so the taskbar groups windows under the brand.
+    app.setDesktopFileName(fincept::AppIdentity::kDisplayName);
 #ifndef FINCEPT_VERSION_STRING
 #    define FINCEPT_VERSION_STRING "0.0.0-dev"
 #endif

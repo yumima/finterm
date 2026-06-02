@@ -23,7 +23,7 @@ if(WIN32 AND CMAKE_HOST_WIN32)
     endif()
 endif()
 
-project(FinceptTerminal VERSION 4.0.2 LANGUAGES C CXX)
+project(finterm VERSION 4.0.2 LANGUAGES C CXX)
 
 # Strip C/C++ flags out of RC invocations — rc.exe only understands /D, /I, /fo.
 if(WIN32)
@@ -248,7 +248,7 @@ add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 # OFF by default so a normal build is unchanged. Turn on with
 # -DFINCEPT_BUILD_TESTS=ON to compile the Qt Test executables under
 # fincept-qt/tests/. Run via `ctest` in the build directory.
-option(FINCEPT_BUILD_TESTS "Build the Fincept Terminal test suite" OFF)
+option(FINCEPT_BUILD_TESTS "Build the finterm test suite" OFF)
 
 # ── Qt packages ──────────────────────────────────────────────────────────────
 # FINCEPT_QT_VERSION is the version the project is *tested and shipped* against.
@@ -2061,6 +2061,19 @@ target_include_directories(FinceptTerminal PRIVATE
     ${SingleApplication_SOURCE_DIR}
 )
 
+# ── Emitted artifact name ─────────────────────────────────────────────────────
+# The CMake target token "FinceptTerminal" is an internal handle — never seen in
+# any shipped artifact (like the C++ namespace fincept). Only the produced
+# binary carries the brand:
+#   Linux -> finterm.bin    Windows -> finterm.exe    macOS -> finterm.app
+if(WIN32)
+    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm")
+elseif(APPLE)
+    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm")
+else()
+    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm.bin")
+endif()
+
 # ── macOS bundle properties ───────────────────────────────────────────────────
 if(APPLE)
     set_target_properties(FinceptTerminal PROPERTIES
@@ -2721,7 +2734,7 @@ if(FINCEPT_BUILD_INSTALLER)
     endif()
 
     # ── CPack general metadata ───────────────────────────────────────────────
-    set(CPACK_PACKAGE_NAME "FinceptTerminal")
+    set(CPACK_PACKAGE_NAME "finterm")
     set(CPACK_PACKAGE_VENDOR "finterm contributors")
     set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
@@ -2856,7 +2869,7 @@ endif() # FINCEPT_BUILD_INSTALLER
 # ── Build configuration summary ──────────────────────────────────────────────
 message(STATUS "")
 message(STATUS "============================================================")
-message(STATUS "  Fincept Terminal ${CMAKE_PROJECT_VERSION} — build summary")
+message(STATUS "  finterm ${CMAKE_PROJECT_VERSION} — build summary")
 message(STATUS "============================================================")
 message(STATUS "  Qt version        : ${Qt6Core_VERSION}")
 message(STATUS "  Build type        : ${CMAKE_BUILD_TYPE}")
