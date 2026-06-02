@@ -1,6 +1,6 @@
 # Connect your wallet — Crypto Center
 
-The **Crypto Center** is where Fincept Terminal reads your $FNCPT identity. It shows your public address, SOL balance, $FNCPT balance, and live USD value. **Your private keys never touch the terminal.**
+The **Crypto Center** is where finterm reads your $FNCPT identity. It shows your public address, SOL balance, $FNCPT balance, and live USD value. **Your private keys never touch the terminal.**
 
 ## Supported wallets
 
@@ -30,11 +30,11 @@ The browser tab self-destructs after the handshake. The local server only listen
 ## Step by step (Phantom)
 
 1. Install the [Phantom extension](https://phantom.app/) in Chrome, Brave, Edge, or Firefox.
-2. In Fincept Terminal: **Navigate → Crypto → Crypto Center**.
+2. In finterm: **Navigate → Crypto → Crypto Center**.
 3. Click **Connect Wallet**.
 4. A new browser tab opens. Click the row labelled **Phantom**.
 5. Phantom prompts you to authorise the connection — review the message, click **Connect**.
-6. Phantom shows a second prompt: a *signed message* request. Verify it begins with `Fincept Terminal wallet-connect challenge.` then click **Sign**.
+6. Phantom shows a second prompt: a *signed message* request. Verify it begins with `finterm wallet-connect challenge.` then click **Sign**.
 7. Tab closes. Terminal shows your public key and balances.
 
 The Solflare flow is identical — pick the Solflare row instead.

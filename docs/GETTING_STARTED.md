@@ -94,9 +94,9 @@ cmake --preset linux-release   && cmake --build --preset linux-release   # Linux
 cmake --preset macos-release   && cmake --build --preset macos-release   # macOS
 
 # 3. Run
-./build/linux-release/FinceptTerminal              # Linux
-./build/macos-release/FinceptTerminal.app/Contents/MacOS/FinceptTerminal   # macOS
-.\build\win-release\FinceptTerminal.exe            # Windows
+./build/linux-release/finterm.bin              # Linux
+./build/macos-release/finterm.app/Contents/MacOS/finterm   # macOS
+.\build\win-release\finterm.exe            # Windows
 ```
 
 **If CMake presets can't resolve your Qt path**, use the manual configure:

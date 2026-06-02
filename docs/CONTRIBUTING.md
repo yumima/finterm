@@ -110,12 +110,12 @@ cmake --build build/win-release
 ## Run
 
 ```bash
-.\build\win-release\FinceptTerminal.exe                                           # Windows
-./build/linux-release/FinceptTerminal                                             # Linux
-./build/macos-release/FinceptTerminal.app/Contents/MacOS/FinceptTerminal          # macOS
+.\build\win-release\finterm.exe                                           # Windows
+./build/linux-release/finterm.bin                                             # Linux
+./build/macos-release/finterm.app/Contents/MacOS/finterm          # macOS
 ```
 
-(The binary name is `FinceptTerminal` because the project's CMake target was inherited from upstream — renaming it would break installers and registered file types. Day-to-day, just use `finterm.sh start`.)
+(The CMake *target* is still named `FinceptTerminal` — an internal handle kept unchanged to ease merging upstream code — but the built binary is branded via `OUTPUT_NAME`: `finterm.bin` on Linux, `finterm.exe` on Windows, `finterm.app` on macOS. Day-to-day, just use `finterm.sh start`.)
 
 ---
 
