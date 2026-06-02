@@ -627,6 +627,9 @@ cmd_setup() {
                 `# Covers Widgets/Charts/Network/Sql/Multimedia/WebSockets/Speech/` \
                 `# WebEngine/Positioning/WebChannel/Quick used by the app + tests.)` \
                 qt6-base-dev qt6-base-dev-tools \
+                `# Private headers: required by the bundled qtads docking` \
+                `# dependency (Qt6::GuiPrivate) and re-enables QXlsx Excel export.` \
+                qt6-base-private-dev \
                 qt6-declarative-dev qt6-charts-dev \
                 qt6-multimedia-dev qt6-websockets-dev \
                 qt6-speech-dev qt6-webengine-dev \
@@ -674,7 +677,8 @@ cmd_setup() {
                 git cmake ninja-build gcc-c++ \
                 python3 python3-pip python3-virtualenv \
                 `# Qt 6 (system packages — single source, auto-upgraded)` \
-                qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtcharts-devel \
+                `# qt6-qtbase-private-devel: qtads docking (Qt6::GuiPrivate) + QXlsx Excel export` \
+                qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qtcharts-devel \
                 qt6-qtmultimedia-devel qt6-qtwebsockets-devel qt6-qtspeech-devel \
                 qt6-qtwebengine-devel qt6-qtpositioning-devel qt6-qtwebchannel-devel \
                 mesa-libGL-devel mesa-libGLU-devel mesa-libEGL-devel \

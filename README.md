@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`42edfe2c`](https://github.com/yumima/finterm/commit/42edfe2c) finterm: system Qt, merged setup, repair/reset model, cross-platform
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
