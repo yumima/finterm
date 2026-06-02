@@ -27,14 +27,14 @@ $RepoDir     = $PSScriptRoot
 $AppDir      = Join-Path $RepoDir 'fincept-qt'
 $BuildPreset = 'win-release'
 $BuildDir    = Join-Path $AppDir "build\$BuildPreset"
-$Bin         = Join-Path $BuildDir 'FinceptTerminal.exe'
+$Bin         = Join-Path $BuildDir 'finterm.exe'
 
 # App state. AppPaths::root() on Windows = %LOCALAPPDATA%\com.fincept.terminal.
 $Root        = Join-Path $env:LOCALAPPDATA 'com.fincept.terminal'
 $DataDir     = Join-Path $Root 'data'
 $Workspaces  = Join-Path $Root 'workspaces'
 # Settings live in the registry (QSettings native format), org "Fincept".
-$RegApp      = 'HKCU:\Software\Fincept\FinceptTerminal'
+$RegApp      = 'HKCU:\Software\Fincept\finterm'
 $RegOrg      = 'HKCU:\Software\Fincept'
 # Portable data snapshots — outside the wiped trees so `reset` never deletes them.
 $BackupDir   = if ($env:FINCEPT_BACKUP_DIR) { $env:FINCEPT_BACKUP_DIR } `
@@ -58,12 +58,12 @@ function Confirm-Action($prompt) {
 }
 
 function Stop-App {
-    $p = Get-Process FinceptTerminal -ErrorAction SilentlyContinue
+    $p = Get-Process finterm -ErrorAction SilentlyContinue
     if ($p) {
         $p | Stop-Process -Force -ErrorAction SilentlyContinue
         # Wait for the process to actually exit so its DB/plist files are unlocked
         # before we snapshot or delete them (avoids a half-written snapshot).
-        Wait-Process -Name FinceptTerminal -Timeout 10 -ErrorAction SilentlyContinue
+        Wait-Process -Name finterm -Timeout 10 -ErrorAction SilentlyContinue
     }
 }
 
@@ -100,7 +100,7 @@ function Snapshot-Data($dest) {
 function Cmd-Setup {
     Write-Host ""
     Write-Host "================================================"
-    Write-Host "  Fincept Terminal - Setup (Windows)"
+    Write-Host "  finterm - Setup (Windows)"
     Write-Host "  Qt $QtVersion (pinned) | MSVC 2022 | CMake + Ninja"
     Write-Host "================================================`n"
 
@@ -189,7 +189,7 @@ function Cmd-Start {
     # GPU note: on Windows, NVIDIA Optimus selects the GPU automatically; no glvnd
     # juggling needed, so there is no FINCEPT_GPU equivalent here.
     Start-Process -FilePath $Bin -WorkingDirectory $BuildDir
-    Write-Host "Launched FinceptTerminal."
+    Write-Host "Launched finterm."
 }
 
 # ── Command: build ─────────────────────────────────────────────────────────────
@@ -284,15 +284,15 @@ function Cmd-Reset {
 
 # ── Command: stop / status ─────────────────────────────────────────────────────
 function Cmd-Stop {
-    $p = Get-Process FinceptTerminal -ErrorAction SilentlyContinue
-    if ($p) { $p | Stop-Process -Force; Write-Host "Stopped FinceptTerminal." }
-    else    { Write-Host "Nothing to stop - FinceptTerminal is not running." }
+    $p = Get-Process finterm -ErrorAction SilentlyContinue
+    if ($p) { $p | Stop-Process -Force; Write-Host "Stopped finterm." }
+    else    { Write-Host "Nothing to stop - finterm is not running." }
 }
 
 function Cmd-Status {
-    $p = Get-Process FinceptTerminal -ErrorAction SilentlyContinue
-    if ($p) { Write-Host ("* FinceptTerminal: running (PID " + ($p.Id -join ', ') + ")") }
-    else    { Write-Host "o FinceptTerminal: not running" }
+    $p = Get-Process finterm -ErrorAction SilentlyContinue
+    if ($p) { Write-Host ("* finterm: running (PID " + ($p.Id -join ', ') + ")") }
+    else    { Write-Host "o finterm: not running" }
 }
 
 # ── Command: install / uninstall (Start Menu shortcut) ─────────────────────────
@@ -321,7 +321,7 @@ function Cmd-Uninstall {
 # ── Help ───────────────────────────────────────────────────────────────────────
 function Cmd-Help {
 @"
-finterm (Windows) - local Fincept Terminal management
+finterm (Windows) - local finterm management
 
 USAGE
     .\finterm.ps1 <command> [flags]

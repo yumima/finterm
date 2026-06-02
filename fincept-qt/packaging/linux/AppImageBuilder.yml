@@ -17,7 +17,7 @@ AppDir:
     name: Fincept Terminal
     icon: fincept-terminal
     version: !ENV ${FINCEPT_VERSION:-4.0.2}
-    exec: usr/bin/FinceptTerminal
+    exec: usr/bin/finterm.bin
     exec_args: $@
 
   apt:
@@ -56,6 +56,6 @@ AppDir:
 AppImage:
   arch: x86_64
   comp: xz
-  file_name: FinceptTerminal-!ENV ${FINCEPT_VERSION:-4.0.2}-x86_64.AppImage
+  file_name: finterm-!ENV ${FINCEPT_VERSION:-4.0.2}-x86_64.AppImage
   sign-key: None
-  update-information: gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|FinceptTerminal-*x86_64.AppImage.zsync
+  update-information: gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|finterm-*x86_64.AppImage.zsync

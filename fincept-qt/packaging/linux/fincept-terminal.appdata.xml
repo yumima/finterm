@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>com.fincept.terminal</id>
-  <name>Fincept Terminal</name>
+  <name>finterm</name>
   <summary>Professional financial intelligence terminal</summary>
   <metadata_license>FSFAP</metadata_license>
   <project_license>AGPL-3.0-or-later</project_license>
@@ -25,7 +25,7 @@
   <url type="bugtracker">https://github.com/Fincept-Corporation/FinceptTerminal/issues</url>
   <url type="help">https://discord.gg/ae87a8ygbN</url>
   <provides>
-    <binary>FinceptTerminal</binary>
+    <binary>finterm</binary>
   </provides>
   <releases>
     <release version="4.0.2" date="2026-04-14">

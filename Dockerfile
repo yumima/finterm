@@ -153,7 +153,7 @@ RUN . /etc/build.env \
          -DFINCEPT_QT_STRICT=ON \
          -DOPENSSL_ROOT_DIR=/usr \
     && cmake --build build --parallel 4 \
-    && strip build/FinceptTerminal
+    && strip build/finterm.bin
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
 # Pinned to $TARGETPLATFORM so the final image actually matches the arch the
@@ -219,7 +219,7 @@ COPY --from=builder /opt/Qt /opt/Qt
 ENV QT_QPA_PLATFORM=xcb
 
 WORKDIR /app
-COPY --from=builder /src/fincept-qt/build/FinceptTerminal ./FinceptTerminal
+COPY --from=builder /src/fincept-qt/build/finterm.bin ./finterm.bin
 COPY --from=builder /src/fincept-qt/scripts              ./scripts
 COPY --from=builder /src/fincept-qt/resources            ./resources
 
@@ -227,7 +227,7 @@ COPY --from=builder /src/fincept-qt/resources            ./resources
 # binary on Linux. Copy it into /usr/local/lib so the map widget can dlopen it.
 COPY --from=builder /src/fincept-qt/build/_deps/qgeoview-build/lib/ /usr/local/lib/
 RUN ldconfig \
-    && chmod +x ./FinceptTerminal
+    && chmod +x ./finterm.bin
 
 # Tiny wrapper resolves QT_PREFIX at runtime (cannot expand $(cat ...) in ENV).
 RUN { \
@@ -238,7 +238,7 @@ RUN { \
       echo 'export LD_LIBRARY_PATH="${QT_PREFIX}/lib:/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"'; \
       echo 'export QT_PLUGIN_PATH="${QT_PREFIX}/plugins"'; \
       echo 'export QT_QPA_PLATFORM_PLUGIN_PATH="${QT_PREFIX}/plugins/platforms"'; \
-      echo 'exec /app/FinceptTerminal "$@"'; \
+      echo 'exec /app/finterm.bin "$@"'; \
     } > /usr/local/bin/fincept-entrypoint.sh \
     && chmod +x /usr/local/bin/fincept-entrypoint.sh
 

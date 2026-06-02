@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`63e28c93`](https://github.com/yumima/finterm/commit/63e28c93) rebrand: visible strings -> finterm; migrate settings store
 - [`b9e0ae98`](https://github.com/yumima/finterm/commit/b9e0ae98) build,launcher: emit binary as finterm.bin; brand desktop association
 - [`4ba16b03`](https://github.com/yumima/finterm/commit/4ba16b03) core: centralize app identity into AppIdentity, add display brand
 - [`51682abb`](https://github.com/yumima/finterm/commit/51682abb) pre_ipo: fix ambiguous ColorToken .arg() on Qt 6.10
@@ -103,7 +104,7 @@ finterm/
 
 One process runs when you launch:
 
-1. **FinceptTerminal binary** — the Qt app. Auth/profile/session run in-process via `AuthService` (no stub server). Spawns `yfinance_data.py --daemon --socket <path>` as a Python child for all market-data work; communicates via a Unix domain socket at `~/.local/share/com.fincept.terminal/runtime/yfinance.sock`. The daemon runs a `ThreadPoolExecutor` internally so multiple yfinance fetches execute concurrently.
+1. **finterm binary** — the Qt app. Auth/profile/session run in-process via `AuthService` (no stub server). Spawns `yfinance_data.py --daemon --socket <path>` as a Python child for all market-data work; communicates via a Unix domain socket at `~/.local/share/com.fincept.terminal/runtime/yfinance.sock`. The daemon runs a `ThreadPoolExecutor` internally so multiple yfinance fetches execute concurrently.
 
 Nothing talks to anything outside `localhost` except the data scripts and any LLM provider you explicitly configure.
 
@@ -165,7 +166,7 @@ When something's wrong, reach for `finterm repair` — it fixes the common break
 
 What `finterm start` does:
 
-1. **Strips Qt window/dock layout state** from `~/.config/Fincept/FinceptTerminal.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
+1. **Strips Qt window/dock layout state** from `~/.config/Fincept/finterm.conf`. Surgical: portfolio/watchlists/theme/workspaces preserved. Skip with `FINCEPT_KEEP_WINDOW=1 finterm`.
 2. **Execs the Qt binary in the foreground.** Closing the window returns control to your shell.
 
 ### Auth & user accounts

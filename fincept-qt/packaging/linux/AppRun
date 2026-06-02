@@ -25,4 +25,4 @@ export FINCEPT_SCRIPTS_DIR="${HERE}/usr/share/fincept-terminal/scripts"
 # speech-dispatcher config (for TTS on Linux)
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
 
-exec "${HERE}/usr/bin/FinceptTerminal" "$@"
+exec "${HERE}/usr/bin/finterm.bin" "$@"
