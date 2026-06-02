@@ -58,7 +58,7 @@ Pinned toolchain versions — enforced by CMake. Mismatch produces a clear fail-
 | C++ compiler  | MSVC 19.38 (VS 2022 17.8) / GCC 12.3 / Apple Clang 15.0 (Xcode 15.2)                    |
 | CMake         | **3.27.7** — [cmake.org](https://cmake.org/download/)                                   |
 | Ninja         | **1.11.1** — [releases](https://github.com/ninja-build/ninja/releases)                  |
-| Qt            | **6.8.3** — [Qt Online Installer](https://www.qt.io/download-qt-installer)              |
+| Qt            | **6.8+** — system packages: distro `qt6-*` (Linux) / Homebrew `qt` (macOS). Tested against 6.8.3; ship builds pin it via `-DFINCEPT_QT_STRICT=ON`. |
 | Python        | **3.11.9** — [python.org](https://www.python.org/downloads/release/python-3119/)        |
 | Git           | latest — [git-scm.com](https://git-scm.com)                                             |
 
@@ -73,9 +73,8 @@ Optional (speeds up rebuilds): **ccache 4.13.4** on Windows is auto-detected.
 ```bash
 git clone <this-repo-url> ~/fin/finterm
 cd ~/fin/finterm
-./setup.sh        # Linux / macOS — installs toolchain + Qt via aqtinstall
-./finterm.sh build
-setup.bat         # Windows — run from a VS 2022 Developer Command Prompt
+./finterm.sh setup     # Linux / macOS — installs toolchain + Qt, configures, builds
+.\finterm.ps1 setup    # Windows (PowerShell) — installs toolchain + Qt (aqt), configures, builds
 ```
 
 ### Manual — CMake presets
@@ -137,8 +136,9 @@ finterm/
 ├── docs/                       # Repo-wide documentation (this file lives here)
 ├── tools/                      # Localhost stub server, systemd unit
 ├── .github/                    # Issue/PR templates, workflows, contribution policy
-├── finterm.sh                  # one-stop CLI: start / build / reset / install / stop / status
-├── setup.sh                    # toolchain preflight + provisioner
+├── finterm.sh                  # one-stop CLI (Linux/macOS): setup / start / build / repair / reset / install / …
+├── finterm.ps1                 # same CLI for native Windows (PowerShell)
+├── setup.sh                    # deprecated shim → `finterm.sh setup`
 └── README.md
 ```
 

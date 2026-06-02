@@ -2,12 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-05-23)
+## Today's commits (2026-06-01)
 
 Latest first.
 
-- [`55668a20`](https://github.com/yumima/finterm/commit/55668a20) widgets(video): follow system default audio sink (fix stuck-on-speaker)
-- [`51a7294b`](https://github.com/yumima/finterm/commit/51a7294b) widgets(video): fullscreen + Spacebar + fix resume-doesn't-play
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
@@ -72,7 +70,7 @@ can't promise:
 - **Live video** — embedded Bloomberg / CNBC HLS streams with pause/play, auto-pause on terminal lock, and user-pickable max resolution (480/720/1080).
 - **AI chat bubble** — pluggable LLM provider; none wired by default.
 - **Concurrent yfinance daemon** — long-lived Python child runs market-data fetches in parallel over a Unix domain socket; interactive requests are prioritised over background sweeps. A local `QueryStore` (SWR + LRU) fronts it for the ER tabs.
-- **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; dock geometry and the last primary screen are restored across launches. `finterm install` registers a desktop launcher.
+- **Workspaces & docking** — multi-window Qt-Advanced-Docking with persistable layouts; dock geometry and the last primary screen are restored across launches. `finterm install` adds a desktop launcher.
 
 ## Data flow
 
@@ -87,8 +85,9 @@ finterm is **data-in only**:
 
 ```
 finterm/
-├── finterm.sh                      ← one-stop CLI: start / build / reset / install / stop / status
-├── setup.sh                        ← preflight: Qt / cmake / Python toolchain
+├── finterm.sh                      ← one-stop CLI (Linux/macOS): setup / start / build / repair / reset / install / …
+├── finterm.ps1                     ← same CLI for native Windows (PowerShell)
+├── setup.sh                        ← deprecated shim → `finterm.sh setup`
 ├── fincept-qt/                     ← Qt6/C++ application
 │   ├── src/auth/AuthService.cpp    ← in-process auth (users stored in auth.db)
 │   ├── src/                        ← C++ source
@@ -109,25 +108,24 @@ Nothing talks to anything outside `localhost` except the data scripts and any LL
 
 ### Platform support
 
-Linux is regularly tested (Ubuntu / Debian-likes, x86-64). macOS and Windows build but are unverified — expect minor friction. `finterm.sh` is bash; on Windows, run under WSL or invoke the binary directly.
+Linux is regularly tested (Ubuntu / Debian-likes, x86-64). macOS and Windows build but are less exercised — expect minor friction. `finterm.sh` drives Linux + macOS; **`finterm.ps1`** is the native-Windows equivalent (same commands).
 
 ### Prerequisites
 
-- Qt 6.8.3 (`setup.sh` provisions via `aqtinstall` if absent).
+- Qt 6.8+ — the **system** Qt (distro `qt6-*` packages, or Homebrew `qt` on macOS); `finterm setup` installs it. Not vendored into the tree.
 - CMake 3.27+, GCC 12.3+ / Clang 15+ / MSVC 2022.
 - Python 3.11+ (for the data scripts; no stub server needed).
-- A separate venv for the data scripts — `setup.sh` provisions it under `~/.local/share/com.fincept.terminal/`. ~110 packages, ~5–15 minutes the first time.
+- A separate venv for the data scripts — `finterm setup` provisions it under `~/.local/share/com.fincept.terminal/`. ~110 packages, ~5–15 minutes the first time.
 
 ### First-time setup
 
 ```bash
 git clone <this-repo-url> ~/fin/finterm
 cd ~/fin/finterm
-./setup.sh                     # checks toolchain, provisions venvs, fetches Qt if needed
-./finterm.sh build             # configure + build the Qt binary
+./finterm.sh setup             # installs system deps + Qt, configures, and builds
 ```
 
-`setup.sh` installs system deps on Linux/macOS automatically (build tools, OpenGL/xkbcommon/dbus, `portaudio19-dev` for AI voice input, etc.).
+`finterm setup` installs system deps on Linux/macOS automatically (build tools, the Qt 6 packages, OpenGL/xkbcommon/dbus, `portaudio19-dev` for AI voice input, etc.) and then configures and builds — no separate script.
 
 **Optional — enable tracked git hooks.** This repo ships a pre-commit hook at `.githooks/pre-commit` that regenerates the "Today's commits" section near the top of this README (oldest-first, GitHub-linked) by calling `tools/update_todays_commits.py`. To turn it on in a fresh clone:
 
@@ -148,18 +146,19 @@ finterm help
 
 | Command | What it does |
 |---|---|
+| `finterm setup` *(`--ci`)* | First-run: install system deps + Qt, configure, build. |
 | `finterm` *(or `finterm start`)* | Launch the Qt app (auth is in-process; no stub needed). |
 | `finterm build` | Incremental cmake/ninja build. |
 | `finterm build --clean` | Clean rebuild. |
 | `finterm build --tests` | Configure with `-DFINCEPT_BUILD_TESTS=ON`. |
-| `finterm reset` | Strip Qt window/dock state only — ~1s, preserves everything else. Run on every `start`. |
-| `finterm reset --config-only` | Back up entire `~/.config/Fincept/`. Python venv preserved. |
-| `finterm reset --full` | Nuke Qt config + Python venv + caches. Reprovisions ~110 pip packages on next launch. |
-| `finterm reset --list` / `--restore <ts>` | List / roll back prior reset backups. |
-| `finterm install` | Register a `.desktop` launcher (pinnable to your dock). |
+| `finterm repair` | **Fix a misbehaving app, keeping all your data.** Clears caches + transient state + stale window/dock layout, and rebuilds the Python venv only if a health check finds it broken. Keeps portfolio, API keys, GUI layout, data-source, workspaces. Takes an insurance snapshot first. |
+| `finterm reset` | **Wipe everything to a clean install.** Confirms first (`-y` skips), snapshots your data to `~/.local/share/finterm-backups/` and prints copy-back commands, then clears config + share. |
+| `finterm install` | Create a `.desktop` launcher (pinnable to your dock). |
 | `finterm uninstall` | Remove the `.desktop` launcher. |
 | `finterm stop` | `pkill` the Qt binary. |
 | `finterm status` | Print what's running (Qt binary + data daemon). |
+
+When something's wrong, reach for `finterm repair` — it fixes the common breakages (stale cache, corrupt layout, broken venv) without ever losing your portfolio, keys, or settings. Use `finterm reset` only when you want a genuinely clean install.
 
 What `finterm start` does:
 
@@ -179,9 +178,14 @@ Local-only multi-user, no email, no SaaS round-trip. Auth runs entirely in-proce
 
 ### Windows
 
+Use the PowerShell sibling **`finterm.ps1`** — same commands as `finterm.sh`, native to Windows (MSVC build, registry settings, Start Menu shortcut):
+
 ```powershell
-fincept-qt\build\windows-release\FinceptTerminal.exe
+.\finterm.ps1              # first run sets everything up, then launches
+.\finterm.ps1 repair      # fix without losing data    .\finterm.ps1 reset   # clean wipe
+.\finterm.ps1 install     # add a Start Menu shortcut
 ```
+(`finterm.sh` is bash and only covers Linux/macOS; on Windows use `finterm.ps1`, or run the Linux flow under WSL.)
 
 ### Verify a launch
 
@@ -191,13 +195,14 @@ fincept-qt\build\windows-release\FinceptTerminal.exe
 
 ### Recovery
 
-`finterm reset` covers ~95% of breakage. Portfolio data lives in SQLite under `~/.local/share/com.fincept.terminal/data/` and is never moved. Every destructive reset moves the affected dir to `<dir>.bak.<unix-ts>` rather than deleting outright.
+`finterm repair` covers ~95% of breakage — it clears caches/transient state and rebuilds a broken venv while keeping your portfolio, API keys, GUI layout, and workspaces. Use `finterm reset` only for a genuinely clean install. Both snapshot your data to `~/.local/share/finterm-backups/` first (printed path), so nothing is lost. Portfolio data lives in SQLite under `~/.local/share/com.fincept.terminal/data/`.
 
 | Symptom | Try |
 |---|---|
-| Two floating empty windows on launch / PIN screen behind another | `finterm reset` (default = window-only) |
-| Stuck on a weird theme / layout | `finterm reset --config-only` |
-| Setup keeps offering "Install Analytics Libraries" | Install `portaudio19-dev` (or distro equivalent), then `finterm reset --full` once. |
+| Two floating empty windows on launch / PIN screen behind another | `finterm repair` (resets the window layout, keeps your data) |
+| Stuck on a weird theme / layout, stale cache, or general flakiness | `finterm repair` |
+| Python venv / data scripts broken (e.g. "Install Analytics Libraries" keeps reappearing) | `finterm repair` — it rebuilds the venv if a health check finds it broken |
+| Want a genuinely clean install | `finterm reset` (snapshots your data first) |
 | Daemon hung / Yahoo timing out | `pkill -f "yfinance_data.py --daemon"` — the Qt app respawns it automatically. |
 | Stale socket file after crash | `rm ~/.local/share/com.fincept.terminal/runtime/yfinance.sock` — cleared automatically on next launch too. |
 | Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — every local user disappears; sign up again. |

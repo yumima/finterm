@@ -53,13 +53,12 @@
 
     {
       "name": "linux-release",
-      "displayName": "Linux Release (GCC 12.3, Qt 6.8.3)",
-      "description": "Pinned Release build for Linux x86_64",
+      "displayName": "Linux Release (GCC, system Qt 6.8+)",
+      "description": "Release build for Linux x86_64. Uses the system/distro Qt (qt6-* dev packages) found on CMake's default search path. Override with -DCMAKE_PREFIX_PATH=<dir> for a specific Qt; add -DFINCEPT_QT_STRICT=ON to lock the exact tested version for ship builds.",
       "inherits": "base",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_PREFIX_PATH": "$env{HOME}/Qt/6.8.3/gcc_64"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {

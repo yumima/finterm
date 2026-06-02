@@ -251,11 +251,25 @@ add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 option(FINCEPT_BUILD_TESTS "Build the Fincept Terminal test suite" OFF)
 
 # ── Qt packages ──────────────────────────────────────────────────────────────
-# Qt is pinned to 6.8.3 across all platforms. Releases must build
-# on exactly this version to guarantee binary/ABI stability of the shipped
-# installer. Developers may override for local experimentation with
-# -DFINCEPT_ALLOW_QT_DRIFT=ON (not for CI or release builds).
-set(FINCEPT_QT_VERSION 6.8.3)
+# FINCEPT_QT_VERSION is the version the project is *tested and shipped* against.
+# By default the build accepts any Qt >= that major.minor (so a system/distro
+# Qt — e.g. apt's qt6-* or Homebrew's qt6 — is used as-is, no vendored copy).
+# Release/installer builds set -DFINCEPT_QT_STRICT=ON to lock the exact tested
+# patch release, guaranteeing binary/ABI stability of the shipped installer.
+# The Dockerfile and release CI set STRICT; dev boxes and PR CI do not.
+# (The old -DFINCEPT_ALLOW_QT_DRIFT flag is gone — the floor IS the default now;
+#  pass -DFINCEPT_QT_STRICT=ON for the exact pin instead.)
+set(FINCEPT_QT_VERSION 6.8.3 CACHE STRING "Qt version the project is tested/shipped against")
+option(FINCEPT_QT_STRICT "Require exactly FINCEPT_QT_VERSION (release/ship builds)" OFF)
+
+# Resolve the version constraint passed to every find_package(Qt6 ...) below.
+# STRICT  -> exact patch pin (ship builds).  Default -> major.minor floor.
+if(FINCEPT_QT_STRICT)
+    set(_fincept_qt_match ${FINCEPT_QT_VERSION} EXACT)
+else()
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _fincept_qt_floor "${FINCEPT_QT_VERSION}")
+    set(_fincept_qt_match ${_fincept_qt_floor})
+endif()
 
 # Qt 6.8 FindWrapOpenGL.cmake hard-codes "-framework AGL" as a fallback when
 # find_library(AGL) fails. Apple removed AGL in macOS 14+ (Sonoma), causing
@@ -277,29 +291,24 @@ if(APPLE AND NOT TARGET WrapOpenGL::WrapOpenGL)
     endif()
 endif()
 
-if(FINCEPT_ALLOW_QT_DRIFT)
-    find_package(Qt6 REQUIRED COMPONENTS
-        Widgets Charts PrintSupport Network Sql Concurrent Multimedia)
-else()
-    find_package(Qt6 ${FINCEPT_QT_VERSION} EXACT REQUIRED COMPONENTS
-        Widgets Charts PrintSupport Network Sql Concurrent Multimedia)
-endif()
+find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS
+    Widgets Charts PrintSupport Network Sql Concurrent Multimedia)
 
 # Optional: WebSockets (not always installed)
-find_package(Qt6 ${FINCEPT_QT_VERSION} EXACT QUIET COMPONENTS WebSockets)
+find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS WebSockets)
 if(Qt6WebSockets_FOUND)
     set(HAS_WEBSOCKETS TRUE)
 endif()
 
 # Optional: MultimediaWidgets (for inline video/stream playback)
 # Qt6::Multimedia is already required above (needed for QMediaPlayer in AiChatBubble / VideoPlayerWidget).
-find_package(Qt6 ${FINCEPT_QT_VERSION} EXACT QUIET COMPONENTS MultimediaWidgets)
+find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS MultimediaWidgets)
 if(Qt6MultimediaWidgets_FOUND)
     set(HAS_MULTIMEDIA TRUE)
 endif()
 
 # Optional: TextToSpeech (cross-platform TTS — SAPI/AVSpeech/speech-dispatcher)
-find_package(Qt6 ${FINCEPT_QT_VERSION} EXACT QUIET COMPONENTS TextToSpeech)
+find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS TextToSpeech)
 if(Qt6TextToSpeech_FOUND)
     set(HAS_TTS TRUE)
 endif()

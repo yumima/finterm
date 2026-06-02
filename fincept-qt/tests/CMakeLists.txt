@@ -5,7 +5,9 @@
 # Qt Test executable that links the minimum subset of sources it needs
 # (no linking against the full FinceptTerminal target — keeps tests fast).
 
-find_package(Qt6 ${FINCEPT_QT_VERSION} EXACT REQUIRED COMPONENTS Test)
+# Inherits ${_fincept_qt_match} from the parent CMakeLists (exact pin under
+# -DFINCEPT_QT_STRICT=ON, else a major.minor floor that accepts system Qt).
+find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Test)
 
 enable_testing()
 

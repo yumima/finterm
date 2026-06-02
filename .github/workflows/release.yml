@@ -75,6 +75,7 @@ jobs:
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DFINCEPT_QT_STRICT=ON \
             -DOPENSSL_ROOT_DIR="${OPENSSL_ROOT_DIR}" \
             -DDEPLOY_QT=ON \
             -DFINCEPT_BUILD_INSTALLER=ON
@@ -303,6 +304,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DFINCEPT_QT_STRICT=ON \
             -DOPENSSL_ROOT_DIR=/usr \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -581,6 +583,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
+            -DFINCEPT_QT_STRICT=ON \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
