@@ -1,5 +1,6 @@
 #include "storage/StorageManager.h"
 
+#include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "storage/cache/CacheManager.h"
@@ -518,7 +519,7 @@ Result<void> StorageManager::clear_workspace_files() {
 
 Result<void> StorageManager::clear_qsettings() {
     LOG_INFO("StorageManager", "Clearing QSettings (window geometry, perspectives, UI state)");
-    QSettings settings("Fincept", "FinceptTerminal");
+    QSettings settings(AppIdentity::kOrg, AppIdentity::kApp);
     settings.clear();
     settings.sync();
     emit category_cleared("qsettings");

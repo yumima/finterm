@@ -1,5 +1,6 @@
 #include "storage/secure/SecureStorage.h"
 
+#include "core/config/AppIdentity.h"
 #include "core/logging/Logger.h"
 
 // ── Platform-specific credential storage ──────────────────────────────────────
@@ -42,7 +43,7 @@
 #endif
 
 static constexpr auto TAG = "SecureStorage";
-static constexpr const char* kService = "com.fincept.terminal";
+static constexpr const char* kService = fincept::AppIdentity::kBundleId;
 
 namespace fincept {
 
@@ -88,7 +89,7 @@ static const SecretSchema* fincept_schema() {
 #    pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #endif
     static const SecretSchema schema = {
-        .name = "com.fincept.terminal",
+        .name = AppIdentity::kBundleId,
         .flags = SECRET_SCHEMA_NONE,
         .attributes = {
             {"fincept-key", SECRET_SCHEMA_ATTRIBUTE_STRING},
@@ -240,7 +241,7 @@ Result<void> SecureStorage::store(const QString& key, const QString& value) {
 
 #    else
     // XOR-obfuscated QSettings fallback — NOT cryptographically secure.
-    QSettings s("Fincept", "FinceptTerminal-Secure");
+    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
     const QByteArray obfuscated = xor_obfuscate(value.toUtf8()).toBase64();
     s.setValue("secure/" + key, QString::fromLatin1(obfuscated));
     return Result<void>::ok();
@@ -328,7 +329,7 @@ Result<QString> SecureStorage::retrieve(const QString& key) {
     return Result<QString>::ok(value);
 
 #    else
-    QSettings s("Fincept", "FinceptTerminal-Secure");
+    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
     QVariant v = s.value("secure/" + key);
     if (!v.isValid())
         return Result<QString>::err("Not found");
@@ -393,7 +394,7 @@ Result<void> SecureStorage::remove(const QString& key) {
     return Result<void>::ok();
 
 #    else
-    QSettings s("Fincept", "FinceptTerminal-Secure");
+    QSettings s(AppIdentity::kOrg, AppIdentity::kAppSecure);
     s.remove("secure/" + key);
     return Result<void>::ok();
 #    endif

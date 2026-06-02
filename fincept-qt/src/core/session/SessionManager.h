@@ -6,6 +6,8 @@
 #include <QString>
 #include <QVariantMap>
 
+#include "core/config/AppIdentity.h"
+
 namespace fincept {
 
 /// Manages session state: uptime, last-used tabs, window geometry, etc.
@@ -80,7 +82,7 @@ class SessionManager : public QObject {
   private:
     SessionManager() = default;
     QElapsedTimer elapsed_;
-    mutable QSettings settings_{"Fincept", "FinceptTerminal"};
+    mutable QSettings settings_{AppIdentity::kOrg, AppIdentity::kApp};
 };
 
 } // namespace fincept

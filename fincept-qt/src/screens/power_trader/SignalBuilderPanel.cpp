@@ -4,6 +4,7 @@
 
 #include "ui/theme/Theme.h"
 #include "ui/components/LayoutHelpers.h"
+#include "core/config/AppIdentity.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -662,7 +663,7 @@ void SignalBuilderPanel::apply_preset(const SignalPreset& p) {
 }
 
 void SignalBuilderPanel::load_user_presets() {
-    QSettings settings("Fincept", "Terminal");
+    QSettings settings(AppIdentity::kOrg, "Terminal");
     const QByteArray data = settings.value("signal_presets").toByteArray();
     if (data.isEmpty()) return;
     const auto doc = QJsonDocument::fromJson(data);
@@ -703,7 +704,7 @@ void SignalBuilderPanel::save_user_presets() {
         o["w_history"]   = p.w_history;
         arr.append(o);
     }
-    QSettings settings("Fincept", "Terminal");
+    QSettings settings(AppIdentity::kOrg, "Terminal");
     settings.setValue("signal_presets", QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 

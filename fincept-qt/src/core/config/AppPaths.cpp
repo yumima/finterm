@@ -1,5 +1,6 @@
 #include "core/config/AppPaths.h"
 
+#include "core/config/AppIdentity.h"
 #include "core/config/ProfileManager.h"
 
 #include <QDir>
@@ -17,11 +18,11 @@ QString AppPaths::root() {
     // GenericDataLocation = %LOCALAPPDATA% on Windows (Qt docs: QStandardPaths).
     const QString local_app_data =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return local_app_data + "/com.fincept.terminal";
+    return local_app_data + "/" + AppIdentity::kBundleId;
 #elif defined(__APPLE__)
-    return QDir::homePath() + "/Library/Application Support/com.fincept.terminal";
+    return QDir::homePath() + "/Library/Application Support/" + AppIdentity::kBundleId;
 #else
-    return QDir::homePath() + "/.local/share/com.fincept.terminal";
+    return QDir::homePath() + "/.local/share/" + AppIdentity::kBundleId;
 #endif
 }
 

@@ -1,5 +1,7 @@
 #include "core/config/AppConfig.h"
 
+#include "core/config/AppIdentity.h"
+
 namespace fincept {
 
 AppConfig& AppConfig::instance() {
@@ -7,7 +9,7 @@ AppConfig& AppConfig::instance() {
     return s;
 }
 
-AppConfig::AppConfig() : settings_("Fincept", "FinceptTerminal") {}
+AppConfig::AppConfig() : settings_(AppIdentity::kOrg, AppIdentity::kApp) {}
 
 QVariant AppConfig::get(const QString& key, const QVariant& default_val) const {
     return settings_.value(key, default_val);

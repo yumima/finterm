@@ -6,6 +6,7 @@
 #include "auth/PinManager.h"
 #include "auth/SessionGuard.h"
 #include "core/config/AppConfig.h"
+#include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/config/ProfileManager.h"
 #include "core/components/ComponentCatalog.h"
@@ -112,11 +113,15 @@ int main(int argc, char* argv[]) {
     // "FinceptTerminal --profile work" and "FinceptTerminal --profile personal"
     // are treated as two separate primary instances and run simultaneously.
     // allowSecondary=true: secondary instances send "--new-window" and exit.
-    const QString profile_key = QString("FinceptTerminal-%1").arg(fincept::ProfileManager::instance().active());
+    const QString profile_key = QString("%1-%2").arg(fincept::AppIdentity::kApp).arg(fincept::ProfileManager::instance().active());
     SingleApplication app(argc, argv, /*allowSecondary=*/true, SingleApplication::Mode::User, 100,
                           profile_key.toUtf8());
-    app.setApplicationName("FinceptTerminal");
-    app.setOrganizationName("Fincept");
+    app.setApplicationName(fincept::AppIdentity::kApp);
+    app.setOrganizationName(fincept::AppIdentity::kOrg);
+    // Visible brand — deliberately decoupled from the frozen storage identity
+    // above, so the app can be rebranded without moving any on-disk data or
+    // settings (see core/config/AppIdentity.h).
+    app.setApplicationDisplayName(fincept::AppIdentity::kDisplayName);
 #ifndef FINCEPT_VERSION_STRING
 #    define FINCEPT_VERSION_STRING "0.0.0-dev"
 #endif
