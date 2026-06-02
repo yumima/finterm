@@ -187,7 +187,7 @@ Before picking a path, we need answers from a broader package /
 distribution lens:
 
 1. **Release distribution model.** Are we shipping a self-contained
-   `FinceptTerminal` installer (windeployqt/linuxdeployqt style), or
+   `finterm` installer (windeployqt/linuxdeployqt style), or
    relying on the user to have Qt installed? A custom Qt build is
    easier to bundle than to require users to assemble.
 2. **CI build cost.** Adding a Qt source build to CI is a multi-hour

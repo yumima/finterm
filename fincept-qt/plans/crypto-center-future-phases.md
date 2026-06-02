@@ -10,7 +10,7 @@
 
 ## 0. North star
 
-The Crypto Center is the **single home for everything $FNCPT** inside Fincept Terminal. By the end of Phase 5 it should answer four questions at a glance, in this order of priority:
+The Crypto Center is the **single home for everything $FNCPT** inside finterm. By the end of Phase 5 it should answer four questions at a glance, in this order of priority:
 
 1. **What do I hold?** — SOL + $FNCPT balance, USD value, recent activity. (Phase 1 done; Phase 2 deepens.)
 2. **What can I do with it?** — buy/swap/burn, fee discounts, tier perks. (Phase 2.)

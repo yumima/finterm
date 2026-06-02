@@ -7,7 +7,7 @@
   <project_license>AGPL-3.0-or-later</project_license>
   <description>
     <p>
-      Fincept Terminal is a native C++ desktop financial intelligence terminal
+      finterm is a native C++ desktop financial intelligence terminal
       featuring real-time market data, AI-powered analytics, multi-broker trading,
       portfolio management, and 1300+ Python analytics scripts.
     </p>
@@ -21,8 +21,8 @@
     </ul>
   </description>
   <launchable type="desktop-id">fincept-terminal.desktop</launchable>
-  <url type="homepage">https://github.com/Fincept-Corporation/FinceptTerminal</url>
-  <url type="bugtracker">https://github.com/Fincept-Corporation/FinceptTerminal/issues</url>
+  <url type="homepage">https://github.com/yumima/finterm</url>
+  <url type="bugtracker">https://github.com/yumima/finterm/issues</url>
   <url type="help">https://discord.gg/ae87a8ygbN</url>
   <provides>
     <binary>finterm</binary>

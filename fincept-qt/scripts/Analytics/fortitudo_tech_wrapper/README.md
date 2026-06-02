@@ -335,7 +335,7 @@ fortitudo_tech_wrapper/
 
 ---
 
-## Integration with Fincept Terminal
+## Integration with finterm
 
 ### Qt/C++ Integration
 

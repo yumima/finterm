@@ -309,4 +309,4 @@ python offsets.py
 
 ## License
 
-MIT License - Same as Fincept Terminal
+MIT License - Same as finterm

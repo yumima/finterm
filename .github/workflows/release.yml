@@ -450,7 +450,7 @@ jobs:
           # zsync update URL so AppImageUpdate can fetch deltas later.
           export QMAKE="${QT_ROOT_DIR}/bin/qmake"
           export OUTPUT="finterm-${VERSION}-linux-x64-setup.run"
-          export UPDATE_INFORMATION="gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|finterm-*-linux-x64-setup.run.zsync"
+          export UPDATE_INFORMATION="gh-releases-zsync|yumima|finterm|latest|finterm-*-linux-x64-setup.run.zsync"
 
           ./linuxdeploy-x86_64.AppImage \
             --appdir "${APPDIR}" \
@@ -1078,7 +1078,7 @@ jobs:
             - Ubuntu 20.04+ / Debian 11+
             - macOS 13+ (Apple Silicon)
 
-            See the [README](https://github.com/Fincept-Corporation/FinceptTerminal#readme) for full installation instructions.
+            See the [README](https://github.com/yumima/finterm#readme) for full installation instructions.
           files: |
             dist/windows/**
             dist/linux/**
@@ -1187,7 +1187,7 @@ jobs:
             | head -1) || true
 
           # Release page URL as final fallback
-          RELEASE_URL="https://github.com/Fincept-Corporation/FinceptTerminal/releases/tag/${TAG}"
+          RELEASE_URL="https://github.com/yumima/finterm/releases/tag/${TAG}"
           WIN_URL="${WIN_URL:-${RELEASE_URL}}"
           LIN_URL="${LIN_URL:-${RELEASE_URL}}"
           MAC_URL="${MAC_URL:-${RELEASE_URL}}"

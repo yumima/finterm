@@ -255,7 +255,7 @@ weights = optimize_portfolio(
 - **GPU acceleration**: PyTorch for neural networks
 - **Vectorization**: NumPy/Pandas operations
 
-## Integration with Fincept Terminal
+## Integration with finterm
 
 Services exposed via C++ commands:
 - `qlib_service.py`: Main Qlib interface

@@ -8,7 +8,7 @@
 
 ## 1. Goal
 
-Build a new **Crypto Center** screen in the Fincept Terminal where users can:
+Build a new **Crypto Center** screen in the finterm where users can:
 - Connect any major Solana wallet (Phantom, Solflare, Backpack, Glow, Coinbase Solana) and any WalletConnect-v2 mobile wallet.
 - See live $FNCPT + SOL balances.
 - Disconnect cleanly. Re-connect on next launch without re-prompting (session persistence).
@@ -272,7 +272,7 @@ These have separate plans.
 
 1. **QWebEngine binary size**: ~50 MB extra. Acceptable trade for the cleanest path. Confirm with installer pipeline owner.
 2. **Bundled `wallet.js`**: needs a Node build step the first time. Check it in pre-built so end-developers don't need Node.
-3. **WalletConnect v2 project ID**: requires a free signup at WalletConnect Cloud. Need to register one for "Fincept Terminal" before Task 0.3.
+3. **WalletConnect v2 project ID**: requires a free signup at WalletConnect Cloud. Need to register one for "finterm" before Task 0.3.
 4. **Helius API key**: need to provision and wire through `KeyConfigManager`. Free tier OK initially.
 5. **$FNCPT mint cluster**: pump.fun lives on mainnet. Devnet won't have the token — for dev testing, mock the balance producer or fork the mint to devnet.
 6. **Coinbase Wallet (Solana mode)**: support via Wallet Adapter is recent; verify it works on the bundled version we ship.

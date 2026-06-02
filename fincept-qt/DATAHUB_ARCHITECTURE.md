@@ -2,7 +2,7 @@
 
 **Status:** Current (in production as of 2026-04-18; all phases 0–10 shipped)
 **Version:** 1.0
-**Owner:** Fincept Terminal Core
+**Owner:** finterm Core
 **Scope:** In-process pub/sub data layer for the entire terminal (markets, news, economics, broker streams, geopolitics, agents, WebSockets).
 
 ---

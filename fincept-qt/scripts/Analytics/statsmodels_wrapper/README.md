@@ -21,7 +21,7 @@ This wrapper provides **100% coverage** of the statsmodels library with **200+ f
 
 ## Installation
 
-The statsmodels library is already installed as part of the Fincept Terminal dependencies.
+The statsmodels library is already installed as part of the finterm dependencies.
 
 ```bash
 pip install statsmodels==0.14.4
@@ -294,4 +294,4 @@ python stats_extended.py  # Test extended stats module
 
 ## License
 
-MIT License - Same as Fincept Terminal
+MIT License - Same as finterm

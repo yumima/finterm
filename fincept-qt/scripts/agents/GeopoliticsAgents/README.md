@@ -243,7 +243,7 @@ Both frameworks support multiple LLM providers with structured prompts:
 3. **Follow Usage Example**: Set up testing with dummy data and real LLM
 4. **Build Your Agent**: Use templates and production requirements
 5. **Validate & Test**: Ensure compliance with author's core thesis
-6. **Deploy**: Integrate with Fincept Terminal C++ commands
+6. **Deploy**: Integrate with finterm C++ commands
 
 ## 📞 **Support & Contribution**
 

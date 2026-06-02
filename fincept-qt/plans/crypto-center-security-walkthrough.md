@@ -14,7 +14,7 @@ The plan §3 enumerated nine threats. Each is reproduced below with its mitigati
 
 **Mitigation**: every connect runs a signed-message challenge.
 - `ConnectWalletDialog::start_handshake()` generates a 32-byte cryptographically random nonce via `QRandomGenerator::system()` (CSPRNG, not the deterministic generator).
-- The browser-side JS asks the wallet to sign the literal bytes `Fincept Terminal wallet-connect challenge. Nonce: <hex>`.
+- The browser-side JS asks the wallet to sign the literal bytes `finterm wallet-connect challenge. Nonce: <hex>`.
 - `ConnectWalletDialog::on_payload()` calls `Ed25519Verifier::verify(pubkey, message, signature)` on the returned bundle. If the signature is invalid, the dialog rejects with "signature verification failed" and never persists anything.
 - `Ed25519Verifier::verify()` uses the public-domain `orlp/ed25519` reference implementation (FetchContent pinned to a SHA), wrapped in our base58 decoder.
 
@@ -107,7 +107,7 @@ The user-facing doc warns that sources should be downloaded only from official w
 **Attack**: the user clicks "Sign" on a message they don't actually understand, granting the terminal an unintended capability.
 
 **Mitigation**:
-- The signed message is human-readable: `Fincept Terminal wallet-connect challenge. Nonce: <hex>`. It contains no fund-movement primitives — it is a literal text message, not a transaction.
+- The signed message is human-readable: `finterm wallet-connect challenge. Nonce: <hex>`. It contains no fund-movement primitives — it is a literal text message, not a transaction.
 - The user-facing doc explicitly tells users to verify the message begins with this prefix before signing.
 - This is signed-message authentication only. We never use signed messages to authorise on-chain state changes — those will require a real transaction in Phase 2.
 

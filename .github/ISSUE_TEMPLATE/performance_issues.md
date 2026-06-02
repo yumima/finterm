@@ -23,7 +23,7 @@ to this issue before PRs against it will be accepted.
 
 ## Environment & Measurements
 - **OS:** (Windows / macOS / Linux)
-- **Fincept Terminal Version:**
+- **finterm Version:**
 - **Observed behavior:** (e.g., UI froze for 5s, memory jumped to 2GB)
 - **Expected behavior:**
 

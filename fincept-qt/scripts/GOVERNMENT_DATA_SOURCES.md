@@ -4,7 +4,7 @@
 
 ## Overview
 
-Fincept Terminal integrates with official government data portals worldwide providing authoritative, free, and regularly updated data including economic indicators, trade statistics, company registrations, and geographic data.
+finterm integrates with official government data portals worldwide providing authoritative, free, and regularly updated data including economic indicators, trade statistics, company registrations, and geographic data.
 
 **Universal CKAN Wrapper**: Use `universal_ckan_api.py` for unified access to 8+ CKAN portals with a single interface. See `universal_ckan_api.md` for documentation.
 

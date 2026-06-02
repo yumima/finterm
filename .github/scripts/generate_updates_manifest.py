@@ -5,7 +5,7 @@ Reads env vars:
     WORK     Directory containing downloaded release assets.
     VERSION  Project version, no "v" prefix (e.g. "4.0.2").
     TAG      Git tag (e.g. "v4.0.2").
-    REPO     "owner/name" (e.g. "Fincept-Corporation/FinceptTerminal").
+    REPO     "owner/name" (e.g. "yumima/finterm").
 
 Writes the JSON manifest to stdout. Non-matching platforms are skipped
 with a "# ..." comment to stderr — output stays valid JSON on stdout.

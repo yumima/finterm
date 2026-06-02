@@ -1,7 +1,7 @@
 # Local stub server
 
 This directory contains a Python stub server that replaces `api.fincept.in` for
-the localhost-only fork of FinceptTerminal. It handles signup, login, profile,
+the localhost-only fork of finterm. It handles signup, login, profile,
 subscription, and the rest of the endpoints the desktop client hits at runtime.
 
 **Nothing ever leaves your machine.** Users are stored in a local SQLite file at

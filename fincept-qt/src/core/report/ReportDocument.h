@@ -35,7 +35,7 @@ struct ReportComponent {
 struct ReportMetadata {
     QString title = "Untitled Report";
     QString author = "Analyst";
-    QString company = "Fincept Corporation";
+    QString company = "finterm";
     QString date;
     QString header_left;
     QString header_center;
@@ -174,7 +174,7 @@ struct ReportDocument {
             QJsonObject m = root["metadata"].toObject();
             out.metadata.title = m.value("title").toString("Untitled Report");
             out.metadata.author = m.value("author").toString("Analyst");
-            out.metadata.company = m.value("company").toString("Fincept Corporation");
+            out.metadata.company = m.value("company").toString("finterm");
             out.metadata.date = m.value("date").toString();
             out.metadata.header_left = m.value("header_left").toString();
             out.metadata.header_center = m.value("header_center").toString();

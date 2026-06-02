@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a new feature or screen for Fincept Terminal
+about: Suggest a new feature or screen for finterm
 title: "[FEATURE] "
 labels: "type:feature, status:triage"
 assignees: ""

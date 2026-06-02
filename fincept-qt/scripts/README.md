@@ -1,10 +1,10 @@
 # Python Scripts Library
 
-> Comprehensive collection of data sources, analytics, and AI agents for Fincept Terminal
+> Comprehensive collection of data sources, analytics, and AI agents for finterm
 
 ## Overview
 
-This directory contains Python scripts powering the backend analytics, data integrations, and AI capabilities of Fincept Terminal. All scripts are executed by the C++ application via the Python bridge (python_runner.cpp).
+This directory contains Python scripts powering the backend analytics, data integrations, and AI capabilities of finterm. All scripts are executed by the C++ application via the Python bridge (python_runner.cpp).
 
 ## Directory Structure
 
@@ -120,7 +120,7 @@ fincept::python::PythonRunner::instance().run(
 
 ## Project Context
 
-Part of **Fincept Terminal** - a financial intelligence platform built with:
+Part of **finterm** - a financial intelligence platform built with:
 - **UI**: C++20 + Qt6 Widgets
 - **Core**: C++20
 - **Analytics**: Python (embedded runtime)
@@ -142,7 +142,7 @@ Part of **Fincept Terminal** - a financial intelligence platform built with:
 
 ## License
 
-MIT License - Part of Fincept Terminal
+MIT License - Part of finterm
 
 ---
 

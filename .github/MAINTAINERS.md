@@ -1,6 +1,6 @@
 # Maintainer Runbook
 
-Internal notes for Fincept Terminal maintainers. Contributors read [`CONTRIBUTING.md`](./CONTRIBUTING.md); this file is for people with repo write access.
+Internal notes for finterm maintainers. Contributors read [`CONTRIBUTING.md`](./CONTRIBUTING.md); this file is for people with repo write access.
 
 ## What the automation handles for you
 
@@ -69,4 +69,4 @@ Close with a templated comment:
 
 Templated close comment:
 
-> Thanks for the interest in Fincept Terminal. Closing per our [contribution policy](https://github.com/Fincept-Corporation/FinceptTerminal/blob/main/.github/CONTRIBUTING.md) — this PR does not meet the scope-approval / minimum-diff / topic-branch requirements. You are welcome to open a labeled issue first and then a follow-up PR once the scope is agreed.
+> Thanks for the interest in finterm. Closing per our [contribution policy](https://github.com/yumima/finterm/blob/main/.github/CONTRIBUTING.md) — this PR does not meet the scope-approval / minimum-diff / topic-branch requirements. You are welcome to open a labeled issue first and then a follow-up PR once the scope is agreed.

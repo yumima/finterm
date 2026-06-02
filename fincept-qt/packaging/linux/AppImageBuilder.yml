@@ -1,4 +1,4 @@
-# AppImageBuilder recipe for Fincept Terminal
+# AppImageBuilder recipe for finterm
 # Build with: appimage-builder --recipe AppImageBuilder.yml
 # Requires: appimage-builder >= 1.0 (pip install appimage-builder)
 #
@@ -14,7 +14,7 @@ AppDir:
 
   app_info:
     id: com.fincept.terminal
-    name: Fincept Terminal
+    name: finterm
     icon: fincept-terminal
     version: !ENV ${FINCEPT_VERSION:-4.0.2}
     exec: usr/bin/finterm.bin
@@ -58,4 +58,4 @@ AppImage:
   comp: xz
   file_name: finterm-!ENV ${FINCEPT_VERSION:-4.0.2}-x86_64.AppImage
   sign-key: None
-  update-information: gh-releases-zsync|Fincept-Corporation|FinceptTerminal|latest|finterm-*x86_64.AppImage.zsync
+  update-information: gh-releases-zsync|yumima|finterm|latest|finterm-*x86_64.AppImage.zsync

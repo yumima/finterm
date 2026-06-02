@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`8a1c9b61`](https://github.com/yumima/finterm/commit/8a1c9b61) **ci:** rebrand workflows/scripts to finterm binary + artifact names
 - [`aeee406a`](https://github.com/yumima/finterm/commit/aeee406a) rebrand: docs, .gitignore, updates.json visible refs -> finterm
 - [`c1704953`](https://github.com/yumima/finterm/commit/c1704953) rebrand: docs, launchers, packaging visible refs -> finterm
 - [`63e28c93`](https://github.com/yumima/finterm/commit/63e28c93) rebrand: visible strings -> finterm; migrate settings store
@@ -214,8 +215,8 @@ Use the PowerShell sibling **`finterm.ps1`** — same commands as `finterm.sh`, 
 | Auth DB locked / corrupt | Delete `~/.local/share/com.fincept.terminal/data/auth.db` and restart — every local user disappears; sign up again. |
 | Forgot a user's PIN | Login picker → select the user → **Forgot PIN? Reset this user**. Per-user DB is removed too. |
 
-## License & attribution
+## License
 
-Licensed under **AGPL-3.0** (see [`LICENSE`](LICENSE)).
+finterm is free, open-source software released under **AGPL-3.0** (see [`LICENSE`](LICENSE)) — free to download, use, modify, and redistribute under that license. It is a community project, not a company product.
 
-finterm is derived from [Fincept Corporation's FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal). The Qt UI and most domain code originate there; this fork strips the SaaS dependency (no email signup, no OTP, no paywall), replaces it with a local username + PIN multi-user picker, adds the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed with PTF / TL;DR, a 47-entry quant strategy catalogue, and the various local-first conveniences described above. AGPL-3.0 inherits.
+finterm is a fully-local financial terminal: no email signup, no OTP, no paywall, no SaaS round-trip. It uses a local username + PIN multi-user picker and ships the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed with PTF / TL;DR, a 47-entry quant strategy catalogue, and the various local-first conveniences described above.
