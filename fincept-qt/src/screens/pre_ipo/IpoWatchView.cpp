@@ -1355,12 +1355,12 @@ void IpoWatchView::render_kpis() {
     }
     if (kpi_above_)
         kpi_above_->setText(QString("<b>ABOVE (pop&gt;2%%)</b><br><span style='color:%1;'>%2 (%3)</span>")
-                                .arg(POSITIVE).arg(abv).arg(pct(abv, n_priced_with_pop)));
+                                .arg(POSITIVE()).arg(abv).arg(pct(abv, n_priced_with_pop)));
     if (kpi_in_)
         kpi_in_->setText(QString("<b>NEAR-RANGE</b><br>%1 (%2)").arg(inr).arg(pct(inr, n_priced_with_pop)));
     if (kpi_below_)
         kpi_below_->setText(QString("<b>BELOW (pop&lt;-2%%)</b><br><span style='color:%1;'>%2 (%3)</span>")
-                                .arg(NEGATIVE).arg(blw).arg(pct(blw, n_priced_with_pop)));
+                                .arg(NEGATIVE()).arg(blw).arg(pct(blw, n_priced_with_pop)));
 }
 
 void IpoWatchView::render_calendar() {
