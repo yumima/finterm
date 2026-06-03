@@ -463,8 +463,6 @@ void SettingsScreen::load_credentials() {
 
 // Single source of truth for appearance defaults
 namespace {
-constexpr const char* kDefaultFontSize = "14px";
-constexpr const char* kDefaultFontFamily = "Consolas";
 constexpr const char* kDefaultDensity = "Default";
 } // namespace
 
@@ -482,51 +480,15 @@ QWidget* SettingsScreen::build_appearance() {
     vl->setContentsMargins(24, 24, 24, 24);
     vl->setSpacing(8);
 
-    // ── TYPOGRAPHY ────────────────────────────────────────────────────────────
-    auto* t = new QLabel("TYPOGRAPHY");
-    t->setStyleSheet(section_title_ss());
-    vl->addWidget(t);
-    vl->addWidget(make_sep());
-    vl->addSpacing(8);
-
-    app_font_size_ = new QComboBox;
-    for (int px = 8; px <= 24; ++px)
-        app_font_size_->addItem(QString("%1px").arg(px));
-    app_font_size_->setCurrentText(kDefaultFontSize);
-    app_font_size_->setStyleSheet(combo_ss());
-    vl->addWidget(make_row("Font Size", app_font_size_));
-
-    app_font_family_ = new QComboBox;
-    app_font_family_->addItems(QFontDatabase::families());
-    app_font_family_->setCurrentText(kDefaultFontFamily);
-    app_font_family_->setStyleSheet(combo_ss());
-    vl->addWidget(make_row("Font Family", app_font_family_));
-
-    // Debounced live preview — coalesce rapid changes into one apply after 300ms idle
-    appearance_debounce_ = new QTimer(this);
-    appearance_debounce_->setSingleShot(true);
-    appearance_debounce_->setInterval(300);
-    connect(appearance_debounce_, &QTimer::timeout, this, [this]() {
-        auto& tm = fincept::ui::ThemeManager::instance();
-        int px = QString(app_font_size_->currentText()).replace("px", "").toInt();
-        if (px > 0)
-            tm.apply_font(app_font_family_->currentText(), px);
-        tm.apply_density(app_density_->currentText());
-    });
-
-    auto restart_debounce = [this]() { appearance_debounce_->start(); };
-    connect(app_font_size_, &QComboBox::currentTextChanged, this, restart_debounce);
-    connect(app_font_family_, &QComboBox::currentTextChanged, this, restart_debounce);
-
-    vl->addSpacing(8);
-    vl->addWidget(make_sep());
-    vl->addSpacing(8);
-
     // ── THEME ─────────────────────────────────────────────────────────────────
+    // Font family/size are intentionally NOT user-configurable — the app always
+    // uses its built-in default font (see ThemeManager). Only content density is
+    // exposed here.
     auto* t2 = new QLabel("THEME");
-    t2->setStyleSheet(sub_title_ss());
+    t2->setStyleSheet(section_title_ss());
     vl->addWidget(t2);
-    vl->addSpacing(4);
+    vl->addWidget(make_sep());
+    vl->addSpacing(8);
 
     app_density_ = new QComboBox;
     app_density_->addItems(fincept::ui::ThemeManager::available_densities());
@@ -534,7 +496,15 @@ QWidget* SettingsScreen::build_appearance() {
     app_density_->setStyleSheet(combo_ss());
     vl->addWidget(make_row("Content Density", app_density_, "Controls padding and spacing throughout the UI."));
 
-    connect(app_density_, &QComboBox::currentTextChanged, this, restart_debounce);
+    // Debounced live preview — coalesce rapid density changes into one apply.
+    appearance_debounce_ = new QTimer(this);
+    appearance_debounce_->setSingleShot(true);
+    appearance_debounce_->setInterval(300);
+    connect(appearance_debounce_, &QTimer::timeout, this, [this]() {
+        fincept::ui::ThemeManager::instance().apply_density(app_density_->currentText());
+    });
+    connect(app_density_, &QComboBox::currentTextChanged, this,
+            [this]() { appearance_debounce_->start(); });
 
     vl->addSpacing(8);
     vl->addWidget(make_sep());
@@ -573,8 +543,6 @@ QWidget* SettingsScreen::build_appearance() {
         auto& tm = fincept::ui::ThemeManager::instance();
 
         // Persist all values
-        repo.set("appearance.font_size", app_font_size_->currentText(), "appearance");
-        repo.set("appearance.font_family", app_font_family_->currentText(), "appearance");
         repo.set("appearance.density", app_density_->currentText(), "appearance");
         repo.set("appearance.show_chat_bubble", chat_bubble_toggle_->isChecked() ? "true" : "false", "appearance");
         repo.set("appearance.show_ticker_bar", ticker_bar_toggle_->isChecked() ? "true" : "false", "appearance");
@@ -583,10 +551,6 @@ QWidget* SettingsScreen::build_appearance() {
         // Flush any pending debounce immediately on save
         if (appearance_debounce_->isActive()) {
             appearance_debounce_->stop();
-            int px = QString(app_font_size_->currentText()).replace("px", "").toInt();
-            if (px <= 0)
-                px = 14;
-            tm.apply_font(app_font_family_->currentText(), px);
             tm.apply_density(app_density_->currentText());
         }
 
@@ -600,15 +564,13 @@ QWidget* SettingsScreen::build_appearance() {
 }
 
 void SettingsScreen::load_appearance() {
-    if (!app_font_size_)
+    if (!app_density_)
         return;
     auto& repo = SettingsRepository::instance();
 
     // Block signals during load so live-preview slots don't fire for every
     // setCurrentIndex() call — prevents 4+ ThemeManager apply_* calls and
     // the associated theme_changed signal re-rendering every widget on screen.
-    const QSignalBlocker b1(app_font_size_);
-    const QSignalBlocker b2(app_font_family_);
     const QSignalBlocker b4(app_density_);
 
     auto load_combo = [&](QComboBox* cb, const QString& key, const QString& def) {
@@ -626,8 +588,6 @@ void SettingsScreen::load_appearance() {
         cb->setChecked(!r.is_ok() ? def : r.value() != "false");
     };
 
-    load_combo(app_font_size_, "appearance.font_size", kDefaultFontSize);
-    load_combo(app_font_family_, "appearance.font_family", kDefaultFontFamily);
     load_combo(app_density_, "appearance.density", kDefaultDensity);
 
     load_check(chat_bubble_toggle_, "appearance.show_chat_bubble", true);

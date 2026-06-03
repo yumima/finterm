@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`faa7cf78`](https://github.com/yumima/finterm/commit/faa7cf78) theme: empty font family no longer clobbers the default (Consolas)
 - [`19d81788`](https://github.com/yumima/finterm/commit/19d81788) setup: install libqt6sql6-sqlite (fix 'Driver not loaded' on system Qt)
 - [`ae7d5539`](https://github.com/yumima/finterm/commit/ae7d5539) rebrand: sweep stragglers + review fix (primary-only settings migration)
 - [`706d73be`](https://github.com/yumima/finterm/commit/706d73be) rebrand: docs, attribution, repo URLs -> finterm (yumima/finterm)

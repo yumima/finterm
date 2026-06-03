@@ -59,13 +59,11 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     QHash<QString, QLabel*> cred_status_;    // key → status label
 
     // ── Appearance state ──────────────────────────────────────────────────────
-    QComboBox* app_font_size_ = nullptr;
-    QComboBox* app_font_family_ = nullptr;
     QComboBox* app_density_ = nullptr;
     QCheckBox* chat_bubble_toggle_ = nullptr;
     QCheckBox* ticker_bar_toggle_ = nullptr;
     QCheckBox* animations_toggle_ = nullptr;
-    QTimer* appearance_debounce_ = nullptr; // coalesces rapid font/density changes
+    QTimer* appearance_debounce_ = nullptr; // coalesces rapid density changes
 
     // ── Notifications state ───────────────────────────────────────────────────
     // Per-provider accordion widgets (keyed by provider_id)
