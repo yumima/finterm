@@ -494,27 +494,14 @@ int main(int argc, char* argv[]) {
     // saved session exists, so the DB is available for the theme load below.
     fincept::auth::AuthManager::instance().initialize();
 
-    // Load persisted font/theme from user DB (open if there's a saved session,
-    // otherwise DB is closed and defaults are used — fine for the login screen).
+    // Apply the theme. Font is fixed to the app default (customization removed)
+    // and the theme is always Obsidian, so nothing is read from the user DB here:
+    // ThemeManager's built-in default font (Consolas/14) is applied for everyone,
+    // ignoring any legacy appearance.font_* keys a previous version may have saved.
     {
-        auto& repo = fincept::SettingsRepository::instance();
-        auto& tm   = fincept::ui::ThemeManager::instance();
-        if (fincept::Database::instance().is_open()) {
-            auto r_family = repo.get("appearance.font_family");
-            auto r_size   = repo.get("appearance.font_size");
-            // Treat a missing OR empty stored value as "use the default": repo.get()
-            // returns ok-with-empty for an unset key, which previously yielded an
-            // empty family and a wrong fallback font after login.
-            QString family  = (r_family.is_ok() && !r_family.value().isEmpty()) ? r_family.value() : "Consolas";
-            QString size_s  = r_size.is_ok()   ? r_size.value()   : "14px";
-            int size_px = size_s.left(size_s.indexOf("px")).toInt();
-            if (size_px <= 0) size_px = 14;
-            tm.apply_font(family, size_px);
-            LOG_INFO("App", "Theme: Obsidian, font: " + family + " " + size_s);
-        } else {
-            LOG_INFO("App", "No user session — using default theme/font");
-        }
+        auto& tm = fincept::ui::ThemeManager::instance();
         tm.apply_theme("Obsidian");
+        LOG_INFO("App", "Theme: Obsidian, default font");
 
         // Prune stale news articles; deferred so startup critical path is not blocked.
         if (fincept::Database::instance().is_open()) {
