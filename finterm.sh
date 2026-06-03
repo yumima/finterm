@@ -632,6 +632,11 @@ cmd_setup() {
                 `# Private headers: required by the bundled qtads docking` \
                 `# dependency (Qt6::GuiPrivate) and re-enables QXlsx Excel export.` \
                 qt6-base-private-dev \
+                `# SQLite QSqlDriver plugin (libqsqlite.so) — split out from` \
+                `# qt6-base-dev on Debian/Ubuntu. Without it every QSqlDatabase` \
+                `# open fails with "Driver not loaded" (no auth.db / cache.db /` \
+                `# portfolio). Bundled in qt6-base on Arch/Fedora; apt-only here.` \
+                libqt6sql6-sqlite \
                 qt6-declarative-dev qt6-charts-dev \
                 qt6-multimedia-dev qt6-websockets-dev \
                 qt6-speech-dev qt6-webengine-dev \

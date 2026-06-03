@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`ae7d5539`](https://github.com/yumima/finterm/commit/ae7d5539) rebrand: sweep stragglers + review fix (primary-only settings migration)
 - [`706d73be`](https://github.com/yumima/finterm/commit/706d73be) rebrand: docs, attribution, repo URLs -> finterm (yumima/finterm)
 - [`8a1c9b61`](https://github.com/yumima/finterm/commit/8a1c9b61) **ci:** rebrand workflows/scripts to finterm binary + artifact names
 - [`aeee406a`](https://github.com/yumima/finterm/commit/aeee406a) rebrand: docs, .gitignore, updates.json visible refs -> finterm
