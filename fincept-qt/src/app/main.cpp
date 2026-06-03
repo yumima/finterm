@@ -502,7 +502,10 @@ int main(int argc, char* argv[]) {
         if (fincept::Database::instance().is_open()) {
             auto r_family = repo.get("appearance.font_family");
             auto r_size   = repo.get("appearance.font_size");
-            QString family  = r_family.is_ok() ? r_family.value() : "Consolas";
+            // Treat a missing OR empty stored value as "use the default": repo.get()
+            // returns ok-with-empty for an unset key, which previously yielded an
+            // empty family and a wrong fallback font after login.
+            QString family  = (r_family.is_ok() && !r_family.value().isEmpty()) ? r_family.value() : "Consolas";
             QString size_s  = r_size.is_ok()   ? r_size.value()   : "14px";
             int size_px = size_s.left(size_s.indexOf("px")).toInt();
             if (size_px <= 0) size_px = 14;

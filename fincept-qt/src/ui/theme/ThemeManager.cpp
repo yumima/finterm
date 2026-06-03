@@ -64,7 +64,11 @@ void ThemeManager::apply_theme(const QString& /*name*/) {
 }
 
 void ThemeManager::apply_font(const QString& family, int size_px) {
-    font_family_ = family;
+    // An empty family must NOT clobber the default — an empty QFont family makes
+    // Qt pick an arbitrary fallback (the "looks different after restart" bug).
+    // Guard it like size_px below: unset/empty → keep the current default.
+    if (!family.isEmpty())
+        font_family_ = family;
     font_size_px_ = (size_px > 0) ? size_px : 14;
     // rebuild_and_apply() will sync qApp->setFont() and QSS together.
     rebuild_and_apply();
