@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`aa65cd53`](https://github.com/yumima/finterm/commit/aa65cd53) pre-IPO: user-editable valuation seed override (no rebuild needed)
 - [`6d8c3643`](https://github.com/yumima/finterm/commit/6d8c3643) pre-IPO: review fixes for KPI/chart iterations
 - [`b85a42b2`](https://github.com/yumima/finterm/commit/b85a42b2) pre-IPO: fund-mark trend chart + fix stale chart/tab leak on private select
 - [`911fb7b6`](https://github.com/yumima/finterm/commit/911fb7b6) pre-IPO: private-lens KPI strip shows dossier metrics

@@ -156,6 +156,7 @@ const char* IpoWatchView::lens_label(Lens l) {
         case LensWatchlist:   return "WATCHLIST";
         case LensLockups:     return "LOCKUPS";
         case LensPrivate:     return "PRIVATE";
+        case LensSignals:     return "SIGNALS";
         default:              return "";
     }
 }
@@ -319,10 +320,11 @@ void IpoWatchView::build_kpi_strip(QVBoxLayout* root) {
 bool IpoWatchView::eventFilter(QObject* obj, QEvent* ev) {
     if (ev->type() == QEvent::MouseButtonRelease) {
         const QVariant v = obj->property("kpiTw");
-        // On the PRIVATE lens the KPI cells show dossier metrics, not the
-        // calendar time-window buckets — a click must not move window_chip_
-        // (a visible glitch that also leaves a stale filter for public lenses).
-        if (v.isValid() && active_lens_ != LensPrivate) {
+        // On the PRIVATE and SIGNALS lenses the KPI cells show dossier metrics,
+        // not the calendar time-window buckets — a click must not move
+        // window_chip_ (a visible glitch that also leaves a stale filter for
+        // public lenses).
+        if (v.isValid() && active_lens_ != LensPrivate && active_lens_ != LensSignals) {
             const int tw_int = v.toInt();
             time_window_ = static_cast<TimeWindow>(tw_int);
             if (window_chip_) window_chip_->setCurrentIndex(tw_int);
@@ -461,6 +463,14 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
                 return;
             }
         }
+        // SIGNALS lens: every row carries the subject company's id at
+        // UserRole+2 (UserRole+1 is the DateSortItem sort key); any click opens
+        // that company's dossier.
+        if (active_lens_ == LensSignals) {
+            const QString id = it->data(Qt::UserRole + 2).toString();
+            if (!id.isEmpty()) render_detail_private(id);
+            return;
+        }
         const int idx = it->data(Qt::UserRole).toInt();
         if (idx < 0 || idx >= entries_.size()) return;
         // Col 0 is the star — toggle and stop (don't trigger ER auto-pop on
@@ -488,6 +498,13 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
                 if (!it) return;
                 // Private-row path — both PRIVATE lens and WATCHLIST rows
                 // tagged "PRIVATE" route to the Form D detail rail.
+                // SIGNALS rows carry the company id at UserRole+2 (UserRole+1 is
+                // the DateSortItem sort key), so route them separately.
+                if (active_lens_ == LensSignals) {
+                    const QString company = it->data(Qt::UserRole + 2).toString();
+                    if (!company.isEmpty()) render_detail_private(company);
+                    return;
+                }
                 if (active_lens_ == LensPrivate ||
                     (active_lens_ == LensWatchlist &&
                      it->data(Qt::UserRole + 2).toString() == "PRIVATE")) {
@@ -1329,6 +1346,7 @@ void IpoWatchView::render() {
         case LensWatchlist:   render_watchlist(); break;
         case LensLockups:     render_lockups(); break;
         case LensPrivate:     render_private(); break;
+        case LensSignals:     render_signals(); break;
         default: break;
     }
 }
@@ -1364,6 +1382,28 @@ void IpoWatchView::render_kpis() {
                                                 .arg(fmt_raised_m(raised_sum_m)));
         if (kpi_in_)    kpi_in_->setText(QString("<b>FUND-MARKED</b><br>%1").arg(marked));
         if (kpi_below_) kpi_below_->setText(QString("<b>IPO-READY 70+</b><br>%1").arg(ready));
+        return;
+    }
+
+    // SIGNALS lens: count the derived-signal feed by kind.
+    if (active_lens_ == LensSignals) {
+        const auto sigs = services::PreIpoService::instance().signal_list();
+        int moves = 0, amend = 0, ready = 0;
+        QSet<QString> cos;
+        for (const auto& s : sigs) {
+            if (s.kind == pre_ipo::SignalKind::MarkUp || s.kind == pre_ipo::SignalKind::MarkDown) ++moves;
+            else if (s.kind == pre_ipo::SignalKind::AmendmentBurst) ++amend;
+            else if (s.kind == pre_ipo::SignalKind::ReadinessJump)  ++ready;
+            if (!s.company_id.isEmpty()) cos.insert(s.company_id);
+        }
+        const QString newest = (!sigs.isEmpty() && sigs.first().at.isValid())
+            ? sigs.first().at.toString("MMM d") : "—";
+        if (kpi_week_)  kpi_week_->setText(QString("<b>SIGNALS</b><br>%1").arg(sigs.size()));
+        if (kpi_month_) kpi_month_->setText(QString("<b>MARK MOVES</b><br>%1").arg(moves));
+        if (kpi_pop_)   kpi_pop_->setText(QString("<b>AMENDMENTS</b><br>%1").arg(amend));
+        if (kpi_above_) kpi_above_->setText(QString("<b>IPO-READY</b><br>%1").arg(ready));
+        if (kpi_in_)    kpi_in_->setText(QString("<b>COMPANIES</b><br>%1").arg(cos.size()));
+        if (kpi_below_) kpi_below_->setText(QString("<b>NEWEST</b><br>%1").arg(newest));
         return;
     }
 
@@ -1975,6 +2015,106 @@ void IpoWatchView::render_private() {
             "<i style='color:#7a7a7a;'>%1 private companies — SEC Form D / N-PORT marks / "
             "S-1 pipeline + curated valuations. Click ★ to watchlist, click a row for the "
             "dossier. Type to filter.</i>")
+            .arg(rows.size()));
+    }
+}
+
+// Signal kind → short label + colour for the SIGNALS feed.
+static QString signal_kind_label(pre_ipo::SignalKind k) {
+    switch (k) {
+        case pre_ipo::SignalKind::MarkUp:         return "MARK UP";
+        case pre_ipo::SignalKind::MarkDown:       return "MARK DOWN";
+        case pre_ipo::SignalKind::NewFiling:      return "NEW FILING";
+        case pre_ipo::SignalKind::AmendmentBurst: return "AMENDMENTS";
+        case pre_ipo::SignalKind::PremiumHigh:    return "PREMIUM";
+        case pre_ipo::SignalKind::ReadinessJump:  return "IPO-READY";
+        case pre_ipo::SignalKind::RoundFiled:     return "ROUND FILED";
+        default:                                  return "SIGNAL";
+    }
+}
+static QString signal_kind_color(pre_ipo::SignalKind k) {
+    using namespace ui::colors;
+    switch (k) {
+        case pre_ipo::SignalKind::MarkUp:
+        case pre_ipo::SignalKind::ReadinessJump:  return POSITIVE();
+        case pre_ipo::SignalKind::MarkDown:       return NEGATIVE();
+        case pre_ipo::SignalKind::AmendmentBurst: return INFO();
+        default:                                  return AMBER();
+    }
+}
+
+void IpoWatchView::render_signals() {
+    using ui::colors::CYAN;
+    const auto& svc = services::PreIpoService::instance();
+    // NB: `signals` is a Qt macro (expands to `public`) — name the local `sigs`.
+    const auto sigs = svc.signal_list();   // already sorted newest-first
+
+    const QStringList headers{"WHEN", "COMPANY", "SIGNAL", "DETAIL"};
+    table_->setSortingEnabled(false);
+    table_->clear();
+    table_->setColumnCount(headers.size());
+    table_->setHorizontalHeaderLabels(headers);
+
+    if (sigs.isEmpty()) {
+        const QString hint = svc.is_loaded()
+            ? QStringLiteral("No signals firing — one posts when a consensus mark moves >10% vs "
+                             "the prior quarter, an S-1 logs 3+ amendments, or IPO readiness hits "
+                             "70. Check back as filings land.")
+            : QStringLiteral("Loading private-market signals…");
+        if (header_lbl_) header_lbl_->setText(QString("<i style='color:#7a7a7a;'>%1</i>").arg(hint));
+        table_->setRowCount(0);
+        return;
+    }
+
+    // Search filter across company / kind / detail.
+    QVector<int> rows;
+    for (int i = 0; i < sigs.size(); ++i) {
+        const auto& s = sigs.at(i);
+        if (!search_query_.isEmpty()) {
+            const bool hit = s.company_name.toLower().contains(search_query_)
+                          || s.description.toLower().contains(search_query_)
+                          || signal_kind_label(s.kind).toLower().contains(search_query_);
+            if (!hit) continue;
+        }
+        rows.append(i);
+    }
+
+    table_->setRowCount(rows.size());
+    for (int r = 0; r < rows.size(); ++r) {
+        const auto& s = sigs.at(rows.at(r));
+        // WHEN — sortable by timestamp. DateSortItem reserves UserRole+1 for its
+        // numeric sort key, so the routing company_id goes on UserRole+2 (else
+        // it'd clobber the key and break date sorting).
+        auto* when = new DateSortItem(
+            s.at.isValid() ? s.at.toString("MMM d, yyyy") : "—",
+            s.at.isValid() ? s.at.toMSecsSinceEpoch() : 0);
+        when->setData(Qt::UserRole, -1);                 // not entries_-indexed
+        when->setData(Qt::UserRole + 2, s.company_id);   // routing key (see above)
+        table_->setItem(r, 0, when);
+
+        auto* co = new QTableWidgetItem(s.company_name);
+        co->setData(Qt::UserRole, -1);
+        co->setData(Qt::UserRole + 1, s.company_id);
+        co->setForeground(QBrush(QColor(CYAN())));
+        table_->setItem(r, 1, co);
+
+        auto* kind = new QTableWidgetItem(signal_kind_label(s.kind));
+        kind->setForeground(QBrush(QColor(signal_kind_color(s.kind))));
+        table_->setItem(r, 2, kind);
+
+        table_->setItem(r, 3, new QTableWidgetItem(s.description));
+    }
+
+    table_->setSortingEnabled(true);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+
+    if (header_lbl_) {
+        header_lbl_->setText(QString(
+            "<i style='color:#7a7a7a;'>%1 signals — consensus-mark moves, S-1 amendment bursts, "
+            "IPO-readiness jumps. Newest first; click a row for the company dossier.</i>")
             .arg(rows.size()));
     }
 }

@@ -111,8 +111,13 @@ class IpoWatchView : public QWidget {
     /// Qumulo, etc. — surface in IPO Watch's search and can be starred.
     /// Backed by PreIpoService::recent_form_d(); no live quote (private
     /// companies don't trade publicly).
+    ///
+    /// SIGNALS is a cross-universe "what just changed" feed of the derived
+    /// signals PreIpoService::signal_list() computes (consensus mark moves,
+    /// S-1 amendment bursts, IPO-readiness jumps). Rows click through to the
+    /// private dossier.
     enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups,
-                LensPrivate, LensCount };
+                LensPrivate, LensSignals, LensCount };
     enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
                       TW_6Months, TW_12Months, TW_Past30Days };
     // Tab indexes for the two detail-rail tab bars — kept in sync with the
@@ -147,6 +152,7 @@ class IpoWatchView : public QWidget {
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
     void render_private();          // private-company dossier list (PreIpoService::companies)
+    void render_signals();          // cross-universe derived-signal feed (signal_list)
     /// Detail-rail render for a private company, keyed by PrivateCompany::id.
     /// Pulled out separately because the per-Entry render_detail() assumes
     /// Nasdaq-calendar columns we don't have for private companies; this
