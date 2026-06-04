@@ -16,6 +16,7 @@
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -855,6 +856,14 @@ void FuturesHeatmapPanel::render_from_cache() {
                                        cache.last_refresh().toString("HH:mm:ss")));
 
     clear_grid();
+
+    // Metrics for the actual tile font (DATA family at font_px(-2)), so each
+    // tile can reserve exactly enough width for its text. The old fixed 72px
+    // floor clipped longer tiles like "ESM5 : +12.34%" down to "…2.3…".
+    QFont tile_font(fonts::DATA_FAMILY());
+    tile_font.setPixelSize(fonts::font_px(-2));
+    const QFontMetrics tile_fm(tile_font);
+
     int row = 0;
     const QStringList order = {"INDEX", "RATES", "ENERGY", "METALS", "AGS",
                                "FX", "CRYPTO", "EUROPE", "JAPAN", "ASIA",
@@ -872,9 +881,16 @@ void FuturesHeatmapPanel::render_from_cache() {
             // Single-line tile: "ES : +1.23%". Reads left-to-right like a
             // ticker, which keeps the row compact and removes the previous
             // 36px two-line height that made the panel dominate vertically.
-            auto* tile = new QLabel(QString("%1 : %2%").arg(q.symbol, fmt_signed(q.change_pct, 1)));
+            // 2 decimals so a real move shows as "+12.34%", not a clipped "+1.2".
+            const QString tile_text =
+                QString("%1 : %2%").arg(q.symbol, fmt_signed(q.change_pct, 2));
+            auto* tile = new QLabel(tile_text);
             tile->setAlignment(Qt::AlignCenter);
-            tile->setMinimumSize(72, 20);
+            // Width = text advance + chrome (8px padding + 2px border + slack),
+            // floored at 72px so short tiles stay tidy. Sizing from the text
+            // guarantees "xx.yy%" is never clipped.
+            const int tile_w = std::max(72, tile_fm.horizontalAdvance(tile_text) + 12);
+            tile->setMinimumSize(tile_w, 20);
             tile->setToolTip(QString("%1\nLast %2  ·  %3").arg(q.name, fmt_num(q.last, 4),
                                                                 fmt_signed(q.change_pct, 2) + "%"));
             // Use the standard POSITIVE/NEGATIVE accent colors (the same green
