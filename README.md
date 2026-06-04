@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b85a42b2`](https://github.com/yumima/finterm/commit/b85a42b2) pre-IPO: fund-mark trend chart + fix stale chart/tab leak on private select
 - [`911fb7b6`](https://github.com/yumima/finterm/commit/911fb7b6) pre-IPO: private-lens KPI strip shows dossier metrics
 - [`f61706fd`](https://github.com/yumima/finterm/commit/f61706fd) pre-IPO: review fixes — correct stale Stripe CIK, share seed matcher
 - [`47480548`](https://github.com/yumima/finterm/commit/47480548) pre-IPO: document why S-1 offering size is not surfaced

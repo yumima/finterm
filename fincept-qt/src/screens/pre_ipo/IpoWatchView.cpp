@@ -128,6 +128,15 @@ QString fmt_raised_m(double m) {
     if (m >= 1000.0) return QString("$%1B").arg(m / 1000.0, 0, 'f', 1);
     return QString("$%1M").arg(m, 0, 'f', 0);
 }
+
+// If a tab widget's current tab is now hidden, move to the first visible one.
+// Shared by render_detail / render_detail_private so the 4 call sites can't
+// drift (the drift class is exactly what leaks tab state across selections).
+void normalize_current_tab(QTabWidget* t) {
+    if (!t || t->isTabVisible(t->currentIndex())) return;
+    for (int i = 0; i < t->count(); ++i)
+        if (t->isTabVisible(i)) { t->setCurrentIndex(i); return; }
+}
 } // namespace
 
 // Forward declaration — defined further down inside the second anonymous
@@ -310,7 +319,10 @@ void IpoWatchView::build_kpi_strip(QVBoxLayout* root) {
 bool IpoWatchView::eventFilter(QObject* obj, QEvent* ev) {
     if (ev->type() == QEvent::MouseButtonRelease) {
         const QVariant v = obj->property("kpiTw");
-        if (v.isValid()) {
+        // On the PRIVATE lens the KPI cells show dossier metrics, not the
+        // calendar time-window buckets — a click must not move window_chip_
+        // (a visible glitch that also leaves a stale filter for public lenses).
+        if (v.isValid() && active_lens_ != LensPrivate) {
             const int tw_int = v.toInt();
             time_window_ = static_cast<TimeWindow>(tw_int);
             if (window_chip_) window_chip_->setCurrentIndex(tw_int);
@@ -1335,8 +1347,11 @@ void IpoWatchView::render_kpis() {
         int filed = 0, marked = 0, ready = 0, valued = 0;
         double val_sum = 0, raised_sum_m = 0;
         for (const auto& c : cos) {
-            if (c.ipo_status == pre_ipo::IpoStatus::Filed) ++filed;
-            if (c.analytics.smart_money_index > 0) ++marked;
+            // Match the dossier's own predicates: PIPELINE tab keys on a valid
+            // S-1 date, the MARK chart on fund_marks presence — so the KPIs
+            // can't disagree with what a row's detail rail shows.
+            if (c.s1.first_filed.isValid()) ++filed;
+            if (!c.fund_marks.isEmpty()) ++marked;
             if (c.analytics.ipo_readiness_score >= 70) ++ready;
             if (c.last_valuation_usd > 0) { ++valued; val_sum += c.last_valuation_usd; }
             raised_sum_m += c.cumulative_raised_m;
@@ -1707,13 +1722,12 @@ void IpoWatchView::render_watchlist() {
     // header; DateSortItem makes that a real date compare.
 
     if (total_rows == 0 && header_lbl_) {
+        // Full rail reset (labels + chart hosts + tab visibility), then override
+        // the header with the watchlist-specific empty message.
+        render_detail(nullptr);
         header_lbl_->setText(
             "<i style='color:#7a7a7a;'>Watchlist is empty — click the ☆ next to a deal on CALENDAR, "
             "PERFORMANCE, or PRIVATE to add it.</i>");
-        for (QLabel* p : {page_deal_, page_business_, page_leader_, page_fund_, page_pipeline_,
-                          page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
-            if (p) p->setText("");
-        detail_symbol_.clear();
     }
 }
 
@@ -2320,8 +2334,10 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // ── Charts: fund-mark trend in the PRICE host; wipe the rest ─────────────
     // render_detail_private previously left the four QChartView hosts untouched,
     // so a stale chart from a prior PUBLIC selection bled through under a private
-    // company. Rebuild/clear all four every time.
-    rebuild_fundmark_chart(c);
+    // company. Rebuild/clear all four every time. The PRICE tab keeps its label
+    // (relabelling it leaked onto public/cleared selections); the chart carries
+    // its own "Consensus mark $/share" title instead.
+    const bool has_mark_chart = rebuild_fundmark_chart(c);
     const QString priv_chart_note =
         "<i>Time-series financials aren't available for private companies — "
         "see FUNDAMENTALS / FUNDING.</i>";
@@ -2354,22 +2370,19 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         tabs_facts_->setTabVisible(FT_Filings,      false);
         tabs_facts_->setTabVisible(FT_Funding,      true);
         tabs_facts_->setTabVisible(FT_Pipeline,     c.s1.first_filed.isValid());
-        if (!tabs_facts_->isTabVisible(tabs_facts_->currentIndex()))
-            for (int i = 0; i < tabs_facts_->count(); ++i)
-                if (tabs_facts_->isTabVisible(i)) { tabs_facts_->setCurrentIndex(i); break; }
+        normalize_current_tab(tabs_facts_);
     }
     if (tabs_charts_) {
-        tabs_charts_->setTabText(CT_Price, QStringLiteral("MARK $/SH"));
-        tabs_charts_->setTabVisible(CT_Price,     !c.fund_marks.isEmpty());
+        // Only show the chart tab when a trend actually plotted (≥2 quarters);
+        // otherwise it'd be an empty "need more data" tab.
+        tabs_charts_->setTabVisible(CT_Price,     has_mark_chart);
         tabs_charts_->setTabVisible(CT_Revenue,   false);
         tabs_charts_->setTabVisible(CT_NetIncome, false);
         tabs_charts_->setTabVisible(CT_Margins,   false);
         tabs_charts_->setTabVisible(CT_Range,     false);
         tabs_charts_->setTabVisible(CT_Lockup,    false);
         tabs_charts_->setTabVisible(CT_Timeline,  true);
-        if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex()))
-            for (int i = 0; i < tabs_charts_->count(); ++i)
-                if (tabs_charts_->isTabVisible(i)) { tabs_charts_->setCurrentIndex(i); break; }
+        normalize_current_tab(tabs_charts_);
     }
     detail_symbol_ = c.id;
 }
@@ -2507,6 +2520,15 @@ void IpoWatchView::render_detail(const Entry* e) {
                           page_news_, page_holders_, page_filings_, page_funding_,
                           page_range_, page_lockup_, page_timeline_, right_top_, right_bottom_})
             if (p) p->setText("");
+        // Reset chart hosts + tab set to the fresh-build state, else a prior
+        // selection's chart (e.g. a private fund-mark line) and tab-visibility
+        // configuration linger under the "nothing selected" header.
+        wipe_chart_host(page_price_chart_host_,     price_chart_view_);
+        wipe_chart_host(page_revenue_chart_host_,   revenue_chart_view_);
+        wipe_chart_host(page_netincome_chart_host_, netincome_chart_view_);
+        wipe_chart_host(page_margins_chart_host_,   margins_chart_view_);
+        if (tabs_facts_)  for (int i = 0; i < tabs_facts_->count();  ++i) tabs_facts_->setTabVisible(i, true);
+        if (tabs_charts_) for (int i = 0; i < tabs_charts_->count(); ++i) tabs_charts_->setTabVisible(i, true);
         detail_symbol_.clear();
         return;
     }
@@ -2597,7 +2619,6 @@ void IpoWatchView::render_detail(const Entry* e) {
     page_lockup_  ->setText(css + build_lockup_html(*e));
     page_timeline_->setText(css + build_timeline_html(*e));
 
-    tabs_charts_->setTabText(CT_Price, QStringLiteral("PRICE"));  // reset (private view relabels it)
     tabs_charts_->setTabVisible(CT_Price,     e->status == "priced");
     tabs_charts_->setTabVisible(CT_Revenue,   has_ticker);
     tabs_charts_->setTabVisible(CT_NetIncome, has_ticker);
@@ -2606,14 +2627,8 @@ void IpoWatchView::render_detail(const Entry* e) {
     tabs_charts_->setTabVisible(CT_Lockup,    e->status == "priced");
     tabs_charts_->setTabVisible(CT_Timeline,  e->status != "priced");
     // If the currently-visible tab got hidden, jump to the first visible one.
-    if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex())) {
-        for (int i = 0; i < tabs_charts_->count(); ++i)
-            if (tabs_charts_->isTabVisible(i)) { tabs_charts_->setCurrentIndex(i); break; }
-    }
-    if (!tabs_facts_->isTabVisible(tabs_facts_->currentIndex())) {
-        for (int i = 0; i < tabs_facts_->count(); ++i)
-            if (tabs_facts_->isTabVisible(i)) { tabs_facts_->setCurrentIndex(i); break; }
-    }
+    normalize_current_tab(tabs_charts_);
+    normalize_current_tab(tabs_facts_);
 
     // ── RIGHT PANE: sector heat + comps (top), research links (bottom) ─────
     right_top_   ->setText(css + build_sector_comps_html(*e));
@@ -3436,15 +3451,17 @@ void IpoWatchView::rebuild_margins_chart(const Entry& e) {
 }
 
 // ── FUND-MARK chart — private-company $/share trend from N-PORT marks ────────
-// Reuses the PRICE chart host (relabelled "MARK $/SH" in render_detail_private).
-// The marks are quarterly mutual-fund fair values; we average all funds'
-// marks within each as_of period to plot one consensus point per quarter — the
-// closest public proxy for how a private company's per-share value is trending.
-void IpoWatchView::rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c) {
-    if (!page_price_chart_host_) return;
+// Drawn into the PRICE chart host. The marks are quarterly mutual-fund fair
+// values; we average all funds' marks within each as_of period to plot one
+// consensus point per quarter — the closest public proxy for how a private
+// company's per-share value is trending. Returns true iff a trend line was
+// plotted (≥2 quarters); false when only a placeholder was shown, so the caller
+// can hide the chart tab rather than show an empty one.
+bool IpoWatchView::rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c) {
+    if (!page_price_chart_host_) return false;
     wipe_chart_host(page_price_chart_host_, price_chart_view_);
     auto* host_layout = qobject_cast<QVBoxLayout*>(page_price_chart_host_->layout());
-    if (!host_layout) return;
+    if (!host_layout) return false;
 
     // Average mark_pps per distinct as_of (ascending), skipping invalid rows.
     QVector<pre_ipo::FundMark> marks;
@@ -3466,13 +3483,14 @@ void IpoWatchView::rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c) {
         chart_placeholder(page_price_chart_host_,
             "<i>Need ≥2 quarters of mutual-fund marks to plot a trend.<br>"
             "See FUNDING for the latest marks.</i>");
-        return;
+        return false;
     }
     const QString color = pts.last().y >= pts.first().y
         ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
     auto* view = ui::ChartFactory::line_chart(QStringLiteral("Consensus mark $/share"), pts, color);
     price_chart_view_ = view;
     host_layout->addWidget(view, 1);
+    return true;
 }
 
 // ── RIGHT-TOP: sector heat + comps ──────────────────────────────────────────
