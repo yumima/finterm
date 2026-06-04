@@ -134,6 +134,11 @@ QString fmt_raised_m(double m) {
 // namespace block. render_detail_private (~1862 below) needs to call it
 // before the definition order would otherwise allow.
 static QString build_detail_css();
+// Same — the chart-host helpers are defined alongside the rebuild_*_chart
+// functions far below, but render_detail_private (above them) clears the
+// private-company chart hosts through them.
+static void wipe_chart_host(QWidget* host, QChartView*& view_member);
+static void chart_placeholder(QWidget* host, const QString& html);
 
 const char* IpoWatchView::lens_label(Lens l) {
     switch (l) {
@@ -2312,6 +2317,21 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         page_timeline_->setText(h);
     }
 
+    // ── Charts: fund-mark trend in the PRICE host; wipe the rest ─────────────
+    // render_detail_private previously left the four QChartView hosts untouched,
+    // so a stale chart from a prior PUBLIC selection bled through under a private
+    // company. Rebuild/clear all four every time.
+    rebuild_fundmark_chart(c);
+    const QString priv_chart_note =
+        "<i>Time-series financials aren't available for private companies — "
+        "see FUNDAMENTALS / FUNDING.</i>";
+    wipe_chart_host(page_revenue_chart_host_,   revenue_chart_view_);
+    chart_placeholder(page_revenue_chart_host_, priv_chart_note);
+    wipe_chart_host(page_netincome_chart_host_, netincome_chart_view_);
+    chart_placeholder(page_netincome_chart_host_, priv_chart_note);
+    wipe_chart_host(page_margins_chart_host_,   margins_chart_view_);
+    chart_placeholder(page_margins_chart_host_, priv_chart_note);
+
     // Panes with no private-company source: clear so stale public data doesn't
     // bleed through from a prior selection.
     if (page_news_)    page_news_->setText("");
@@ -2319,6 +2339,38 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     if (page_filings_) page_filings_->setText("");
     if (page_range_)   page_range_->setText("");
     if (page_lockup_)  page_lockup_->setText("");
+
+    // ── Tab visibility for a private company ─────────────────────────────────
+    // render_detail (public) sets per-selection visibility; without mirroring it
+    // here, the tab set / current tab leaks across a public→private switch.
+    const bool has_fin = (c.fin.revenue_m != 0 || c.fin.net_income_m != 0 || c.fin.cash_m != 0);
+    if (tabs_facts_) {
+        tabs_facts_->setTabVisible(FT_Deal,         true);
+        tabs_facts_->setTabVisible(FT_Business,     true);
+        tabs_facts_->setTabVisible(FT_Leadership,   true);
+        tabs_facts_->setTabVisible(FT_Fundamentals, has_fin);
+        tabs_facts_->setTabVisible(FT_News,         false);
+        tabs_facts_->setTabVisible(FT_Holders,      false);
+        tabs_facts_->setTabVisible(FT_Filings,      false);
+        tabs_facts_->setTabVisible(FT_Funding,      true);
+        tabs_facts_->setTabVisible(FT_Pipeline,     c.s1.first_filed.isValid());
+        if (!tabs_facts_->isTabVisible(tabs_facts_->currentIndex()))
+            for (int i = 0; i < tabs_facts_->count(); ++i)
+                if (tabs_facts_->isTabVisible(i)) { tabs_facts_->setCurrentIndex(i); break; }
+    }
+    if (tabs_charts_) {
+        tabs_charts_->setTabText(CT_Price, QStringLiteral("MARK $/SH"));
+        tabs_charts_->setTabVisible(CT_Price,     !c.fund_marks.isEmpty());
+        tabs_charts_->setTabVisible(CT_Revenue,   false);
+        tabs_charts_->setTabVisible(CT_NetIncome, false);
+        tabs_charts_->setTabVisible(CT_Margins,   false);
+        tabs_charts_->setTabVisible(CT_Range,     false);
+        tabs_charts_->setTabVisible(CT_Lockup,    false);
+        tabs_charts_->setTabVisible(CT_Timeline,  true);
+        if (!tabs_charts_->isTabVisible(tabs_charts_->currentIndex()))
+            for (int i = 0; i < tabs_charts_->count(); ++i)
+                if (tabs_charts_->isTabVisible(i)) { tabs_charts_->setCurrentIndex(i); break; }
+    }
     detail_symbol_ = c.id;
 }
 
@@ -2545,6 +2597,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     page_lockup_  ->setText(css + build_lockup_html(*e));
     page_timeline_->setText(css + build_timeline_html(*e));
 
+    tabs_charts_->setTabText(CT_Price, QStringLiteral("PRICE"));  // reset (private view relabels it)
     tabs_charts_->setTabVisible(CT_Price,     e->status == "priced");
     tabs_charts_->setTabVisible(CT_Revenue,   has_ticker);
     tabs_charts_->setTabVisible(CT_NetIncome, has_ticker);
@@ -3379,6 +3432,46 @@ void IpoWatchView::rebuild_margins_chart(const Entry& e) {
     view->setRenderHint(QPainter::Antialiasing);
     view->setStyleSheet("background: transparent; border: none;");
     margins_chart_view_ = view;
+    host_layout->addWidget(view, 1);
+}
+
+// ── FUND-MARK chart — private-company $/share trend from N-PORT marks ────────
+// Reuses the PRICE chart host (relabelled "MARK $/SH" in render_detail_private).
+// The marks are quarterly mutual-fund fair values; we average all funds'
+// marks within each as_of period to plot one consensus point per quarter — the
+// closest public proxy for how a private company's per-share value is trending.
+void IpoWatchView::rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c) {
+    if (!page_price_chart_host_) return;
+    wipe_chart_host(page_price_chart_host_, price_chart_view_);
+    auto* host_layout = qobject_cast<QVBoxLayout*>(page_price_chart_host_->layout());
+    if (!host_layout) return;
+
+    // Average mark_pps per distinct as_of (ascending), skipping invalid rows.
+    QVector<pre_ipo::FundMark> marks;
+    for (const auto& m : c.fund_marks)
+        if (m.mark_pps > 0 && m.as_of.isValid()) marks.append(m);
+    std::sort(marks.begin(), marks.end(),
+              [](const pre_ipo::FundMark& a, const pre_ipo::FundMark& b) { return a.as_of < b.as_of; });
+
+    QVector<ui::ChartFactory::DataPoint> pts;
+    int idx = 0;
+    for (int j = 0; j < marks.size(); ) {
+        const QDate d = marks[j].as_of;
+        double sum = 0; int cnt = 0;
+        while (j < marks.size() && marks[j].as_of == d) { sum += marks[j].mark_pps; ++cnt; ++j; }
+        pts.append({double(idx++), sum / cnt});
+    }
+
+    if (pts.size() < 2) {
+        chart_placeholder(page_price_chart_host_,
+            "<i>Need ≥2 quarters of mutual-fund marks to plot a trend.<br>"
+            "See FUNDING for the latest marks.</i>");
+        return;
+    }
+    const QString color = pts.last().y >= pts.first().y
+        ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
+    auto* view = ui::ChartFactory::line_chart(QStringLiteral("Consensus mark $/share"), pts, color);
+    price_chart_view_ = view;
     host_layout->addWidget(view, 1);
 }
 

@@ -176,6 +176,9 @@ class IpoWatchView : public QWidget {
     void    rebuild_revenue_chart(const Entry& e);   // mutates revenue_chart_view_
     void    rebuild_netincome_chart(const Entry& e); // mutates netincome_chart_view_
     void    rebuild_margins_chart(const Entry& e);   // mutates margins_chart_view_
+    /// Private-company $/share trend from N-PORT fund marks, drawn into the
+    /// PRICE chart host (relabelled by render_detail_private).
+    void    rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c);
 
     // Lazy fetchers fired from render_detail when their tab data is missing.
     void fetch_ipo_extras_for_detail(const Entry& e);
