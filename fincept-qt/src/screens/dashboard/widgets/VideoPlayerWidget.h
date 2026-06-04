@@ -14,6 +14,7 @@
 
 #    include <QAudioDevice>
 #    include <QAudioOutput>
+#    include <QComboBox>
 #    include <QImage>
 #    include <QMediaDevices>
 #    include <QMediaPlayer>
@@ -187,6 +188,11 @@ class VideoPlayerWidget : public BaseWidget {
 
   private:
     void apply_styles();
+    /// Keep the native-pipeline-only controls (pause/play, and the GL audio
+    /// device picker) in lockstep with the active engine: shown for the native
+    /// player, hidden in WEB-engine mode (which owns its own transport/audio).
+    /// Safe to call in any build — guards each control's existence internally.
+    void sync_web_mode_controls();
 #ifdef HAS_QT_MULTIMEDIA
     /// Refresh audio_output_ to the current system default sink and
     /// re-attach it to the player. Single source of truth for the
@@ -198,6 +204,10 @@ class VideoPlayerWidget : public BaseWidget {
     /// as the workaround for Qt6 FFmpeg's audio-sink detach across
     /// pause→play (07737672).
     void refresh_audio_output();
+    /// (Re)build the bottom output-device combo from the current device list,
+    /// preserving the user's selection. Item 0 is "System default" (follows
+    /// the default sink); any other entry pins that specific device.
+    void populate_audio_devices();
 #endif
     /// Toggle fullscreen on whichever surface is currently active —
     /// VideoRenderWidget for GL playback, QWebEngineView for WEB
@@ -364,6 +374,13 @@ class VideoPlayerWidget : public BaseWidget {
     /// landed on, while Chrome/YouTube migrate because they specify
     /// the default sink on each stream creation. We mirror that.
     QMediaDevices*     media_devices_ = nullptr;
+    // Bottom-bar output-device selector. "System default" (index 0, empty
+    // itemData) follows QMediaDevices::defaultAudioOutput(); any other entry
+    // pins audio_output_ to that sink (id stored in pinned_audio_id_) until the
+    // user re-selects. follow_system_default_ tracks which mode is active.
+    QComboBox*         audio_device_combo_    = nullptr;
+    bool               follow_system_default_ = true;
+    QByteArray         pinned_audio_id_;
     // Local HLS trimming proxy for live streams. Null when no live
     // playback is active. Owned (parented) by this widget — also gets
     // cleaned up automatically on destruction.

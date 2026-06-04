@@ -1,6 +1,7 @@
 #include "screens/dashboard/widgets/VideoPlayerWidget.h"
 
 #include "auth/InactivityGuard.h"
+#include "core/config/AppIdentity.h"
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
 #include "services/video/LiveHlsProxy.h"
@@ -36,6 +37,7 @@
 #include <algorithm>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QSettings>
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QUrl>
@@ -437,6 +439,41 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         now_playing_ = new QLabel("—");
         cl->addWidget(now_playing_, 1);
 
+#ifdef HAS_QT_MULTIMEDIA
+        // Audio output-device selector. Item 0 ("System default") follows the
+        // system default sink; picking a specific device pins playback to it.
+        // Restore the persisted choice first so populate_audio_devices() can
+        // select it (per-user QSettings; empty pinned id → follow default).
+        {
+            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            follow_system_default_ =
+                s.value(QStringLiteral("video/audio_follow_default"), true).toBool();
+            pinned_audio_id_ =
+                s.value(QStringLiteral("video/audio_pinned_id")).toByteArray();
+            if (pinned_audio_id_.isEmpty()) follow_system_default_ = true;
+        }
+        audio_device_combo_ = new QComboBox;
+        audio_device_combo_->setFixedHeight(20);
+        audio_device_combo_->setMaximumWidth(220);
+        audio_device_combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        audio_device_combo_->setToolTip("Audio output device (defaults to the system default sink)");
+        connect(audio_device_combo_, &QComboBox::currentIndexChanged, this,
+                [this](int idx) {
+                    if (idx < 0) return;
+                    // Empty itemData == "System default" → follow the default
+                    // sink; otherwise pin to the selected device's id.
+                    const QByteArray id = audio_device_combo_->currentData().toByteArray();
+                    follow_system_default_ = id.isEmpty();
+                    pinned_audio_id_ = id;
+                    QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+                    s.setValue(QStringLiteral("video/audio_follow_default"), follow_system_default_);
+                    s.setValue(QStringLiteral("video/audio_pinned_id"), pinned_audio_id_);
+                    refresh_audio_output();
+                });
+        populate_audio_devices();
+        cl->addWidget(audio_device_combo_);
+#endif
+
         // Pause/resume — GL pipeline only. WEB engine's iframe is
         // cross-origin so JS pause is unreliable; we hide the button in WEB
         // mode. Visibility is set immediately below this controls_ block
@@ -498,7 +535,9 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         // hide it in that mode so the control bar reflects what actually
         // works. Re-toggled by the config dialog's accept handler when the
         // user switches engines.
-        play_pause_btn_->setVisible(!use_web_engine_);
+        // Pause/play and the GL device picker apply only to the native player;
+        // the WEB engine owns its own transport + audio. Keep both in lockstep.
+        sync_web_mode_controls();
 #endif
     }
 
@@ -750,14 +789,16 @@ void VideoPlayerWidget::build_player_view() {
     // when no target is named.
     refresh_audio_output();
 
-    // Migrate to the new default whenever the device list changes —
-    // headset plug/unplug, Bluetooth connect, pavucontrol "Set as
-    // default". audioOutputsChanged() is the closest Qt6 gives us;
-    // it fires on device add/remove and on default-sink swaps in
-    // the PA / PipeWire backend.
+    // Re-route + rebuild the picker when the device LIST changes — headset
+    // plug/unplug, Bluetooth connect/disconnect. Note audioOutputsChanged does
+    // NOT reliably fire on a pure default-sink swap (both devices still
+    // present); that case is covered by re-pinning at the start of every fresh
+    // stream (see play_direct) and by the user picking a device explicitly.
     media_devices_ = new QMediaDevices(this);
-    connect(media_devices_, &QMediaDevices::audioOutputsChanged,
-            this, &VideoPlayerWidget::refresh_audio_output);
+    connect(media_devices_, &QMediaDevices::audioOutputsChanged, this, [this]() {
+        populate_audio_devices();   // refresh the combo list + selection
+        refresh_audio_output();     // re-route to the (possibly new) target sink
+    });
 
     // QVideoSink is the frame delivery pipe: it receives decoded frames from
     // the multimedia engine and emits videoFrameChanged. The queued connection
@@ -827,19 +868,72 @@ void VideoPlayerWidget::build_player_view() {
 #ifdef HAS_QT_MULTIMEDIA
 void VideoPlayerWidget::refresh_audio_output() {
     if (!player_ || !audio_output_) return;
-    // setDevice() to the current system default is a no-op when
-    // unchanged and a stream migration when it differs (headset
-    // plug/unplug, BT connect, pavucontrol default swap). Naming the
-    // sink also bypasses PA's stream-restore module, which would
-    // otherwise re-pin finterm by application-name to whichever sink
-    // it last used.
-    audio_output_->setDevice(QMediaDevices::defaultAudioOutput());
+    // Resolve the target sink: the live system default when following it,
+    // otherwise the user-pinned device. Naming the sink explicitly also
+    // bypasses PA's stream-restore module, which would otherwise re-pin
+    // finterm by application-name to whichever sink it last used.
+    QAudioDevice want;
+    if (follow_system_default_) {
+        want = QMediaDevices::defaultAudioOutput();
+    } else {
+        for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
+            if (d.id() == pinned_audio_id_) { want = d; break; }
+        }
+        if (want.isNull()) {
+            // Pinned device vanished (unplugged / removed) — fall back to the
+            // system default and reflect that in the combo.
+            want = QMediaDevices::defaultAudioOutput();
+            follow_system_default_ = true;
+            pinned_audio_id_.clear();
+            if (audio_device_combo_) {
+                QSignalBlocker block(audio_device_combo_);
+                audio_device_combo_->setCurrentIndex(0);
+            }
+        }
+    }
+    if (!want.isNull() && audio_output_->device().id() != want.id()) {
+        // Log only on an actual switch (keeps it quiet). If the user reports
+        // audio on the wrong sink, this line reveals which device Qt routed to.
+        LOG_INFO("VideoPlayer", "Routing audio to sink: " + want.description());
+    }
+    audio_output_->setDevice(want);
     // Re-attach so a player_ that quietly dropped its output across
     // a source reset (Qt6 FFmpeg backend, 07737672) picks it back
     // up. No-op when already attached.
     player_->setAudioOutput(audio_output_);
 }
+
+void VideoPlayerWidget::populate_audio_devices() {
+    if (!audio_device_combo_) return;
+    // Rebuild without firing currentIndexChanged (which would re-route audio);
+    // we restore the user's selection ourselves below.
+    QSignalBlocker block(audio_device_combo_);
+    audio_device_combo_->clear();
+
+    const QAudioDevice def = QMediaDevices::defaultAudioOutput();
+    audio_device_combo_->addItem(
+        def.isNull() ? QStringLiteral("System default")
+                     : QStringLiteral("System default · %1").arg(def.description()),
+        QByteArray());  // empty itemData == follow the system default
+
+    int select = 0;  // default to "System default"
+    for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
+        audio_device_combo_->addItem(d.description(), d.id());
+        if (!follow_system_default_ && d.id() == pinned_audio_id_)
+            select = audio_device_combo_->count() - 1;
+    }
+    audio_device_combo_->setCurrentIndex(select);
+}
 #endif
+
+void VideoPlayerWidget::sync_web_mode_controls() {
+    // Native-pipeline-only controls track the active engine. Each guarded by
+    // its own existence so this compiles in any multimedia/webengine combo.
+    if (play_pause_btn_) play_pause_btn_->setVisible(!use_web_engine_);
+#ifdef HAS_QT_MULTIMEDIA
+    if (audio_device_combo_) audio_device_combo_->setVisible(!use_web_engine_);
+#endif
+}
 
 // Resume from a paused stream by picking the lightest correct
 // recovery for the situation:
@@ -1005,7 +1099,7 @@ void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString
     // play_pause_btn_ would also stay stuck off).
     web_is_spotify_              = false;
     spotify_auto_paused_on_lock_ = false;
-    if (play_pause_btn_) play_pause_btn_->setVisible(!use_web_engine_);
+    sync_web_mode_controls();
 
     const QString embed_url = QString("https://www.youtube-nocookie.com/embed/%1"
                                       "?autoplay=1&controls=1&rel=0"
@@ -1170,6 +1264,10 @@ void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& i
     // drive the embed (cross-origin postMessage is best-effort; the visible
     // controls live inside the iframe).
     if (play_pause_btn_) play_pause_btn_->setVisible(false);
+#ifdef HAS_QT_MULTIMEDIA
+    // The embed owns its own audio too — hide the GL device picker here.
+    if (audio_device_combo_) audio_device_combo_->setVisible(false);
+#endif
     stack_->setCurrentIndex(2);
 }
 #endif
@@ -1455,6 +1553,12 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
     status_label_->hide();
     controls_->show();
     stack_->setCurrentIndex(1);
+    // Re-pin to the CURRENT system-default sink before every fresh stream.
+    // QMediaDevices::audioOutputsChanged does NOT fire on a pure default-sink
+    // swap (both devices still present), so a stream started after the user
+    // switched the default (e.g. to a headset) would otherwise inherit the
+    // stale device captured at construction and play on the old sink.
+    refresh_audio_output();
     player_->setSource(QUrl(stream_url));
     player_->play();
 #else
@@ -1494,6 +1598,7 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
         status_label_->hide();
         controls_->show();
         stack_->setCurrentIndex(1);
+        refresh_audio_output();  // re-pin to the current default sink (see play_direct)
         player_->setSource(hls_proxy_->local_url());
         player_->play();
     });
@@ -1667,11 +1772,10 @@ void VideoPlayerWidget::stop_playback() {
     stack_->setCurrentIndex(0);
 #ifdef HAS_QT_WEBENGINE
     stop_web();
-    // stop_web() cleared web_is_spotify_; restore the pause button to match
-    // the currently selected engine so the next GL playback gets its control
-    // back (Spotify-mode hides it because the embed owns its own transport).
-    if (play_pause_btn_)
-        play_pause_btn_->setVisible(!use_web_engine_);
+    // stop_web() cleared web_is_spotify_; restore the native-pipeline controls
+    // to match the currently selected engine so the next GL playback gets them
+    // back (Spotify-mode hides them because the embed owns its own transport).
+    sync_web_mode_controls();
 #endif
 #ifdef HAS_QT_MULTIMEDIA
     player_->stop();
@@ -1965,10 +2069,9 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
         if (want_web != use_web_engine_) {
             use_web_engine_ = want_web;
             save_engine(use_web_engine_);
-            // Pause/play targets the GL player only; reflect that in the
-            // control bar so the button disappears when WEB takes over.
-            if (play_pause_btn_)
-                play_pause_btn_->setVisible(!use_web_engine_);
+            // Native-pipeline controls (pause/play + device picker) target the
+            // GL player only; hide them when WEB takes over.
+            sync_web_mode_controls();
         }
 #endif
 

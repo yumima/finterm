@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f1e9b7fb`](https://github.com/yumima/finterm/commit/f1e9b7fb) Futures heatmap: 2-decimal % and tiles sized to fit
 - [`2b5b1a2c`](https://github.com/yumima/finterm/commit/2b5b1a2c) Pre-IPO: SPV interest, data-based SEC cursors, versioned migrations
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
