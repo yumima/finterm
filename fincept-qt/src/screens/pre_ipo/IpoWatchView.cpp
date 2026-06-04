@@ -2221,8 +2221,17 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
             h += "</table>";
             if (!c.s1.edgar_url.isEmpty())
                 h += QString("<p><a href='%1'>SEC EDGAR filing index →</a></p>").arg(esc(c.s1.edgar_url));
-            h += "<p class='muted'>Offering size and price range aren't extracted from the "
-                 "S-1 header in this view — open the EDGAR index for the prospectus.</p>";
+            // Deliberately NOT showing the S-1 "Maximum Aggregate Offering
+            // Price": that figure is a registration-fee placeholder, not the
+            // real deal size (e.g. SpaceX's S-1 registers a nominal
+            // $1,000,000,000 against a multi-tens-of-billions IPO). Surfacing it
+            // as "deal size" is exactly the misleading number this rework
+            // removed — show the curated valuation + status instead. A genuine
+            // price range arrives via the Nasdaq-calendar enrichment near
+            // pricing (S1Filing::ticker / price_range), not from the S-1 header.
+            h += "<p class='muted'>Offering size isn't shown — the S-1 registers a "
+                 "nominal fee-placeholder amount, not the deal size. Open the EDGAR "
+                 "prospectus for the live terms.</p>";
         } else {
             h += "<i class='muted'>No S-1 / F-1 on file. This company hasn't begun the "
                  "public-registration process (or its draft submission is confidential).</i>";
