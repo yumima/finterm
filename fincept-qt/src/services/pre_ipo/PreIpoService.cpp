@@ -1100,44 +1100,70 @@ void PreIpoService::recompute_analytics() {
 void PreIpoService::load_valuation_seed() {
     if (seed_loaded_) return;
     seed_loaded_ = true;  // attempt once per session regardless of outcome
-    const QString path =
-        python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json";
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly)) {
-        LOG_INFO("PreIpo", QString("valuation seed not found at %1 (optional)").arg(path));
-        return;
+
+    // Parse one seed file's `entries` array into ValuationSeed objects.
+    auto parse_file = [](const QString& path, const char* label) -> QVector<ValuationSeed> {
+        QVector<ValuationSeed> out;
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) return out;
+        QJsonParseError err{};
+        const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+        f.close();
+        if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+            LOG_WARN("PreIpo", QString("valuation seed %1 parse failed: %2")
+                                   .arg(label, err.errorString()));
+            return out;
+        }
+        for (const auto& v : doc.object().value(QStringLiteral("entries")).toArray()) {
+            const auto o = v.toObject();
+            ValuationSeed s;
+            s.id = o[QStringLiteral("id")].toString();
+            if (s.id.isEmpty()) continue;
+            s.name = o[QStringLiteral("name")].toString();
+            s.cik  = o[QStringLiteral("cik")].toString();
+            for (const auto& a : o[QStringLiteral("aliases")].toArray()) s.aliases << a.toString();
+            s.last_valuation_usd = o[QStringLiteral("last_valuation_usd")].toDouble();
+            s.as_of        = QDate::fromString(o[QStringLiteral("as_of")].toString(), Qt::ISODate);
+            s.source_label = o[QStringLiteral("source_label")].toString();
+            s.source_url   = o[QStringLiteral("source_url")].toString();
+            s.round_name   = o[QStringLiteral("round_name")].toString();
+            s.sector       = o[QStringLiteral("sector")].toString();
+            s.description  = o[QStringLiteral("description")].toString();
+            s.hq_city      = o[QStringLiteral("hq_city")].toString();
+            s.hq_state     = o[QStringLiteral("hq_state")].toString();
+            s.hq_country   = o[QStringLiteral("hq_country")].toString();
+            s.founded_year = o[QStringLiteral("founded")].toInt();
+            for (const auto& k : o[QStringLiteral("key_investors")].toArray()) s.key_investors << k.toString();
+            for (const auto& t : o[QStringLiteral("tags")].toArray()) s.tags << t.toString();
+            out.append(s);
+        }
+        return out;
+    };
+
+    // 1) Bundled seed (ships with the app, under scripts/).
+    seed_ = parse_file(
+        python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json", "bundled");
+
+    // 2) User override (optional): FINCEPT_DATA_DIR/pre_ipo_valuation_seed.json,
+    //    falling back to the app data dir. Lets the user refresh stale
+    //    valuations or add private names WITHOUT a rebuild. Override entries
+    //    upsert by id — same id replaces the bundled entry, new ids are added.
+    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
+    if (data_dir.isEmpty())
+        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QVector<ValuationSeed> overrides =
+        parse_file(data_dir + "/pre_ipo_valuation_seed.json", "user override");
+    int replaced = 0, added = 0;
+    for (const auto& ov : overrides) {
+        int idx = -1;
+        for (int i = 0; i < seed_.size(); ++i)
+            if (seed_[i].id == ov.id) { idx = i; break; }
+        if (idx >= 0) { seed_[idx] = ov; ++replaced; }
+        else          { seed_.append(ov); ++added; }
     }
-    QJsonParseError err{};
-    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-    f.close();
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        LOG_WARN("PreIpo", QStringLiteral("valuation seed parse failed: ") + err.errorString());
-        return;
-    }
-    for (const auto& v : doc.object().value(QStringLiteral("entries")).toArray()) {
-        const auto o = v.toObject();
-        ValuationSeed s;
-        s.id = o[QStringLiteral("id")].toString();
-        if (s.id.isEmpty()) continue;
-        s.name = o[QStringLiteral("name")].toString();
-        s.cik  = o[QStringLiteral("cik")].toString();
-        for (const auto& a : o[QStringLiteral("aliases")].toArray()) s.aliases << a.toString();
-        s.last_valuation_usd = o[QStringLiteral("last_valuation_usd")].toDouble();
-        s.as_of        = QDate::fromString(o[QStringLiteral("as_of")].toString(), Qt::ISODate);
-        s.source_label = o[QStringLiteral("source_label")].toString();
-        s.source_url   = o[QStringLiteral("source_url")].toString();
-        s.round_name   = o[QStringLiteral("round_name")].toString();
-        s.sector       = o[QStringLiteral("sector")].toString();
-        s.description  = o[QStringLiteral("description")].toString();
-        s.hq_city      = o[QStringLiteral("hq_city")].toString();
-        s.hq_state     = o[QStringLiteral("hq_state")].toString();
-        s.hq_country   = o[QStringLiteral("hq_country")].toString();
-        s.founded_year = o[QStringLiteral("founded")].toInt();
-        for (const auto& k : o[QStringLiteral("key_investors")].toArray()) s.key_investors << k.toString();
-        for (const auto& t : o[QStringLiteral("tags")].toArray()) s.tags << t.toString();
-        seed_.append(s);
-    }
-    LOG_INFO("PreIpo", QString("loaded %1 curated valuation seeds").arg(seed_.size()));
+
+    LOG_INFO("PreIpo", QString("loaded %1 curated valuation seeds (overrides: %2 replaced, %3 added)")
+                           .arg(seed_.size()).arg(replaced).arg(added));
 }
 
 QSet<QString> PreIpoService::seed_fuzzy_norms(const ValuationSeed& s) const {
