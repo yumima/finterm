@@ -90,6 +90,13 @@ QString slugify(const QString& s) {
 // non-empty fields and pulling in other's only where primary is empty. Used to
 // reconcile a canonical-slug stub (e.g. "spacex" from the SPV/N-PORT layer)
 // with the Form-D legal-name entry that describes the same company.
+//
+// Intentionally NOT merged because they're rebuilt downstream every emit and
+// would be stale here: `analytics` (recompute_analytics), `spv_activity`
+// (attach_spv_activity), `seed_*`/`last_valuation_usd` (seed_apply_valuation),
+// `revenue_est_usd`/`s1_filed_date`/`ipo_expected_window` (recompute_analytics).
+// A NEW value-bearing PrivateCompany field that is NOT in one of those rebuild
+// passes must be added below, or it will be lost when `other` is removed.
 void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
     if (primary.cik.isEmpty())        primary.cik = other.cik;
     if (primary.name.isEmpty())       primary.name = other.name;
@@ -1148,21 +1155,37 @@ QSet<QString> PreIpoService::seed_fuzzy_norms(const ValuationSeed& s) const {
     return norms;
 }
 
-int PreIpoService::find_company_for_seed(const ValuationSeed& s) const {
+bool PreIpoService::seed_matches(const PrivateCompany& c, const ValuationSeed& s,
+                                 const QSet<QString>& norms) const {
     // 1. CIK (most reliable — set only for verified operating-company filers).
+    if (!s.cik.isEmpty() && c.cik == s.cik) return true;
+    // 2. Exact id/alias: the seed id, or any seed alias (slugified) matching the
+    //    company id or one of its aliases. This is how single-token aliases
+    //    (e.g. "scaleai") match — they're excluded from the fuzzy tier.
+    if (c.id == s.id || c.aliases.contains(s.id)) return true;
+    for (const auto& a : s.aliases) {
+        const QString slug = slugify(a);
+        if (c.aliases.contains(a)) return true;
+        if (!slug.isEmpty() && (c.id == slug || c.aliases.contains(slug))) return true;
+    }
+    // 3. Fuzzy normalized-name match (canonical name + multi-word aliases only).
+    if (norms.contains(norm_name(c.name))) return true;
+    for (const auto& a : c.aliases)
+        if (norms.contains(norm_name(a))) return true;
+    return false;
+}
+
+int PreIpoService::find_company_for_seed(const ValuationSeed& s) const {
+    const QSet<QString> norms = seed_fuzzy_norms(s);
+    // Prefer a CIK match (most reliable) before any other tier, then fall back
+    // to the shared predicate. seed_ensure_companies has normally already
+    // merged fragments into one row by the time this runs, so there's a single
+    // match — but the CIK-first pass keeps the choice deterministic regardless.
     if (!s.cik.isEmpty())
         for (int i = 0; i < companies_.size(); ++i)
             if (companies_[i].cik == s.cik) return i;
-    // 2. canonical id, or seed id present in a company's aliases.
     for (int i = 0; i < companies_.size(); ++i)
-        if (companies_[i].id == s.id || companies_[i].aliases.contains(s.id)) return i;
-    // 3. fuzzy normalized-name match (canonical name + multi-word aliases only).
-    const QSet<QString> norms = seed_fuzzy_norms(s);
-    for (int i = 0; i < companies_.size(); ++i) {
-        if (norms.contains(norm_name(companies_[i].name))) return i;
-        for (const auto& a : companies_[i].aliases)
-            if (norms.contains(norm_name(a))) return i;
-    }
+        if (seed_matches(companies_[i], s, norms)) return i;
     return -1;
 }
 
@@ -1175,16 +1198,11 @@ void PreIpoService::seed_ensure_companies() {
 
         // Gather ALL matching rows so fragmented duplicates (canonical-slug
         // stub vs Form-D legal-name entry) get merged, not left side by side.
+        // Uses the same predicate as find_company_for_seed so the two passes
+        // can't disagree about what a seed maps to.
         QVector<int> matches;
-        for (int i = 0; i < companies_.size(); ++i) {
-            const auto& c = companies_[i];
-            bool m = (!s.cik.isEmpty() && c.cik == s.cik)
-                  || c.id == s.id || c.aliases.contains(s.id);
-            if (!m && norms.contains(norm_name(c.name))) m = true;
-            if (!m) for (const auto& a : c.aliases)
-                if (norms.contains(norm_name(a))) { m = true; break; }
-            if (m) matches.append(i);
-        }
+        for (int i = 0; i < companies_.size(); ++i)
+            if (seed_matches(companies_[i], s, norms)) matches.append(i);
 
         if (matches.isEmpty()) {
             // Seeded name with no SEC footprint (OpenAI, Anthropic, …): stub it

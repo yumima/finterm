@@ -47,7 +47,7 @@ _DRAFT_FORMS = ("DRS", "DRS/A")
 try:
     from sec_known_ciks import KNOWN_PRIVATE_CIKS
 except ImportError:
-    KNOWN_PRIVATE_CIKS = ["0001181412", "0001646180"]
+    KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
 
 _LAST_REQ = 0.0
 # 0.4s gap = ≤2.5 req/s per process; with up to 3 SEC scripts concurrent the

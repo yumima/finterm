@@ -2247,7 +2247,7 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
                 h += QString("<tr><td class='k'>%1</td><td>%2</td></tr>").arg(k).arg(v);
         };
         row("Valuation", fmt_valuation(c.last_valuation_usd));
-        row("Raised", money_m(c.cumulative_raised_m));
+        row("Raised", fmt_raised_m(c.cumulative_raised_m));  // match DEAL/FUNDING precision
         row("Status", pre_ipo::ipo_status_label(c.ipo_status));
         row("Readiness", QString("%1 / 100").arg(c.analytics.ipo_readiness_score));
         h += "</table>";

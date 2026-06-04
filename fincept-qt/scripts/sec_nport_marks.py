@@ -113,7 +113,7 @@ FUND_FAMILIES = [
 # FINCEPT_DATA_DIR). Until then this hardcoded set IS the universe.
 PRIVATE_NAMES = {
     # cid:         { aliases (substring-anchored to word boundary), known_cik }
-    "stripe":      {"aliases": ["Stripe"],                    "cik": "0001646180"},
+    "stripe":      {"aliases": ["Stripe"],                    "cik": "0001691342"},
     "spacex":      {"aliases": ["Space Exploration", "SpaceX"], "cik": "0001181412"},
     "openai":      {"aliases": ["OpenAI"],                    "cik": ""},
     "anthropic":   {"aliases": ["Anthropic"],                 "cik": ""},

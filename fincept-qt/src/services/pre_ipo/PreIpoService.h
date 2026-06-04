@@ -145,8 +145,14 @@ class PreIpoService : public QObject {
     /// Normalized-name set used for the FUZZY (last-resort) match tier: the
     /// canonical name plus only multi-word aliases. Single-token aliases are
     /// excluded so a generic word (e.g. "figure") can't bind a seed to an
-    /// unrelated company; they still match exactly via id/alias tiers.
+    /// unrelated company; they still match exactly via the id/alias tier.
     QSet<QString> seed_fuzzy_norms(const ValuationSeed& s) const;
+    /// The single seed↔company match predicate, shared by find_company_for_seed
+    /// and seed_ensure_companies so the two passes can't drift: CIK, then exact
+    /// id/alias (seed id and each slugified alias), then fuzzy name (`norms`).
+    /// `norms` is seed_fuzzy_norms(s), passed in so callers compute it once.
+    bool seed_matches(const pre_ipo::PrivateCompany& c, const ValuationSeed& s,
+                      const QSet<QString>& norms) const;
 
     /// Emit the current data state. Called both incrementally (as each of
     /// the 3 fetches lands) and finally (when all three are done).

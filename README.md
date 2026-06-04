@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`47480548`](https://github.com/yumima/finterm/commit/47480548) pre-IPO: document why S-1 offering size is not surfaced
 - [`a96d27ec`](https://github.com/yumima/finterm/commit/a96d27ec) pre-IPO: rich private-company dossier in IPO Watch PRIVATE lens
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

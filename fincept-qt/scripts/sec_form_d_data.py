@@ -46,7 +46,7 @@ try:
     from sec_known_ciks import KNOWN_PRIVATE_CIKS
 except ImportError:
     # Standalone fallback if the sibling module isn't importable.
-    KNOWN_PRIVATE_CIKS = ["0001181412", "0001646180"]
+    KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
 
 UA = {
     "User-Agent": "FinceptTerminal research@hanlexon.com",
