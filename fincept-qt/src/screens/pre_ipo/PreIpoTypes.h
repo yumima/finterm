@@ -154,7 +154,17 @@ struct PrivateCompany {
     // Status & legacy back-compat fields populated by analytics ----------------
     IpoStatus ipo_status = IpoStatus::Unknown;
     QString   ipo_expected_window;
-    double    last_valuation_usd = 0;   // $B, derived from latest mark or round
+    double    last_valuation_usd = 0;   // USD; rendered headline. Form D/N-PORT
+                                        // can't derive this, so it is set from
+                                        // the curated valuation seed (see below).
+    // Curated valuation-seed provenance. Overlaid by PreIpoService AFTER
+    // recompute_analytics() (which zeroes last_valuation_usd). When seed_as_of
+    // is valid the UI shows "as reported · <as_of> · <source>". Never sourced
+    // from SEC filings — kept separate so SEC-derived fields stay authoritative.
+    QString   seed_source;              // e.g. "Company announcement"
+    QString   seed_source_url;
+    QDate     seed_as_of;
+    QString   seed_round;               // e.g. "Series F", "tender offer"
     QDate     last_round_date;
     QString   last_round_name;
     double    revenue_est_usd = 0;      // $M

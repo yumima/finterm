@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QTimeZone>
@@ -67,6 +68,62 @@ QStringList tags_for_company(const PrivateCompany& c) {
     return out;
 }
 
+// Lowercase, punctuation→single space, trimmed. For fuzzy name matching.
+QString norm_name(const QString& s) {
+    QString out = s.toLower();
+    static const QRegularExpression non_alnum("[^a-z0-9]+");
+    out.replace(non_alnum, " ");
+    return out.simplified();
+}
+
+// Slugify mirroring the Python _slug (lowercase, non-alnum→'-', trim '-').
+QString slugify(const QString& s) {
+    QString out = s.toLower();
+    static const QRegularExpression non_alnum("[^a-z0-9]+");
+    out.replace(non_alnum, "-");
+    while (out.endsWith('-')) out.chop(1);
+    while (out.startsWith('-')) out.remove(0, 1);
+    return out;
+}
+
+// Fold a duplicate company entry (`other`) into `primary`, keeping primary's
+// non-empty fields and pulling in other's only where primary is empty. Used to
+// reconcile a canonical-slug stub (e.g. "spacex" from the SPV/N-PORT layer)
+// with the Form-D legal-name entry that describes the same company.
+void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
+    if (primary.cik.isEmpty())        primary.cik = other.cik;
+    if (primary.name.isEmpty())       primary.name = other.name;
+    if (primary.sector.isEmpty())     primary.sector = other.sector;
+    if (primary.sub_sector.isEmpty()) primary.sub_sector = other.sub_sector;
+    if (primary.hq_city.isEmpty())    primary.hq_city = other.hq_city;
+    if (primary.hq_state.isEmpty())   primary.hq_state = other.hq_state;
+    if (primary.hq_country.isEmpty()) primary.hq_country = other.hq_country;
+    if (!primary.founded.isValid())   primary.founded = other.founded;
+    if (primary.employee_count_est == 0) primary.employee_count_est = other.employee_count_est;
+    if (primary.key_investors.isEmpty()) primary.key_investors = other.key_investors;
+    if (primary.cumulative_raised_m < other.cumulative_raised_m)
+        primary.cumulative_raised_m = other.cumulative_raised_m;
+    if (primary.rounds.isEmpty())     primary.rounds = other.rounds;
+    if (primary.fund_marks.isEmpty()) primary.fund_marks = other.fund_marks;
+    if (primary.secondary.isEmpty())  primary.secondary = other.secondary;
+    if (!primary.s1.first_filed.isValid() && other.s1.first_filed.isValid())
+        primary.s1 = other.s1;
+    if (primary.fin.revenue_m == 0 && other.fin.revenue_m != 0) primary.fin = other.fin;
+    if (!primary.last_round_date.isValid() && other.last_round_date.isValid()) {
+        primary.last_round_date = other.last_round_date;
+        primary.last_round_name = other.last_round_name;
+    }
+    primary.watched = primary.watched || other.watched;
+    // IpoStatus enum is ordered Unknown<Rumored<Filed<Priced<Listed<Acquired,
+    // so the larger value is the more-advanced status.
+    if (static_cast<int>(other.ipo_status) > static_cast<int>(primary.ipo_status))
+        primary.ipo_status = other.ipo_status;
+    for (const auto& t : other.tags) if (!primary.tags.contains(t)) primary.tags << t;
+    for (const auto& a : other.aliases) if (!primary.aliases.contains(a)) primary.aliases << a;
+    if (!other.id.isEmpty() && other.id != primary.id && !primary.aliases.contains(other.id))
+        primary.aliases << other.id;
+}
+
 } // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
@@ -85,6 +142,7 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
     // is asleep at 05:00 ET, the min-check gate in load_data() picks up the
     // slack on the next click.
     load_cursors();
+    load_valuation_seed();
     schedule_next_daily_refresh();
 }
 
@@ -190,6 +248,11 @@ PrivateCompany PreIpoService::company(const QString& id) const {
 }
 
 void PreIpoService::toggle_watch(const QString& id) {
+    // NOTE: the IPO Watch UI does NOT use this — its watchlist is the
+    // SettingsRepository-backed `starred_` set in IpoWatchView, keyed by
+    // company id. PrivateCompany::watched is left here for other callers but is
+    // intentionally not the source of truth for the UI star (avoids two
+    // divergent watch states). See IpoWatchView::toggle_private_star.
     for (auto& c : companies_) {
         if (c.id == id) {
             c.watched = !c.watched;
@@ -1025,9 +1088,190 @@ void PreIpoService::recompute_analytics() {
 
 // ── Emit ─────────────────────────────────────────────────────────────────────
 
+// ── Curated valuation seed ─────────────────────────────────────────────────────
+
+void PreIpoService::load_valuation_seed() {
+    if (seed_loaded_) return;
+    seed_loaded_ = true;  // attempt once per session regardless of outcome
+    const QString path =
+        python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json";
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        LOG_INFO("PreIpo", QString("valuation seed not found at %1 (optional)").arg(path));
+        return;
+    }
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
+    f.close();
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        LOG_WARN("PreIpo", QStringLiteral("valuation seed parse failed: ") + err.errorString());
+        return;
+    }
+    for (const auto& v : doc.object().value(QStringLiteral("entries")).toArray()) {
+        const auto o = v.toObject();
+        ValuationSeed s;
+        s.id = o[QStringLiteral("id")].toString();
+        if (s.id.isEmpty()) continue;
+        s.name = o[QStringLiteral("name")].toString();
+        s.cik  = o[QStringLiteral("cik")].toString();
+        for (const auto& a : o[QStringLiteral("aliases")].toArray()) s.aliases << a.toString();
+        s.last_valuation_usd = o[QStringLiteral("last_valuation_usd")].toDouble();
+        s.as_of        = QDate::fromString(o[QStringLiteral("as_of")].toString(), Qt::ISODate);
+        s.source_label = o[QStringLiteral("source_label")].toString();
+        s.source_url   = o[QStringLiteral("source_url")].toString();
+        s.round_name   = o[QStringLiteral("round_name")].toString();
+        s.sector       = o[QStringLiteral("sector")].toString();
+        s.description  = o[QStringLiteral("description")].toString();
+        s.hq_city      = o[QStringLiteral("hq_city")].toString();
+        s.hq_state     = o[QStringLiteral("hq_state")].toString();
+        s.hq_country   = o[QStringLiteral("hq_country")].toString();
+        s.founded_year = o[QStringLiteral("founded")].toInt();
+        for (const auto& k : o[QStringLiteral("key_investors")].toArray()) s.key_investors << k.toString();
+        for (const auto& t : o[QStringLiteral("tags")].toArray()) s.tags << t.toString();
+        seed_.append(s);
+    }
+    LOG_INFO("PreIpo", QString("loaded %1 curated valuation seeds").arg(seed_.size()));
+}
+
+QSet<QString> PreIpoService::seed_fuzzy_norms(const ValuationSeed& s) const {
+    QSet<QString> norms;
+    const QString nm = norm_name(s.name);
+    if (!nm.isEmpty()) norms.insert(nm);
+    // Only multi-word aliases participate in fuzzy matching — a bare single
+    // token (e.g. "figure") is too generic and would bind to an unrelated
+    // company. Single-token aliases still match exactly via the id tier.
+    for (const auto& a : s.aliases) {
+        if (!a.contains(' ')) continue;
+        const QString an = norm_name(a);
+        if (!an.isEmpty()) norms.insert(an);
+    }
+    return norms;
+}
+
+int PreIpoService::find_company_for_seed(const ValuationSeed& s) const {
+    // 1. CIK (most reliable — set only for verified operating-company filers).
+    if (!s.cik.isEmpty())
+        for (int i = 0; i < companies_.size(); ++i)
+            if (companies_[i].cik == s.cik) return i;
+    // 2. canonical id, or seed id present in a company's aliases.
+    for (int i = 0; i < companies_.size(); ++i)
+        if (companies_[i].id == s.id || companies_[i].aliases.contains(s.id)) return i;
+    // 3. fuzzy normalized-name match (canonical name + multi-word aliases only).
+    const QSet<QString> norms = seed_fuzzy_norms(s);
+    for (int i = 0; i < companies_.size(); ++i) {
+        if (norms.contains(norm_name(companies_[i].name))) return i;
+        for (const auto& a : companies_[i].aliases)
+            if (norms.contains(norm_name(a))) return i;
+    }
+    return -1;
+}
+
+void PreIpoService::seed_ensure_companies() {
+    if (seed_.isEmpty()) return;
+    for (const auto& s : seed_) {
+        // Fuzzy norm-set (canonical name + multi-word aliases) — shared with
+        // find_company_for_seed so the two passes can't disagree on matching.
+        const QSet<QString> norms = seed_fuzzy_norms(s);
+
+        // Gather ALL matching rows so fragmented duplicates (canonical-slug
+        // stub vs Form-D legal-name entry) get merged, not left side by side.
+        QVector<int> matches;
+        for (int i = 0; i < companies_.size(); ++i) {
+            const auto& c = companies_[i];
+            bool m = (!s.cik.isEmpty() && c.cik == s.cik)
+                  || c.id == s.id || c.aliases.contains(s.id);
+            if (!m && norms.contains(norm_name(c.name))) m = true;
+            if (!m) for (const auto& a : c.aliases)
+                if (norms.contains(norm_name(a))) { m = true; break; }
+            if (m) matches.append(i);
+        }
+
+        if (matches.isEmpty()) {
+            // Seeded name with no SEC footprint (OpenAI, Anthropic, …): stub it
+            // so marquee names always appear. Stubs are rebuilt from seed_ each
+            // emit, so they survive cache hydration without being persisted.
+            PrivateCompany stub;
+            stub.id   = s.id;
+            stub.cik  = s.cik;
+            stub.name = s.name;
+            stub.aliases = s.aliases;
+            stub.sector  = s.sector;
+            stub.hq_city = s.hq_city; stub.hq_state = s.hq_state; stub.hq_country = s.hq_country;
+            if (s.founded_year > 1900 && s.founded_year < 2100) stub.founded = QDate(s.founded_year, 1, 1);
+            stub.key_investors = s.key_investors;
+            stub.description = s.description.isEmpty()
+                ? QStringLiteral("Tracked via curated valuation seed") : s.description;
+            stub.ipo_status = IpoStatus::Rumored;
+            stub.tags = s.tags.isEmpty() ? tags_for_company(stub) : s.tags;
+            companies_.append(stub);
+            continue;
+        }
+
+        // Pick the richest match as primary: prefer one with a CIK, then the one
+        // with the most Form D rounds.
+        int primary = matches.front();
+        for (int idx : matches) {
+            const auto& c = companies_[idx];
+            const auto& p = companies_[primary];
+            const bool better =
+                (!c.cik.isEmpty() && p.cik.isEmpty()) ||
+                (c.cik.isEmpty() == p.cik.isEmpty() && c.rounds.size() > p.rounds.size());
+            if (better) primary = idx;
+        }
+        QVector<int> remove;
+        for (int idx : matches)
+            if (idx != primary) { merge_company_into(companies_[primary], companies_[idx]); remove.append(idx); }
+
+        auto& p = companies_[primary];
+        auto add_alias = [&](const QString& a) {
+            if (!a.isEmpty() && a != p.id && !p.aliases.contains(a)) p.aliases << a;
+        };
+        // Prefer the friendlier seed display name (e.g. "SpaceX" over the Form D
+        // legal name); keep the legal name searchable as an alias.
+        if (!s.name.isEmpty() && p.name != s.name) { add_alias(p.name); p.name = s.name; }
+        add_alias(s.id);
+        add_alias(slugify(s.name));
+        for (const auto& a : s.aliases) add_alias(a);
+        // Fill descriptive fields only where SEC data is absent.
+        if (p.sector.isEmpty())  p.sector = s.sector;
+        if (!p.founded.isValid() && s.founded_year > 1900 && s.founded_year < 2100)
+            p.founded = QDate(s.founded_year, 1, 1);
+        if (p.hq_city.isEmpty())    p.hq_city = s.hq_city;
+        if (p.hq_state.isEmpty())   p.hq_state = s.hq_state;
+        if (p.hq_country.isEmpty()) p.hq_country = s.hq_country;
+        if (p.key_investors.isEmpty()) p.key_investors = s.key_investors;
+        if (!s.description.isEmpty() &&
+            (p.description.isEmpty() || p.description.startsWith("Tracked via") ||
+             p.description.startsWith("Source: SEC")))
+            p.description = s.description;
+
+        std::sort(remove.begin(), remove.end(), std::greater<int>());
+        for (int idx : remove) companies_.removeAt(idx);
+    }
+}
+
+void PreIpoService::seed_apply_valuation() {
+    for (const auto& s : seed_) {
+        const int idx = find_company_for_seed(s);
+        if (idx < 0) continue;
+        auto& c = companies_[idx];
+        c.last_valuation_usd = s.last_valuation_usd;  // overwrites the 0 set by recompute
+        c.seed_source     = s.source_label;
+        c.seed_source_url = s.source_url;
+        c.seed_as_of      = s.as_of;
+        c.seed_round      = s.round_name;
+    }
+}
+
 void PreIpoService::emit_summary() {
+    // Order matters: reconcile/stub seeded names BEFORE attach_spv_activity (so
+    // SPVs join to the canonical entry via aliases instead of spawning a dup
+    // stub), and apply valuations AFTER recompute_analytics (which zeroes
+    // last_valuation_usd on every pass).
+    seed_ensure_companies();
     attach_spv_activity();  // re-join the SPV side table to the latest companies_
     recompute_analytics();
+    seed_apply_valuation();
     PreIpoSummary summary;
     summary.companies     = companies_;
     summary.recent_form_d = form_d_;

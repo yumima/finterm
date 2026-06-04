@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QVector>
 
@@ -40,6 +41,11 @@ class PreIpoService : public QObject {
     void refresh();
 
     QVector<pre_ipo::PrivateCompany> companies() const;
+    /// Zero-copy view of the universe for read-only render paths (called per
+    /// search keystroke). Valid only on the main thread between emits — the
+    /// reference is invalidated by the next refresh. Use companies() when you
+    /// need an owning snapshot.
+    const QVector<pre_ipo::PrivateCompany>& companies_ref() const { return companies_; }
     pre_ipo::PrivateCompany company(const QString& id) const;
     void toggle_watch(const QString& id);
 
@@ -107,6 +113,41 @@ class PreIpoService : public QObject {
     void attach_spv_activity();
 
     void recompute_analytics();
+
+    // ── Curated valuation seed ────────────────────────────────────────────────
+    // SEC Form D / N-PORT don't disclose share price or shares outstanding, so a
+    // headline post-money valuation can't be derived from filings. A small hand-
+    // maintained JSON (scripts/pre_ipo_valuation_seed.json) supplies last-
+    // reported valuations for marquee names, labelled "as reported" in the UI.
+    struct ValuationSeed {
+        QString id, name, cik;
+        QStringList aliases;
+        double  last_valuation_usd = 0;
+        QDate   as_of;
+        QString source_label, source_url, round_name;
+        QString sector, description, hq_city, hq_state, hq_country;
+        int     founded_year = 0;
+        QStringList key_investors, tags;
+    };
+    /// Load the seed file once (tolerant of a missing/invalid file).
+    void load_valuation_seed();
+    /// Reconcile seed names into companies_ BEFORE recompute_analytics():
+    /// merge fragmented duplicates (canonical-slug stub vs Form-D legal-name
+    /// entry), add canonical aliases, create stubs for seeded names with no SEC
+    /// footprint, and fill empty descriptive fields. Idempotent across emits.
+    void seed_ensure_companies();
+    /// Overlay last_valuation_usd + seed_* provenance AFTER recompute_analytics()
+    /// (which resets last_valuation_usd to 0 every emit).
+    void seed_apply_valuation();
+    /// Best single company match for a seed (CIK → id/alias-exact → fuzzy
+    /// name). -1 when no match.
+    int  find_company_for_seed(const ValuationSeed& s) const;
+    /// Normalized-name set used for the FUZZY (last-resort) match tier: the
+    /// canonical name plus only multi-word aliases. Single-token aliases are
+    /// excluded so a generic word (e.g. "figure") can't bind a seed to an
+    /// unrelated company; they still match exactly via id/alias tiers.
+    QSet<QString> seed_fuzzy_norms(const ValuationSeed& s) const;
+
     /// Emit the current data state. Called both incrementally (as each of
     /// the 3 fetches lands) and finally (when all three are done).
     void emit_summary();
@@ -146,6 +187,8 @@ class PreIpoService : public QObject {
     QJsonObject cursors_;            // per-source change markers (cursors.json)
 
     QVector<pre_ipo::PrivateCompany> companies_;
+    QVector<ValuationSeed>           seed_;      // curated valuation overlay
+    bool                             seed_loaded_ = false;
     QVector<pre_ipo::SpvActivity>    spv_raw_;   // side table, re-joined each emit
     QVector<pre_ipo::FormDFiling>    form_d_;
     QVector<pre_ipo::S1Filing>       pipeline_;

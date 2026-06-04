@@ -19,6 +19,7 @@
 // 0; the filter row stays compact so it works on 3:2 / 16:9 laptops too.
 
 #include "core/result/Result.h"
+#include "screens/pre_ipo/PreIpoTypes.h"
 #include "services/markets/MarketDataService.h"
 
 #include <QDate>
@@ -145,12 +146,13 @@ class IpoWatchView : public QWidget {
     void render_performance();
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
-    void render_private();          // SEC Form D filers — pre-S-1 privates
-    /// Detail-rail render for a private company. Pulled out separately
-    /// because the per-Entry render_detail() assumes Nasdaq-calendar
-    /// columns we don't have for private companies; this version
-    /// surfaces Form D history + EDGAR link inside the same rail.
-    void render_detail_private(const QString& company_name);
+    void render_private();          // private-company dossier list (PreIpoService::companies)
+    /// Detail-rail render for a private company, keyed by PrivateCompany::id.
+    /// Pulled out separately because the per-Entry render_detail() assumes
+    /// Nasdaq-calendar columns we don't have for private companies; this
+    /// version surfaces the full dossier (valuation, rounds, fund marks, SPV
+    /// interest, S-1 pipeline) from PreIpoService::company(id) inside the rail.
+    void render_detail_private(const QString& company_id);
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     // Per-section detail rail builders — each populates one tab page or pane.
@@ -179,12 +181,13 @@ class IpoWatchView : public QWidget {
     void fetch_ipo_extras_for_detail(const Entry& e);
     void fetch_sec_filings_for_detail(const Entry& e);
     void fetch_wikipedia_for_detail(const Entry& e);
-    /// Wikipedia summary for private (Form D) companies — reused by
-    /// render_detail_private. Tries the legal company name first; falls
-    /// back to a suffix-stripped variant for filings whose Form D legal
-    /// name doesn't match the common Wikipedia title (e.g. "Space
-    /// Exploration Technologies Corp." → "SpaceX").
-    void fetch_wikipedia_for_private(const QString& company);
+    /// Wikipedia summary for private companies — reused by
+    /// render_detail_private. `title` is the lookup name (tries a suffix-
+    /// stripped variant on miss for filings whose Form D legal name doesn't
+    /// match the common Wikipedia title, e.g. "Space Exploration Technologies
+    /// Corp." → "SpaceX"); `company_id` is re-rendered on success so the cache
+    /// stays name-keyed while routing stays id-keyed.
+    void fetch_wikipedia_for_private(const QString& title, const QString& company_id);
     void fetch_s1_funding_for_detail(const Entry& e);
     QVector<int> filtered_indices() const;     // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
@@ -206,6 +209,15 @@ class IpoWatchView : public QWidget {
     void save_starred();
     void toggle_star(const Entry& e);
     bool is_starred(const Entry& e) const { return starred_.contains(starred_key(e)); }
+    /// Private companies are keyed in starred_ by PrivateCompany::id, but
+    /// legacy stars (pre-dossier UI) used the Form D legal name. Match
+    /// tolerantly against id, display name, and aliases so old watchlists
+    /// keep working. Toggling normalizes to the id (see the PRIVATE/WATCHLIST
+    /// click handlers).
+    bool private_starred(const pre_ipo::PrivateCompany& c) const;
+    /// Flip a private company's watch state, clearing any legacy name/alias
+    /// keys and persisting the id form.
+    void toggle_private_star(const QString& company_id);
 
     // Helpers
     static QString format_money(double dollars);

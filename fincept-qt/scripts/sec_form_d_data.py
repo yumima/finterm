@@ -40,15 +40,13 @@ EDGAR_ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
 # Curated CIKs of well-known late-stage private companies that file Form D.
 # These are the names pre-IPO investors actually care about. We always
 # fetch their filings even if they don't show up in the noisy recent feed.
-#
-# Only verified CIKs go in this list; unverified ones (Anthropic, Databricks,
-# OpenAI, etc.) get picked up by the N-PORT mutual-fund-mark layer instead,
-# where issuer-name alias matching is the source of truth. SpaceX (1181412)
-# verified by smoke test → $8.2B across 8 rounds.
-KNOWN_PRIVATE_CIKS = [
-    "0001181412",  # Space Exploration Technologies (SpaceX)  — VERIFIED
-    "0001646180",  # Stripe                                  — to verify
-]
+# Shared with sec_s1_pipeline.py via sec_known_ciks so the Form D universe and
+# the S-1 pipeline never drift. (scripts/ is on PYTHONPATH at runtime.)
+try:
+    from sec_known_ciks import KNOWN_PRIVATE_CIKS
+except ImportError:
+    # Standalone fallback if the sibling module isn't importable.
+    KNOWN_PRIVATE_CIKS = ["0001181412", "0001646180"]
 
 UA = {
     "User-Agent": "FinceptTerminal research@hanlexon.com",
