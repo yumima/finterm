@@ -615,6 +615,7 @@ set(CMAKE_SKIP_INSTALL_RULES FALSE CACHE BOOL "" FORCE)
 set(CORE_SOURCES
     src/core/config/AppConfig.cpp
     src/core/config/AppPaths.cpp
+    src/core/config/LayoutMigrations.cpp
     src/core/config/ProfileManager.cpp
     src/core/logging/Logger.cpp
     src/core/events/EventBus.cpp

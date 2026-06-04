@@ -305,12 +305,40 @@ def collect_all_marks(quarters_back=2, families_max=None):
     }
 
 
+def family_cursor(families_max=None):
+    """Newest N-PORT-P accession per fund family — the data-based change signal
+    for marks. Accessions are stable identifiers (no sliding-window churn), and
+    each costs one cheap submissions request, so this is far cheaper than the
+    per-filing XML the full collect_all_marks fetches. Marks only change when a
+    family files a new N-PORT (quarterly), so an unchanged map = nothing to do."""
+    families = FUND_FAMILIES if families_max is None else FUND_FAMILIES[:families_max]
+    cur = {}
+    for _label, cik in families:
+        accs = list_nport_accessions(cik, limit=1)
+        cur[cik] = accs[0]["adsh"] if accs else ""
+    return cur
+
+
 def handle_action(action, payload):
     if action == "marks_all":
-        return collect_all_marks(
+        families_max = payload.get("families_max")
+        # Cheap cursor probe first: if every family's newest N-PORT accession
+        # matches the prior cursor, nothing was filed → skip all the XML.
+        cursor = family_cursor(families_max)
+        prev = payload.get("prev_cursor")
+        # any(cursor.values()): never trust a degenerate all-empty probe (every
+        # family returned "" — an EDGAR outage or a fully-failed run) as
+        # "unchanged"; that would equal a prior failed cursor and suppress the
+        # fetch forever. Require at least one real accession before short-circuiting.
+        if (isinstance(prev, dict) and prev.get("accessions") == cursor
+                and any(cursor.values())):
+            return {"unchanged": True, "cursor": {"accessions": cursor}}
+        data = collect_all_marks(
             quarters_back=payload.get("quarters_back", 2),
-            families_max=payload.get("families_max"),
+            families_max=families_max,
         )
+        data["cursor"] = {"accessions": cursor}
+        return data
     if action == "marks_for":
         name = (payload.get("name") or "").strip()
         if not name:

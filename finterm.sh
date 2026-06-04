@@ -218,6 +218,11 @@ EOF
         fi
     fi
 
+    # Can't-boot guard before anything reads the config (quarantines a zero-byte
+    # .conf so the binary can start and self-migrate). Structural migration is
+    # the binary's job (LayoutMigrations); this only unblocks the boot.
+    preflight_guard
+
     # Strip Qt window/toolbar/dock-layout state from finterm.conf
     # so every launch starts with a clean default layout. Surgical —
     # preserves portfolio, workspaces, theme, component-usage stats, and
@@ -387,6 +392,28 @@ kill_app() {
     if pgrep -f "$FINTERM_PROC" >/dev/null 2>&1; then
         echo "WARN: finterm still running after kill — proceeding anyway." >&2
     fi
+}
+
+# Preflight can't-boot guard. The ONLY launcher-side self-healing — everything
+# structural (path/settings migration, orphaned-cache cleanup) lives in the
+# binary's versioned LayoutMigrations, which runs at the top of main() and
+# derives every path from AppIdentity (one source of truth). But a settings file
+# corrupted to zero bytes can stop the binary from reaching that migration step,
+# so this covers exactly that chicken-and-egg case: quarantine an empty .conf
+# (preserving it for forensics) so the app boots and regenerates defaults.
+# Cheap — two stats — and silent unless it actually acts.
+preflight_guard() {
+    local f conf quarantine
+    for f in finterm.conf finterm-Secure.conf; do
+        conf="$CONFIG_DIR/$f"
+        # -f && ! -s  ==  exists but is zero bytes.
+        if [[ -f "$conf" && ! -s "$conf" ]]; then
+            quarantine="$conf.corrupt-$(date +%Y%m%d-%H%M%S)"
+            if mv "$conf" "$quarantine" 2>/dev/null; then
+                echo "finterm: quarantined empty/corrupt $f → $(basename "$quarantine"); regenerating defaults." >&2
+            fi
+        fi
+    done
 }
 
 # Surgical: strip ONLY the window/toolbar/dock-layout state from

@@ -101,10 +101,160 @@ def _slug(name):
     return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
 
 
+# ── SPV (secondary-interest) resolution ────────────────────────────────────────
+# Late-stage private companies don't trade, but the SPVs that raise capital to
+# buy into them DO file Form D — and the entity is named after its target
+# ("HII Anthropic-01", "Hiive ScaleAI Series I", "Destiny SpaceX SPV LLC").
+# Those filings are a free public proxy for secondary-market interest, the
+# closest an independent app gets to the proprietary order-flow that
+# Hiive/Forge/NPM sell. We resolve the filer name to (target, sponsor).
+
+# Sponsors that package private-company SPVs. "HII" is Hiive's filing prefix.
+_SPV_SPONSORS = [
+    ("hiive", "Hiive"), ("hii", "Hiive"), ("forge", "Forge"),
+    ("equityzen", "EquityZen"), ("destiny", "Destiny"),
+    ("manhattan venture", "Manhattan Venture"), ("fundrise", "Fundrise"),
+    ("greycroft", "Greycroft"), ("ark", "ARK"),
+]
+
+# Underlying companies people build SPVs around. token (normalised, space-
+# separated) → (canonical name, slug). The slug must match the Form D / N-PORT
+# company id so the SPV joins to an existing dossier.
+_SPV_TARGETS = [
+    ("anthropic", "Anthropic", "anthropic"),
+    ("openai", "OpenAI", "openai"),
+    ("open ai", "OpenAI", "openai"),
+    ("spacex", "SpaceX", "spacex"),
+    ("space exploration", "SpaceX", "spacex"),
+    ("stripe", "Stripe", "stripe"),
+    ("databricks", "Databricks", "databricks"),
+    ("xai", "xAI", "xai"),
+    ("scaleai", "Scale AI", "scale-ai"),
+    ("scale ai", "Scale AI", "scale-ai"),
+    ("anduril", "Anduril", "anduril"),
+    ("ramp", "Ramp", "ramp"),
+    ("mistral", "Mistral", "mistral"),
+    ("perplexity", "Perplexity", "perplexity"),
+    ("canva", "Canva", "canva"),
+    ("discord", "Discord", "discord"),
+    ("revolut", "Revolut", "revolut"),
+    ("figure ai", "Figure AI", "figure-ai"),
+    ("chime", "Chime", "chime"),
+    ("plaid", "Plaid", "plaid"),
+    ("rippling", "Rippling", "rippling"),
+    ("deel", "Deel", "deel"),
+    ("groq", "Groq", "groq"),
+    ("cohere", "Cohere", "cohere"),
+    ("epic games", "Epic Games", "epic-games"),
+    ("fanatics", "Fanatics", "fanatics"),
+    ("kraken", "Kraken", "kraken"),
+    ("brex", "Brex", "brex"),
+    ("notion", "Notion", "notion"),
+    ("airtable", "Airtable", "airtable"),
+    ("gusto", "Gusto", "gusto"),
+    ("netskope", "Netskope", "netskope"),
+    ("waymo", "Waymo", "waymo"),
+    ("celonis", "Celonis", "celonis"),
+    ("flexport", "Flexport", "flexport"),
+]
+
+# Tokens marking the filer as an SPV/feeder, not the operating company itself.
+# Kept narrow (no bare "llc"/"lp") so an operating company that merely shares a
+# target token isn't misread as an SPV.
+_SPV_INDICATORS = (
+    "spv", "fund", "series", "opportunit", "co invest", "coinvest", "feeder",
+    "access",
+)
+
+
+def _norm_name(s):
+    """Lowercase, strip punctuation to single spaces, pad with edge spaces so
+    whole-token containment checks (' anthropic ') don't match substrings."""
+    body = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip())
+    return " " + body + " "
+
+
+def _resolve_spv(name):
+    """Return {underlying_name, underlying_id, sponsor} if `name` looks like an
+    SPV targeting a known private company, else None."""
+    low = _norm_name(name)
+    target = None
+    for tok, canon, slug in _SPV_TARGETS:
+        if (" " + tok + " ") in low:
+            target = (canon, slug)
+            break
+    if not target:
+        return None
+    sponsor = ""
+    for tok, label in _SPV_SPONSORS:
+        if low.startswith(" " + tok + " ") or (" " + tok + " ") in low:
+            sponsor = label
+            break
+    has_indicator = any(ind in low for ind in _SPV_INDICATORS)
+    # Require an SPV signal so the target's OWN operating Form D (e.g.
+    # "Space Exploration Technologies Corp") isn't misclassified as interest
+    # in itself.
+    if not sponsor and not has_indicator:
+        return None
+    return {"underlying_name": target[0], "underlying_id": target[1], "sponsor": sponsor}
+
+
+def build_spv_activity(filings, parse_xml_max=24):
+    """Scan an already-fetched Form D filing list for SPVs targeting known
+    private companies. Reuses the universe builder's search results (no extra
+    EDGAR search requests); only matched SPVs incur an XML fetch, capped."""
+    out = []
+    parsed = 0
+    seen = set()
+    for f in filings:
+        names = f.get("display_names") or []
+        ciks = f.get("ciks") or []
+        if not names or not ciks:
+            continue
+        raw = re.sub(r"\s*\(CIK.*$", "", names[0]).strip()
+        res = _resolve_spv(raw)
+        if not res:
+            continue
+        cik = ciks[0]
+        key = (_cik_padded(cik), f.get("adsh", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        rec = {
+            "underlying_id": res["underlying_id"],
+            "underlying_name": res["underlying_name"],
+            "sponsor": res["sponsor"],
+            "spv_name": raw,
+            "cik": _cik_padded(cik),
+            "filed_date": f.get("filed_date", ""),
+            "amount_sold_m": 0.0,
+            "amount_offered_m": 0.0,
+            "minimum_investment_usd": 0.0,
+            "num_investors": 0,
+            "edgar_url": "",
+        }
+        if parsed < parse_xml_max:
+            x = fetch_form_d_xml(cik, f["adsh"])
+            parsed += 1
+            if x:
+                rec["amount_sold_m"] = (x.get("total_sold_usd", 0) or 0) / 1_000_000.0
+                rec["amount_offered_m"] = (x.get("total_offering_usd", 0) or 0) / 1_000_000.0
+                rec["minimum_investment_usd"] = x.get("minimum_investment_usd", 0)
+                rec["num_investors"] = x.get("already_invested_count", 0)
+                rec["edgar_url"] = x.get("edgar_url", "")
+        out.append(rec)
+    out.sort(key=lambda r: r.get("filed_date", ""), reverse=True)
+    return out
+
+
 # ── EDGAR full-text search ─────────────────────────────────────────────────────
 
-def search_filings(forms, days_back, max_hits=200):
-    """List recent filings of given forms (D, S-1, F-1, S-11)."""
+def search_filings(forms, days_back, max_hits=200, q=None):
+    """List filings of given forms (D, S-1, F-1, S-11) over a date window.
+
+    `q` runs an EDGAR full-text query (phrase-quoted by the caller); used to
+    pull every SPV that mentions a target company across the full history,
+    not just whatever shows up in the recent unfiltered feed."""
     start = (date.today() - timedelta(days=days_back)).isoformat()
     end = date.today().isoformat()
     out = []
@@ -118,6 +268,8 @@ def search_filings(forms, days_back, max_hits=200):
             "enddt": end,
             "from": from_,
         }
+        if q:
+            params["q"] = q
         r = _get(EDGAR_SEARCH, params=params)
         if r is None:
             break
@@ -156,6 +308,41 @@ def search_filings(forms, days_back, max_hits=200):
         if len(hits) < 10:
             break
         from_ += len(hits)
+    return out
+
+
+# Full-text query terms, tuned to how SPVs actually reference each company in
+# filings — which is NOT always the display name. Empirically: SPVs write
+# "Space Exploration" (not "SpaceX"), "ScaleAI" (not "Scale AI"); and EDGAR FTS
+# returns nothing for a quoted lone word like "Stripe", so single words are
+# sent unquoted while multi-word terms are phrase-quoted. Noisy hits from
+# generic terms are harmless — _resolve_spv still gates on the entity name.
+_SPV_QUERIES = [
+    "Anthropic", "OpenAI", "Space Exploration", "ScaleAI", "xAI",
+    "Stripe", "Databricks", "Anduril", "Brex", "Cohere", "Groq",
+    "Discord", "Canva", "Chime", "Figure AI", "Fanatics", "Mistral",
+    "Perplexity", "Kraken", "Revolut", "Rippling", "Deel", "Plaid",
+    "Netskope", "Waymo", "Celonis", "Flexport", "Notion", "Airtable",
+    "Gusto", "Epic Games",
+]
+
+
+def search_spv_filings(days_back=1825, per_target_hits=30):
+    """Targeted EDGAR full-text searches — one query per tracked target — to
+    surface SPVs across the full filing history rather than only the recent
+    unfiltered window the universe builder samples. Public efts endpoint, no
+    API key. Resolution to the canonical company is still done by _resolve_spv
+    on each result's entity name."""
+    out = []
+    seen = set()
+    for term in _SPV_QUERIES:
+        t = term.strip()
+        if not t or t.lower() in seen:
+            continue
+        seen.add(t.lower())
+        q = ('"%s"' % t) if " " in t else t
+        out.extend(search_filings(["D", "D/A"], days_back=days_back,
+                                  max_hits=per_target_hits, q=q))
     return out
 
 
@@ -375,20 +562,35 @@ def _filings_for_cik(cik, forms=("D", "D/A"), limit=10):
     return out
 
 
+def fetch_form_d_filings(days_back=180, max_filings=120, include_known=True):
+    """Fetch the raw Form D filing list (curated CIKs + recent EDGAR-wide
+    search). Pulled out so the universe builder (build_form_d_companies) and the
+    flat recent-filings feed share one search result set instead of issuing it
+    twice. (The deep SPV scan is a separate action with its own targeted
+    full-text queries — it does not reuse this list.)"""
+    filings = []
+    if include_known:
+        for cik in KNOWN_PRIVATE_CIKS:
+            filings.extend(_filings_for_cik(cik, ("D", "D/A"), limit=8))
+    filings.extend(search_filings(["D", "D/A"], days_back=days_back, max_hits=max_filings))
+    return filings
+
+
 def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
-                            filter_pooled_funds=True, include_known=True):
+                            filter_pooled_funds=True, include_known=True,
+                            filings=None):
     """Build the pre-IPO universe.
 
     Strategy:
       1. Fetch each curated CIK's recent Form D filings directly.
       2. Backfill with recent EDGAR-wide Form D search, filtering out
          pooled-investment-fund filers (VC/PE funds raising from LPs).
+
+    `filings` may be supplied by the caller to reuse a shared search result set.
     """
-    filings = []
-    if include_known:
-        for cik in KNOWN_PRIVATE_CIKS:
-            filings.extend(_filings_for_cik(cik, ("D", "D/A"), limit=8))
-    filings.extend(search_filings(["D", "D/A"], days_back=days_back, max_hits=max_filings))
+    if filings is None:
+        filings = fetch_form_d_filings(days_back=days_back, max_filings=max_filings,
+                                       include_known=include_known)
 
     companies = {}
     recent_flat = []
@@ -525,15 +727,68 @@ def fetch_ipo_pipeline(days_back=120, max_hits=80):
 
 def build_all_data(days_back_fd=180, days_back_ipo=120, max_filings=120, parse_xml_max=80,
                    filter_pooled_funds=True, include_known=True):
+    filings = fetch_form_d_filings(days_back=days_back_fd, max_filings=max_filings,
+                                   include_known=include_known)
     companies, recent_flat = build_form_d_companies(
-        days_back=days_back_fd, max_filings=max_filings, parse_xml_max=parse_xml_max,
-        filter_pooled_funds=filter_pooled_funds, include_known=include_known,
+        parse_xml_max=parse_xml_max, filter_pooled_funds=filter_pooled_funds,
+        filings=filings,
     )
     pipeline = fetch_ipo_pipeline(days_back=days_back_ipo, max_hits=80)
     return {
         "form_d_companies": companies,
         "recent_form_d": recent_flat,
         "s1_filings": pipeline,
+        "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def spv_query_counts():
+    """Data-based change signal: one page-1 request per SPV query returning
+    EDGAR's all-time total hit count (`hits.total.value`). No paging, no XML.
+
+    Counts are ALL-TIME on purpose — a sliding date window would change every
+    day as old filings age off the back, defeating the "did anything change?"
+    test. All-time totals only ever grow when a genuinely new SPV files, so an
+    unchanged map means there is nothing new to fetch."""
+    counts = {}
+    for term in _SPV_QUERIES:
+        t = term.strip()
+        if not t or t.lower() in counts:
+            continue
+        q = ('"%s"' % t) if " " in t else t
+        r = _get(EDGAR_SEARCH, params={"forms": "D,D/A", "q": q, "from": 0})
+        total = 0
+        if r is not None:
+            try:
+                total = int(r.json().get("hits", {}).get("total", {}).get("value", 0) or 0)
+            except Exception:
+                total = 0
+        counts[t.lower()] = total
+    return counts
+
+
+def build_spv_deep(spv_days_back=1825, spv_hits_per_target=30, spv_parse_max=40,
+                   prev_cursor=None):
+    """Deep SPV scan, gated by a data-based cursor. Runs the cheap all-time
+    count probe first; if the counts match the prior cursor, returns
+    {"unchanged": true} without the expensive search+XML. Run as its OWN fetch
+    so even a full scan never jeopardises the core Form D load."""
+    counts = spv_query_counts()
+    prev = prev_cursor.get("counts") if isinstance(prev_cursor, dict) else None
+    # any(counts.values()): a degenerate all-zero probe (every count request
+    # failed — an EDGAR outage) must not be trusted as "unchanged"; it would
+    # match a prior failed cursor and suppress the scan. Require a real signal.
+    if prev is not None and counts == prev and any(counts.values()):
+        return {"unchanged": True, "cursor": {"counts": counts}}
+
+    filings = search_spv_filings(days_back=spv_days_back,
+                                 per_target_hits=spv_hits_per_target)
+    # Newest-first so the capped XML-enrichment budget lands on the most recent
+    # SPVs; build_spv_activity dedups keeping first occurrence.
+    filings.sort(key=lambda f: f.get("filed_date", ""), reverse=True)
+    return {
+        "spv_activity": build_spv_activity(filings, parse_xml_max=spv_parse_max),
+        "cursor": {"counts": counts},
         "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
@@ -547,6 +802,13 @@ def handle_action(action, payload):
             parse_xml_max=payload.get("parse_xml_max", 200),
             filter_pooled_funds=payload.get("filter_pooled_funds", True),
             include_known=payload.get("include_known", True),
+        )
+    if action == "spv_deep":
+        return build_spv_deep(
+            spv_days_back=payload.get("spv_days_back", 1825),
+            spv_hits_per_target=payload.get("spv_hits_per_target", 30),
+            spv_parse_max=payload.get("spv_parse_max", 40),
+            prev_cursor=payload.get("prev_cursor"),
         )
     if action == "form_d_recent":
         days = payload.get("days_back", 30)

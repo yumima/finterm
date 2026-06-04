@@ -7,6 +7,9 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QMap>
+#include <QPainter>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QSet>
 
@@ -17,6 +20,86 @@ namespace fincept::screens {
 
 using namespace fincept::ui;
 using namespace fincept::pre_ipo;
+
+namespace {
+
+/// Lightweight valuation/mark history chart: a shaded min–max dispersion band
+/// with a consensus polyline on top. This is the "valuation timeline" NPM and
+/// Forge build their dossiers around — but sourced from cross-fund N-PORT
+/// marks, so the band width honestly shows how much fund families disagree
+/// (research found ~2× divergence on the same private name). No Q_OBJECT
+/// (paintEvent is a plain virtual) so it needs no MOC and stays local to this
+/// translation unit; the panel holds it as a QWidget* and static_casts back.
+class MarkTimeline : public QWidget {
+  public:
+    explicit MarkTimeline(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumHeight(60);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+
+    // One entry per period, oldest → newest.
+    void set_series(const QVector<QString>& labels, const QVector<double>& lo,
+                    const QVector<double>& mid, const QVector<double>& hi) {
+        labels_ = labels; lo_ = lo; mid_ = mid; hi_ = hi;
+        update();
+    }
+
+  protected:
+    void paintEvent(QPaintEvent*) override {
+        const int n = mid_.size();
+        if (n == 0) return;
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, true);
+
+        double vmin = 1e300, vmax = -1e300;
+        for (int i = 0; i < n; ++i) {
+            vmin = std::min(vmin, lo_.value(i, mid_[i]));
+            vmax = std::max(vmax, hi_.value(i, mid_[i]));
+        }
+        if (!(vmax > vmin)) { vmax = vmin + 1.0; vmin -= 1.0; }
+        const double headroom = (vmax - vmin) * 0.12;
+        vmin -= headroom; vmax += headroom;
+
+        const double L = 6, Rg = 54, T = 6, Bm = 16;  // right gutter holds last value
+        const double w = width() - L - Rg, h = height() - T - Bm;
+        auto X = [&](int i) { return L + (n == 1 ? w / 2 : w * i / double(n - 1)); };
+        auto Y = [&](double v) { return T + h * (1.0 - (v - vmin) / (vmax - vmin)); };
+
+        if (n >= 2) {  // dispersion band
+            QPolygonF band;
+            for (int i = 0; i < n; ++i) band << QPointF(X(i), Y(hi_.value(i, mid_[i])));
+            for (int i = n - 1; i >= 0; --i) band << QPointF(X(i), Y(lo_.value(i, mid_[i])));
+            QColor bandc(colors::AMBER()); bandc.setAlpha(38);
+            p.setPen(Qt::NoPen); p.setBrush(bandc); p.drawPolygon(band);
+        }
+
+        QPolygonF line;
+        for (int i = 0; i < n; ++i) line << QPointF(X(i), Y(mid_[i]));
+        QPen linep(QColor(colors::AMBER())); linep.setWidthF(1.6);
+        p.setPen(linep); p.setBrush(Qt::NoBrush);
+        if (n >= 2) p.drawPolyline(line);
+        p.setBrush(QColor(colors::AMBER())); p.setPen(Qt::NoPen);
+        for (const auto& pt : line) p.drawEllipse(pt, 2.2, 2.2);
+
+        QFont f = p.font(); f.setPointSizeF(8); p.setFont(f);
+        p.setPen(QColor(colors::TEXT_SECONDARY()));
+        p.drawText(QRectF(width() - Rg + 2, Y(mid_[n - 1]) - 7, Rg - 4, 14),
+                   Qt::AlignLeft | Qt::AlignVCenter,
+                   QString("$%1").arg(mid_[n - 1], 0, 'f', 2));
+        if (!labels_.isEmpty()) {
+            p.drawText(QRectF(L, height() - Bm + 1, w / 2, Bm),
+                       Qt::AlignLeft | Qt::AlignVCenter, labels_.first());
+            p.drawText(QRectF(L + w / 2, height() - Bm + 1, w / 2, Bm),
+                       Qt::AlignRight | Qt::AlignVCenter, labels_.last());
+        }
+    }
+
+  private:
+    QVector<QString> labels_;
+    QVector<double>  lo_, mid_, hi_;
+};
+
+} // namespace
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -347,7 +430,11 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         auto* outer = new QVBoxLayout(investors_card_);
         outer->setContentsMargins(8, 6, 8, 6);
         outer->setSpacing(4);
-        outer->addWidget(make_card_title(investors_card_, "KEY INVESTORS"));
+        // Title is set per-company in populate(): "KEY INVESTORS" only when we
+        // actually have named backers, otherwise "OFFICERS & DIRECTORS" — the
+        // Form D related-persons we'd otherwise be passing off as investors.
+        investors_title_lbl_ = make_card_title(investors_card_, "KEY INVESTORS");
+        outer->addWidget(investors_title_lbl_);
 
         investors_container_ = new QWidget;
         investors_container_->setStyleSheet("background:transparent;");
@@ -438,6 +525,13 @@ QWidget* CompanyDetailPanel::build_detail_view() {
         row->addStretch();
         mvl->addLayout(row);
 
+        // Valuation/mark history band+line, between the consensus row and the
+        // per-fund table. Hidden until there are ≥2 quarters of marks.
+        auto* tl = new MarkTimeline(marks_section_);
+        tl->setVisible(false);
+        marks_timeline_ = tl;
+        mvl->addWidget(tl);
+
         marks_table_ = new QTableWidget(marks_section_);
         marks_table_->setColumnCount(4);
         marks_table_->setHorizontalHeaderLabels({"Fund", "As of", "Shares", "Mark $/sh"});
@@ -468,6 +562,50 @@ QWidget* CompanyDetailPanel::build_detail_view() {
                 .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
         mvl->addWidget(marks_table_);
         return marks_section_;
+    };
+
+    // SECONDARY INTEREST — SPV filings that target this company. Form D's free
+    // analogue to the marketplace order flow Hiive/Forge sell: who is raising
+    // capital to buy the name, how much, and at what minimum check.
+    auto build_spv_card = [&]() -> QWidget* {
+        spv_section_ = make_card();
+        auto* outer = new QVBoxLayout(spv_section_);
+        outer->setContentsMargins(8, 6, 8, 6);
+        outer->setSpacing(4);
+        outer->addWidget(make_card_title(spv_section_, "SECONDARY INTEREST · SPV FILINGS"));
+
+        spv_table_ = new QTableWidget(spv_section_);
+        spv_table_->setColumnCount(6);
+        spv_table_->setHorizontalHeaderLabels(
+            {"Sponsor", "SPV", "Filed", "Raised", "Min", "Inv"});
+        spv_table_->setSelectionMode(QAbstractItemView::NoSelection);
+        spv_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        spv_table_->setShowGrid(false);
+        spv_table_->setAlternatingRowColors(false);
+        spv_table_->verticalHeader()->setVisible(false);
+        spv_table_->setFocusPolicy(Qt::NoFocus);
+        spv_table_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        spv_table_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        auto* shdr = spv_table_->horizontalHeader();
+        shdr->setStretchLastSection(false);
+        shdr->setSectionResizeMode(0, QHeaderView::Fixed); shdr->resizeSection(0, 96);
+        shdr->setSectionResizeMode(1, QHeaderView::Stretch);
+        shdr->setSectionResizeMode(2, QHeaderView::Fixed); shdr->resizeSection(2, 76);
+        shdr->setSectionResizeMode(3, QHeaderView::Fixed); shdr->resizeSection(3, 70);
+        shdr->setSectionResizeMode(4, QHeaderView::Fixed); shdr->resizeSection(4, 60);
+        shdr->setSectionResizeMode(5, QHeaderView::Fixed); shdr->resizeSection(5, 44);
+        spv_table_->setStyleSheet(
+            QString("QTableWidget{background:transparent;color:%1;border:none;"
+                    "  font-size:12px;font-family:Consolas,monospace;}"
+                    "QTableWidget::item{padding:3px 6px;border-bottom:1px solid %2;}")
+                .arg(colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+        shdr->setStyleSheet(
+            QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                    "  border-bottom:1px solid %3;padding:3px 6px;"
+                    "  font-size:12px;font-weight:700;}")
+                .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+        outer->addWidget(spv_table_);
+        return spv_section_;
     };
 
     // Layout strategy — each section hugs its content (no inflation):
@@ -502,6 +640,10 @@ QWidget* CompanyDetailPanel::build_detail_view() {
     add_row({{build_rounds_card(), 3}, {build_investors_card(), 2}});
     // ── 2-column mid 2: ANALYTICS · FUND MARKS ─────────────────────────────
     add_row({{build_analytics_card(), 2}, {build_marks_card(), 3}});
+
+    // ── Full-width: SECONDARY INTEREST (SPV filings) — hidden when empty ────
+    vl->addWidget(build_spv_card());
+    vl->addSpacing(4);
 
     // ── Full-width tail: COMPS · TAGS · ABOUT ──────────────────────────────
     // Each section lives in a wrapper widget (*_section_) so it can be hidden
@@ -782,10 +924,14 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
     }
 
     // ── Funding rounds table ──────────────────────────────────────────────────
-    rebuild_rounds_table(c.rounds);
+    rebuild_rounds_table(c.rounds, c.fund_marks);
 
     // ── Investors ─────────────────────────────────────────────────────────────
+    // Prefer real named backers; only fall back to Form D related persons
+    // (officers, directors, promoters) when we have none — and when we do,
+    // relabel the card so we're not passing them off as investors.
     QStringList investor_names = c.key_investors;
+    const bool real_investors = !investor_names.isEmpty();
     if (investor_names.isEmpty()) {
         QSet<QString> seen;
         for (const auto& r : c.rounds) {
@@ -798,6 +944,9 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
             if (investor_names.size() >= 10) break;
         }
     }
+    if (investors_title_lbl_)
+        investors_title_lbl_->setText(real_investors ? "KEY INVESTORS"
+                                                     : "OFFICERS & DIRECTORS");
     rebuild_investors(investor_names);
 
     // ── Comps ─────────────────────────────────────────────────────────────────
@@ -813,14 +962,31 @@ void CompanyDetailPanel::populate(const PrivateCompany& c) {
 
     // ── Fund marks & analytics ───────────────────────────────────────────────
     rebuild_fund_marks(c.fund_marks);
+    rebuild_spv(c.spv_activity);
     rebuild_analytics(c);
 }
 
 // ── Rebuild helpers ──────────────────────────────────────────────────────────
 
-void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& rounds) {
+void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& rounds,
+                                              const QVector<FundMark>& marks) {
     rounds_table_->setRowCount(0);
     rounds_table_->setRowCount(rounds.size());
+
+    // Nearest fund mark within 90 days of a round's filing — used to fill the
+    // $/Share column with a *derived* price (prefixed "~"), since Form D never
+    // discloses primary-round PPS.
+    auto derived_pps = [&](const QDate& when) -> double {
+        if (!when.isValid()) return 0.0;
+        double best_pps = 0.0;
+        int best_gap = 91;
+        for (const auto& m : marks) {
+            if (m.mark_pps <= 0 || !m.as_of.isValid()) continue;
+            const int gap = static_cast<int>(qAbs(m.as_of.daysTo(when)));
+            if (gap <= 90 && gap < best_gap) { best_gap = gap; best_pps = m.mark_pps; }
+        }
+        return best_pps;
+    };
 
     for (int i = 0; i < rounds.size(); ++i) {
         const auto& r = rounds[i];
@@ -849,9 +1015,18 @@ void CompanyDetailPanel::rebuild_rounds_table(const QVector<PrimaryRound>& round
         rounds_table_->setItem(i, 2,
             make_item(amt, Qt::AlignRight | Qt::AlignVCenter));
 
-        // Form D doesn't disclose PPS; we keep the column for future enrichment.
-        rounds_table_->setItem(i, 3,
-            make_item("—", Qt::AlignRight | Qt::AlignVCenter));
+        // Form D doesn't disclose PPS. Show a fund-mark-derived price (~) when
+        // one lands within 90 days of the filing; otherwise an em-dash.
+        const double pps = derived_pps(r.filed_date);
+        auto* pps_item = make_item(
+            pps > 0 ? QString("~$%1").arg(pps, 0, 'f', 2) : "—",
+            Qt::AlignRight | Qt::AlignVCenter,
+            pps > 0 ? colors::TEXT_SECONDARY() : QString());
+        if (pps > 0)
+            pps_item->setToolTip(
+                "Derived from a mutual-fund N-PORT mark within 90 days — "
+                "not a disclosed primary-round price");
+        rounds_table_->setItem(i, 3, pps_item);
 
         QStringList persons;
         for (const auto& rp : r.related_persons) persons << rp.name;
@@ -934,6 +1109,90 @@ void CompanyDetailPanel::rebuild_fund_marks(const QVector<FundMark>& marks) {
     const int header_h = 24;
     const int natural  = header_h + rows * row_h + 4;
     marks_table_->setFixedHeight(qMin(180, std::max(header_h + row_h, natural)));
+
+    // ── Valuation/mark timeline ───────────────────────────────────────────────
+    // Group marks by calendar quarter; per quarter, plot the share-weighted
+    // consensus (line) and the min–max across funds (dispersion band).
+    if (marks_timeline_) {
+        QMap<int, QVector<const FundMark*>> by_q;  // key = year*4 + quarter-index
+        for (const auto& m : marks) {
+            if (m.mark_pps <= 0 || !m.as_of.isValid()) continue;
+            by_q[m.as_of.year() * 4 + (m.as_of.month() - 1) / 3].append(&m);
+        }
+        QVector<QString> labels;
+        QVector<double>  los, mids, his;
+        for (auto it = by_q.begin(); it != by_q.end(); ++it) {  // QMap iterates ascending
+            double sum_w = 0, sum_wx = 0, lo = 1e300, hi = -1e300;
+            for (const FundMark* m : it.value()) {
+                const double w = std::max(m->shares_held, 1.0);
+                sum_w += w; sum_wx += w * m->mark_pps;
+                lo = std::min(lo, m->mark_pps);
+                hi = std::max(hi, m->mark_pps);
+            }
+            if (sum_w <= 0) continue;
+            mids.append(sum_wx / sum_w); los.append(lo); his.append(hi);
+            labels.append(QString("Q%1'%2")
+                              .arg(it.key() % 4 + 1)
+                              .arg(it.key() / 4 % 100, 2, 10, QChar('0')));
+        }
+        auto* tl = static_cast<MarkTimeline*>(marks_timeline_);
+        const bool show = mids.size() >= 2;
+        if (show) tl->set_series(labels, los, mids, his);
+        tl->setVisible(show);
+    }
+}
+
+// ── Secondary-interest SPV filings ───────────────────────────────────────────
+
+void CompanyDetailPanel::rebuild_spv(const QVector<SpvActivity>& spvs) {
+    if (!spv_section_) return;
+    if (spvs.isEmpty()) {
+        spv_section_->setVisible(false);
+        return;
+    }
+    spv_section_->setVisible(true);
+
+    auto cell = [](const QString& text,
+                   Qt::Alignment align = Qt::AlignLeft | Qt::AlignVCenter,
+                   const QString& color = {}) {
+        auto* it = new QTableWidgetItem(text);
+        it->setFlags(Qt::ItemIsEnabled);
+        it->setTextAlignment(align);
+        if (!color.isEmpty()) it->setForeground(QColor(color));
+        return it;
+    };
+
+    spv_table_->setRowCount(spvs.size());
+    for (int i = 0; i < spvs.size(); ++i) {
+        const auto& s = spvs[i];
+        spv_table_->setItem(i, 0, cell(s.sponsor.isEmpty() ? "—" : s.sponsor,
+                                       Qt::AlignLeft | Qt::AlignVCenter, colors::CYAN()));
+        auto* name_item = cell(s.spv_name);
+        if (!s.edgar_url.isEmpty()) name_item->setToolTip(s.edgar_url);
+        spv_table_->setItem(i, 1, name_item);
+        spv_table_->setItem(i, 2, cell(
+            s.filed_date.isValid() ? s.filed_date.toString("MMM yyyy") : "—",
+            Qt::AlignCenter));
+        spv_table_->setItem(i, 3, cell(
+            s.amount_sold_m > 0
+                ? "$" + QString::number(s.amount_sold_m, 'f', s.amount_sold_m >= 10 ? 0 : 1) + "M"
+                : "—",
+            Qt::AlignRight | Qt::AlignVCenter));
+        spv_table_->setItem(i, 4, cell(
+            s.minimum_investment_usd > 0
+                ? "$" + QString::number(qRound(s.minimum_investment_usd / 1000.0)) + "k"
+                : "—",
+            Qt::AlignRight | Qt::AlignVCenter));
+        spv_table_->setItem(i, 5, cell(
+            s.num_investors > 0 ? QString::number(s.num_investors) : "—",
+            Qt::AlignRight | Qt::AlignVCenter));
+    }
+
+    const int rows     = spvs.size();
+    const int row_h    = 24;
+    const int header_h = 26;
+    const int natural  = header_h + rows * row_h + 4;
+    spv_table_->setFixedHeight(qMin(200, std::max(header_h + row_h, natural)));
 }
 
 // ── Analytics KPI band ───────────────────────────────────────────────────────

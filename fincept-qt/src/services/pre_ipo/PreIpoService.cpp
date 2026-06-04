@@ -82,8 +82,9 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
     // refresh every day at 05:00 America/New_York. That's after EDGAR's
     // 22:00 ET filing window has closed and before the user typically
     // opens the terminal, so cached data is ready by morning. If the app
-    // is asleep at 05:00 ET, the TTL gate in load_data() picks up the
+    // is asleep at 05:00 ET, the min-check gate in load_data() picks up the
     // slack on the next click.
+    load_cursors();
     schedule_next_daily_refresh();
 }
 
@@ -91,54 +92,45 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
 
 void PreIpoService::load_data() {
     if (loading_) return;
-    // Three-phase strategy so the user never stares at an empty screen
-    // and the network only runs when it actually buys fresher data:
-    //   1. Hydrate from disk cache (if any) and emit data_loaded
-    //      immediately so views populate.
-    //   2. If the cache is fresh (<24h old, measured against the OLDEST
-    //      of the three cache files so a partially-failed prior run
-    //      still triggers a refresh), stop. SEC Form D / S-1 cadence is
-    //      ~daily; pre-IPO data moves slowly enough that once-a-day is
-    //      plenty fresh. The manual Refresh button bypasses this gate.
-    //   3. Otherwise (no cache, or cache >24h old), kick off the live
-    //      refresh in the background.
+    //   1. Hydrate from disk cache (if any) and emit immediately so views
+    //      populate with no network wait.
+    //   2. Anti-thrash gate: if we ran a check very recently (< kMinCheckSecs),
+    //      don't even probe — pre-IPO data can't meaningfully change in hours,
+    //      and this stops every window-focus from hitting EDGAR.
+    //   3. Otherwise refresh in the background. Refresh is now CHEAP when
+    //      nothing changed: each source runs a data-based cursor probe and
+    //      short-circuits unless EDGAR shows new filings (see refresh_internal).
     const bool had_cache = load_from_cache();
     if (had_cache) {
         loaded_ = true;
         emit_summary();
     }
 
-    auto cache_age_secs = [this]() -> qint64 {
-        const QString dir = cache_dir();
-        QDateTime oldest;
-        for (const QString& f : {QStringLiteral("form_d.json"),
-                                 QStringLiteral("marks.json"),
-                                 QStringLiteral("pipeline.json")}) {
-            QFileInfo fi(dir + "/" + f);
-            if (!fi.exists()) return std::numeric_limits<qint64>::max();
-            const QDateTime mtime = fi.lastModified();
-            if (!oldest.isValid() || mtime < oldest) oldest = mtime;
-        }
-        if (!oldest.isValid()) return std::numeric_limits<qint64>::max();
-        return oldest.secsTo(QDateTime::currentDateTime());
-    };
-
-    constexpr qint64 kCacheTtlSecs = 24 * 60 * 60;
-    if (had_cache && cache_age_secs() < kCacheTtlSecs) {
+    // kMinCheckSecs is a short anti-thrash window, NOT a data-staleness TTL:
+    // it caps how often we bother to *probe*, while the actual fetch decision
+    // is data-based. last_checked updates on every probe (even when nothing
+    // changed), so stable data doesn't force a re-probe on every open.
+    constexpr qint64 kMinCheckSecs = 6 * 60 * 60;
+    const QDateTime last_checked =
+        QDateTime::fromString(cursors_.value(QStringLiteral("last_checked")).toString(),
+                              Qt::ISODate);
+    if (had_cache && last_checked.isValid() &&
+        last_checked.secsTo(QDateTime::currentDateTime()) < kMinCheckSecs) {
         LOG_INFO("PreIpo",
-                 QString("Cache fresh (%1h old) — skipping refresh; "
-                         "use Refresh to force.")
-                     .arg(cache_age_secs() / 3600));
+                 QString("Checked %1 min ago — skipping probe (data-based gate).")
+                     .arg(last_checked.secsTo(QDateTime::currentDateTime()) / 60));
         return;
     }
 
     if (had_cache) {
-        emit progress(QStringLiteral("Cache > 24h old · refreshing in background…"));
+        emit progress(QStringLiteral("Checking SEC for new filings…"));
     }
-    refresh();
+    refresh_internal(/*force*/ false);
 }
 
-void PreIpoService::refresh() {
+void PreIpoService::refresh() { refresh_internal(/*force*/ true); }
+
+void PreIpoService::refresh_internal(bool force) {
     if (!python::PythonRunner::instance().is_available()) {
         LOG_WARN("PreIpo", "Python not available — cannot load private market data");
         emit error_occurred(QStringLiteral("Python runtime unavailable."));
@@ -146,8 +138,15 @@ void PreIpoService::refresh() {
     }
     if (loading_) return;
     loading_ = true;
+    force_refresh_ = force;
     pending_bits_ = FB_All;
     failed_bits_  = 0;
+
+    // Stamp the probe time up front (and persist) so a crash or rapid re-open
+    // mid-fetch doesn't immediately re-probe.
+    cursors_[QStringLiteral("last_checked")] =
+        QDateTime::currentDateTime().toString(Qt::ISODate);
+    save_cursors();
     // Only show the "Loading…" status if we don't already have cached
     // rows on screen. When the cache hydrated, load_data() has already
     // emitted "Loaded from cache · refreshing in background…" — letting
@@ -161,6 +160,12 @@ void PreIpoService::refresh() {
     run_form_d_fetch();
     run_nport_marks_fetch();
     run_s1_pipeline_fetch();
+
+    // Deep SPV scan runs independently of the 3-bit SEC flow (like Nasdaq /
+    // Finnhub below): its ~2-min targeted full-text search must never block or
+    // fail the core Form D load. Results land in spv_raw_ and are re-joined to
+    // companies on every emit_summary().
+    run_spv_fetch();
 
     // Nasdaq IPO calendar runs independently — no auth, fast, enriches the
     // pipeline with confirmed dates and catches companies not yet in EDGAR.
@@ -205,6 +210,23 @@ QVector<services::finnhub::FinnhubLockup> PreIpoService::finnhub_lockups() const
 // ── Fetchers ─────────────────────────────────────────────────────────────────
 
 void PreIpoService::run_form_d_fetch() {
+    // The Form D *discovery sweep* is the one source with no cheap data marker
+    // — market-wide Form D activity advances every day, so a count cursor would
+    // never let it skip. It's therefore the lone time-backstopped source: run
+    // at most once / 24h (unless forced). This is the legitimate, narrow use of
+    // a clock that we agreed remains under the data-based design.
+    if (!force_refresh_) {
+        const QDateTime ts = QDateTime::fromString(
+            cursors_.value(QStringLiteral("form_d")).toObject()
+                    .value(QStringLiteral("ts")).toString(), Qt::ISODate);
+        if (ts.isValid() && ts.secsTo(QDateTime::currentDateTime()) < 24 * 60 * 60) {
+            LOG_INFO("PreIpo", "Form D discovery sweep < 24h old — skipping.");
+            pending_bits_ &= ~FB_FormD;
+            if (pending_bits_ == 0) finalize_load();
+            return;
+        }
+    }
+
     QPointer<PreIpoService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form_d_data.py"),
@@ -227,6 +249,11 @@ void PreIpoService::run_form_d_fetch() {
                 if (doc.isObject()) {
                     self->parse_form_d_response(doc.object());
                     self->save_cache(QStringLiteral("form_d.json"), doc);
+                    QJsonObject fc;
+                    fc[QStringLiteral("ts")] =
+                        QDateTime::currentDateTime().toString(Qt::ISODate);
+                    self->cursors_[QStringLiteral("form_d")] = fc;
+                    self->save_cursors();
                     parsed = true;
                 }
             }
@@ -249,21 +276,33 @@ void PreIpoService::run_nport_marks_fetch() {
     // blow past the 180s timeout. Subsequent refreshes (with cache hot)
     // can afford to widen — but for now, fast first-paint matters more
     // than mark depth.
+    QJsonObject base;
+    base[QStringLiteral("quarters_back")] = 1;
+    base[QStringLiteral("families_max")]  = 6;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_nport_marks.py"),
-        {QStringLiteral("marks_all"),
-         QStringLiteral("{\"quarters_back\":1,\"families_max\":6}")},
+        {QStringLiteral("marks_all"), cursor_payload(base, QStringLiteral("marks"))},
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
-            QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
-                doc = QJsonDocument::fromJson(js.toUtf8());
+                const QJsonDocument doc = QJsonDocument::fromJson(js.toUtf8());
                 if (doc.isObject()) {
-                    self->parse_marks_response(doc.object());
-                    self->save_cache(QStringLiteral("marks.json"), doc);
-                    parsed = true;
+                    const QJsonObject o = doc.object();
+                    if (o.value(QStringLiteral("unchanged")).toBool()) {
+                        LOG_INFO("PreIpo", "N-PORT marks unchanged — no new fund filings.");
+                        parsed = true;  // success, just nothing new
+                    } else {
+                        self->parse_marks_response(o);
+                        self->save_cache(QStringLiteral("marks.json"), doc);
+                        if (o.contains(QStringLiteral("cursor"))) {
+                            self->cursors_[QStringLiteral("marks")] = o.value(QStringLiteral("cursor"));
+                            self->save_cursors();
+                        }
+                        self->emit_summary();
+                        parsed = true;
+                    }
                 }
             }
             if (!parsed) {
@@ -271,7 +310,6 @@ void PreIpoService::run_nport_marks_fetch() {
                 self->failed_bits_ |= FB_Marks;
             }
             self->pending_bits_ &= ~FB_Marks;
-            self->emit_summary();
             if (self->pending_bits_ == 0) self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 240'000);
@@ -279,20 +317,37 @@ void PreIpoService::run_nport_marks_fetch() {
 
 void PreIpoService::run_s1_pipeline_fetch() {
     QPointer<PreIpoService> self = this;
+    QJsonObject base;
+    base[QStringLiteral("days_back")] = 180;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_s1_pipeline.py"),
-        {QStringLiteral("pipeline_all"), QStringLiteral("{\"days_back\":180}")},
+        {QStringLiteral("pipeline_all"), cursor_payload(base, QStringLiteral("s1"))},
         [self](python::PythonResult result) {
             if (!self) return;
             bool parsed = false;
-            QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
-                doc = QJsonDocument::fromJson(js.toUtf8());
-                if (doc.isArray()) {
-                    self->parse_pipeline_response(doc.array());
-                    self->save_cache(QStringLiteral("pipeline.json"), doc);
-                    parsed = true;
+                const QJsonDocument doc = QJsonDocument::fromJson(js.toUtf8());
+                // pipeline_all now returns an object: {"unchanged":true} or
+                // {"pipeline":[...], "cursor":{...}}.
+                if (doc.isObject()) {
+                    const QJsonObject o = doc.object();
+                    if (o.value(QStringLiteral("unchanged")).toBool()) {
+                        LOG_INFO("PreIpo", "IPO pipeline unchanged — no new S-1/F-1 filings.");
+                        parsed = true;
+                    } else {
+                        const QJsonArray arr = o.value(QStringLiteral("pipeline")).toArray();
+                        self->parse_pipeline_response(arr);
+                        // Cache the bare array so load_from_cache (which expects
+                        // an array) keeps working unchanged.
+                        self->save_cache(QStringLiteral("pipeline.json"), QJsonDocument(arr));
+                        if (o.contains(QStringLiteral("cursor"))) {
+                            self->cursors_[QStringLiteral("s1")] = o.value(QStringLiteral("cursor"));
+                            self->save_cursors();
+                        }
+                        self->emit_summary();
+                        parsed = true;
+                    }
                 }
             }
             if (!parsed) {
@@ -300,10 +355,111 @@ void PreIpoService::run_s1_pipeline_fetch() {
                 self->failed_bits_ |= FB_S1;
             }
             self->pending_bits_ &= ~FB_S1;
-            self->emit_summary();
             if (self->pending_bits_ == 0) self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
+}
+
+// ── Deep SPV secondary-interest scan ──────────────────────────────────────────
+//
+// Targeted EDGAR full-text searches (one per tracked private company) + capped
+// XML enrichment, ~2 minutes. Runs as its own fetch, independent of the 3-bit
+// finalize_load flow — so a slow or failed SPV scan leaves the core Form D /
+// N-PORT / S-1 data untouched. Results are stored raw in spv_raw_ and re-joined
+// to companies_ in attach_spv_activity() on every emit, which makes the join
+// robust regardless of which fetch lands first.
+void PreIpoService::run_spv_fetch() {
+    QJsonObject base;
+    base[QStringLiteral("spv_days_back")]       = 1825;
+    base[QStringLiteral("spv_hits_per_target")] = 30;
+    base[QStringLiteral("spv_parse_max")]       = 40;
+    QPointer<PreIpoService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_form_d_data.py"),
+        {QStringLiteral("spv_deep"), cursor_payload(base, QStringLiteral("spv"))},
+        [self](python::PythonResult result) {
+            if (!self) return;
+            if (result.success && !result.output.trimmed().isEmpty()) {
+                const QString js = python::extract_json(result.output);
+                const QJsonDocument doc = QJsonDocument::fromJson(js.toUtf8());
+                if (doc.isObject()) {
+                    const QJsonObject o = doc.object();
+                    if (o.value(QStringLiteral("unchanged")).toBool()) {
+                        LOG_INFO("PreIpo", "SPV activity unchanged — no new SPV filings.");
+                        return;
+                    }
+                    self->parse_spv_response(o);
+                    self->save_cache(QStringLiteral("spv.json"), doc);
+                    if (o.contains(QStringLiteral("cursor"))) {
+                        self->cursors_[QStringLiteral("spv")] = o.value(QStringLiteral("cursor"));
+                        self->save_cursors();
+                    }
+                    self->emit_summary();
+                    return;
+                }
+            }
+            LOG_WARN("PreIpo", "SPV deep scan failed (non-fatal): " + result.error.left(200));
+        },
+        /*stream*/ {}, /*timeout*/ 240'000);
+}
+
+void PreIpoService::parse_spv_response(const QJsonObject& root) {
+    QVector<SpvActivity> out;
+    for (const auto& v : root.value(QStringLiteral("spv_activity")).toArray()) {
+        const auto o = v.toObject();
+        SpvActivity s;
+        s.underlying_id    = o[QStringLiteral("underlying_id")].toString();
+        s.underlying_name  = o[QStringLiteral("underlying_name")].toString();
+        s.sponsor          = o[QStringLiteral("sponsor")].toString();
+        s.spv_name         = o[QStringLiteral("spv_name")].toString();
+        s.cik              = o[QStringLiteral("cik")].toString();
+        s.filed_date       = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+        s.amount_sold_m    = o[QStringLiteral("amount_sold_m")].toDouble();
+        s.amount_offered_m = o[QStringLiteral("amount_offered_m")].toDouble();
+        s.minimum_investment_usd = o[QStringLiteral("minimum_investment_usd")].toDouble();
+        s.num_investors    = o[QStringLiteral("num_investors")].toInt();
+        s.edgar_url        = o[QStringLiteral("edgar_url")].toString();
+        if (!s.underlying_id.isEmpty()) out.append(s);
+    }
+    // Don't wipe a good prior result on an empty/failed response.
+    if (!out.isEmpty()) spv_raw_ = out;
+}
+
+void PreIpoService::attach_spv_activity() {
+    for (auto& c : companies_) c.spv_activity.clear();
+    if (spv_raw_.isEmpty()) return;
+
+    QHash<QString, int> by_any_id;
+    for (int i = 0; i < companies_.size(); ++i) {
+        by_any_id[companies_[i].id] = i;
+        for (const auto& al : companies_[i].aliases) by_any_id[al] = i;
+    }
+
+    for (const auto& s : spv_raw_) {
+        int idx = -1;
+        if (auto it = by_any_id.find(s.underlying_id); it != by_any_id.end()) idx = *it;
+        if (idx < 0) {
+            // Target not in the Form D / N-PORT universe yet — stub it so the
+            // SPV interest is still visible. Idempotent across emits: the stub
+            // persists in companies_, so the next attach finds it here.
+            PrivateCompany stub;
+            stub.id          = s.underlying_id;
+            stub.name        = s.underlying_name;
+            stub.description = QStringLiteral("Tracked via secondary-market SPV filings");
+            stub.ipo_status  = IpoStatus::Unknown;
+            stub.tags        = tags_for_company(stub);
+            by_any_id[stub.id] = companies_.size();
+            companies_.append(stub);
+            idx = companies_.size() - 1;
+        }
+        companies_[idx].spv_activity.append(s);
+    }
+
+    for (auto& c : companies_)
+        std::sort(c.spv_activity.begin(), c.spv_activity.end(),
+                  [](const SpvActivity& a, const SpvActivity& b) {
+                      return a.filed_date > b.filed_date;
+                  });
 }
 
 // ── Nasdaq IPO calendar ───────────────────────────────────────────────────────
@@ -503,6 +659,9 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
             const auto& existing = companies_[*it];
             c.watched        = existing.watched;
             c.fund_marks     = existing.fund_marks;
+            // spv_activity is intentionally NOT preserved here: it's a transient
+            // projection of spv_raw_, rebuilt for every company by
+            // attach_spv_activity() at the top of each emit_summary().
             c.secondary      = existing.secondary;
             c.s1             = existing.s1;
             c.fin            = existing.fin;
@@ -867,6 +1026,7 @@ void PreIpoService::recompute_analytics() {
 // ── Emit ─────────────────────────────────────────────────────────────────────
 
 void PreIpoService::emit_summary() {
+    attach_spv_activity();  // re-join the SPV side table to the latest companies_
     recompute_analytics();
     PreIpoSummary summary;
     summary.companies     = companies_;
@@ -881,6 +1041,7 @@ void PreIpoService::emit_summary() {
 
 void PreIpoService::finalize_load() {
     loading_ = false;
+    force_refresh_ = false;
     const bool any_failed = failed_bits_ != 0;
     loaded_ = !any_failed;
     LOG_INFO("PreIpo",
@@ -924,7 +1085,7 @@ void PreIpoService::schedule_next_daily_refresh() {
             LOG_INFO("PreIpo", "Daily auto-refresh fired while a load is in flight — skipping this tick");
         } else {
             LOG_INFO("PreIpo", "Daily auto-refresh firing (05:00 ET pre-warm)");
-            self->refresh();
+            self->refresh_internal(/*force*/ false);  // data-based: cheap if nothing filed
         }
         self->schedule_next_daily_refresh();
     });
@@ -950,21 +1111,52 @@ bool PreIpoService::load_from_cache() {
         return QJsonDocument::fromJson(bytes);
     };
 
-    const auto form_d_doc = read(QStringLiteral("form_d.json"));
-    if (form_d_doc.isObject()) {
-        parse_form_d_response(form_d_doc.object());
-        loaded_any = true;
-    }
-    const auto marks_doc = read(QStringLiteral("marks.json"));
-    if (marks_doc.isObject()) {
-        parse_marks_response(marks_doc.object());
-        loaded_any = true;
-    }
-    const auto pipeline_doc = read(QStringLiteral("pipeline.json"));
-    if (pipeline_doc.isArray()) {
-        parse_pipeline_response(pipeline_doc.array());
-        loaded_any = true;
-    }
+    // Self-heal cursor/cache desync: a source's change cursor is only
+    // trustworthy if that source's cache actually loaded. If the cache file is
+    // missing or corrupt while its cursor persisted (e.g. a prior save_cache()
+    // failed on a full disk, or the file was truncated), the data-based gate
+    // would return "unchanged" against the live cursor forever and the data
+    // would never reload. Drop the cursor for any source that didn't hydrate so
+    // the next refresh fetches it in full (which rewrites both cache + cursor).
+    bool cursors_changed = false;
+    auto load_source = [&](const QString& file, const QString& cursor_key,
+                           auto&& parse_if_ok) {
+        const QJsonDocument doc = read(file);
+        if (parse_if_ok(doc)) {
+            loaded_any = true;
+        } else if (cursors_.contains(cursor_key)) {
+            cursors_.remove(cursor_key);
+            cursors_changed = true;
+        }
+    };
+
+    load_source(QStringLiteral("form_d.json"), QStringLiteral("form_d"),
+                [&](const QJsonDocument& d) {
+                    if (!d.isObject()) return false;
+                    parse_form_d_response(d.object());
+                    return true;
+                });
+    load_source(QStringLiteral("marks.json"), QStringLiteral("marks"),
+                [&](const QJsonDocument& d) {
+                    if (!d.isObject()) return false;
+                    parse_marks_response(d.object());
+                    return true;
+                });
+    load_source(QStringLiteral("pipeline.json"), QStringLiteral("s1"),
+                [&](const QJsonDocument& d) {
+                    if (!d.isArray()) return false;
+                    parse_pipeline_response(d.array());
+                    return true;
+                });
+    load_source(QStringLiteral("spv.json"), QStringLiteral("spv"),
+                [&](const QJsonDocument& d) {
+                    if (!d.isObject()) return false;
+                    parse_spv_response(d.object());  // attached on the next emit_summary()
+                    return true;
+                });
+
+    if (cursors_changed) save_cursors();
+
     if (loaded_any) {
         LOG_INFO("PreIpo",
                  QString("Hydrated %1 companies from cache (%2 S-1 filers, %3 funds)")
@@ -984,6 +1176,33 @@ void PreIpoService::save_cache(const QString& filename, const QJsonDocument& doc
     }
     f.write(doc.toJson(QJsonDocument::Compact));
     f.close();
+}
+
+// ── Data-based change cursors ─────────────────────────────────────────────────
+
+void PreIpoService::load_cursors() {
+    QFile f(cache_dir() + "/cursors.json");
+    if (!f.open(QIODevice::ReadOnly)) return;
+    cursors_ = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+}
+
+void PreIpoService::save_cursors() {
+    QFile f(cache_dir() + "/cursors.json");
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_WARN("PreIpo", "Failed to write cursors.json");
+        return;
+    }
+    f.write(QJsonDocument(cursors_).toJson(QJsonDocument::Compact));
+    f.close();
+}
+
+QString PreIpoService::cursor_payload(QJsonObject base, const QString& src) const {
+    // A forced refresh deliberately omits the prior cursor so Python treats it
+    // as a first run and re-fetches in full.
+    if (!force_refresh_ && cursors_.contains(src))
+        base[QStringLiteral("prev_cursor")] = cursors_.value(src);
+    return QString::fromUtf8(QJsonDocument(base).toJson(QJsonDocument::Compact));
 }
 
 } // namespace fincept::services

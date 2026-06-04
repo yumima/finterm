@@ -2,22 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-02)
+## Today's commits (2026-06-03)
 
 Latest first.
 
-- [`0e451991`](https://github.com/yumima/finterm/commit/0e451991) settings: remove font customization — always use the default font
-- [`faa7cf78`](https://github.com/yumima/finterm/commit/faa7cf78) theme: empty font family no longer clobbers the default (Consolas)
-- [`19d81788`](https://github.com/yumima/finterm/commit/19d81788) setup: install libqt6sql6-sqlite (fix 'Driver not loaded' on system Qt)
-- [`ae7d5539`](https://github.com/yumima/finterm/commit/ae7d5539) rebrand: sweep stragglers + review fix (primary-only settings migration)
-- [`706d73be`](https://github.com/yumima/finterm/commit/706d73be) rebrand: docs, attribution, repo URLs -> finterm (yumima/finterm)
-- [`8a1c9b61`](https://github.com/yumima/finterm/commit/8a1c9b61) **ci:** rebrand workflows/scripts to finterm binary + artifact names
-- [`aeee406a`](https://github.com/yumima/finterm/commit/aeee406a) rebrand: docs, .gitignore, updates.json visible refs -> finterm
-- [`c1704953`](https://github.com/yumima/finterm/commit/c1704953) rebrand: docs, launchers, packaging visible refs -> finterm
-- [`63e28c93`](https://github.com/yumima/finterm/commit/63e28c93) rebrand: visible strings -> finterm; migrate settings store
-- [`b9e0ae98`](https://github.com/yumima/finterm/commit/b9e0ae98) build,launcher: emit binary as finterm.bin; brand desktop association
-- [`4ba16b03`](https://github.com/yumima/finterm/commit/4ba16b03) core: centralize app identity into AppIdentity, add display brand
-- [`51682abb`](https://github.com/yumima/finterm/commit/51682abb) pre_ipo: fix ambiguous ColorToken .arg() on Qt 6.10
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

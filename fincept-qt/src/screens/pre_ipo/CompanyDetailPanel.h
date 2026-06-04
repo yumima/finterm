@@ -32,11 +32,16 @@ class CompanyDetailPanel : public QWidget {
 
     void populate(const pre_ipo::PrivateCompany& c);
 
-    void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds);
+    // Rounds get the company's fund marks too, so the $/Share column can show
+    // a derived mark (labelled "~") when Form D — which never discloses PPS —
+    // has no price of its own.
+    void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds,
+                              const QVector<pre_ipo::FundMark>& marks);
     void rebuild_comps_chips(const QStringList& tickers);
     void rebuild_investors(const QStringList& investors);
     void rebuild_tags(const QStringList& tags);
     void rebuild_fund_marks(const QVector<pre_ipo::FundMark>& marks);
+    void rebuild_spv(const QVector<pre_ipo::SpvActivity>& spvs);
     void rebuild_analytics(const pre_ipo::PrivateCompany& c);
 
     // ── Stacked widget ────────────────────────────────────────────────────────
@@ -88,9 +93,14 @@ class CompanyDetailPanel : public QWidget {
     // investors_card_ is the surrounding tile (hidden when investor list is
     // empty so a sparse company doesn't waste a half-row of vertical space).
     QWidget*     investors_card_      = nullptr;
+    QLabel*      investors_title_lbl_ = nullptr;  // relabelled per provenance
     QWidget*     investors_container_ = nullptr;
     QVBoxLayout* investors_layout_    = nullptr;
     QScrollArea* investors_scroll_    = nullptr;
+
+    // ── Secondary-interest SPV filings ─────────────────────────────────────────
+    QWidget*      spv_section_ = nullptr;  // hidden when no SPVs target the name
+    QTableWidget* spv_table_   = nullptr;
 
     // ── Public comps ──────────────────────────────────────────────────────────
     QWidget*     comps_section_   = nullptr;  // header + chip row; hidden when empty
@@ -111,6 +121,10 @@ class CompanyDetailPanel : public QWidget {
     QLabel*       consensus_lbl_   = nullptr;
     QLabel*       dispersion_lbl_  = nullptr;
     QLabel*       smart_money_lbl_ = nullptr;
+    // Valuation/mark history: a shaded cross-fund dispersion band + consensus
+    // line. Typed QWidget* because the concrete MarkTimeline class is local to
+    // the .cpp (no MOC); the .cpp static_casts it back to call set_series().
+    QWidget*      marks_timeline_  = nullptr;
     QTableWidget* marks_table_     = nullptr;
 
     // ── Analytics KPI band ────────────────────────────────────────────────────

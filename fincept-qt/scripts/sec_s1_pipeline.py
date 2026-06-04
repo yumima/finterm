@@ -251,12 +251,42 @@ def fetch_company_facts(cik):
     return out
 
 
+def pipeline_newest(days_back=180):
+    """Data-based change signal for the IPO pipeline: the newest S-1/F-1 filing
+    date. One efts page-1 request (EDGAR returns newest-first). We use the max
+    date rather than a total count because a broad all-time count saturates
+    efts's 10k cap (and a sliding-window count churns daily as filings age off);
+    the newest date only advances when something genuinely new is filed."""
+    start = (date.today() - timedelta(days=days_back)).isoformat()
+    end = date.today().isoformat()
+    r = _get(EDGAR_SEARCH,
+             params={"forms": "S-1,S-1/A,F-1,F-1/A,S-11,S-11/A",
+                     "dateRange": "custom", "startdt": start, "enddt": end, "from": 0},
+             headers={**UA, "Host": "efts.sec.gov"})
+    newest = ""
+    if r is not None:
+        try:
+            for h in r.json().get("hits", {}).get("hits", []):
+                d = h.get("_source", {}).get("file_date") or ""
+                if d > newest:
+                    newest = d
+        except Exception:
+            pass
+    return newest
+
+
 def handle_action(action, payload):
     if action == "pipeline_all":
-        return fetch_pipeline(
-            days_back=payload.get("days_back", 180),
-            max_hits=payload.get("max_hits", 200),
-        )
+        # Cheap newest-date probe first: if unchanged since the prior cursor,
+        # skip the full paged fetch. Returns an object (not a bare array) so the
+        # cursor + unchanged flag have somewhere to live.
+        days = payload.get("days_back", 180)
+        prev = payload.get("prev_cursor")
+        newest = pipeline_newest(days)
+        if newest and isinstance(prev, dict) and prev.get("newest") == newest:
+            return {"unchanged": True, "cursor": {"newest": newest}}
+        pipeline = fetch_pipeline(days_back=days, max_hits=payload.get("max_hits", 200))
+        return {"pipeline": pipeline, "cursor": {"newest": newest}}
     if action == "facts_for":
         cik = payload.get("cik")
         if not cik:

@@ -61,6 +61,27 @@ struct FundMark {
     double  mark_pps = 0;     // fair_value / shares
 };
 
+/// One special-purpose-vehicle (SPV) Form D filing that raises capital to buy
+/// into a single underlying private company on the secondary market. The
+/// entity is named after the target (e.g. "HII Anthropic-01",
+/// "Hiive ScaleAI Series I"), so the SPV's own Form D becomes a free public
+/// proxy for secondary-market interest in that company — the closest an
+/// independent app can get to the proprietary order-flow signals that
+/// Hiive/Forge/NPM sell. Source: SEC EDGAR Form D (pooled-fund filers).
+struct SpvActivity {
+    QString underlying_id;       // slug of the target company (join key)
+    QString underlying_name;     // "Anthropic", "Scale AI", …
+    QString sponsor;             // "Hiive", "Forge", "Destiny", … or "" if unknown
+    QString spv_name;            // raw entity name on the filing
+    QString cik;                 // SPV's own CIK (not the target's)
+    QDate   filed_date;
+    double  amount_sold_m   = 0; // $M raised by the SPV so far
+    double  amount_offered_m = 0;// $M target
+    double  minimum_investment_usd = 0;
+    int     num_investors = 0;   // totalNumberAlreadyInvested
+    QString edgar_url;
+};
+
 /// Public secondary-market observation (Hiive50, news, manual).
 struct SecondaryQuote {
     QString source;           // "Hiive50", "News"
@@ -145,6 +166,7 @@ struct PrivateCompany {
     // Layered data -----------------------------------------------------------
     QVector<PrimaryRound>   rounds;
     QVector<FundMark>       fund_marks;
+    QVector<SpvActivity>    spv_activity;  // secondary-interest SPVs targeting this name
     QVector<SecondaryQuote> secondary;
     S1Status   s1;
     Financials fin;

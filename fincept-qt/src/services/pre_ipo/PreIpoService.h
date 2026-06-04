@@ -3,11 +3,11 @@
 #include "screens/pre_ipo/PreIpoTypes.h"
 #include "services/finnhub/FinnhubService.h"
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QVector>
 
-class QJsonObject;
 class QJsonArray;
 
 namespace fincept::services {
@@ -34,7 +34,9 @@ class PreIpoService : public QObject {
     /// Trigger initial data load (idempotent).
     void load_data();
 
-    /// Force a refresh (re-runs all fetchers). Emits data_loaded on completion.
+    /// Force a full refresh — bypasses the data-based cursors so every source
+    /// re-fetches regardless of whether EDGAR shows new filings. Wired to the
+    /// user's manual Refresh button. Emits data_loaded on completion.
     void refresh();
 
     QVector<pre_ipo::PrivateCompany> companies() const;
@@ -65,9 +67,19 @@ class PreIpoService : public QObject {
   private:
     explicit PreIpoService(QObject* parent = nullptr);
 
+    /// Shared refresh path. `force` bypasses the per-source data cursors (full
+    /// re-fetch); the daily timer and initial load call it with force=false so
+    /// each source self-gates and only re-fetches when its EDGAR change marker
+    /// actually moved.
+    void refresh_internal(bool force);
+
     void run_form_d_fetch();
     void run_nport_marks_fetch();
     void run_s1_pipeline_fetch();
+    /// Deep SPV secondary-interest scan (targeted EDGAR full-text searches +
+    /// capped XML enrichment). Independent of the 3-bit finalize_load flow —
+    /// a slow/failed scan never blocks the core Form D / N-PORT / S-1 load.
+    void run_spv_fetch();
     /// Finnhub augmentation — runs alongside the 3-bit SEC flow. Independent
     /// of finalize_load gating: completes when it completes, emits a summary
     /// progressively. No-op when FINNHUB_API_KEY is unset.
@@ -87,6 +99,12 @@ class PreIpoService : public QObject {
     void parse_form_d_response(const QJsonObject& root);
     void parse_marks_response(const QJsonObject& root);
     void parse_pipeline_response(const QJsonArray& arr);
+    /// Deserialize the deep SPV scan into spv_raw_ (no company mutation).
+    void parse_spv_response(const QJsonObject& root);
+    /// Re-join spv_raw_ onto companies_ (clearing+rebuilding each company's
+    /// spv_activity), creating stubs for targets not otherwise tracked. Called
+    /// from emit_summary() so the join survives any fetch ordering.
+    void attach_spv_activity();
 
     void recompute_analytics();
     /// Emit the current data state. Called both incrementally (as each of
@@ -105,6 +123,18 @@ class PreIpoService : public QObject {
     /// Persist the most recent raw response for a single source.
     void   save_cache(const QString& filename, const QJsonDocument& doc);
 
+    // ── Data-based change cursors ─────────────────────────────────────────────
+    // Per-source opaque markers (EDGAR all-time hit counts / newest accessions)
+    // persisted to cursors.json. Each fetch passes its prior cursor to Python,
+    // which short-circuits with {"unchanged":true} when the marker hasn't moved
+    // — so a quiet day costs a cheap probe, not a full scan. Replaces the old
+    // single 24h time-to-live gate.
+    void   load_cursors();
+    void   save_cursors();
+    /// Compact JSON payload for a Python action, injecting the stored prior
+    /// cursor for `src` as "prev_cursor" (omitted when force_refresh_ is set).
+    QString cursor_payload(QJsonObject base, const QString& src) const;
+
     // Multi-stage loading guard. We wait for all 3 fetches before emitting,
     // and remember per-source success so a failed fetcher can be retried
     // independently rather than the whole load being marked permanent.
@@ -112,8 +142,11 @@ class PreIpoService : public QObject {
     int  pending_bits_ = 0;
     int  failed_bits_  = 0;
     bool loading_ = false;
+    bool force_refresh_ = false;     // set for the duration of a forced refresh
+    QJsonObject cursors_;            // per-source change markers (cursors.json)
 
     QVector<pre_ipo::PrivateCompany> companies_;
+    QVector<pre_ipo::SpvActivity>    spv_raw_;   // side table, re-joined each emit
     QVector<pre_ipo::FormDFiling>    form_d_;
     QVector<pre_ipo::S1Filing>       pipeline_;
     QVector<pre_ipo::Signal>         signals_;

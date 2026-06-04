@@ -8,6 +8,7 @@
 #include "core/config/AppConfig.h"
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
+#include "core/config/LayoutMigrations.h"
 #include "core/config/ProfileManager.h"
 #include "core/components/ComponentCatalog.h"
 #include "core/crash/CrashHandler.h"
@@ -65,7 +66,6 @@
 #include <QFile>
 #include <QLockFile>
 #include <QPointer>
-#include <QSettings>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -145,29 +145,14 @@ int main(int argc, char* argv[]) {
 
     // ── Primary instance from here on ────────────────────────────────────────
 
-    // ── One-time settings-store migration (primary only) ─────────────────────
-    // The QSettings *application* name was rebranded FinceptTerminal -> finterm
-    // (AppIdentity::kApp). The organization ("Fincept") and the on-disk data root
-    // (com.fincept.terminal) are unchanged, so portfolio/auth/secrets are
-    // untouched — only the settings .conf basename moved. Copy the legacy store
-    // into the new one once, when the new store has no keys yet. Idempotent: a
-    // second run finds the new store populated and does nothing. Secondary
-    // instances return above before reaching here, so they skip this entirely.
-    {
-        const auto migrate_settings = [](const char* new_app, const char* old_app) {
-            QSettings dst(fincept::AppIdentity::kOrg, new_app);
-            if (!dst.allKeys().isEmpty())
-                return;  // already populated — never clobber existing settings
-            QSettings src(fincept::AppIdentity::kOrg, old_app);
-            const QStringList keys = src.allKeys();
-            for (const QString& k : keys)
-                dst.setValue(k, src.value(k));
-            if (!keys.isEmpty())
-                dst.sync();
-        };
-        migrate_settings(fincept::AppIdentity::kApp,       fincept::AppIdentity::kAppLegacy);
-        migrate_settings(fincept::AppIdentity::kAppSecure, fincept::AppIdentity::kAppSecureLegacy);
-    }
+    // ── Versioned layout migrations (primary only) ───────────────────────────
+    // Self-healing for on-disk layout moves between releases (settings-store
+    // rebrand, orphaned legacy caches, …). Fast no-op once up to date — a single
+    // QSettings read — and narrates to stdout only when it actually migrates, so
+    // a terminal launch shows what happened before the GUI. Secondary instances
+    // returned above, so this runs once per primary launch. See
+    // core/config/LayoutMigrations.h.
+    fincept::LayoutMigrations::run();
 
     // Register DataHub payload meta-types (QuoteData, HistoryPoint, InfoData,
     // NewsArticle, EconomicsResult) so they can flow through QVariant-keyed
