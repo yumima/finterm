@@ -1322,6 +1322,31 @@ void IpoWatchView::render_kpis() {
     using ui::colors::NEGATIVE;
     using ui::colors::TEXT_SECONDARY;
 
+    // The PRIVATE lens isn't backed by entries_ (the Nasdaq calendar), so the
+    // calendar KPIs below (this-week pipeline, 30D pop, range mix) are
+    // meaningless there. Repaint the same six cells with dossier metrics.
+    if (active_lens_ == LensPrivate) {
+        const auto& cos = services::PreIpoService::instance().companies_ref();
+        int filed = 0, marked = 0, ready = 0, valued = 0;
+        double val_sum = 0, raised_sum_m = 0;
+        for (const auto& c : cos) {
+            if (c.ipo_status == pre_ipo::IpoStatus::Filed) ++filed;
+            if (c.analytics.smart_money_index > 0) ++marked;
+            if (c.analytics.ipo_readiness_score >= 70) ++ready;
+            if (c.last_valuation_usd > 0) { ++valued; val_sum += c.last_valuation_usd; }
+            raised_sum_m += c.cumulative_raised_m;
+        }
+        if (kpi_week_)  kpi_week_->setText(QString("<b>TRACKED</b><br>%1").arg(cos.size()));
+        if (kpi_month_) kpi_month_->setText(QString("<b>S-1 FILED</b><br>%1").arg(filed));
+        if (kpi_pop_)   kpi_pop_->setText(QString("<b>CURATED VAL</b><br>%1 · %2")
+                                              .arg(fmt_valuation(val_sum)).arg(valued));
+        if (kpi_above_) kpi_above_->setText(QString("<b>TOTAL RAISED</b><br>%1")
+                                                .arg(fmt_raised_m(raised_sum_m)));
+        if (kpi_in_)    kpi_in_->setText(QString("<b>FUND-MARKED</b><br>%1").arg(marked));
+        if (kpi_below_) kpi_below_->setText(QString("<b>IPO-READY 70+</b><br>%1").arg(ready));
+        return;
+    }
+
     const QDate today = QDate::currentDate();
     int week_n = 0, month_n = 0;
     double week_$ = 0, month_$ = 0;
