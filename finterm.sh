@@ -245,6 +245,15 @@ EOF
     #                      a warning if nvidia-smi can't reach the card.
     _have_nvidia() { command -v lspci >/dev/null 2>&1 && lspci -d 10de: 2>/dev/null | grep -qiE 'VGA|3D|Display'; }
     _nvidia_alive() { command -v nvidia-smi >/dev/null 2>&1 && timeout 3 nvidia-smi >/dev/null 2>&1; }
+    # Compute-alive (nvidia-smi) is necessary but NOT sufficient for *display*.
+    # On a muxless laptop the dGPU can have healthy CUDA yet no way to present:
+    # no connected outputs and nvidia_drm KMS modeset off → PRIME render offload
+    # onto it can't scan out (and may hang the GUI thread). Gate the render path
+    # on KMS modeset being on, which is what a Wayland/X PRIME sink actually needs.
+    _nvidia_can_render() {
+        local ms=/sys/module/nvidia_drm/parameters/modeset
+        [[ -r "$ms" && "$(cat "$ms" 2>/dev/null)" == "Y" ]]
+    }
     _use_mesa() {
         export __EGL_VENDOR_LIBRARY_FILENAMES="${__EGL_VENDOR_LIBRARY_FILENAMES:-/usr/share/glvnd/egl_vendor.d/50_mesa.json}"
         export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-mesa}"
@@ -262,12 +271,17 @@ EOF
             igpu|intel|mesa)
                 _use_mesa ;;
             nvidia|dgpu)
-                if _have_nvidia && _nvidia_alive; then
+                if ! { _have_nvidia && _nvidia_alive; }; then
+                    echo "finterm: NVIDIA GPU requested but unresponsive (nvidia-smi failed) — falling back to Mesa/iGPU." >&2
+                    _use_mesa
+                elif ! _nvidia_can_render; then
+                    echo "finterm: NVIDIA GPU is alive for compute but can't drive the display here" >&2
+                    echo "        (nvidia_drm modeset off; typical muxless laptop) — rendering on Mesa/iGPU." >&2
+                    echo "        The dGPU stays available for CUDA compute (e.g. the local AI engine)." >&2
+                    _use_mesa
+                else
                     echo "finterm: rendering on the discrete NVIDIA GPU (PRIME offload)." >&2
                     _use_nvidia
-                else
-                    echo "finterm: NVIDIA GPU requested but unavailable — falling back to Mesa/iGPU." >&2
-                    _use_mesa
                 fi ;;
             auto|*)
                 if _have_nvidia && ! _nvidia_alive; then
