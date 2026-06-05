@@ -6,6 +6,7 @@
 
 #include "ai_chat/LlmService.h"
 
+#include "ai_chat/HearthService.h"
 #include "ai_chat/ModelCatalog.h"
 
 #include "core/logging/Logger.h"
@@ -207,10 +208,18 @@ void LlmService::ensure_config() const {
     // unreachable, do_request surfaces a connection error — no silent
     // failover to any other provider (R1).
     if (provider_.isEmpty()) {
+        // Auto-use the local engine (hearth) by default; explicit Settings
+        // config (loaded above) overrides. resolve() is deterministic and
+        // I/O-free, so it's safe to call under this lock / on the GUI thread.
+        const auto engine = HearthService::instance().resolve();
         provider_ = "ollama";
-        base_url_ = "http://localhost:11434/v1";
-        model_ = "llama3.1:8b";
-        LOG_INFO(TAG, "No LLM provider configured — using local profile fallback");
+        base_url_ = engine.base_url;
+        // With hearth, address the role alias and let the engine pick the
+        // concrete model; otherwise a sensible default model name.
+        model_ = engine.is_hearth ? "primary_chat" : "llama3.1:8b";
+        LOG_INFO(TAG, QString("No LLM provider configured — using local engine "
+                              "at %1 (model %2)")
+                          .arg(base_url_, model_));
     }
 
     auto gs = LlmConfigRepository::instance().get_global_settings();

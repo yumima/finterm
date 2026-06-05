@@ -781,6 +781,7 @@ set(PYTHON_SOURCES
 set(AI_CHAT_SOURCES
     src/ai_chat/LlmService.cpp
     src/ai_chat/EmbeddingsClient.cpp
+    src/ai_chat/HearthService.cpp
     src/ai_chat/ModelCatalog.cpp
     src/ai_chat/AiChatScreen.cpp
     src/ai_chat/AiChatBubble.cpp

@@ -1,5 +1,6 @@
 #include "ai_chat/EmbeddingsClient.h"
 
+#include "ai_chat/HearthService.h"
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
@@ -33,12 +34,17 @@ QNetworkAccessManager* emb_nam() {
 } // namespace
 
 QString EmbeddingsClient::base_url() {
+    // An embeddings-specific override still wins (lets you send embeddings
+    // somewhere other than chat); otherwise use the one engine base that the
+    // chat path also resolves through — so chat and embeddings never diverge.
     const QByteArray env = qgetenv("FINCEPT_EMBEDDINGS_BASE_URL");
-    QString url = env.isEmpty() ? QStringLiteral("http://127.0.0.1:11435/v1")
-                                : QString::fromUtf8(env);
-    while (url.endsWith('/'))
-        url.chop(1);
-    return url;
+    if (!env.isEmpty()) {
+        QString url = QString::fromUtf8(env);
+        while (url.endsWith('/'))
+            url.chop(1);
+        return url;
+    }
+    return HearthService::instance().engine_base_url();
 }
 
 void EmbeddingsClient::embed(

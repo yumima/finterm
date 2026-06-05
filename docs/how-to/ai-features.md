@@ -16,19 +16,28 @@ is active.
    plain text.
 4. Set this as the active profile.
 
-### Local (Ollama default)
+### Local (hearth — default local engine)
 
-1. Start a local OpenAI-compatible server.  The fastest path:
+With **no LLM provider configured**, finterm targets the local
+**hearth** engine at `http://127.0.0.1:11435/v1` by default (the same
+base its embeddings + semantic-memory use — one engine for both). Just
+run it:
 
-   ```bash
-   # Ollama (https://ollama.com) — defaults to localhost:11434
-   ollama pull qwen2.5:14b-instruct
-   ollama serve
-   ```
-2. **Settings → LLM Config** → provider **Ollama** → click
-   **Probe**.  finterm fetches the model list at
-   `http://localhost:11434/v1/models` and the dropdown populates.
-3. Pick a model.  Set as active profile.
+```bash
+# hearth (https://github.com/yumima/hearth) — loopback :11435
+hearth start          # brings up the bundled Ollama + the gateway
+```
+
+Chat then works with zero config (it addresses the `primary_chat`
+role; hearth picks the model). Override the base with
+`FINCEPT_ENGINE_BASE_URL` or in **Settings → LLM Config**.
+
+**Bare Ollama (no hearth)?** Ollama defaults to `localhost:11434`,
+not hearth's `:11435` — so set the base URL explicitly:
+
+1. `ollama pull qwen2.5:14b-instruct && ollama serve`
+2. **Settings → LLM Config** → provider **Ollama** → set base URL to
+   `http://localhost:11434/v1` → **Probe** → pick a model → set active.
 
 Other OpenAI-compat servers work the same way — change the base
 URL.  Defaults: vLLM (`http://localhost:8000/v1`), LM Studio

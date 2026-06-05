@@ -15,8 +15,10 @@ namespace fincept {
 /// of the active chat profile.
 ///
 /// Resolution order for the base URL:
-///   1. env `FINCEPT_EMBEDDINGS_BASE_URL`
-///   2. default `http://127.0.0.1:11435/v1` (hearth's loopback port)
+///   1. env `FINCEPT_EMBEDDINGS_BASE_URL` (embeddings-specific override)
+///   2. the shared engine base from `HearthService` (env override → hearth
+///      default :11435) — the same base the chat path uses, so the two
+///      never diverge
 ///
 /// The request sends `model: "embedding"` — hearth's role registry resolves
 /// that alias to the bound embedding model (e.g. nomic-embed-text).  Failure
