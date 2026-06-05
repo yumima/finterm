@@ -2,21 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-04)
+## Today's commits (2026-06-05)
 
 Latest first.
 
-- [`834c7d51`](https://github.com/yumima/finterm/commit/834c7d51) ai: unify chat + embeddings on one local-engine base (HearthService)
-- [`f0759d35`](https://github.com/yumima/finterm/commit/f0759d35) ai: semantic memory search via local-engine embeddings
-- [`b6003133`](https://github.com/yumima/finterm/commit/b6003133) finterm.sh: gate nvidia render path on KMS modeset, not just nvidia-smi
-- [`2a722066`](https://github.com/yumima/finterm/commit/2a722066) pre-IPO: SIGNALS lens — cross-universe derived-signal feed
-- [`aa65cd53`](https://github.com/yumima/finterm/commit/aa65cd53) pre-IPO: user-editable valuation seed override (no rebuild needed)
-- [`6d8c3643`](https://github.com/yumima/finterm/commit/6d8c3643) pre-IPO: review fixes for KPI/chart iterations
-- [`b85a42b2`](https://github.com/yumima/finterm/commit/b85a42b2) pre-IPO: fund-mark trend chart + fix stale chart/tab leak on private select
-- [`911fb7b6`](https://github.com/yumima/finterm/commit/911fb7b6) pre-IPO: private-lens KPI strip shows dossier metrics
-- [`f61706fd`](https://github.com/yumima/finterm/commit/f61706fd) pre-IPO: review fixes — correct stale Stripe CIK, share seed matcher
-- [`47480548`](https://github.com/yumima/finterm/commit/47480548) pre-IPO: document why S-1 offering size is not surfaced
-- [`a96d27ec`](https://github.com/yumima/finterm/commit/a96d27ec) pre-IPO: rich private-company dossier in IPO Watch PRIVATE lens
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

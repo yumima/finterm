@@ -3,22 +3,43 @@
 
 #include "ui/theme/Theme.h"
 
+#include <QColor>
+#include <QGraphicsDropShadowEffect>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
 
 PortfolioOrderPanel::PortfolioOrderPanel(QWidget* parent) : QWidget(parent) {
+    setObjectName("PortfolioOrderPanel");
+    // A plain QWidget subclass does NOT paint a stylesheet `background` unless
+    // this attribute is set — without it the panel was see-through over the
+    // holdings table behind it. This is the core "transparent popup" fix.
+    setAttribute(Qt::WA_StyledBackground, true);
     setFixedWidth(200);
+
+    // Lift the overlay off the table so it reads as a distinct panel.
+    auto* shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(28);
+    shadow->setXOffset(-6);
+    shadow->setYOffset(0);
+    shadow->setColor(QColor(0, 0, 0, 170));
+    setGraphicsEffect(shadow);
+
     build_ui();
 }
 
 void PortfolioOrderPanel::build_ui() {
-    setStyleSheet(
-        QString("background:%1; border-left:2px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::POSITIVE()));
+    // Scope the background to the panel itself (#id) so it paints solid over
+    // the table without cascading onto child widgets. update_tabs() recolors
+    // the left accent to the active side.
+    setStyleSheet(QString("#PortfolioOrderPanel { background:%1; border:1px solid %2;"
+                          " border-left:3px solid %3; }")
+                      .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED(), ui::colors::POSITIVE()));
 
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 6, 8, 6);
-    layout->setSpacing(8);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
 
     // Header + close
     auto* header_row = new QHBoxLayout;
@@ -57,28 +78,32 @@ void PortfolioOrderPanel::build_ui() {
     side_row->addWidget(sell_tab_);
 
     auto update_tabs = [this]() {
-        bool is_buy = (side_ == "BUY");
+        const bool is_buy = (side_ == "BUY");
         const char* active_color = is_buy ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        const char* inactive_color = ui::colors::TEXT_TERTIARY;
 
         buy_tab_->setChecked(is_buy);
         sell_tab_->setChecked(!is_buy);
 
+        // Segmented BUY|SELL: the active side is a solid filled button; the
+        // inactive side stays clearly legible (raised fill + secondary text +
+        // border) so it reads as a tappable toggle, not a disabled control.
         buy_tab_->setStyleSheet(
-            QString("QPushButton { background:%1; color:%2; border:none;"
-                    "  font-size:12px; font-weight:700; }")
-                .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::BG_RAISED(), is_buy ? "#000" : inactive_color));
+            QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                    "  font-size:13px; font-weight:700; }")
+                .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::BG_RAISED(),
+                     is_buy ? "#000" : ui::colors::TEXT_SECONDARY(),
+                     is_buy ? ui::colors::POSITIVE() : ui::colors::BORDER_MED()));
         sell_tab_->setStyleSheet(
-            QString("QPushButton { background:%1; color:%2; border:none;"
-                    "  font-size:12px; font-weight:700; }")
-                .arg(!is_buy ? ui::colors::NEGATIVE() : ui::colors::BG_RAISED(), !is_buy ? "#fff" : inactive_color));
+            QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                    "  font-size:13px; font-weight:700; }")
+                .arg(!is_buy ? ui::colors::NEGATIVE() : ui::colors::BG_RAISED(),
+                     !is_buy ? "#fff" : ui::colors::TEXT_SECONDARY(),
+                     !is_buy ? ui::colors::NEGATIVE() : ui::colors::BORDER_MED()));
 
-        // Update header and border color
-        setStyleSheet(QString("background:%1; border-left:2px solid %2;").arg(ui::colors::BG_SURFACE(), active_color));
-        auto* title_w = findChild<QLabel*>();
-        if (title_w && title_w->text() == "ORDER ENTRY") {
-            // skip — the title might have been found differently
-        }
+        // Recolor the panel's left accent to match the active side.
+        setStyleSheet(QString("#PortfolioOrderPanel { background:%1; border:1px solid %2;"
+                              " border-left:3px solid %3; }")
+                          .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED(), active_color));
     };
 
     connect(buy_tab_, &QPushButton::clicked, this, [this, update_tabs]() {
