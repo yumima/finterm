@@ -457,7 +457,7 @@ current truth; older history lives in `git log`.
 | 7A-C | Task tray + feedback loop | ✅ | In-flight + recent task tray; mark-wrong / mark-right capture; SKILL.md propose-fix flow (Track 7C) with type-to-confirm overwrite |
 | 8 | Per-agent tool scoping + namespacing | ✅ | `int__` prefix + `allow_tools` glob patterns |
 | 8 (inline) | Inline completion scaffold | ✅ scaffold | `InlineCompletionController` capability-gated; Settings checkbox + LRU cache + slash-prefix guard.  Latency API-bound until Engine M1 lands a fast local model |
-| 9 | Memory + vector store | ⚠ stub | `MemoryTools` over plain SQLite (upsert/search/list/delete); sqlite-vec upgrade pending Engine M1 |
+| 9 | Memory + vector store | ✅ | `MemoryTools` semantic search via local-engine embeddings (`EmbeddingsClient` → hearth `/v1/embeddings`) + float32 BLOB column (v040) + C++ cosine KNN, keyword LIKE fallback when the engine is down or nothing clears the relevance floor. sqlite-vec deliberately declined — a loadable extension fights cross-platform packaging (Qt's bundled SQLite often omits load-extension on Win/macOS; per-OS signed .so/.dylib/.dll). BLOB+cosine is ample at terminal scale and forward-compatible: a `vec0` table can layer over the same BLOBs if scale ever demands it. |
 | 10 | Scheduler + hooks | ⚠ partial | Core + UI ✅; SDK hook registration on Anthropic profile defers |
 | 11 | Quant narrator | ✅ | `QuantNarratorTools` + `quant_critic` agent |
 | 12 | Alpha-arena migration | ✅ | Default flipped to two-runtime path; agno stays as opt-in legacy |
@@ -482,11 +482,13 @@ Categorised by why each item isn't done yet.  Anything that says
   OpenAI-compatible service.  finterm's local-runtime adapter
   already works against any OpenAI-compat server today; this is
   the opinionated install path.  See `plans/local-ai-engine.md`.
-- **sqlite-vec semantic search in MemoryTools.** Schema is
-  forward-compatible — add an `embedding` column + a vec table
-  and switch `memory_search` from LIKE to cosine.  Tool API stays
-  unchanged.  Blocked because finterm doesn't ship the sqlite-vec
-  extension; Engine M1 will.
+- ~~**sqlite-vec semantic search in MemoryTools.**~~ ✅ Done a
+  different way (v040): `memory_search` now embeds via the local
+  engine (`EmbeddingsClient` → hearth `/v1/embeddings`) and does
+  C++ cosine over a float32 BLOB column, with a keyword fallback.
+  sqlite-vec was declined for cross-platform reasons (see Track 9);
+  the BLOB column stays forward-compatible with a future `vec0`
+  table. No longer blocked on the engine shipping an extension.
 - **Fast-local inline completion.** Scaffold shipped (Track 8 /
   Settings → AI System checkbox); the controller works against
   any configured runtime.  Quality story (sub-300ms ghost text)

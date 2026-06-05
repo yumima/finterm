@@ -766,6 +766,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v037_teams.cpp
     src/storage/sqlite/migrations/v038_team_mode.cpp
     src/storage/sqlite/migrations/v039_artefact_supersedes.cpp
+    src/storage/sqlite/migrations/v040_memory_embeddings.cpp
 )
 
 # Python runner
@@ -779,6 +780,7 @@ set(PYTHON_SOURCES
 # AI Chat
 set(AI_CHAT_SOURCES
     src/ai_chat/LlmService.cpp
+    src/ai_chat/EmbeddingsClient.cpp
     src/ai_chat/ModelCatalog.cpp
     src/ai_chat/AiChatScreen.cpp
     src/ai_chat/AiChatBubble.cpp
@@ -1870,6 +1872,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v037_teams.cpp
     src/storage/sqlite/migrations/v038_team_mode.cpp
     src/storage/sqlite/migrations/v039_artefact_supersedes.cpp
+    src/storage/sqlite/migrations/v040_memory_embeddings.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp

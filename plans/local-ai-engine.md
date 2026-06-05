@@ -1,17 +1,34 @@
 # Local AI Engine — Vision, Requirements, Architecture
 
-**Status:** Proposal — sibling project, separate repo. Not blocking
-finterm shipping; finterm's local-runtime adapter
-(`finagent_core.runtimes.local_runtime`) already talks to any
-OpenAI-compatible server, so users can point at vanilla Ollama / vLLM
-/ llama.cpp / LM Studio today.  This document describes the
-opinionated bundle we'd publish as a one-click install.
+**Status:** **In build (M1) as `hearth`** — sibling repo at
+`/home/yma/fin/hearth`.  M1 walking skeleton (FastAPI gateway +
+Ollama adapter + role registry + CLI + hardware probe) implemented
+and unit-tested 2026-06-04.  Not blocking finterm shipping; finterm's
+local-runtime adapter (`finagent_core.runtimes.local_runtime`)
+already talks to any OpenAI-compatible server, so users can point at
+vanilla Ollama / vLLM / llama.cpp / LM Studio today.  This document
+is the spec; `hearth` is the opinionated one-click bundle of it.
 
 **Owner:** yumima
-**Working name:** `finterm-localai` (placeholder; see §6 Open
-questions)
+**Name:** `hearth` (chosen 2026-06-04; was working name
+`finterm-localai`).  Dropped the `finterm-` prefix per §6 Q1 so
+non-finterm consumers can adopt it.  Throughout this doc, read every
+`finterm-localai` / `~/.finterm-localai` reference as `hearth` /
+`~/.hearth`.
 **Related:** `plans/ai-stack.md` (finterm's side of the
 contract)
+
+**Backend / model decision (this box).** Default backend is **Ollama**
+(single Go binary, bundles its own CUDA v13 — verified Blackwell
+support on the RTX 5070 Ti, so no system CUDA toolkit needed, and no
+Python/torch dependency to fight the host's Python 3.14).  The dGPU's
+*display* path is wedged on this laptop but **CUDA compute is healthy**
+(`nvidia-smi` 0.05s, 12 GB free) — hearth uses it for inference while
+the GUI renders on the Intel iGPU.  Default role models:
+`primary_chat=qwen2.5:14b-instruct-q4_K_M`,
+`fast_chat`/`coding=qwen2.5:7b-instruct-q4_K_M`,
+`embedding=nomic-embed-text`.  llama.cpp is the M4 control/perf
+escape hatch; vLLM stays opt-in (heavy, torch-on-3.14 friction).
 
 **Finterm-side readiness:**
 
@@ -443,9 +460,9 @@ safely. The engine's job is faithful transport of model output.
 
 ## 6. Open questions
 
-1. **Name.** `finterm-localai` is the working name. Alternatives:
-   `finai`, `localai-svc`, `homeloom`, generic. If we want to
-   attract non-finterm consumers, drop the `finterm-` prefix.
+1. **Name.** ✅ **Decided: `hearth`** (2026-06-04). Dropped the
+   `finterm-` prefix to keep the door open for non-finterm consumers.
+   Config/state under `~/.hearth/`; binary/CLI `hearth`.
 2. **License.** MIT or Apache-2.0. Match finterm's stance.
 3. **Bundle vs adapter-only.** v1 assumes Ollama installed.
    Should `install` pull Ollama itself if absent? Lean: yes, with

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b6003133`](https://github.com/yumima/finterm/commit/b6003133) finterm.sh: gate nvidia render path on KMS modeset, not just nvidia-smi
 - [`2a722066`](https://github.com/yumima/finterm/commit/2a722066) pre-IPO: SIGNALS lens — cross-universe derived-signal feed
 - [`aa65cd53`](https://github.com/yumima/finterm/commit/aa65cd53) pre-IPO: user-editable valuation seed override (no rebuild needed)
 - [`6d8c3643`](https://github.com/yumima/finterm/commit/6d8c3643) pre-IPO: review fixes for KPI/chart iterations
