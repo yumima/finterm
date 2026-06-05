@@ -31,6 +31,10 @@ class PortfolioInsightsPanel : public QWidget {
     void set_summary(const portfolio::PortfolioSummary& summary);
     void open_tab(Tab tab);
     void reload_agents();
+    /// Shrink the dock if it's wider than `available_px` so its left edge can
+    /// never run off-screen (the screen passes ~90% of the window width on open
+    /// and on resize). Never widens; honours the dock's min width.
+    void clamp_width(int available_px);
 
   signals:
     void close_requested();
@@ -38,6 +42,8 @@ class PortfolioInsightsPanel : public QWidget {
   protected:
     void keyPressEvent(QKeyEvent* e) override;
     void showEvent(QShowEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
+    bool eventFilter(QObject* obj, QEvent* e) override;
 
   private:
     void build_ui();
@@ -73,6 +79,12 @@ class PortfolioInsightsPanel : public QWidget {
     QPushButton* agent_run_ = nullptr;
     QLabel* agent_meta_ = nullptr;
     QTextBrowser* agent_content_ = nullptr;
+
+    // Resizable left-edge grip — drag the dock's inner border to widen/narrow it.
+    QWidget* resize_grip_ = nullptr;
+    bool resizing_ = false;
+    int drag_start_x_ = 0;
+    int drag_start_w_ = 0;
 
     // State
     Tab current_tab_ = Tab::AI;

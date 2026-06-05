@@ -312,6 +312,7 @@ void PortfolioScreen::build_ui() {
         insights_scrim_->show();
         insights_scrim_->raise();
         insights_panel_->setFixedHeight(h);
+        insights_panel_->clamp_width(static_cast<int>(width() * 0.9));
         insights_panel_->move(width() - insights_panel_->width(), top);
         insights_panel_->raise();
         insights_panel_->open_tab(tab);
@@ -1437,6 +1438,7 @@ void PortfolioScreen::resizeEvent(QResizeEvent* event) {
             insights_scrim_->setGeometry(0, top, width(), h);
         if (insights_panel_->isVisible()) {
             insights_panel_->setFixedHeight(h);
+            insights_panel_->clamp_width(static_cast<int>(width() * 0.9));
             insights_panel_->move(width() - insights_panel_->width(), top);
         }
     }

@@ -15,9 +15,12 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollBar>
+#include <QSettings>
 #include <QShowEvent>
 #include <QStackedWidget>
 #include <QTextBrowser>
@@ -34,14 +37,38 @@ QString fmt_now() {
 // Markdown rendering is delegated to ui::MarkdownRenderer — the same path used
 // by AgentChatPanel and AI Chat so portfolio responses look consistent.
 
+// Resizable insights dock — drag-strip width + width bounds (persisted).
+constexpr int kPiGripW = 6;       // px — drag strip on the dock's left edge
+constexpr int kPiMinW = 380;      // px — narrowest the dock can get
+constexpr int kPiMaxW = 1100;     // px — widest (also capped at 90% of the screen)
+constexpr int kPiDefaultW = 560;  // px — default / first-run width
+
 } // namespace
 
 PortfolioInsightsPanel::PortfolioInsightsPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("PortfolioInsightsPanel");
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_StyledBackground, true);
-    setFixedWidth(560);
+    const int saved_w = QSettings().value("portfolio/insights_panel_width", kPiDefaultW).toInt();
+    setFixedWidth(qBound(kPiMinW, saved_w, kPiMaxW));
     build_ui();
+
+    // Draggable left-edge grip: drag the dock's inner border to resize it. The
+    // grip is a thin overlay strip kept full-height in resizeEvent; its mouse
+    // events are handled in eventFilter, which anchors the right edge so the
+    // dock grows leftward over the dimmed main pane. Width is persisted.
+    resize_grip_ = new QWidget(this);
+    resize_grip_->setObjectName("PortfolioInsightsResizeGrip");
+    resize_grip_->setCursor(Qt::SizeHorCursor);
+    resize_grip_->setToolTip("Drag to resize");
+    resize_grip_->setAttribute(Qt::WA_StyledBackground, true);
+    resize_grip_->setStyleSheet(
+        QString("#PortfolioInsightsResizeGrip { background:transparent; }"
+                "#PortfolioInsightsResizeGrip:hover { background:%1; }")
+            .arg(ui::colors::AMBER()));
+    resize_grip_->installEventFilter(this);
+    resize_grip_->raise();
+
     hide();
 
     // Wire AgentService results. Both run_portfolio_analysis (AI tab) and
@@ -438,6 +465,66 @@ void PortfolioInsightsPanel::keyPressEvent(QKeyEvent* e) {
         return;
     }
     QWidget::keyPressEvent(e);
+}
+
+void PortfolioInsightsPanel::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    if (resize_grip_) {
+        resize_grip_->setGeometry(0, 0, kPiGripW, height());
+        resize_grip_->raise();
+    }
+}
+
+void PortfolioInsightsPanel::clamp_width(int available_px) {
+    // Cap so the right-anchored dock can't push its left edge off-screen. Never
+    // below the min width (a sub-min window is degenerate; overflow is accepted).
+    const int cap = qMax(kPiMinW, qMin(available_px, kPiMaxW));
+    if (width() > cap)
+        setFixedWidth(cap);
+}
+
+bool PortfolioInsightsPanel::eventFilter(QObject* obj, QEvent* e) {
+    if (obj == resize_grip_) {
+        switch (e->type()) {
+        case QEvent::MouseButtonPress: {
+            auto* me = static_cast<QMouseEvent*>(e);
+            if (me->button() == Qt::LeftButton) {
+                resizing_ = true;
+                drag_start_x_ = me->globalPosition().toPoint().x();
+                drag_start_w_ = width();
+                return true;
+            }
+            break;
+        }
+        case QEvent::MouseMove:
+            if (resizing_) {
+                auto* me = static_cast<QMouseEvent*>(e);
+                // Drag the left edge leftward → wider (right edge stays anchored).
+                const int dx = drag_start_x_ - me->globalPosition().toPoint().x();
+                int cap = kPiMaxW;
+                if (parentWidget())
+                    cap = qMin(cap, static_cast<int>(parentWidget()->width() * 0.9));
+                const int neww = qBound(kPiMinW, drag_start_w_ + dx, qMax(kPiMinW, cap));
+                if (neww != width()) {
+                    setFixedWidth(neww);
+                    if (parentWidget())
+                        move(parentWidget()->width() - neww, y());
+                }
+                return true;
+            }
+            break;
+        case QEvent::MouseButtonRelease:
+            if (resizing_) {
+                resizing_ = false;
+                QSettings().setValue("portfolio/insights_panel_width", width());
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return QWidget::eventFilter(obj, e);
 }
 
 void PortfolioInsightsPanel::switch_tab(Tab tab) {
