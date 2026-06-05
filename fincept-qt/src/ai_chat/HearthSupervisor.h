@@ -14,11 +14,6 @@ namespace fincept {
 /// the app is open. Off by default — users who run hearth themselves (or a
 /// raw Ollama) are unaffected.
 ///
-/// Usage:
-///   HearthSupervisor::instance().set_enabled(true);  // called on Settings save
-///   // Process is started immediately if the engine isn't already up.
-///   // On app exit Qt's parent-child destruction stops the child.
-///
 /// Thread: all methods and signals are on the GUI thread.
 class HearthSupervisor : public QObject {
     Q_OBJECT
@@ -33,8 +28,10 @@ public:
 
     /// Resolved path to the hearth CLI binary. Resolution order:
     ///   1. env FINCEPT_HEARTH_BIN
-    ///   2. ~/.hearth/bin/hearth  (pip install hearth installs here)
-    ///   3. PATH lookup
+    ///   2. ~/.local/bin/hearth       (pip / pipx install)
+    ///   3. ~/fin/hearth/.venv/bin/hearth  (dev checkout)
+    ///   4. ~/.hearth/bin/hearth
+    ///   5. PATH lookup
     /// Returns empty string when not found.
     static QString hearth_binary();
 
@@ -46,10 +43,12 @@ private:
     explicit HearthSupervisor(QObject* parent = nullptr);
     void start_process();
     void stop_process();
+    void set_state(State s);
     void on_process_finished(int exit_code, QProcess::ExitStatus status);
 
     QProcess* process_ = nullptr;
     QTimer*   retry_timer_ = nullptr;
+    QTimer*   settle_timer_ = nullptr; // one member, not a singleShot, to cancel on stop
     State     state_ = State::Disabled;
     bool      enabled_ = false;
     int       retry_count_ = 0;

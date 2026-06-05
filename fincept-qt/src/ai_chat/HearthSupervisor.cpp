@@ -4,6 +4,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTimer>
@@ -12,14 +13,13 @@ namespace fincept {
 
 namespace {
 constexpr const char* kHearthSupTag = "HearthSupervisor";
-// How long to wait before retrying after a crash (caps at 30 s).
 constexpr int kRetryBaseMs  = 3000;
 constexpr int kRetryMaxMs   = 30000;
 constexpr int kMaxRetries   = 8;
+constexpr int kSettleMs     = 3000; // how long after start to promote Starting→Running
 } // namespace
 
 HearthSupervisor& HearthSupervisor::instance() {
-    // Owned by qApp so the process is stopped when Qt tears down.
     static HearthSupervisor* s = new HearthSupervisor(qApp);
     return *s;
 }
@@ -28,29 +28,42 @@ HearthSupervisor::HearthSupervisor(QObject* parent) : QObject(parent) {
     retry_timer_ = new QTimer(this);
     retry_timer_->setSingleShot(true);
     connect(retry_timer_, &QTimer::timeout, this, &HearthSupervisor::start_process);
+
+    settle_timer_ = new QTimer(this);
+    settle_timer_->setSingleShot(true);
+    connect(settle_timer_, &QTimer::timeout, this, [this]() {
+        if (process_ && process_->state() == QProcess::Running
+                && state_ == State::Starting) {
+            retry_count_ = 0;
+            set_state(State::Running);
+        }
+    });
 }
 
 // static
 QString HearthSupervisor::hearth_binary() {
-    // 1. Explicit override.
     const QByteArray env = qgetenv("FINCEPT_HEARTH_BIN");
     if (!env.isEmpty() && QFile::exists(QString::fromUtf8(env)))
         return QString::fromUtf8(env);
 
-    // 2. pipx / pip user install puts scripts in ~/.local/bin on Linux/macOS.
     const QStringList candidates = {
-        QDir::homePath() + "/.local/bin/hearth",
+        QDir::homePath() + "/.local/bin/hearth",       // pip / pipx install
+        QDir::homePath() + "/fin/hearth/.venv/bin/hearth", // dev checkout
         QDir::homePath() + "/.hearth/bin/hearth",
-        QDir::homePath() + "/hearth/.venv/bin/hearth", // dev checkout
     };
     for (const QString& p : candidates) {
         if (QFile::exists(p))
             return p;
     }
 
-    // 3. PATH lookup.
-    const QString found = QStandardPaths::findExecutable("hearth");
-    return found;
+    return QStandardPaths::findExecutable("hearth");
+}
+
+void HearthSupervisor::set_state(State s) {
+    if (state_ == s)
+        return;
+    state_ = s;
+    emit state_changed(s);
 }
 
 void HearthSupervisor::set_enabled(bool enabled) {
@@ -74,16 +87,17 @@ void HearthSupervisor::start_process() {
         LOG_WARN(kHearthSupTag,
             "hearth binary not found — install with `pip install hearth` "
             "or set FINCEPT_HEARTH_BIN. Supervision disabled.");
+        // Sync enabled_ back to false AND re-persist so the checkbox reflects
+        // reality (prevents the checkbox/enabled_ desync bug).
         enabled_ = false;
-        state_ = State::Disabled;
-        emit state_changed(state_);
+        set_state(State::Disabled);
+        emit state_changed(State::Disabled); // signals the UI to uncheck
         return;
     }
 
     if (process_ && process_->state() == QProcess::Running)
         return;
 
-    // Re-use or allocate the process object.
     if (!process_) {
         process_ = new QProcess(this);
         process_->setProcessChannelMode(QProcess::MergedChannels);
@@ -93,56 +107,58 @@ void HearthSupervisor::start_process() {
 
     LOG_INFO(kHearthSupTag, QString("starting hearth: %1 start").arg(bin));
     process_->start(bin, {"start"});
-    state_ = State::Starting;
-    emit state_changed(state_);
+    set_state(State::Starting);
 
-    // Give it 3 s to settle; if the /admin/health probe in HearthService::detect()
-    // succeeds the UI chip updates independently. We just need to track the
-    // process state here — not the engine readiness.
-    QTimer::singleShot(3000, this, [this]() {
-        if (process_ && process_->state() == QProcess::Running
-            && state_ == State::Starting) {
-            state_ = State::Running;
-            emit state_changed(state_);
-            retry_count_ = 0;
-        }
-    });
+    // Promote to Running after settle period (cancellable if we stop early).
+    settle_timer_->start(kSettleMs);
 }
 
 void HearthSupervisor::stop_process() {
+    settle_timer_->stop();
     retry_timer_->stop();
+
     if (!process_ || process_->state() == QProcess::NotRunning) {
-        state_ = State::Disabled;
-        emit state_changed(state_);
+        set_state(State::Disabled);
         return;
     }
+
     LOG_INFO(kHearthSupTag, "stopping hearth");
     process_->terminate();
-    if (!process_->waitForFinished(2000))
-        process_->kill();
-    state_ = State::Disabled;
-    emit state_changed(state_);
+    // Non-blocking: we don't call waitForFinished() on the GUI thread.
+    // on_process_finished will fire when the process actually exits and
+    // set state to Disabled. QProcess::kill() is our backstop if terminate
+    // doesn't work — schedule it after a short grace period.
+    QTimer::singleShot(2000, process_, [this]() {
+        if (process_ && process_->state() != QProcess::NotRunning) {
+            process_->kill();
+        }
+    });
+    // Optimistically set Disabled now so the UI reflects the intent immediately.
+    set_state(State::Disabled);
 }
 
 void HearthSupervisor::on_process_finished(int exit_code,
                                             QProcess::ExitStatus /*status*/) {
+    settle_timer_->stop();
+
     if (!enabled_) {
-        state_ = State::Disabled;
-        emit state_changed(state_);
+        // Normal clean stop (stop_process already emitted Disabled).
         return;
     }
 
     LOG_WARN(kHearthSupTag, QString("hearth exited (code %1)").arg(exit_code));
-    state_ = State::Crashed;
-    emit state_changed(state_);
 
     if (retry_count_ >= kMaxRetries) {
         LOG_WARN(kHearthSupTag, "hearth kept crashing — giving up supervision");
         enabled_ = false;
-        state_ = State::Disabled;
-        emit state_changed(state_);
+        // Emit Crashed briefly so the status chip shows it, then Disabled after
+        // a short delay so the user actually sees the message.
+        set_state(State::Crashed);
+        QTimer::singleShot(3000, this, [this]() { set_state(State::Disabled); });
         return;
     }
+
+    set_state(State::Crashed);
 
     const int delay = std::min(kRetryBaseMs * (1 << retry_count_), kRetryMaxMs);
     ++retry_count_;

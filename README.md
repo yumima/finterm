@@ -6,9 +6,10 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
-- [`94bc443b`](https://github.com/yumima/finterm/commit/94bc443b) settings: retire fincept provider, default ollama to hearth
-- [`985af6fe`](https://github.com/yumima/finterm/commit/985af6fe) ai: opt-in local engine supervision (HearthSupervisor + manage toggle)
-- [`cb794fa8`](https://github.com/yumima/finterm/commit/cb794fa8) portfolio: make BUY/SELL order panel opaque + clearer
+- [`12cc737b1`](https://github.com/yumima/finterm/commit/12cc737b1) **fix:** /v1/v1 double-path in LLM Config test connection + embeddings
+- [`94bc443bb`](https://github.com/yumima/finterm/commit/94bc443bb) settings: retire fincept provider, default ollama to hearth
+- [`985af6fef`](https://github.com/yumima/finterm/commit/985af6fef) ai: opt-in local engine supervision (HearthSupervisor + manage toggle)
+- [`cb794fa85`](https://github.com/yumima/finterm/commit/cb794fa85) portfolio: make BUY/SELL order panel opaque + clearer
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

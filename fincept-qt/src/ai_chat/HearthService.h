@@ -29,7 +29,9 @@ class HearthService : public QObject {
     static HearthService& instance();
 
     struct Resolution {
-        QString base_url;  // ".../v1" base for chat + embeddings
+        // Root URL without /v1 (e.g. "http://127.0.0.1:11435").
+        // LlmService appends /v1/chat/completions; EmbeddingsClient appends /v1/embeddings.
+        QString base_url;
         bool is_hearth;    // base is hearth's (use role aliases like primary_chat)
     };
     /// Deterministic + I/O-free. Pure resolution; safe under any lock.
