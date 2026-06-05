@@ -104,25 +104,40 @@ class AgentFactory:
         # api_key passed directly takes priority; fall back to env-var lookup
         api_key     = model_config.get("api_key") or self._get_api_key(provider) or ""
 
+        _STANDARD_ROLE_MAP = {
+            "system": "system", "user": "user", "assistant": "assistant",
+            "tool": "tool", "model": "assistant",
+        }
+
+        # ── Local engine (ollama → hearth) ────────────────────────────────────
+        # Route "ollama" through OpenAIChat against the hearth gateway
+        # (OpenAI-compatible, default 127.0.0.1:11435) — NOT agno's native Ollama
+        # class, which needs the `ollama` pip package. /v1 is ensured; role
+        # aliases (primary_chat/...) resolve at the gateway.
+        if provider == "ollama":
+            from agno.models.openai import OpenAIChat
+            b = (base_url or "http://127.0.0.1:11435").rstrip("/")
+            if b.endswith("/v1"):
+                b = b[:-3]
+            b = b + "/v1"
+            kwargs = dict(id=model_id, api_key=api_key or "sk-no-key",
+                          temperature=temperature, max_tokens=max_tokens,
+                          base_url=b, role_map=_STANDARD_ROLE_MAP)
+            return OpenAIChat(**{k: v for k, v in kwargs.items() if v is not None})
+
         # ── Custom base_url → OpenAI-compatible endpoint ──────────────────────
         # Any provider configured with a custom base_url (e.g. minimax served
         # on an Anthropic-compatible endpoint, OpenRouter, LM Studio, etc.)
         # is routed through OpenAIChat with that base_url.
         if base_url:
             from agno.models.openai import OpenAIChat
-            # Override Agno's default role_map which maps "system"→"developer".
-            # Custom endpoints (MiniMax, OpenRouter, etc.) expect standard roles.
-            _STANDARD_ROLE_MAP = {
-                "system": "system",
-                "user": "user",
-                "assistant": "assistant",
-                "tool": "tool",
-                "model": "assistant",
-            }
+            # _STANDARD_ROLE_MAP defined above. Keep temperature=0.0 (filter
+            # None, not falsy) so an explicit 0 isn't silently dropped.
             kwargs = dict(id=model_id, api_key=api_key,
                           temperature=temperature, max_tokens=max_tokens,
                           base_url=base_url, role_map=_STANDARD_ROLE_MAP)
-            return OpenAIChat(**{k: v for k, v in kwargs.items() if v})
+            # Keep 0.0 (drop only None / empty-string, e.g. an unset api_key).
+            return OpenAIChat(**{k: v for k, v in kwargs.items() if v is not None and v != ""})
 
         # ── Native provider instances ─────────────────────────────────────────
         if provider == "openai":
@@ -150,9 +165,8 @@ class AgentFactory:
             return DeepSeek(id=model_id, api_key=api_key,
                             temperature=temperature, max_tokens=max_tokens)
 
-        if provider == "ollama":
-            from agno.models.ollama import Ollama
-            return Ollama(id=model_id, temperature=temperature, num_predict=max_tokens)
+        # NOTE: "ollama" is handled above (routed to OpenAIChat against hearth),
+        # so it never reaches here — no native agno.models.ollama import.
 
         if provider in ("openrouter",):
             from agno.models.openai import OpenAIChat

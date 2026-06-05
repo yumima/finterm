@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`77cb1e174`](https://github.com/yumima/finterm/commit/77cb1e174) agents: route 'ollama' provider through hearth (OpenAI-compat), not native Ollama
 - [`816abe83b`](https://github.com/yumima/finterm/commit/816abe83b) **fix:** Test Connection 'No models found' — parse OpenAI /v1/models shape for ollama
 - [`756ae1a4f`](https://github.com/yumima/finterm/commit/756ae1a4f) review: normalize LLM base URLs, fix supervisor on-launch + races
 - [`3c6e4aebb`](https://github.com/yumima/finterm/commit/3c6e4aebb) **fix:** LLM Config — trailing slash in base_url, profile defaults to ollama
