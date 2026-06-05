@@ -52,6 +52,7 @@ private:
     State     state_ = State::Disabled;
     bool      enabled_ = false;
     int       retry_count_ = 0;
+    int       gen_ = 0; // bumped on each start/stop; invalidates stale kill timers
 };
 
 } // namespace fincept

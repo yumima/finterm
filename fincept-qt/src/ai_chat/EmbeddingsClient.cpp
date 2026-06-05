@@ -1,6 +1,7 @@
 #include "ai_chat/EmbeddingsClient.h"
 
 #include "ai_chat/HearthService.h"
+#include "ai_chat/LlmUrl.h"
 #include "core/logging/Logger.h"
 
 #include <QCoreApplication>
@@ -38,12 +39,8 @@ QString EmbeddingsClient::base_url() {
     // somewhere other than chat); otherwise use the one engine base that the
     // chat path also resolves through — so chat and embeddings never diverge.
     const QByteArray env = qgetenv("FINCEPT_EMBEDDINGS_BASE_URL");
-    if (!env.isEmpty()) {
-        QString url = QString::fromUtf8(env);
-        while (url.endsWith('/'))
-            url.chop(1);
-        return url;
-    }
+    if (!env.isEmpty())
+        return normalize_llm_base(QString::fromUtf8(env));
     return HearthService::instance().engine_base_url();
 }
 

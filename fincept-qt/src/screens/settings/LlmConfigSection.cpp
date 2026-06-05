@@ -54,7 +54,7 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
     if (p == "openrouter")
         return {};
     if (p == "minimax")
-        return "https://api.minimax.io/v1";
+        return "https://api.minimax.io"; // root; LlmService appends /v1/...
     if (p == "kimi")
         return {}; // defaults to https://api.moonshot.ai
     if (p == "ollama")
@@ -104,8 +104,6 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
                 "llama3.1:8b", "qwen2.5:7b", "mistral:7b"};
     if (p == "xai")
         return {"grok-4-latest", "grok-4", "grok-3", "grok-3-mini"};
-    if (p == "fincept")
-        return {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"};
     return {};
 }
 
@@ -441,12 +439,8 @@ QWidget* LlmConfigSection::build_form_panel() {
         auto r = SettingsRepository::instance().get("hearth.manage", "false");
         manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");
     }
-    HearthSupervisor::instance().set_enabled(manage_engine_check_->isChecked());
-    connect(manage_engine_check_, &QCheckBox::toggled, this, [this](bool on) {
-        SettingsRepository::instance().set("hearth.manage", on ? "true" : "false", "ai");
-        HearthSupervisor::instance().set_enabled(on);
-        refresh_engine_status();
-    });
+    // Connect BEFORE set_enabled so a construction-time self-disable (binary not
+    // found) is caught and the checkbox/setting are synced.
     connect(&HearthSupervisor::instance(), &HearthSupervisor::state_changed, this,
             [this](HearthSupervisor::State s) {
                 // If the supervisor disabled itself (binary not found), sync
@@ -461,6 +455,13 @@ QWidget* LlmConfigSection::build_form_panel() {
                 }
                 refresh_engine_status();
             });
+    connect(manage_engine_check_, &QCheckBox::toggled, this, [this](bool on) {
+        SettingsRepository::instance().set("hearth.manage", on ? "true" : "false", "ai");
+        HearthSupervisor::instance().set_enabled(on);
+        refresh_engine_status();
+    });
+    // Sync the supervisor to the persisted setting (now that handlers are wired).
+    HearthSupervisor::instance().set_enabled(manage_engine_check_->isChecked());
     form->addRow(new QLabel(""), manage_engine_check_);
 
     // Tools toggle
@@ -815,6 +816,9 @@ void LlmConfigSection::on_delete_provider() {
 
     LlmConfigRepository::instance().delete_provider(provider);
     load_providers();
+    // Reload so LlmService drops the deleted config immediately (mirrors save);
+    // if it was the active provider, this picks up the local-engine fallback.
+    ai_chat::LlmService::instance().reload_config();
     emit config_changed();
 }
 
@@ -960,15 +964,18 @@ void LlmConfigSection::refresh_engine_status() {
     } else if (s.present) {
         text = "engine reachable (not hearth) at " + s.base_url;
     } else {
-        // Show supervisor state when not detected so the user knows whether
-        // finterm is trying to start it.
+        // Not detected (yet). Reflect supervisor state so the message isn't
+        // contradictory when finterm is actively managing the engine.
         const auto sup = HearthSupervisor::instance().state();
+        const bool managed = HearthSupervisor::instance().is_enabled();
         if (sup == HearthSupervisor::State::Starting)
             text = "starting hearth…";
         else if (sup == HearthSupervisor::State::Crashed)
             text = "hearth crashed — check logs";
+        else if (managed)
+            text = "hearth not responding yet…";
         else
-            text = "not detected — run `hearth start` (or enable Manage above)";
+            text = "not detected — enable Manage above, or run `hearth start`";
         color = ui::colors::AMBER();
     }
     engine_status_lbl_->setText(text);

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3c6e4aebb`](https://github.com/yumima/finterm/commit/3c6e4aebb) **fix:** LLM Config — trailing slash in base_url, profile defaults to ollama
 - [`67570d24e`](https://github.com/yumima/finterm/commit/67570d24e) **fix:** LLM Config test connection, fincept branding, supervisor bugs
 - [`12cc737b1`](https://github.com/yumima/finterm/commit/12cc737b1) **fix:** /v1/v1 double-path in LLM Config test connection + embeddings
 - [`94bc443bb`](https://github.com/yumima/finterm/commit/94bc443bb) settings: retire fincept provider, default ollama to hearth

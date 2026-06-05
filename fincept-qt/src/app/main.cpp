@@ -54,6 +54,7 @@
 #include "trading/ExchangeService.h"
 #include "trading/ExchangeSessionManager.h"
 #include "storage/repositories/NewsArticleRepository.h"
+#include "ai_chat/HearthSupervisor.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "storage/sqlite/CacheDatabase.h"
 #include "storage/sqlite/Database.h"
@@ -457,6 +458,16 @@ int main(int argc, char* argv[]) {
     LOG_INFO("App", "Starting session manager...");
     // Start session
     fincept::SessionManager::instance().start_session();
+
+    // Honor the "Manage local engine" opt-in at launch: if enabled, start the
+    // hearth supervisor now. Otherwise it's only wired when Settings → LLM
+    // Config is opened, so "start on launch" wouldn't actually happen. Safe
+    // no-op when the setting is unset/false or the hearth binary is missing.
+    {
+        auto m = fincept::SettingsRepository::instance().get("hearth.manage", "false");
+        if (m.is_ok() && m.value() == "true")
+            fincept::HearthSupervisor::instance().set_enabled(true);
+    }
 
     // Initialize in-process auth service (replaces external stub server).
     // On the very first launch (no auth.db present), wipe any legacy single-user

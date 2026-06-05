@@ -1,5 +1,6 @@
 #include "ai_chat/HearthService.h"
 
+#include "ai_chat/LlmUrl.h"
 #include "core/logging/Logger.h"
 
 #include <QByteArray>
@@ -24,12 +25,6 @@ namespace {
 
 constexpr const char* kHearthTag = "HearthService";
 constexpr int kProbeTimeoutMs = 600;
-
-QString hs_normalize(QString base) {
-    while (base.endsWith('/'))
-        base.chop(1);
-    return base;
-}
 
 /// One-shot synchronous GET with a hard timeout. Runs on a QtConcurrent worker
 /// (its own QEventLoop drives the local QNAM); never on a UI-blocking path.
@@ -101,12 +96,13 @@ HearthService& HearthService::instance() {
 
 HearthService::Resolution HearthService::resolve() const {
     const QByteArray env = qgetenv("FINCEPT_ENGINE_BASE_URL");
-    const QString base = env.isEmpty() ? QString::fromLatin1(kDefaultBase)
-                                       : hs_normalize(QString::fromUtf8(env));
+    const QString base = env.isEmpty() ? normalize_llm_base(QString::fromLatin1(kDefaultBase))
+                                       : normalize_llm_base(QString::fromUtf8(env));
     // Treat hearth's default port as hearth even before any probe, so the
     // common zero-config case addresses role aliases (primary_chat) and "just
-    // works" the moment the engine is up at :11435.
-    return {base, base == QLatin1String(kDefaultBase)};
+    // works" the moment the engine is up at :11435. Compare normalized so an
+    // env value with a /v1 suffix still resolves to is_hearth=true.
+    return {base, base == normalize_llm_base(QString::fromLatin1(kDefaultBase))};
 }
 
 void HearthService::detect() {

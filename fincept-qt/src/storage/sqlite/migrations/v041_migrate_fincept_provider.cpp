@@ -7,10 +7,12 @@
 //
 // This migration:
 //   1. Rewrites the fincept row to provider="ollama" with hearth's loopback
-//      base URL (127.0.0.1:11435/v1) and the "primary_chat" role alias, so
-//      the user immediately has a working local-engine config.
-//   2. Marks it active (if it was the active provider), so finterm routes
-//      through hearth on next launch without the user touching Settings.
+//      base URL (http://127.0.0.1:11435, the bare root — LlmService appends
+//      /v1/...) and the "primary_chat" role alias, so the user immediately has
+//      a working local-engine config.
+//   2. Leaves is_active as it was on the fincept row (an UPDATE, not a
+//      re-activation). v042 then activates the sole ollama row if nothing else
+//      is active, so the user routes through hearth without touching Settings.
 //   3. Leaves any other provider rows untouched.
 //
 // Idempotent: re-running is a no-op when no fincept row exists.

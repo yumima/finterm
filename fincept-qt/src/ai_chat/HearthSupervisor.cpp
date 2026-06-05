@@ -105,6 +105,7 @@ void HearthSupervisor::start_process() {
                 &HearthSupervisor::on_process_finished);
     }
 
+    ++gen_; // invalidate any pending stale-kill timer from a prior stop
     LOG_INFO(kHearthSupTag, QString("starting hearth: %1 start").arg(bin));
     process_->start(bin, {"start"});
     set_state(State::Starting);
@@ -123,13 +124,15 @@ void HearthSupervisor::stop_process() {
     }
 
     LOG_INFO(kHearthSupTag, "stopping hearth");
+    const int g = ++gen_; // mark this stop; a later start bumps gen_ again
     process_->terminate();
     // Non-blocking: we don't call waitForFinished() on the GUI thread.
     // on_process_finished will fire when the process actually exits and
     // set state to Disabled. QProcess::kill() is our backstop if terminate
-    // doesn't work — schedule it after a short grace period.
-    QTimer::singleShot(2000, process_, [this]() {
-        if (process_ && process_->state() != QProcess::NotRunning) {
+    // doesn't work — schedule it after a short grace period. The gen_ guard
+    // ensures a re-start within the grace window isn't killed by this timer.
+    QTimer::singleShot(2000, process_, [this, g]() {
+        if (gen_ == g && process_ && process_->state() != QProcess::NotRunning) {
             process_->kill();
         }
     });

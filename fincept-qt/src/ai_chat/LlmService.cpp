@@ -7,6 +7,7 @@
 #include "ai_chat/LlmService.h"
 
 #include "ai_chat/HearthService.h"
+#include "ai_chat/LlmUrl.h"
 #include "ai_chat/ModelCatalog.h"
 
 #include "core/logging/Logger.h"
@@ -397,9 +398,7 @@ QString LlmService::get_endpoint_url() const {
 
     // Custom base_url takes priority for other providers
     if (!base_url_.isEmpty()) {
-        QString base = base_url_;
-        if (base.endsWith('/'))
-            base.chop(1);
+        const QString base = normalize_llm_base(base_url_);
         if (p == "anthropic")
             return base + "/v1/messages";
         return base + "/v1/chat/completions";
@@ -1942,9 +1941,7 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
 
     // Custom base_url (except fincept)
     if (!base_url.isEmpty() && p != "fincept") {
-        QString base = base_url;
-        if (base.endsWith('/'))
-            base.chop(1);
+        const QString base = normalize_llm_base(base_url);
         if (p == "anthropic")
             return base + "/v1/models?limit=1000";
         return base + "/v1/models";
