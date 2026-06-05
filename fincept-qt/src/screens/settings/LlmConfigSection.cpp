@@ -36,7 +36,8 @@ static constexpr const char* TAG = "LlmConfigSection";
 // LlmService.cpp as dormant code; legacy rows that still reference
 // them appear in the saved-providers list view but cannot be added
 // as new providers.  "fincept" was retired in R17.
-const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"anthropic", "ollama"};
+// ollama first: it's the default local provider; anthropic second (requires a key).
+const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"ollama", "anthropic"};
 
 QString LlmConfigSection::default_base_url(const QString& provider) {
     const QString p = provider.toLower();
@@ -1244,7 +1245,15 @@ void LlmConfigSection::populate_profile_form(const LlmProfile& p) {
 
 void LlmConfigSection::clear_profile_form() {
     profile_name_edit_->clear();
-    profile_provider_combo_->setCurrentIndex(0);
+    // Default new profiles to the currently active provider (or the first in the list).
+    {
+        QString active;
+        auto r = LlmConfigRepository::instance().get_active_provider();
+        if (r.is_ok())
+            active = r.value().provider;
+        int idx = active.isEmpty() ? 0 : profile_provider_combo_->findText(active, Qt::MatchFixedString | Qt::MatchCaseSensitive);
+        profile_provider_combo_->setCurrentIndex(idx < 0 ? 0 : idx);
+    }
     on_profile_provider_changed(profile_provider_combo_->currentText());
     profile_api_key_edit_->clear();
     profile_base_url_edit_->clear();

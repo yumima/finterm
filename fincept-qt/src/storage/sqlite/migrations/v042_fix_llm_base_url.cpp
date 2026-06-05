@@ -37,20 +37,46 @@ static Result<void> sql_exec(QSqlDatabase& db, const char* stmt) {
 
 static Result<void> apply_v042(QSqlDatabase& db) {
     // 1. Strip trailing /v1 or /v1/ from ollama base_url values.
+    // SQLite's RTRIM(str, chars) treats the second arg as a SET of characters,
+    // not a literal string — RTRIM(url, '/v1') would strip all '/', 'v', '1'
+    // chars from the right, leaving a bare host. Use SUBSTR+LENGTH instead:
+    // strip a trailing '/v1/' first (4 chars), then '/v1' (3 chars).
     {
-        QSqlQuery fix(db);
-        fix.prepare(
+        // Step 1: trailing /v1/ → remove 4 chars
+        QSqlQuery fix1(db);
+        fix1.prepare(
             "UPDATE llm_configs "
-            "SET base_url = RTRIM(RTRIM(base_url, '/'), 'v1'), "
+            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 4), "
             "    updated_at = datetime('now') "
-            "WHERE provider = 'ollama' "
-            "  AND (base_url LIKE '%/v1' OR base_url LIKE '%/v1/')");
-        if (!fix.exec())
-            return Result<void>::err(fix.lastError().text().toStdString());
-        if (fix.numRowsAffected() > 0)
+            "WHERE provider = 'ollama' AND base_url LIKE '%/v1/'");
+        if (!fix1.exec())
+            return Result<void>::err(fix1.lastError().text().toStdString());
+
+        // Step 2: trailing /v1 (without slash) → remove 3 chars
+        QSqlQuery fix2(db);
+        fix2.prepare(
+            "UPDATE llm_configs "
+            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 3), "
+            "    updated_at = datetime('now') "
+            "WHERE provider = 'ollama' AND base_url LIKE '%/v1'");
+        if (!fix2.exec())
+            return Result<void>::err(fix2.lastError().text().toStdString());
+
+        // Step 3: any remaining trailing slash
+        QSqlQuery fix3(db);
+        fix3.prepare(
+            "UPDATE llm_configs "
+            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 1), "
+            "    updated_at = datetime('now') "
+            "WHERE provider = 'ollama' AND base_url LIKE '%/'");
+        if (!fix3.exec())
+            return Result<void>::err(fix3.lastError().text().toStdString());
+
+        const int affected = fix1.numRowsAffected() + fix2.numRowsAffected() + fix3.numRowsAffected();
+        if (affected > 0)
             LOG_INFO(kMig042Tag,
-                QString("stripped /v1 suffix from %1 ollama base_url row(s)")
-                    .arg(fix.numRowsAffected()));
+                QString("stripped /v1 suffix from ollama base_url (%1 step(s))")
+                    .arg(affected));
     }
 
     // 2. If no active provider exists but exactly one ollama row does, make it
