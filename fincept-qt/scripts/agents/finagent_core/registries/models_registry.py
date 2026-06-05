@@ -71,13 +71,16 @@ class ModelsRegistry:
             "default_model": "llama-3.3-70b-versatile",
         },
 
-        # Local Models
+        # Local Models. NOTE: "ollama" is routed through OpenAIChat against the
+        # hearth gateway (OpenAI-compatible, 127.0.0.1:11435) — NOT agno's native
+        # Ollama class — so we don't need the `ollama` pip package and so role
+        # aliases (primary_chat/fast_chat/...) resolve. See LOCAL_OPENAI_COMPAT below.
         "ollama": {
-            "class": "agno.models.ollama.Ollama",
-            "models": ["llama3.3", "llama3.2", "mistral", "mixtral", "codellama", "phi3", "gemma2", "qwen2.5"],
-            "api_key_env": None,  # No API key needed
-            "default_model": "llama3.3",
-            "base_url": "http://localhost:11434",
+            "class": "agno.models.openai.OpenAIChat",
+            "models": ["primary_chat", "fast_chat", "coding", "qwen2.5:14b-instruct-q4_K_M"],
+            "api_key_env": None,  # local engine ignores the key
+            "default_model": "primary_chat",
+            "base_url": "http://127.0.0.1:11435",
         },
         "lmstudio": {
             "class": "agno.models.lmstudio.LMStudio",
@@ -381,6 +384,41 @@ class ModelsRegistry:
                 or config.get("base_url")
             )
 
+            # Standard role map — agno's default maps "system"→"developer"
+            # which is only valid for OpenAI o1/o3. Local engines (hearth/qwen)
+            # and custom OpenAI-compatible endpoints expect the plain "system".
+            _STANDARD_ROLE_MAP = {
+                "system": "system", "user": "user", "assistant": "assistant",
+                "tool": "tool", "model": "assistant",
+            }
+
+            # Local OpenAI-compatible engines speak the OpenAI protocol — route
+            # them through OpenAIChat instead of agno's native per-engine classes,
+            # so we don't need extra pip packages (e.g. `ollama`) and so hearth
+            # role aliases resolve. base_url defaults to hearth (:11435); /v1 is
+            # ensured (OpenAI SDK appends /chat/completions itself).
+            LOCAL_OPENAI_COMPAT = {"ollama"}
+            if provider_lower in LOCAL_OPENAI_COMPAT:
+                from agno.models.openai import OpenAIChat as _OAI
+                base = (effective_base_url or "http://127.0.0.1:11435").rstrip("/")
+                if base.endswith("/v1"):
+                    base = base[:-3]
+                base = base + "/v1"
+                oai_kwargs = {
+                    "id": final_model_id,
+                    "base_url": base,
+                    "api_key": final_api_key or "sk-no-key",
+                    "role_map": _STANDARD_ROLE_MAP,
+                }
+                if "temperature" in kwargs:
+                    oai_kwargs["temperature"] = kwargs.pop("temperature")
+                if "max_tokens" in kwargs:
+                    oai_kwargs["max_tokens"] = kwargs.pop("max_tokens")
+                logger.info(
+                    f"Local engine '{provider}' → OpenAIChat(base_url={base}, id={final_model_id})"
+                )
+                return _OAI(**{k: v for k, v in oai_kwargs.items() if v is not None})
+
             # If a custom base_url is set for a provider that normally doesn't
             # accept one (e.g. anthropic with a MiniMax/OpenRouter-compatible
             # endpoint), redirect to OpenAIChat — the custom endpoint speaks
@@ -401,16 +439,7 @@ class ModelsRegistry:
                 # Ensure /v1 suffix (add if missing, don't double-add)
                 if not _cleaned_base_url.rstrip('/').endswith('/v1'):
                     _cleaned_base_url = _cleaned_base_url.rstrip('/') + '/v1'
-                # Use standard role map — Agno's default maps "system"→"developer"
-                # which is only valid for OpenAI o1/o3. Custom endpoints (MiniMax,
-                # OpenRouter, etc.) expect the standard "system" role.
-                _STANDARD_ROLE_MAP = {
-                    "system": "system",
-                    "user": "user",
-                    "assistant": "assistant",
-                    "tool": "tool",
-                    "model": "assistant",
-                }
+                # Reuse the standard role map defined above.
                 oai_kwargs = {"id": final_model_id, "base_url": _cleaned_base_url,
                               "role_map": _STANDARD_ROLE_MAP}
                 if final_api_key:

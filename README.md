@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`816abe83b`](https://github.com/yumima/finterm/commit/816abe83b) **fix:** Test Connection 'No models found' — parse OpenAI /v1/models shape for ollama
 - [`756ae1a4f`](https://github.com/yumima/finterm/commit/756ae1a4f) review: normalize LLM base URLs, fix supervisor on-launch + races
 - [`3c6e4aebb`](https://github.com/yumima/finterm/commit/3c6e4aebb) **fix:** LLM Config — trailing slash in base_url, profile defaults to ollama
 - [`67570d24e`](https://github.com/yumima/finterm/commit/67570d24e) **fix:** LLM Config test connection, fincept branding, supervisor bugs
