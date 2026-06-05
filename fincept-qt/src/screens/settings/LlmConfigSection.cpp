@@ -57,7 +57,7 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
     if (p == "kimi")
         return {}; // defaults to https://api.moonshot.ai
     if (p == "ollama")
-        return "http://127.0.0.1:11435/v1"; // hearth's default loopback; bare Ollama: :11434/v1
+        return "http://127.0.0.1:11435"; // hearth's default loopback (no /v1 — LlmService appends it)
     if (p == "xai")
         return {};
     // "fincept" is retired (R17). v041 migration rewrites the DB row to ollama.

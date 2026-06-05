@@ -72,9 +72,11 @@ static Result<void> apply_v041(QSqlDatabase& db) {
     // No ollama row yet: rewrite fincept → ollama-at-hearth so the user gets
     // a working local config immediately. base_url points at hearth's default
     // loopback port; model uses the primary_chat role alias.
+    // base_url is the root without /v1 — LlmService appends /v1/chat/completions
+    // and /v1/models itself, matching the convention used by Ollama (:11434).
     if (auto r = sql(db,
             "UPDATE llm_configs SET provider = 'ollama', "
-            "  base_url = 'http://127.0.0.1:11435/v1', "
+            "  base_url = 'http://127.0.0.1:11435', "
             "  model    = 'primary_chat', "
             "  updated_at = datetime('now') "
             "WHERE provider = 'fincept'");

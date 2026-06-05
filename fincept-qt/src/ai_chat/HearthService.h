@@ -49,7 +49,9 @@ class HearthService : public QObject {
     void detect();
     Status status() const;
 
-    static constexpr const char* kDefaultBase = "http://127.0.0.1:11435/v1";
+    // Root URL without /v1 — consumers that need /v1 append it themselves.
+    // LlmService appends /v1/chat/completions; EmbeddingsClient appends /v1/embeddings.
+    static constexpr const char* kDefaultBase = "http://127.0.0.1:11435";
     static constexpr int kKnownContractMajor = 0;
 
   signals:

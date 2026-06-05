@@ -59,18 +59,14 @@ QByteArray hs_sync_get(const QString& url, int* status_out) {
     return body;
 }
 
-// Probe the resolved base's sibling /admin/version. Pure worker-thread work.
-HearthService::Status hs_probe_status(const QString& base_v1) {
+// Probe the resolved base (root, no /v1) for /admin/version. Pure worker-thread work.
+HearthService::Status hs_probe_status(const QString& base_root) {
     HearthService::Status s;
     s.probed = true;
-    s.base_url = base_v1;
-
-    QString root = base_v1;
-    if (root.endsWith(QLatin1String("/v1")))
-        root.chop(3);
+    s.base_url = base_root;
 
     int st = 0;
-    const QByteArray body = hs_sync_get(root + "/admin/version", &st);
+    const QByteArray body = hs_sync_get(base_root + "/admin/version", &st);
     if (st == 200) {
         const QJsonObject o = QJsonDocument::fromJson(body).object();
         if (o.value("name").toString() == QLatin1String("hearth")) {
@@ -91,7 +87,7 @@ HearthService::Status hs_probe_status(const QString& base_v1) {
 
     // Reachable but not hearth? Treat a 200 from /v1/models as "engine present".
     int st2 = 0;
-    hs_sync_get(base_v1 + "/models", &st2);
+    hs_sync_get(base_root + "/v1/models", &st2);
     s.present = (st2 == 200);
     return s;
 }

@@ -54,7 +54,7 @@ void EmbeddingsClient::embed(
         return;
     }
 
-    QUrl url(base_url() + QStringLiteral("/embeddings"));
+    QUrl url(base_url() + QStringLiteral("/v1/embeddings"));
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     // hearth ignores auth on loopback; harmless for other OpenAI-compat servers.
