@@ -2042,12 +2042,21 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
                 models.append(name);
         }
     } else if (p == "ollama") {
-        // {"models": [{"name": "llama3:8b", ...}]}
-        QJsonArray arr = root["models"].toArray();
-        for (const auto& v : arr) {
-            QString name = v.toObject()["name"].toString();
-            if (!name.isEmpty())
-                models.append(name);
+        // We fetch /v1/models, which returns the OpenAI shape
+        // {"data":[{"id":"..."}]} (hearth and Ollama's own /v1 endpoint both
+        // serve this). Parse that first; fall back to Ollama's native
+        // /api/tags shape {"models":[{"name":"..."}]} for robustness.
+        for (const auto& v : root["data"].toArray()) {
+            const QString id = v.toObject()["id"].toString();
+            if (!id.isEmpty())
+                models.append(id);
+        }
+        if (models.isEmpty()) {
+            for (const auto& v : root["models"].toArray()) {
+                const QString name = v.toObject()["name"].toString();
+                if (!name.isEmpty())
+                    models.append(name);
+            }
         }
     } else if (p == "fincept") {
         // {"success":true,"data":{"models":["MiniMax-M2.7",...]}}
