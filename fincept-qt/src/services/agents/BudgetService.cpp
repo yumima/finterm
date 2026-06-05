@@ -12,7 +12,7 @@
 namespace fincept::services {
 
 namespace {
-constexpr const char* kTag = "BudgetService";
+constexpr const char* kBudgetTag = "BudgetService";
 
 /// Read `agent_configs.config_json.budget.max_usd_per_day` for an
 /// agent.  Returns 0.0 (no cap) on parse error / missing field —
@@ -97,7 +97,7 @@ Result<void> BudgetService::check_dispatch(const QString& agent_id) {
     if (spent_r.is_err()) {
         // Fail-open on a SQL read error — same posture as the
         // kill-switch.  A transient DB hiccup shouldn't block dispatch.
-        LOG_WARN(kTag, QString("budget check for %1 failed to read spend: %2 (allowing dispatch)")
+        LOG_WARN(kBudgetTag, QString("budget check for %1 failed to read spend: %2 (allowing dispatch)")
                           .arg(agent_id, QString::fromStdString(spent_r.error())));
         return Result<void>::ok();
     }

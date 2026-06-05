@@ -3,6 +3,7 @@
 #include "screens/settings/LlmConfigSection.h"
 
 #include "ai_chat/HearthService.h"
+#include "ai_chat/HearthSupervisor.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -416,6 +417,36 @@ QWidget* LlmConfigSection::build_form_panel() {
     connect(&HearthService::instance(), &HearthService::detected, this,
             &LlmConfigSection::refresh_engine_status);
     HearthService::instance().detect();
+
+    // "Manage local engine" opt-in — finterm starts/stops hearth automatically.
+    // Off by default: users running hearth themselves (or bare Ollama) are
+    // unaffected. Persisted in SettingsRepository under "hearth.manage".
+    manage_engine_check_ = new QCheckBox("Manage local engine (start hearth automatically)");
+    const QString check_style =
+        "QCheckBox{color:" + QString(ui::colors::TEXT_PRIMARY()) + ";spacing:8px;}"
+        "QCheckBox::indicator{width:16px;height:16px;border:1px solid " +
+        QString(ui::colors::BORDER_MED()) +
+        ";border-radius:3px;background:" + QString(ui::colors::BG_RAISED()) + ";}"
+        "QCheckBox::indicator:checked{background:" + QString(ui::colors::AMBER()) +
+        ";border-color:" + QString(ui::colors::AMBER()) + ";}";
+    manage_engine_check_->setStyleSheet(check_style);
+    manage_engine_check_->setToolTip(
+        "When checked, finterm starts `hearth start` on launch and keeps it running.\n"
+        "Disable if you manage the hearth engine yourself, or use bare Ollama.\n"
+        "Requires the `hearth` binary on PATH (or install: pip install hearth).");
+    {
+        auto r = SettingsRepository::instance().get("hearth.manage", "false");
+        manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");
+    }
+    HearthSupervisor::instance().set_enabled(manage_engine_check_->isChecked());
+    connect(manage_engine_check_, &QCheckBox::toggled, this, [this](bool on) {
+        SettingsRepository::instance().set("hearth.manage", on ? "true" : "false", "ai");
+        HearthSupervisor::instance().set_enabled(on);
+        refresh_engine_status();
+    });
+    connect(&HearthSupervisor::instance(), &HearthSupervisor::state_changed, this,
+            [this](HearthSupervisor::State) { refresh_engine_status(); });
+    form->addRow(new QLabel(""), manage_engine_check_);
 
     // Tools toggle
     tools_check_ = new QCheckBox("Enable MCP Tools (navigation, market data, portfolio, etc.)");
@@ -971,7 +1002,15 @@ void LlmConfigSection::refresh_engine_status() {
     } else if (s.present) {
         text = "engine reachable (not hearth) at " + s.base_url;
     } else {
-        text = "not detected — run `hearth start` (or set Base URL above)";
+        // Show supervisor state when not detected so the user knows whether
+        // finterm is trying to start it.
+        const auto sup = HearthSupervisor::instance().state();
+        if (sup == HearthSupervisor::State::Starting)
+            text = "starting hearth…";
+        else if (sup == HearthSupervisor::State::Crashed)
+            text = "hearth crashed — check logs";
+        else
+            text = "not detected — run `hearth start` (or enable Manage above)";
         color = ui::colors::AMBER();
     }
     engine_status_lbl_->setText(text);

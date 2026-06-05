@@ -65,6 +65,7 @@ class LlmConfigSection : public QWidget {
     QPushButton* save_btn_ = nullptr;
     QPushButton* test_btn_ = nullptr;
     QCheckBox* tools_check_ = nullptr;
+    QCheckBox* manage_engine_check_ = nullptr; // opt-in hearth supervision
     QLabel* status_lbl_ = nullptr;
     QLabel* engine_status_lbl_ = nullptr; // local-engine (hearth) discovery
 

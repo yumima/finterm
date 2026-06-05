@@ -16,7 +16,7 @@ namespace fincept::services {
 
 namespace {
 
-constexpr const char* kTag = "SkillProposalService";
+constexpr const char* kSkillTag = "SkillProposalService";
 
 /// Where the on-disk skills live.  In a dev build:
 ///   <build>/scripts/agents/finagent_core/skills/...
@@ -156,7 +156,7 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
 
     const QString prompt = build_prompt(skill_md, trace.query, trace.response, user_note);
 
-    LOG_INFO(kTag, QString("proposing fix for skill %1 (trace %2)")
+    LOG_INFO(kSkillTag, QString("proposing fix for skill %1 (trace %2)")
                        .arg(skill_name, trace.request_id.left(8)));
 
     auto resp = ai_chat::LlmService::instance().chat(
