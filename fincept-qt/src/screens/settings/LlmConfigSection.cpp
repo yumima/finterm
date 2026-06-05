@@ -57,11 +57,10 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
     if (p == "kimi")
         return {}; // defaults to https://api.moonshot.ai
     if (p == "ollama")
-        return "http://localhost:11434";
+        return "http://127.0.0.1:11435/v1"; // hearth's default loopback; bare Ollama: :11434/v1
     if (p == "xai")
         return {};
-    if (p == "fincept")
-        return {}; // endpoints are hardcoded in LlmService, no base_url needed
+    // "fincept" is retired (R17). v041 migration rewrites the DB row to ollama.
     return {};
 }
 
@@ -98,7 +97,10 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
                 "moonshot-v1-32k-vision-preview",
                 "moonshot-v1-128k-vision-preview"};
     if (p == "ollama")
-        return {"llama3.1:8b", "qwen2.5:7b", "mistral:7b"};
+        // Role aliases (hearth resolves these) first, then concrete model ids.
+        return {"primary_chat", "fast_chat", "coding", "embedding",
+                "qwen2.5:14b-instruct-q4_K_M", "qwen2.5:7b-instruct-q4_K_M",
+                "llama3.1:8b", "qwen2.5:7b", "mistral:7b"};
     if (p == "xai")
         return {"grok-4-latest", "grok-4", "grok-3", "grok-3-mini"};
     if (p == "fincept")
@@ -881,12 +883,9 @@ void LlmConfigSection::on_test_connection() {
     }
 
     if (provider == "fincept") {
-        // Fincept is a managed service — verify API key exists
-        auto stored = SettingsRepository::instance().get("fincept_api_key");
-        if (stored.is_ok() && !stored.value().isEmpty())
-            show_status("finterm connected — API key active", false);
-        else
-            show_status("Not connected — login to your finterm account first", true);
+        // Legacy retired provider (R17). v041 migration rewrites the DB row
+        // to ollama on next launch. Guide the user to save a new config.
+        show_status("fincept provider retired — save as ollama with Base URL http://127.0.0.1:11435/v1", true);
         return;
     }
 

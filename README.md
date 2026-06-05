@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`985af6fe`](https://github.com/yumima/finterm/commit/985af6fe) ai: opt-in local engine supervision (HearthSupervisor + manage toggle)
 - [`cb794fa8`](https://github.com/yumima/finterm/commit/cb794fa8) portfolio: make BUY/SELL order panel opaque + clearer
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
