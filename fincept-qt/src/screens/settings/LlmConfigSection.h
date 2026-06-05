@@ -39,6 +39,7 @@ class LlmConfigSection : public QWidget {
     void on_test_connection();
     void on_fetch_models();
     void on_models_fetched(const QString& provider, const QStringList& models, const QString& error);
+    void refresh_engine_status(); // updates the local-engine (hearth) status label
 
     // Profiles tab
     void on_profile_selected(int row);
@@ -65,6 +66,7 @@ class LlmConfigSection : public QWidget {
     QPushButton* test_btn_ = nullptr;
     QCheckBox* tools_check_ = nullptr;
     QLabel* status_lbl_ = nullptr;
+    QLabel* engine_status_lbl_ = nullptr; // local-engine (hearth) discovery
 
     // Global settings (lives at bottom of provider tab)
     QDoubleSpinBox* temp_spin_ = nullptr;

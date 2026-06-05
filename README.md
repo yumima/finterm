@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`834c7d51`](https://github.com/yumima/finterm/commit/834c7d51) ai: unify chat + embeddings on one local-engine base (HearthService)
 - [`f0759d35`](https://github.com/yumima/finterm/commit/f0759d35) ai: semantic memory search via local-engine embeddings
 - [`b6003133`](https://github.com/yumima/finterm/commit/b6003133) finterm.sh: gate nvidia render path on KMS modeset, not just nvidia-smi
 - [`2a722066`](https://github.com/yumima/finterm/commit/2a722066) pre-IPO: SIGNALS lens — cross-universe derived-signal feed

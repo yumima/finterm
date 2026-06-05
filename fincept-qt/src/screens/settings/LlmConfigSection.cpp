@@ -2,6 +2,7 @@
 
 #include "screens/settings/LlmConfigSection.h"
 
+#include "ai_chat/HearthService.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -399,6 +400,22 @@ QWidget* LlmConfigSection::build_form_panel() {
     base_url_edit_->setPlaceholderText("Optional — leave empty for default");
     field_style(base_url_edit_);
     form->addRow(b_lbl, base_url_edit_);
+
+    // Local engine (hearth) discovery — informational. resolve() always
+    // defaults chat + embeddings to hearth regardless; this just surfaces
+    // whether it's actually up + its contract version. The probe is async.
+    auto* eng_lbl = new QLabel("Local engine");
+    lbl_style(eng_lbl);
+    engine_status_lbl_ = new QLabel("checking…");
+    engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
+    engine_status_lbl_->setToolTip(
+        "Local AI engine (hearth) detected at the resolved base URL.\n"
+        "Chat + embeddings default to hearth on 127.0.0.1:11435 with no config;\n"
+        "set Base URL above (or $FINCEPT_ENGINE_BASE_URL) to override.");
+    form->addRow(eng_lbl, engine_status_lbl_);
+    connect(&HearthService::instance(), &HearthService::detected, this,
+            &LlmConfigSection::refresh_engine_status);
+    HearthService::instance().detect();
 
     // Tools toggle
     tools_check_ = new QCheckBox("Enable MCP Tools (navigation, market data, portfolio, etc.)");
@@ -873,6 +890,7 @@ void LlmConfigSection::on_test_connection() {
 }
 
 void LlmConfigSection::on_fetch_models() {
+    HearthService::instance().detect(); // also refresh the local-engine status
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
         show_status("Select a provider first", true);
@@ -937,6 +955,27 @@ void LlmConfigSection::show_status(const QString& msg, bool error) {
                                      : "color:" + QString(ui::colors::POSITIVE()) + ";");
     status_lbl_->show();
     QTimer::singleShot(4000, status_lbl_, &QLabel::hide);
+}
+
+void LlmConfigSection::refresh_engine_status() {
+    if (!engine_status_lbl_)
+        return;
+    const auto s = HearthService::instance().status();
+    QString text;
+    QString color = ui::colors::TEXT_SECONDARY();
+    if (!s.probed) {
+        text = "checking…";
+    } else if (s.present && s.is_hearth) {
+        text = QString("✓ hearth %1 (contract %2)").arg(s.version, s.contract);
+        color = ui::colors::POSITIVE();
+    } else if (s.present) {
+        text = "engine reachable (not hearth) at " + s.base_url;
+    } else {
+        text = "not detected — run `hearth start` (or set Base URL above)";
+        color = ui::colors::AMBER();
+    }
+    engine_status_lbl_->setText(text);
+    engine_status_lbl_->setStyleSheet("color:" + color + ";");
 }
 
 // ============================================================================

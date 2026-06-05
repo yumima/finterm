@@ -1,26 +1,30 @@
 #pragma once
 
+#include <QMutex>
+#include <QObject>
 #include <QString>
 
 namespace fincept {
 
-/// Resolves the local AI engine (hearth) base URL that chat + embeddings share.
+/// Resolves + (optionally) discovers the local AI engine (hearth) that chat +
+/// embeddings share.
 ///
 /// hearth runs out-of-process as a local OpenAI-compatible service (it is NOT
-/// linked like Qt). finterm depends on it like a local daemon: it routes local
-/// chat + embeddings to one base and degrades with a clear banner when the
-/// engine is down (no silent failover).
+/// linked like Qt). finterm depends on it like a local daemon: route local
+/// chat + embeddings to one base, and degrade with a clear banner when it's
+/// down (no silent failover).
 ///
-/// Phase 1 is a deterministic, I/O-free resolver — finterm uses hearth's
-/// loopback port by default (zero config), overridable via env or Settings:
+/// `resolve()` is the deterministic, **I/O-free** base resolver used on the hot
+/// path (never blocks a UI thread or a held lock):
 ///   1. env `FINCEPT_ENGINE_BASE_URL`  (explicit override — remote/custom)
 ///   2. hearth's default `http://127.0.0.1:11435/v1`
 ///
-/// It does NOT probe the network (so it never blocks a UI thread or a held
-/// lock). Active discovery — GET /admin/version for a status chip + a
-/// contract-version floor — is a follow-up; the engine already exposes
-/// `/admin/version` and a `Server: hearth/<v>` header for it.
-class HearthService {
+/// `detect()` is a separate, **async** discovery overlay used for UI status +
+/// a contract version-floor. It probes `/admin/version` on a worker thread and
+/// emits `detected()` on completion. It does NOT influence `resolve()`.
+class HearthService : public QObject {
+    Q_OBJECT
+
   public:
     static HearthService& instance();
 
@@ -28,17 +32,36 @@ class HearthService {
         QString base_url;  // ".../v1" base for chat + embeddings
         bool is_hearth;    // base is hearth's (use role aliases like primary_chat)
     };
-
-    /// Cached/deterministic resolution. Pure — no network, no locks needed.
+    /// Deterministic + I/O-free. Pure resolution; safe under any lock.
     Resolution resolve() const;
-
-    /// Convenience: just the base URL.
     QString engine_base_url() const { return resolve().base_url; }
 
+    struct Status {
+        bool probed = false;    // a detect() has completed at least once
+        bool present = false;   // the engine answered
+        bool is_hearth = false; // it identified as hearth
+        QString version;        // engine build (when hearth)
+        QString contract;       // consumer contract (when hearth)
+        QString base_url;       // the base that was probed
+    };
+    /// Kick off a non-blocking probe of the resolved base's /admin/version.
+    /// Emits detected() on the GUI thread when done. Coalesces concurrent calls.
+    void detect();
+    Status status() const;
+
     static constexpr const char* kDefaultBase = "http://127.0.0.1:11435/v1";
+    static constexpr int kKnownContractMajor = 0;
+
+  signals:
+    void detected();
 
   private:
-    HearthService() = default;
+    explicit HearthService(QObject* parent = nullptr) : QObject(parent) {}
+    void apply_status(const Status& s); // store + emit detected() (GUI thread)
+
+    mutable QMutex mutex_;
+    Status status_;
+    bool detecting_ = false;
 };
 
 } // namespace fincept
