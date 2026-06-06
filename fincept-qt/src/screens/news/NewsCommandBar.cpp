@@ -230,11 +230,12 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
         emit rtl_toggled();
     });
 
-    // Summarize button
-    summarize_btn_ = new QPushButton("AI", row);
+    // Summarize button — briefs the current feed's top headlines (not the open
+    // article; that's the detail panel's ANALYZE). Labelled "TL;DR" per request.
+    summarize_btn_ = new QPushButton("TL;DR", row);
     summarize_btn_->setObjectName("newsDetailAnalyzeBtn");
     summarize_btn_->setFixedHeight(20);
-    summarize_btn_->setToolTip("AI Brief — summarize headlines");
+    summarize_btn_->setToolTip("TL;DR — summarize the top headlines");
     hl->addWidget(summarize_btn_);
     connect(summarize_btn_, &QPushButton::clicked, this, &NewsCommandBar::summarize_clicked);
 
@@ -420,7 +421,7 @@ void NewsCommandBar::set_unseen_count(int count) {
 }
 
 void NewsCommandBar::set_summarizing(bool busy) {
-    summarize_btn_->setText(busy ? "..." : "AI");
+    summarize_btn_->setText(busy ? "TL;DR…" : "TL;DR");
     summarize_btn_->setEnabled(!busy);
 }
 
