@@ -189,7 +189,11 @@ void TtsService::speak(const QString& text) {
     }
     proc_->write(text.toUtf8());
     proc_->closeWriteChannel();
-    emit state_changed(true);
+    // NB: state_changed(true) is intentionally NOT emitted here. Synthesising a
+    // long article takes ~20s on CPU; signalling "speaking" now would flip the
+    // UI to "STOP" while still silent (looks broken). It's emitted from
+    // on_proc_finished() once QMediaPlayer reaches PlayingState — callers show a
+    // "preparing" state in between.
 }
 
 void TtsService::stop() {
@@ -242,7 +246,9 @@ void TtsService::on_proc_finished(int exit_code) {
     player_->setAudioOutput(audio_);
     connect(player_, &QMediaPlayer::playbackStateChanged, this,
             [this](QMediaPlayer::PlaybackState s) {
-                if (s == QMediaPlayer::StoppedState) {
+                if (s == QMediaPlayer::PlayingState) {
+                    emit state_changed(true);  // audio actually started (synthesis done)
+                } else if (s == QMediaPlayer::StoppedState) {
                     cleanup_temp_file();
                     // Drop the player + audio output too — leaving
                     // stale pointers around invites use-after-free

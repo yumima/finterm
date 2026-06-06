@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`76d6baefc`](https://github.com/yumima/finterm/commit/76d6baefc) Address review findings on the startup/TTS/news commits
 - [`bb43d7dc2`](https://github.com/yumima/finterm/commit/bb43d7dc2) Defer boot prefetch off the login path; back off the dead session-pulse
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

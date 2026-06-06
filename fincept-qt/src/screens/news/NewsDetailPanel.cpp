@@ -176,6 +176,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     tldr_label_ = new QLabel(tldr_section_);
     tldr_label_->setObjectName("newsTldrBody");
     tldr_label_->setWordWrap(true);
+    tldr_label_->setTextFormat(Qt::MarkdownText);  // the LLM brief is markdown — render it
     tldr_layout->addWidget(tldr_label_);
 
     layout->addWidget(tldr_section_);
@@ -360,14 +361,22 @@ QWidget* NewsDetailPanel::build_content_view() {
             text += "\n\n" + body;
         tts.speak(text);
         listening_ = true;
-        listen_btn_->setText("STOP");
+        // Synthesis runs for several seconds on a long article; show progress
+        // until TTS signals playback actually started (handler flips to STOP).
+        listen_btn_->setText("PREP…");
     });
     // Reset the button whenever TTS actually stops — playback finished, was
     // stopped, or failed to start. TtsService is shared, so only react to the
     // "stopped" edge while we believe we're listening.
     connect(&services::TtsService::instance(), &services::TtsService::state_changed, this,
             [this](bool speaking) {
-                if (!speaking && listening_) {
+                if (!listening_)
+                    return;
+                if (speaking) {
+                    // Synthesis done, audio now playing — offer to stop it.
+                    if (listen_btn_)
+                        listen_btn_->setText("STOP");
+                } else {
                     listening_ = false;
                     if (listen_btn_)
                         listen_btn_->setText("LISTEN");
@@ -537,6 +546,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     ai_summary_ = new QLabel(analysis_section_);
     ai_summary_->setObjectName("newsDetailAiSummary");
     ai_summary_->setWordWrap(true);
+    ai_summary_->setTextFormat(Qt::MarkdownText);  // LLM analysis is markdown — render it
     analysis_layout->addWidget(ai_summary_);
 
     auto* ai_row = new QWidget(analysis_section_);
