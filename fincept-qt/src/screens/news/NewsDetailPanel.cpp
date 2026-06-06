@@ -359,11 +359,15 @@ QWidget* NewsDetailPanel::build_content_view() {
         const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
         if (!body.isEmpty())
             text += "\n\n" + body;
-        tts.speak(text);
-        listening_ = true;
-        // Synthesis runs for several seconds on a long article; show progress
-        // until TTS signals playback actually started (handler flips to STOP).
-        listen_btn_->setText("PREP…");
+        // Only enter the PREP… state if synthesis actually launched. speak()
+        // returns false (having already emitted error()) on a synchronous
+        // failure; setting listening_ first would strand the button on PREP….
+        if (tts.speak(text)) {
+            listening_ = true;
+            // Synthesis runs for several seconds on a long article; show progress
+            // until TTS signals playback actually started (handler flips to STOP).
+            listen_btn_->setText("PREP…");
+        }
     });
     // Reset the button whenever TTS actually stops — playback finished, was
     // stopped, or failed to start. TtsService is shared, so only react to the

@@ -46,7 +46,11 @@ class TtsService : public QObject {
     /// Synthesise + play.  Returns immediately; the actual subprocess
     /// + playback happen async.  Calling again before the previous
     /// utterance finishes cancels it.
-    void speak(const QString& text);
+    /// @return true if synthesis was launched (the caller may show a
+    ///         "preparing" state); false if it failed synchronously
+    ///         (unavailable, no voice, or the process didn't start) —
+    ///         in which case error() has already been emitted.
+    bool speak(const QString& text);
 
     /// Stop any in-flight playback.  Idempotent.
     void stop();
@@ -66,6 +70,11 @@ class TtsService : public QObject {
 
     void on_proc_finished(int exit_code);
     void cleanup_temp_file();
+    /// Tear down the QMediaPlayer/QAudioOutput, remove the temp WAV, and
+    /// emit state_changed(false). Idempotent — safe to call from both the
+    /// StoppedState and errorOccurred handlers (whichever fires first does
+    /// the work; the second is a no-op).
+    void teardown_playback();
 
     /// The actual (filesystem-heavy) availability probe. is_available() caches
     /// its result briefly because it's called once per chat-message bubble.

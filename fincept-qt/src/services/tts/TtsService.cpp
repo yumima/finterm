@@ -126,9 +126,9 @@ bool TtsService::compute_available() const {
     return true;
 }
 
-void TtsService::speak(const QString& text) {
+bool TtsService::speak(const QString& text) {
     if (text.trimmed().isEmpty())
-        return;
+        return false;
 
     // Cancel any in-flight utterance + cleanup before starting new
     // one.  The user clicking 🔊 twice should mean "just say the new
@@ -137,7 +137,7 @@ void TtsService::speak(const QString& text) {
 
     if (!is_available()) {
         emit error(QStringLiteral("TTS not available — configure Piper under Settings → Voice"));
-        return;
+        return false;
     }
 
     // Resolve the voice once and reuse it for the env var + the log line. Guards
@@ -146,7 +146,7 @@ void TtsService::speak(const QString& text) {
     const QString model = resolve_model_path();
     if (model.isEmpty()) {
         emit error(QStringLiteral("TTS voice not found — run `hearth voice` to provision one"));
-        return;
+        return false;
     }
 
     const QString script = resolve_script_path();
@@ -185,7 +185,7 @@ void TtsService::speak(const QString& text) {
         emit error(QStringLiteral("Failed to start piper_tts.py: %1").arg(proc_->errorString()));
         proc_->deleteLater();
         proc_ = nullptr;
-        return;
+        return false;
     }
     proc_->write(text.toUtf8());
     proc_->closeWriteChannel();
@@ -193,7 +193,10 @@ void TtsService::speak(const QString& text) {
     // long article takes ~20s on CPU; signalling "speaking" now would flip the
     // UI to "STOP" while still silent (looks broken). It's emitted from
     // on_proc_finished() once QMediaPlayer reaches PlayingState — callers show a
-    // "preparing" state in between.
+    // "preparing" state in between. We return true so the caller knows synthesis
+    // launched (and can show that "preparing" state) without racing the internal
+    // stop() above, which already fired while the caller's flag was still clear.
+    return true;
 }
 
 void TtsService::stop() {
@@ -208,6 +211,11 @@ void TtsService::stop() {
         proc_ = nullptr;
     }
     if (player_) {
+        // Disconnect first (like proc_ above): on a synchronous multimedia
+        // backend, player_->stop() can re-enter the playbackStateChanged
+        // handler → teardown_playback() nulls player_ before the deleteLater()
+        // here runs — a use-after-free + a duplicate state_changed(false).
+        disconnect(player_, nullptr, this, nullptr);
         player_->stop();
         player_->deleteLater();
         player_ = nullptr;
@@ -246,26 +254,43 @@ void TtsService::on_proc_finished(int exit_code) {
     player_->setAudioOutput(audio_);
     connect(player_, &QMediaPlayer::playbackStateChanged, this,
             [this](QMediaPlayer::PlaybackState s) {
-                if (s == QMediaPlayer::PlayingState) {
+                if (s == QMediaPlayer::PlayingState)
                     emit state_changed(true);  // audio actually started (synthesis done)
-                } else if (s == QMediaPlayer::StoppedState) {
-                    cleanup_temp_file();
-                    // Drop the player + audio output too — leaving
-                    // stale pointers around invites use-after-free
-                    // on the next speak() call's stop() codepath.
-                    if (player_) {
-                        player_->deleteLater();
-                        player_ = nullptr;
-                    }
-                    if (audio_) {
-                        audio_->deleteLater();
-                        audio_ = nullptr;
-                    }
-                    emit state_changed(false);
-                }
+                else if (s == QMediaPlayer::StoppedState)
+                    teardown_playback();
+            });
+    // A decode/output failure (corrupt WAV, no audio device, busy sink) makes
+    // QMediaPlayer emit errorOccurred WITHOUT a PlayingState→StoppedState pair,
+    // so without this the UI would hang on "preparing" forever. Surface it and
+    // reset state.
+    connect(player_, &QMediaPlayer::errorOccurred, this,
+            [this](QMediaPlayer::Error err, const QString& msg) {
+                if (err == QMediaPlayer::NoError)
+                    return;
+                emit error(QStringLiteral("Audio playback failed: %1").arg(msg));
+                teardown_playback();
             });
     player_->setSource(QUrl::fromLocalFile(pending_wav_path_));
     player_->play();
+}
+
+void TtsService::teardown_playback() {
+    // Idempotent: the StoppedState and errorOccurred handlers can both fire;
+    // whichever runs first does the teardown + signal, the second is a no-op.
+    if (!player_ && !audio_ && pending_wav_path_.isEmpty())
+        return;
+    cleanup_temp_file();
+    // Drop the player + audio output too — leaving stale pointers around
+    // invites use-after-free on the next speak() call's stop() codepath.
+    if (player_) {
+        player_->deleteLater();
+        player_ = nullptr;
+    }
+    if (audio_) {
+        audio_->deleteLater();
+        audio_ = nullptr;
+    }
+    emit state_changed(false);
 }
 
 void TtsService::cleanup_temp_file() {
