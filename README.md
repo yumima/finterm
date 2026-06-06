@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`930d53ef6`](https://github.com/yumima/finterm/commit/930d53ef6) ai-chat: context-aware personas + ambient app context
 - [`13f603ea5`](https://github.com/yumima/finterm/commit/13f603ea5) news: on-device 'Analyze' via local LLM, replacing the dead cloud call
 - [`f16f904be`](https://github.com/yumima/finterm/commit/f16f904be) portfolio: drag-resizable AI insights dock (left-edge grip)
 - [`d4d622def`](https://github.com/yumima/finterm/commit/d4d622def) agents: route ollama via hearth in legacy AgentFactory too (no native Ollama import)

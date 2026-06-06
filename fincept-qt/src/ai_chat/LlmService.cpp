@@ -542,7 +542,10 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     QJsonArray messages;
     if (!system_prompt_.isEmpty())
         messages.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
-    const QString sys_suffix = dynamic_system_suffix();
+    // Persona + ambient context steer the AGENTIC chat. A tool-less one-shot
+    // call (e.g. news analysis via chat(use_tools=false)) must NOT receive it,
+    // or it derails structured-output prompts — so gate on with_tools.
+    const QString sys_suffix = with_tools ? dynamic_system_suffix() : QString();
     if (!sys_suffix.isEmpty())
         messages.append(QJsonObject{{"role", "system"}, {"content", sys_suffix}});
     for (const auto& m : history)
@@ -610,7 +613,10 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     req["max_tokens"] = resolved_max_tokens();
     // Temperature intentionally omitted — Anthropic defaults to 1.0.
     QString sys = system_prompt_;
-    const QString sys_suffix = dynamic_system_suffix();
+    // Only the agentic chat (tools on) gets persona + ambient context — not a
+    // tool-less one-shot call. (Anthropic has no with_tools param; tools_enabled_
+    // carries it.)
+    const QString sys_suffix = tools_enabled_ ? dynamic_system_suffix() : QString();
     if (!sys_suffix.isEmpty())
         sys = sys.isEmpty() ? sys_suffix : (sys + "\n\n" + sys_suffix);
     if (!sys.isEmpty())
@@ -981,7 +987,8 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
 // Non-streaming request
 // ============================================================================
 
-LlmResponse LlmService::do_request(const QString& user_message, const std::vector<ConversationMessage>& history) {
+LlmResponse LlmService::do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
+                                  bool use_tools) {
     LlmResponse resp;
 
     QString url = get_endpoint_url();
@@ -1009,7 +1016,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         LOG_WARN(TAG, resp.error);
         return resp;
     } else {
-        req_body = build_openai_request(user_message, history, false, true);
+        req_body = build_openai_request(user_message, history, false, use_tools);
     }
 
     LOG_DEBUG(TAG, QString("POST %1 provider=%2 model=%3").arg(url, provider_, model_));
@@ -2264,20 +2271,19 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
     //     chats routinely (multi-pane workspace, background agents
     //     polling), revisit and do the refactor.  Until then, the
     //     lock-held-across-network-IO cost is invisible.
-    QMutexLocker lock(&mutex_);
-    ensure_config();
-
-    if (provider_.isEmpty())
-        return LlmResponse{.content = {}, .error = "No LLM provider configured"};
-
-    // Per-request tools override; restored before return.
-    const bool saved_tools = tools_enabled_;
-    if (!use_tools)
-        tools_enabled_ = false;
-
-    auto resp = do_request(user_message, history);
-    tools_enabled_ = saved_tools;
-    return resp;
+    {
+        QMutexLocker lock(&mutex_);
+        ensure_config();
+        if (provider_.isEmpty())
+            return LlmResponse{.content = {}, .error = "No LLM provider configured"};
+    }
+    // Release mutex_ before the blocking round-trip so a long call (e.g. a slow
+    // local news analysis on a QtConcurrent thread) can't freeze the UI thread,
+    // which takes mutex_ in active_provider()/chat_streaming's snapshot.
+    // use_tools is threaded through do_request (per-request, no global
+    // tools_enabled_ mutation), so concurrent calls don't race on tool state.
+    // do_request reads config members unlocked — same as do_streaming_request.
+    return do_request(user_message, history, use_tools);
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,

@@ -185,7 +185,8 @@ class LlmService : public QObject {
 
     // Synchronous HTTP helpers (use QNetworkAccessManager + QEventLoop)
     // Must be called from a background thread.
-    LlmResponse do_request(const QString& user_message, const std::vector<ConversationMessage>& history);
+    LlmResponse do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
+                           bool use_tools = true);
     LlmResponse do_streaming_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                      StreamCallback on_chunk);
 
