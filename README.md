@@ -2,27 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-05)
+## Today's commits (2026-06-06)
 
 Latest first.
 
-- [`272b08f60`](https://github.com/yumima/finterm/commit/272b08f60) news: render the AI Brief in the detail panel, not the 60px command bar
-- [`6b1f5bd14`](https://github.com/yumima/finterm/commit/6b1f5bd14) news: portfolio-impact in the Daily Brief + Listen (local TTS)
-- [`82651e6f7`](https://github.com/yumima/finterm/commit/82651e6f7) news: AI 'Brief' button works locally + analysis shown above the body
-- [`5f4d223f7`](https://github.com/yumima/finterm/commit/5f4d223f7) ai-chat: keep persona/ambient context out of one-shot calls; free the mutex
-- [`930d53ef6`](https://github.com/yumima/finterm/commit/930d53ef6) ai-chat: context-aware personas + ambient app context
-- [`13f603ea5`](https://github.com/yumima/finterm/commit/13f603ea5) news: on-device 'Analyze' via local LLM, replacing the dead cloud call
-- [`f16f904be`](https://github.com/yumima/finterm/commit/f16f904be) portfolio: drag-resizable AI insights dock (left-edge grip)
-- [`d4d622def`](https://github.com/yumima/finterm/commit/d4d622def) agents: route ollama via hearth in legacy AgentFactory too (no native Ollama import)
-- [`77cb1e174`](https://github.com/yumima/finterm/commit/77cb1e174) agents: route 'ollama' provider through hearth (OpenAI-compat), not native Ollama
-- [`816abe83b`](https://github.com/yumima/finterm/commit/816abe83b) **fix:** Test Connection 'No models found' — parse OpenAI /v1/models shape for ollama
-- [`756ae1a4f`](https://github.com/yumima/finterm/commit/756ae1a4f) review: normalize LLM base URLs, fix supervisor on-launch + races
-- [`3c6e4aebb`](https://github.com/yumima/finterm/commit/3c6e4aebb) **fix:** LLM Config — trailing slash in base_url, profile defaults to ollama
-- [`67570d24e`](https://github.com/yumima/finterm/commit/67570d24e) **fix:** LLM Config test connection, fincept branding, supervisor bugs
-- [`12cc737b1`](https://github.com/yumima/finterm/commit/12cc737b1) **fix:** /v1/v1 double-path in LLM Config test connection + embeddings
-- [`94bc443bb`](https://github.com/yumima/finterm/commit/94bc443bb) settings: retire fincept provider, default ollama to hearth
-- [`985af6fef`](https://github.com/yumima/finterm/commit/985af6fef) ai: opt-in local engine supervision (HearthSupervisor + manage toggle)
-- [`cb794fa85`](https://github.com/yumima/finterm/commit/cb794fa85) portfolio: make BUY/SELL order panel opaque + clearer
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

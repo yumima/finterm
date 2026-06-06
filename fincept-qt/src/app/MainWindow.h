@@ -90,6 +90,7 @@ class MainWindow : public QMainWindow {
                                     ///< Prevents subsequent auth_state_changed events (profile
                                     ///< refresh, subscription fetch, focus refresh) from
                                     ///< re-locking the terminal. Reset on lock / logout.
+    bool boot_prefetched_ = false; ///< guard: the boot cache-warm runs once, after unlock.
     AiChatBubble* chat_bubble_ = nullptr;
     QTimer* user_refresh_timer_ = nullptr;
 
@@ -113,6 +114,10 @@ class MainWindow : public QMainWindow {
     void setup_app_screens();
     void setup_docking_mode();
     void setup_dock_screens();
+    /// Deferred FUTURES/PORTFOLIO cache warm. Self-defers while the terminal is
+    /// locked so the ~20s yfinance hydration doesn't starve the PIN entry; runs
+    /// once when unlocked.
+    void try_boot_prefetch();
     void setup_navigation();
     void on_auth_state_changed();
     void toggle_chat_mode();

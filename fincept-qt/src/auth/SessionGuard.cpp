@@ -23,6 +23,7 @@ SessionGuard::SessionGuard(QObject* parent) : QObject(parent) {
 
 void SessionGuard::start() {
     if (!timer_.isActive()) {
+        net_failures_ = 0;  // fresh back-off budget for this monitoring session
         check_pulse();
         timer_.start();
     }
@@ -65,11 +66,21 @@ void SessionGuard::check_pulse() {
             return;
         }
 
-        // Network/server error → don't log out, just skip this pulse
+        // Network/server error → don't log out. A connection-level failure
+        // (status 0 = unreachable) means there's no session backend to talk to
+        // — e.g. the localhost build with no :8765 server. Back off after a
+        // couple of tries so we stop hammering it every interval; start()
+        // re-arms the pulse on the next auth_state_changed.
         if (!r.success) {
-            LOG_DEBUG("SessionGuard", "Pulse network error — skipping");
+            if (r.status_code == 0 && ++net_failures_ >= 2) {
+                LOG_INFO("SessionGuard", "Session backend unreachable — backing off (pulse stopped)");
+                stop();
+            } else {
+                LOG_DEBUG("SessionGuard", "Pulse network error — skipping");
+            }
             return;
         }
+        net_failures_ = 0;
 
         // Explicit valid=false in response body — same recovery path
         auto data = r.data;

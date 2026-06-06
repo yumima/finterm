@@ -23,6 +23,7 @@ class SessionGuard : public QObject {
   private:
     QTimer timer_;
     bool is_checking_ = false;
+    int net_failures_ = 0;  ///< consecutive connection failures; back off when the backend is unreachable
 
     static constexpr int PULSE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 };

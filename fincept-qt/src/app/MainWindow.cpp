@@ -328,34 +328,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     dock_router_ = new DockScreenRouter(dock_manager_, this);
     setup_dock_screens();
 
-    // Boot prefetch — warm caches before the user clicks anything. The
-    // FUTURES screen and PortfolioFuturesView read the futures cache
-    // synchronously, so by the time those screens open, data is already
-    // there. Cost: one yfinance batch (~3–5s) overlapping window setup.
-    {
-        // Boot prefetch: kick a one-shot fetch so the cache is warm by the
-        // time the user opens FUTURES or PORTFOLIO. We deliberately do NOT
-        // call start_auto_refresh — the cache's refresh timer is now
-        // ref-counted via FuturesQuoteCache::retain()/release() in each
-        // consumer's showEvent/hideEvent, which keeps it idle while
-        // nothing is visible.
-        fincept::screens::futures::FuturesQuoteCache::instance().refresh();
-
-        // Portfolio prefetch — load the list, then warm the summary cache
-        // for every portfolio. The persistent yfinance daemon handles the
-        // batch, so cost is one network roundtrip per portfolio (no import
-        // overhead). Switching between portfolios in the UI then hits the
-        // in-memory summary cache and renders synchronously.
-        auto& portfolio_svc = services::PortfolioService::instance();
-        QObject::connect(&portfolio_svc, &services::PortfolioService::portfolios_loaded, this,
-            [&portfolio_svc](QVector<portfolio::Portfolio> portfolios) {
-                static bool already_prefetched = false;
-                if (already_prefetched || portfolios.isEmpty()) return;
-                already_prefetched = true;
-                for (const auto& p : portfolios) portfolio_svc.load_summary(p.id);
-            });
-        portfolio_svc.load_portfolios();
-    }
+    // Boot prefetch — DEFERRED. Warming the FUTURES/PORTFOLIO caches kicks a
+    // yfinance hydration that took ~20s and starved the lock-screen PIN entry
+    // when it ran during construction. Kick it after the event loop starts, and
+    // only once the terminal is unlocked (try_boot_prefetch self-defers while
+    // locked) so login stays snappy; the caches still warm in the background
+    // before the user navigates to those screens.
+    QTimer::singleShot(0, this, &MainWindow::try_boot_prefetch);
 
     // Tab bar navigation: open the selected screen exclusively — closes all other
     // panels and fills the full area. Each tab is a fresh independent screen,
@@ -1439,6 +1418,32 @@ void MainWindow::show_info_trademarks() {
 void MainWindow::show_info_help() {
     info_stack_->setCurrentIndex(4);
     enter_auth_stack(4);
+}
+
+void MainWindow::try_boot_prefetch() {
+    if (boot_prefetched_)
+        return;
+    if (locked_) {  // wait until the user unlocks — don't compete with PIN entry
+        QTimer::singleShot(1500, this, &MainWindow::try_boot_prefetch);
+        return;
+    }
+    boot_prefetched_ = true;
+
+    // Warm the FUTURES cache (FUTURES / PortfolioFuturesView read it synchronously).
+    fincept::screens::futures::FuturesQuoteCache::instance().refresh();
+
+    // Warm each portfolio's summary cache so portfolio switches render instantly.
+    auto& portfolio_svc = services::PortfolioService::instance();
+    connect(&portfolio_svc, &services::PortfolioService::portfolios_loaded, this,
+            [&portfolio_svc](QVector<portfolio::Portfolio> portfolios) {
+                static bool already_prefetched = false;
+                if (already_prefetched || portfolios.isEmpty())
+                    return;
+                already_prefetched = true;
+                for (const auto& p : portfolios)
+                    portfolio_svc.load_summary(p.id);
+            });
+    portfolio_svc.load_portfolios();
 }
 
 void MainWindow::show_lock_screen() {
