@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`272b08f60`](https://github.com/yumima/finterm/commit/272b08f60) news: render the AI Brief in the detail panel, not the 60px command bar
 - [`6b1f5bd14`](https://github.com/yumima/finterm/commit/6b1f5bd14) news: portfolio-impact in the Daily Brief + Listen (local TTS)
 - [`82651e6f7`](https://github.com/yumima/finterm/commit/82651e6f7) news: AI 'Brief' button works locally + analysis shown above the body
 - [`5f4d223f7`](https://github.com/yumima/finterm/commit/5f4d223f7) ai-chat: keep persona/ambient context out of one-shot calls; free the mutex
