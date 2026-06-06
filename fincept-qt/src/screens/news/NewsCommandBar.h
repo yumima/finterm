@@ -26,8 +26,6 @@ class NewsCommandBar : public QWidget {
     void set_alert_count(int count);
     void set_unseen_count(int count);
 
-    void show_summary(const QString& summary);
-    void hide_summary();
     void set_summarizing(bool busy);
 
     // PTF pill — last filter pill in the command row. Always clickable;
@@ -97,7 +95,6 @@ class NewsCommandBar : public QWidget {
     QPushButton* refresh_btn_ = nullptr;
     QPushButton* summarize_btn_ = nullptr;
     QPushButton* drawer_btn_ = nullptr;
-    QLabel* summary_label_ = nullptr;
     QLabel* count_label_ = nullptr;
     QPushButton* alert_label_ = nullptr;
     QPushButton* unseen_label_ = nullptr;

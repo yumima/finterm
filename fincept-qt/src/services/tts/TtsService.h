@@ -8,8 +8,12 @@
 // not what I clicked five seconds ago".
 //
 // Configuration via SettingsRepository:
-//   `tts.provider`   = "piper" | "none"  (default "none" — TTS disabled)
-//   `tts.model_path` = absolute path to a Piper .onnx voice
+//   `tts.provider`   = "piper" | "none" | unset
+//                      "none" disables; unset or "piper" auto-detects a voice
+//                      provisioned by `hearth voice` / `hearth setup`.
+//   `tts.model_path` = absolute path to a Piper .onnx voice (optional;
+//                      auto-discovered under ~/.local/share/finterm/piper or
+//                      ~/.hearth/voices when unset)
 //   `tts.length`     = float string, default "1.0"
 //   `tts.noise`      = float string, default "0.667"
 //
@@ -17,6 +21,7 @@
 // bundle them — the Settings → Voice surface tells the user where
 // to download and points at the FINCEPT_TTS_MODEL slot.
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
@@ -61,6 +66,13 @@ class TtsService : public QObject {
 
     void on_proc_finished(int exit_code);
     void cleanup_temp_file();
+
+    /// The actual (filesystem-heavy) availability probe. is_available() caches
+    /// its result briefly because it's called once per chat-message bubble.
+    bool compute_available() const;
+    mutable bool avail_cache_ = false;     ///< last compute_available() result
+    mutable QElapsedTimer avail_cache_age_; ///< invalid until first probe; TTL'd below
+    static constexpr int kAvailCacheTtlMs = 2000;
 };
 
 } // namespace fincept::services

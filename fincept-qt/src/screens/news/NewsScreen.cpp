@@ -370,8 +370,15 @@ void NewsScreen::connect_signals() {
 
     // Summarize button
     connect(command_bar_, &NewsCommandBar::summarize_clicked, this, [this]() {
+        // Share the in-flight flag with the TL;DR button: both render into the
+        // same detail-panel TL;DR surface, so one must finish before the other
+        // starts — otherwise a double-click fans out duplicate LLM requests or
+        // two briefs clobber each other in the shared label.
+        if (tldr_in_flight_)
+            return;
         if (filtered_articles_.isEmpty())
             return;
+        tldr_in_flight_ = true;
         command_bar_->set_summarizing(true);
         // Render the brief in the detail panel's TL;DR section (a proper, full-size
         // surface that opens the panel) instead of cramming it into the 60px
@@ -381,9 +388,13 @@ void NewsScreen::connect_signals() {
         services::NewsService::instance().summarize_headlines(filtered_articles_, 8, [self](bool ok, QString summary) {
             if (!self)
                 return;
+            self->tldr_in_flight_ = false;
             self->command_bar_->set_summarizing(false);
+            // Treat ok-but-empty as a failure so the panel doesn't stay stuck on
+            // "Generating brief…" (show_tldr_summary hides the section on empty).
+            const bool have_text = ok && !summary.trimmed().isEmpty();
             self->detail_panel_->show_tldr_summary(
-                ok ? summary : QStringLiteral("AI brief is unavailable right now."));
+                have_text ? summary : QStringLiteral("AI brief is unavailable right now."));
         });
     });
     connect(detail_panel_, &NewsDetailPanel::related_article_clicked, this, &NewsScreen::on_related_clicked);

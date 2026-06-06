@@ -17,12 +17,6 @@ NewsCommandBar::NewsCommandBar(QWidget* parent) : QWidget(parent) {
 
     build_command_row(root);
     build_intel_row(root);
-
-    // Summary display label (hidden, shown below command bar)
-    summary_label_ = new QLabel(this);
-    summary_label_->setObjectName("newsDetailAiSummary");
-    summary_label_->setWordWrap(true);
-    summary_label_->hide();
 }
 
 void NewsCommandBar::build_command_row(QVBoxLayout* root) {
@@ -423,17 +417,6 @@ void NewsCommandBar::set_unseen_count(int count) {
     } else {
         unseen_label_->hide();
     }
-}
-
-void NewsCommandBar::show_summary(const QString& summary) {
-    summary_label_->setText(summary);
-    summary_label_->show();
-    summarize_btn_->setText("AI");
-    summarize_btn_->setEnabled(true);
-}
-
-void NewsCommandBar::hide_summary() {
-    summary_label_->hide();
 }
 
 void NewsCommandBar::set_summarizing(bool busy) {

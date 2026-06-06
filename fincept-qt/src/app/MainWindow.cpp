@@ -330,10 +330,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // Boot prefetch — DEFERRED. Warming the FUTURES/PORTFOLIO caches kicks a
     // yfinance hydration that took ~20s and starved the lock-screen PIN entry
-    // when it ran during construction. Kick it after the event loop starts, and
-    // only once the terminal is unlocked (try_boot_prefetch self-defers while
-    // locked) so login stays snappy; the caches still warm in the background
-    // before the user navigates to those screens.
+    // when it ran during construction. Kick it after the event loop starts;
+    // try_boot_prefetch() no-ops while locked and is re-invoked from
+    // on_terminal_unlocked(), so on the PIN path it warms only after unlock,
+    // and on the no-PIN path it runs straight through here. Either way login
+    // stays snappy and the caches warm before the user reaches those screens.
     QTimer::singleShot(0, this, &MainWindow::try_boot_prefetch);
 
     // Tab bar navigation: open the selected screen exclusively — closes all other
@@ -1423,10 +1424,12 @@ void MainWindow::show_info_help() {
 void MainWindow::try_boot_prefetch() {
     if (boot_prefetched_)
         return;
-    if (locked_) {  // wait until the user unlocks — don't compete with PIN entry
-        QTimer::singleShot(1500, this, &MainWindow::try_boot_prefetch);
+    // Don't compete with PIN entry. If we're still at the lock screen, do
+    // nothing — on_terminal_unlocked() re-invokes us the moment the user is in
+    // (event-driven, no polling). The ctor's singleShot(0) covers the no-PIN
+    // path where this runs straight through.
+    if (locked_)
         return;
-    }
     boot_prefetched_ = true;
 
     // Warm the FUTURES cache (FUTURES / PortfolioFuturesView read it synchronously).
@@ -1555,6 +1558,10 @@ void MainWindow::on_terminal_unlocked() {
         hide_lock_overlay();
         WorkspaceManager::instance().load_last_workspace();
     }
+
+    // Now that the user is in, kick the deferred cache warm (no-op if it already
+    // ran on the no-PIN path). Async — returns immediately, won't block the UI.
+    try_boot_prefetch();
 
     emit auth.terminal_unlocked();
 }

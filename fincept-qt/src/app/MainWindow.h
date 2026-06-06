@@ -114,9 +114,10 @@ class MainWindow : public QMainWindow {
     void setup_app_screens();
     void setup_docking_mode();
     void setup_dock_screens();
-    /// Deferred FUTURES/PORTFOLIO cache warm. Self-defers while the terminal is
-    /// locked so the ~20s yfinance hydration doesn't starve the PIN entry; runs
-    /// once when unlocked.
+    /// Deferred FUTURES/PORTFOLIO cache warm. No-ops while the terminal is
+    /// locked so the ~20s yfinance hydration doesn't starve PIN entry;
+    /// on_terminal_unlocked() re-invokes it once the user is in. Runs once
+    /// (guarded by boot_prefetched_).
     void try_boot_prefetch();
     void setup_navigation();
     void on_auth_state_changed();

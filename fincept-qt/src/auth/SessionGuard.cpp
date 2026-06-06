@@ -23,7 +23,8 @@ SessionGuard::SessionGuard(QObject* parent) : QObject(parent) {
 
 void SessionGuard::start() {
     if (!timer_.isActive()) {
-        net_failures_ = 0;  // fresh back-off budget for this monitoring session
+        net_failures_ = 0;                      // fresh back-off budget for this session
+        timer_.setInterval(PULSE_INTERVAL_MS);  // restore normal cadence (start() re-arms after a back-off)
         check_pulse();
         timer_.start();
     }
@@ -68,19 +69,26 @@ void SessionGuard::check_pulse() {
 
         // Network/server error → don't log out. A connection-level failure
         // (status 0 = unreachable) means there's no session backend to talk to
-        // — e.g. the localhost build with no :8765 server. Back off after a
-        // couple of tries so we stop hammering it every interval; start()
-        // re-arms the pulse on the next auth_state_changed.
+        // — e.g. the localhost build with no :8765 server. After a couple of
+        // tries, SLOW the pulse to 30 min rather than stopping outright: that
+        // quiets the log/retries on a dead backend while still recovering if it
+        // comes back (a later successful pulse restores the 5-min cadence). A
+        // hard stop() would never re-arm mid-session, silently disabling session
+        // monitoring after a transient blip.
         if (!r.success) {
-            if (r.status_code == 0 && ++net_failures_ >= 2) {
-                LOG_INFO("SessionGuard", "Session backend unreachable — backing off (pulse stopped)");
-                stop();
+            if (r.status_code == 0 && ++net_failures_ == 2) {
+                LOG_INFO("SessionGuard", "Session backend unreachable — slowing pulse to 30 min");
+                timer_.setInterval(SLOW_PULSE_INTERVAL_MS);
             } else {
                 LOG_DEBUG("SessionGuard", "Pulse network error — skipping");
             }
             return;
         }
-        net_failures_ = 0;
+        // Healthy pulse — reset the budget and restore the normal cadence.
+        if (net_failures_ != 0) {
+            net_failures_ = 0;
+            timer_.setInterval(PULSE_INTERVAL_MS);
+        }
 
         // Explicit valid=false in response body — same recovery path
         auto data = r.data;
