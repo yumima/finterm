@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/tts/TtsService.h"
 #include "storage/repositories/NewsArticleRepository.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -278,6 +279,12 @@ QWidget* NewsDetailPanel::build_content_view() {
     analyze_btn_ = new QPushButton("ANALYZE", content);
     analyze_btn_->setObjectName("newsDetailAnalyzeBtn");
     analyze_btn_->setFixedHeight(24);
+
+    listen_btn_ = new QPushButton("LISTEN", content);
+    listen_btn_->setObjectName("newsDetailOpenBtn");
+    listen_btn_->setFixedHeight(24);
+    listen_btn_->setToolTip("Read the article aloud (local voice — set one up in Settings → Voice)");
+
     save_btn_ = new QPushButton("SAVE", content);
     save_btn_->setObjectName("newsDetailSaveBtn");
     save_btn_->setFixedHeight(24);
@@ -298,6 +305,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     action_layout->addWidget(copy_btn_);
     action_layout->addWidget(copy_title_btn_);
     action_layout->addWidget(analyze_btn_);
+    action_layout->addWidget(listen_btn_);
     action_layout->addWidget(save_btn_);
     action_layout->addWidget(bookmark_btn_);
     action_layout->addWidget(translate_btn_);
@@ -325,6 +333,52 @@ QWidget* NewsDetailPanel::build_content_view() {
         analyze_btn_->setEnabled(false);
         analyze_timeout_->start();
         emit analyze_requested(current_article_.link);
+    });
+    connect(listen_btn_, &QPushButton::clicked, this, [this]() {
+        auto& tts = services::TtsService::instance();
+        if (listening_) {  // toggle off
+            tts.stop();
+            listening_ = false;
+            listen_btn_->setText("LISTEN");
+            return;
+        }
+        if (!tts.is_available()) {
+            listen_btn_->setText("NO VOICE");
+            QTimer::singleShot(1500, this, [this]() {
+                if (listen_btn_)
+                    listen_btn_->setText("LISTEN");
+            });
+            return;
+        }
+        if (!has_article_)
+            return;
+        QString text = current_article_.headline;
+        if (!current_article_.summary.isEmpty())
+            text += ". " + current_article_.summary;
+        const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
+        if (!body.isEmpty())
+            text += "\n\n" + body;
+        tts.speak(text);
+        listening_ = true;
+        listen_btn_->setText("STOP");
+    });
+    // Reset the button whenever TTS actually stops — playback finished, was
+    // stopped, or failed to start. TtsService is shared, so only react to the
+    // "stopped" edge while we believe we're listening.
+    connect(&services::TtsService::instance(), &services::TtsService::state_changed, this,
+            [this](bool speaking) {
+                if (!speaking && listening_) {
+                    listening_ = false;
+                    if (listen_btn_)
+                        listen_btn_->setText("LISTEN");
+                }
+            });
+    connect(&services::TtsService::instance(), &services::TtsService::error, this, [this](const QString&) {
+        if (listening_) {
+            listening_ = false;
+            if (listen_btn_)
+                listen_btn_->setText("LISTEN");
+        }
     });
     connect(save_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_)
@@ -621,6 +675,13 @@ void NewsDetailPanel::close_panel() {
 // ── Public methods ──────────────────────────────────────────────────────────
 
 void NewsDetailPanel::show_article(const services::NewsArticle& article) {
+    // Stop any read-aloud from the previously shown article.
+    if (listening_) {
+        services::TtsService::instance().stop();
+        listening_ = false;
+        if (listen_btn_)
+            listen_btn_->setText("LISTEN");
+    }
     current_article_ = article;
     has_article_ = true;
     stack_->setCurrentIndex(1);

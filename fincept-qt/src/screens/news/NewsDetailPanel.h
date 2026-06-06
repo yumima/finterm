@@ -113,6 +113,7 @@ class NewsDetailPanel : public QWidget {
     QVBoxLayout* risk_layout_ = nullptr;
     QVBoxLayout* topics_layout_ = nullptr;
     QPushButton* analyze_btn_ = nullptr;
+    QPushButton* listen_btn_ = nullptr;
     QTimer* analyze_timeout_ = nullptr;
 
     // Monitor matches section
@@ -145,6 +146,7 @@ class NewsDetailPanel : public QWidget {
     QStackedWidget* stack_ = nullptr;
     services::NewsArticle current_article_;
     bool has_article_ = false;
+    bool listening_ = false;  // local TTS read-aloud toggle
 };
 
 } // namespace fincept::screens

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`82651e6f7`](https://github.com/yumima/finterm/commit/82651e6f7) news: AI 'Brief' button works locally + analysis shown above the body
 - [`5f4d223f7`](https://github.com/yumima/finterm/commit/5f4d223f7) ai-chat: keep persona/ambient context out of one-shot calls; free the mutex
 - [`930d53ef6`](https://github.com/yumima/finterm/commit/930d53ef6) ai-chat: context-aware personas + ambient app context
 - [`13f603ea5`](https://github.com/yumima/finterm/commit/13f603ea5) news: on-device 'Analyze' via local LLM, replacing the dead cloud call
