@@ -528,7 +528,9 @@ QWidget* NewsDetailPanel::build_content_view() {
     topics_layout_->setSpacing(2);
     analysis_layout->addWidget(topics_container);
 
-    layout->addWidget(analysis_section_);
+    // Show the AI analysis directly under the action row, ABOVE the article body
+    // (insert at the body's slot so it lands between the actions and the body).
+    layout->insertWidget(layout->indexOf(body_section_), analysis_section_);
 
     // Monitor matches section
     monitor_section_ = new QWidget(content);
