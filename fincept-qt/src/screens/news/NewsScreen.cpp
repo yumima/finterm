@@ -373,13 +373,17 @@ void NewsScreen::connect_signals() {
         if (filtered_articles_.isEmpty())
             return;
         command_bar_->set_summarizing(true);
+        // Render the brief in the detail panel's TL;DR section (a proper, full-size
+        // surface that opens the panel) instead of cramming it into the 60px
+        // command bar, where it overlapped the INTEL strip.
+        detail_panel_->show_tldr_loading();
         QPointer<NewsScreen> self = this;
         services::NewsService::instance().summarize_headlines(filtered_articles_, 8, [self](bool ok, QString summary) {
             if (!self)
                 return;
             self->command_bar_->set_summarizing(false);
-            if (ok)
-                self->command_bar_->show_summary(summary);
+            self->detail_panel_->show_tldr_summary(
+                ok ? summary : QStringLiteral("AI brief is unavailable right now."));
         });
     });
     connect(detail_panel_, &NewsDetailPanel::related_article_clicked, this, &NewsScreen::on_related_clicked);
