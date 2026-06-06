@@ -139,6 +139,16 @@ std::vector<UnifiedTool> McpService::list_tools_for(const QString& agent_id) {
     if (patterns.isEmpty())
         return all;
 
+    auto filtered = list_tools_for_patterns(patterns);
+    LOG_INFO(TAG, QString("list_tools_for(%1): %2/%3 tools allowed by %4 pattern(s)")
+                      .arg(agent_id).arg(filtered.size()).arg(all.size()).arg(patterns.size()));
+    return filtered;
+}
+
+std::vector<UnifiedTool> McpService::list_tools_for_patterns(const QStringList& patterns) {
+    auto all = get_all_tools();
+    if (patterns.isEmpty())
+        return all;
     std::vector<UnifiedTool> filtered;
     filtered.reserve(all.size());
     for (const auto& t : all) {
@@ -146,13 +156,15 @@ std::vector<UnifiedTool> McpService::list_tools_for(const QString& agent_id) {
         if (any_pattern_matches(patterns, wire))
             filtered.push_back(t);
     }
-    LOG_INFO(TAG, QString("list_tools_for(%1): %2/%3 tools allowed by %4 pattern(s)")
-                      .arg(agent_id).arg(filtered.size()).arg(all.size()).arg(patterns.size()));
     return filtered;
 }
 
 QJsonArray McpService::format_tools_for_openai() {
-    auto tools = get_all_tools();
+    return format_tools_for_openai(QStringList{});
+}
+
+QJsonArray McpService::format_tools_for_openai(const QStringList& allow_globs) {
+    auto tools = allow_globs.isEmpty() ? get_all_tools() : list_tools_for_patterns(allow_globs);
     QJsonArray result;
 
     for (const auto& tool : tools) {

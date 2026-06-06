@@ -28,8 +28,16 @@ class McpService {
     /// (matches the pre-allowlist default).  See R7 / Track 8.
     std::vector<UnifiedTool> list_tools_for(const QString& agent_id);
 
+    /// Like list_tools_for() but with explicit glob patterns (empty = all
+    /// tools). Lets a chat persona scope to a focused tool-set without needing
+    /// a stored AgentConfig.
+    std::vector<UnifiedTool> list_tools_for_patterns(const QStringList& patterns);
+
     /// Format for OpenAI function calling
     QJsonArray format_tools_for_openai();
+    /// Format only the tools matching `allow_globs` (empty = all) — used to
+    /// scope a chat persona instead of sending all ~300 tools.
+    QJsonArray format_tools_for_openai(const QStringList& allow_globs);
 
     std::size_t tool_count();
 

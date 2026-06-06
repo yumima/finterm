@@ -4,6 +4,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolRef.h"
+#include "services/app_context/AppContextService.h"
 #include "screens/portfolio/PortfolioInsightsPanel.h"
 #include "screens/portfolio/PortfolioBlotter.h"
 #include "screens/portfolio/PortfolioCommandBar.h"
@@ -633,6 +634,10 @@ void PortfolioScreen::on_portfolio_selected(const QString& id) {
     // enough; if the user really wants force-fresh they can hit refresh.
 
     selected_id_ = id;
+    // Make the AI chat aware of the active portfolio — only while this screen is
+    // visible, so an init-time auto-select doesn't claim a "current view".
+    if (isVisible())
+        services::AppContextService::instance().set_active_portfolio(id);
     ScreenStateManager::instance().notify_changed(this);
     summary_loaded_ = false;
     active_detail_ = std::nullopt;

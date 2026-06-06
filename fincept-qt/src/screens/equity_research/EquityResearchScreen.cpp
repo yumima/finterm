@@ -4,6 +4,7 @@
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
+#include "services/app_context/AppContextService.h"
 #include "core/symbol/SymbolDragSource.h"
 #include "screens/equity_research/EquityAnalysisTab.h"
 #include "screens/equity_research/EquityFinancialsTab.h"
@@ -696,6 +697,11 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
+    // Make the AI chat aware of what the user is looking at — only while this
+    // screen is on-screen, so a construction-time / default load doesn't claim
+    // the user is "viewing" a symbol they never opened (ambient context).
+    if (isVisible())
+        services::AppContextService::instance().set_current_symbol(symbol);
 
     // Update title bar to the new symbol immediately.
     symbol_label_->setText(symbol);

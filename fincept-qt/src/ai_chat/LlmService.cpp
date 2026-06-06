@@ -6,12 +6,14 @@
 
 #include "ai_chat/LlmService.h"
 
+#include "ai_chat/ChatPersonas.h"
 #include "ai_chat/HearthService.h"
 #include "ai_chat/LlmUrl.h"
 #include "ai_chat/ModelCatalog.h"
 
 #include "core/logging/Logger.h"
 #include "mcp/McpService.h"
+#include "services/app_context/AppContextService.h"
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -463,6 +465,68 @@ QMap<QString, QString> LlmService::get_headers() const {
 // Request builders
 // ============================================================================
 
+void LlmService::set_persona(const QString& persona_id) {
+    QMutexLocker lock(&persona_mutex_);
+    const ChatPersona* p = find_persona(persona_id);
+    if (!p) {
+        active_persona_id_.clear();
+        active_persona_prompt_.clear();
+        active_persona_tools_.clear();
+        return;
+    }
+    active_persona_id_ = p->id;
+    active_persona_prompt_ = p->system_prompt;
+    active_persona_tools_ = p->tool_globs;
+    LOG_INFO(TAG, QString("chat persona → %1 (%2 tool pattern(s))").arg(p->id).arg(p->tool_globs.size()));
+}
+
+QString LlmService::active_persona() const {
+    QMutexLocker lock(&persona_mutex_);
+    return active_persona_id_;
+}
+
+// Locked snapshots — the build_*_request / tool-loop paths read these from a
+// pool thread without holding mutex_, so they must take a copy under the lock.
+QStringList LlmService::persona_tools() const {
+    QMutexLocker lock(&persona_mutex_);
+    return active_persona_tools_;
+}
+
+QString LlmService::persona_prompt() const {
+    QMutexLocker lock(&persona_mutex_);
+    return active_persona_prompt_;
+}
+
+// Reads the ambient app context (current symbol / active portfolio) the user is
+// looking at. Must be called with mutex_ held (invoked from build_*_request).
+QString LlmService::ambient_context() const {
+    const auto s = services::AppContextService::instance().snapshot();
+    QStringList parts;
+    if (!s.symbol.isEmpty())
+        parts << QStringLiteral("the security in focus is %1").arg(s.symbol);
+    if (!s.portfolio_id.isEmpty()) {
+        const QString who = s.portfolio_name.isEmpty() ? s.portfolio_id : s.portfolio_name;
+        parts << QStringLiteral("the active portfolio is \"%1\" (id: %2) — read it with the portfolio "
+                                "tools (get_portfolio / get_holdings) before answering about positions")
+                     .arg(who, s.portfolio_id);
+    }
+    if (parts.isEmpty())
+        return {};
+    return QStringLiteral("[Current view] ") + parts.join(QStringLiteral("; ")) + QStringLiteral(".");
+}
+
+// Persona instructions + ambient context, appended after the base system prompt.
+QString LlmService::dynamic_system_suffix() const {
+    QStringList blocks;
+    const QString pp = persona_prompt();
+    if (!pp.isEmpty())
+        blocks << pp;
+    const QString amb = ambient_context();
+    if (!amb.isEmpty())
+        blocks << amb;
+    return blocks.join(QStringLiteral("\n\n"));
+}
+
 QJsonObject LlmService::build_openai_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, bool stream,
                                              bool with_tools) {
@@ -478,6 +542,9 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     QJsonArray messages;
     if (!system_prompt_.isEmpty())
         messages.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
+    const QString sys_suffix = dynamic_system_suffix();
+    if (!sys_suffix.isEmpty())
+        messages.append(QJsonObject{{"role", "system"}, {"content", sys_suffix}});
     for (const auto& m : history)
         messages.append(QJsonObject{{"role", m.role}, {"content", m.content}});
     messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
@@ -509,7 +576,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // which silently breaks live tool calling for OpenAI/Kimi/Groq/etc.
     // deepseek-reasoner rejects tools entirely; some Groq models also.
     if (with_tools && tools_enabled_ && !is_ds_reasoner && !groq_no_tools) {
-        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai();
+        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(persona_tools());
         if (!tools.isEmpty())
             req["tools"] = tools;
         LOG_INFO(TAG, QString("OpenAI request: stream=%1 provider=%2 tools=%3 (count=%4)")
@@ -542,8 +609,12 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     req["messages"] = messages;
     req["max_tokens"] = resolved_max_tokens();
     // Temperature intentionally omitted — Anthropic defaults to 1.0.
-    if (!system_prompt_.isEmpty())
-        req["system"] = system_prompt_;
+    QString sys = system_prompt_;
+    const QString sys_suffix = dynamic_system_suffix();
+    if (!sys_suffix.isEmpty())
+        sys = sys.isEmpty() ? sys_suffix : (sys + "\n\n" + sys_suffix);
+    if (!sys.isEmpty())
+        req["system"] = sys;
     if (stream)
         req["stream"] = true;
 
@@ -554,7 +625,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     // falls back to do_request to execute and follow up.
     if (tools_enabled_) {
         QJsonArray ant_tools;
-        auto all_tools = mcp::McpService::instance().get_all_tools();
+        auto all_tools = mcp::McpService::instance().list_tools_for_patterns(persona_tools());
         for (const auto& tool : all_tools) {
             QString fn_name = tool.server_id + "__" + tool.name;
             QJsonObject schema = tool.input_schema;
@@ -594,7 +665,8 @@ QJsonObject LlmService::build_gemini_request(const QString& user_message,
     }
 
     // Gemini tool format: tools[{functionDeclarations:[{name, description, parameters}]}]
-    auto all_tools = tools_enabled_ ? mcp::McpService::instance().get_all_tools() : std::vector<mcp::UnifiedTool>{};
+    auto all_tools = tools_enabled_ ? mcp::McpService::instance().list_tools_for_patterns(persona_tools())
+                                    : std::vector<mcp::UnifiedTool>{};
     if (!all_tools.empty()) {
         QJsonArray fn_decls;
         for (const auto& tool : all_tools) {
@@ -1241,7 +1313,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         // Temperature intentionally omitted — provider default.
         fu["max_tokens"] = resolved_max_tokens();
 
-        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai();
+        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(persona_tools());
         if (!tools.isEmpty())
             fu["tools"] = tools;
 

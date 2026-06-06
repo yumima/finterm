@@ -2,6 +2,7 @@
 
 #include "ai_chat/AiChatScreen.h"
 
+#include "ai_chat/ChatPersonas.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
@@ -478,6 +479,26 @@ QWidget* AiChatScreen::build_header_bar() {
     hl->addWidget(hdr_session_lbl_);
 
     hl->addStretch();
+
+    // Persona selector — scopes the assistant's tools + focus (General /
+    // Portfolio Advisor / Research / Markets). Curating the tool-set per
+    // persona is what makes tool-calling reliable on a small local model.
+    persona_combo_ = new QComboBox;
+    persona_combo_->setCursor(Qt::PointingHandCursor);
+    persona_combo_->setToolTip("Assistant focus — scopes which tools the model can use");
+    for (const auto& p : ai_chat::builtin_personas())
+        persona_combo_->addItem(p.label, p.id);
+    persona_combo_->setStyleSheet(QString("QComboBox{color:%1;font-size:%2px;background:%3;border:1px solid %4;"
+                                          "border-radius:0px;padding:2px 8px;}")
+                                      .arg(col::TEXT_SECONDARY())
+                                      .arg(fnt::TINY)
+                                      .arg(col::BG_BASE(), col::BORDER_MED()));
+    connect(persona_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        ai_chat::LlmService::instance().set_persona(persona_combo_->itemData(idx).toString());
+    });
+    // Apply the initial persona (index 0 = General → all tools, legacy default).
+    ai_chat::LlmService::instance().set_persona(persona_combo_->currentData().toString());
+    hl->addWidget(persona_combo_);
 
     // Token count
     hdr_tokens_lbl_ = new QLabel;

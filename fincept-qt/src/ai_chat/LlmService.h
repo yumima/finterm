@@ -99,6 +99,13 @@ class LlmService : public QObject {
     bool tools_enabled() const;
     bool is_configured() const;
 
+    // ── Chat persona ──────────────────────────────────────────────────────────
+    // Scope subsequent chat()/chat_streaming() calls to a persona (focused
+    // system prompt + curated tool allow-list). See ChatPersonas.h. Unknown id
+    // → General (all tools).
+    void set_persona(const QString& persona_id);
+    QString active_persona() const;
+
     // ── Profile-aware resolution ──────────────────────────────────────────────
     // Returns the resolved LLM profile for a given context.
     // context_type: "ai_chat" | "agent" | "agent_default" |
@@ -137,7 +144,24 @@ class LlmService : public QObject {
     mutable bool tools_enabled_ = true;
     mutable bool config_loaded_ = false;
 
+    // Active chat persona — a focused system-prompt addition + a tool allow-list
+    // (glob patterns; empty = all tools / General). Guarded by its OWN mutex,
+    // not mutex_: the streaming / tool-loop build path reads the persona WITHOUT
+    // holding mutex_, so all reads go through the locked snapshot accessors
+    // below (returning by value) to avoid a COW data race with set_persona().
+    mutable QMutex persona_mutex_;
+    QString active_persona_id_;
+    QString active_persona_prompt_;
+    QStringList active_persona_tools_;
+    QStringList persona_tools() const;  // locked snapshot — safe to read off-thread
+    QString persona_prompt() const;     // locked snapshot — safe to read off-thread
+
     void ensure_config() const;
+
+    // Per-request system additions: persona instructions + ambient app context
+    // (current symbol / active portfolio). Injected after the base system prompt.
+    QString ambient_context() const;
+    QString dynamic_system_suffix() const;
 
     // Request builders → QJsonObject
     QJsonObject build_openai_request(const QString& user_message, const std::vector<ConversationMessage>& history,

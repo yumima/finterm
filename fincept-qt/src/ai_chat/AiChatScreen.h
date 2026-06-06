@@ -4,6 +4,7 @@
 #include "mcp/McpTypes.h"
 #include "screens/IStatefulScreen.h"
 
+#include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -93,6 +94,7 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     QLabel* hdr_status_lbl_ = nullptr;
     QLabel* hdr_session_lbl_ = nullptr;
     QLabel* hdr_model_lbl_ = nullptr;
+    QComboBox* persona_combo_ = nullptr;
     QPushButton* runtime_toggle_btn_ = nullptr;
     void refresh_runtime_toggle();
     QLabel* hdr_tokens_lbl_ = nullptr;
