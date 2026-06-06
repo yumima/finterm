@@ -175,6 +175,9 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // while a request is in flight (we can't abort mid-stream, so the gate
     // also prevents the user from racing themselves into duplicate work).
     bool tldr_in_flight_ = false;
+    // Same gate for AI Analyze: local-LLM analysis can exceed the button's
+    // re-enable timeout, so guard against launching a second concurrent run.
+    bool analyze_in_flight_ = false;
 };
 
 } // namespace fincept::screens

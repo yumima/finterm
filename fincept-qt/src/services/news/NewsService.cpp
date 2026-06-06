@@ -1,11 +1,14 @@
 #include "services/news/NewsService.h"
 
+#include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
 
 #include <QCryptographicHash>
+#include <QFutureWatcher>
+#include <QtConcurrent>
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
@@ -363,57 +366,108 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
     }
 }
 
-// ── AI Analysis via Fincept API ─────────────────────────────────────────────
+// ── AI Analysis (local LLM engine) ──────────────────────────────────────────
+//
+// The old cloud endpoint (/news/analyze on fincept.in, credits-metered) is gone
+// in the localhost build. We extract the article text and analyse it on-device
+// through the local LLM (hearth), asking for structured JSON we map onto
+// NewsAnalysis. Both the "Analyze" button and the analyze_news_article MCP tool
+// flow through here, so this one change fixes both.
+
+namespace {
+
+// Prompt the local model for structured analysis as strict JSON. Long bodies
+// are truncated to stay within the context budget.
+QString news_build_analysis_prompt(const QString& title, const QString& body) {
+    QString text = body;
+    if (text.size() > 8000)
+        text = text.left(8000) + "\n…[truncated]";
+    return QString(
+               "You are a financial news analyst. Analyse the article and reply with ONLY a JSON "
+               "object (no markdown, no commentary) of exactly this shape:\n"
+               "{\"summary\":\"2-3 sentences\","
+               "\"sentiment\":{\"score\":-1..1,\"intensity\":0..1,\"confidence\":0..1},"
+               "\"market_impact\":{\"urgency\":\"LOW|MEDIUM|HIGH\","
+               "\"prediction\":\"negative|neutral|moderate_positive|positive\"},"
+               "\"keywords\":[],\"topics\":[],\"key_points\":[],"
+               "\"risk_signals\":{\"regulatory\":{\"level\":\"none|low|medium|high\",\"details\":\"\"},"
+               "\"geopolitical\":{\"level\":\"\",\"details\":\"\"},"
+               "\"operational\":{\"level\":\"\",\"details\":\"\"},"
+               "\"market\":{\"level\":\"\",\"details\":\"\"}}}\n\n"
+               "Title: %1\n\nArticle:\n%2")
+        .arg(title.isEmpty() ? QStringLiteral("(untitled)") : title, text);
+}
+
+// Map the model's JSON onto NewsAnalysis. Reasoning models can wrap the object
+// in prose/fences, so slice the outermost {...} before parsing.
+bool news_parse_analysis(const QString& content, NewsAnalysis& out) {
+    const int s = content.indexOf('{');
+    const int e = content.lastIndexOf('}');
+    if (s < 0 || e <= s)
+        return false;
+    const QJsonDocument doc = QJsonDocument::fromJson(content.mid(s, e - s + 1).toUtf8());
+    if (!doc.isObject())
+        return false;
+    const QJsonObject a = doc.object();
+    // Reject objects that aren't analysis-shaped (e.g. {} or an {"error":...}
+    // object) so they route to the error path instead of rendering as blanks.
+    if (!a.contains("summary") && !a.contains("sentiment") && !a.contains("key_points"))
+        return false;
+    const QJsonObject sent = a.value("sentiment").toObject();
+    const QJsonObject mi = a.value("market_impact").toObject();
+    const QJsonObject rs = a.value("risk_signals").toObject();
+    out.summary = a.value("summary").toString();
+    out.sentiment = {sent.value("score").toDouble(), sent.value("intensity").toDouble(),
+                     sent.value("confidence").toDouble()};
+    out.market_impact = {mi.value("urgency").toString(), mi.value("prediction").toString()};
+    for (const auto& v : a.value("keywords").toArray())
+        out.keywords << v.toString();
+    for (const auto& v : a.value("topics").toArray())
+        out.topics << v.toString();
+    for (const auto& v : a.value("key_points").toArray())
+        out.key_points << v.toString();
+    auto sig = [&rs](const char* k) {
+        const QJsonObject o = rs.value(QString::fromLatin1(k)).toObject();
+        return RiskSignal{o.value("level").toString(), o.value("details").toString()};
+    };
+    out.regulatory = sig("regulatory");
+    out.geopolitical = sig("geopolitical");
+    out.operational = sig("operational");
+    out.market = sig("market");
+    return true;
+}
+
+} // namespace
 
 void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
-    QJsonObject body;
-    body["url"] = url;
-
-    HttpClient::instance().post("/news/analyze", body, [this, cb](Result<QJsonDocument> result) {
-        if (result.is_err()) {
-            LOG_ERROR("NewsService", "Analysis failed: " + QString::fromStdString(result.error()));
+    extract_article_body(url, [this, cb](bool ok, QString title, QString text) {
+        if (!ok || text.trimmed().isEmpty()) {
+            LOG_WARN("NewsService", "analyze_article: could not extract article body for analysis");
             cb(false, {});
             return;
         }
-
-        auto obj = result.value().object();
-        if (!obj["success"].toBool(false)) {
-            LOG_ERROR("NewsService", "API returned failure: " + obj["message"].toString());
-            cb(false, {});
-            return;
-        }
-
-        auto data = obj["data"].toObject();
-        auto a = data["analysis"].toObject();
-        auto sent = a["sentiment"].toObject();
-        auto mi = a["market_impact"].toObject();
-        auto rs = a["risk_signals"].toObject();
-
-        NewsAnalysis analysis;
-        analysis.sentiment = {sent["score"].toDouble(), sent["intensity"].toDouble(), sent["confidence"].toDouble()};
-        analysis.market_impact = {mi["urgency"].toString(), mi["prediction"].toString()};
-        analysis.summary = a["summary"].toString();
-        analysis.credits_used = data["credits_used"].toInt();
-        analysis.credits_remaining = data["credits_remaining"].toInt();
-
-        for (const auto& v : a["keywords"].toArray())
-            analysis.keywords << v.toString();
-        for (const auto& v : a["topics"].toArray())
-            analysis.topics << v.toString();
-        for (const auto& v : a["key_points"].toArray())
-            analysis.key_points << v.toString();
-
-        auto reg = rs["regulatory"].toObject();
-        auto geo = rs["geopolitical"].toObject();
-        auto ops = rs["operational"].toObject();
-        auto mkt = rs["market"].toObject();
-        analysis.regulatory = {reg["level"].toString(), reg["details"].toString()};
-        analysis.geopolitical = {geo["level"].toString(), geo["details"].toString()};
-        analysis.operational = {ops["level"].toString(), ops["details"].toString()};
-        analysis.market = {mkt["level"].toString(), mkt["details"].toString()};
-
-        cb(true, analysis);
-        emit this->analysis_ready(analysis);
+        const QString prompt = news_build_analysis_prompt(title, text);
+        // chat() is blocking + uses a synchronous HTTP loop, so run it off the
+        // UI thread; the watcher's finished() lands back on the UI thread.
+        auto* watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
+        QObject::connect(watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
+                         [this, watcher, cb]() {
+                             const ai_chat::LlmResponse resp = watcher->result();
+                             watcher->deleteLater();
+                             NewsAnalysis analysis;
+                             if (!resp.success || !news_parse_analysis(resp.content, analysis)) {
+                                 LOG_WARN("NewsService",
+                                          "analyze_article: local analysis failed: "
+                                              + (resp.success ? QStringLiteral("unparseable response")
+                                                              : resp.error));
+                                 cb(false, {});
+                                 return;
+                             }
+                             cb(true, analysis);
+                             emit this->analysis_ready(analysis);
+                         });
+        watcher->setFuture(QtConcurrent::run(
+            [prompt]() { return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false); }));
     });
 }
 

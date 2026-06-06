@@ -123,7 +123,9 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     // Analyze timeout guard (30s)
     analyze_timeout_ = new QTimer(this);
     analyze_timeout_->setSingleShot(true);
-    analyze_timeout_->setInterval(30000);
+    // On-device analysis (local LLM) is slower than the old cloud call — give it
+    // headroom before the button re-enables as a safety net.
+    analyze_timeout_->setInterval(120000);
     connect(analyze_timeout_, &QTimer::timeout, this, [this]() {
         if (analyze_btn_) {
             analyze_btn_->setText("ANALYZE");
@@ -759,6 +761,26 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
             // <p style="text-indent:…"> CSS we emit actually applies.
             self->body_label_->setHtml(format_article_html(text));
         });
+}
+
+void NewsDetailPanel::show_analysis_error(const QString& message) {
+    analyze_btn_->setText("ANALYZE");
+    analyze_btn_->setEnabled(true);
+    analyze_timeout_->stop();
+    ai_sentiment_->clear();
+    ai_urgency_->clear();
+    // Clear all result layouts so stale rows from a previous success don't linger
+    // under the error (show_analysis clears the same three).
+    for (QVBoxLayout* lay : {key_points_layout_, risk_layout_, topics_layout_}) {
+        while (lay->count() > 0) {
+            auto* item = lay->takeAt(0);
+            if (item->widget())
+                item->widget()->deleteLater();
+            delete item;
+        }
+    }
+    ai_summary_->setText(message.isEmpty() ? "AI analysis is unavailable right now." : message);
+    analysis_section_->show();
 }
 
 void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {

@@ -664,12 +664,18 @@ void NewsScreen::on_monitor_deleted(const QString& id) {
 }
 
 void NewsScreen::on_analyze_requested(const QString& url) {
+    if (analyze_in_flight_)  // local LLM can outlast the button timeout — don't double-launch
+        return;
+    analyze_in_flight_ = true;
     QPointer<NewsScreen> self = this;
     services::NewsService::instance().analyze_article(url, [self](bool ok, services::NewsAnalysis analysis) {
         if (!self)
             return;
+        self->analyze_in_flight_ = false;
         if (ok)
             self->detail_panel_->show_analysis(analysis);
+        else
+            self->detail_panel_->show_analysis_error("AI analysis is unavailable right now.");
     });
 }
 

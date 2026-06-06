@@ -23,6 +23,7 @@ class NewsDetailPanel : public QWidget {
 
     void show_article(const services::NewsArticle& article);
     void show_analysis(const services::NewsAnalysis& analysis);
+    void show_analysis_error(const QString& message);
     void show_related(const QVector<services::NewsArticle>& related);
     void show_monitor_matches(const QVector<QPair<services::NewsMonitor, QStringList>>& matches);
     void show_entities(const services::EntityResult& entities);
