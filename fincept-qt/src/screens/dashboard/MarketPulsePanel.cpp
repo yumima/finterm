@@ -715,8 +715,8 @@ QString MarketPulsePanel::market_status(const QString& region) {
         if (hour >= 1 && hour < 7)
             return "OPEN";
     } else if (region == "DE") {
-        // XETRA 09:00–17:30 CET ≈ 08:00–16:30 UTC
-        if (hour >= 8 && hour < 16)
+        // XETRA 09:00–17:30 CET ≈ 08:00–16:30 UTC (hour-bucket: open through 16:xx)
+        if (hour >= 8 && hour < 17)
             return "OPEN";
     }
     return "CLOSED";
