@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`05b926e28`](https://github.com/yumima/finterm/commit/05b926e28) markets: finish de-India — US defaults for the last placeholders + workspace template
 - [`5f1856b38`](https://github.com/yumima/finterm/commit/5f1856b38) dashboard: align XETRA market-hours code with its 16:30 UTC comment (review nit)
 - [`6332f1f7e`](https://github.com/yumima/finterm/commit/6332f1f7e) markets: drop India defaults, re-point to US / China / Europe
 - [`411b24ca1`](https://github.com/yumima/finterm/commit/411b24ca1) chat: make the New pane button actually open a side-by-side pane
