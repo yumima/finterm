@@ -448,7 +448,7 @@ QWidget* StrategyBuilderPanel::build_right_pane() {
     };
 
     bt_symbol_ = new QLineEdit;
-    bt_symbol_->setPlaceholderText("RELIANCE");
+    bt_symbol_->setPlaceholderText("AAPL");
     bt_symbol_->setStyleSheet(kInputStyle());
     bt_symbol_->setFixedHeight(30);
     params_gl->addWidget(make_param_col("SYMBOL", bt_symbol_), 0, 0);

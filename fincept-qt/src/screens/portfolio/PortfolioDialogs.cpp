@@ -207,7 +207,7 @@ AddAssetDialog::AddAssetDialog(QWidget* parent) : QDialog(parent) {
     form->setSpacing(8);
 
     symbol_edit_ = new QLineEdit;
-    symbol_edit_->setPlaceholderText("e.g. AAPL, Apple, Reliance…");
+    symbol_edit_->setPlaceholderText("e.g. AAPL, Apple, Microsoft…");
     symbol_edit_->installEventFilter(this);
     form->addRow("Symbol:", symbol_edit_);
 

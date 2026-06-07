@@ -184,7 +184,7 @@ void VoiceConfigSection::build_ui() {
     auto* kt_lbl = new QLabel("Key terms");
     kt_lbl->setStyleSheet(label_ss());
     keyterms_edit_ = new QLineEdit;
-    keyterms_edit_->setPlaceholderText("AAPL, BTCUSD, Nifty (comma-separated)");
+    keyterms_edit_->setPlaceholderText("AAPL, BTCUSD, MSFT (comma-separated)");
     keyterms_edit_->setStyleSheet(input_ss());
     keyterms_edit_->setMinimumWidth(320);
     kt_hl->addWidget(kt_lbl);

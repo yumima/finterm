@@ -116,7 +116,7 @@ void RelationshipMapScreen::build_ui() {
 
     // Search with autocomplete
     search_input_ = new QLineEdit;
-    search_input_->setPlaceholderText("Search assets (AAPL, Tesla, RELIANCE...)");
+    search_input_->setPlaceholderText("Search assets (AAPL, Tesla, Microsoft...)");
     search_input_->setFixedWidth(320);
     search_input_->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
