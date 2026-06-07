@@ -107,7 +107,7 @@ EquityOrderEntry::EquityOrderEntry(QWidget* parent) : QWidget(parent) {
 
     exchange_combo_ = new QComboBox;
     exchange_combo_->setObjectName("eqOeCombo");
-    exchange_combo_->addItems({"NSE", "BSE", "NYSE", "NASDAQ"});
+    exchange_combo_->addItems({"NASDAQ", "NYSE", "LSE", "HKEX", "TSE"});
     exchange_combo_->setFixedHeight(26);
     form->addWidget(exchange_combo_);
 
@@ -221,7 +221,7 @@ EquityOrderEntry::EquityOrderEntry(QWidget* parent) : QWidget(parent) {
     auto* submit_row = new QHBoxLayout;
     submit_row->setSpacing(4);
 
-    submit_btn_ = new QPushButton("BUY RELIANCE");
+    submit_btn_ = new QPushButton("BUY AAPL");
     submit_btn_->setObjectName("eqBuySubmit");
     submit_btn_->setFixedHeight(34);
     submit_btn_->setCursor(Qt::PointingHandCursor);

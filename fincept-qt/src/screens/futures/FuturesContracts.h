@@ -140,12 +140,12 @@ inline const QVector<ContractDef>& all_contracts() {
         {"NIY",   "Nikkei 225 (Yen, CME)",       "JAPAN",  5.0,  500,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
         {"NKD",   "Nikkei 225 (USD, CME)",       "JAPAN",  5.0,    5,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
         {"TOPX",  "TOPIX (spot proxy)",          "JAPAN",  0, 0, 0, R::None, "^TPX"},
-        // ASIA — HSI, KOSPI, AXJO, NIFTY (spot proxies)
+        // ASIA — HSI, KOSPI, AXJO, TAIEX (spot proxies)
         {"HSI",   "Hang Seng (spot proxy)",      "ASIA",   0, 0, 0, R::None, "^HSI"},
         {"HSCEI", "Hang Seng China Ent. (spot)", "ASIA",   0, 0, 0, R::None, "^HSCE"},
         {"KOSPI", "KOSPI Composite (spot)",      "ASIA",   0, 0, 0, R::None, "^KS11"},
         {"AXJO",  "ASX 200 (spot proxy)",        "ASIA",   0, 0, 0, R::None, "^AXJO"},
-        {"NIFTY", "Nifty 50 (spot proxy)",       "ASIA",   0, 0, 0, R::None, "^NSEI"},
+        {"TWII",  "Taiwan TAIEX (spot proxy)",   "ASIA",   0, 0, 0, R::None, "^TWII"},
         // CHINA — onshore index spot proxies. Real CFFEX index futures (IF/IH/
         // IC/IM) aren't on yfinance for free; we route to the underlying SSE/
         // SZSE indices so CHINA renders the same heatmap+watchlist+chart grid

@@ -43,7 +43,7 @@ QStringList session_to_broker_symbol_args(const QStringList& symbols) {
         QString sym = s.trimmed();
         if (sym.isEmpty())
             continue;
-        QString exchange = "NSE";
+        QString exchange = "NASDAQ";
         if (sym.contains(':')) {
             exchange = sym.section(':', 0, 0).trimmed().toUpper();
             sym = sym.section(':', 1).trimmed();

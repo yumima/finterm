@@ -198,17 +198,17 @@ inline QVector<ScannerPreset> scanner_presets() {
     return presets;
 }
 
-// ── Nifty watchlists ────────────────────────────────────────────────────────
+// ── Large-cap watchlists (US / China / Europe) ──────────────────────────────
 
-inline QStringList nifty50_symbols() {
-    return {"RELIANCE",   "TCS",   "HDFCBANK",  "INFY",       "ICICIBANK", "HINDUNILVR", "SBIN",
-            "BHARTIARTL", "ITC",   "KOTAKBANK", "LT",         "AXISBANK",  "BAJFINANCE", "ASIANPAINT",
-            "MARUTI",     "TITAN", "SUNPHARMA", "ULTRACEMCO", "NESTLEIND", "WIPRO"};
+inline QStringList megacap_symbols() {
+    return {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
+            "JPM",  "V",    "WMT",   "XOM",  "BABA", "PDD",  "ASML",
+            "SAP",  "NVO",  "SHEL",  "TTE",  "NVS",  "UL"};
 }
 
-inline QStringList bank_nifty_symbols() {
-    return {"HDFCBANK",   "ICICIBANK",  "KOTAKBANK", "AXISBANK",   "SBIN",       "INDUSINDBK",
-            "BANDHANBNK", "FEDERALBNK", "PNB",       "BANKBARODA", "IDFCFIRSTB", "AUBANK"};
+inline QStringList bank_symbols() {
+    return {"JPM", "BAC", "WFC", "C",  "GS",  "MS",
+            "USB", "PNC", "HSBC", "BCS", "DB", "UBS"};
 }
 
 } // namespace fincept::services::algo

@@ -1352,8 +1352,8 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
 // ── Static symbol lists ─────────────────────────────────────────────────────
 
 QStringList MarketDataService::indices_symbols() {
-    return {"^GSPC", "^DJI",  "^IXIC", "^RUT",      "^FTSE",  "^GDAXI",
-            "^FCHI", "^N225", "^HSI",  "000001.SS", "^BSESN", "^NSEI"};
+    return {"^GSPC", "^DJI",  "^IXIC", "^RUT",      "^FTSE",     "^GDAXI",
+            "^FCHI", "^N225", "^HSI",  "000001.SS", "000300.SS", "^STOXX50E"};
 }
 
 QStringList MarketDataService::forex_symbols() {
@@ -1379,11 +1379,11 @@ QStringList MarketDataService::global_snapshot_symbols() {
 QVector<MarketCategory> MarketDataService::default_global_markets() {
     return {
         {"Stock Indices",
-         {"^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX", "^FTSE", "^GDAXI", "^N225", "^FCHI", "^HSI", "^AXJO", "^BSESN",
-          "^NSEI", "^STOXX50E", "^NYA", "^SOX", "^IBEX", "^AEX"}},
+         {"^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX", "^FTSE", "^GDAXI", "^N225", "^FCHI", "^HSI", "^AXJO", "000300.SS",
+          "000001.SS", "^STOXX50E", "^NYA", "^SOX", "^IBEX", "^AEX"}},
         {"Forex",
          {"EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCHF=X", "USDCAD=X", "AUDUSD=X", "NZDUSD=X", "EURGBP=X", "EURJPY=X",
-          "GBPJPY=X", "USDCNY=X", "USDINR=X", "USDHKD=X", "USDTWD=X", "USDSGD=X"}},
+          "GBPJPY=X", "USDCNY=X", "USDKRW=X", "USDHKD=X", "USDTWD=X", "USDSGD=X"}},
         {"Commodities",
          // LBS=F (lumber) was delisted; yfinance returns YFPricesMissingError
          // every refresh and the producer-refresh-timeout cycle burned ~25%

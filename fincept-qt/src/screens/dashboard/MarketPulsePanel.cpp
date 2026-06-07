@@ -655,7 +655,7 @@ QWidget* MarketPulsePanel::build_market_hours_section() {
         const char* region;
     };
     ExDef exchanges[] = {
-        {"NYSE/NASDAQ", "US"}, {"LSE", "UK"}, {"TSE (TOKYO)", "JP"}, {"SSE (SHANGHAI)", "CN"}, {"NSE (INDIA)", "IN"},
+        {"NYSE/NASDAQ", "US"}, {"LSE", "UK"}, {"XETRA (FRANKFURT)", "DE"}, {"TSE (TOKYO)", "JP"}, {"SSE (SHANGHAI)", "CN"},
     };
 
     for (auto& ex : exchanges) {
@@ -714,8 +714,9 @@ QString MarketPulsePanel::market_status(const QString& region) {
     } else if (region == "CN") {
         if (hour >= 1 && hour < 7)
             return "OPEN";
-    } else if (region == "IN") {
-        if (hour >= 3 && hour < 10)
+    } else if (region == "DE") {
+        // XETRA 09:00–17:30 CET ≈ 08:00–16:30 UTC
+        if (hour >= 8 && hour < 16)
             return "OPEN";
     }
     return "CLOSED";

@@ -1233,11 +1233,10 @@ QVector<RSSFeed> NewsService::default_feeds() {
         // Tier 2 — Forex
         {"fxstreet", "FXStreet", "https://www.fxstreet.com/rss/news", "MARKETS", "GLOBAL", "FXSTREET", 2},
 
-        // Tier 2 — Asia
-        {"scmp", "South China Morning Post", "https://www.scmp.com/rss/91/feed", "GEOPOLITICS", "ASIA", "SCMP", 2},
+        // Tier 2 — China & Asia
+        {"scmp", "South China Morning Post", "https://www.scmp.com/rss/91/feed", "GEOPOLITICS", "CHINA", "SCMP", 2},
         {"nikkei-asia", "Nikkei Asia", "https://asia.nikkei.com/rss/feed/nar", "MARKETS", "ASIA", "NIKKEI ASIA", 2},
-        {"hindu-biz", "The Hindu Business", "https://www.thehindu.com/business/feeder/default.rss", "MARKETS", "INDIA",
-         "THE HINDU", 2},
+        {"caixin", "Caixin Global", "https://www.caixinglobal.com/feed/", "MARKETS", "CHINA", "CAIXIN", 2},
 
         // Tier 2 — MENA
         {"middle-east-eye", "Middle East Eye", "https://www.middleeasteye.net/rss", "GEOPOLITICS", "MENA",
@@ -1279,12 +1278,12 @@ QVector<RSSFeed> NewsService::default_feeds() {
         // Tier 2 — Europe
         {"dw-world", "Deutsche Welle", "https://rss.dw.com/rdf/rss-en-all", "GEOPOLITICS", "EU", "DW", 2},
 
-        // Tier 2 — Asia & India (additional)
-        {"livemint", "LiveMint", "https://www.livemint.com/rss/markets", "MARKETS", "INDIA", "LIVEMINT", 2},
-        {"et-markets", "Economic Times", "https://economictimes.indiatimes.com/rssfeedstopstories.cms", "MARKETS",
-         "INDIA", "ECONOMIC TIMES", 2},
-        {"moneycontrol", "MoneyControl", "https://www.moneycontrol.com/rss/latestnews.xml", "MARKETS", "INDIA",
-         "MONEYCONTROL", 2},
+        // Tier 2 — China & Europe (additional)
+        {"scmp-biz", "SCMP Business", "https://www.scmp.com/rss/92/feed", "MARKETS", "CHINA", "SCMP", 2},
+        {"guardian-biz", "Guardian Business", "https://www.theguardian.com/uk/business/rss", "MARKETS", "EU",
+         "GUARDIAN", 2},
+        {"euronews-biz", "Euronews Business", "https://www.euronews.com/rss?level=theme&name=business", "MARKETS", "EU",
+         "EURONEWS", 2},
         {"channel-news-asia", "CNA", "https://www.channelnewsasia.com/rssfeeds/8395986", "MARKETS", "ASIA", "CNA", 2},
 
         // Tier 2 — Fintech

@@ -116,7 +116,7 @@ void MarketPanelEditor::build_ui() {
     root->addWidget(search_lbl);
 
     search_edit_ = new QLineEdit;
-    search_edit_->setPlaceholderText("Search symbol or name: AAPL, Reliance, Bitcoin ...");
+    search_edit_->setPlaceholderText("Search symbol or name: AAPL, Alibaba, Bitcoin ...");
     search_edit_->setStyleSheet(input_ss());
     search_edit_->installEventFilter(this);
     root->addWidget(search_edit_);

@@ -212,7 +212,7 @@ void EquityTradingScreen::setup_ui() {
     cmd_layout->addWidget(sep);
 
     // Exchange label
-    exchange_label_ = new QLabel("NSE");
+    exchange_label_ = new QLabel("NASDAQ");
     exchange_label_->setObjectName("eqExchangeLabel");
     cmd_layout->addWidget(exchange_label_);
 
@@ -222,7 +222,7 @@ void EquityTradingScreen::setup_ui() {
     cmd_layout->addWidget(sep2);
 
     // Symbol input
-    symbol_input_ = new QLineEdit("RELIANCE");
+    symbol_input_ = new QLineEdit("AAPL");
     symbol_input_->setObjectName("eqSymbolInput");
     symbol_input_->setFixedWidth(120);
     symbol_input_->setFixedHeight(22);

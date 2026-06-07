@@ -118,8 +118,8 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
 
     // ── Multi-account state ──
     QString focused_account_id_;          // the account targeted by order entry + chart
-    QString selected_symbol_ = "RELIANCE";
-    QString selected_exchange_ = "NSE";
+    QString selected_symbol_ = "AAPL";
+    QString selected_exchange_ = "NASDAQ";
 
     // Paper trading (derived from focused account)
     int fill_cb_id_ = -1; // OrderMatcher fill callback

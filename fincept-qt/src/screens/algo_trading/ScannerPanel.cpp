@@ -357,14 +357,14 @@ void ScannerPanel::build_ui() {
     symbols_edit_ = new QTextEdit(right_col);
     symbols_edit_->setStyleSheet(kTextEditStyle());
     symbols_edit_->setFixedHeight(120);
-    symbols_edit_->setPlaceholderText("RELIANCE\nTCS\nINFY\n...");
+    symbols_edit_->setPlaceholderText("AAPL\nMSFT\nNVDA\n...");
     right_vl->addWidget(symbols_edit_);
 
     // Quick-add buttons
     auto* quick_row = new QHBoxLayout;
     quick_row->setSpacing(8);
 
-    auto* nifty_btn = new QPushButton("NIFTY 50", right_col);
+    auto* nifty_btn = new QPushButton("MEGA CAPS", right_col);
     nifty_btn->setCursor(Qt::PointingHandCursor);
     nifty_btn->setFixedHeight(26);
     nifty_btn->setStyleSheet(
@@ -376,15 +376,15 @@ void ScannerPanel::build_ui() {
             .arg(kMonoFont())
             .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
     connect(nifty_btn, &QPushButton::clicked, this,
-            [this]() { symbols_edit_->setPlainText(nifty50_symbols().join("\n")); });
+            [this]() { symbols_edit_->setPlainText(megacap_symbols().join("\n")); });
     quick_row->addWidget(nifty_btn);
 
-    auto* banknifty_btn = new QPushButton("BANK NIFTY", right_col);
+    auto* banknifty_btn = new QPushButton("BANKS", right_col);
     banknifty_btn->setCursor(Qt::PointingHandCursor);
     banknifty_btn->setFixedHeight(26);
     banknifty_btn->setStyleSheet(nifty_btn->styleSheet());
     connect(banknifty_btn, &QPushButton::clicked, this,
-            [this]() { symbols_edit_->setPlainText(bank_nifty_symbols().join("\n")); });
+            [this]() { symbols_edit_->setPlainText(bank_symbols().join("\n")); });
     quick_row->addWidget(banknifty_btn);
     quick_row->addStretch();
 

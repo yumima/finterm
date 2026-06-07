@@ -33,7 +33,7 @@ TradingSession UnifiedTrading::init_session(const QString& broker, const QString
         if (!paper_portfolio_id.isEmpty()) {
             session.paper_portfolio_id = paper_portfolio_id;
         } else {
-            auto portfolio = pt_create_portfolio(broker + " Paper Trading", 1000000.0, "INR", 1.0, "cross", 0.0003);
+            auto portfolio = pt_create_portfolio(broker + " Paper Trading", 100000.0, "USD", 1.0, "cross", 0.0003);
             session.paper_portfolio_id = portfolio.id;
         }
     }
@@ -59,7 +59,7 @@ TradingSession UnifiedTrading::switch_mode(const QString& mode) {
 
     if (session_->mode == "paper" && session_->paper_portfolio_id.isEmpty()) {
         auto portfolio =
-            pt_create_portfolio(session_->broker + " Paper Trading", 1000000.0, "INR", 1.0, "cross", 0.0003);
+            pt_create_portfolio(session_->broker + " Paper Trading", 100000.0, "USD", 1.0, "cross", 0.0003);
         session_->paper_portfolio_id = portfolio.id;
     }
 

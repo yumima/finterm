@@ -17,12 +17,15 @@ enum class BottomTab { Positions, Holdings, Orders, Funds, Stats };
 
 enum class TradingMode { Paper, Live };
 
-// ── Default Watchlist (NIFTY 50 subset) ────────────────────────────────────
+// ── Default Watchlist (US / China / Europe mega-caps) ──────────────────────
 
 inline const QStringList DEFAULT_WATCHLIST = {
-    "HDFCBANK", "ICICIBANK", "SBIN",     "KOTAKBANK", "AXISBANK",   "TCS",        "INFY",
-    "WIPRO",    "HCLTECH",   "RELIANCE", "TATASTEEL", "MARUTI",     "BAJFINANCE", "HINDUNILVR",
-    "ITC",      "SUNPHARMA", "DRREDDY",  "LT",        "BHARTIARTL", "TITAN",
+    // US mega-caps
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM",
+    // China (US-listed ADRs)
+    "BABA", "PDD",  "JD",    "NIO",
+    // Europe (ADRs / majors)
+    "ASML", "SAP",  "NVO",   "NVS",  "UL",   "SHEL", "TTE",  "BP",
 };
 
 inline const QStringList US_WATCHLIST = {
@@ -31,7 +34,7 @@ inline const QStringList US_WATCHLIST = {
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-inline constexpr double DEFAULT_PAPER_BALANCE = 1000000.0; // 10 Lakh INR
+inline constexpr double DEFAULT_PAPER_BALANCE = 100000.0; // USD
 inline constexpr int OHLCV_FETCH_COUNT = 200;
 inline constexpr int QUOTE_POLL_MS = 5000;
 inline constexpr int PORTFOLIO_POLL_MS = 3000;
