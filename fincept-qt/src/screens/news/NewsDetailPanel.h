@@ -33,10 +33,13 @@ class NewsDetailPanel : public QWidget {
     /// TL;DR — show a transient "loading…" placeholder while the
     /// summarize_headlines call is in flight. Renders above the article
     /// summary so it stays visible regardless of which article is selected.
-    void show_tldr_loading();
+    /// @param title section header — "TL;DR" (concise, current view) or
+    ///        "DIGEST" (broader full-feed read), so the reading-pane label
+    ///        reflects which brief was requested.
+    void show_tldr_loading(const QString& title = QStringLiteral("TL;DR"));
     /// Populate the TL;DR section with the AI-generated brief. Pass an
     /// empty string to hide the section (e.g., on backend failure).
-    void show_tldr_summary(const QString& text);
+    void show_tldr_summary(const QString& text, const QString& title = QStringLiteral("TL;DR"));
     /// Hide the TL;DR section (called when a new article is opened so the
     /// summary doesn't outlive its relevance to the feed snapshot).
     void hide_tldr();
@@ -64,6 +67,7 @@ class NewsDetailPanel : public QWidget {
     // when the user scrolls through the feed. Populated by NewsScreen via
     // show_tldr_summary() after NewsService::summarize_headlines() returns.
     QWidget* tldr_section_ = nullptr;
+    QLabel* tldr_title_ = nullptr;  ///< section header — "TL;DR" or "DIGEST"
     QLabel* tldr_label_ = nullptr;
 
     // Article section

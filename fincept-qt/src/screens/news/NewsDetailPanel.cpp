@@ -169,9 +169,9 @@ QWidget* NewsDetailPanel::build_content_view() {
     tldr_layout->setContentsMargins(0, 0, 0, 6);
     tldr_layout->setSpacing(2);
 
-    auto* tldr_title = new QLabel("TL;DR", tldr_section_);
-    tldr_title->setObjectName("newsTldrTitle");
-    tldr_layout->addWidget(tldr_title);
+    tldr_title_ = new QLabel("TL;DR", tldr_section_);
+    tldr_title_->setObjectName("newsTldrTitle");
+    tldr_layout->addWidget(tldr_title_);
 
     tldr_label_ = new QLabel(tldr_section_);
     tldr_label_->setObjectName("newsTldrBody");
@@ -1063,25 +1063,29 @@ void NewsDetailPanel::clear() {
 
 // ── TL;DR ──────────────────────────────────────────────────────────────────
 
-void NewsDetailPanel::show_tldr_loading() {
+void NewsDetailPanel::show_tldr_loading(const QString& title) {
     // Force the content stack page so the TL;DR section is reachable even
     // if no article has been selected yet. Keep the panel open while the
     // request is in flight.
+    if (tldr_title_)
+        tldr_title_->setText(title);
     if (tldr_label_)
-        tldr_label_->setText(QStringLiteral("Generating brief…"));
+        tldr_label_->setText(QStringLiteral("Generating %1…").arg(title));
     if (tldr_section_)
         tldr_section_->show();
     stack_->setCurrentIndex(1);
     open_panel();
 }
 
-void NewsDetailPanel::show_tldr_summary(const QString& text) {
+void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& title) {
     if (!tldr_label_ || !tldr_section_)
         return;
     if (text.isEmpty()) {
         tldr_section_->hide();
         return;
     }
+    if (tldr_title_)
+        tldr_title_->setText(title);
     tldr_label_->setText(text);
     tldr_section_->show();
     stack_->setCurrentIndex(1);

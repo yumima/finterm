@@ -235,7 +235,8 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     summarize_btn_ = new QPushButton("TL;DR", row);
     summarize_btn_->setObjectName("newsDetailAnalyzeBtn");
     summarize_btn_->setFixedHeight(20);
-    summarize_btn_->setToolTip("TL;DR — summarize the top headlines");
+    summarize_btn_->setToolTip("TL;DR — a quick brief of your current filtered view "
+                               "(vs DIGEST in the INTEL strip, a broader read of the whole feed)");
     hl->addWidget(summarize_btn_);
     connect(summarize_btn_, &QPushButton::clicked, this, &NewsCommandBar::summarize_clicked);
 
@@ -264,12 +265,13 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     // the inline live counters that follow ("X WATCHES Y HIT"). Styled
     // via the dedicated #newsIntelTldr object name so the cyan accent
     // pulls from the theme tokens, not a hard-coded hex.
-    tldr_btn_ = new QPushButton("TL;DR", row);
+    tldr_btn_ = new QPushButton("DIGEST", row);
     tldr_btn_->setObjectName("newsIntelTldr");
     tldr_btn_->setFlat(true);
     tldr_btn_->setCursor(Qt::PointingHandCursor);
     tldr_btn_->setToolTip(QStringLiteral(
-        "AI-generated brief of the top headlines currently visible. "
+        "DIGEST — a broader AI read of the whole feed, grouped by theme "
+        "(vs the command-row TL;DR, a quick brief of your current view). "
         "Renders into the article detail pane (the middle window)."));
     connect(tldr_btn_, &QPushButton::clicked, this, &NewsCommandBar::tldr_clicked);
     hl->addWidget(tldr_btn_);
@@ -476,7 +478,7 @@ void NewsCommandBar::set_tldr_busy(bool busy) {
     if (!tldr_btn_)
         return;
     tldr_btn_->setEnabled(!busy);
-    tldr_btn_->setText(busy ? QStringLiteral("TL;DR…") : QStringLiteral("TL;DR"));
+    tldr_btn_->setText(busy ? QStringLiteral("DIGEST…") : QStringLiteral("DIGEST"));
 }
 
 void NewsCommandBar::refresh_portfolio_pill() {
