@@ -119,6 +119,10 @@ class MainWindow : public QMainWindow {
     /// on_terminal_unlocked() re-invokes it once the user is in. Runs once
     /// (guarded by boot_prefetched_).
     void try_boot_prefetch();
+    /// Open another AI-chat conversation pane side-by-side (AiChatScreen's
+    /// "New pane" button). Creates a fresh chat, registers it under a unique
+    /// id, and splits it alongside via the dock router.
+    void open_new_chat_pane();
     void setup_navigation();
     void on_auth_state_changed();
     void toggle_chat_mode();

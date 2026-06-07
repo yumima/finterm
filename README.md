@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`dd2452dee`](https://github.com/yumima/finterm/commit/dd2452dee) chat: per-conversation personas + multi-pane + session-id fix
 - [`6f5deeb39`](https://github.com/yumima/finterm/commit/6f5deeb39) equity tools: fail fast (90s -> 20s) so a stuck yfinance call can't hang chat
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

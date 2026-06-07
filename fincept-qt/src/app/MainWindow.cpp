@@ -1150,10 +1150,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("portfolio", []() { return new screens::PortfolioScreen; });
     dock_router_->register_factory("ai_chat", [this]() {
         auto* chat = new screens::AiChatScreen;
-        // "New pane" button → open another chat conversation side-by-side. The
-        // same factory materialises every duplicate, so this wires base + dups.
-        connect(chat, &screens::AiChatScreen::request_new_pane, this,
-                [this]() { dock_router_->duplicate_panel("ai_chat"); });
+        connect(chat, &screens::AiChatScreen::request_new_pane, this, &MainWindow::open_new_chat_pane);
         return chat;
     });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });
@@ -1454,6 +1451,23 @@ void MainWindow::try_boot_prefetch() {
                     portfolio_svc.load_summary(p.id);
             });
     portfolio_svc.load_portfolios();
+}
+
+void MainWindow::open_new_chat_pane() {
+    if (!dock_router_)
+        return;
+    // duplicate_panel() can't be used: the "ai_chat" factory is consumed on
+    // first materialise, and it tabs rather than splits. Instead build a fresh
+    // chat, register it eagerly under a unique id, and split it alongside the
+    // focused area (Right = side-by-side). Each new pane can spawn more.
+    static int pane_seq = 1;
+    const QString id = QStringLiteral("ai_chat#pane%1").arg(++pane_seq);
+    auto* chat = new screens::AiChatScreen;
+    connect(chat, &screens::AiChatScreen::request_new_pane, this, &MainWindow::open_new_chat_pane);
+    dock_router_->register_screen(id, chat);
+    dock_router_->split_alongside(id);  // defaults to RightDockWidgetArea
+    if (auto* dw = dock_router_->find_dock_widget(id))
+        dw->setWindowTitle(QStringLiteral("AI Chat %1").arg(pane_seq));
 }
 
 void MainWindow::show_lock_screen() {
