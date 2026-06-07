@@ -2,18 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-06)
+## Today's commits (2026-06-07)
 
 Latest first.
 
-- [`98e14505f`](https://github.com/yumima/finterm/commit/98e14505f) news: make the INTEL drawer drag-resizable; fix its toggle wiring
-- [`4c6549a68`](https://github.com/yumima/finterm/commit/4c6549a68) news: rescope the two feed briefs into distinct TL;DR + DIGEST
-- [`0c44c9335`](https://github.com/yumima/finterm/commit/0c44c9335) news: raise AI-content contrast to the headline/body cream
-- [`968c0793d`](https://github.com/yumima/finterm/commit/968c0793d) news: relabel the headline-brief button AI -> TL;DR
-- [`416e21ce4`](https://github.com/yumima/finterm/commit/416e21ce4) tts: never strand the LISTEN button on PREP…; fix stop() re-entrancy
-- [`173597895`](https://github.com/yumima/finterm/commit/173597895) news: render AI markdown; show TTS prep state instead of silent STOP
-- [`76d6baefc`](https://github.com/yumima/finterm/commit/76d6baefc) Address review findings on the startup/TTS/news commits
-- [`bb43d7dc2`](https://github.com/yumima/finterm/commit/bb43d7dc2) Defer boot prefetch off the login path; back off the dead session-pulse
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

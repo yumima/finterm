@@ -39,8 +39,12 @@ namespace {
 // when it groups multiple tools' anonymous namespaces into one TU.
 static constexpr const char* kEquityResearchTag = "EquityResearchTools";
 
-// Most calls hit yfinance via Python; 90s default covers slow paths.
-static constexpr int kEquityResearchTimeoutMs = 90000;
+// Calls hit yfinance via the Python daemon, which already caps each action at
+// PythonWorker::kNetworkActionTimeoutMs (10s). 90s here just made a stuck/
+// dropped daemon callback hang the chat for a minute and a half before failing
+// (e.g. when Yahoo rate-limits yfinance). Cap the outer watchdog just above the
+// daemon's own timeout so the tool fails fast and the model can answer.
+static constexpr int kEquityResearchTimeoutMs = 20000;
 
 QJsonObject quote_to_json(const services::equity::QuoteData& q) {
     return QJsonObject{
