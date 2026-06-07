@@ -165,6 +165,19 @@ QJsonArray McpService::format_tools_for_openai() {
 
 QJsonArray McpService::format_tools_for_openai(const QStringList& allow_globs) {
     auto tools = allow_globs.isEmpty() ? get_all_tools() : list_tools_for_patterns(allow_globs);
+
+    // A local model chokes on a huge tool list — all ~474 tools is ~107k tokens,
+    // which overran the chat request (it hung) and wrecks tool selection. Hard-cap
+    // the count so no persona / over-broad glob can blow up the request. Curated
+    // personas sit well under this; the cap only bites the legacy all-tools case.
+    constexpr int kMaxLlmTools = 48;
+    if (static_cast<int>(tools.size()) > kMaxLlmTools) {
+        LOG_WARN(TAG, QString("format_tools_for_openai: capping %1 tools → %2 for the LLM")
+                          .arg(tools.size())
+                          .arg(kMaxLlmTools));
+        tools.resize(kMaxLlmTools);
+    }
+
     QJsonArray result;
 
     for (const auto& tool : tools) {

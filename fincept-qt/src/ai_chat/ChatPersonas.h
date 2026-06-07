@@ -11,10 +11,11 @@ namespace fincept::ai_chat {
 /// patterns over the wire name `<server>__<tool>`, e.g. `int__get_portfolio*`).
 ///
 /// Scoping tools per persona is what makes the assistant usable: handing a 14B
-/// model all ~300 registered tools at once wrecks tool selection, so it rarely
-/// pulls the right one. A Portfolio persona that sees ~a dozen portfolio tools
-/// picks correctly. Empty `tool_globs` = all tools (the General persona, i.e.
-/// the legacy behaviour).
+/// model all ~474 registered tools at once (~107k tokens) overruns the request
+/// and wrecks tool selection, so it rarely pulls the right one. A Portfolio
+/// persona that sees ~a dozen portfolio tools picks correctly. Empty
+/// `tool_globs` still means "all tools", but the count is hard-capped in
+/// McpService::format_tools_for_openai so it can never blow up a request.
 struct ChatPersona {
     QString id;
     QString label;
@@ -22,13 +23,19 @@ struct ChatPersona {
     QStringList tool_globs;
 };
 
-/// Built-in personas. Index 0 (General) preserves the all-tools default.
+/// Built-in personas. Index 0 (General) is a broad-but-curated default — it
+/// carries the most-used market / news / portfolio tools rather than all ~474,
+/// which used to hang the local model on every message.
 inline const std::vector<ChatPersona>& builtin_personas() {
     static const std::vector<ChatPersona> kPersonas = {
         {"general", "General",
          "You are finterm AI, a general financial assistant embedded in the terminal. "
-         "Use any available tool to help the user.",
-         {}},
+         "Use the available market, news, portfolio, and watchlist tools to help the user.",
+         {"int__get_quote", "int__get_candles", "int__get_news", "int__search_news",
+          "int__get_top_news", "int__get_news_summary", "int__get_portfolio*", "int__get_holdings",
+          "int__list_portfolios", "int__get_transactions", "int__get_watchlists",
+          "int__add_to_watchlist", "int__remove_from_watchlist", "int__navigate_to_tab",
+          "int__load_equity_symbol", "int__search_equity_symbols"}},
         {"portfolio", "Portfolio Advisor",
          "You are a portfolio advisor inside finterm. The user's real holdings are reachable through "
          "the portfolio tools — ALWAYS read the actual portfolio (get_portfolio / get_holdings / "

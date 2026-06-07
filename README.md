@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`98e14505f`](https://github.com/yumima/finterm/commit/98e14505f) news: make the INTEL drawer drag-resizable; fix its toggle wiring
 - [`4c6549a68`](https://github.com/yumima/finterm/commit/4c6549a68) news: rescope the two feed briefs into distinct TL;DR + DIGEST
 - [`0c44c9335`](https://github.com/yumima/finterm/commit/0c44c9335) news: raise AI-content contrast to the headline/body cream
 - [`968c0793d`](https://github.com/yumima/finterm/commit/968c0793d) news: relabel the headline-brief button AI -> TL;DR
