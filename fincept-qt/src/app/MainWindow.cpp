@@ -1148,7 +1148,14 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("notes", []() { return new screens::NotesScreen; });
 
     dock_router_->register_factory("portfolio", []() { return new screens::PortfolioScreen; });
-    dock_router_->register_factory("ai_chat", []() { return new screens::AiChatScreen; });
+    dock_router_->register_factory("ai_chat", [this]() {
+        auto* chat = new screens::AiChatScreen;
+        // "New pane" button → open another chat conversation side-by-side. The
+        // same factory materialises every duplicate, so this wires base + dups.
+        connect(chat, &screens::AiChatScreen::request_new_pane, this,
+                [this]() { dock_router_->duplicate_panel("ai_chat"); });
+        return chat;
+    });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });
     dock_router_->register_factory("algo_trading", []() { return new screens::AlgoTradingScreen; });
     dock_router_->register_factory("node_editor", []() { return new workflow::NodeEditorScreen; });

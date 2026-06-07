@@ -55,6 +55,17 @@ struct ConversationMessage {
     QString content;
 };
 
+// Per-request persona scope. Carried through the chat path so each conversation
+// (and each chat pane) uses its own persona without touching the global
+// active_persona_* singleton state. `valid == false` (the default) means "fall
+// back to the global set_persona() snapshot" — keeps every existing caller
+// (inline completion, news one-shots, agent bridge) working unchanged.
+struct PersonaScope {
+    QString prompt;          // resolved persona system prompt
+    QStringList tool_globs;  // resolved persona tool allow-list (globs)
+    bool valid = false;
+};
+
 struct LlmResponse {
     QString content;
     QString error;
@@ -77,14 +88,15 @@ class LlmService : public QObject {
     // Non-streaming (blocking — call from background thread via QtConcurrent::run)
     // use_tools: when false, disables MCP tool execution for this request
     //            (use for the floating bubble to prevent unintended navigation)
+    // persona: per-request persona scope (default {} → global set_persona snapshot)
     LlmResponse chat(const QString& user_message, const std::vector<ConversationMessage>& history,
-                     bool use_tools = true);
+                     bool use_tools = true, const PersonaScope& persona = {});
 
     // Streaming — launches background thread; on_chunk called on that thread.
     // Emit finished_streaming(response) when done to get result on UI thread.
     // use_tools: when false, disables MCP tool execution for this request
     void chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
-                        StreamCallback on_chunk, bool use_tools = true);
+                        StreamCallback on_chunk, bool use_tools = true, const PersonaScope& persona = {});
 
     // Reload config from DB (call after user changes LLM settings)
     void reload_config();
@@ -162,13 +174,18 @@ class LlmService : public QObject {
     // (current symbol / active portfolio). Injected after the base system prompt.
     QString ambient_context() const;
     QString dynamic_system_suffix() const;
+    // Per-request overloads: use the PersonaScope's prompt/globs when valid,
+    // else fall back to the global persona snapshot.
+    QString dynamic_system_suffix(const PersonaScope& persona) const;
+    QStringList resolve_tool_globs(const PersonaScope& persona) const;
 
     // Request builders → QJsonObject
     QJsonObject build_openai_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                     bool stream, bool with_tools = true);
+                                     bool stream, bool with_tools = true, const PersonaScope& persona = {});
     QJsonObject build_anthropic_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                        bool stream);
-    QJsonObject build_gemini_request(const QString& user_message, const std::vector<ConversationMessage>& history);
+                                        bool stream, const PersonaScope& persona = {});
+    QJsonObject build_gemini_request(const QString& user_message, const std::vector<ConversationMessage>& history,
+                                     const PersonaScope& persona = {});
     QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                       bool with_tools);
 
@@ -186,12 +203,13 @@ class LlmService : public QObject {
     // Synchronous HTTP helpers (use QNetworkAccessManager + QEventLoop)
     // Must be called from a background thread.
     LlmResponse do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                           bool use_tools = true);
+                           bool use_tools = true, const PersonaScope& persona = {});
     LlmResponse do_streaming_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                     StreamCallback on_chunk);
+                                     StreamCallback on_chunk, const PersonaScope& persona = {});
 
     // Tool-call follow-up loop (OpenAI-compatible)
-    LlmResponse do_tool_loop(QJsonArray loop_messages, const QString& url, const QMap<QString, QString>& headers);
+    LlmResponse do_tool_loop(QJsonArray loop_messages, const QString& url, const QMap<QString, QString>& headers,
+                             const PersonaScope& persona = {});
 
     // Detect and execute tool calls embedded as text/XML in the response content.
     // Returns std::nullopt if no text-based tool calls were found.

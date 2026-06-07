@@ -34,7 +34,12 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     QString state_key() const override { return "ai_chat"; }
     // v2 adds: draft text, search text, scroll position, attached file path.
     // v3 adds: sidebar_collapsed.
-    int state_version() const override { return 3; }
+    // v4 adds: persona_id (per-conversation persona).
+    int state_version() const override { return 4; }
+
+  signals:
+    /// Ask the host (MainWindow) to open another chat pane via ADS docking.
+    void request_new_pane();
 
   protected:
     void showEvent(QShowEvent* e) override;
@@ -95,6 +100,7 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     QLabel* hdr_session_lbl_ = nullptr;
     QLabel* hdr_model_lbl_ = nullptr;
     QComboBox* persona_combo_ = nullptr;
+    QPushButton* new_pane_btn_ = nullptr;
     QPushButton* runtime_toggle_btn_ = nullptr;
     void refresh_runtime_toggle();
     QLabel* hdr_tokens_lbl_ = nullptr;
@@ -124,6 +130,8 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     // ── State ────────────────────────────────────────────────────────────
     QString active_session_id_;
     QString active_session_title_;
+    QString active_persona_id_ = QStringLiteral("general"); // persona bound to the active conversation
+    bool programmatic_persona_set_ = false;  // guards combo signal re-entry during restore
     mutable QMutex history_mutex_;
     std::vector<ai_chat::ConversationMessage> history_;
     bool streaming_ = false;
@@ -144,7 +152,10 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     // ── Data ─────────────────────────────────────────────────────────────
     void load_sessions();
     void load_messages(const QString& session_id);
-    void create_new_session();
+    /// Create a new conversation bound to `persona_id`. Returns false on failure.
+    bool create_new_session(const QString& persona_id = QStringLiteral("general"));
+    /// Reflect `persona_id` in the header combo without firing the change handler.
+    void sync_persona_combo(const QString& persona_id);
     void add_message_bubble(const QString& role, const QString& content, const QString& timestamp = {});
     QLabel* add_streaming_bubble();
     void clear_messages();

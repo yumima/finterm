@@ -517,8 +517,14 @@ QString LlmService::ambient_context() const {
 
 // Persona instructions + ambient context, appended after the base system prompt.
 QString LlmService::dynamic_system_suffix() const {
+    return dynamic_system_suffix(PersonaScope{});
+}
+
+// Per-request variant: prefer the request's PersonaScope prompt; fall back to
+// the global persona snapshot when the scope is invalid (legacy callers).
+QString LlmService::dynamic_system_suffix(const PersonaScope& persona) const {
     QStringList blocks;
-    const QString pp = persona_prompt();
+    const QString pp = persona.valid ? persona.prompt : persona_prompt();
     if (!pp.isEmpty())
         blocks << pp;
     const QString amb = ambient_context();
@@ -527,9 +533,15 @@ QString LlmService::dynamic_system_suffix() const {
     return blocks.join(QStringLiteral("\n\n"));
 }
 
+// Per-request tool allow-list: the request's PersonaScope globs when valid, else
+// the global persona snapshot.
+QStringList LlmService::resolve_tool_globs(const PersonaScope& persona) const {
+    return persona.valid ? persona.tool_globs : persona_tools();
+}
+
 QJsonObject LlmService::build_openai_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, bool stream,
-                                             bool with_tools) {
+                                             bool with_tools, const PersonaScope& persona) {
     const QString model_lower = model_.toLower();
 
     // deepseek-reasoner doesn't accept `tools`.
@@ -545,7 +557,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // Persona + ambient context steer the AGENTIC chat. A tool-less one-shot
     // call (e.g. news analysis via chat(use_tools=false)) must NOT receive it,
     // or it derails structured-output prompts — so gate on with_tools.
-    const QString sys_suffix = with_tools ? dynamic_system_suffix() : QString();
+    const QString sys_suffix = with_tools ? dynamic_system_suffix(persona) : QString();
     if (!sys_suffix.isEmpty())
         messages.append(QJsonObject{{"role", "system"}, {"content", sys_suffix}});
     for (const auto& m : history)
@@ -579,7 +591,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // which silently breaks live tool calling for OpenAI/Kimi/Groq/etc.
     // deepseek-reasoner rejects tools entirely; some Groq models also.
     if (with_tools && tools_enabled_ && !is_ds_reasoner && !groq_no_tools) {
-        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(persona_tools());
+        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(resolve_tool_globs(persona));
         if (!tools.isEmpty())
             req["tools"] = tools;
         LOG_INFO(TAG, QString("OpenAI request: stream=%1 provider=%2 tools=%3 (count=%4)")
@@ -599,7 +611,8 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
 }
 
 QJsonObject LlmService::build_anthropic_request(const QString& user_message,
-                                                const std::vector<ConversationMessage>& history, bool stream) {
+                                                const std::vector<ConversationMessage>& history, bool stream,
+                                                const PersonaScope& persona) {
     QJsonArray messages;
     for (const auto& m : history) {
         if (m.role != "system")
@@ -616,7 +629,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     // Only the agentic chat (tools on) gets persona + ambient context — not a
     // tool-less one-shot call. (Anthropic has no with_tools param; tools_enabled_
     // carries it.)
-    const QString sys_suffix = tools_enabled_ ? dynamic_system_suffix() : QString();
+    const QString sys_suffix = tools_enabled_ ? dynamic_system_suffix(persona) : QString();
     if (!sys_suffix.isEmpty())
         sys = sys.isEmpty() ? sys_suffix : (sys + "\n\n" + sys_suffix);
     if (!sys.isEmpty())
@@ -631,7 +644,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     // falls back to do_request to execute and follow up.
     if (tools_enabled_) {
         QJsonArray ant_tools;
-        auto all_tools = mcp::McpService::instance().list_tools_for_patterns(persona_tools());
+        auto all_tools = mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona));
         for (const auto& tool : all_tools) {
             QString fn_name = tool.server_id + "__" + tool.name;
             QJsonObject schema = tool.input_schema;
@@ -649,7 +662,8 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
 }
 
 QJsonObject LlmService::build_gemini_request(const QString& user_message,
-                                             const std::vector<ConversationMessage>& history) {
+                                             const std::vector<ConversationMessage>& history,
+                                             const PersonaScope& persona) {
     QJsonArray contents;
     for (const auto& m : history) {
         if (m.role == "system")
@@ -671,7 +685,7 @@ QJsonObject LlmService::build_gemini_request(const QString& user_message,
     }
 
     // Gemini tool format: tools[{functionDeclarations:[{name, description, parameters}]}]
-    auto all_tools = tools_enabled_ ? mcp::McpService::instance().list_tools_for_patterns(persona_tools())
+    auto all_tools = tools_enabled_ ? mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona))
                                     : std::vector<mcp::UnifiedTool>{};
     if (!all_tools.empty()) {
         QJsonArray fn_decls;
@@ -988,7 +1002,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
 // ============================================================================
 
 LlmResponse LlmService::do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                  bool use_tools) {
+                                  bool use_tools, const PersonaScope& persona) {
     LlmResponse resp;
 
     QString url = get_endpoint_url();
@@ -1001,9 +1015,9 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     QJsonObject req_body;
 
     if (provider_ == "anthropic") {
-        req_body = build_anthropic_request(user_message, history, false);
+        req_body = build_anthropic_request(user_message, history, false, persona);
     } else if (provider_ == "gemini" || provider_ == "google") {
-        req_body = build_gemini_request(user_message, history);
+        req_body = build_gemini_request(user_message, history, persona);
         // Auth goes via x-goog-api-key header (set by get_headers()).
         // Do not append ?key= to URL — it leaks the key into access logs.
     } else if (provider_ == "fincept") {
@@ -1016,7 +1030,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         LOG_WARN(TAG, resp.error);
         return resp;
     } else {
-        req_body = build_openai_request(user_message, history, false, use_tools);
+        req_body = build_openai_request(user_message, history, false, use_tools, persona);
     }
 
     LOG_DEBUG(TAG, QString("POST %1 provider=%2 model=%3").arg(url, provider_, model_));
@@ -1267,7 +1281,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                         {"content", QString::fromUtf8(QJsonDocument(tr.to_json()).toJson(QJsonDocument::Compact))}});
                 }
 
-                resp = do_tool_loop(loop_msgs, url, hdr);
+                resp = do_tool_loop(loop_msgs, url, hdr, persona);
                 parse_usage(resp, rj, provider_);
                 return resp;
 
@@ -1305,7 +1319,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 // ============================================================================
 
 LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& url,
-                                     const QMap<QString, QString>& headers) {
+                                     const QMap<QString, QString>& headers, const PersonaScope& persona) {
     LlmResponse resp;
     // 15 rounds covers complex agentic workflows (multi-step research →
     // template → fill → polish). Each round can contain many parallel
@@ -1320,7 +1334,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         // Temperature intentionally omitted — provider default.
         fu["max_tokens"] = resolved_max_tokens();
 
-        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(persona_tools());
+        QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(resolve_tool_globs(persona));
         if (!tools.isEmpty())
             fu["tools"] = tools;
 
@@ -1718,13 +1732,14 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
 // ============================================================================
 
 LlmResponse LlmService::do_streaming_request(const QString& user_message,
-                                             const std::vector<ConversationMessage>& history, StreamCallback on_chunk) {
+                                             const std::vector<ConversationMessage>& history, StreamCallback on_chunk,
+                                             const PersonaScope& persona) {
     // All providers fall back to non-streaming do_request so the full tool-call /
     // follow-up loop runs correctly regardless of provider.
     // Streaming is disabled globally until per-provider SSE tool-call handling is
     // implemented for each backend.
     {
-        auto resp = do_request(user_message, history);
+        auto resp = do_request(user_message, history, true, persona);
         if (resp.success && !resp.content.isEmpty())
             on_chunk(resp.content, false);
         on_chunk("", true);
@@ -1742,8 +1757,8 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
     auto hdr = get_headers();
     // Send tools for OpenAI-compatible streaming; Anthropic streaming doesn't
     // support tool_choice in the same SSE flow so we handle that separately.
-    QJsonObject req_body = (provider_ == "anthropic") ? build_anthropic_request(user_message, history, true)
-                                                      : build_openai_request(user_message, history, true, true);
+    QJsonObject req_body = (provider_ == "anthropic") ? build_anthropic_request(user_message, history, true, persona)
+                                                      : build_openai_request(user_message, history, true, true, persona);
 
     // Use dedicated NAM on this background thread
     QNetworkAccessManager nam;
@@ -1907,7 +1922,7 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
         // Send a special "clear" sentinel so the chat screen can reset the bubble.
         on_chunk("\x01__TOOL_CALL_CLEAR__", false);
 
-        auto tool_resp = do_request(user_message, history);
+        auto tool_resp = do_request(user_message, history, true, persona);
         if (tool_resp.success && !tool_resp.content.isEmpty())
             on_chunk(tool_resp.content, false);
         on_chunk("", true);
@@ -2242,7 +2257,7 @@ void LlmService::fetch_models(const QString& provider, const QString& api_key, c
 // ============================================================================
 
 LlmResponse LlmService::chat(const QString& user_message, const std::vector<ConversationMessage>& history,
-                             bool use_tools) {
+                             bool use_tools, const PersonaScope& persona) {
     // Hold the mutex across the entire do_request call to prevent
     // member-config tearing under concurrent callers.
     //
@@ -2283,11 +2298,11 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
     // use_tools is threaded through do_request (per-request, no global
     // tools_enabled_ mutation), so concurrent calls don't race on tool state.
     // do_request reads config members unlocked — same as do_streaming_request.
-    return do_request(user_message, history, use_tools);
+    return do_request(user_message, history, use_tools, persona);
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                StreamCallback on_chunk, bool use_tools) {
+                                StreamCallback on_chunk, bool use_tools, const PersonaScope& persona) {
     // Snapshot config under lock
     QString p, k, b, m, sp;
     double t;
@@ -2358,7 +2373,7 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
         }
     };
     (void)QtConcurrent::run(
-        [self, p, k, b, m, sp, t, mx, user_message, history_copy, guarded_chunk, use_tools, saved_tools]() {
+        [self, p, k, b, m, sp, t, mx, user_message, history_copy, guarded_chunk, use_tools, saved_tools, persona]() {
             if (!self)
                 return;
 
@@ -2379,7 +2394,7 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
                     self->tools_enabled_ = false;
             }
 
-            auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk);
+            auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk, persona);
 
             // Restore tools_enabled_ to saved value
             {

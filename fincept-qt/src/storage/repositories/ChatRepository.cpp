@@ -11,7 +11,7 @@ ChatRepository& ChatRepository::instance() {
 
 ChatSession ChatRepository::map_session(QSqlQuery& q) {
     return {q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
-            q.value(4).toInt(),    q.value(5).toString(), q.value(6).toString()};
+            q.value(4).toInt(),    q.value(5).toString(), q.value(6).toString(), q.value(7).toString()};
 }
 
 ChatMessage ChatRepository::map_message(QSqlQuery& q) {
@@ -20,29 +20,34 @@ ChatMessage ChatRepository::map_message(QSqlQuery& q) {
 }
 
 Result<ChatSession> ChatRepository::create_session(const QString& title, const QString& provider,
-                                                   const QString& model) {
+                                                   const QString& model, const QString& persona_id) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model) VALUES (?, ?, ?, ?)",
-                        {id, title, provider, model});
+    auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model, persona_id) VALUES (?, ?, ?, ?, ?)",
+                        {id, title, provider, model, persona_id});
     if (r.is_err())
         return Result<ChatSession>::err(r.error());
     return get_session(id);
 }
 
 Result<ChatSession> ChatRepository::get_session(const QString& id) {
-    return query_one("SELECT id, title, provider, model, message_count, created_at, updated_at "
+    return query_one("SELECT id, title, provider, model, message_count, created_at, updated_at, persona_id "
                      "FROM chat_sessions WHERE id = ?",
                      {id}, map_session);
 }
 
 Result<QVector<ChatSession>> ChatRepository::list_sessions() {
-    return query_list("SELECT id, title, provider, model, message_count, created_at, updated_at "
+    return query_list("SELECT id, title, provider, model, message_count, created_at, updated_at, persona_id "
                       "FROM chat_sessions ORDER BY updated_at DESC",
                       {}, map_session);
 }
 
 Result<void> ChatRepository::update_session_title(const QString& id, const QString& title) {
     return exec_write("UPDATE chat_sessions SET title = ?, updated_at = datetime('now') WHERE id = ?", {title, id});
+}
+
+Result<void> ChatRepository::update_session_persona(const QString& id, const QString& persona_id) {
+    return exec_write("UPDATE chat_sessions SET persona_id = ?, updated_at = datetime('now') WHERE id = ?",
+                      {persona_id, id});
 }
 
 Result<void> ChatRepository::delete_session(const QString& id) {

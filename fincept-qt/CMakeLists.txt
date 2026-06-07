@@ -769,6 +769,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v040_memory_embeddings.cpp
     src/storage/sqlite/migrations/v041_migrate_fincept_provider.cpp
     src/storage/sqlite/migrations/v042_fix_llm_base_url.cpp
+    src/storage/sqlite/migrations/v043_chat_session_persona.cpp
 )
 
 # Python runner
@@ -1879,6 +1880,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v040_memory_embeddings.cpp
     src/storage/sqlite/migrations/v041_migrate_fincept_provider.cpp
     src/storage/sqlite/migrations/v042_fix_llm_base_url.cpp
+    src/storage/sqlite/migrations/v043_chat_session_persona.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp

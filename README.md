@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`6f5deeb39`](https://github.com/yumima/finterm/commit/6f5deeb39) equity tools: fail fast (90s -> 20s) so a stuck yfinance call can't hang chat
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

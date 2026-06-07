@@ -494,11 +494,32 @@ QWidget* AiChatScreen::build_header_bar() {
                                       .arg(fnt::TINY)
                                       .arg(col::BG_BASE(), col::BORDER_MED()));
     connect(persona_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
-        ai_chat::LlmService::instance().set_persona(persona_combo_->itemData(idx).toString());
+        if (programmatic_persona_set_)
+            return;  // restoring a session's persona — don't write back / clobber
+        active_persona_id_ = persona_combo_->itemData(idx).toString();
+        // Persona is bound to THIS conversation (passed per-request on send), not
+        // the global singleton — so panes/conversations don't share one persona.
+        if (!active_session_id_.isEmpty())
+            ChatRepository::instance().update_session_persona(active_session_id_, active_persona_id_);
     });
-    // Apply the initial persona (index 0 = General → all tools, legacy default).
+    // Keep a harmless process-wide default for any non-chat tool caller that
+    // doesn't pass a PersonaScope; the chat itself overrides this per request.
     ai_chat::LlmService::instance().set_persona(persona_combo_->currentData().toString());
     hl->addWidget(persona_combo_);
+
+    // New pane — open another chat conversation side-by-side (reuses the ADS
+    // docking: split vertical/horizontal, drag, resize — like dashboard widgets).
+    new_pane_btn_ = new QPushButton(QStringLiteral("＋ Pane"));
+    new_pane_btn_->setCursor(Qt::PointingHandCursor);
+    new_pane_btn_->setToolTip("Open another chat in a new pane (split / drag / resize)");
+    new_pane_btn_->setStyleSheet(QString("QPushButton{color:%1;font-size:%2px;background:%3;border:1px solid %4;"
+                                         "border-radius:0px;padding:2px 8px;}"
+                                         "QPushButton:hover{color:%5;border-color:%5;}")
+                                     .arg(col::TEXT_SECONDARY())
+                                     .arg(fnt::TINY)
+                                     .arg(col::BG_BASE(), col::BORDER_MED(), col::TEXT_PRIMARY()));
+    connect(new_pane_btn_, &QPushButton::clicked, this, [this]() { emit request_new_pane(); });
+    hl->addWidget(new_pane_btn_);
 
     // Token count
     hdr_tokens_lbl_ = new QLabel;
@@ -844,18 +865,20 @@ void AiChatScreen::load_sessions() {
         create_new_session();
 }
 
-void AiChatScreen::create_new_session() {
+bool AiChatScreen::create_new_session(const QString& persona_id) {
     if (streaming_)
-        return;
+        return false;
     const QString title = generate_session_title();
     auto result = ChatRepository::instance().create_session(title, ai_chat::LlmService::instance().active_provider(),
-                                                            ai_chat::LlmService::instance().active_model());
+                                                            ai_chat::LlmService::instance().active_model(), persona_id);
     if (result.is_err()) {
         LOG_ERROR(TAG, "create_new_session failed: " + QString::fromStdString(result.error()));
-        return;
+        return false;
     }
     active_session_id_ = result.value().id;
     active_session_title_ = result.value().title;
+    active_persona_id_ = persona_id;
+    sync_persona_combo(persona_id);
     history_.clear();
     total_tokens_ = 0;
     total_messages_ = 0;
@@ -866,6 +889,16 @@ void AiChatScreen::create_new_session() {
     rename_btn_->setEnabled(true);
     update_stats();
     show_welcome(true);
+    return true;
+}
+
+void AiChatScreen::sync_persona_combo(const QString& persona_id) {
+    if (!persona_combo_)
+        return;
+    programmatic_persona_set_ = true;  // suppress the change handler's DB write-back
+    const int row = persona_combo_->findData(persona_id);
+    persona_combo_->setCurrentIndex(row < 0 ? 0 : row);
+    programmatic_persona_set_ = false;
 }
 
 void AiChatScreen::load_messages(const QString& session_id) {
@@ -918,7 +951,16 @@ void AiChatScreen::load_messages(const QString& session_id) {
 // ── Slots ─────────────────────────────────────────────────────────────────────
 
 void AiChatScreen::on_new_session() {
-    create_new_session();
+    if (streaming_)
+        return;
+    // Bind the new conversation to a persona chosen here (default = General).
+    QMenu menu(this);
+    for (const auto& p : ai_chat::builtin_personas()) {
+        QAction* act = menu.addAction(p.label);
+        const QString pid = p.id;
+        connect(act, &QAction::triggered, this, [this, pid]() { create_new_session(pid); });
+    }
+    menu.exec(new_btn_->mapToGlobal(QPoint(0, new_btn_->height())));
 }
 
 void AiChatScreen::on_session_selected(int row) {
@@ -930,6 +972,13 @@ void AiChatScreen::on_session_selected(int row) {
     delete_btn_->setEnabled(true);
     rename_btn_->setEnabled(true);
     hdr_session_lbl_->setText(active_session_title_);
+    // Restore this conversation's bound persona into the combo (guarded so it
+    // doesn't write back). Each conversation carries its own persona.
+    auto sess = ChatRepository::instance().get_session(active_session_id_);
+    active_persona_id_ = (!sess.is_err() && !sess.value().persona_id.isEmpty())
+                             ? sess.value().persona_id
+                             : QStringLiteral("general");
+    sync_persona_combo(active_persona_id_);
     load_messages(active_session_id_);
     ScreenStateManager::instance().notify_changed(this);
 }
@@ -986,9 +1035,10 @@ void AiChatScreen::on_send() {
     const QString raw_text = input_box_->toPlainText().trimmed();
     if (raw_text.isEmpty() && attached_file_path_.isEmpty())
         return;
-    if (active_session_id_.isEmpty())
-        create_new_session();
-    if (active_session_id_.isEmpty()) {
+    // Ensure a session exists before we persist anything (fixes the
+    // chat_messages.session_id NOT NULL failure when sending from a fresh
+    // welcome panel). Bind it to the currently-selected persona.
+    if (active_session_id_.isEmpty() && !create_new_session(active_persona_id_)) {
         add_message_bubble("system", "Failed to create chat session. Please try again.");
         return;
     }
@@ -1057,6 +1107,11 @@ void AiChatScreen::on_send() {
     scroll_to_bottom();
 
     std::vector<ai_chat::ConversationMessage> hist_copy = history_;
+    // This conversation's persona, carried per-request (not the global singleton)
+    // so two panes/conversations can use different personas concurrently.
+    ai_chat::PersonaScope persona;
+    if (const auto* p = ai_chat::find_persona(active_persona_id_))
+        persona = {p->system_prompt, p->tool_globs, true};
     const QString provider = ai_chat::LlmService::instance().active_provider();
     if (ai_chat::provider_supports_streaming(provider)) {
         QPointer<AiChatScreen> self = this;
@@ -1078,11 +1133,11 @@ void AiChatScreen::on_send() {
                         self->on_stream_chunk(chunk, done);
                     },
                     Qt::QueuedConnection);
-            });
+            }, /*use_tools*/ true, persona);
     } else {
         QPointer<AiChatScreen> self = this;
-        (void)QtConcurrent::run([self, text, hist_copy]() {
-            auto resp = ai_chat::LlmService::instance().chat(text, hist_copy);
+        (void)QtConcurrent::run([self, text, hist_copy, persona]() {
+            auto resp = ai_chat::LlmService::instance().chat(text, hist_copy, /*use_tools*/ true, persona);
             QMetaObject::invokeMethod(
                 qApp,
                 [self, resp]() {
@@ -1239,6 +1294,14 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
     auto persist_pair = [this](const QString& user_text, const QString& sys_text) {
         add_message_bubble("user", user_text);
         add_message_bubble("system", sys_text);
+        // Backstop against the chat_messages.session_id NOT NULL constraint: a
+        // suggestion chip can re-enter handle_slash_command outside on_send's
+        // session guard. With no session, show the exchange in-UI but skip the
+        // DB write rather than fail the insert.
+        if (active_session_id_.isEmpty()) {
+            scroll_to_bottom();
+            return;
+        }
         // Persist so the exchange survives a session reload.  History_
         // intentionally does NOT receive these — they're a parallel
         // dispatch channel, not LLM conversation context.
@@ -1375,10 +1438,14 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
                     : QStringLiteral("Team **%1** failed: %2").arg(team_name_copy,
                           r.error.isEmpty() ? QStringLiteral("unknown error") : r.error);
                 self_ptr->add_message_bubble("system", body);
-                const auto& llm = ai_chat::LlmService::instance();
-                ChatRepository::instance().add_message(
-                    self_ptr->active_session_id_, "system", body,
-                    llm.active_provider(), llm.active_model());
+                // Skip the DB write if the session was cleared while the team
+                // ran (chat_messages.session_id is NOT NULL).
+                if (!self_ptr->active_session_id_.isEmpty()) {
+                    const auto& llm = ai_chat::LlmService::instance();
+                    ChatRepository::instance().add_message(
+                        self_ptr->active_session_id_, "system", body,
+                        llm.active_provider(), llm.active_model());
+                }
                 self_ptr->scroll_to_bottom();
             });
             return true;
@@ -1457,10 +1524,13 @@ bool AiChatScreen::handle_slash_command(const QString& text) {
             // detects the prefix and rebuilds the chip row.
             const QString suggest = suggest_persist_prefix()
                                     + rendered.join(suggest_persist_separator());
-            ChatRepository::instance().add_message(
-                active_session_id_, "system", suggest,
-                ai_chat::LlmService::instance().active_provider(),
-                ai_chat::LlmService::instance().active_model());
+            // Skip the DB mirror if there's no session (chip re-entry outside
+            // on_send's guard) — chat_messages.session_id is NOT NULL.
+            if (!active_session_id_.isEmpty())
+                ChatRepository::instance().add_message(
+                    active_session_id_, "system", suggest,
+                    ai_chat::LlmService::instance().active_provider(),
+                    ai_chat::LlmService::instance().active_model());
             scroll_to_bottom();
         }
     }
@@ -1943,6 +2013,7 @@ QVariantMap AiChatScreen::save_state() const {
     if (!attached_file_path_.isEmpty())
         s.insert("attached_file", attached_file_path_);
     s.insert("sidebar_collapsed", sidebar_collapsed_);
+    s.insert("persona_id", active_persona_id_);
 
     return s;
 }
@@ -1961,6 +2032,17 @@ void AiChatScreen::restore_state(const QVariantMap& state) {
             }
         }
         // Session not found (may have been deleted) — leave default selection
+    }
+
+    // Persona: a restored session's DB persona is authoritative (on_session_selected
+    // already synced the combo). Only fall back to the saved persona when no session
+    // was restored (e.g. a fresh duplicated pane).
+    if (active_session_id_.isEmpty()) {
+        const QString pid = state.value("persona_id").toString();
+        if (!pid.isEmpty()) {
+            active_persona_id_ = pid;
+            sync_persona_combo(pid);
+        }
     }
 
     // Search box — apply before (or after) session restore; filter text is independent.

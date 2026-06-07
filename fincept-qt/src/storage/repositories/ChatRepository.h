@@ -11,6 +11,7 @@ struct ChatSession {
     int message_count = 0;
     QString created_at;
     QString updated_at;
+    QString persona_id; // chat persona bound to this conversation (ChatPersonas.h); default 'general'
 };
 
 struct ChatMessage {
@@ -29,10 +30,12 @@ class ChatRepository : public BaseRepository<ChatSession> {
     static ChatRepository& instance();
 
     // Sessions
-    Result<ChatSession> create_session(const QString& title, const QString& provider = {}, const QString& model = {});
+    Result<ChatSession> create_session(const QString& title, const QString& provider = {}, const QString& model = {},
+                                       const QString& persona_id = QStringLiteral("general"));
     Result<ChatSession> get_session(const QString& id);
     Result<QVector<ChatSession>> list_sessions();
     Result<void> update_session_title(const QString& id, const QString& title);
+    Result<void> update_session_persona(const QString& id, const QString& persona_id);
     Result<void> delete_session(const QString& id);
 
     // Messages
