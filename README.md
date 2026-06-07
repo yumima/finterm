@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`968c0793d`](https://github.com/yumima/finterm/commit/968c0793d) news: relabel the headline-brief button AI -> TL;DR
 - [`416e21ce4`](https://github.com/yumima/finterm/commit/416e21ce4) tts: never strand the LISTEN button on PREP…; fix stop() re-entrancy
 - [`173597895`](https://github.com/yumima/finterm/commit/173597895) news: render AI markdown; show TTS prep state instead of silent STOP
 - [`76d6baefc`](https://github.com/yumima/finterm/commit/76d6baefc) Address review findings on the startup/TTS/news commits
