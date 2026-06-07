@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QShowEvent>
+#include <QSplitter>
 #include <QWidget>
 
 #include <atomic>
@@ -99,8 +100,10 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     NewsDetailPanel* detail_panel_ = nullptr;
     NewsTickerStrip* ticker_strip_ = nullptr;
 
-    // Content area layout — holds feed + overlays
+    // Content area layout — holds the drag-resizable [drawer | feed] splitter.
     QHBoxLayout* content_layout_ = nullptr;
+    QSplitter* content_splitter_ = nullptr;
+    int drawer_width_ = 280;  ///< remembered Intel-drawer width across toggles
 
     // State
     QVector<services::NewsArticle> all_articles_;

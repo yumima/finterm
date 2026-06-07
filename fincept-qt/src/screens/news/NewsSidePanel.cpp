@@ -10,7 +10,7 @@ namespace fincept::screens {
 
 NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDrawerPanel");
-    setFixedWidth(280);
+    setMinimumWidth(200);  // resizable via the content splitter; opens at ~280
     hide(); // start hidden — toggled by INTEL button
 
     auto* outer = new QVBoxLayout(this);
@@ -35,7 +35,9 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     close_btn->setFixedSize(22, 22);
     close_btn->setCursor(Qt::PointingHandCursor);
     connect(close_btn, &QPushButton::clicked, this, [this]() {
-        toggle_drawer();
+        // Just request the close; NewsScreen::on_drawer_toggle does the single
+        // toggle (+ width/button sync). Toggling here too would double-toggle
+        // and the drawer would reopen instead of closing.
         emit close_requested();
     });
     header_layout->addWidget(close_btn);

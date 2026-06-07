@@ -154,19 +154,29 @@ void NewsScreen::build_ui() {
     content_layout_->setContentsMargins(0, 0, 0, 0);
     content_layout_->setSpacing(0);
 
-    // Intel drawer (left, hidden by default, 280px)
+    // Horizontal splitter so the Intel drawer is drag-resizable against the
+    // feed — standard Qt handle, no width hard-locked.
+    content_splitter_ = new QSplitter(Qt::Horizontal, content_widget);
+    content_splitter_->setObjectName("newsContentSplitter");
+    content_splitter_->setChildrenCollapsible(false);
+
+    // Intel drawer (left, hidden by default; opens to ~280px, resizable).
     side_panel_ = new NewsSidePanel(content_widget);
-    content_layout_->addWidget(side_panel_);
+    content_splitter_->addWidget(side_panel_);
 
     // Feed panel (fills remaining space). The detail pane is docked INSIDE
     // the feed's horizontal splitter (between the two news columns) rather
     // than off to the right — reading a story flanked by related headlines
     // on both sides is the layout the user requested.
     feed_panel_ = new NewsFeedPanel(content_widget);
-    content_layout_->addWidget(feed_panel_, 1);
+    content_splitter_->addWidget(feed_panel_);
 
     detail_panel_ = new NewsDetailPanel(content_widget);
     feed_panel_->set_middle_widget(detail_panel_);
+
+    content_splitter_->setStretchFactor(0, 0);  // drawer keeps its width
+    content_splitter_->setStretchFactor(1, 1);  // feed absorbs the resize
+    content_layout_->addWidget(content_splitter_);
 
     root->addWidget(content_widget, 1);
 
@@ -443,7 +453,7 @@ void NewsScreen::connect_signals() {
         if (detail_panel_->is_panel_open())
             detail_panel_->close_panel();
         else if (side_panel_->is_drawer_open())
-            side_panel_->toggle_drawer();
+            on_drawer_toggle();  // single path: closes + remembers width + syncs the INTEL button
     });
 }
 
@@ -702,7 +712,27 @@ void NewsScreen::on_related_clicked(const services::NewsArticle& article) {
 }
 
 void NewsScreen::on_drawer_toggle() {
-    side_panel_->toggle_drawer();
+    const bool was_open = side_panel_->is_drawer_open();
+    if (was_open) {
+        // Remember the user's dragged width before hiding so re-open restores it.
+        const int w = content_splitter_->sizes().value(0);
+        if (w > 0)
+            drawer_width_ = w;
+    }
+    side_panel_->toggle_drawer();  // flips visibility
+    const bool now_open = side_panel_->is_drawer_open();
+    if (now_open) {
+        // Give the freshly-shown drawer its remembered width; feed takes the rest.
+        // Only when the splitter is actually laid out wide enough — otherwise the
+        // over-request makes Qt rescale proportionally and the drawer opens too
+        // wide; in that case let the stretch factors + minimumWidth place it.
+        const int total = content_splitter_->width();
+        if (total > drawer_width_ + 200)
+            content_splitter_->setSizes({drawer_width_, total - drawer_width_});
+    }
+    // Keep the INTEL toggle button's checked state in sync — the in-drawer
+    // close button reaches here too, and otherwise the button would go stale.
+    command_bar_->set_drawer_open(now_open);
 }
 
 void NewsScreen::on_detail_closed() {

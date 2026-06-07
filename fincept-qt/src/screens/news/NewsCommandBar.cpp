@@ -481,6 +481,13 @@ void NewsCommandBar::set_tldr_busy(bool busy) {
     tldr_btn_->setText(busy ? QStringLiteral("DIGEST…") : QStringLiteral("DIGEST"));
 }
 
+void NewsCommandBar::set_drawer_open(bool open) {
+    // drawer_btn_ is checkable; setChecked emits toggled (not clicked), and only
+    // clicked is wired to drawer_toggle_requested, so this won't re-fire a toggle.
+    if (drawer_btn_)
+        drawer_btn_->setChecked(open);
+}
+
 void NewsCommandBar::refresh_portfolio_pill() {
     if (!view_ptf_)
         return;

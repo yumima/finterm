@@ -25,6 +25,9 @@ class NewsCommandBar : public QWidget {
     void set_article_count(int count);
     void set_alert_count(int count);
     void set_unseen_count(int count);
+    /// Sync the INTEL toggle button's checked state with the drawer (so the
+    /// in-drawer close button doesn't leave it stale).
+    void set_drawer_open(bool open);
 
     void set_summarizing(bool busy);
 
