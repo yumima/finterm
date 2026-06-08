@@ -233,8 +233,10 @@ void AiChatScreen::refresh_theme() {
 
 void AiChatScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    connect(&ai_chat::LlmService::instance(), &ai_chat::LlmService::finished_streaming, this,
-            &AiChatScreen::on_streaming_done, Qt::UniqueConnection);
+    // NB: do NOT connect to LlmService::finished_streaming here. It's a singleton
+    // broadcast — every visible pane would receive every pane's response (the
+    // multi-pane cross-talk bug). Streaming completion is delivered per-call via
+    // the on_done callback passed to chat_streaming() in on_send().
     connect(&ai_chat::LlmService::instance(), &ai_chat::LlmService::config_changed, this,
             &AiChatScreen::on_provider_changed, Qt::UniqueConnection);
     update_stats();
@@ -1133,7 +1135,14 @@ void AiChatScreen::on_send() {
                         self->on_stream_chunk(chunk, done);
                     },
                     Qt::QueuedConnection);
-            }, /*use_tools*/ true, persona);
+            }, /*use_tools*/ true, persona,
+            // Finalize via a per-call callback (NOT the global finished_streaming
+            // signal) so the response lands only in THIS pane — multiple panes no
+            // longer cross-talk. Already marshalled onto the UI thread by the worker.
+            /*on_done*/ [self](ai_chat::LlmResponse resp) {
+                if (self)
+                    self->on_streaming_done(resp);
+            });
     } else {
         QPointer<AiChatScreen> self = this;
         (void)QtConcurrent::run([self, text, hist_copy, persona]() {

@@ -2302,7 +2302,8 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                StreamCallback on_chunk, bool use_tools, const PersonaScope& persona) {
+                                StreamCallback on_chunk, bool use_tools, const PersonaScope& persona,
+                                CompletionCallback on_done) {
     // Snapshot config under lock
     QString p, k, b, m, sp;
     double t;
@@ -2323,7 +2324,13 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
 
     if (p.isEmpty()) {
         on_chunk("", true);
-        emit finished_streaming(LlmResponse{.content = {}, .error = "No LLM provider configured"});
+        LlmResponse err{.content = {}, .error = "No LLM provider configured"};
+        // Per-call delivery when provided (scoped to the caller); else the
+        // legacy broadcast signal. We're on the caller's (UI) thread here.
+        if (on_done)
+            on_done(err);
+        else
+            emit finished_streaming(err);
         return;
     }
 
@@ -2373,7 +2380,8 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
         }
     };
     (void)QtConcurrent::run(
-        [self, p, k, b, m, sp, t, mx, user_message, history_copy, guarded_chunk, use_tools, saved_tools, persona]() {
+        [self, p, k, b, m, sp, t, mx, user_message, history_copy, guarded_chunk, use_tools, saved_tools, persona,
+         on_done]() {
             if (!self)
                 return;
 
@@ -2405,8 +2413,15 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
             if (self) {
                 QMetaObject::invokeMethod(
                     self,
-                    [self, resp]() {
-                        if (self)
+                    [self, resp, on_done]() {
+                        if (!self)
+                            return;
+                        // Deliver to the originating caller only (no cross-pane
+                        // broadcast) when it supplied a completion callback;
+                        // otherwise fall back to the legacy global signal.
+                        if (on_done)
+                            on_done(resp);
+                        else
                             emit self->finished_streaming(resp);
                     },
                     Qt::QueuedConnection);

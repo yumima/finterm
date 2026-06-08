@@ -78,6 +78,13 @@ struct LlmResponse {
 // chunk_text, is_done
 using StreamCallback = std::function<void(const QString&, bool)>;
 
+// Final structured response, delivered on the UI thread and scoped to THIS
+// call. Prefer this over the finished_streaming() signal for per-widget
+// finalization: that signal is a singleton broadcast, so with multiple chat
+// panes every pane receives every response (cross-talk). When on_done is set,
+// chat_streaming delivers the result only to the caller and skips the signal.
+using CompletionCallback = std::function<void(LlmResponse)>;
+
 // ── LlmService ────────────────────────────────────────────────────────────────
 
 class LlmService : public QObject {
@@ -96,7 +103,8 @@ class LlmService : public QObject {
     // Emit finished_streaming(response) when done to get result on UI thread.
     // use_tools: when false, disables MCP tool execution for this request
     void chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
-                        StreamCallback on_chunk, bool use_tools = true, const PersonaScope& persona = {});
+                        StreamCallback on_chunk, bool use_tools = true, const PersonaScope& persona = {},
+                        CompletionCallback on_done = {});
 
     // Reload config from DB (call after user changes LLM settings)
     void reload_config();

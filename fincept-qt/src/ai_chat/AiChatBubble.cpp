@@ -64,8 +64,9 @@ AiChatBubble::AiChatBubble(QWidget* parent) : QWidget(parent) {
     build_chat_panel();
     chat_panel_->hide();
 
-    connect(&ai_chat::LlmService::instance(), &ai_chat::LlmService::finished_streaming, this,
-            &AiChatBubble::on_streaming_done, Qt::UniqueConnection);
+    // Streaming completion arrives via the per-call on_done callback passed to
+    // chat_streaming() (see on_send) — NOT the global finished_streaming signal,
+    // which broadcasts to every consumer and would cross-talk with chat panes.
 
     // ── SpeechService wiring ─────────────────────────────────────────────────
     auto& stt = services::SpeechService::instance();
@@ -539,7 +540,16 @@ void AiChatBubble::on_send() {
                 },
                 Qt::QueuedConnection);
         },
-        /*use_tools=*/false);
+        /*use_tools=*/false,
+        /*persona=*/{},
+        // Finalize via a per-call callback, not the global finished_streaming
+        // broadcast: that signal fans out to every consumer, so news/tutor
+        // streams could otherwise surface in this bubble (and the bubble's
+        // replies in chat panes). Already on the UI thread when invoked.
+        /*on_done=*/[self](ai_chat::LlmResponse resp) {
+            if (self)
+                self->on_streaming_done(resp);
+        });
 }
 
 void AiChatBubble::on_stream_chunk(const QString& chunk, bool done) {
