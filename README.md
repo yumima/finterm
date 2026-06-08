@@ -2,20 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-07)
+## Today's commits (2026-06-08)
 
 Latest first.
 
-- [`3e895387f`](https://github.com/yumima/finterm/commit/3e895387f) Equity data: cache yfinance daemon responses to cut Yahoo 429s
-- [`43cbdf92c`](https://github.com/yumima/finterm/commit/43cbdf92c) AI chat: fix multi-pane cross-talk — a reply showed up in every pane
-- [`917f7a999`](https://github.com/yumima/finterm/commit/917f7a999) TTS: stream piper to the speakers for ~1-2s start latency
-- [`75da64a3e`](https://github.com/yumima/finterm/commit/75da64a3e) chat: harden Portfolio/General persona prompts to force tool calls
-- [`05b926e28`](https://github.com/yumima/finterm/commit/05b926e28) markets: finish de-India — US defaults for the last placeholders + workspace template
-- [`5f1856b38`](https://github.com/yumima/finterm/commit/5f1856b38) dashboard: align XETRA market-hours code with its 16:30 UTC comment (review nit)
-- [`6332f1f7e`](https://github.com/yumima/finterm/commit/6332f1f7e) markets: drop India defaults, re-point to US / China / Europe
-- [`411b24ca1`](https://github.com/yumima/finterm/commit/411b24ca1) chat: make the New pane button actually open a side-by-side pane
-- [`dd2452dee`](https://github.com/yumima/finterm/commit/dd2452dee) chat: per-conversation personas + multi-pane + session-id fix
-- [`6f5deeb39`](https://github.com/yumima/finterm/commit/6f5deeb39) equity tools: fail fast (90s -> 20s) so a stuck yfinance call can't hang chat
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

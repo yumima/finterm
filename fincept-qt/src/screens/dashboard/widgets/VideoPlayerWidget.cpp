@@ -470,6 +470,10 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                     s.setValue(QStringLiteral("video/audio_pinned_id"), pinned_audio_id_);
                     refresh_audio_output();
                 });
+        // Filter the combo directly (NOT via the app-wide filter, which is only
+        // installed during fullscreen) so a click rebuilds the device list right
+        // before the popup opens — see eventFilter().
+        audio_device_combo_->installEventFilter(this);
         populate_audio_devices();
         cl->addWidget(audio_device_combo_);
 #endif
@@ -885,6 +889,12 @@ void VideoPlayerWidget::refresh_audio_output() {
             want = QMediaDevices::defaultAudioOutput();
             follow_system_default_ = true;
             pinned_audio_id_.clear();
+            // Persist the revert: otherwise the stale pinned id reloads on the
+            // next launch and re-triggers this fallback forever, so the player
+            // never simply follows the system default like the user expects.
+            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            s.setValue(QStringLiteral("video/audio_follow_default"), true);
+            s.setValue(QStringLiteral("video/audio_pinned_id"), QByteArray());
             if (audio_device_combo_) {
                 QSignalBlocker block(audio_device_combo_);
                 audio_device_combo_->setCurrentIndex(0);
@@ -1557,7 +1567,9 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
     // QMediaDevices::audioOutputsChanged does NOT fire on a pure default-sink
     // swap (both devices still present), so a stream started after the user
     // switched the default (e.g. to a headset) would otherwise inherit the
-    // stale device captured at construction and play on the old sink.
+    // stale device captured at construction and play on the old sink. Rebuild
+    // the picker too so its "System default · …" label tracks the swap.
+    populate_audio_devices();
     refresh_audio_output();
     player_->setSource(QUrl(stream_url));
     player_->play();
@@ -1598,7 +1610,8 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
         status_label_->hide();
         controls_->show();
         stack_->setCurrentIndex(1);
-        refresh_audio_output();  // re-pin to the current default sink (see play_direct)
+        populate_audio_devices();  // refresh the picker (see play_direct)
+        refresh_audio_output();    // re-pin to the current default sink
         player_->setSource(hls_proxy_->local_url());
         player_->play();
     });
@@ -1738,6 +1751,15 @@ void VideoPlayerWidget::exit_fullscreen() {
 }
 
 bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
+#ifdef HAS_QT_MULTIMEDIA
+    // Rebuild the device list the instant the user opens the picker, so a
+    // headset / Bluetooth sink connected since construction is listed even when
+    // QMediaDevices::audioOutputsChanged never fired (it misses pure default-
+    // sink swaps, and is flaky on some PipeWire setups). Signal-blocked inside,
+    // so it only refreshes the list — it doesn't re-route or clobber the pick.
+    if (obj == audio_device_combo_ && event->type() == QEvent::MouseButtonPress)
+        populate_audio_devices();
+#endif
     if (fullscreen_target_ && event->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(event);
         if (ke->key() == Qt::Key_Escape) {
