@@ -8,6 +8,7 @@ import sys
 import json
 import os
 import threading
+import time
 import concurrent.futures
 import yfinance as yf
 import pandas as pd
@@ -1799,13 +1800,133 @@ def _sanitize_for_json(obj):
     return obj
 
 
+# ── Response cache (per-action TTL) ───────────────────────────────────────────
+# Yahoo Finance rate-limits aggressively (HTTP 429), and the SAME read is often
+# requested many times in a short window: the 20s quote-refresh tick racing a
+# manual action, several dashboard panels asking for the same symbol, or an AI
+# agent calling get_quote / get_info / get_financials on one ticker in sequence.
+# yfinance already bounds each HTTP call (10s download / 30s info) and uses
+# curl_cffi browser impersonation, so the residual pain is duplicate round-trips
+# — each one re-pays the latency AND adds to the rate-limit pressure that makes
+# the NEXT call fail. Caching successful results for a short, per-action TTL
+# collapses those duplicates: fewer 429s, near-instant repeats, and the daemon's
+# worker pool stops getting tied up re-fetching data it just had.
+#
+# Invisible by construction: the TTLs are shorter than (or comparable to) each
+# consumer's own refresh cadence, so a caller never sees data older than it
+# would have tolerated anyway. Errors are never cached, so a transient failure
+# self-heals on the next request rather than sticking for the whole TTL.
+_CACHE_TTL = {
+    # live-ish prices — short (the 20s refresh tick still always gets fresh data)
+    "quote": 8, "quote_orderbook": 8, "batch_quotes": 8, "batch_all": 8,
+    "extended_hours": 8, "batch_sparklines": 30, "top_movers": 30,
+    # slow-moving fundamentals / metadata — long (change at most daily)
+    "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
+    "multiple_ratios": 600, "ipo_extras": 600, "earnings_dates": 600,
+    # historical / news / search — medium
+    "historical_period": 120, "news": 120, "search": 300,
+    # static SEC filing — very long
+    "parse_s1": 3600,
+}
+_CACHE_MAX = 512  # hard cap on entries; evict soonest-to-expire beyond this
+
+_cache_lock = threading.Lock()
+_cache = {}  # key -> (expires_at_monotonic, result)
+
+
+def _cache_key(action, payload):
+    """Stable key over (action, payload). default=str tolerates odd value types
+    (e.g. tuples, numpy scalars) that would otherwise break json.dumps."""
+    try:
+        return action + "|" + json.dumps(payload, sort_keys=True, default=str)
+    except Exception:
+        return action + "|" + repr(payload)
+
+
+def _cache_get(key):
+    now = time.monotonic()
+    with _cache_lock:
+        ent = _cache.get(key)
+        if ent is None:
+            return None
+        if ent[0] <= now:           # expired — drop it
+            _cache.pop(key, None)
+            return None
+        return ent[1]
+
+
+def _cache_put(key, ttl, result):
+    with _cache_lock:
+        _cache[key] = (time.monotonic() + ttl, result)
+        if len(_cache) > _CACHE_MAX:
+            # Evict the soonest-to-expire entries (cheap, bounded, rarely hit).
+            overflow = len(_cache) - _CACHE_MAX
+            for k in sorted(_cache, key=lambda k: _cache[k][0])[:overflow]:
+                _cache.pop(k, None)
+
+
+def _is_cacheable_result(result):
+    """Decide whether a dispatch result is a real success worth caching.
+
+    We must NOT cache transient failures, or a rate-limited blip sticks for the
+    whole TTL instead of self-healing on the next request. Beyond the standard
+    {"error": ...} shape, daemon actions signal trouble three other ways:
+      • partial-failure dicts carry a "<section>_error" key (ipo_extras's
+        holders_error / financials_error, top_movers's gainers_error /
+        losers_error) — reject the whole result so the failed part is retried;
+      • no-data / all-failed actions return an empty list or empty dict
+        (e.g. multiple_ratios filters out every errored symbol → []);
+      • a bare {"symbol": X} with no data keys is an action that caught every
+        sub-fetch — a failure in disguise.
+    Substantive lists (get_batch_info records "—" inline by design, so a list
+    with some inline-error rows is still worth caching) and dicts carrying real
+    data are cacheable.
+    """
+    if result is None:
+        return False
+    if isinstance(result, list):
+        return len(result) > 0
+    if isinstance(result, dict):
+        if not result:
+            return False
+        for k in result:
+            if k in ("error", "fatal") or (isinstance(k, str) and k.endswith("_error")):
+                return False
+        if set(result.keys()) <= {"symbol"}:
+            return False
+        return True
+    return True
+
+
 def _daemon_dispatch(action, payload):
     """Run one action and return the raw result object (not wrapped).
+
+    Read-only actions are served from a short-TTL in-process cache (see
+    _CACHE_TTL) so duplicate requests don't re-hit Yahoo. The cache is checked
+    before, and populated after, the crumb-retry path below. The actual upstream
+    call happens OUTSIDE the cache lock, so concurrent misses run in parallel
+    (the lock only guards the dict).
 
     On the first HTTP 401 / Invalid-Crumb error the yfinance session is reset
     and the action is retried once so callers don't see a cascade of failures
     every time Yahoo Finance rotates its auth crumb mid-session.
     """
+    ttl = _CACHE_TTL.get(action)
+    key = None
+    if ttl:
+        key = _cache_key(action, payload)
+        hit = _cache_get(key)
+        if hit is not None:
+            return hit
+
+    result = _daemon_dispatch_with_crumb_retry(action, payload)
+
+    if ttl and _is_cacheable_result(result):
+        _cache_put(key, ttl, result)
+    return result
+
+
+def _daemon_dispatch_with_crumb_retry(action, payload):
     try:
         return _daemon_dispatch_inner(action, payload)
     except Exception as e:

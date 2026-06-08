@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`43cbdf92c`](https://github.com/yumima/finterm/commit/43cbdf92c) AI chat: fix multi-pane cross-talk — a reply showed up in every pane
 - [`917f7a999`](https://github.com/yumima/finterm/commit/917f7a999) TTS: stream piper to the speakers for ~1-2s start latency
 - [`75da64a3e`](https://github.com/yumima/finterm/commit/75da64a3e) chat: harden Portfolio/General persona prompts to force tool calls
 - [`05b926e28`](https://github.com/yumima/finterm/commit/05b926e28) markets: finish de-India — US defaults for the last placeholders + workspace template
