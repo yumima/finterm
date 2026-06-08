@@ -144,6 +144,11 @@ class LlmService : public QObject {
     LlmService& operator=(const LlmService&) = delete;
 
   signals:
+    // LEGACY — no in-app consumers. Streaming completion is delivered per-call
+    // via the on_done CompletionCallback (see chat_streaming), NOT this signal.
+    // Do NOT connect chat panes here: it is a singleton broadcast, so every
+    // connected pane would receive every pane's response (the multi-pane
+    // cross-talk bug). Kept only for backward compatibility.
     void finished_streaming(LlmResponse response);
     void config_changed(); // emitted after reload_config() — UI can react
     void models_fetched(const QString& provider, const QStringList& models, const QString& error);

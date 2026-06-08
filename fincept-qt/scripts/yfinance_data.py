@@ -9,6 +9,7 @@ import json
 import os
 import threading
 import time
+import heapq
 import concurrent.futures
 import yfinance as yf
 import pandas as pd
@@ -1817,8 +1818,12 @@ def _sanitize_for_json(obj):
 # would have tolerated anyway. Errors are never cached, so a transient failure
 # self-heals on the next request rather than sticking for the whole TTL.
 _CACHE_TTL = {
-    # live-ish prices — short (the 20s refresh tick still always gets fresh data)
-    "quote": 8, "quote_orderbook": 8, "batch_quotes": 8, "batch_all": 8,
+    # live-ish prices — short (the 20s refresh tick still always gets fresh data).
+    # NB: quote_orderbook is intentionally NOT cached — it's the live bid/ask
+    # spread fetched on focus-mode enter, where freshness matters and the
+    # duplicate-call pressure the cache targets doesn't apply; caching it would
+    # also pin a transient all-zeros (swallowed 429) for the TTL.
+    "quote": 8, "batch_quotes": 8, "batch_all": 8,
     "extended_hours": 8, "batch_sparklines": 30, "top_movers": 30,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
@@ -1859,9 +1864,11 @@ def _cache_put(key, ttl, result):
     with _cache_lock:
         _cache[key] = (time.monotonic() + ttl, result)
         if len(_cache) > _CACHE_MAX:
-            # Evict the soonest-to-expire entries (cheap, bounded, rarely hit).
+            # Evict the soonest-to-expire entries. heapq.nsmallest is O(n) for a
+            # small overflow vs a full O(n log n) sort — this runs under the lock
+            # on the hot dispatch path once the cache saturates, so keep it cheap.
             overflow = len(_cache) - _CACHE_MAX
-            for k in sorted(_cache, key=lambda k: _cache[k][0])[:overflow]:
+            for k in heapq.nsmallest(overflow, _cache, key=lambda k: _cache[k][0]):
                 _cache.pop(k, None)
 
 
