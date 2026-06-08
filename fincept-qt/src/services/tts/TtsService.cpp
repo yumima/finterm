@@ -15,6 +15,12 @@
 #include <QUrl>
 #include <QUuid>
 
+#if defined(Q_OS_UNIX)
+#include <csignal>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
 namespace fincept::services {
 
 namespace {
@@ -71,6 +77,42 @@ bool piper_on_path() {
 QString new_temp_wav_path() {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
     return QString("%1/finterm-tts-%2.wav").arg(dir, QUuid::createUuid().toString(QUuid::WithoutBraces));
+}
+
+/// A raw-PCM audio sink for low-latency streaming playback. When present, speak()
+/// streams piper straight to the speakers (audio in ~1-2s) instead of
+/// synthesising the whole clip to a WAV first (~20s for a long article).
+bool stream_sink_available() {
+    const QString lbin = QDir::homePath() + "/.local/bin";
+    for (const char* p : {"paplay", "pw-play", "aplay"}) {
+        if (!QStandardPaths::findExecutable(p).isEmpty() ||
+            !QStandardPaths::findExecutable(p, {lbin}).isEmpty())
+            return true;
+    }
+    return false;
+}
+
+/// Tear down `p` AND all its descendants. The TTS subprocess is python3 spawning
+/// bash → piper → player; signalling only python3 would orphan the audio
+/// pipeline. speak() makes python3 a process-group leader (setsid), so here we
+/// signal the whole group. Falls back to plain terminate/kill off-Unix.
+void kill_process_group(QProcess* p) {
+#if defined(Q_OS_UNIX)
+    const qint64 pid = p->processId();
+    if (pid > 0) {
+        ::kill(static_cast<pid_t>(-pid), SIGTERM);  // negative pid = the process group
+        // SIGTERM reaps piper/player promptly; keep the GUI-thread block close to
+        // the old ~500ms (stop() is called synchronously from the button + aboutToQuit).
+        if (!p->waitForFinished(400)) {
+            ::kill(static_cast<pid_t>(-pid), SIGKILL);
+            p->waitForFinished(150);
+        }
+        return;
+    }
+#endif
+    p->terminate();
+    if (!p->waitForFinished(400))
+        p->kill();
 }
 
 } // anonymous namespace
@@ -150,8 +192,6 @@ bool TtsService::speak(const QString& text) {
     }
 
     const QString script = resolve_script_path();
-    const QString wav_path = new_temp_wav_path();
-    pending_wav_path_ = wav_path;
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     // Ensure ~/.local/bin (where `hearth voice` symlinks piper) is on PATH so
@@ -173,40 +213,70 @@ bool TtsService::speak(const QString& text) {
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(env);
     proc_->setProgram("python3");
-    proc_->setArguments({script, "--output", wav_path});
+#if defined(Q_OS_UNIX)
+    // Run python3 as its own session/group leader so stop() can group-kill the
+    // whole piper→player pipeline (its grandchildren) atomically — signalling
+    // only python3 would orphan the audio.
+    proc_->setChildProcessModifier([] { ::setsid(); });
+#endif
+
+    // Prefer streaming: pipe piper straight to the speakers so audio starts in
+    // ~1-2s. Fall back to synthesise-to-WAV + QMediaPlayer when no raw sink is
+    // available (e.g. a headless/no-PulseAudio host).
+    stream_mode_ = stream_sink_available();
+    stream_started_ = false;
+    if (stream_mode_) {
+        proc_->setArguments({script, "--stream"});
+        stream_out_.clear();
+        // Flip to "speaking" the moment piper reports the pipeline launched (the
+        // "streaming" marker). We keep draining + accumulating stdout afterwards so
+        // a later fatal line isn't lost — on a fast failure the marker and the fatal
+        // line can arrive in one readyRead burst; on_proc_finished needs both.
+        connect(proc_, &QProcess::readyReadStandardOutput, this, [this]() {
+            if (!proc_)
+                return;
+            stream_out_ += proc_->readAllStandardOutput();
+            if (!stream_started_ && stream_out_.contains("\"streaming\"")) {
+                stream_started_ = true;
+                emit state_changed(true);
+            }
+        });
+    } else {
+        pending_wav_path_ = new_temp_wav_path();
+        proc_->setArguments({script, "--output", pending_wav_path_});
+    }
 
     connect(proc_, &QProcess::finished, this,
             [this](int exit_code, QProcess::ExitStatus) { on_proc_finished(exit_code); });
 
-    LOG_INFO(kTtsTag, QString("speaking via Piper (model=%1, %2 chars)")
-                          .arg(model, QString::number(text.size())));
+    LOG_INFO(kTtsTag, QString("speaking via Piper (model=%1, %2 chars, mode=%3)")
+                          .arg(model, QString::number(text.size()), stream_mode_ ? "stream" : "buffered"));
     proc_->start();
     if (!proc_->waitForStarted(2000)) {
         emit error(QStringLiteral("Failed to start piper_tts.py: %1").arg(proc_->errorString()));
         proc_->deleteLater();
         proc_ = nullptr;
+        stream_mode_ = false;
         return false;
     }
     proc_->write(text.toUtf8());
     proc_->closeWriteChannel();
-    // NB: state_changed(true) is intentionally NOT emitted here. Synthesising a
-    // long article takes ~20s on CPU; signalling "speaking" now would flip the
-    // UI to "STOP" while still silent (looks broken). It's emitted from
-    // on_proc_finished() once QMediaPlayer reaches PlayingState — callers show a
-    // "preparing" state in between. We return true so the caller knows synthesis
-    // launched (and can show that "preparing" state) without racing the internal
-    // stop() above, which already fired while the caller's flag was still clear.
+    // NB: state_changed(true) is intentionally NOT emitted here. In BUFFERED mode
+    // synthesis takes ~20s; signalling "speaking" now would flip the UI to "STOP"
+    // while still silent. It's emitted from on_proc_finished() at PlayingState
+    // (buffered) or from the readyRead handler above on the "streaming" marker
+    // (streaming, ~1-2s). Callers show a "preparing" state in between. We return
+    // true so the caller can show that without racing the internal stop() above.
     return true;
 }
 
 void TtsService::stop() {
     if (proc_) {
-        // Disconnect first so on_proc_finished doesn't fire and try
-        // to play the (possibly half-written) WAV.
+        // Disconnect first so on_proc_finished doesn't fire and try to play the
+        // (possibly half-written) WAV. Group-kill so the streaming pipeline's
+        // grandchildren (piper/player) die too — not just python3.
         disconnect(proc_, nullptr, this, nullptr);
-        proc_->terminate();
-        if (!proc_->waitForFinished(500))
-            proc_->kill();
+        kill_process_group(proc_);
         proc_->deleteLater();
         proc_ = nullptr;
     }
@@ -224,6 +294,9 @@ void TtsService::stop() {
         audio_->deleteLater();
         audio_ = nullptr;
     }
+    stream_mode_ = false;
+    stream_started_ = false;
+    stream_out_.clear();
     cleanup_temp_file();
     emit state_changed(false);
 }
@@ -234,6 +307,24 @@ void TtsService::on_proc_finished(int exit_code) {
     const QByteArray out = proc_->readAllStandardOutput();
     proc_->deleteLater();
     proc_ = nullptr;
+
+    // Streaming mode: the process WAS the playback (piper → speaker pipeline),
+    // there is no WAV or QMediaPlayer. Its exit is the end of playback.
+    if (stream_mode_) {
+        stream_mode_ = false;
+        stream_started_ = false;
+        if (exit_code != 0) {
+            // Diagnostics: the readyRead handler already drained most stdout into
+            // stream_out_; `out` catches anything written after the last burst.
+            const QByteArray diag = stream_out_ + out;
+            emit error(QStringLiteral("TTS streaming exited %1: %2")
+                           .arg(exit_code)
+                           .arg(QString::fromUtf8(diag).trimmed().left(300)));
+        }
+        stream_out_.clear();
+        emit state_changed(false);
+        return;
+    }
 
     if (exit_code != 0) {
         emit error(QStringLiteral("piper_tts.py exited %1: %2").arg(exit_code).arg(QString::fromUtf8(out).left(300)));

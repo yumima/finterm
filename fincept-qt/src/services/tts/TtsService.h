@@ -21,6 +21,7 @@
 // bundle them — the Settings → Voice surface tells the user where
 // to download and points at the FINCEPT_TTS_MODEL slot.
 
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
@@ -64,9 +65,12 @@ class TtsService : public QObject {
     ~TtsService() override;
 
     QProcess* proc_ = nullptr;        ///< current piper_tts.py invocation
-    QMediaPlayer* player_ = nullptr;  ///< plays the produced WAV
+    QMediaPlayer* player_ = nullptr;  ///< plays the produced WAV (buffered path only)
     QAudioOutput* audio_ = nullptr;
     QString pending_wav_path_;        ///< temp WAV cleaned up after playback
+    bool stream_mode_ = false;        ///< proc_ is the piper→player streaming pipeline (no WAV)
+    bool stream_started_ = false;     ///< the streaming pipeline reported it launched
+    QByteArray stream_out_;           ///< accumulated streaming-mode stdout (status/fatal) for diagnostics
 
     void on_proc_finished(int exit_code);
     void cleanup_temp_file();
