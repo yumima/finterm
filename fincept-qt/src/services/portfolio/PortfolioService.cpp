@@ -415,6 +415,60 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 quote_map[q.symbol] = q;
         }
 
+        // Last-known fallback for holdings the live fetch didn't cover. A quote
+        // fetch legitimately comes back empty for an established holding —
+        // Yahoo rate-limits once enough refresh ticks accumulate across the
+        // app, or a symbol hits a transient data hole — leaving ok=true with no
+        // quote for that symbol (a price<=0 partial counts the same). Without a
+        // fallback the loop below dropped to avg_buy_price, which silently
+        // collapses BOTH unrealized P&L (market_value == cost_basis ⇒ 0) and
+        // day-change (⇒ 0) to zero, overwriting the good numbers the user was
+        // watching. Recover the last-known price/day-change from the durable 7d
+        // `market_last:` cache (the same store refresh_summary_prices_from_
+        // market_last() trusts) so a momentary fetch failure shows slightly-
+        // stale truth instead of zeros. Only queried for the symbols actually
+        // missing, so the common all-fresh path pays nothing.
+        QHash<QString, QuoteData> last_known;
+        {
+            QStringList missing;
+            for (const auto& a : assets) {
+                const auto it = quote_map.constFind(a.symbol);
+                if (it == quote_map.constEnd() || it->price <= 0)
+                    missing.append(a.symbol);
+            }
+            if (!missing.isEmpty()) {
+                QStringList keys;
+                keys.reserve(missing.size());
+                for (const auto& s : missing)
+                    keys.append(QStringLiteral("market_last:") + s);
+                const QHash<QString, QString> hits =
+                    fincept::CacheManager::instance().multi_get(keys);
+                for (auto it = hits.cbegin(); it != hits.cend(); ++it) {
+                    // Key off the cache key suffix (== the asset symbol we
+                    // queried), NOT the payload's "symbol" field — the daemon
+                    // echoes whatever Yahoo returns, which can differ in case /
+                    // normalisation from the DB-uppercased asset symbol the
+                    // holding loop below looks up with. Mirrors how
+                    // hydrate_quotes_from_cache() strips the prefix.
+                    const QString sym = it.key().mid(sizeof("market_last:") - 1);
+                    if (sym.isEmpty())
+                        continue;
+                    const QJsonObject o =
+                        QJsonDocument::fromJson(it.value().toUtf8()).object();
+                    if (o.isEmpty())
+                        continue;
+                    QuoteData qd{};
+                    qd.price      = o.value("price").toDouble();
+                    qd.change     = o.value("change").toDouble();
+                    qd.change_pct = o.value("change_pct").toDouble();
+                    qd.high       = o.value("high").toDouble();
+                    qd.low        = o.value("low").toDouble();
+                    qd.volume     = o.value("volume").toDouble();
+                    last_known[sym] = qd;
+                }
+            }
+        }
+
         portfolio::PortfolioSummary summary;
         summary.portfolio = portfolio;
         summary.holdings.reserve(assets.size());
@@ -436,7 +490,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                            : asset.sector;
 
             auto it = quote_map.find(asset.symbol);
-            if (it != quote_map.end()) {
+            if (it != quote_map.end() && it->price > 0) {
                 h.current_price = it->price;
                 h.day_change = it->change;
                 h.day_change_percent = it->change_pct;
@@ -450,8 +504,21 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 h.ask       = it->ask;
                 h.bid_size  = it->bid_size;
                 h.ask_size  = it->ask_size;
+            } else if (auto lk = last_known.constFind(asset.symbol);
+                       lk != last_known.constEnd() && lk->price > 0) {
+                // No fresh quote — hold the last-known price + day-change so the
+                // ribbon/blotter keep showing real (if slightly stale) numbers
+                // instead of collapsing P&L and chg% to zero. Order-book fields
+                // aren't in the 7d payload; leave them at 0 ("unavailable").
+                h.current_price = lk->price;
+                h.day_change = lk->change;
+                h.day_change_percent = lk->change_pct;
+                h.day_high  = lk->high;
+                h.day_low   = lk->low;
+                h.day_volume = lk->volume;
             } else {
-                // Fallback to avg buy price if no quote
+                // Genuine cold start — no quote and nothing cached. Fall back to
+                // avg buy price (P&L reads 0 until the first quote lands).
                 h.current_price = asset.avg_buy_price;
             }
 
@@ -497,7 +564,13 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         portfolio_disk_cache().save(summary_filename(portfolio_id),
                                     QJsonDocument(summary_to_json(summary)));
 
-        // Save snapshot for performance history
+        // Save snapshot for performance history. Built from last-known
+        // `market_last:` prices when the live fetch came back empty — that's an
+        // honest best-estimate valuation (the holdings really were worth that at
+        // the last good print), not the avg_buy_price zeros the old fallback
+        // produced. save_snapshot is INSERT OR REPLACE keyed by date, so the row
+        // self-corrects on the next fresh tick; writing unconditionally keeps the
+        // history gap-free even on a fully rate-limited day.
         QString today = QDate::currentDate().toString(Qt::ISODate);
         PortfolioRepository::instance().save_snapshot(portfolio_id, summary.total_market_value,
                                                       summary.total_cost_basis, summary.total_unrealized_pnl,
