@@ -152,7 +152,9 @@ void AuthManager::validate_saved_session() {
     //
     // Flow:
     //   api_key valid (200) → fetch subscription → mark authenticated → save
-    //   api_key revoked (401/403) → clear everything → show login
+    //   api_key rejected (401/403) → show login but KEEP stored secrets — the
+    //       PIN/api_key keyring is GLOBAL across --profiles, so auto-validation
+    //       must never wipe it; only an explicit user logout clears credentials
     //   network error → trust cached session data (offline-friendly)
     LOG_INFO("Auth", "Validating saved session via profile fetch (api_key only, no session_token)");
     fetch_user_profile([this] { emit subscription_fetched(); });
@@ -161,8 +163,17 @@ void AuthManager::validate_saved_session() {
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {
     AuthService::instance().get_user_profile(session_.api_key, [this, on_done = std::move(on_done)](ApiResponse r) mutable {
         if (!r.success && (r.status_code == 401 || r.status_code == 403)) {
-            LOG_WARN("Auth", "Profile fetch: API key invalid, clearing session");
-            clear_session();
+            // Do NOT clear_session() here. The secure store (PIN + api_key) is a
+            // GLOBAL OS keyring shared across every --profile (service =
+            // com.fincept.terminal, not profile-scoped), so wiping it on an
+            // auto-validation 401 lets a fresh/stale/unreachable profile clobber
+            // another profile's real login *and* PIN — which is exactly how a
+            // throwaway diagnostic profile silently erased the user's credentials.
+            // Auto-validation must be non-destructive: drop to unauthenticated and
+            // show login; only an explicit user logout erases stored secrets, and
+            // a successful re-login overwrites the (possibly stale) key.
+            LOG_WARN("Auth", "Profile fetch: api_key rejected — showing login (credentials preserved)");
+            session_.authenticated = false;
             set_loading(false);
             emit auth_state_changed();
             return;
