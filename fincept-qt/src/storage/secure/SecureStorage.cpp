@@ -1,6 +1,7 @@
 #include "storage/secure/SecureStorage.h"
 
 #include "core/config/AppIdentity.h"
+#include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
 
 // ── Platform-specific credential storage ──────────────────────────────────────
@@ -126,11 +127,21 @@ static QByteArray xor_obfuscate(const QByteArray& data) {
 #endif // FINCEPT_HAVE_LIBSECRET
 #endif // Linux helpers
 
+// Every secret is namespaced by the active profile so a non-default `--profile`
+// can neither read nor clear another profile's credentials. ProfileManager returns
+// "" for the default profile — its keys stay un-prefixed, so existing credentials
+// need no migration — and "profiles/<name>/" for custom profiles. This is applied
+// here, centrally, rather than at the 80+ call sites.
+static QString scoped_key(const QString& key) {
+    return ProfileManager::instance().secure_key_prefix() + key;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // store
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<void> SecureStorage::store(const QString& key, const QString& value) {
+Result<void> SecureStorage::store(const QString& key_in, const QString& value) {
+    const QString key = scoped_key(key_in);
 #ifdef Q_OS_WIN
     // Windows Credential Manager — DPAPI-encrypted, user-scoped
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
@@ -253,7 +264,8 @@ Result<void> SecureStorage::store(const QString& key, const QString& value) {
 // retrieve
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<QString> SecureStorage::retrieve(const QString& key) {
+Result<QString> SecureStorage::retrieve(const QString& key_in) {
+    const QString key = scoped_key(key_in);
 #ifdef Q_OS_WIN
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
     PCREDENTIALW cred = nullptr;
@@ -346,7 +358,8 @@ Result<QString> SecureStorage::retrieve(const QString& key) {
 // remove
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<void> SecureStorage::remove(const QString& key) {
+Result<void> SecureStorage::remove(const QString& key_in) {
+    const QString key = scoped_key(key_in);
 #ifdef Q_OS_WIN
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
     if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0)) {
