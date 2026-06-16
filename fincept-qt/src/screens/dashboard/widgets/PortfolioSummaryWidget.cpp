@@ -1,6 +1,6 @@
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
 
-#include "storage/repositories/PortfolioHoldingsRepository.h"
+#include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -9,20 +9,28 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QScrollArea>
+#include <QSettings>
 
 namespace fincept::screens::widgets {
 
-// Demo holdings if no DB portfolio exists
-static const QVector<PortfolioSummaryWidget::Holding> kDemoHoldings = {
-    {"AAPL", 10.0, 178.50}, {"MSFT", 5.0, 415.00}, {"NVDA", 8.0, 880.00},
-    {"GOOGL", 3.0, 165.00}, {"TSLA", 6.0, 210.00}, {"SPY", 12.0, 520.00},
-};
+// QSettings key remembering which portfolio the dashboard widget last showed.
+static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
 
 PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     : BaseWidget("PORTFOLIO SUMMARY", parent, ui::colors::POSITIVE) {
     auto* vl = content_layout();
     vl->setContentsMargins(8, 8, 8, 8);
     vl->setSpacing(6);
+
+    // ── Portfolio selector — picks which portfolio to mirror ──
+    portfolio_combo_ = new QComboBox(this);
+    portfolio_combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    connect(portfolio_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        if (suppress_combo_signal_ || idx < 0 || idx >= portfolios_.size())
+            return;
+        select_portfolio(portfolios_.at(idx).id);
+    });
+    vl->addWidget(portfolio_combo_);
 
     // ── Summary card — inline "LABEL  value" pairs, two per row ──
     // 4-column grid: [label0][value0][label1][value1] per row.
@@ -95,6 +103,24 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
 
     connect(this, &BaseWidget::refresh_requested, this, [this] { load_holdings(); });
 
+    // Stay in sync with the real portfolio backend the Portfolio screen uses.
+    auto& svc = services::PortfolioService::instance();
+    connect(&svc, &services::PortfolioService::portfolios_loaded, this,
+            &PortfolioSummaryWidget::on_portfolios_loaded);
+    connect(&svc, &services::PortfolioService::summary_loaded, this,
+            &PortfolioSummaryWidget::on_summary_loaded);
+    // A buy/sell in the shown portfolio (from anywhere) refreshes this widget.
+    auto refresh_if_selected = [this](const QString& portfolio_id) {
+        if (!selected_id_.isEmpty() && portfolio_id == selected_id_)
+            services::PortfolioService::instance().refresh_summary(selected_id_);
+    };
+    connect(&svc, &services::PortfolioService::asset_added, this, refresh_if_selected);
+    connect(&svc, &services::PortfolioService::asset_sold, this, refresh_if_selected);
+
+    // Restore the last-shown portfolio; the real id is reconciled once the
+    // portfolio list loads (the persisted one may have since been deleted).
+    selected_id_ = QSettings().value(kSelectedPortfolioKey).toString();
+
     apply_styles();
     set_loading(true);
 
@@ -141,26 +167,95 @@ void PortfolioSummaryWidget::on_theme_changed() {
 }
 
 void PortfolioSummaryWidget::load_holdings() {
-    QVector<Holding> holdings;
+    // First call kicks off the portfolio list; on_portfolios_loaded() takes
+    // over from there (fill dropdown → load the selected portfolio's summary).
+    // Later calls (re-show, manual refresh) just re-pull the selected summary.
+    if (!portfolios_loaded_) {
+        services::PortfolioService::instance().load_portfolios();
+        return;
+    }
+    if (!selected_id_.isEmpty())
+        services::PortfolioService::instance().load_summary(selected_id_);
+}
 
-    // Read from portfolio_holdings via repository
-    auto result = fincept::PortfolioHoldingsRepository::instance().get_active();
-    if (result.is_ok()) {
-        for (const auto& ph : result.value()) {
-            Holding h;
-            h.symbol = ph.symbol;
-            h.shares = ph.shares;
-            h.avg_cost = ph.avg_cost;
-            if (!h.symbol.isEmpty() && h.shares > 0)
-                holdings.append(h);
+void PortfolioSummaryWidget::on_portfolios_loaded(QVector<portfolio::Portfolio> portfolios) {
+    portfolios_ = portfolios;
+    portfolios_loaded_ = true;
+
+    suppress_combo_signal_ = true;
+    portfolio_combo_->clear();
+    for (const auto& p : portfolios_)
+        portfolio_combo_->addItem(p.name.isEmpty() ? p.id : p.name);
+    suppress_combo_signal_ = false;
+
+    if (portfolios_.isEmpty()) {
+        // No portfolios configured yet — show an empty summary, not stale data.
+        selected_id_.clear();
+        portfolio_combo_->setVisible(false);
+        hub_unsubscribe_all();
+        render({}, {});
+        set_loading(false);
+        return;
+    }
+    portfolio_combo_->setVisible(true);
+
+    // Reconcile the persisted selection against the current list — the saved
+    // portfolio may have been deleted since last run (or this is first run).
+    int idx = 0;
+    for (int i = 0; i < portfolios_.size(); ++i) {
+        if (portfolios_.at(i).id == selected_id_) {
+            idx = i;
+            break;
         }
     }
 
-    // Fall back to demo portfolio
-    if (holdings.isEmpty()) {
-        holdings = kDemoHoldings;
+    suppress_combo_signal_ = true;
+    portfolio_combo_->setCurrentIndex(idx);
+    suppress_combo_signal_ = false;
+
+    // portfolios_loaded is a global signal — it also fires when the Portfolio
+    // screen loads. Only pull the summary now if we're actually on screen;
+    // otherwise just remember the choice and let showEvent() load it on show,
+    // so a hidden dashboard widget doesn't trigger a needless daemon fetch.
+    const QString id = portfolios_.at(idx).id;
+    if (isVisible()) {
+        select_portfolio(id);
+    } else {
+        selected_id_ = id;
+        QSettings().setValue(kSelectedPortfolioKey, id);
+    }
+}
+
+void PortfolioSummaryWidget::select_portfolio(const QString& id) {
+    selected_id_ = id;
+    QSettings().setValue(kSelectedPortfolioKey, id);
+    set_loading(true);
+    services::PortfolioService::instance().load_summary(id);
+}
+
+void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary& summary) {
+    // summary_loaded fires for every portfolio anyone loads (incl. the
+    // Portfolio screen's own selection) — only react to the one we're showing.
+    if (summary.portfolio.id != selected_id_)
+        return;
+
+    QVector<Holding> holdings;
+    holdings.reserve(summary.holdings.size());
+    for (const auto& h : summary.holdings) {
+        if (h.symbol.isEmpty() || h.quantity <= 0)
+            continue;
+        holdings.append(Holding{h.symbol, h.quantity, h.avg_buy_price});
     }
 
+    if (holdings.isEmpty()) {
+        hub_unsubscribe_all();
+        render({}, {});
+        set_loading(false);
+        return;
+    }
+
+    // Hand off to the live-quote path: subscribe to market:quote:<sym> for each
+    // holding so prices keep ticking after this initial paint.
     fetch_prices(holdings);
 }
 

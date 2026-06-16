@@ -3,7 +3,7 @@
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
-#include "network/http/HttpClient.h"
+#include "python/PythonWorker.h"
 #include "screens/relationship_map/RelationshipGraphScene.h"
 #include "services/relationship_map/RelationshipMapService.h"
 #include "ui/theme/Theme.h"
@@ -33,6 +33,10 @@ static constexpr int kMaxSearchResults = 10;
 
 /// Convert exchange + symbol to yfinance-compatible ticker.
 static QString to_yfinance_symbol(const QString& symbol, const QString& exchange, const QString& country = {}) {
+    // Daemon search returns canonical Yahoo symbols already suffixed for foreign
+    // listings (e.g. "RELIANCE.NS") — don't re-suffix and risk a double suffix.
+    if (symbol.contains('.'))
+        return symbol;
     if (exchange.toUpper() == "EURONEXT") {
         static const QHash<QString, QString> m = {
             {"FR", ".PA"}, {"NL", ".AS"}, {"BE", ".BR"}, {"PT", ".LS"}, {"IE", ".IR"},
@@ -536,25 +540,29 @@ void RelationshipMapScreen::on_search_text_changed(const QString& text) {
 }
 
 void RelationshipMapScreen::fire_asset_search(const QString& query) {
-    const QString url = QString("/market/search?q=%1&type=stock&limit=%2").arg(query).arg(kMaxSearchResults);
+    // Symbol search runs through the persistent yfinance daemon (action "search"),
+    // not the retired HTTP /market/search stub. type=stock keeps this to equities.
+    QJsonObject payload;
+    payload["query"] = query;
+    payload["type"]  = QStringLiteral("stock");
+    payload["limit"] = kMaxSearchResults;
 
     QPointer<RelationshipMapScreen> self = this;
-    fincept::HttpClient::instance().get(url, [self, query](Result<QJsonDocument> result) {
-        if (!self) return;
-        if (self->pending_query_ != query) return;
-        if (!result.is_ok()) return;
+    python::PythonWorker::instance().submit(
+        "search", payload,
+        [self, query](bool ok, QJsonObject result, QString) {
+            if (!self) return;
+            if (self->pending_query_ != query) return;
+            if (!ok) return;
 
-        const auto doc = result.value();
-        QJsonArray arr;
-        if (doc.isArray()) {
-            arr = doc.array();
-        } else if (doc.isObject()) {
-            const auto obj = doc.object();
-            if (obj.contains("results")) arr = obj["results"].toArray();
-            else if (obj.contains("data")) arr = obj["data"].toArray();
-        }
-        self->on_asset_results(arr);
-    });
+            QJsonArray arr;
+            if (result.contains("_value") && result["_value"].isArray())
+                arr = result["_value"].toArray();
+            else if (result.contains("results"))
+                arr = result["results"].toArray();
+            self->on_asset_results(arr);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void RelationshipMapScreen::on_asset_results(const QJsonArray& results) {

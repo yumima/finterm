@@ -1,7 +1,7 @@
 // src/screens/portfolio/PortfolioDialogs.cpp
 #include "screens/portfolio/PortfolioDialogs.h"
 
-#include "network/http/HttpClient.h"
+#include "python/PythonWorker.h"
 #include "services/file_manager/FileManagerService.h"
 #include "ui/theme/Theme.h"
 
@@ -304,34 +304,38 @@ void AddAssetDialog::schedule_search(const QString& query) {
 }
 
 void AddAssetDialog::fire_search(const QString& query) {
-    const QString url = QString("/market/search?q=%1&type=stock&limit=%2").arg(query).arg(kAssetSearchLimit);
+    if (query.isEmpty())
+        return;
+
+    // Symbol search goes through the persistent yfinance daemon (action "search"),
+    // not the old HTTP /market/search endpoint — that was served by the now-deprecated
+    // local auth stub, which no longer runs (its port is taken by other localhost
+    // services, so the call 404'd and every search returned "No results found").
+    QJsonObject payload;
+    payload["query"] = query;
+    payload["limit"] = kAssetSearchLimit;
 
     QPointer<AddAssetDialog> self = this;
-    fincept::HttpClient::instance().get(url, [self, query](fincept::Result<QJsonDocument> result) {
-        if (!self || self->pending_query_ != query)
-            return;
-        if (!result.is_ok())
-            return;
+    python::PythonWorker::instance().submit(
+        "search", payload,
+        [self, query](bool ok, QJsonObject result, QString) {
+            if (!self || self->pending_query_ != query)
+                return;
+            if (!ok)
+                return;
 
-        const auto doc = result.value();
-        QJsonArray arr;
-        if (doc.isArray()) {
-            arr = doc.array();
-        } else if (doc.isObject()) {
-            const auto obj = doc.object();
-            if (obj.contains("results"))
-                arr = obj["results"].toArray();
-            else if (obj.contains("data"))
-                arr = obj["data"].toArray();
-        }
-        QMetaObject::invokeMethod(
-            self,
-            [self, arr]() {
-                if (self)
-                    self->show_results(arr);
-            },
-            Qt::QueuedConnection);
-    });
+            // Daemon wraps flat arrays under "_value"; search_symbols' native
+            // shape is {results:[...]}. Each result is already a yfinance-ready
+            // symbol (foreign listings arrive with their suffix, e.g. "SPCX.TO").
+            QJsonArray arr;
+            if (result.contains("_value") && result["_value"].isArray())
+                arr = result["_value"].toArray();
+            else if (result.contains("results"))
+                arr = result["results"].toArray();
+
+            self->show_results(arr);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void AddAssetDialog::show_results(const QJsonArray& results) {
@@ -365,17 +369,11 @@ void AddAssetDialog::show_results(const QJsonArray& results) {
         if (sym.isEmpty())
             continue;
 
-        // Resolve yfinance-compatible ticker (same logic as CommandBar)
-        QString yf_sym = sym;
-        static const QHash<QString, QString> suffix_map = {
-            {"NSE", ".NS"}, {"BSE", ".BO"},        {"HKEX", ".HK"}, {"TSE", ".T"},  {"KRX", ".KS"}, {"SGX", ".SI"},
-            {"ASX", ".AX"}, {"IDX", ".JK"},        {"MYX", ".KL"},  {"SET", ".BK"}, {"PSE", ".PS"}, {"XETR", ".DE"},
-            {"FWB", ".F"},  {"LSE", ".L"},         {"BME", ".MC"},  {"MIL", ".MI"}, {"SIX", ".SW"}, {"TSX", ".TO"},
-            {"TSXV", ".V"}, {"BMFBOVESPA", ".SA"}, {"BIST", ".IS"}, {"EGX", ".CA"},
-        };
-        const auto it = suffix_map.find(exch.toUpper());
-        if (it != suffix_map.end())
-            yf_sym = sym + it.value();
+        // The daemon's search returns yfinance-ready symbols — foreign listings
+        // already carry their exchange suffix (e.g. "SPCX.TO", "RELIANCE.NS"),
+        // so the symbol is used as-is. (The old HTTP stub returned bare symbols
+        // plus a friendly exchange name and needed a suffix lookup here.)
+        const QString yf_sym = sym;
 
         auto* item = new QListWidgetItem(search_list_);
         item->setData(Qt::UserRole, yf_sym);

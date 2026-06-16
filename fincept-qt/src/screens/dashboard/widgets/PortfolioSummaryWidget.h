@@ -1,7 +1,9 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
+#include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
 
+#include <QComboBox>
 #include <QGridLayout>
 #include <QHash>
 #include <QLabel>
@@ -10,13 +12,15 @@
 
 namespace fincept::screens::widgets {
 
-/// Portfolio Summary Widget — reads holdings from SQLite (portfolio table),
-/// fetches live prices via yfinance, computes P&L and portfolio value.
-/// Falls back to a demo portfolio if no DB holdings are found.
+/// Portfolio Summary Widget — mirrors a real portfolio from PortfolioService.
+/// A dropdown selects which portfolio to view when several are configured;
+/// the choice is remembered across sessions. Holdings come straight from the
+/// same backend the Portfolio screen uses, so a buy/sell there shows up here.
 ///
-/// Once `load_holdings()` produces the holdings set the widget subscribes
-/// to `market:quote:<sym>` on the DataHub for each holding. Any change to
-/// the holdings set (e.g., refresh after a DB write) rewires subscriptions.
+/// Once a portfolio's holdings are known the widget subscribes to
+/// `market:quote:<sym>` on the DataHub for each holding, so prices stay live.
+/// Adds/sells in the selected portfolio (PortfolioService::asset_added/sold)
+/// trigger a re-fetch and rewire the subscriptions.
 class PortfolioSummaryWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -39,6 +43,16 @@ class PortfolioSummaryWidget : public BaseWidget {
   public:
     void load_holdings();
     void fetch_prices(const QVector<Holding>& holdings);
+
+  private:
+    // Populate the dropdown from the loaded portfolios and (re)select one.
+    void on_portfolios_loaded(QVector<portfolio::Portfolio> portfolios);
+    // Render the summary for the selected portfolio; ignores other portfolios.
+    void on_summary_loaded(const portfolio::PortfolioSummary& summary);
+    // Switch the active portfolio: persist the choice and load its summary.
+    void select_portfolio(const QString& id);
+
+  public:
     void render(const QVector<Holding>& holdings, const QVector<services::QuoteData>& quotes);
 
     /// Re-subscribe to `market:quote:<sym>` for every holding. Drops old
@@ -74,6 +88,13 @@ class PortfolioSummaryWidget : public BaseWidget {
 
     QHash<QString, services::QuoteData> row_cache_;
     bool hub_active_ = false;
+
+    // ── Portfolio selection ──────────────────────────────────────────────────
+    QComboBox* portfolio_combo_ = nullptr;
+    QVector<portfolio::Portfolio> portfolios_;
+    QString selected_id_;             // id of the portfolio currently shown
+    bool suppress_combo_signal_ = false; // guard against programmatic combo edits
+    bool portfolios_loaded_ = false;  // false until first portfolios_loaded()
 };
 
 } // namespace fincept::screens::widgets

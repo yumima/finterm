@@ -3,7 +3,7 @@
 #include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/session/ScreenStateManager.h"
-#include "network/http/HttpClient.h"
+#include "python/PythonWorker.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -78,6 +78,11 @@ static QString list_ss() {
 /// The /market/search API returns clean symbols (e.g. "RELIANCE") with exchange
 /// as a separate field. yfinance needs suffixed tickers for non-US exchanges.
 static QString to_yfinance_symbol(const QString& symbol, const QString& exchange, const QString& country = {}) {
+    // The daemon's search returns canonical Yahoo symbols — foreign listings
+    // already carry their suffix (e.g. "RELIANCE.NS"). Never re-suffix those,
+    // or exchange-name collisions would double-append ("SPCX.VI" → "SPCX.VI.VI").
+    if (symbol.contains('.'))
+        return symbol;
     // EURONEXT suffix depends on country
     if (exchange.toUpper() == "EURONEXT") {
         static const QHash<QString, QString> euronext_map = {
@@ -1180,32 +1185,35 @@ void CommandBar::schedule_asset_search(const QString& query) {
 }
 
 void CommandBar::fire_asset_search(const QString& query) {
-    const QString url = QString("/market/search?q=%1&type=%2&limit=%3").arg(query, active_asset_type_).arg(kMaxResults);
+    // Symbol search runs through the persistent yfinance daemon (action "search").
+    // The old HTTP /market/search endpoint was served by the now-deprecated local
+    // auth stub, which no longer runs — every search returned "No results found".
+    QJsonObject payload;
+    payload["query"] = query;
+    payload["type"]  = active_asset_type_; // stock/fund/index/crypto — daemon filters
+    payload["limit"] = kMaxResults;
 
     QPointer<CommandBar> self = this;
-    HttpClient::instance().get(url, [self, query](Result<QJsonDocument> result) {
-        if (!self)
-            return;
-        // Only process if user hasn't changed the query since we fired
-        if (self->pending_query_ != query)
-            return;
-        if (!result.is_ok())
-            return;
+    python::PythonWorker::instance().submit(
+        "search", payload,
+        [self, query](bool ok, QJsonObject result, QString) {
+            if (!self)
+                return;
+            // Only process if user hasn't changed the query since we fired
+            if (self->pending_query_ != query)
+                return;
+            if (!ok)
+                return;
 
-        const auto doc = result.value();
-        QJsonArray arr;
-        if (doc.isArray()) {
-            arr = doc.array();
-        } else if (doc.isObject()) {
-            // API might wrap results in { "results": [...] } or { "data": [...] }
-            const auto obj = doc.object();
-            if (obj.contains("results"))
-                arr = obj["results"].toArray();
-            else if (obj.contains("data"))
-                arr = obj["data"].toArray();
-        }
-        self->on_asset_results(arr);
-    });
+            // Daemon wraps flat arrays under "_value"; native shape is {results}.
+            QJsonArray arr;
+            if (result.contains("_value") && result["_value"].isArray())
+                arr = result["_value"].toArray();
+            else if (result.contains("results"))
+                arr = result["results"].toArray();
+            self->on_asset_results(arr);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 void CommandBar::on_asset_results(const QJsonArray& results) {

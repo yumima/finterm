@@ -1108,11 +1108,32 @@ def get_multiple_ratios(symbols):
             results.append(ratios)
     return results
 
-def search_symbols(query, limit=20):
+# Yahoo quoteType → CommandBar asset-type slug. Used to (a) filter when a caller
+# asks for a specific category and (b) label results. Slugs match CommandBar's
+# tabs (build_asset_types). dr/bond/economic have no distinct Yahoo quoteType
+# (ADRs come back as EQUITY), so those tabs can't be served from search.
+_YAHOO_TO_UI_TYPE = {
+    "EQUITY": "stock",
+    "ETF": "fund",
+    "MUTUALFUND": "fund",
+    "INDEX": "index",
+    "CRYPTOCURRENCY": "crypto",
+    "CURRENCY": "forex",
+    "FUTURE": "futures",
+}
+
+
+def search_symbols(query, limit=20, asset_type=""):
     """
     Search for stock symbols using yfinance's search API.
     Fast — uses Yahoo Finance's search endpoint instead of brute-force .info calls.
+
+    asset_type (stock/fund/index/crypto) filters by Yahoo's quoteType; empty
+    means "any". Results carry the canonical Yahoo `symbol` (foreign listings
+    already include their exchange suffix, e.g. "RELIANCE.NS"), a friendly
+    exchange display name, and the UI asset-type slug.
     """
+    asset_type = (asset_type or "").strip().lower()
     try:
         from urllib.request import urlopen, Request
         from urllib.parse import quote as url_quote
@@ -1137,15 +1158,30 @@ def search_symbols(query, limit=20):
                     symbol = q.get("symbol", "")
                     if not symbol:
                         continue
+                    yahoo_type = (q.get("quoteType") or "").upper()
+                    ui_type = _YAHOO_TO_UI_TYPE.get(yahoo_type)
+                    if asset_type:
+                        # Caller wants one category — drop anything that doesn't match.
+                        if ui_type != asset_type:
+                            continue
+                        result_type = ui_type
+                    else:
+                        # "Any" caller (CLI, screener, portfolio add) keeps every
+                        # quoteType; label with the slug when known, else the raw type.
+                        result_type = ui_type or yahoo_type.lower()
                     results.append({
                         "symbol": symbol,
                         "name": q.get("longname") or q.get("shortname", ""),
-                        "exchange": q.get("exchange", ""),
-                        "type": q.get("quoteType", "EQUITY"),
+                        # Friendly display name ("NASDAQ") over the raw code ("NMS").
+                        "exchange": q.get("exchDisp") or q.get("exchange", ""),
+                        "country": q.get("market", ""),
+                        "type": result_type,
                         "currency": q.get("currency", "USD"),
                         "sector": "",
                         "industry": q.get("industry", "")
                     })
+                    if len(results) >= limit:
+                        break
         except Exception as search_err:
             # Fallback: try the exact symbol as a yfinance Ticker
             query_upper = query_str.upper()
@@ -1156,11 +1192,15 @@ def search_symbols(query, limit=20):
                     ticker = yf.Ticker(candidate)
                     info = ticker.info
                     if info.get("longName") or info.get("shortName"):
+                        yahoo_type = (info.get("quoteType") or "").upper()
+                        ui_type = _YAHOO_TO_UI_TYPE.get(yahoo_type)
+                        if asset_type and ui_type != asset_type:
+                            break  # exact symbol isn't the requested category
                         results.append({
                             "symbol": candidate,
                             "name": info.get("longName", info.get("shortName", "")),
                             "exchange": info.get("exchange", ""),
-                            "type": info.get("quoteType", "EQUITY"),
+                            "type": ui_type or yahoo_type.lower(),
                             "currency": info.get("currency", "USD"),
                             "sector": info.get("sector", ""),
                             "industry": info.get("industry", "")
@@ -2009,7 +2049,7 @@ def _daemon_dispatch_inner(action, payload):
         return compute_technicals_from_candles(p.get("candles") or [])
     if action == "search":
         p = payload or {}
-        return search_symbols(p.get("query", ""), p.get("limit", 20))
+        return search_symbols(p.get("query", ""), p.get("limit", 20), p.get("type", ""))
     if action == "financials":
         return get_financials((payload or {}).get("symbol"))
     if action == "multiple_ratios":
