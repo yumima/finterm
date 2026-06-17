@@ -655,6 +655,16 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // otherwise it lingers for the duration of the historical+info fetch.
     cached_candles_.clear();
     cached_info_ = {};
+    // Reset the quote too. Otherwise the prior symbol's OHLC/volume lingers in
+    // the TODAY'S TRADING panel, and — worse — apply_info_state() re-applies the
+    // stale cached_quote_ when the new symbol's info arrives before (or instead
+    // of) its quote, so the panel keeps showing the old ticker's numbers.
+    cached_quote_ = {};
+    if (open_val_)       open_val_->setText(QStringLiteral("--"));
+    if (high_val_)       high_val_->setText(QStringLiteral("--"));
+    if (low_val_)        low_val_->setText(QStringLiteral("--"));
+    if (prev_close_val_) prev_close_val_->setText(QStringLiteral("--"));
+    if (vol_val_)        vol_val_->setText(QStringLiteral("--"));
     update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
