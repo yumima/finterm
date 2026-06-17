@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e7fb15874`](https://github.com/yumima/finterm/commit/e7fb15874) tests: link Qt::Gui into test_datahub so the DataHub suite builds/runs
 - [`c211c2c40`](https://github.com/yumima/finterm/commit/c211c2c40) Power-trader: "Explain this trader" via the local AI (LlmService → hearth)
 - [`38c6da51e`](https://github.com/yumima/finterm/commit/38c6da51e) Portfolio AI tools + exposure panel: use the real multi-portfolio schema
 - [`d99b08809`](https://github.com/yumima/finterm/commit/d99b08809) Make the configured font apply to widgets that hardcode 'Consolas'

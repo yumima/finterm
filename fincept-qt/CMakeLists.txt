@@ -698,7 +698,6 @@ set(STORAGE_SOURCES
     src/storage/repositories/StrategiesRepository.cpp
     src/storage/repositories/NewsMonitorRepository.cpp
     src/storage/repositories/NewsArticleRepository.cpp
-    src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/ChatRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/TeamRepository.cpp
@@ -1828,7 +1827,6 @@ set_source_files_properties(
     src/storage/repositories/NewsArticleRepository.cpp
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
-    src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
     src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/SettingsRepository.cpp
@@ -2009,7 +2007,6 @@ set_source_files_properties(
     src/storage/repositories/NewsArticleRepository.cpp
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
-    src/storage/repositories/PortfolioHoldingsRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
     src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/SettingsRepository.cpp
