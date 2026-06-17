@@ -6,6 +6,7 @@
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
 #include "ui/components/SignalTooltip.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QClipboard>
@@ -292,9 +293,9 @@ void CommitteePanel::show_committee(const power_trader::CommitteeGroup& g) {
                 "~$%3  ·  avg signal %4  ·  %5% insider correlation")
             .arg(g.member_count)
             .arg(g.trade_count)
-            .arg(g.total_est_amount >= 1e6
-                 ? QString::number(g.total_est_amount/1e6,'f',1)+"M"
-                 : QString::number(g.total_est_amount/1e3,'f',0)+"K")
+            // Compact magnitude via the shared layer (B-rollover; was M-capped).
+            // The "$" lives in the format string, so we emit only the magnitude.
+            .arg(ui::formatting::format_compact(g.total_est_amount, 1))
             .arg(g.avg_signal_score, 0, 'f', 0)
             .arg(g.correlation_pct,  0, 'f', 0));
 

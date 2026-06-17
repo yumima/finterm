@@ -2,6 +2,7 @@
 #include "screens/equity_research/EquityAnalysisTab.h"
 
 #include "services/equity/EquityResearchService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
@@ -211,28 +212,20 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
 }
 
 QString EquityAnalysisTab::fmt(double v, int decimals) {
-    return v != 0.0 ? QString::number(v, 'f', decimals) : "—";
+    // The equity feed uses 0.0 as its "no data" sentinel, so a real 0.0 renders
+    // as the canonical missing placeholder.
+    return v != 0.0 ? QString::number(v, 'f', decimals) : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_large(double v) {
-    if (v == 0.0)
-        return "—";
-    bool neg = v < 0;
-    double a = std::abs(v);
-    QString s;
-    if (a >= 1e12)
-        s = QString("%1T").arg(a / 1e12, 0, 'f', 2);
-    else if (a >= 1e9)
-        s = QString("%1B").arg(a / 1e9, 0, 'f', 2);
-    else if (a >= 1e6)
-        s = QString("%1M").arg(a / 1e6, 0, 'f', 1);
-    else
-        s = QString::number(a, 'f', 0);
-    return neg ? "-" + s : s;
+    // Unified K/M/B/T at one decimal via the shared layer (was M@1dp but B/T@2dp,
+    // and lacked a K tier). 0.0 is the feed's "no data" sentinel here.
+    return v != 0.0 ? ui::formatting::format_compact(v, 1) : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_pct(double v) {
-    return v != 0.0 ? QString("%1%").arg(v * 100.0, 0, 'f', 2) : "—";
+    // 2dp, matching EquityPeersTab (now unified). Input is a fraction (×100).
+    return v != 0.0 ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
 }
 
 } // namespace fincept::screens

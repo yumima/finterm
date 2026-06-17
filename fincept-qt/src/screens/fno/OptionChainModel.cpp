@@ -1,7 +1,8 @@
 #include "screens/fno/OptionChainModel.h"
 
+#include "ui/formatting/NumberFormat.h"
+
 #include <QColor>
-#include <QLocale>
 
 #include <cmath>
 
@@ -14,19 +15,11 @@ using fincept::trading::BrokerQuote;
 namespace {
 
 QString fmt_int_compact(qint64 v) {
-    // Compact integer formatting: 1.2k, 3.4M, 5.6L (lakhs for IN context).
-    // We avoid lakh/crore in pure code path — the chain values are integers
-    // up to ~10^8 (e.g. NIFTY total OI in lakhs of contracts).
-    if (v == 0)
-        return QStringLiteral("--");
-    const double a = std::abs(double(v));
-    if (a >= 1e7)
-        return QString::number(v / 1.0e7, 'f', 2) + "Cr";
-    if (a >= 1e5)
-        return QString::number(v / 1.0e5, 'f', 2) + "L";
-    if (a >= 1e3)
-        return QString::number(v / 1.0e3, 'f', 1) + "k";
-    return QLocale(QLocale::English).toString(v);
+    // Compact integer formatting via the shared layer: K / M / B / T at one
+    // decimal. Was India-centric (Cr / L / lowercase k) before the US rebase;
+    // chain values are contract counts up to ~10^8. A real 0 now renders as "0"
+    // (a valid OI/volume) rather than being hidden as missing.
+    return fincept::ui::formatting::format_compact(static_cast<double>(v), 1);
 }
 
 QString fmt_price(double v) {

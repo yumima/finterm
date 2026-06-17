@@ -3,6 +3,7 @@
 
 #include "services/equity/EquityResearchService.h"
 #include "services/file_manager/FileManagerService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QBarCategoryAxis>
@@ -1139,7 +1140,10 @@ void EquityFinancialsTab::populate_table(QTableWidget* table, const QVector<QPai
 
         for (int c = 0; c < stmt.size(); ++c) {
             double val = stmt[c].second[metrics[r]].toVariant().toDouble();
-            QString text = val == 0.0 ? "—" : fmt_large(val);
+            // Statement cells use 0.0 as the feed's "no data" marker (no
+            // NaN/optional at this layer), so render it as the canonical
+            // missing placeholder rather than a misleading "0".
+            QString text = val == 0.0 ? ui::formatting::placeholder() : fmt_large(val);
             auto* cell = new QTableWidgetItem(text);
             cell->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             if (val < 0)
@@ -1154,24 +1158,14 @@ void EquityFinancialsTab::populate_table(QTableWidget* table, const QVector<QPai
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 QString EquityFinancialsTab::fmt_large(double v) {
-    bool neg = v < 0;
-    double av = qAbs(v);
-    QString s;
-    if (av >= 1e12)
-        s = QString("%1T").arg(av / 1e12, 0, 'f', 2);
-    else if (av >= 1e9)
-        s = QString("%1B").arg(av / 1e9, 0, 'f', 2);
-    else if (av >= 1e6)
-        s = QString("%1M").arg(av / 1e6, 0, 'f', 1);
-    else if (av >= 1e3)
-        s = QString("%1K").arg(av / 1e3, 0, 'f', 1);
-    else
-        s = QString::number(static_cast<qint64>(av));
-    return neg ? "-" + s : s;
+    // Unified K/M/B/T at one decimal via the shared layer (was M/K@1dp but
+    // B/T@2dp). Negative-safe.
+    return ui::formatting::format_compact(v, 1);
 }
 
 QString EquityFinancialsTab::fmt_pct(double v) {
-    return QString("%1%").arg(v * 100.0, 0, 'f', 2);
+    // 2dp, matching the sibling ER tabs. Input is a fraction (×100).
+    return ui::formatting::format_percent(v * 100.0, 2);
 }
 
 QString EquityFinancialsTab::fmt_ratio(double v) {

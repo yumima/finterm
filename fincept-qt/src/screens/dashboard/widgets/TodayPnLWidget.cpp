@@ -5,6 +5,7 @@
 #include "trading/AccountManager.h"
 #include "trading/BrokerTopic.h"
 #include "trading/DataStreamManager.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
@@ -19,12 +20,13 @@ namespace fincept::screens::widgets {
 
 namespace {
 QString fmt_pnl(double v) {
-    const QString sign = v >= 0 ? "+" : "";
-    if (std::abs(v) >= 1.0e7)
-        return sign + QString::number(v / 1.0e7, 'f', 2) + "Cr";
-    if (std::abs(v) >= 1.0e5)
-        return sign + QString::number(v / 1.0e5, 'f', 2) + "L";
-    return sign + QString::number(v, 'f', 2);
+    // USD money via the shared layer (was India Cr/L before the US rebase).
+    // P&L keeps its explicit +/- sign: format_money already prefixes "-" for
+    // negatives, so we only add the "+" for non-negative. Compact magnitude
+    // ($1.2K / $3.4M / $1.1B at 1dp) keeps the hero number narrow.
+    using namespace fincept::ui::formatting;
+    const QString plus = v >= 0 ? QStringLiteral("+") : QString();
+    return plus + format_money(v, QStringLiteral("USD"), /*compact=*/true);
 }
 } // namespace
 

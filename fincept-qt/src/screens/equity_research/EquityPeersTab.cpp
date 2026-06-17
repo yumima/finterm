@@ -2,6 +2,7 @@
 #include "screens/equity_research/EquityPeersTab.h"
 
 #include "services/equity/EquityResearchService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
@@ -266,8 +267,16 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         peer_table_->setItem(row, col, item);
     };
 
-    auto fmt = [](double v, int dec = 2) -> QString { return v != 0.0 ? QString::number(v, 'f', dec) : "—"; };
-    auto fmt_pct = [](double v) -> QString { return v != 0.0 ? QString("%1%").arg(v * 100.0, 0, 'f', 1) : "—"; };
+    // The peer feed uses 0.0 as its "no data" sentinel (no NaN/optional is
+    // available at this layer), so a 0.0 ratio renders as the canonical missing
+    // placeholder. Percent is now 2dp — matching EquityAnalysisTab, which used
+    // to disagree (this tab was 1dp). fmt_pct's input is a fraction (×100).
+    auto fmt = [](double v, int dec = 2) -> QString {
+        return v != 0.0 ? QString::number(v, 'f', dec) : ui::formatting::placeholder();
+    };
+    auto fmt_pct = [](double v) -> QString {
+        return v != 0.0 ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
+    };
 
     for (int r = 0; r < peers.size(); ++r) {
         const auto& p = peers[r];

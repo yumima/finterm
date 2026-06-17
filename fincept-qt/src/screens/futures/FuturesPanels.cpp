@@ -6,6 +6,7 @@
 #include "screens/futures/FuturesQuoteCache.h"
 #include "services/util/DiskCache.h"
 #include "storage/secure/SecureStorage.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -65,11 +66,10 @@ static QString fmt_signed(double v, int decimals = 2) {
 }
 
 static QString fmt_volume(double v) {
-    if (!std::isfinite(v) || v <= 0) return "—";
-    if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-    if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
-    if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
-    return QString::number(v, 'f', 0);
+    // Unified K/M/B at one decimal via the shared layer (was K@1dp but M/B@2dp).
+    // format_compact_volume renders a real 0 as "0" and only NaN/inf/negative as
+    // the canonical missing sentinel.
+    return ui::formatting::format_compact_volume(v);
 }
 
 static QString color_for_change(double v) {

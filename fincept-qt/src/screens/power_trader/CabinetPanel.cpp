@@ -5,6 +5,7 @@
 #include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QGridLayout>
@@ -530,10 +531,9 @@ void CabinetPanel::on_member_selected(int row) {
 void CabinetPanel::populate_stat_tiles() {
     stat_members_->setText(QString::number(summary_.members.size()));
 
+    // Compact USD via the shared layer (1dp magnitude, B-rollover).
     auto fmt = [](double v) -> QString {
-        if (v >= 1e9) return "$" + QString::number(v/1e9,'f',1) + "B";
-        if (v >= 1e6) return "$" + QString::number(v/1e6,'f',1) + "M";
-        return "$" + QString::number(v/1e3,'f',0) + "K";
+        return ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true);
     };
     stat_total_lo_->setText(fmt(summary_.total_est_min));
     stat_total_hi_->setText(fmt(summary_.total_est_max));
@@ -590,10 +590,9 @@ void CabinetPanel::populate_member_list() {
         member_table_->setItem(r, 2, ci);
 
         const double mid = (m.est_total_min + m.est_total_max) / 2.0;
+        // Compact USD via the shared layer (1dp magnitude, B-rollover).
         auto fmt = [](double v) -> QString {
-            if (v >= 1e9) return "$"+QString::number(v/1e9,'f',1)+"B";
-            if (v >= 1e6) return "$"+QString::number(v/1e6,'f',1)+"M";
-            return "$"+QString::number(v/1e3,'f',0)+"K";
+            return ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true);
         };
         mk(3, fmt(mid), ui::colors::TEXT_SECONDARY, Qt::AlignRight | Qt::AlignVCenter);
     }
@@ -626,8 +625,9 @@ void CabinetPanel::populate_overview_tab() {
         o_ranking_table_->setItem(r, 3, ci);
 
         const double mid = (m.est_total_min + m.est_total_max) / 2.0;
-        mk(4, mid >= 1e6 ? "$"+QString::number(mid/1e6,'f',1)+"M"
-                         : "$"+QString::number(mid/1e3,'f',0)+"K",
+        // Compact USD via the shared layer — was M-capped (no B-rollover, so
+        // $1.2B showed as "$1200.0M").
+        mk(4, ui::formatting::format_money(mid, QStringLiteral("USD"), /*compact=*/true),
            ui::colors::TEXT_SECONDARY, Qt::AlignRight|Qt::AlignVCenter);
     }
 
@@ -651,8 +651,8 @@ void CabinetPanel::populate_overview_tab() {
 
         mk(0, s.sector);
         const double v = s.total_est_amount;
-        mk(1, v >= 1e6 ? "$"+QString::number(v/1e6,'f',1)+"M"
-                       : "$"+QString::number(v/1e3,'f',0)+"K",
+        // Compact USD via the shared layer (B-rollover; was M-capped).
+        mk(1, ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true),
            ui::colors::TEXT_SECONDARY, Qt::AlignRight|Qt::AlignVCenter);
         mk(2, grand > 0 ? QString::number(v/grand*100,'f',0)+"%" : "—",
            nullptr, Qt::AlignCenter);
@@ -825,8 +825,8 @@ void CabinetPanel::populate_sector_tab(const power_trader::CabinetMember& m) {
 
         mk(0, se.sector, regulated ? "#ef4444" : ui::colors::TEXT_PRIMARY);
         const double v = se.total_est_amount;
-        mk(1, v >= 1e6 ? "$"+QString::number(v/1e6,'f',1)+"M"
-                       : "$"+QString::number(v/1e3,'f',0)+"K",
+        // Compact USD via the shared layer (B-rollover; was M-capped).
+        mk(1, ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true),
            ui::colors::TEXT_SECONDARY, Qt::AlignRight|Qt::AlignVCenter);
         mk(2, total > 0 ? QString::number(v/total*100,'f',1)+"%" : "—",
            nullptr, Qt::AlignCenter);

@@ -3,6 +3,7 @@
 
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -310,7 +311,7 @@ void InsiderWatchPanel::show_entry(const power_trader::InsiderWatchEntry& e) {
     detail_meta_->setText(
         QString("%1  ·  %2  ·  %3%4  ·  "
                 "%5 of %6 trades in committee sectors (%7%)  ·  "
-                "Avg lag %8d  ·  Biggest trade ~$%9%10")
+                "Avg lag %8d  ·  Biggest trade ~$%9")
             .arg(e.party == QStringLiteral("D") ? "Democrat" :
                  e.party == QStringLiteral("R") ? "Republican" : "Independent")
             .arg(e.chamber == power_trader::MemberChamber::Senate ? "Senate" : "House")
@@ -320,9 +321,9 @@ void InsiderWatchPanel::show_entry(const power_trader::InsiderWatchEntry& e) {
             .arg(e.total_trades)
             .arg(e.cmte_overlap_pct, 0, 'f', 0)
             .arg(e.avg_disclosure_lag, 0, 'f', 0)
-            .arg(e.biggest_trade_amt >= 1e6
-                 ? QString::number(e.biggest_trade_amt/1e6,'f',1) : QString::number(e.biggest_trade_amt/1e3,'f',0))
-            .arg(e.biggest_trade_amt >= 1e6 ? "M" : "K"));
+            // Compact magnitude via the shared layer (B-rollover; was M-capped).
+            // The "$" lives in the format string, so we emit only the magnitude.
+            .arg(ui::formatting::format_compact(e.biggest_trade_amt, 1)));
 
     // Score breakdown table
     struct BreakdownRow { QString factor; double score; QString weight; };

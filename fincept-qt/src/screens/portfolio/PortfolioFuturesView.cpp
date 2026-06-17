@@ -3,6 +3,7 @@
 #include "python/PythonWorker.h"
 #include "screens/futures/FuturesContracts.h"
 #include "screens/futures/FuturesQuoteCache.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -299,12 +300,9 @@ void PortfolioFuturesView::populate_futures() {
         add(3, fmt_num(h.avg_buy_price, 4));
         add(4, fmt_num(last, 4));
         add(5, fmt_signed(chg_pct, 2) + "%", color_for_change(chg_pct));
-        add(6, [&]{
-            if (!std::isfinite(volume) || volume <= 0) return QString("—");
-            if (volume >= 1e6) return QString::number(volume / 1e6, 'f', 2) + "M";
-            if (volume >= 1e3) return QString::number(volume / 1e3, 'f', 1) + "K";
-            return QString::number(volume, 'f', 0);
-        }());
+        // Unified K/M/B/T at one decimal via the shared layer (was M@2dp, K@1dp,
+        // and lacked a B tier). 0 renders as "0"; only NaN/inf/negative → "—".
+        add(6, ui::formatting::format_compact_volume(volume));
         add(7, fmt_num(mv, 2));
         add(8, fmt_signed(pnl, 2), color_for_change(pnl));
     }

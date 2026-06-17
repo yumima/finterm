@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c85f9326a`](https://github.com/yumima/finterm/commit/c85f9326a) Equity Research: clear TODAY'S TRADING on symbol switch (no stale quote)
 - [`b342bbfdb`](https://github.com/yumima/finterm/commit/b342bbfdb) Preserve scroll position + selection across data refreshes
 - [`1cb04ee14`](https://github.com/yumima/finterm/commit/1cb04ee14) Dashboard widgets: build rows once + update in place (kill O(N^2) per-tick churn)
 - [`80d2c45b7`](https://github.com/yumima/finterm/commit/80d2c45b7) Dashboard widgets: surface fetch errors instead of spinning/looking empty
