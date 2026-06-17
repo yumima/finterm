@@ -94,24 +94,24 @@ UnifiedOrderResponse UnifiedTrading::place_paper_order(const TradingSession& ses
     QString type_str = order_type_str(order.order_type);
 
     std::optional<double> price_opt;
-    if (order.order_type == OrderType::Market) {
-        price_opt = 1000.0;
-    } else if (order.price > 0) {
+    if (order.price > 0)
         price_opt = order.price;
-    }
 
     std::optional<double> stop_opt;
     if (order.stop_price > 0)
         stop_opt = order.stop_price;
 
+    // A market order fills at the real price the caller supplies (the live
+    // quote). Never fabricate a placeholder fill price — reject if absent.
+    if (order.order_type == OrderType::Market && !(order.price > 0))
+        return {false, "", "No market price available — cannot fill market order", "paper"};
+
     try {
         auto paper_order = pt_place_order(session.paper_portfolio_id, symbol, side_str, type_str, order.quantity,
                                           price_opt, stop_opt, false);
 
-        if (order.order_type == OrderType::Market) {
-            double fill_price = order.price > 0 ? order.price : 1000.0;
-            pt_fill_order(paper_order.id, fill_price);
-        }
+        if (order.order_type == OrderType::Market)
+            pt_fill_order(paper_order.id, order.price);
 
         return {true, paper_order.id, "Paper order placed", "paper"};
     } catch (const std::exception& e) {
@@ -225,22 +225,22 @@ UnifiedOrderResponse UnifiedTrading::place_paper_order_for_account(const QString
     QString type_str = order_type_str(order.order_type);
 
     std::optional<double> price_opt;
-    if (order.order_type == OrderType::Market)
-        price_opt = 1000.0;
-    else if (order.price > 0)
+    if (order.price > 0)
         price_opt = order.price;
 
     std::optional<double> stop_opt;
     if (order.stop_price > 0)
         stop_opt = order.stop_price;
 
+    // Market orders fill at the real supplied price; never a placeholder.
+    if (order.order_type == OrderType::Market && !(order.price > 0))
+        return {false, "", "No market price available — cannot fill market order", "paper"};
+
     try {
         auto paper_order = pt_place_order(account.paper_portfolio_id, symbol, side_str, type_str, order.quantity,
                                           price_opt, stop_opt, false);
-        if (order.order_type == OrderType::Market) {
-            double fill_price = order.price > 0 ? order.price : 1000.0;
-            pt_fill_order(paper_order.id, fill_price);
-        }
+        if (order.order_type == OrderType::Market)
+            pt_fill_order(paper_order.id, order.price);
         return {true, paper_order.id, "Paper order placed", "paper"};
     } catch (const std::exception& e) {
         return {false, "", QString("Paper order failed: %1").arg(e.what()), "paper"};
