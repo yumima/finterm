@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <set>
 
 namespace fincept {
@@ -1069,17 +1070,25 @@ surface::ContangoData DatabentoService::parse_contango(const QJsonObject& j) {
     }
     data.contract_months.assign(months_set.begin(), months_set.end());
 
+    const float kNaN = std::numeric_limits<float>::quiet_NaN();
     for (const QString& sym : term.keys()) {
         QJsonArray curve = term[sym].toArray();
-        float spot_price = curve.isEmpty() ? 1.0f : (float)curve[0].toObject()["price"].toDouble(curve[0].toDouble());
-        if (spot_price == 0)
-            spot_price = 1.0f;
+        // Real front-month spot only — never a fabricated $1.00 baseline (which
+        // rendered every commodity as a misleading ~0% term structure).
+        const float spot_price = curve.isEmpty()
+            ? 0.0f
+            : (float)curve[0].toObject()["price"].toDouble(curve[0].toDouble());
 
         std::vector<float> row;
         for (int i = 0; i < (int)data.contract_months.size(); i++) {
-            float price =
-                (i < curve.size()) ? (float)curve[i].toObject()["price"].toDouble(curve[i].toDouble()) : spot_price;
-            row.push_back((price / spot_price - 1.0f) * 100.0f);
+            const float price = (i < curve.size())
+                ? (float)curve[i].toObject()["price"].toDouble(curve[i].toDouble())
+                : 0.0f;
+            // A month with no real spot or no real contract price is a gap (NaN),
+            // not a fabricated 0% contango.
+            row.push_back((spot_price > 0.0f && price > 0.0f)
+                              ? (price / spot_price - 1.0f) * 100.0f
+                              : kNaN);
         }
         data.z.push_back(row);
     }

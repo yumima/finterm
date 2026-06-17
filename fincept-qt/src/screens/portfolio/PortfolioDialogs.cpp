@@ -610,75 +610,8 @@ ImportPortfolioDialog::ImportPortfolioDialog(const QVector<portfolio::Portfolio>
 
     layout->addLayout(file_row);
 
-    // Demo JSON download hint
-    auto* demo_row = new QHBoxLayout;
-    auto* demo_hint = new QLabel("Need a template? Download the demo portfolio JSON:");
-    demo_hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    demo_row->addWidget(demo_hint, 1);
-
-    auto* demo_dl_btn = new QPushButton("DOWNLOAD DEMO");
-    demo_dl_btn->setFixedSize(120, 24);
-    demo_dl_btn->setCursor(Qt::PointingHandCursor);
-    demo_dl_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
-                                       "  font-size:12px; font-weight:700; letter-spacing:0.3px; }"
-                                       "QPushButton:hover { background:%1; color:%2; }")
-                                   .arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
-    connect(demo_dl_btn, &QPushButton::clicked, this, [this]() {
-        QString path = QFileDialog::getSaveFileName(this, "Save Demo Portfolio JSON", "demo_portfolio.json",
-                                                    "JSON Files (*.json)");
-        if (path.isEmpty())
-            return;
-
-        QJsonArray holdings;
-        struct H {
-            const char* symbol;
-            double qty;
-            double price;
-            const char* sector;
-        };
-        static const H demo[] = {
-            {"AAPL", 15, 178.50, "Technology"},
-            {"MSFT", 12, 375.20, "Technology"},
-            {"GOOGL", 8, 141.80, "Technology"},
-            {"NVDA", 10, 480.00, "Technology"},
-            {"AMZN", 6, 178.25, "Consumer Discretionary"},
-            {"TSLA", 5, 245.00, "Consumer Discretionary"},
-            {"JPM", 20, 195.50, "Financials"},
-            {"JNJ", 15, 155.75, "Healthcare"},
-            {"XOM", 25, 105.30, "Energy"},
-            {"V", 10, 280.00, "Financials"},
-            {"UNH", 4, 525.60, "Healthcare"},
-            {"PG", 12, 158.90, "Consumer Staples"},
-        };
-        for (const auto& h : demo) {
-            QJsonObject o;
-            o["symbol"] = h.symbol;
-            o["quantity"] = h.qty;
-            o["avg_buy_price"] = h.price;
-            o["sector"] = h.sector;
-            holdings.append(o);
-        }
-
-        QJsonObject root;
-        root["name"] = "Demo Portfolio";
-        root["owner"] = "finterm User";
-        root["currency"] = "USD";
-        root["description"] = "Sample portfolio for demonstration";
-        root["holdings"] = holdings;
-
-        QFile f(path);
-        if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            f.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-            f.close();
-            services::FileManagerService::instance().import_file(path, "portfolio");
-            QMessageBox::information(this, "Demo JSON Saved",
-                                     "Demo portfolio JSON saved.\nYou can now import it using the BROWSE button.");
-        } else {
-            QMessageBox::warning(this, "Save Failed", "Could not write to: " + path);
-        }
-    });
-    demo_row->addWidget(demo_dl_btn);
-    layout->addLayout(demo_row);
+    // (No "download demo JSON" template: finterm ships no fabricated sample
+    // holdings/prices. Import a real exported portfolio via BROWSE.)
 
     // Import mode
     auto* mode_label = new QLabel("IMPORT MODE");

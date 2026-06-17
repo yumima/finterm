@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`fcd297c48`](https://github.com/yumima/finterm/commit/fcd297c48) No fake $1000 paper fills: market orders fill at the real price or reject
 - [`d606fa684`](https://github.com/yumima/finterm/commit/d606fa684) Power-trader: real price-based returns (replace fabricated sector-constant P&L)
 - [`379d72039`](https://github.com/yumima/finterm/commit/379d72039) Remove the demo portfolio (fabricated holdings/cost-basis)
 - [`5079b8f05`](https://github.com/yumima/finterm/commit/5079b8f05) No fake order-book data: show only real broker bid/ask, never synthesize depth
