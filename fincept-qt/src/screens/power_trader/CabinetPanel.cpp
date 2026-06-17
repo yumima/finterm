@@ -110,9 +110,11 @@ void CabinetPanel::build_content_page() {
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ── LEFT column: stats (200px fixed, full height) ─────────────────────────
+    // ── LEFT column: stats (flexible width, full height) ──────────────────────
     auto* left_col = new QWidget(page);
-    left_col->setFixedWidth(200);
+    left_col->setMinimumWidth(200);
+    left_col->setMaximumWidth(280); // was a hard 200px that clipped long stat
+                                    // values; give it room without dominating.
     left_col->setStyleSheet(
         QString("QWidget{background:%1;border-right:1px solid %2;}")
             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));

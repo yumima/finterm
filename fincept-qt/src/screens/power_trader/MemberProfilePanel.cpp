@@ -522,7 +522,9 @@ void MemberProfilePanel::build_ui() {
     // are no longer truncated. Steals horizontal real estate from the growth
     // chart, which still has plenty of room at 1280+ window widths.
     info_pane->setMinimumWidth(360);
-    info_pane->setMaximumWidth(460);
+    info_pane->setMaximumWidth(560); // the profile now lives in a resizable
+                                     // right pane, so give long names/badges
+                                     // more headroom before the chart steals it.
     info_pane->setStyleSheet(
         QString("QWidget { background:%1; border-right:1px solid %2; }")
             .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));

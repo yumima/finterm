@@ -1136,7 +1136,6 @@ set(SCREEN_SOURCES
     src/screens/power_trader/DataSourceDialog.cpp
     src/screens/power_trader/LeaderboardPanel.cpp
     src/screens/power_trader/TradesFeedPanel.cpp
-    src/screens/power_trader/MemberDetailPanel.cpp
     src/screens/power_trader/OverviewPanel.cpp
     src/screens/power_trader/RankingsPanel.cpp
     src/screens/power_trader/MemberProfilePanel.cpp
@@ -1544,7 +1543,6 @@ set_source_files_properties(
     src/screens/power_trader/DataSourceDialog.cpp
     src/screens/power_trader/LeaderboardPanel.cpp
     src/screens/power_trader/TradesFeedPanel.cpp
-    src/screens/power_trader/MemberDetailPanel.cpp
     src/screens/power_trader/OverviewPanel.cpp
     src/screens/power_trader/RankingsPanel.cpp
     src/screens/power_trader/MemberProfilePanel.cpp

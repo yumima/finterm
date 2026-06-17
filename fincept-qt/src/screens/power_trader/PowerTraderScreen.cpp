@@ -25,6 +25,7 @@
 #include <QMenu>
 #include <QSettings>
 #include <QShortcut>
+#include <QSplitter>
 #include <QShowEvent>
 #include <QStringList>
 #include <QTabBar>
@@ -225,7 +226,7 @@ void PowerTraderScreen::build_ui() {
             auto* cl = new QHBoxLayout(congress_view_);
             cl->setContentsMargins(0, 0, 0, 0);
             cl->setSpacing(0);
-            cl->addWidget(build_member_sidebar());
+            auto* member_sidebar = build_member_sidebar();
 
             tab_widget_ = new QTabWidget;
             tab_widget_->setDocumentMode(true);
@@ -254,9 +255,9 @@ void PowerTraderScreen::build_ui() {
 
             tab_widget_->addTab(overview_panel_,  "Overview");
             tab_widget_->addTab(rankings_panel_,  "Rankings");
-            // Member tab removed — member_panel_ is shown as a slide-in
-            // drawer (build_member_drawer()) so member selection doesn't
-            // force-navigate away from the user's current tab context.
+            // No Member tab — member_panel_ lives in the persistent right pane
+            // of the master-detail splitter (built below), so selecting a member
+            // never force-navigates away from the analytics tab you're on.
             tab_widget_->addTab(feed_panel_,      "Feed");
             tab_widget_->addTab(committee_panel_, "By Committee");
             tab_widget_->addTab(party_panel_,     "Party Intel");
@@ -366,26 +367,33 @@ void PowerTraderScreen::build_ui() {
                         emit navigate_to_screen(QStringLiteral("markets"), ticker);
                     });
 
-            cl->addWidget(tab_widget_, 1);
+            // ── Master-detail layout (all resizable splitters) ───────────────
+            // LEFT group pane = [ ranked member sidebar | analytics tabs ];
+            // RIGHT pane = the selected member's profile, PERSISTENT and
+            // side-by-side (it used to be a full-width slide-in overlay drawer
+            // that hid the group context and wasted the wide screen). The user
+            // can drag any divider to rebalance.
+            auto* group_split = new QSplitter(Qt::Horizontal);
+            group_split->addWidget(member_sidebar);
+            group_split->addWidget(tab_widget_);
+            group_split->setStretchFactor(0, 0);
+            group_split->setStretchFactor(1, 1);
+            group_split->setCollapsible(0, false);
+            group_split->setCollapsible(1, false);
 
-            // Member-detail drawer overlay (replaces former Member tab).
-            // Built AFTER tab_widget_ is added so we can attach an event filter
-            // to track its geometry and keep the drawer in sync on resize.
-            build_member_drawer();
+            member_panel_->setMinimumWidth(380);
+            member_panel_->clear(); // placeholder until a member is selected
 
-            // Switching tabs while the member-detail drawer is open auto-
-            // dismisses it — clicking any tab IS the return path. Wiring
-            // this here (after the drawer exists) avoids a stale this/null
-            // capture order.
-            connect(tab_widget_, &QTabWidget::currentChanged, this,
-                    [this](int) { hide_member_drawer(); });
-            // currentChanged only fires when the index actually changes, so
-            // re-clicking the tab you're already on (the natural "back to this
-            // list" gesture — e.g. clicking Rankings again after opening a
-            // member) wouldn't dismiss the drawer, leaving the list hidden
-            // behind it. tabBarClicked fires on every click, same tab included.
-            if (auto* bar = tab_widget_->tabBar())
-                connect(bar, &QTabBar::tabBarClicked, this, [this](int) { hide_member_drawer(); });
+            auto* md_split = new QSplitter(Qt::Horizontal);
+            md_split->addWidget(group_split);
+            md_split->addWidget(member_panel_);
+            md_split->setStretchFactor(0, 1);
+            md_split->setStretchFactor(1, 0);
+            md_split->setCollapsible(0, false);
+            md_split->setCollapsible(1, false);
+            md_split->setSizes({900, 520});
+
+            cl->addWidget(md_split, 1);
         }
         view_stack_->addWidget(congress_view_);  // index 0
 
@@ -607,7 +615,9 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
 QWidget* PowerTraderScreen::build_member_sidebar() {
     auto* sidebar = new QWidget;
-    sidebar->setFixedWidth(240);
+    // Resizable in the master-detail splitter (was a hard 240px that clipped
+    // long member names); a minimum keeps it usable, the user can widen it.
+    sidebar->setMinimumWidth(210);
     sidebar->setStyleSheet(QString("background:%1; border-right:1px solid %2;")
                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* vl = new QVBoxLayout(sidebar);
@@ -692,112 +702,6 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
 }
 
 // ── Member detail drawer ──────────────────────────────────────────────────────
-
-void PowerTraderScreen::build_member_drawer() {
-    // Drawer is a child of congress_view_, not part of any layout — we drive
-    // its geometry manually so it overlays tab_widget_'s area when shown.
-    // This lets the user dismiss the detail and return to whichever tab they
-    // were on, instead of being auto-navigated.
-    member_drawer_ = new QWidget(congress_view_);
-    member_drawer_->setStyleSheet(
-        QString("QWidget#powerTraderMemberDrawer { background:%1; "
-                " border-left:2px solid %2; }")
-            .arg(ui::colors::BG_BASE(), ui::colors::AMBER()));
-    member_drawer_->setObjectName(QStringLiteral("powerTraderMemberDrawer"));
-
-    auto* vl = new QVBoxLayout(member_drawer_);
-    vl->setContentsMargins(0, 0, 0, 0);
-    vl->setSpacing(0);
-
-    // Top bar — title + close pill. The drawer no longer covers the tab bar
-    // above tab_widget_'s content area, so the user can switch back to any
-    // tab (Overview / Rankings / etc.) directly — that's the return path.
-    // The explicit "BACK" pill was removed because users were asking "back to
-    // what?"; the tab bar above is the obvious affordance. A subtle × stays
-    // on the right for keyboard-shy power users alongside the Esc shortcut.
-    auto* bar = new QWidget(member_drawer_);
-    bar->setFixedHeight(36);
-    bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
-                           .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-    auto* bl = new QHBoxLayout(bar);
-    bl->setContentsMargins(10, 0, 10, 0);
-    bl->setSpacing(10);
-
-    auto* title = new QLabel(QStringLiteral("MEMBER DETAIL"), bar);
-    title->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
-                                 "letter-spacing:1.5px;background:transparent;")
-                             .arg(ui::colors::TEXT_SECONDARY()));
-    bl->addWidget(title);
-
-    auto* hint = new QLabel(QStringLiteral("(switch tabs above, or Esc to close)"), bar);
-    hint->setStyleSheet(QString("color:%1;font-size:11px;background:transparent;")
-                            .arg(ui::colors::TEXT_TERTIARY()));
-    bl->addWidget(hint);
-    bl->addStretch();
-
-    auto* close_btn = new QPushButton(QStringLiteral("\xc3\x97"), bar);
-    close_btn->setFixedSize(26, 22);
-    close_btn->setCursor(Qt::PointingHandCursor);
-    close_btn->setToolTip(QStringLiteral("Close (Esc)"));
-    close_btn->setStyleSheet(
-        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                "border-radius:2px;font-size:14px;font-weight:700;}"
-                "QPushButton:hover{color:%3;border-color:%3;background:%4;}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
-                 ui::colors::AMBER(),          ui::colors::BG_RAISED()));
-    connect(close_btn, &QPushButton::clicked, this, &PowerTraderScreen::hide_member_drawer);
-    bl->addWidget(close_btn);
-
-    vl->addWidget(bar);
-
-    // member_panel_ is reparented inside the drawer. Previously it was a tab
-    // of tab_widget_; here it lives only in the drawer.
-    member_panel_->setParent(member_drawer_);
-    vl->addWidget(member_panel_, 1);
-
-    member_drawer_->setVisible(false);
-    member_drawer_->raise();
-
-    // Track the tab area's geometry so the drawer follows on resize.
-    tab_widget_->installEventFilter(this);
-
-    // Esc closes the drawer.
-    auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), member_drawer_);
-    esc->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(esc, &QShortcut::activated, this, &PowerTraderScreen::hide_member_drawer);
-}
-
-void PowerTraderScreen::show_member_drawer() {
-    if (!member_drawer_ || !tab_widget_) return;
-    // Position the drawer so it covers only the tab's CONTENT area, leaving
-    // the tab bar at the top visible and clickable. The user can dismiss the
-    // detail by clicking any other tab — that's the obvious return path the
-    // old "BACK" pill was trying (and failing) to communicate.
-    const QPoint pos    = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
-    const int    tab_h  = tab_widget_->tabBar() ? tab_widget_->tabBar()->height() : 0;
-    member_drawer_->setGeometry(pos.x(), pos.y() + tab_h,
-                                tab_widget_->width(),
-                                tab_widget_->height() - tab_h);
-    member_drawer_->raise();
-    member_drawer_->show();
-    member_drawer_->setFocus();
-}
-
-void PowerTraderScreen::hide_member_drawer() {
-    if (member_drawer_) member_drawer_->setVisible(false);
-}
-
-bool PowerTraderScreen::eventFilter(QObject* obj, QEvent* ev) {
-    if (obj == tab_widget_ && member_drawer_ && member_drawer_->isVisible() &&
-        (ev->type() == QEvent::Resize || ev->type() == QEvent::Move)) {
-        const QPoint pos   = tab_widget_->mapTo(congress_view_, QPoint(0, 0));
-        const int    tab_h = tab_widget_->tabBar() ? tab_widget_->tabBar()->height() : 0;
-        member_drawer_->setGeometry(pos.x(), pos.y() + tab_h,
-                                    tab_widget_->width(),
-                                    tab_widget_->height() - tab_h);
-    }
-    return QWidget::eventFilter(obj, ev);
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -946,9 +850,8 @@ void PowerTraderScreen::on_member_selected(const QString& member_id) {
 
     member_panel_->set_member(member);
     feed_panel_->set_selected_member(member_id);
-    // Show the member detail in the slide-in drawer instead of force-
-    // navigating to a Member tab — preserves the user's current tab context.
-    show_member_drawer();
+    // member_panel_ is a persistent right-pane in the master-detail splitter —
+    // set_member() populates it in place; no drawer to show/hide.
 }
 
 void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {

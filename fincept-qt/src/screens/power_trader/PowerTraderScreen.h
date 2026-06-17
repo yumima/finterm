@@ -59,7 +59,6 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
   protected:
     void showEvent(QShowEvent* e) override;
     void hideEvent(QHideEvent* e) override;
-    bool eventFilter(QObject* obj, QEvent* ev) override;
 
   private slots:
     void on_data_loaded(fincept::power_trader::PowerTraderSummary summary);
@@ -75,13 +74,10 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
     QWidget* build_top_bar();
     QWidget* build_body_strip();
     QWidget* build_member_sidebar();
-    void build_member_drawer();
     void populate_member_list(const QVector<CongressMember>& members);
     void show_content();
     void show_loading();
     void show_error(const QString& msg);
-    void show_member_drawer();
-    void hide_member_drawer();
     void show_onboarding_overlay();
     void refresh_all_panels();
 
@@ -144,12 +140,7 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
 
     // ── Congress vs Cabinet page switch ──────────────────────────────────────
     QStackedWidget* view_stack_      = nullptr;  // 0=congress, 1=cabinet
-    QWidget*        congress_view_   = nullptr;  // sidebar + tab_widget_
-
-    // ── Member detail drawer (replaces former Member tab) ───────────────────
-    // Slide-in overlay attached to congress_view_, sized to cover tab_widget_
-    // when shown. Lets the user inspect a member without losing their tab.
-    QWidget* member_drawer_ = nullptr;
+    QWidget*        congress_view_   = nullptr;  // master-detail: [sidebar|tabs] | member_panel_
 
     // ── State ─────────────────────────────────────────────────────────────────
     PowerTraderSummary current_summary_;
