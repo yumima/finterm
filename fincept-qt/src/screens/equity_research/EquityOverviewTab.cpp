@@ -660,6 +660,9 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // stale cached_quote_ when the new symbol's info arrives before (or instead
     // of) its quote, so the panel keeps showing the old ticker's numbers.
     cached_quote_ = {};
+    cached_quote_.valid = false; // {} leaves valid at its default (true); force-clear
+                                 // so apply_info_state() genuinely skips re-applying
+                                 // this empty quote over the new symbol's "--" labels.
     if (open_val_)       open_val_->setText(QStringLiteral("--"));
     if (high_val_)       high_val_->setText(QStringLiteral("--"));
     if (low_val_)        low_val_->setText(QStringLiteral("--"));
