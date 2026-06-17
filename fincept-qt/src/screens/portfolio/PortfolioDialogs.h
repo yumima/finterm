@@ -44,7 +44,7 @@ class ConfirmDeleteDialog : public QDialog {
 class AddAssetDialog : public QDialog {
     Q_OBJECT
   public:
-    explicit AddAssetDialog(QWidget* parent = nullptr);
+    explicit AddAssetDialog(QWidget* parent = nullptr, const QString& prefill_symbol = {});
 
     QString symbol() const;
     double quantity() const;

@@ -178,7 +178,7 @@ ConfirmDeleteDialog::ConfirmDeleteDialog(const QString& portfolio_name, QWidget*
 static constexpr int kAssetSearchDebounceMs = 300;
 static constexpr int kAssetSearchLimit = 10;
 
-AddAssetDialog::AddAssetDialog(QWidget* parent) : QDialog(parent) {
+AddAssetDialog::AddAssetDialog(QWidget* parent, const QString& prefill_symbol) : QDialog(parent) {
     setWindowTitle("Add Asset");
     setFixedSize(400, 260);
     setStyleSheet(QString("QDialog { background:%1; color:%2; }"
@@ -295,7 +295,17 @@ AddAssetDialog::AddAssetDialog(QWidget* parent) : QDialog(parent) {
         schedule_search(q);
     });
 
-    symbol_edit_->setFocus();
+    // Optional prefill (e.g. power-trader "paper-buy the same"). The selecting_
+    // guard suppresses the search dropdown so the dialog opens clean; focus
+    // moves to quantity since the ticker is already chosen.
+    if (!prefill_symbol.isEmpty()) {
+        selecting_ = true;
+        symbol_edit_->setText(prefill_symbol);
+        selecting_ = false;
+        quantity_edit_->setFocus();
+    } else {
+        symbol_edit_->setFocus();
+    }
 }
 
 void AddAssetDialog::schedule_search(const QString& query) {

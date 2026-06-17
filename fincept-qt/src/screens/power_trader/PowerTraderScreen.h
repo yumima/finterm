@@ -55,6 +55,9 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
 
   signals:
     void navigate_to_screen(QString screen_id, QString ticker);
+    // "Paper-buy the same" from a power-trader's trade: the app shell routes
+    // this to the Portfolio screen and opens its BUY ticket pre-filled.
+    void request_paper_buy(QString ticker);
 
   protected:
     void showEvent(QShowEvent* e) override;

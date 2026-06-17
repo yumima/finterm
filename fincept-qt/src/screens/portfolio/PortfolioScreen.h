@@ -50,6 +50,12 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     void on_group_symbol_changed(const SymbolRef& ref) override;
     SymbolRef current_symbol() const override;
 
+    /// Open the BUY order ticket pre-filled with @p symbol. Used by external
+    /// callers (e.g. power-trader's "paper-buy the same") to drop the user
+    /// straight into the buy flow for a ticker; they still confirm portfolio,
+    /// quantity, and price — nothing is written until they accept.
+    void open_buy_for(const QString& symbol);
+
   protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
@@ -133,6 +139,9 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     QVector<portfolio::Portfolio> portfolios_;
     QString selected_id_;
     QString selected_symbol_;
+    // One-shot ticker prefilled into the next BUY AddAssetDialog, set by
+    // open_buy_for() and consumed (cleared) when that dialog is constructed.
+    QString pending_buy_symbol_;
     portfolio::PortfolioSummary current_summary_;
     portfolio::ComputedMetrics current_metrics_;
     bool summary_loaded_ = false;

@@ -1211,6 +1211,33 @@ void MainWindow::setup_dock_screens() {
                         SymbolContext::instance().set_group_symbol(
                             SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     dock_router_->navigate(id);
+                    // Equity Research loads via the EventBus "load_symbol" event
+                    // (it ignores group-A broadcasts when its tab isn't linked).
+                    // Publish AFTER navigate() so the now-materialized screen's
+                    // subscription receives it — matching every other caller
+                    // (PortfolioBlotter, IpoWatchView, CommandBar, …).
+                    if (id == QLatin1String("equity_research") && !ticker.isEmpty())
+                        EventBus::instance().publish("equity_research.load_symbol",
+                                                     QVariantMap{{"symbol", ticker}});
+                });
+        // "Paper-buy the same": land on Portfolio with the symbol in context
+        // and pop its BUY ticket pre-filled with the ticker.
+        connect(screen, &power_trader::PowerTraderScreen::request_paper_buy, this,
+                [this](const QString& ticker) {
+                    if (ticker.isEmpty())
+                        return;
+                    SymbolContext::instance().set_group_symbol(
+                        SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+                    dock_router_->navigate(QStringLiteral("portfolio"));
+                    if (auto* dw = dock_router_->find_dock_widget(QStringLiteral("portfolio"))) {
+                        if (QWidget* w = dw->widget()) {
+                            auto* ps = qobject_cast<screens::PortfolioScreen*>(w);
+                            if (!ps)
+                                ps = w->findChild<screens::PortfolioScreen*>();
+                            if (ps)
+                                ps->open_buy_for(ticker);
+                        }
+                    }
                 });
         return screen;
     });

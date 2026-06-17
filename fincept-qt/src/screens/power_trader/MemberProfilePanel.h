@@ -14,6 +14,8 @@
 
 namespace fincept::screens {
 
+class TradeActionCard;
+
 // ── NavChart ──────────────────────────────────────────────────────────────────
 /// Custom QPainter line chart for estimated portfolio NAV series.
 /// No QtCharts dependency — draws directly with QPainter.
@@ -72,6 +74,11 @@ public:
 
 signals:
     void navigate_to_markets(QString ticker);
+    // Per-trade "follow this trade" actions, raised from the TradeActionCard
+    // drill-down and re-emitted by PowerTraderScreen to the app shell.
+    void request_equity_research(QString ticker);
+    void request_watchlist(QString ticker);
+    void request_paper_buy(QString ticker);
 
 private:
     void build_ui();
@@ -161,6 +168,10 @@ private:
 
     // ── Section 5: recent trades ──────────────────────────────────────────────
     QTableWidget* trades_table_   = nullptr;
+    // The trades currently shown in trades_table_, in row order, so a row
+    // click maps straight to its PoliticalTrade for the drill-down card.
+    QVector<power_trader::PoliticalTrade> shown_trades_;
+    TradeActionCard* trade_card_  = nullptr;  // lazy per-trade drill-down popup
 
     // ── Signal analysis ───────────────────────────────────────────────────────
     QWidget*      signal_analysis_    = nullptr;

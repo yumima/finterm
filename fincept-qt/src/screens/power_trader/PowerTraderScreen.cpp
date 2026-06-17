@@ -366,6 +366,20 @@ void PowerTraderScreen::build_ui() {
                     this, [this](const QString& ticker) {
                         emit navigate_to_screen(QStringLiteral("markets"), ticker);
                     });
+            // Per-trade "follow this trade" actions from the drill-down card.
+            connect(member_panel_,    &screens::MemberProfilePanel::request_equity_research,
+                    this, [this](const QString& ticker) {
+                        emit navigate_to_screen(QStringLiteral("equity_research"), ticker);
+                    });
+            connect(member_panel_,    &screens::MemberProfilePanel::request_watchlist,
+                    this, [this](const QString& ticker) {
+                        // Idempotent add (the card's button is an "Add", not a toggle).
+                        if (ticker.isEmpty() || ticker_watchlist_.contains(ticker))
+                            return;
+                        toggle_ticker_watchlist(ticker);
+                    });
+            connect(member_panel_,    &screens::MemberProfilePanel::request_paper_buy,
+                    this, &PowerTraderScreen::request_paper_buy);
 
             // ── Master-detail layout (all resizable splitters) ───────────────
             // LEFT group pane = [ ranked member sidebar | analytics tabs ];
@@ -1037,9 +1051,9 @@ void PowerTraderScreen::on_watchlist_filter_toggled(bool /*only_watched*/) {
 // The watchlist sets are separately persisted via QSettings (see
 // save_watchlist / save_ticker_watchlist) and don't need to live in this map.
 //
-// Member selection is intentionally NOT restored across sessions: the
-// existing on_member_selected() pops the slide-in drawer as a side effect,
-// which would be intrusive on app launch. The user's last filter + tab are
+// Member selection is intentionally NOT restored across sessions: on launch
+// the member detail pane stays on its placeholder until the user picks someone,
+// rather than auto-populating a member. The user's last filter + tab are
 // the high-value items to restore; member focus is opt-in per session
 // (same pattern PortfolioScreen uses for symbol focus — see its
 // restore_state for the analogue).

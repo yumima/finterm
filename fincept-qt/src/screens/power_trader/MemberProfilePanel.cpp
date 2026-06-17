@@ -3,6 +3,7 @@
 
 #include "ai_chat/LlmService.h"
 #include "screens/power_trader/PowerTraderService.h"
+#include "screens/power_trader/TradeActionCard.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
 #include "ui/theme/Theme.h"
@@ -971,6 +972,26 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
                  ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
+    // Clicking any trade row pops the per-trade drill-down + "follow this
+    // trade" actions. The card is created lazily and reused.
+    connect(trades_table_, &QTableWidget::cellClicked, this, [this](int row, int /*col*/) {
+        if (row < 0 || row >= shown_trades_.size())
+            return;
+        if (!trade_card_) {
+            trade_card_ = new TradeActionCard(this);
+            connect(trade_card_, &TradeActionCard::open_equity_research,
+                    this, &MemberProfilePanel::request_equity_research);
+            connect(trade_card_, &TradeActionCard::add_to_watchlist,
+                    this, &MemberProfilePanel::request_watchlist);
+            connect(trade_card_, &TradeActionCard::paper_buy,
+                    this, &MemberProfilePanel::request_paper_buy);
+        }
+        // Anchor just below the clicked row's left edge.
+        const QRect r = trades_table_->visualRect(trades_table_->model()->index(row, 0));
+        const QPoint anchor = trades_table_->viewport()->mapToGlobal(r.bottomLeft());
+        trade_card_->show_for(shown_trades_[row], anchor);
+    });
+
     vl->addWidget(trades_table_);
 }
 
@@ -1821,6 +1842,7 @@ void MemberProfilePanel::populate_trades(const QVector<power_trader::PoliticalTr
     if (sorted.size() > 15)
         sorted = sorted.mid(0, 15);
 
+    shown_trades_ = sorted;  // row-aligned with the table for the drill-down card
     trades_table_->setRowCount(sorted.size());
 
     for (int r = 0; r < sorted.size(); ++r) {
