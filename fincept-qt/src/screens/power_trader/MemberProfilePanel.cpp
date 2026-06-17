@@ -4,8 +4,11 @@
 #include "ai_chat/LlmService.h"
 #include "screens/power_trader/PowerTraderService.h"
 #include "screens/power_trader/TradeActionCard.h"
+#include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
 #include "ui/components/SectionHeader.h"
+#include "ui/components/SignalTooltip.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QApplication>
@@ -873,6 +876,16 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     holdings_table_->setColumnCount(kCols.size());
     holdings_table_->setHorizontalHeaderLabels(kCols);
     fincept::ui::ensure_header_fits(holdings_table_);
+
+    // "*" columns are modeled from disclosed amount RANGES — explain on hover.
+    auto set_hdr_tip = [&](int col, const QString& tip) {
+        if (auto* it = holdings_table_->horizontalHeaderItem(col)) it->setToolTip(tip);
+    };
+    set_hdr_tip(3, fincept::ui::tooltip_for_aggregate_signal());
+    set_hdr_tip(4, fincept::ui::est::portfolio_tooltip());
+    set_hdr_tip(5, fincept::ui::est::portfolio_tooltip());
+    set_hdr_tip(6, fincept::ui::est::portfolio_tooltip());
+    set_hdr_tip(7, fincept::ui::est::portfolio_tooltip());
     holdings_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     holdings_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     holdings_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -934,6 +947,16 @@ void MemberProfilePanel::build_trades_section(QWidget* parent, QVBoxLayout* vl) 
     trades_table_->setColumnCount(kCols.size());
     trades_table_->setHorizontalHeaderLabels(kCols);
     fincept::ui::ensure_header_fits(trades_table_);
+
+    // Hover legend for the abbreviated headers (cheaper than a footnote row).
+    auto set_hdr_tip = [&](int col, const QString& tip) {
+        if (auto* it = trades_table_->horizontalHeaderItem(col)) it->setToolTip(tip);
+    };
+    set_hdr_tip(0, QStringLiteral("Disclosure date — when the trade was publicly filed (PTR receipt date)."));
+    set_hdr_tip(2, QStringLiteral("B = Buy, S = Sell, X = Exchange."));
+    set_hdr_tip(4, fincept::ui::est::disclosure_lag_tooltip());
+    set_hdr_tip(5, fincept::ui::tooltip_for_aggregate_signal());
+    set_hdr_tip(6, QStringLiteral("A committee whose remit overlaps this trade's sector — a potential information edge."));
     trades_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     trades_table_->setSelectionMode(QAbstractItemView::SingleSelection);
     trades_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -1756,6 +1779,19 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
 
     holdings_table_->setRowCount(sorted.size());
 
+    // Real per-ticker signal = mean signal_score of THIS member's disclosed
+    // trades in that ticker. No synthetic proxy — a holding with no scored
+    // trades behind it shows "—" rather than an invented number.
+    QHash<QString, QPair<double, int>> sig_acc;  // ticker → (sum, count)
+    for (const auto& t : power_trader::PowerTraderService::instance()
+                             .trades_for_member(current_member_.id)) {
+        if (t.signal_score > 0) {
+            auto& a = sig_acc[t.ticker];
+            a.first  += t.signal_score;
+            a.second += 1;
+        }
+    }
+
     for (int r = 0; r < sorted.size(); ++r) {
         const auto& h = sorted[r];
         holdings_table_->setRowHeight(r, 28);
@@ -1789,14 +1825,20 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
         // SECTOR
         set_item(2, h.sector, ui::colors::TEXT_SECONDARY);
 
-        // SIG — per-holding insider signal score; amber if committee overlap
+        // SIG — mean of this member's real trade signal scores for the ticker.
         {
-            const double sig = h.committee_overlap ? 80.0 : 30.0;  // proxy signal
-            auto* sig_item = new QTableWidgetItem(QString::number(sig, 'f', 0));
+            const auto it    = sig_acc.constFind(h.ticker);
+            const bool have  = (it != sig_acc.constEnd() && it.value().second > 0);
+            const double sig = have ? it.value().first / it.value().second : 0.0;
+            auto* sig_item = new QTableWidgetItem(
+                have ? QString::number(sig, 'f', 0)
+                     : fincept::ui::formatting::placeholder());
             sig_item->setTextAlignment(Qt::AlignCenter);
-            sig_item->setForeground(QColor(h.committee_overlap
-                                           ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY()));
+            sig_item->setForeground(QColor(have && sig >= 60
+                                           ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()));
             sig_item->setFlags(sig_item->flags() & ~Qt::ItemIsEditable);
+            if (have)
+                sig_item->setToolTip(fincept::ui::tooltip_for_aggregate_signal(it.value().second));
             holdings_table_->setItem(r, 3, sig_item);
         }
 
@@ -1894,6 +1936,8 @@ void MemberProfilePanel::populate_trades(const QVector<power_trader::PoliticalTr
                                       ? ui::colors::AMBER
                                       : ui::colors::TEXT_TERTIARY;
             set_item(5, QString::number(t.signal_score, 'f', 0), sig_col, Qt::AlignCenter);
+            if (auto* sig_item = trades_table_->item(r, 5))
+                sig_item->setToolTip(fincept::ui::tooltip_for_trade_signal(t));
         }
 
         // COMMITTEE

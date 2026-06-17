@@ -2,9 +2,11 @@
 #include "screens/power_trader/TradeActionCard.h"
 
 #include "ai_chat/LlmService.h"
+#include "screens/power_trader/PowerTraderService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
+#include <QDate>
 #include <QDesktopServices>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -241,6 +243,27 @@ void TradeActionCard::show_for(const PoliticalTrade& trade, const QPoint& global
                     + QStringLiteral("</span>"),
                 sig_col);
     html += row(QStringLiteral("Committee"), cmte, cmte_col);
+
+    // Price since the trade — the "did following this pay off?" read. Real
+    // closes only (from PowerTraderService's in-memory daily series); shows
+    // "—" when the series doesn't cover this ticker/date — never fabricated.
+    auto& svc = PowerTraderService::instance();
+    const double p_then = svc.close_on_or_before(trade.ticker, trade.transaction_date);
+    const double p_now  = svc.close_on_or_before(trade.ticker, QDate::currentDate());
+    if (p_then > 0.0 && p_now > 0.0) {
+        const double chg = (p_now - p_then) / p_then * 100.0;
+        const bool   up  = chg >= 0.0;
+        html += row(QStringLiteral("Stock since trade"),
+                    QString("%1 \xE2\x86\x92 %2 &nbsp;(%3%4%)")
+                        .arg(fmt::format_money(p_then), fmt::format_money(p_now),
+                             up ? QStringLiteral("+") : QString(),
+                             QString::number(chg, 'f', 1)),
+                    up ? QString(colors::POSITIVE()) : QString(colors::NEGATIVE()));
+    } else {
+        html += row(QStringLiteral("Stock since trade"), fmt::placeholder(),
+                    QString(colors::TEXT_TERTIARY()));
+    }
+
     html += QStringLiteral("</table>");
     detail_lbl_->setText(html);
 
@@ -318,6 +341,22 @@ void TradeActionCard::start_explain_stream() {
                  .arg(trade_.committee_relevance.isEmpty()
                           ? QStringLiteral("none recorded")
                           : trade_.committee_relevance);
+    {
+        auto& svc = PowerTraderService::instance();
+        const double p_then = svc.close_on_or_before(trade_.ticker, trade_.transaction_date);
+        const double p_now  = svc.close_on_or_before(trade_.ticker, QDate::currentDate());
+        if (p_then > 0.0 && p_now > 0.0) {
+            const double chg = (p_now - p_then) / p_then * 100.0;
+            lines << QString("Stock price since the trade: %1 on the trade date -> %2 now "
+                             "(%3%4%). Use this to judge whether the move is already priced in.")
+                         .arg(fmt::format_money(p_then), fmt::format_money(p_now),
+                              chg >= 0 ? QStringLiteral("+") : QString(),
+                              QString::number(chg, 'f', 1));
+        } else {
+            lines << QStringLiteral("Stock price since the trade: UNAVAILABLE (no real close "
+                                    "series for this ticker — do not estimate a move).");
+        }
+    }
 
     std::vector<fincept::ai_chat::ConversationMessage> history;
     history.push_back({QStringLiteral("system"), QStringLiteral(

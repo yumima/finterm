@@ -99,6 +99,13 @@ class PowerTraderService : public QObject {
     /// Cabinet-wide sector exposure (sum of all member holdings by sector).
     QVector<SectorExposure> cabinet_sector_exposure() const;
 
+    /// Real close on or before @p date for @p ticker, or 0 if unavailable.
+    /// Current price is just close_on_or_before(today) — the latest real close.
+    /// Used by the per-trade drill-down for the "price since the trade" read;
+    /// returns 0 (never a fabricated value) when the daily series doesn't
+    /// cover the ticker/date.
+    double close_on_or_before(const QString& ticker, const QDate& date) const;
+
   signals:
     void data_loaded(fincept::power_trader::PowerTraderSummary summary);
     void cabinet_data_loaded(fincept::power_trader::CabinetSummary summary);
@@ -121,9 +128,6 @@ class PowerTraderService : public QObject {
     // "—"); nothing is ever fabricated.
     void   fetch_real_prices();
     void   recompute_member_returns();
-    /// Real close on or before @p date for @p ticker, or 0 if unavailable.
-    /// Current price is just close_on_or_before(today) — the latest real close.
-    double close_on_or_before(const QString& ticker, const QDate& date) const;
 
     QHash<QString, QMap<QDate, double>>   close_history_;   // ticker → date→close
     qint64 price_epoch_ = 0;  // bumps each load so stale price callbacks drop

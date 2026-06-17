@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`5b11d6b53`](https://github.com/yumima/finterm/commit/5b11d6b53) power-trader: per-trade drill-down + "follow this trade" actions (Phase 2)
 - [`54155431a`](https://github.com/yumima/finterm/commit/54155431a) power-trader: unify Senate/House into resizable master-detail shell (Phase 1)
 - [`d2d1a00bb`](https://github.com/yumima/finterm/commit/d2d1a00bb) Equity Research: explicitly clear cached_quote_.valid on symbol switch
 - [`74d77e252`](https://github.com/yumima/finterm/commit/74d77e252) Remove the dead PortfolioHoldingsRepository
