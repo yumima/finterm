@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`af1aa72aa`](https://github.com/yumima/finterm/commit/af1aa72aa) qlib AI-lab: train/evaluate on REAL market data, never np.random noise
 - [`55c2c03bd`](https://github.com/yumima/finterm/commit/55c2c03bd) No fabricated Databento contango baseline or demo-portfolio JSON template
 - [`fcd297c48`](https://github.com/yumima/finterm/commit/fcd297c48) No fake $1000 paper fills: market orders fill at the real price or reject
 - [`d606fa684`](https://github.com/yumima/finterm/commit/d606fa684) Power-trader: real price-based returns (replace fabricated sector-constant P&L)

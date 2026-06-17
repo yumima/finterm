@@ -242,11 +242,20 @@ void MarginUsageWidget::apply_styles() {
             QString("color:%1;font-size:12px;font-weight:600;background:transparent;padding-top:4px;")
                 .arg(ui::colors::TEXT_SECONDARY()));
 
-    if (usage_bar_)
+    if (usage_bar_) {
+        // Re-derive the threshold color from the CURRENT usage — a theme/font
+        // change must not reset a high-usage (red/amber) bar back to green.
+        const int pct = usage_bar_->value();
+        QColor bar_color = ui::colors::POSITIVE();
+        if (pct >= 80)
+            bar_color = ui::colors::NEGATIVE();
+        else if (pct >= 50)
+            bar_color = ui::colors::WARNING();
         usage_bar_->setStyleSheet(
             QString("QProgressBar{background:%1;border:none;border-radius:2px;}"
                     "QProgressBar::chunk{background:%2;border-radius:2px;}")
-                .arg(ui::colors::BG_RAISED(), ui::colors::POSITIVE()));
+                .arg(ui::colors::BG_RAISED(), bar_color.name()));
+    }
 }
 
 } // namespace fincept::screens::widgets
