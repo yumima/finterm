@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`52778ba04`](https://github.com/yumima/finterm/commit/52778ba04) DataHub: skip subscriber fan-out for no-change publishes (live-tick perf)
 - [`0765c3361`](https://github.com/yumima/finterm/commit/0765c3361) Fix power-trader contrast bugs: dead rgba highlight + white-on-amber badge
 - [`e3b2b99cc`](https://github.com/yumima/finterm/commit/e3b2b99cc) Defer startup disk I/O off the launch path (faster, less launch-time thrash)
 
