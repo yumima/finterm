@@ -1,3 +1,6 @@
+// LEGACY — see PortfolioHoldingsRepository.h. Unused by current live flows;
+// kept only for StorageManager/migration references. New code should use the
+// canonical PortfolioRepository (portfolios + portfolio_assets).
 #include "storage/repositories/PortfolioHoldingsRepository.h"
 
 namespace fincept {

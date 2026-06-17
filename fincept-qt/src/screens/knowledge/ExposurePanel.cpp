@@ -1,10 +1,11 @@
 #include "screens/knowledge/ExposurePanel.h"
 
 #include "services/markets/MarketDataService.h"
-#include "storage/repositories/PortfolioHoldingsRepository.h"
+#include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
+#include <QHash>
 #include <QLabel>
 #include <QPointer>
 #include <QRegularExpression>
@@ -100,13 +101,35 @@ ExposurePanel::ExposurePanel(const KnowledgeEntry& entry, QWidget* parent) : QWi
 void ExposurePanel::load_holdings_and_evaluate() {
     const auto crit = parse_criterion(entry_.exposure_criterion);
 
-    auto& repo = PortfolioHoldingsRepository::instance();
-    auto result = repo.get_active();
-    if (!result.is_ok()) {
+    // Aggregate exposure across ALL portfolios: sum quantity per symbol over
+    // every portfolio's assets. This is the user's *total* exposure, not a
+    // single portfolio's. Sourced from the canonical portfolios/portfolio_assets
+    // schema (PortfolioRepository) rather than the legacy flat holdings table.
+    auto& repo = PortfolioRepository::instance();
+    auto portfolios = repo.list_portfolios();
+    if (!portfolios.is_ok()) {
         status_->setText(QString("No portfolio data yet — add holdings in the Portfolio tab to see exposure here."));
         return;
     }
-    const auto holdings = result.value();
+
+    struct AggHolding {
+        QString symbol;
+        double shares = 0;
+    };
+    QHash<QString, double> shares_by_symbol; // UPPER(symbol) → summed quantity
+    for (const auto& p : portfolios.value()) {
+        auto assets = repo.get_assets(p.id);
+        if (!assets.is_ok())
+            continue;
+        for (const auto& a : assets.value())
+            shares_by_symbol[a.symbol.toUpper()] += a.quantity;
+    }
+
+    QVector<AggHolding> holdings;
+    holdings.reserve(shares_by_symbol.size());
+    for (auto it = shares_by_symbol.constBegin(); it != shares_by_symbol.constEnd(); ++it)
+        holdings.push_back({it.key(), it.value()});
+
     if (holdings.isEmpty()) {
         status_->setText(QString("Your portfolio is empty — add holdings in the Portfolio tab to see exposure here."));
         return;

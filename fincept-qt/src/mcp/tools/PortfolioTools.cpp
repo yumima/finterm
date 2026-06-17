@@ -1,10 +1,12 @@
 // PortfolioTools.cpp — Portfolio tab MCP tools + resources
-// Merges flat holdings (PortfolioHoldingsRepository) + full CRUD (PortfolioRepository)
+// All tools are sourced from the canonical multi-portfolio schema
+// (PortfolioRepository → portfolios + portfolio_assets). The legacy flat
+// `portfolio_holdings` table is no longer read or written here — the holdings
+// tools default to the FIRST portfolio when no portfolio_id is supplied.
 
 #include "mcp/tools/PortfolioTools.h"
 
 #include "core/logging/Logger.h"
-#include "storage/repositories/PortfolioHoldingsRepository.h"
 #include "storage/repositories/PortfolioRepository.h"
 
 #include <QDateTime>
@@ -14,33 +16,90 @@ namespace fincept::mcp::tools {
 
 static constexpr const char* TAG = "PortfolioTools";
 
+namespace {
+
+// Resolve the portfolio_id to operate on. If `requested` is non-empty it is
+// returned verbatim. Otherwise the FIRST portfolio (by PortfolioRepository's
+// "ORDER BY name" listing) is used. On any error / empty DB, `err` is set to a
+// model-readable message and an empty string is returned — callers must check.
+QString resolve_portfolio_id(const QString& requested, QString& err) {
+    if (!requested.trimmed().isEmpty())
+        return requested.trimmed();
+
+    auto r = PortfolioRepository::instance().list_portfolios();
+    if (r.is_err()) {
+        err = "Failed to list portfolios: " + QString::fromStdString(r.error());
+        return {};
+    }
+    if (r.value().isEmpty()) {
+        err = "No portfolio exists — create one first (use create_portfolio), "
+              "then retry. List existing portfolios with list_portfolios.";
+        return {};
+    }
+    return r.value().first().id;
+}
+
+// Look up an asset's symbol by its numeric row id within a portfolio. The
+// legacy holdings tools addressed positions by integer id; canonical asset
+// mutation keys by symbol, so we translate. Returns empty + sets `err` if not
+// found.
+QString symbol_for_asset_id(const QString& portfolio_id, int asset_id, QString& err) {
+    auto r = PortfolioRepository::instance().get_assets(portfolio_id);
+    if (r.is_err()) {
+        err = "Failed to load assets: " + QString::fromStdString(r.error());
+        return {};
+    }
+    for (const auto& a : r.value())
+        if (a.id == asset_id)
+            return a.symbol;
+    err = QString("No holding with id %1 in portfolio %2").arg(asset_id).arg(portfolio_id);
+    return {};
+}
+
+} // namespace
+
 std::vector<ToolDef> get_portfolio_tools() {
     std::vector<ToolDef> tools;
 
     // ════════════════════════════════════════════════════════════════════
-    // Holdings (flat quick-add list)
+    // Holdings (canonical portfolio_assets, defaulting to the first portfolio)
+    //
+    // These keep the legacy {symbol, shares, avg_cost} external result shape so
+    // the AI prompt-contract is preserved, but are sourced from / written to the
+    // real portfolio_assets rows. Each accepts an OPTIONAL portfolio_id; when
+    // omitted the FIRST portfolio is used.
     // ════════════════════════════════════════════════════════════════════
 
     // ── get_holdings ───────────────────────────────────────────────────
     {
         ToolDef t;
         t.name = "get_holdings";
-        t.description = "Get all active portfolio holdings (symbol, shares, avg cost).";
+        t.description = "Get all holdings (symbol, shares, avg cost) for a portfolio. "
+                        "Omit portfolio_id to use the first portfolio; call list_portfolios "
+                        "to discover valid portfolio_ids.";
         t.category = "portfolio";
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            auto result = PortfolioHoldingsRepository::instance().get_active();
+        t.input_schema.properties = QJsonObject{
+            {"portfolio_id",
+             QJsonObject{{"type", "string"}, {"description", "Portfolio ID (optional; defaults to first portfolio)"}}}};
+        t.handler = [](const QJsonObject& args) -> ToolResult {
+            QString err;
+            QString portfolio_id = resolve_portfolio_id(args["portfolio_id"].toString(), err);
+            if (portfolio_id.isEmpty())
+                return ToolResult::fail(err);
+
+            auto result = PortfolioRepository::instance().get_assets(portfolio_id);
             if (result.is_err())
                 return ToolResult::fail("Failed to load holdings: " + QString::fromStdString(result.error()));
 
             QJsonArray arr;
-            for (const auto& h : result.value()) {
-                arr.append(QJsonObject{{"id", h.id},
-                                       {"symbol", h.symbol},
-                                       {"name", h.name},
-                                       {"shares", h.shares},
-                                       {"avg_cost", h.avg_cost},
-                                       {"added_at", h.added_at},
-                                       {"updated_at", h.updated_at}});
+            for (const auto& a : result.value()) {
+                arr.append(QJsonObject{{"id", a.id},
+                                       {"symbol", a.symbol},
+                                       {"name", a.symbol}, // assets have no separate name field
+                                       {"shares", a.quantity},
+                                       {"avg_cost", a.avg_buy_price},
+                                       {"added_at", a.first_purchase_date},
+                                       {"updated_at", a.last_updated}});
             }
             return ToolResult::ok_data(arr);
         };
@@ -51,29 +110,39 @@ std::vector<ToolDef> get_portfolio_tools() {
     {
         ToolDef t;
         t.name = "add_holding";
-        t.description = "Add or increase a position in the portfolio holdings list.";
+        t.description = "Add or increase a position in a portfolio. Re-adding an existing symbol "
+                        "increases the quantity and recomputes the weighted average cost. "
+                        "Omit portfolio_id to use the first portfolio.";
         t.category = "portfolio";
         t.input_schema.properties =
-            QJsonObject{{"symbol", QJsonObject{{"type", "string"}, {"description", "Ticker symbol (e.g. AAPL)"}}},
+            QJsonObject{{"portfolio_id",
+                         QJsonObject{{"type", "string"},
+                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+                        {"symbol", QJsonObject{{"type", "string"}, {"description", "Ticker symbol (e.g. AAPL)"}}},
                         {"shares", QJsonObject{{"type", "number"}, {"description", "Number of shares/units"}}},
-                        {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Average cost per share/unit"}}},
-                        {"name", QJsonObject{{"type", "string"}, {"description", "Company/asset name (optional)"}}}};
+                        {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Average cost per share/unit"}}}};
         t.input_schema.required = {"symbol", "shares", "avg_cost"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString symbol = args["symbol"].toString().trimmed().toUpper();
             double shares = args["shares"].toDouble(0.0);
             double avg_cost = args["avg_cost"].toDouble(0.0);
-            QString name = args["name"].toString();
 
             if (symbol.isEmpty() || shares <= 0 || avg_cost <= 0)
                 return ToolResult::fail("Missing or invalid: symbol, shares (>0), avg_cost (>0)");
 
-            auto r = PortfolioHoldingsRepository::instance().add(symbol, shares, avg_cost, name);
+            QString err;
+            QString portfolio_id = resolve_portfolio_id(args["portfolio_id"].toString(), err);
+            if (portfolio_id.isEmpty())
+                return ToolResult::fail(err);
+
+            auto r = PortfolioRepository::instance().add_asset(portfolio_id, symbol, shares, avg_cost);
             if (r.is_err())
                 return ToolResult::fail("Failed to add holding: " + QString::fromStdString(r.error()));
 
-            LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3").arg(symbol).arg(shares).arg(avg_cost));
+            LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3 (portfolio %4)")
+                              .arg(symbol).arg(shares).arg(avg_cost).arg(portfolio_id));
             return ToolResult::ok("Holding added", QJsonObject{{"id", static_cast<int>(r.value())},
+                                                               {"portfolio_id", portfolio_id},
                                                                {"symbol", symbol},
                                                                {"shares", shares},
                                                                {"avg_cost", avg_cost}});
@@ -85,10 +154,14 @@ std::vector<ToolDef> get_portfolio_tools() {
     {
         ToolDef t;
         t.name = "update_holding";
-        t.description = "Update shares and average cost for an existing holding by ID.";
+        t.description = "Set the absolute shares and average cost for an existing holding by ID "
+                        "(the id from get_holdings). Omit portfolio_id to use the first portfolio.";
         t.category = "portfolio";
         t.input_schema.properties =
-            QJsonObject{{"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID"}}},
+            QJsonObject{{"portfolio_id",
+                         QJsonObject{{"type", "string"},
+                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+                        {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}},
                         {"shares", QJsonObject{{"type", "number"}, {"description", "Updated share count"}}},
                         {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Updated average cost"}}}};
         t.input_schema.required = {"id", "shares", "avg_cost"};
@@ -100,11 +173,21 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (id < 0 || shares <= 0 || avg_cost <= 0)
                 return ToolResult::fail("Missing or invalid: id, shares (>0), avg_cost (>0)");
 
-            auto r = PortfolioHoldingsRepository::instance().update(id, shares, avg_cost);
+            QString err;
+            QString portfolio_id = resolve_portfolio_id(args["portfolio_id"].toString(), err);
+            if (portfolio_id.isEmpty())
+                return ToolResult::fail(err);
+
+            QString symbol = symbol_for_asset_id(portfolio_id, id, err);
+            if (symbol.isEmpty())
+                return ToolResult::fail(err);
+
+            auto r = PortfolioRepository::instance().update_asset(portfolio_id, symbol, shares, avg_cost);
             if (r.is_err())
                 return ToolResult::fail("Failed to update holding: " + QString::fromStdString(r.error()));
 
-            return ToolResult::ok("Holding updated", QJsonObject{{"id", id}});
+            return ToolResult::ok("Holding updated",
+                                  QJsonObject{{"id", id}, {"portfolio_id", portfolio_id}, {"symbol", symbol}});
         };
         tools.push_back(std::move(t));
     }
@@ -113,21 +196,35 @@ std::vector<ToolDef> get_portfolio_tools() {
     {
         ToolDef t;
         t.name = "remove_holding";
-        t.description = "Remove a holding from the portfolio by ID.";
+        t.description = "Remove a holding from a portfolio by ID (the id from get_holdings). "
+                        "Omit portfolio_id to use the first portfolio.";
         t.category = "portfolio";
         t.input_schema.properties =
-            QJsonObject{{"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID"}}}};
+            QJsonObject{{"portfolio_id",
+                         QJsonObject{{"type", "string"},
+                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+                        {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}}};
         t.input_schema.required = {"id"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             int id = args["id"].toInt(-1);
             if (id < 0)
                 return ToolResult::fail("Missing or invalid 'id'");
 
-            auto r = PortfolioHoldingsRepository::instance().remove(id);
+            QString err;
+            QString portfolio_id = resolve_portfolio_id(args["portfolio_id"].toString(), err);
+            if (portfolio_id.isEmpty())
+                return ToolResult::fail(err);
+
+            QString symbol = symbol_for_asset_id(portfolio_id, id, err);
+            if (symbol.isEmpty())
+                return ToolResult::fail(err);
+
+            auto r = PortfolioRepository::instance().remove_asset(portfolio_id, symbol);
             if (r.is_err())
                 return ToolResult::fail("Failed to remove holding: " + QString::fromStdString(r.error()));
 
-            return ToolResult::ok("Holding removed", QJsonObject{{"id", id}});
+            return ToolResult::ok("Holding removed",
+                                  QJsonObject{{"id", id}, {"portfolio_id", portfolio_id}, {"symbol", symbol}});
         };
         tools.push_back(std::move(t));
     }
@@ -509,7 +606,23 @@ std::vector<Resource> get_portfolio_resources() {
             rc.uri = QStringLiteral("finterm://portfolio/snapshot");
             rc.mime_type = QStringLiteral("application/json");
 
-            auto result = PortfolioHoldingsRepository::instance().get_active();
+            // Snapshot the FIRST portfolio's holdings from the canonical schema.
+            QString err;
+            QString portfolio_id = resolve_portfolio_id(QString(), err);
+            if (portfolio_id.isEmpty()) {
+                // No portfolio yet — emit an empty, well-formed snapshot rather
+                // than an error so the agent can still read context cheaply.
+                QJsonObject empty{
+                    {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                    {"holdings_count", 0},
+                    {"holdings", QJsonArray{}},
+                    {"note", err},
+                };
+                rc.text = QString::fromUtf8(QJsonDocument(empty).toJson(QJsonDocument::Compact));
+                return rc;
+            }
+
+            auto result = PortfolioRepository::instance().get_assets(portfolio_id);
             if (result.is_err()) {
                 rc.error = "Failed to load holdings: " +
                            QString::fromStdString(result.error());
@@ -517,18 +630,19 @@ std::vector<Resource> get_portfolio_resources() {
             }
 
             QJsonArray arr;
-            for (const auto& h : result.value()) {
-                arr.append(QJsonObject{{"id", h.id},
-                                       {"symbol", h.symbol},
-                                       {"name", h.name},
-                                       {"shares", h.shares},
-                                       {"avg_cost", h.avg_cost},
-                                       {"added_at", h.added_at},
-                                       {"updated_at", h.updated_at}});
+            for (const auto& a : result.value()) {
+                arr.append(QJsonObject{{"id", a.id},
+                                       {"symbol", a.symbol},
+                                       {"name", a.symbol},
+                                       {"shares", a.quantity},
+                                       {"avg_cost", a.avg_buy_price},
+                                       {"added_at", a.first_purchase_date},
+                                       {"updated_at", a.last_updated}});
             }
 
             QJsonObject envelope{
                 {"as_of", QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
+                {"portfolio_id", portfolio_id},
                 {"holdings_count", arr.size()},
                 {"holdings", arr},
             };

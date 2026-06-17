@@ -1,6 +1,14 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
+// LEGACY — the flat single-table `portfolio_holdings` data path. No live reader
+// or writer uses this anymore: the MCP portfolio tools, the ExposurePanel, the
+// Portfolio screen and the dashboard widget all go through the canonical
+// multi-portfolio schema (PortfolioRepository → portfolios + portfolio_assets,
+// surfaced by PortfolioService). This class is retained only because
+// StorageManager and the migrations still reference it; removing it (and the
+// `portfolio_holdings` table/migration) is a separate cleanup.
+
 namespace fincept {
 
 struct PortfolioHolding {
