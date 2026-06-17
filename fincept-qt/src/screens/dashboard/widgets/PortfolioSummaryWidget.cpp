@@ -22,15 +22,20 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     vl->setContentsMargins(8, 8, 8, 8);
     vl->setSpacing(6);
 
-    // ── Portfolio selector — picks which portfolio to mirror ──
+    // ── Portfolio selector — lives on the title bar (next to refresh/close)
+    //    so it doesn't spend a whole content row. ──
     portfolio_combo_ = new QComboBox(this);
     portfolio_combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    portfolio_combo_->setFixedHeight(18);
+    portfolio_combo_->setMaximumWidth(150);
+    portfolio_combo_->setCursor(Qt::PointingHandCursor);
     connect(portfolio_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
         if (suppress_combo_signal_ || idx < 0 || idx >= portfolios_.size())
             return;
         select_portfolio(portfolios_.at(idx).id);
     });
-    vl->addWidget(portfolio_combo_);
+    add_title_bar_control(portfolio_combo_);
+    // Combo styling is applied with the rest of the widget in apply_styles().
 
     // ── Summary card — inline "LABEL  value" pairs, two per row ──
     // 4-column grid: [label0][value0][label1][value1] per row.
@@ -158,6 +163,21 @@ void PortfolioSummaryWidget::apply_styles() {
                 "QScrollBar::handle:vertical { background: %1; border-radius: 2px; min-height: 20px; }"
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
             .arg(ui::colors::BORDER_MED()));
+
+    // Title-bar portfolio selector — explicit dark field + dark popup. The
+    // app-global combo style (ThemeManager) doesn't reach a combo nested under
+    // a widget that carries its own stylesheet, so without this the field and
+    // dropdown render white-on-white.
+    if (portfolio_combo_)
+        portfolio_combo_->setStyleSheet(
+            QString("QComboBox { background:%1; color:%2; border:1px solid %3; border-radius:2px;"
+                    "  padding:0 4px; font-size:%4; }"
+                    "QComboBox:hover { border-color:%5; }"
+                    "QComboBox::drop-down { border:none; width:14px; }"
+                    "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
+                    "  selection-background-color:%6; selection-color:%2; outline:none; }")
+                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
+                     ui::fonts::ui_px(), ui::colors::AMBER(), ui::colors::BG_HOVER()));
 }
 
 void PortfolioSummaryWidget::on_theme_changed() {

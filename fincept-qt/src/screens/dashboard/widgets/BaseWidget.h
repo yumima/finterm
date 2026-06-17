@@ -59,6 +59,12 @@ class BaseWidget : public QFrame {
     /// so the gear icon appears. Also hides the icon if set to false later.
     void set_configurable(bool configurable);
 
+    /// Insert a custom control (e.g. a selector combo) into the title bar,
+    /// right-aligned just left of the config/refresh/close buttons. Lets a
+    /// widget put a per-instance control on the title bar instead of spending
+    /// a whole content row on it. Takes ownership via the title-bar layout.
+    void add_title_bar_control(QWidget* w);
+
   private:
     void apply_title_bar_style(); // single source of truth for title-bar fonts/colours
     void refresh_base_theme();
@@ -66,6 +72,7 @@ class BaseWidget : public QFrame {
 
   private:
     QWidget* title_bar_ = nullptr;
+    QHBoxLayout* title_bar_layout_ = nullptr;
     QLabel* title_label_ = nullptr;
     QLabel* accent_bar_ = nullptr;
     QLabel* loading_label_ = nullptr;

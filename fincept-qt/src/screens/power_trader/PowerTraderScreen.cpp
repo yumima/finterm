@@ -27,6 +27,7 @@
 #include <QShortcut>
 #include <QShowEvent>
 #include <QStringList>
+#include <QTabBar>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -378,6 +379,13 @@ void PowerTraderScreen::build_ui() {
             // capture order.
             connect(tab_widget_, &QTabWidget::currentChanged, this,
                     [this](int) { hide_member_drawer(); });
+            // currentChanged only fires when the index actually changes, so
+            // re-clicking the tab you're already on (the natural "back to this
+            // list" gesture — e.g. clicking Rankings again after opening a
+            // member) wouldn't dismiss the drawer, leaving the list hidden
+            // behind it. tabBarClicked fires on every click, same tab included.
+            if (auto* bar = tab_widget_->tabBar())
+                connect(bar, &QTabBar::tabBarClicked, this, [this](int) { hide_member_drawer(); });
         }
         view_stack_->addWidget(congress_view_);  // index 0
 

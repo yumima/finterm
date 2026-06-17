@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`12480c00f`](https://github.com/yumima/finterm/commit/12480c00f) Fix symbol search app-wide and wire dashboard portfolio to real data
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

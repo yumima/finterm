@@ -36,6 +36,7 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
     auto* hl = new QHBoxLayout(title_bar_);
     hl->setContentsMargins(8, 0, 4, 0);
     hl->setSpacing(6);
+    title_bar_layout_ = hl;
 
     // Accent bar
     accent_bar_ = new QLabel;
@@ -196,6 +197,18 @@ void BaseWidget::set_title(const QString& title) {
 void BaseWidget::set_configurable(bool configurable) {
     if (config_btn_)
         config_btn_->setVisible(configurable);
+}
+
+void BaseWidget::add_title_bar_control(QWidget* w) {
+    if (!w || !title_bar_layout_)
+        return;
+    w->setParent(title_bar_);
+    // Place it after the title (past the stretch), just left of the buttons.
+    const int idx = config_btn_ ? title_bar_layout_->indexOf(config_btn_) : -1;
+    if (idx >= 0)
+        title_bar_layout_->insertWidget(idx, w);
+    else
+        title_bar_layout_->addWidget(w);
 }
 
 void BaseWidget::on_config_clicked() {
