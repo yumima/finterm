@@ -36,6 +36,9 @@ class QuoteTableWidget : public BaseWidget {
   private:
     void apply_styles();
     void populate(const QVector<fincept::services::QuoteData>& quotes);
+    /// (Re)create the DataTable. Called from the ctor and again after a
+    /// full-batch fetch error replaced it via set_error().
+    void build_table();
 
     /// Hub path: subscribe to every symbol's quote topic and apply updates
     /// into the row cache + redraw. Called from showEvent.

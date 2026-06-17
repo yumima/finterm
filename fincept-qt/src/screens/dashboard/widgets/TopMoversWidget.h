@@ -34,6 +34,10 @@ class TopMoversWidget : public BaseWidget {
     void apply_styles();
     void refresh_data();
     void show_tab(bool gainers);
+    /// (Re)create the tab bar + table. Called from the ctor and again after a
+    /// fetch error tore the body down via set_error(), so a later successful
+    /// refresh has live widgets to render into.
+    void build_body();
 
     /// Fire-and-forget DataHub sparkline subscriptions for the symbols we
     /// just discovered from the screener. Idempotent — re-subscribes only

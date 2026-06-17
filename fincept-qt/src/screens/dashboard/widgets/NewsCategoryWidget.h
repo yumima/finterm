@@ -36,6 +36,7 @@ class NewsCategoryWidget : public BaseWidget {
     void hub_unsubscribe_all();
 
     QString category_ = "markets";
+    QString last_topic_; // current news:category:<cat> topic, for error unsubscribe
     int max_rows_ = 12;
     QListWidget* list_ = nullptr;
     QLabel* badge_ = nullptr;

@@ -109,12 +109,25 @@ void WatchlistWidget::hub_resubscribe() {
     hub.unsubscribe(this);
     sparkline_cache_.clear();
     for (const auto& sym : symbols_) {
-        hub.subscribe(this, QStringLiteral("market:quote:") + sym, [this, sym](const QVariant& v) {
+        const QString topic = QStringLiteral("market:quote:") + sym;
+        hub.subscribe(this, topic, [this, sym](const QVariant& v) {
             if (!v.canConvert<services::QuoteData>())
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
             render_from_cache();
+        });
+        // Surface a quote fetch failure rather than spinning forever. The input
+        // bar must survive (the user re-enters symbols there), so instead of
+        // set_error() — which would tear the whole body down — show an error row
+        // in the table. Only while nothing has loaded yet; once any symbol
+        // delivers, render_from_cache() overwrites the row with real data.
+        hub.subscribe_errors(this, topic, [this](const QString&) {
+            set_loading(false);
+            if (row_cache_.isEmpty() && table_) {
+                table_->clear_data();
+                table_->add_row({QStringLiteral("Quotes unavailable"), QString{}, QString{}, QString{}, QString{}});
+            }
         });
         hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {
             if (!v.canConvert<QVector<double>>())
@@ -128,6 +141,11 @@ void WatchlistWidget::hub_resubscribe() {
 
 void WatchlistWidget::hub_unsubscribe_all() {
     datahub::DataHub::instance().unsubscribe(this);
+    // Drop per-symbol error subscriptions too (data unsubscribe doesn't touch
+    // the error channel). The symbol set is dynamic, so clear every current one.
+    auto& hub = datahub::DataHub::instance();
+    for (const auto& sym : symbols_)
+        hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
 }
 

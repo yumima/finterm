@@ -16,16 +16,19 @@ QuoteTableWidget::QuoteTableWidget(const QString& title, const QStringList& symb
       symbols_(symbols),
       label_map_(label_map),
       price_decimals_(price_decimals) {
-    table_ = new ui::DataTable;
-    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
-    table_->set_column_widths({130, 100, 80, 70});
-    content_layout()->addWidget(table_);
+    build_table();
 
     connect(this, &BaseWidget::refresh_requested, this, &QuoteTableWidget::refresh_data);
 
     apply_styles();
     set_loading(true);
+}
 
+void QuoteTableWidget::build_table() {
+    table_ = new ui::DataTable;
+    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
+    table_->set_column_widths({130, 100, 80, 70});
+    content_layout()->addWidget(table_);
 }
 
 void QuoteTableWidget::apply_styles() {
@@ -70,20 +73,39 @@ void QuoteTableWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            // A prior full-batch error may have replaced the table with
+            // set_error()'s label. Recreate the table before rendering again.
+            if (!table_)
+                build_table();
             render_from_cache();
         });
     }
+    // Surface a refresh failure rather than spinning forever. Only error when no
+    // quote has arrived for any symbol yet — once the cache holds data a single
+    // symbol's transient error must not wipe the populated table.
+    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
+                                 [this](const QString&, const QString&) {
+                                     set_loading(false);
+                                     if (row_cache_.isEmpty() && table_) {
+                                         set_error(QStringLiteral("Quotes unavailable"));
+                                         table_ = nullptr; // set_error() deleteLater()'d it
+                                     }
+                                 });
     hub_active_ = true;
 }
 
 void QuoteTableWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
     hub_active_ = false;
     // Keep row_cache_ so a quick hide/show doesn't flash an empty table —
     // the first hub delivery on re-subscribe will refresh it anyway.
 }
 
 void QuoteTableWidget::render_from_cache() {
+    if (!table_)
+        return;
     table_->clear_data();
     for (const auto& sym : symbols_) {
         auto it = row_cache_.constFind(sym);
@@ -105,6 +127,8 @@ void QuoteTableWidget::render_from_cache() {
 
 
 void QuoteTableWidget::populate(const QVector<services::QuoteData>& quotes) {
+    if (!table_)
+        build_table();
     table_->clear_data();
 
     for (const auto& q : quotes) {

@@ -19,6 +19,15 @@ static const QStringList kScreenerSymbols = {
     "SLB",  "NEE",   "DUK",   "SO",   "CAT",  "GE",   "HON",  "RTX",  "PLTR", "COIN", "SOFI", "PYPL", "SNAP", "UBER"};
 
 ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", parent, ui::colors::INFO()) {
+    build_body();
+
+    connect(this, &BaseWidget::refresh_requested, this, &ScreenerWidget::refresh_data);
+
+    apply_styles();
+    set_loading(true);
+}
+
+void ScreenerWidget::build_body() {
     auto* vl = content_layout();
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
@@ -74,14 +83,12 @@ ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", p
     vl->addWidget(scroll_, 1);
 
     connect(filter_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ScreenerWidget::apply_filter);
-    connect(this, &BaseWidget::refresh_requested, this, &ScreenerWidget::refresh_data);
-
-    apply_styles();
-    set_loading(true);
-
 }
 
 void ScreenerWidget::apply_styles() {
+    // Body may be torn down by set_error() while a fetch failure is showing.
+    if (!filter_bar_)
+        return;
     filter_bar_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     filter_lbl_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                    .arg(ui::colors::TEXT_SECONDARY()));
@@ -150,14 +157,41 @@ void ScreenerWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            // A prior full-batch error may have replaced the body with
+            // set_error()'s label — rebuild before rendering recovered data.
+            if (!list_layout_)
+                build_body();
             rebuild_all_quotes();
         });
     }
+    // Surface a full-batch fetch failure instead of an endless spinner. Error
+    // only while nothing has loaded — once quotes are cached, a single symbol's
+    // transient error must not wipe the populated screener.
+    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
+                                 [this](const QString&, const QString&) {
+                                     set_loading(false);
+                                     if (row_cache_.isEmpty() && list_layout_) {
+                                         set_error(QStringLiteral("Screener data unavailable"));
+                                         // set_error() deleteLater()'d the body; null the persistent
+                                         // pointers so apply_styles()/render rebuild instead of
+                                         // dereferencing deleted widgets.
+                                         filter_combo_ = nullptr;
+                                         list_layout_ = nullptr;
+                                         filter_bar_ = nullptr;
+                                         filter_lbl_ = nullptr;
+                                         count_lbl_ = nullptr;
+                                         header_ = nullptr;
+                                         header_labels_.clear();
+                                         scroll_ = nullptr;
+                                     }
+                                 });
     hub_active_ = true;
 }
 
 void ScreenerWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
     hub_active_ = false;
 }
 
@@ -207,6 +241,8 @@ void ScreenerWidget::apply_filter() {
 }
 
 void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
+    if (!list_layout_)
+        build_body();
     while (list_layout_->count() > 0) {
         auto* item = list_layout_->takeAt(0);
         if (item->widget())

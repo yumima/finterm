@@ -98,6 +98,7 @@ void IpoCalendarWidget::refresh_data() {
     set_loading(true);
     entries_.clear();
     pending_fetches_ = 2;
+    ok_fetches_ = 0;
 
     const QDate today = QDate::currentDate();
     fetch_month(today.toString("yyyy-MM"));
@@ -112,6 +113,7 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
         if (!self) return;
 
         if (res.is_ok() && res.value().isObject()) {
+            ++self->ok_fetches_;
             const auto root  = res.value().object();
             const auto data  = root["data"].toObject();
 
@@ -173,6 +175,17 @@ void IpoCalendarWidget::fetch_month(const QString& yyyymm) {
 void IpoCalendarWidget::on_fetch_done() {
     if (--pending_fetches_ > 0)
         return;
+
+    // Both month requests failed (Nasdaq API down / offline). Surface an error
+    // via the persistent status label rather than populate()'s "No IPO data
+    // available", which would wrongly read as "feed loaded, no IPOs scheduled".
+    if (ok_fetches_ == 0) {
+        set_loading(false);
+        scroll_area_->setVisible(false);
+        status_label_->setText("Couldn't load IPO calendar");
+        status_label_->setVisible(true);
+        return;
+    }
 
     // Sort: upcoming closest-date first (e.g. May 14 before May 15),
     // then priced by date descending (most recently priced at top of its section).

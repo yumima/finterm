@@ -104,15 +104,18 @@ void EconomicCalendarWidget::refresh_data() {
     set_loading(true);
     pending_merge_ = QJsonArray{};
     pending_fetches_ = 2;
+    ok_fetches_ = 0;
 
     QPointer<EconomicCalendarWidget> self = this;
     for (const auto* url : kUrls) {
         HttpClient::instance().get(QString(url), [self](Result<QJsonDocument> res) {
             if (!self) return;
-            if (res.is_ok() && res.value().isArray())
+            if (res.is_ok() && res.value().isArray()) {
+                ++self->ok_fetches_;
                 self->on_fetch_done(res.value().array());
-            else
+            } else {
                 self->on_fetch_done({});
+            }
         });
     }
 }
@@ -123,6 +126,19 @@ void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
 
     if (--pending_fetches_ > 0)
         return; // still waiting for the other week
+
+    // Every HTTP call failed (feed down / offline) — distinguish this from a
+    // successful-but-empty calendar. Surface an error via the persistent status
+    // label instead of populate()'s "No events available", which would wrongly
+    // imply the feed loaded fine with nothing scheduled. last_events_ is kept so
+    // a theme change still re-renders any previously-loaded rows.
+    if (ok_fetches_ == 0) {
+        set_loading(false);
+        scroll_area_->setVisible(false);
+        status_label_->setText("Couldn't load economic calendar");
+        status_label_->setVisible(true);
+        return;
+    }
 
     // Parse "MMM d yyyy" dates so we can sort chronologically.
     // ForexFactory date examples: "May 14 2026", "Jun 2 2026"

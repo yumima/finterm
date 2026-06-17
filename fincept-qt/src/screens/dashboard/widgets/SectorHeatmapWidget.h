@@ -30,6 +30,9 @@ class SectorHeatmapWidget : public BaseWidget {
 
     void hub_subscribe_all();
     void hub_unsubscribe_all();
+    /// (Re)create the grid container/layout. Called from the ctor and again
+    /// after a full-batch fetch error replaced it via set_error().
+    void build_grid();
     /// Rebuild `QVector<QuoteData>` from the row cache (in declared symbol
     /// order) and hand to `populate()`.
     void rebuild_from_cache();

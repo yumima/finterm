@@ -25,18 +25,21 @@ QMap<QString, QString> SectorHeatmapWidget::sector_labels() {
 }
 
 SectorHeatmapWidget::SectorHeatmapWidget(QWidget* parent) : BaseWidget("SECTOR HEATMAP", parent) {
+    build_grid();
+
+    connect(this, &BaseWidget::refresh_requested, this, &SectorHeatmapWidget::refresh_data);
+
+    apply_styles();
+    set_loading(true);
+}
+
+void SectorHeatmapWidget::build_grid() {
     grid_container_ = new QWidget(this);
     grid_ = new QGridLayout(grid_container_);
     grid_->setContentsMargins(4, 4, 4, 4);
     grid_->setSpacing(3);
 
     content_layout()->addWidget(grid_container_);
-
-    connect(this, &BaseWidget::refresh_requested, this, &SectorHeatmapWidget::refresh_data);
-
-    apply_styles();
-    set_loading(true);
-
 }
 
 void SectorHeatmapWidget::apply_styles() {
@@ -47,8 +50,9 @@ void SectorHeatmapWidget::apply_styles() {
 
 void SectorHeatmapWidget::on_theme_changed() {
     apply_styles();
+    // Grid may be torn down by set_error() while a fetch failure is showing.
     // Re-populate the grid with current data so cells pick up new token values
-    if (grid_->count() > 0)
+    if (grid_ && grid_->count() > 0)
         refresh_data();
 }
 
@@ -82,14 +86,30 @@ void SectorHeatmapWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            if (!grid_)
+                build_grid();
             rebuild_from_cache();
         });
     }
+    // Surface a full-batch fetch failure instead of an endless spinner. Error
+    // only while nothing has loaded — a single ETF's transient error must not
+    // wipe a populated heatmap.
+    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
+                                 [this](const QString&, const QString&) {
+                                     set_loading(false);
+                                     if (row_cache_.isEmpty() && grid_container_) {
+                                         set_error(QStringLiteral("Sector data unavailable"));
+                                         grid_ = nullptr; // set_error() deleteLater()'d the container
+                                         grid_container_ = nullptr;
+                                     }
+                                 });
     hub_active_ = true;
 }
 
 void SectorHeatmapWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
     hub_active_ = false;
 }
 
@@ -107,6 +127,8 @@ void SectorHeatmapWidget::rebuild_from_cache() {
 
 
 void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
+    if (!grid_)
+        build_grid();
     // Clear grid
     QLayoutItem* item;
     while ((item = grid_->takeAt(0)) != nullptr) {

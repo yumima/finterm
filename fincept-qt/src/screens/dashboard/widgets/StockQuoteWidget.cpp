@@ -12,6 +12,15 @@ namespace fincept::screens::widgets {
 
 StockQuoteWidget::StockQuoteWidget(const QString& symbol, QWidget* parent)
     : BaseWidget(QString("QUOTE: %1").arg(symbol.toUpper()), parent), symbol_(symbol.toUpper()) {
+    build_body();
+
+    connect(this, &BaseWidget::refresh_requested, this, &StockQuoteWidget::refresh_data);
+
+    apply_styles();
+    set_loading(true);
+}
+
+void StockQuoteWidget::build_body() {
     auto* vl = content_layout();
     vl->setContentsMargins(12, 8, 12, 8);
     vl->setSpacing(8);
@@ -50,6 +59,14 @@ StockQuoteWidget::StockQuoteWidget(const QString& symbol, QWidget* parent)
     vl->addWidget(sep_);
 
     // ── Stats grid ──
+    // Clear the raw-pointer caches before re-appending: build_body() runs again
+    // after a set_error() teardown (which deleteLater()'d these children), so
+    // stale dangling pointers must not linger in the vectors — apply_styles()
+    // iterates them on every theme change.
+    stat_cells_.clear();
+    stat_labels_.clear();
+    stat_values_.clear();
+
     auto* stats = new QWidget(this);
     auto* gl = new QGridLayout(stats);
     gl->setContentsMargins(0, 0, 0, 0);
@@ -81,15 +98,13 @@ StockQuoteWidget::StockQuoteWidget(const QString& symbol, QWidget* parent)
 
     vl->addWidget(stats);
     vl->addStretch();
-
-    connect(this, &BaseWidget::refresh_requested, this, &StockQuoteWidget::refresh_data);
-
-    apply_styles();
-    set_loading(true);
-
 }
 
 void StockQuoteWidget::apply_styles() {
+    // Body may be torn down by set_error() while a fetch failure is showing —
+    // a theme change must not dereference the deleted labels.
+    if (!price_label_)
+        return;
     price_label_->setStyleSheet(QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     arrow_label_->setStyleSheet("background: transparent;");
@@ -142,23 +157,44 @@ void StockQuoteWidget::refresh_data() {
 void StockQuoteWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
+    hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + symbol_);
     const QString topic = QStringLiteral("market:quote:") + symbol_;
     hub.subscribe(this, topic, [this](const QVariant& v) {
         if (!v.canConvert<services::QuoteData>())
             return;
         set_loading(false);
+        // A prior error may have replaced the body with set_error()'s label.
+        // Rebuild the price/stats body before rendering the recovered quote.
+        if (!price_label_)
+            build_body();
         populate(v.value<services::QuoteData>());
+    });
+    // A failed quote refresh would otherwise leave the spinner running forever
+    // and the "--" placeholders looking like a (wrong) empty state. Surface the
+    // failure — but only when no quote has loaded yet, so a transient error
+    // after good data doesn't blow the populated card away.
+    hub.subscribe_errors(this, topic, [this](const QString&) {
+        set_loading(false);
+        if (!has_data_) {
+            set_error(QStringLiteral("Quote unavailable"));
+            // set_error() deleteLater()'d the body labels; null one so the data
+            // slot knows to rebuild before the next populate().
+            price_label_ = nullptr;
+        }
     });
     hub_active_ = true;
 }
 
 void StockQuoteWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + symbol_);
     hub_active_ = false;
 }
 
 
 void StockQuoteWidget::populate(const services::QuoteData& q) {
+    has_data_ = true;
     price_label_->setText(QString("$%1").arg(q.price, 0, 'f', 2));
 
     bool positive = q.change_pct >= 0;

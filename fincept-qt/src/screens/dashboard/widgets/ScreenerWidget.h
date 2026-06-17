@@ -37,6 +37,9 @@ class ScreenerWidget : public BaseWidget {
     void hub_unsubscribe_all();
     /// Recompute `all_quotes_` from `row_cache_` then `apply_filter()`.
     void rebuild_all_quotes();
+    /// (Re)create the filter bar, header and scroll list. Called from the ctor
+    /// and again after a full-batch fetch error replaced it via set_error().
+    void build_body();
 
     QComboBox* filter_combo_ = nullptr;
     QVBoxLayout* list_layout_ = nullptr;

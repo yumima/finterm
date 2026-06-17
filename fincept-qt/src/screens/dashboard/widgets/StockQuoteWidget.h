@@ -29,6 +29,10 @@ class StockQuoteWidget : public BaseWidget {
     void apply_styles();
     void refresh_data();
     void populate(const services::QuoteData& quote);
+    /// (Re)build the price/stats body. Called from the ctor and again after a
+    /// fetch error replaced it with set_error()'s label, so a later quote has
+    /// live labels to render into.
+    void build_body();
 
     /// (Re)subscribe to `market:quote:<symbol_>`. Called on show and on
     /// `set_symbol()`.
@@ -36,6 +40,7 @@ class StockQuoteWidget : public BaseWidget {
     void hub_unsubscribe_all();
 
     QString symbol_;
+    bool has_data_ = false; // a quote has populated the body at least once
 
     QLabel* price_label_ = nullptr;
     QLabel* change_label_ = nullptr;

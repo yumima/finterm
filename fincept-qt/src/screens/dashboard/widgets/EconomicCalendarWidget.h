@@ -33,6 +33,7 @@ class EconomicCalendarWidget : public BaseWidget {
     QJsonArray last_events_;   // cached for theme-change re-populate
     QJsonArray pending_merge_; // accumulates results from both week fetches
     int pending_fetches_ = 0;  // counts in-flight; populate when it reaches 0
+    int ok_fetches_ = 0;       // how many of this batch's HTTP calls succeeded
 };
 
 } // namespace fincept::screens::widgets

@@ -192,11 +192,28 @@ void MarketSentimentWidget::hub_subscribe_all() {
             rebuild_from_cache();
         });
     }
+    // Surface a full-batch fetch failure instead of an endless spinner. This
+    // widget updates persistent labels in place, so rather than set_error()
+    // (which would tear the body down and dangle those pointers) we stop the
+    // spinner and flip the verdict banner to an error state — overwritten the
+    // moment real quotes arrive. Only act while nothing has loaded yet.
+    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
+                                 [this](const QString&, const QString&) {
+                                     set_loading(false);
+                                     if (row_cache_.isEmpty() && verdict_label_) {
+                                         verdict_label_->setText(QStringLiteral("DATA UNAVAILABLE"));
+                                         verdict_label_->setStyleSheet(
+                                             QString("color: %1; font-weight: bold; background: transparent;")
+                                                 .arg(ui::colors::NEGATIVE()));
+                                     }
+                                 });
     hub_active_ = true;
 }
 
 void MarketSentimentWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
     hub_active_ = false;
 }
 

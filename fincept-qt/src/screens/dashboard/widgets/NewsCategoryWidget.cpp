@@ -65,8 +65,20 @@ void NewsCategoryWidget::apply_config(const QJsonObject& cfg) {
 void NewsCategoryWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
+    hub.unsubscribe_errors(this, last_topic_);
     const QString topic = QStringLiteral("news:category:") + category_;
+    last_topic_ = topic;
     hub.subscribe(this, topic, [this](const QVariant& v) { on_articles(v); });
+    // Surface a fetch failure rather than leaving the spinner running and the
+    // empty list looking like "no news in this category". Only when the list is
+    // still empty — a later successful delivery repopulates it via on_articles().
+    hub.subscribe_errors(this, topic, [this](const QString&) {
+        set_loading(false);
+        if (list_ && list_->count() == 0) {
+            list_->clear();
+            new QListWidgetItem(QStringLiteral("News unavailable"), list_);
+        }
+    });
     const QVariant snap = hub.peek(topic);
     if (snap.isValid())
         on_articles(snap);
@@ -74,7 +86,9 @@ void NewsCategoryWidget::hub_resubscribe() {
 }
 
 void NewsCategoryWidget::hub_unsubscribe_all() {
-    datahub::DataHub::instance().unsubscribe(this);
+    auto& hub = datahub::DataHub::instance();
+    hub.unsubscribe(this);
+    hub.unsubscribe_errors(this, last_topic_);
     hub_active_ = false;
 }
 

@@ -48,6 +48,7 @@ class IpoCalendarWidget : public BaseWidget {
 
     QVector<IpoEntry> entries_;
     int pending_fetches_ = 0;
+    int ok_fetches_ = 0; // how many of this batch's HTTP calls succeeded
 };
 
 inline BaseWidget* create_ipo_calendar_widget() {

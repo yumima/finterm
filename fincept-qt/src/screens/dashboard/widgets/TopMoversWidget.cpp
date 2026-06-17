@@ -11,6 +11,19 @@
 namespace fincept::screens::widgets {
 
 TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", parent) {
+    build_body();
+
+    connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
+
+    apply_styles();
+    set_loading(true);
+    // Kick off the initial screener fetch — no fixed symbol list anymore;
+    // the daemon's yfinance.screen('day_gainers'/'day_losers') is the
+    // authoritative source of top movers.
+    refresh_data();
+}
+
+void TopMoversWidget::build_body() {
     // Tab toggle
     auto* tab_bar = new QWidget(this);
     tab_bar->setFixedHeight(26);
@@ -34,15 +47,6 @@ TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", par
     table_->set_headers({"SYMBOL", "PRICE", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 90});
     content_layout()->addWidget(table_);
-
-    connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
-
-    apply_styles();
-    set_loading(true);
-    // Kick off the initial screener fetch — no fixed symbol list anymore;
-    // the daemon's yfinance.screen('day_gainers'/'day_losers') is the
-    // authoritative source of top movers.
-    refresh_data();
 }
 
 void TopMoversWidget::apply_styles() {
@@ -75,8 +79,25 @@ void TopMoversWidget::refresh_data() {
     QPointer<TopMoversWidget> self = this;
     services::MarketDataService::instance().fetch_top_movers(
         10, [self](bool ok, services::MarketDataService::TopMovers tm) {
-            if (!self || !ok)
+            if (!self)
                 return;
+            if (!ok) {
+                // Genuine fetch failure (daemon/yfinance error). Clear the
+                // spinner so it doesn't hang forever. Only replace the body
+                // with an error label when we have nothing to show yet — a
+                // failed refresh shouldn't blow away movers already on screen.
+                self->set_loading(false);
+                if (self->cached_movers_.gainers.isEmpty() && self->cached_movers_.losers.isEmpty()) {
+                    self->set_error(QStringLiteral("Couldn't load top movers"));
+                    // set_error() deleteLater()'d the tab bar + table. Null the
+                    // raw pointers now so show_tab()/rebuild_from_cache() treat
+                    // the body as absent and rebuild it on the next success.
+                    self->table_ = nullptr;
+                    self->gainers_btn_ = nullptr;
+                    self->losers_btn_ = nullptr;
+                }
+                return;
+            }
             self->cached_movers_ = std::move(tm);
             self->set_loading(false);
             self->resubscribe_sparklines();
@@ -110,10 +131,20 @@ void TopMoversWidget::resubscribe_sparklines() {
 }
 
 void TopMoversWidget::rebuild_from_cache() {
+    // A prior fetch error may have replaced the body with set_error()'s label,
+    // deleting the tab bar and table. Recreate them before rendering data again.
+    if (!table_)
+        build_body();
     show_tab(showing_gainers_);
 }
 
 void TopMoversWidget::show_tab(bool gainers) {
+    // After a fetch error, set_error() tears down the body; the buttons/table
+    // are gone until the next successful refresh rebuilds them. Guard so
+    // apply_styles()/theme-change can't dereference deleted widgets.
+    if (!table_ || !gainers_btn_ || !losers_btn_)
+        return;
+
     showing_gainers_ = gainers;
 
     auto active_g = QString("QPushButton { background: %1; color: %2; border: none; "
