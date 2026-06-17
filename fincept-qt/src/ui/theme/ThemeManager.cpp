@@ -111,6 +111,18 @@ void ThemeManager::rebuild_and_apply() {
         qApp->setFont(f);
     }
 
+    // Many per-widget stylesheets hardcode font-family:'Consolas'/'Courier New'
+    // (the historical default), which bypasses the user's configured font and,
+    // on systems without Consolas, falls back to an unrelated monospace. Remap
+    // those family names to the configured family so the Settings font choice
+    // takes effect app-wide without editing every call site. Only when a real
+    // single family is configured — the default value is a fontconfig-style
+    // comma list, which isn't a valid substitution target.
+    if (!font_family_.isEmpty() && !font_family_.contains(QLatin1Char(','))) {
+        QFont::insertSubstitution(QStringLiteral("Consolas"), font_family_);
+        QFont::insertSubstitution(QStringLiteral("Courier New"), font_family_);
+    }
+
     QString qss = build_global_qss();
     LOG_INFO("ThemeManager", QString("Global QSS length: %1 chars").arg(qss.length()));
     if (qss != cached_qss_) {
