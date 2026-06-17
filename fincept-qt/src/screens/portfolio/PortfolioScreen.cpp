@@ -427,14 +427,15 @@ QWidget* PortfolioScreen::build_empty_state() {
         QString("color:%1; font-size:18px; font-weight:700; letter-spacing:2px;").arg(ui::colors::TEXT_PRIMARY()));
     layout->addWidget(title);
 
-    auto* sub = new QLabel("Create, import, or explore a sample portfolio to get started.");
+    auto* sub = new QLabel("Create or import a portfolio to get started.");
     sub->setAlignment(Qt::AlignCenter);
     sub->setStyleSheet(QString("color:%1; font-size:12px; letter-spacing:0.2px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(sub);
 
     layout->addSpacing(24);
 
-    // CTA card row: Create / Import / Demo — equal weight
+    // CTA card row: Create / Import — equal weight. No "demo" card: finterm
+    // shows only real data, so there is no sample/fabricated portfolio.
     auto* card_row = new QHBoxLayout;
     card_row->setAlignment(Qt::AlignCenter);
     card_row->setSpacing(14);
@@ -451,15 +452,8 @@ QWidget* PortfolioScreen::build_empty_state() {
                                       ui::colors::CYAN(), content);
     connect(import_card, &QPushButton::clicked, command_bar_, &PortfolioCommandBar::import_requested);
 
-    auto* demo_card = make_cta_card("\u25B6", "LOAD DEMO",
-                                    "Preview the workspace with a sample diversified portfolio "
-                                    "of 12 major equities.",
-                                    ui::colors::POSITIVE(), content);
-    connect(demo_card, &QPushButton::clicked, this, [this]() { load_demo_portfolio(); });
-
     card_row->addWidget(create_card);
     card_row->addWidget(import_card);
-    card_row->addWidget(demo_card);
     layout->addLayout(card_row);
 
     outer->addWidget(content, 0, Qt::AlignCenter);
@@ -1455,49 +1449,6 @@ const portfolio::HoldingWithQuote* PortfolioScreen::find_holding(const QString& 
             return &h;
     }
     return nullptr;
-}
-
-void PortfolioScreen::load_demo_portfolio() {
-    auto& svc = services::PortfolioService::instance();
-
-    // Connect BEFORE create_portfolio() — create_portfolio() emits portfolio_created
-    // synchronously, so the lambda must be connected first or it will never fire.
-    QMetaObject::Connection* conn = new QMetaObject::Connection;
-    *conn = connect(&svc, &services::PortfolioService::portfolio_created, this, [this, conn](portfolio::Portfolio p) {
-        disconnect(*conn);
-        delete conn;
-
-        auto& svc = services::PortfolioService::instance();
-
-        // Demo holdings: diversified mix of major stocks
-        struct DemoHolding {
-            const char* symbol;
-            double qty;
-            double price;
-        };
-        static const DemoHolding demo[] = {
-            {"AAPL", 15, 178.50}, {"MSFT", 12, 375.20}, {"GOOGL", 8, 141.80}, {"NVDA", 10, 480.00},
-            {"AMZN", 6, 178.25},  {"TSLA", 5, 245.00},  {"JPM", 20, 195.50},  {"JNJ", 15, 155.75},
-            {"XOM", 25, 105.30},  {"V", 10, 280.00},    {"UNH", 4, 525.60},   {"PG", 12, 158.90},
-        };
-
-        for (const auto& h : demo) {
-            svc.add_asset(p.id, h.symbol, h.qty, h.price);
-        }
-
-        // portfolios_ may not yet contain the new portfolio since load_portfolios()
-        // is async. Add it directly so on_portfolio_selected() can find it.
-        bool already_present = std::any_of(portfolios_.begin(), portfolios_.end(),
-                                           [&p](const portfolio::Portfolio& x) { return x.id == p.id; });
-        if (!already_present) {
-            portfolios_.append(p);
-        }
-
-        on_portfolio_selected(p.id);
-    });
-
-    // Create the demo portfolio (emits portfolio_created synchronously)
-    svc.create_portfolio("Demo Portfolio", "finterm User", "USD", "Sample portfolio for demonstration");
 }
 
 QVariantMap PortfolioScreen::save_state() const {

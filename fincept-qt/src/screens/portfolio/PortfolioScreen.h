@@ -87,7 +87,6 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     ///        fetch hits the data source. Timer-driven ticks pass false so
     ///        background polling can still benefit from the cache TTL.
     void request_refresh(bool force_fresh = false);
-    void load_demo_portfolio();
     void reposition_order_panel();
     void animate_order_panel_in();
     const portfolio::HoldingWithQuote* find_holding(const QString& symbol) const;
