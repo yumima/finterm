@@ -657,9 +657,11 @@ void CabinetPanel::populate_holdings_tab(const power_trader::CabinetMember& m) {
             i->setTextAlignment(align);
             i->setForeground(QColor(color ? color : ui::colors::TEXT_PRIMARY()));
             i->setFlags(i->flags() & ~Qt::ItemIsEditable);
-            // Highlight conflict rows
+            // Highlight conflict rows. (QColor's string ctor does NOT parse a
+            // CSS "rgba(...)" string — that produced an invalid color and the
+            // highlight never rendered. Use an integer-alpha QColor.)
             if (h.is_conflict)
-                i->setBackground(QColor("rgba(239,68,68,0.08)"));
+                i->setBackground(QColor(239, 68, 68, 20)); // ~8% red tint
             h_table_->setItem(r, col, i);
         };
 
@@ -783,7 +785,7 @@ void CabinetPanel::populate_sector_tab(const power_trader::CabinetMember& m) {
             auto* i = new QTableWidgetItem(txt);
             i->setTextAlignment(align);
             i->setForeground(QColor(color ? color : ui::colors::TEXT_PRIMARY()));
-            if (regulated) i->setBackground(QColor("rgba(239,68,68,0.06)"));
+            if (regulated) i->setBackground(QColor(239, 68, 68, 15)); // ~6% red tint (rgba string never rendered)
             i->setFlags(i->flags() & ~Qt::ItemIsEditable);
             s_table_->setItem(r, col, i);
         };

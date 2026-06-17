@@ -262,12 +262,17 @@ void MemberDetailPanel::populate(const power_trader::CongressMember& member,
     // Name
     name_label_->setText(member.full_name);
 
-    // Party badge
+    // Party badge — choose a text color that actually contrasts with the party
+    // color (white on dark blue/red, dark on light amber for Independents),
+    // instead of always white which was unreadable on the amber background.
     party_badge_->setText(member.party);
+    const QColor pc(party_color(member.party));
+    const int lum = (pc.red() * 299 + pc.green() * 587 + pc.blue() * 114) / 1000;
+    const QString badge_txt = lum > 140 ? QStringLiteral("#111111") : QStringLiteral("white");
     party_badge_->setStyleSheet(
-        QString("QLabel { background:%1; color:white; font-size:12px; font-weight:700;"
+        QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
                 " border-radius:3px; }")
-            .arg(party_color(member.party)));
+            .arg(party_color(member.party), badge_txt));
 
     // Meta
     QString meta = power_trader::chamber_label(member.chamber) + QStringLiteral(" · ") + member.state;

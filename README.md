@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e3b2b99cc`](https://github.com/yumima/finterm/commit/e3b2b99cc) Defer startup disk I/O off the launch path (faster, less launch-time thrash)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
