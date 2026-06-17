@@ -574,9 +574,14 @@ void TeamsViewPanel::apply_tools_selection(const QStringList& tools) {
 
 void TeamsViewPanel::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-    // Trigger a fresh discover so the list stays current.
+    // First-show-only: discover_agents() clears + repopulates the agent list,
+    // wiping the user's in-progress team selection on every re-show. Mirror
+    // PlannerViewPanel's data_loaded_ guard so re-showing the tab keeps state.
     // AgentService caches results with TTL — no Python spawn if cache is warm.
-    services::AgentService::instance().discover_agents();
+    if (!data_loaded_) {
+        data_loaded_ = true;
+        services::AgentService::instance().discover_agents();
+    }
 }
 
 } // namespace fincept::screens

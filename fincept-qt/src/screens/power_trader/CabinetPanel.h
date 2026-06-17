@@ -53,6 +53,7 @@ class CabinetPanel : public QWidget {
     // ── State ─────────────────────────────────────────────────────────────────
     power_trader::CabinetSummary summary_;
     int selected_row_ = -1;
+    bool first_member_shown_ = false; // gate the one-time jump to the Holdings tab
 
     // ── Page stack ────────────────────────────────────────────────────────────
     QStackedWidget* stack_         = nullptr;  // 0=loading, 1=content

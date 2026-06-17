@@ -70,6 +70,7 @@ class TeamsViewPanel : public QWidget {
     QVector<services::AgentInfo> team_members_;
     QStringList selected_tools_; // synced from TOOLS tab
     bool executing_ = false;
+    bool data_loaded_ = false; // gate showEvent re-discover so re-showing the tab doesn't wipe state
     QString pending_request_id_;
 };
 

@@ -41,13 +41,20 @@ AgentsViewPanel::AgentsViewPanel(QWidget* parent) : QWidget(parent) {
     auto cached = svc.cached_agents();
     if (!cached.isEmpty()) {
         all_agents_ = cached;
+        data_loaded_ = true; // already have data; don't re-discover (and wipe) on first show
         on_category_changed(0);
     }
 }
 
 void AgentsViewPanel::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-    services::AgentService::instance().discover_agents();
+    // First-show-only: discover_agents() clears + repopulates the list, which
+    // wipes the user's category filter and selection. Re-showing the tab should
+    // not reset state — mirror PlannerViewPanel's data_loaded_ guard.
+    if (!data_loaded_) {
+        data_loaded_ = true;
+        services::AgentService::instance().discover_agents();
+    }
 }
 
 // ── Left: agent list ──────────────────────────────────────────────────────────

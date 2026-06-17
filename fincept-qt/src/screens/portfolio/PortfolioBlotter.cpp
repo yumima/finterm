@@ -16,6 +16,8 @@
 #include <QJsonObject>
 #include <QMenu>
 #include <QMetaObject>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -225,6 +227,11 @@ void PortfolioBlotter::on_row_clicked(int row, int) {
 }
 
 void PortfolioBlotter::populate_table() {
+    // Preserve scroll position across the rebuild. The selected row is already
+    // re-selected by symbol below (selected_symbol_), but repopulating still
+    // snaps the scrollbar to 0 on every quote refresh — restore it after.
+    const int prev_scroll = table_->verticalScrollBar()->value();
+
     // Clean up old sparkline cell widgets before repopulating (prevents memory leak)
     for (int r = 0; r < table_->rowCount(); ++r) {
         auto* w = table_->cellWidget(r, 9);
@@ -353,6 +360,13 @@ void PortfolioBlotter::populate_table() {
             table_->selectRow(r);
         }
     }
+
+    // Restore scroll after layout settles. selectRow() above scrolls the
+    // selected row into view; this puts the viewport back where the user left
+    // it (an immediate set here can be clobbered by the pending relayout).
+    QTimer::singleShot(0, table_, [this, prev_scroll]() {
+        table_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 QString PortfolioBlotter::format_value(double v, int dp) const {

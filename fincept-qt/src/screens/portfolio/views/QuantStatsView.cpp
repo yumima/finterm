@@ -18,7 +18,9 @@
 #include <QLineSeries>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QValueAxis>
 
@@ -279,6 +281,10 @@ void QuantStatsView::set_data(const portfolio::PortfolioSummary& summary, const 
 // ── update_metrics ────────────────────────────────────────────────────────────
 
 void QuantStatsView::update_metrics() {
+    // clearContents() + repopulate resets the scrollbar to 0 on every refresh,
+    // bouncing the user off the metric they were reading. Save and restore it.
+    // (metrics_table_ is NoSelection, so only scroll needs preserving.)
+    const int prev_scroll = metrics_table_->verticalScrollBar()->value();
     metrics_table_->clearContents();
 
     // ── Build row definitions ─────────────────────────────────────────────────
@@ -458,6 +464,10 @@ void QuantStatsView::update_metrics() {
         metrics_table_->setItem(
             r, 2, make_item(row.benchmark, Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::TEXT_SECONDARY())));
     }
+
+    QTimer::singleShot(0, metrics_table_, [this, prev_scroll]() {
+        metrics_table_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 // ── update_returns ────────────────────────────────────────────────────────────

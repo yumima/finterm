@@ -15,6 +15,8 @@
 #include <QHeaderView>
 #include <QMenu>
 #include <QProgressBar>
+#include <QScrollBar>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -207,9 +209,43 @@ void CommitteePanel::set_data(const power_trader::PowerTraderSummary& summary,
                                const QVector<power_trader::CommitteeGroup>& groups) {
     summary_ = summary;
     groups_  = groups;
+
+    // Preserve scroll + selection across the rebuild: a periodic set_data()
+    // refresh repopulates the list, which resets the scrollbar to 0 and clears
+    // the current row. Capture the selected committee's name (stable key — row
+    // index shifts) and the scrollbar value, then restore after repopulating.
+    const int prev_scroll = committee_list_->verticalScrollBar()->value();
+    QString prev_key;
+    if (selected_row_ >= 0 && selected_row_ < groups_.size())
+        prev_key = groups_[selected_row_].committee;
+    // selected_row_ refers to the OLD groups_ ordering; resolve against the new
+    // vector below. Capture from the table's current row text as the safest key.
+    if (auto* cur = committee_list_->currentItem())
+        if (auto* name = committee_list_->item(cur->row(), 0))
+            prev_key = name->text();
+
     populate_committee_list();
-    if (!groups_.isEmpty())
+
+    int restore_row = -1;
+    if (!prev_key.isEmpty()) {
+        for (int r = 0; r < groups_.size(); ++r)
+            if (groups_[r].committee == prev_key) { restore_row = r; break; }
+    }
+
+    if (restore_row >= 0) {
+        on_committee_selected(restore_row);
+    } else if (!groups_.isEmpty() && selected_row_ < 0) {
+        // First load (no prior selection) — default to the top entry.
         on_committee_selected(0);
+    } else {
+        selected_row_ = -1;
+        committee_list_->clearSelection();
+    }
+
+    // Restore scroll after layout settles; an immediate set can be clobbered.
+    QTimer::singleShot(0, committee_list_, [this, prev_scroll]() {
+        committee_list_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 void CommitteePanel::populate_committee_list() {

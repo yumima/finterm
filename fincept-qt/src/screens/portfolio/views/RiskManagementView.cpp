@@ -6,6 +6,8 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -129,14 +131,29 @@ void RiskManagementView::build_ui() {
 void RiskManagementView::set_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
     summary_ = summary;
     currency_ = currency;
+
+    // Rebuilt wholesale on each refresh — save/restore scroll so the user isn't
+    // bounced to the top. Both tables are NoSelection, so only scroll matters.
+    const int stress_scroll = stress_table_->verticalScrollBar()->value();
+    const int contrib_scroll = contrib_table_->verticalScrollBar()->value();
+
     update_overview();
     update_stress_test();
     update_contribution();
+
+    QTimer::singleShot(0, this, [this, stress_scroll, contrib_scroll]() {
+        stress_table_->verticalScrollBar()->setValue(stress_scroll);
+        contrib_table_->verticalScrollBar()->setValue(contrib_scroll);
+    });
 }
 
 void RiskManagementView::set_metrics(const portfolio::ComputedMetrics& metrics) {
     metrics_ = metrics;
+    const int stress_scroll = stress_table_->verticalScrollBar()->value();
     update_stress_test(); // rescale with real beta
+    QTimer::singleShot(0, this, [this, stress_scroll]() {
+        stress_table_->verticalScrollBar()->setValue(stress_scroll);
+    });
 }
 
 void RiskManagementView::update_overview() {

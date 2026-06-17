@@ -9,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QTimer>
 #include <QUrl>
 
 namespace fincept::screens {
@@ -97,6 +99,7 @@ void EquityNewsTab::build_ui() {
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setStyleSheet("background:transparent; border:0;");
+    scroll_area_ = scroll;
 
     cards_container_ = new QWidget(this);
     cards_layout_ = new QVBoxLayout(cards_container_);
@@ -118,6 +121,13 @@ void EquityNewsTab::clear_cards() {
 }
 
 void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& articles) {
+    // Preserve scroll across a same-symbol refresh (the REFRESH button and
+    // periodic QueryStore updates re-call populate, which rebuilds every card
+    // and snaps the scrollbar to 0). On a symbol switch set_symbol() already
+    // reset scroll to 0, so restoring 0 there is a harmless no-op.
+    const int prev_scroll =
+        scroll_area_ ? scroll_area_->verticalScrollBar()->value() : 0;
+
     clear_cards();
     status_label_->hide();
     count_label_->setText(QString("%1 articles").arg(articles.size()));
@@ -213,6 +223,12 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
         }
 
         cards_layout_->insertWidget(cards_layout_->count() - 1, card);
+    }
+
+    if (scroll_area_) {
+        QTimer::singleShot(0, scroll_area_, [this, prev_scroll]() {
+            scroll_area_->verticalScrollBar()->setValue(prev_scroll);
+        });
     }
 }
 

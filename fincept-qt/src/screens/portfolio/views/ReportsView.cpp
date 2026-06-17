@@ -7,6 +7,8 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -106,9 +108,26 @@ void ReportsView::build_ui() {
 void ReportsView::set_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
     summary_ = summary;
     currency_ = currency;
+
+    // These tables are rebuilt wholesale on every ~20s refresh, which snaps the
+    // scrollbar back to 0 and bounces the user off what they were reading. Save
+    // each table's scroll position before the rebuild and restore it after.
+    // (Tables are NoSelection here, so only scroll needs preserving.)
+    const int txn_scroll = txn_table_->verticalScrollBar()->value();
+    const int attr_scroll = attr_table_->verticalScrollBar()->value();
+    const int bd_scroll = breakdown_table_ ? breakdown_table_->verticalScrollBar()->value() : 0;
+
     update_summary();
     update_transactions();
     update_attribution();
+
+    // Restore after layout/repaint settles; an immediate set can be clobbered.
+    QTimer::singleShot(0, this, [this, txn_scroll, attr_scroll, bd_scroll]() {
+        txn_table_->verticalScrollBar()->setValue(txn_scroll);
+        attr_table_->verticalScrollBar()->setValue(attr_scroll);
+        if (breakdown_table_)
+            breakdown_table_->verticalScrollBar()->setValue(bd_scroll);
+    });
 }
 
 void ReportsView::update_summary() {
@@ -175,6 +194,7 @@ void ReportsView::update_summary() {
     layout->addWidget(breakdown_title);
 
     auto* breakdown = new QTableWidget;
+    breakdown_table_ = breakdown; // held for scroll save/restore across refreshes
     breakdown->setColumnCount(6);
     breakdown->setHorizontalHeaderLabels({"SYMBOL", "QTY", "AVG COST", "CURRENT", "P&L", "WEIGHT"});
     breakdown->setSelectionMode(QAbstractItemView::NoSelection);

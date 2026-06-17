@@ -96,6 +96,7 @@ class AgentsViewPanel : public QWidget {
     QVector<services::AgentInfo> filtered_agents_;
     int selected_agent_idx_ = -1;
     bool executing_ = false;
+    bool data_loaded_ = false; // gate showEvent re-discover so re-showing the tab doesn't wipe state
     QString pending_request_id_; // guards against cross-panel signal contamination
 };
 

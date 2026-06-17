@@ -9,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -223,6 +225,15 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
                                         "REV GRWTH", "D/E",   "DIV YIELD", "BETA",      "COMP"};
     const int comp_col = headers.size() - 1;
 
+    // Preserve scroll + selected row across a same-symbol refresh (REFRESH /
+    // QueryStore re-emits rebuild the whole grid). Key on the SYMBOL cell text
+    // (stable; row index shifts under sort) rather than the row number.
+    const int prev_scroll = peer_table_->verticalScrollBar()->value();
+    QString prev_sym;
+    if (auto* cur = peer_table_->currentItem())
+        if (auto* s = peer_table_->item(cur->row(), 0))
+            prev_sym = s->text();
+
     peer_table_->setSortingEnabled(false);
     peer_table_->setColumnCount(headers.size());
     peer_table_->setRowCount(peers.size());
@@ -358,6 +369,21 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
     // visual row so we don't show a leftover "checked AVGO" box next to
     // an unchecked GOOG row, etc.
     refresh_check_column();
+
+    // Re-select the previously-selected ticker (if still present) and restore
+    // scroll. Sorting is on, so search by SYMBOL text rather than row index.
+    if (!prev_sym.isEmpty()) {
+        for (int r = 0; r < peer_table_->rowCount(); ++r) {
+            auto* s = peer_table_->item(r, 0);
+            if (s && s->text() == prev_sym) {
+                peer_table_->setCurrentCell(r, 0);
+                break;
+            }
+        }
+    }
+    QTimer::singleShot(0, peer_table_, [this, prev_scroll]() {
+        peer_table_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 QStringList EquityPeersTab::default_peers(const QString& symbol) const {

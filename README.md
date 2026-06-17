@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1cb04ee14`](https://github.com/yumima/finterm/commit/1cb04ee14) Dashboard widgets: build rows once + update in place (kill O(N^2) per-tick churn)
 - [`80d2c45b7`](https://github.com/yumima/finterm/commit/80d2c45b7) Dashboard widgets: surface fetch errors instead of spinning/looking empty
 - [`ef82e3b33`](https://github.com/yumima/finterm/commit/ef82e3b33) Dashboard: persist per-widget gear config across restarts
 - [`52778ba04`](https://github.com/yumima/finterm/commit/52778ba04) DataHub: skip subscriber fan-out for no-change publishes (live-tick perf)

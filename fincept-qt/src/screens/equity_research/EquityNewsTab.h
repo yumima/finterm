@@ -28,6 +28,7 @@ class EquityNewsTab : public QWidget {
     void clear_cards();
 
     QString current_symbol_;
+    QScrollArea* scroll_area_ = nullptr; // held so populate() can preserve scroll on refresh
     QWidget* cards_container_ = nullptr;
     QVBoxLayout* cards_layout_ = nullptr;
     QLabel* status_label_ = nullptr;

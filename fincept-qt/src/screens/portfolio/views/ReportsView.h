@@ -27,6 +27,7 @@ class ReportsView : public QWidget {
 
     // Summary tab
     QWidget* summary_panel_ = nullptr;
+    QTableWidget* breakdown_table_ = nullptr; // rebuilt each refresh; held for scroll restore
 
     // Transactions tab
     QTableWidget* txn_table_ = nullptr;

@@ -27,6 +27,7 @@ class EquitySentimentTab : public QWidget {
     QWidget* build_summary_panel();
 
     QString current_symbol_;
+    QScrollArea* scroll_area_ = nullptr; // held so populate() can preserve scroll on refresh
     QWidget* content_widget_ = nullptr;
     QWidget* sources_widget_ = nullptr;
     QGridLayout* sources_layout_ = nullptr;

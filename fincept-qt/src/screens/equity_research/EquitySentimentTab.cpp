@@ -6,6 +6,8 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QTimer>
 
 namespace fincept::screens {
 
@@ -170,6 +172,7 @@ void EquitySentimentTab::build_ui() {
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     scroll->setStyleSheet("background:transparent; border:0;");
+    scroll_area_ = scroll;
 
     content_widget_ = new QWidget;
     auto* content_layout = new QVBoxLayout(content_widget_);
@@ -217,6 +220,13 @@ void EquitySentimentTab::clear_sources() {
 }
 
 void EquitySentimentTab::populate(const services::equity::MarketSentimentSnapshot& snapshot) {
+    // Preserve scroll across a same-symbol refresh (the REFRESH button re-runs
+    // populate, which clears + rebuilds the source cards and resets scroll to
+    // 0). On a symbol switch set_symbol() already reset scroll, so restoring 0
+    // there is a harmless no-op.
+    const int prev_scroll =
+        scroll_area_ ? scroll_area_->verticalScrollBar()->value() : 0;
+
     avg_buzz_value_->setText(QString::number(snapshot.average_buzz, 'f', 1));
     avg_bullish_value_->setText(QString("%1%").arg(QString::number(snapshot.average_bullish_pct, 'f', 1)));
     coverage_value_->setText(QString("%1 / %2").arg(snapshot.coverage).arg(snapshot.sources.size()));
@@ -266,6 +276,12 @@ void EquitySentimentTab::populate(const services::equity::MarketSentimentSnapsho
         }
 
         sources_layout_->addWidget(card, i / 2, i % 2);
+    }
+
+    if (scroll_area_) {
+        QTimer::singleShot(0, scroll_area_, [this, prev_scroll]() {
+            scroll_area_->verticalScrollBar()->setValue(prev_scroll);
+        });
     }
 }
 

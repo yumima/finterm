@@ -11,6 +11,8 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -476,12 +478,38 @@ void CabinetPanel::on_cabinet_loaded(power_trader::CabinetSummary summary) {
             .arg(summary.disclosure_year)
             .arg(summary.data_note.left(120)));
 
+    // Capture scroll + selected member (stable key = member id) BEFORE the
+    // rebuild so a periodic cabinet_data_loaded refresh doesn't bounce the user
+    // off the row they were reading or scroll back to the top.
+    const int prev_scroll = member_table_->verticalScrollBar()->value();
+    auto prev_ranked = power_trader::PowerTraderService::instance().cabinet_conflict_ranking();
+    QString prev_key;
+    if (selected_row_ >= 0 && selected_row_ < prev_ranked.size())
+        prev_key = prev_ranked[selected_row_].id;
+
     populate_stat_tiles();
     populate_member_list();
     populate_overview_tab();
 
-    if (!summary_.members.isEmpty())
-        on_member_selected(0);
+    auto ranked = power_trader::PowerTraderService::instance().cabinet_conflict_ranking();
+    int restore_row = -1;
+    if (!prev_key.isEmpty()) {
+        for (int r = 0; r < ranked.size(); ++r)
+            if (ranked[r].id == prev_key) { restore_row = r; break; }
+    }
+
+    if (restore_row >= 0) {
+        on_member_selected(restore_row);
+    } else if (!summary_.members.isEmpty() && selected_row_ < 0) {
+        on_member_selected(0); // first load — default to top
+    } else {
+        selected_row_ = -1;
+        member_table_->clearSelection();
+    }
+
+    QTimer::singleShot(0, member_table_, [this, prev_scroll]() {
+        member_table_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 void CabinetPanel::on_member_selected(int row) {
@@ -635,8 +663,13 @@ void CabinetPanel::show_member(const power_trader::CabinetMember& m) {
     const QString score_str = QString::number(m.conflict_score,'f',0);
     const char* sc = conflict_color(m.conflict_score);
 
-    // Detail tabs: switch to overview if first call
-    detail_tabs_->setCurrentIndex(1);  // Holdings
+    // Detail tabs: jump to Holdings only on the very first member shown.
+    // After that, respect whatever tab the user is currently viewing — a
+    // refresh or a different member click shouldn't yank them back to Holdings.
+    if (!first_member_shown_) {
+        first_member_shown_ = true;
+        detail_tabs_->setCurrentIndex(1);  // Holdings
+    }
 
     populate_holdings_tab(m);
     populate_conflicts_tab(m);

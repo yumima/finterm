@@ -8,6 +8,8 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -209,10 +211,37 @@ void InsiderWatchPanel::build_ui() {
 }
 
 void InsiderWatchPanel::set_data(const QVector<power_trader::InsiderWatchEntry>& entries) {
+    const bool had_selection = selected_row_ >= 0;
     entries_ = entries;
+
+    // Preserve scroll + selection across the rebuild. A periodic refresh
+    // repopulates the table, resetting scroll to 0 and clearing the row.
+    // Key on member_id (stashed in each item's UserRole) — row index shifts.
+    const int prev_scroll = watch_table_->verticalScrollBar()->value();
+    QString prev_key;
+    if (auto* cur = watch_table_->currentItem())
+        prev_key = cur->data(Qt::UserRole).toString();
+
     populate_watch_list();
-    if (!entries_.isEmpty())
-        on_entry_selected(0);
+
+    int restore_row = -1;
+    if (!prev_key.isEmpty()) {
+        for (int r = 0; r < entries_.size(); ++r)
+            if (entries_[r].member_id == prev_key) { restore_row = r; break; }
+    }
+
+    if (restore_row >= 0) {
+        on_entry_selected(restore_row);
+    } else if (!entries_.isEmpty() && !had_selection) {
+        on_entry_selected(0); // first load — default to top
+    } else {
+        selected_row_ = -1;
+        watch_table_->clearSelection();
+    }
+
+    QTimer::singleShot(0, watch_table_, [this, prev_scroll]() {
+        watch_table_->verticalScrollBar()->setValue(prev_scroll);
+    });
 }
 
 void InsiderWatchPanel::populate_watch_list() {
