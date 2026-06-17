@@ -163,7 +163,8 @@ void EquityOrderBook::rebuild_cache() {
         p.setPen(color_sell());
         p.drawText(col_price, y, w / 2 - 8, ROW_H, Qt::AlignLeft | Qt::AlignVCenter, QString::number(price, 'f', 2));
         p.setPen(text_secondary());
-        p.drawText(col_qty, y, w / 4 - 4, ROW_H, Qt::AlignRight | Qt::AlignVCenter, QString::number(qty, 'f', 0));
+        p.drawText(col_qty, y, w / 4 - 4, ROW_H, Qt::AlignRight | Qt::AlignVCenter,
+                   qty > 0 ? QString::number(qty, 'f', 0) : QStringLiteral("--"));
     }
 
     // Draw bids (bottom half, top-down so best bid is near spread)
@@ -182,7 +183,8 @@ void EquityOrderBook::rebuild_cache() {
         p.setPen(color_buy());
         p.drawText(col_price, y, w / 2 - 8, ROW_H, Qt::AlignLeft | Qt::AlignVCenter, QString::number(price, 'f', 2));
         p.setPen(text_secondary());
-        p.drawText(col_qty, y, w / 4 - 4, ROW_H, Qt::AlignRight | Qt::AlignVCenter, QString::number(qty, 'f', 0));
+        p.drawText(col_qty, y, w / 4 - 4, ROW_H, Qt::AlignRight | Qt::AlignVCenter,
+                   qty > 0 ? QString::number(qty, 'f', 0) : QStringLiteral("--"));
     }
 
     // Center line

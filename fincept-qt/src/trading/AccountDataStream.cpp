@@ -413,17 +413,18 @@ void AccountDataStream::fetch_orderbook(const QString& symbol) {
         auto result = broker->get_historical_quotes_single(creds, symbol, today + "T00:00:00Z", "", 1000);
 
         if (!result.success || !result.data || result.data->isEmpty()) {
-            // Fallback to snapshot bid/ask
+            // Fall back to the broker's real snapshot bid/ask only. Never
+            // synthesize depth from LTP — if the broker reports no real
+            // bid/ask, show no order book rather than a fabricated one.
             auto snap = broker->get_quotes(creds, {symbol});
             if (!snap.success || !snap.data || snap.data->isEmpty()) return;
             const auto& q = snap.data->first();
-            const double b = q.bid > 0 ? q.bid : (q.ltp > 0 ? q.ltp * 0.9995 : 0);
-            const double a = q.ask > 0 ? q.ask : (q.ltp > 0 ? q.ltp * 1.0005 : 0);
-            if (b <= 0 || a <= 0) return;
-            QVector<QPair<double, double>> bids{{b, q.bid_size > 0 ? q.bid_size : 100.0}};
-            QVector<QPair<double, double>> asks{{a, q.ask_size > 0 ? q.ask_size : 100.0}};
-            const double spread = a - b;
-            const double spread_pct = b > 0 ? (spread / b) * 100.0 : 0.0;
+            if (q.bid <= 0 || q.ask <= 0) return; // no real top-of-book → no book
+            // Real prices with their real sizes (0 = size unavailable, shown as-is).
+            QVector<QPair<double, double>> bids{{q.bid, q.bid_size}};
+            QVector<QPair<double, double>> asks{{q.ask, q.ask_size}};
+            const double spread = q.ask - q.bid;
+            const double spread_pct = q.bid > 0 ? (spread / q.bid) * 100.0 : 0.0;
             QMetaObject::invokeMethod(self, [self, acct_id, bids, asks, spread, spread_pct]() {
                 if (!self) return;
                 emit self->orderbook_fetched(acct_id, bids, asks, spread, spread_pct);
@@ -434,8 +435,10 @@ void AccountDataStream::fetch_orderbook(const QString& symbol) {
         // Aggregate L2
         QMap<double, double> bid_map, ask_map;
         for (const auto& q : *result.data) {
-            if (q.bid > 0) bid_map[q.bid] += q.bid_size > 0 ? q.bid_size : 1.0;
-            if (q.ask > 0) ask_map[q.ask] += q.ask_size > 0 ? q.ask_size : 1.0;
+            // Aggregate real reported sizes only — don't invent a size for a
+            // level the broker reported without one.
+            if (q.bid > 0) bid_map[q.bid] += q.bid_size;
+            if (q.ask > 0) ask_map[q.ask] += q.ask_size;
         }
         QVector<QPair<double, double>> bids, asks;
         auto bid_keys = bid_map.keys();
