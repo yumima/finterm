@@ -15,6 +15,12 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 
+# Shared REAL market-data helper. Make this module's own directory importable
+# regardless of the process cwd (the C++ runner puts scripts_dir on PYTHONPATH,
+# but the ai_quant_lab/ subdir needs to be added explicitly).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _real_data import build_market_frame, RealDataError  # noqa: E402
+
 # Qlib RL imports with availability check
 RL_AVAILABLE = False
 RL_ERROR = None
@@ -300,24 +306,17 @@ class RLTradingAgent:
             return {'success': False, 'error': 'Stable-Baselines3 not installed'}
 
         try:
-            # Fetch market data from Qlib
+            # Fetch REAL daily OHLCV + engineered features for the requested
+            # ticker(s) and date range. RL trades one asset at a time, so the
+            # helper uses the first ticker that returns data. NO synthetic data:
+            # if real prices can't be fetched, surface an explicit error.
             instruments = tickers if isinstance(tickers, list) else [tickers]
 
-            # For demo, generate synthetic data
-            dates = pd.date_range(start=start_date, end=end_date, freq='D')
-            data = {
-                'close': np.random.randn(len(dates)).cumsum() + 100,
-                'open': np.random.randn(len(dates)).cumsum() + 100,
-                'high': np.random.randn(len(dates)).cumsum() + 102,
-                'low': np.random.randn(len(dates)).cumsum() + 98,
-                'volume': np.random.randint(1e6, 1e8, len(dates)),
-                'returns': np.random.randn(len(dates)) * 0.02,
-                'volatility': np.abs(np.random.randn(len(dates)) * 0.01),
-                'rsi': np.random.uniform(30, 70, len(dates)),
-                'macd': np.random.randn(len(dates)) * 0.5,
-                'signal': np.random.randn(len(dates)) * 0.5,
-            }
-            market_data = pd.DataFrame(data, index=dates)
+            try:
+                market_data = build_market_frame(instruments, start_date, end_date)
+            except RealDataError as de:
+                return {'success': False,
+                        'error': f'Real market data unavailable: {de}'}
 
             # Create environment
             self.env = TradingEnvironment(

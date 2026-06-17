@@ -17,6 +17,33 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 
+# Shared REAL market-data helper (zero fabricated data). Ensure this module's
+# own directory is importable regardless of the launching process cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _real_data import build_supervised, RealDataError  # noqa: E402
+
+# Default universe / window used when the caller does not pass tickers or dates
+# (the Meta-Learning UI sends only model_ids / param_grid). REAL liquid US
+# large-caps; the helper fetches their actual OHLCV.
+DEFAULT_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'JPM', 'XOM']
+DEFAULT_SEQ_LENGTH = 10
+
+
+def _real_supervised(task_type, tickers=None, start_date=None, end_date=None):
+    """Fetch a REAL flattened supervised dataset for sklearn-style models.
+
+    Returns (X_train, y_train, X_test, y_test) with 1D targets, or raises
+    RealDataError. Centralises the build_supervised call shared by model
+    selection and hyperparameter tuning.
+    """
+    ds = build_supervised(
+        tickers or DEFAULT_TICKERS, start_date, end_date,
+        seq_length=DEFAULT_SEQ_LENGTH, input_size=None,
+        flatten=True, task_type=task_type)
+    y_train = np.ravel(ds['y_train'])
+    y_test = np.ravel(ds['y_test'])
+    return ds['X_train'], y_train, ds['X_test'], y_test
+
 # Check available ML libraries
 SKLEARN_AVAILABLE = False
 LIGHTGBM_AVAILABLE = False
@@ -163,34 +190,37 @@ class MetaLearningManager:
                            X_test: Optional[np.ndarray] = None,
                            y_test: Optional[np.ndarray] = None,
                            task_type: str = 'classification',
-                           metric: str = 'auto') -> Dict[str, Any]:
+                           metric: str = 'auto',
+                           tickers: Optional[List[str]] = None,
+                           start_date: Optional[str] = None,
+                           end_date: Optional[str] = None) -> Dict[str, Any]:
         """
-        Run model selection by training and evaluating multiple models
+        Run model selection by training and evaluating multiple models on
+        REAL market data.
 
         Args:
             model_ids: List of model IDs to evaluate
-            X_train, y_train, X_test, y_test: Training/test data
-            task_type: 'classification' or 'regression'
+            X_train, y_train, X_test, y_test: Pre-built data. When omitted,
+                REAL flattened OHLCV feature windows are fetched via yfinance.
+                NEVER synthetic.
+            task_type: 'classification' (sign of next return) or 'regression'
+                (next return)
             metric: Evaluation metric ('auto', 'accuracy', 'f1', 'auc', 'mse', 'r2')
+            tickers/start_date/end_date: data-sourcing parameters
         """
         if not model_ids:
             return {'success': False, 'error': 'No models specified'}
 
-        # Generate synthetic data if not provided (for demo/testing)
+        # Source REAL data when not explicitly provided. Fail loudly rather
+        # than fabricate: a model-selection leaderboard on random noise is
+        # actively misleading.
         if X_train is None:
-            n_samples = 1000
-            n_features = 20
-            X_train = np.random.randn(n_samples, n_features)
-            if task_type == 'classification':
-                y_train = np.random.randint(0, 2, n_samples)
-            else:
-                y_train = np.random.randn(n_samples)
-
-            X_test = np.random.randn(200, n_features)
-            if task_type == 'classification':
-                y_test = np.random.randint(0, 2, 200)
-            else:
-                y_test = np.random.randn(200)
+            try:
+                X_train, y_train, X_test, y_test = _real_supervised(
+                    task_type, tickers, start_date, end_date)
+            except RealDataError as de:
+                return {'success': False,
+                        'error': f'Real data unavailable for model selection: {de}'}
 
         results = {}
         trained_count = 0
@@ -408,28 +438,34 @@ class MetaLearningManager:
                              y_train: Optional[np.ndarray] = None,
                              task_type: str = 'classification',
                              search_method: str = 'grid',
-                             cv: int = 5) -> Dict[str, Any]:
+                             cv: int = 5,
+                             tickers: Optional[List[str]] = None,
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None) -> Dict[str, Any]:
         """
-        Perform hyperparameter tuning
+        Perform hyperparameter tuning on REAL market data.
 
         Args:
             model_id: Model to tune
             param_grid: Parameter grid
+            X_train, y_train: Pre-built data. When omitted, REAL flattened
+                OHLCV feature windows are fetched via yfinance. NEVER synthetic.
             search_method: 'grid' or 'random'
             cv: Cross-validation folds
+            tickers/start_date/end_date: data-sourcing parameters
         """
         if not SKLEARN_AVAILABLE:
             return {'success': False, 'error': 'scikit-learn not available'}
 
-        # Generate synthetic data if not provided
+        # Source REAL data when not explicitly provided. A best_score reported
+        # against random noise would be meaningless — fail loudly instead.
         if X_train is None:
-            n_samples = 1000
-            n_features = 20
-            X_train = np.random.randn(n_samples, n_features)
-            if task_type == 'classification':
-                y_train = np.random.randint(0, 2, n_samples)
-            else:
-                y_train = np.random.randn(n_samples)
+            try:
+                X_train, y_train, _, _ = _real_supervised(
+                    task_type, tickers, start_date, end_date)
+            except RealDataError as de:
+                return {'success': False,
+                        'error': f'Real data unavailable for tuning: {de}'}
 
         try:
             # Create base model
@@ -489,7 +525,11 @@ def main():
             model_ids = params.get('model_ids', [])
             task_type = params.get('task_type', 'classification')
             metric = params.get('metric', 'auto')
-            result = manager.run_model_selection(model_ids, task_type=task_type, metric=metric)
+            result = manager.run_model_selection(
+                model_ids, task_type=task_type, metric=metric,
+                tickers=params.get('tickers'),
+                start_date=params.get('start_date'),
+                end_date=params.get('end_date'))
 
         elif command == 'create_ensemble':
             params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
@@ -504,7 +544,12 @@ def main():
             param_grid = params.get('param_grid', {})
             task_type = params.get('task_type', 'classification')
             search_method = params.get('search_method', 'grid')
-            result = manager.hyperparameter_tuning(model_id, param_grid, task_type=task_type, search_method=search_method)
+            result = manager.hyperparameter_tuning(
+                model_id, param_grid, task_type=task_type,
+                search_method=search_method,
+                tickers=params.get('tickers'),
+                start_date=params.get('start_date'),
+                end_date=params.get('end_date'))
 
         elif command == 'get_results':
             result = manager.get_all_results()

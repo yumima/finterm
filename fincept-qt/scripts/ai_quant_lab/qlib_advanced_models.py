@@ -17,6 +17,17 @@ warnings.filterwarnings('ignore')
 import numpy as np
 import pandas as pd
 
+# Shared REAL market-data helper (zero fabricated data). Ensure this module's
+# own directory is importable regardless of the launching process cwd.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _real_data import build_supervised, RealDataError  # noqa: E402
+
+# Default universe / window used when the caller does not pass tickers or a
+# date range (the Advanced Models UI sends only model_type + config). These are
+# REAL liquid US large-caps; the helper fetches their actual OHLCV.
+DEFAULT_TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
+DEFAULT_SEQ_LENGTH = 20
+
 # Check available deep learning frameworks
 TORCH_AVAILABLE = False
 QLIB_AVAILABLE = False
@@ -263,16 +274,22 @@ class AdvancedModelsManager:
                    y_train: Optional[np.ndarray] = None,
                    epochs: int = 10,
                    batch_size: int = 32,
-                   learning_rate: float = 0.001) -> Dict[str, Any]:
+                   learning_rate: float = 0.001,
+                   tickers: Optional[List[str]] = None,
+                   start_date: Optional[str] = None,
+                   end_date: Optional[str] = None) -> Dict[str, Any]:
         """
-        Train model with data
+        Train model with REAL market data.
 
         Args:
             model_id: Model identifier
-            X_train, y_train: Training data (if None, generates synthetic)
+            X_train, y_train: Pre-built training data. When omitted, REAL
+                windowed OHLCV features are fetched via yfinance for `tickers`
+                over [start_date, end_date] (defaults applied). NEVER synthetic.
             epochs: Number of training epochs
             batch_size: Batch size
             learning_rate: Learning rate
+            tickers/start_date/end_date: data-sourcing parameters
         """
         if model_id not in self.models:
             return {'success': False, 'error': f'Model {model_id} not found'}
@@ -284,14 +301,31 @@ class AdvancedModelsManager:
             model_info = self.models[model_id]
             model = model_info['model']
 
-            # Generate synthetic data if not provided
+            # Source REAL training data when not explicitly provided. If real
+            # market data cannot be fetched, fail loudly — do NOT fabricate.
+            data_meta = None
             if X_train is None:
-                seq_length = 20
-                n_samples = 1000
                 input_size = model_info['config']['input_size']
-
-                X_train = np.random.randn(n_samples, seq_length, input_size).astype(np.float32)
-                y_train = np.random.randn(n_samples, 1).astype(np.float32)
+                try:
+                    ds = build_supervised(
+                        tickers or DEFAULT_TICKERS,
+                        start_date, end_date,
+                        seq_length=DEFAULT_SEQ_LENGTH,
+                        input_size=input_size,
+                        flatten=False,
+                        task_type='regression')
+                except RealDataError as de:
+                    return {'success': False,
+                            'error': f'Real training data unavailable: {de}'}
+                X_train = ds['X_train']
+                y_train = ds['y_train']
+                data_meta = {
+                    'data_source': 'yfinance',
+                    'tickers': ds['tickers'],
+                    'n_train_samples': int(len(X_train)),
+                    'seq_length': ds['seq_length'],
+                    'n_features': ds['n_features'],
+                }
 
             # Convert to tensors
             X_tensor = torch.FloatTensor(X_train)
@@ -343,7 +377,7 @@ class AdvancedModelsManager:
             # Save state
             self._save_state()
 
-            return {
+            result = {
                 'success': True,
                 'model_id': model_id,
                 'epochs_trained': epochs,
@@ -352,19 +386,28 @@ class AdvancedModelsManager:
                 'loss_history': [float(l) for l in losses],
                 'message': f'Training completed in {epochs} epochs'
             }
+            if data_meta:
+                result.update(data_meta)
+            return result
 
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
     def predict(self,
                model_id: str,
-               X_test: Optional[np.ndarray] = None) -> Dict[str, Any]:
+               X_test: Optional[np.ndarray] = None,
+               tickers: Optional[List[str]] = None,
+               start_date: Optional[str] = None,
+               end_date: Optional[str] = None) -> Dict[str, Any]:
         """
-        Make predictions with trained model
+        Make predictions with trained model on REAL market data.
 
         Args:
             model_id: Model identifier
-            X_test: Test data (if None, generates synthetic)
+            X_test: Pre-built test data. When omitted, REAL windowed OHLCV
+                features are fetched via yfinance (held-out chronological tail).
+                NEVER synthetic.
+            tickers/start_date/end_date: data-sourcing parameters
         """
         if model_id not in self.models:
             return {'success': False, 'error': f'Model {model_id} not found'}
@@ -376,12 +419,23 @@ class AdvancedModelsManager:
             model_info = self.models[model_id]
             model = model_info['model']
 
-            # Generate synthetic test data if not provided
+            # Source REAL test data when not explicitly provided. Use the
+            # held-out (chronological tail) split so predictions are over real,
+            # unseen prices. Fail loudly rather than fabricate.
             if X_test is None:
-                seq_length = 20
-                n_samples = 100
                 input_size = model_info['config']['input_size']
-                X_test = np.random.randn(n_samples, seq_length, input_size).astype(np.float32)
+                try:
+                    ds = build_supervised(
+                        tickers or DEFAULT_TICKERS,
+                        start_date, end_date,
+                        seq_length=DEFAULT_SEQ_LENGTH,
+                        input_size=input_size,
+                        flatten=False,
+                        task_type='regression')
+                except RealDataError as de:
+                    return {'success': False,
+                            'error': f'Real test data unavailable: {de}'}
+                X_test = ds['X_test']
 
             # Convert to tensor
             X_tensor = torch.FloatTensor(X_test)
@@ -455,24 +509,67 @@ def main():
     if command == 'list_available':
         result = manager.get_available_models()
 
-    elif command == 'create':
+    elif command in ('create', 'create_model'):
         params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
         model_type = params.get('model_type', 'lstm')
         model_id = params.get('model_id', None)
-        config = params.get('config', {})
+        # UI sends the architecture under 'model_config'; MCP under 'config'.
+        config = params.get('config') or params.get('model_config') or {}
         result = manager.create_model(model_type, model_id, config)
 
-    elif command == 'train':
-        model_id = sys.argv[2]
-        params = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
-        epochs = params.get('epochs', 10)
+    elif command in ('train', 'train_model'):
+        # Two call shapes are supported:
+        #   train       <model_id> <json params>   (MCP / explicit)
+        #   train_model <json params>              (UI: create+train in one shot,
+        #                                           params carry model_type/config)
+        if command == 'train' and len(sys.argv) > 2 and not sys.argv[2].lstrip().startswith('{'):
+            model_id = sys.argv[2]
+            params = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
+        else:
+            params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+            model_id = params.get('model_id')
+
+        cfg = params.get('config') or params.get('model_config') or {}
+        epochs = params.get('epochs', cfg.get('epochs', 10))
         batch_size = params.get('batch_size', 32)
-        learning_rate = params.get('learning_rate', 0.001)
-        result = manager.train_model(model_id, epochs=epochs, batch_size=batch_size, learning_rate=learning_rate)
+        learning_rate = params.get('learning_rate', cfg.get('learning_rate', 0.001))
+        tickers = params.get('tickers') or params.get('ticker')
+        if isinstance(tickers, str):
+            tickers = [tickers]
+        start_date = params.get('start_date')
+        end_date = params.get('end_date')
+
+        # No model_id supplied → create the model first from the same params.
+        if not model_id:
+            model_type = params.get('model_type', 'lstm')
+            create_res = manager.create_model(model_type, None, cfg)
+            if not create_res.get('success'):
+                result = create_res
+                print(json.dumps(result, indent=2))
+                return
+            model_id = create_res['model_id']
+
+        result = manager.train_model(
+            model_id, epochs=epochs, batch_size=batch_size,
+            learning_rate=learning_rate, tickers=tickers,
+            start_date=start_date, end_date=end_date)
 
     elif command == 'predict':
-        model_id = sys.argv[2]
-        result = manager.predict(model_id)
+        params = {}
+        model_id = None
+        if len(sys.argv) > 2:
+            if sys.argv[2].lstrip().startswith('{'):
+                params = json.loads(sys.argv[2])
+                model_id = params.get('model_id')
+            else:
+                model_id = sys.argv[2]
+                params = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
+        tickers = params.get('tickers') or params.get('ticker')
+        if isinstance(tickers, str):
+            tickers = [tickers]
+        result = manager.predict(
+            model_id, tickers=tickers,
+            start_date=params.get('start_date'), end_date=params.get('end_date'))
 
     elif command == 'info':
         model_id = sys.argv[2]
