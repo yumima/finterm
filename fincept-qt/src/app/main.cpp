@@ -540,8 +540,10 @@ int main(int argc, char* argv[]) {
     (void)fincept::services::ReportBuilderService::instance();
 
     // Initialize MCP tool system — registers all internal tools and starts
-    // external MCP servers in the background (non-blocking).
-    fincept::mcp::initialize_all_tools();
+    // external MCP servers in the background (non-blocking). Deferred to the
+    // next event-loop tick: the ~367 internal tool constructions aren't needed
+    // at first paint, so keeping them off the show() path speeds up startup.
+    QTimer::singleShot(0, &app, []() { fincept::mcp::initialize_all_tools(); });
 
     // ── App-focus refresh: invalidate stale data when the user returns ──────
     //

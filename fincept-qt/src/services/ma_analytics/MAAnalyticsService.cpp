@@ -67,7 +67,10 @@ MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
     // One-time housekeeping for installs that still have old per-params
     // files on disk (we used to write them; commit removed the save path).
     // Walk the dir, replay by-context payloads, delete any orphan hashed
-    // files so they don't keep occupying disk forever.
+    // files so they don't keep occupying disk forever. Deferred to the next
+    // event-loop tick so the file I/O stays off the startup path (the replayed
+    // result_ready signals still reach no listeners until panels connect).
+    QTimer::singleShot(0, this, [this]() {
     const QStringList files = disk_cache().files();
     for (const QString& fname : files) {
         // Detect old per-params files by the "_<8-hex>.json" tail and unlink.
@@ -90,6 +93,7 @@ MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
         if (!doc.isObject()) continue;
         emit result_ready(stem, doc.object());
     }
+    });
 }
 
 // ── Python helpers ───────────────────────────────────────────────────────────

@@ -63,8 +63,9 @@ void OISnapshotter::ensure_registered_with_hub() {
     flush_timer_.start();
     housekeeping_timer_.start();
     // Run a startup prune so the first session-of-the-day doesn't carry
-    // last week's stale rows for too long.
-    run_housekeeping();
+    // last week's stale rows for too long. Deferred one tick so the blocking
+    // SQLite DELETE doesn't sit on the startup path.
+    QTimer::singleShot(0, this, [this]() { run_housekeeping(); });
 
     registered_ = true;
     LOG_INFO("OISnapshotter",

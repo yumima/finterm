@@ -2,18 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-16)
+## Today's commits (2026-06-17)
 
 Latest first.
 
-- [`af1aa72aa`](https://github.com/yumima/finterm/commit/af1aa72aa) qlib AI-lab: train/evaluate on REAL market data, never np.random noise
-- [`55c2c03bd`](https://github.com/yumima/finterm/commit/55c2c03bd) No fabricated Databento contango baseline or demo-portfolio JSON template
-- [`fcd297c48`](https://github.com/yumima/finterm/commit/fcd297c48) No fake $1000 paper fills: market orders fill at the real price or reject
-- [`d606fa684`](https://github.com/yumima/finterm/commit/d606fa684) Power-trader: real price-based returns (replace fabricated sector-constant P&L)
-- [`379d72039`](https://github.com/yumima/finterm/commit/379d72039) Remove the demo portfolio (fabricated holdings/cost-basis)
-- [`5079b8f05`](https://github.com/yumima/finterm/commit/5079b8f05) No fake order-book data: show only real broker bid/ask, never synthesize depth
-- [`7666359fa`](https://github.com/yumima/finterm/commit/7666359fa) Move dashboard portfolio selector to the title bar; fix power-trader rankings drawer dismiss
-- [`12480c00f`](https://github.com/yumima/finterm/commit/12480c00f) Fix symbol search app-wide and wire dashboard portfolio to real data
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

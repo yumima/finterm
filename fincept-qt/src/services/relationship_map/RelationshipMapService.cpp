@@ -52,11 +52,11 @@ RelationshipMapService::RelationshipMapService() {
     disk_cache().trim_to(500);
 
     // Hydrate: replay each cached ticker into CacheManager so the next
-    // fetch(ticker) hits warm in-memory cache and emits instantly. Lives
-    // in the ctor (not in instance()) so it runs exactly once under the
-    // function-local-static thread-safety guarantee — the prior bool flag
-    // version had a non-atomic read-modify-write race if instance() was
-    // ever called from two threads near-simultaneously.
+    // fetch(ticker) hits warm in-memory cache and emits instantly. Deferred to
+    // the next event-loop tick so the file I/O stays off the startup path
+    // (nothing reads relmap:* before a panel navigates). The singleton lives
+    // for the process lifetime, so the captured `this` can't dangle.
+    QTimer::singleShot(0, [this]() {
     const QStringList files = disk_cache().files();
     for (const QString& fname : files) {
         const QJsonDocument doc = disk_cache().load(fname);
@@ -77,6 +77,7 @@ RelationshipMapService::RelationshipMapService() {
                                               QVariant(blob),
                                               /*ttl_sec=*/10 * 60, "relmap");
     }
+    });
 }
 
 static constexpr int kRelMapTtlSec = 10 * 60; // 10 min

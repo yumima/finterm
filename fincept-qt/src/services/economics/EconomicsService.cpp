@@ -68,42 +68,45 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
     disk_cache().trim_to(500);
 
     // Hydrate the dispatch_records_ map and CacheManager from every file on
-    // disk. We don't emit result_ready here because no panel can be listening
-    // yet — when the panel calls execute() with the same parameters, the
-    // CacheManager hit will fire result_ready synchronously.
-    const QStringList files = disk_cache().files();
-    int hydrated = 0;
-    for (const QString& fname : files) {
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject()) continue;
-        const QJsonObject root = doc.object();
-        // Expected schema written by execute(): { "source_id", "script",
-        // "command", "args" (array), "request_id", "data" (the parsed obj) }
-        DispatchRecord rec;
-        rec.source_id = root.value("source_id").toString();
-        rec.script    = root.value("script").toString();
-        rec.command   = root.value("command").toString();
-        for (const auto& v : root.value("args").toArray()) rec.args << v.toString();
-        rec.request_id = root.value("request_id").toString();
-        const QJsonObject data = root.value("data").toObject();
-        if (rec.script.isEmpty() || rec.request_id.isEmpty() || data.isEmpty())
-            continue;
+    // disk. Deferred to the next event-loop tick so the synchronous file I/O
+    // (up to 500 JSON files) stays off the startup path — that cold-cache read
+    // is what hurts launch under memory pressure. Nothing reads these records
+    // before a panel navigates, which can't happen before the event loop runs.
+    QTimer::singleShot(0, this, [this]() {
+        const QStringList files = disk_cache().files();
+        int hydrated = 0;
+        for (const QString& fname : files) {
+            const QJsonDocument doc = disk_cache().load(fname);
+            if (!doc.isObject()) continue;
+            const QJsonObject root = doc.object();
+            // Expected schema written by execute(): { "source_id", "script",
+            // "command", "args" (array), "request_id", "data" (the parsed obj) }
+            DispatchRecord rec;
+            rec.source_id = root.value("source_id").toString();
+            rec.script    = root.value("script").toString();
+            rec.command   = root.value("command").toString();
+            for (const auto& v : root.value("args").toArray()) rec.args << v.toString();
+            rec.request_id = root.value("request_id").toString();
+            const QJsonObject data = root.value("data").toObject();
+            if (rec.script.isEmpty() || rec.request_id.isEmpty() || data.isEmpty())
+                continue;
 
-        const QString topic = hub_topic(rec.source_id, rec.request_id);
-        dispatch_records_.insert(topic, rec);
+            const QString topic = hub_topic(rec.source_id, rec.request_id);
+            dispatch_records_.insert(topic, rec);
 
-        // Repopulate CacheManager so a subsequent execute() emits cached
-        // immediately. Use full TTL since freshness is gated by execute()'s
-        // own age check on next invocation.
-        fincept::CacheManager::instance().put(
-            cache_key(rec.script, rec.command, rec.args),
-            QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))),
-            kCacheTtlSec, "economics");
-        ++hydrated;
-    }
-    if (hydrated > 0)
-        LOG_INFO("EconomicsService",
-                 QString("Hydrated %1 series from disk cache").arg(hydrated));
+            // Repopulate CacheManager so a subsequent execute() emits cached
+            // immediately. Use full TTL since freshness is gated by execute()'s
+            // own age check on next invocation.
+            fincept::CacheManager::instance().put(
+                cache_key(rec.script, rec.command, rec.args),
+                QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))),
+                kCacheTtlSec, "economics");
+            ++hydrated;
+        }
+        if (hydrated > 0)
+            LOG_INFO("EconomicsService",
+                     QString("Hydrated %1 series from disk cache").arg(hydrated));
+    });
 }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────

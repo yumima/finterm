@@ -98,9 +98,11 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
     // many HDX queries over months.
     disk_cache().trim_to(300);
 
-    // Hydrate from disk if we have a prior session's cache. The *_loaded
-    // signals emitted here go to no listeners (UI wires up later) — that's
-    // the intended drop; the live fetch will re-emit when a panel subscribes.
+    // Hydrate from disk if we have a prior session's cache. Deferred to the
+    // next event-loop tick so the file I/O stays off the startup path. The
+    // *_loaded signals still go to no listeners (UI wires up later) — that's
+    // the intended drop; the live fetch re-emits when a panel subscribes.
+    QTimer::singleShot(0, this, [this]() {
     const QStringList files = disk_cache().files();
     for (const QString& fname : files) {
         const QJsonDocument doc = disk_cache().load(fname);
@@ -136,6 +138,7 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
         // events.json reserved for future use when the conflict-monitor
         // endpoint comes back online (currently kApiBase is empty).
     }
+    });
 }
 
 // ── Python helper ────────────────────────────────────────────────────────────
