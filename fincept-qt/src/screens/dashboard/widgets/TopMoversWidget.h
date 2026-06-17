@@ -5,8 +5,14 @@
 
 #include <QHash>
 #include <QPushButton>
+#include <QTimer>
+#include <QVector>
 
 #include <algorithm>
+
+namespace fincept::ui {
+class InlineSparkline;
+}
 
 namespace fincept::screens::widgets {
 
@@ -34,6 +40,13 @@ class TopMoversWidget : public BaseWidget {
     void apply_styles();
     void refresh_data();
     void show_tab(bool gainers);
+    /// Re-apply the gainers/losers tab-button stylesheets for the current
+    /// active tab. Cheap, but only needs to run on tab switch + theme change —
+    /// not on every data tick. Split out of show_tab() for that reason.
+    void style_tabs();
+    /// Fill the persistent table rows from the active gainers/losers list,
+    /// updating cells + sparklines in place (no clear/re-add).
+    void render_table();
     /// (Re)create the tab bar + table. Called from the ctor and again after a
     /// fetch error tore the body down via set_error(), so a later successful
     /// refresh has live widgets to render into.
@@ -51,10 +64,19 @@ class TopMoversWidget : public BaseWidget {
     QPushButton* losers_btn_ = nullptr;
     bool showing_gainers_ = true;
 
+    // Persistent table rows: built once (up to 6), reused across tab switches
+    // and data ticks. Index i is the i-th rank in whichever list is active.
+    static constexpr int kMaxRows = 6;
+    QVector<ui::InlineSparkline*> spark_widgets_;
+    bool rows_built_ = false;
+
     services::MarketDataService::TopMovers cached_movers_;
     QHash<QString, QVector<double>>        sparkline_cache_;
     QStringList                            subscribed_symbols_;
     bool                                   hub_active_ = false;
+
+    // Collapse the burst of per-symbol sparkline callbacks into one re-render.
+    QTimer* coalesce_ = nullptr;
 };
 
 } // namespace fincept::screens::widgets

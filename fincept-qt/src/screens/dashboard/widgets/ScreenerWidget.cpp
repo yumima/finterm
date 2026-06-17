@@ -21,6 +21,13 @@ static const QStringList kScreenerSymbols = {
 ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", parent, ui::colors::INFO()) {
     build_body();
 
+    // Coalesce the burst of per-symbol quote callbacks (42/cycle) into a single
+    // recompute+re-render per cycle.
+    coalesce_ = new QTimer(this);
+    coalesce_->setSingleShot(true);
+    coalesce_->setInterval(16);
+    connect(coalesce_, &QTimer::timeout, this, &ScreenerWidget::rebuild_all_quotes);
+
     connect(this, &BaseWidget::refresh_requested, this, &ScreenerWidget::refresh_data);
 
     apply_styles();
@@ -77,12 +84,61 @@ void ScreenerWidget::build_body() {
     list_layout_ = new QVBoxLayout(list_widget);
     list_layout_->setContentsMargins(0, 0, 0, 0);
     list_layout_->setSpacing(0);
+
+    build_rows();
     list_layout_->addStretch();
 
     scroll_->setWidget(list_widget);
     vl->addWidget(scroll_, 1);
 
     connect(filter_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ScreenerWidget::apply_filter);
+}
+
+// Build the persistent pool of up to 20 row widgets once. render_rows() reuses
+// these, hiding the slots past the current result count.
+void ScreenerWidget::build_rows() {
+    rows_.clear();
+    for (int i = 0; i < 20; ++i) {
+        Row row;
+        row.container = new QWidget(this);
+        auto* rl = new QHBoxLayout(row.container);
+        rl->setContentsMargins(8, 4, 8, 4);
+
+        row.sym = new QLabel(QString{});
+        rl->addWidget(row.sym, 2);
+
+        row.price = new QLabel(QString{});
+        row.price->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        rl->addWidget(row.price, 2);
+
+        row.chg = new QLabel(QString{});
+        row.chg->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        rl->addWidget(row.chg, 1);
+
+        row.vol = new QLabel(QString{});
+        row.vol->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        rl->addWidget(row.vol, 2);
+
+        row.container->hide();
+        style_row(row, i % 2 != 0);
+        list_layout_->addWidget(row.container);
+        rows_.append(row);
+    }
+}
+
+// Static (theme/striping-driven) styling for a row. The change-cell color is
+// data-driven and set in render_rows().
+void ScreenerWidget::style_row(Row& row, bool alt) {
+    if (!row.container)
+        return;
+    row.container->setStyleSheet(
+        QString("background: %1;").arg(alt ? ui::colors::BG_RAISED() : QStringLiteral("transparent")));
+    row.sym->setStyleSheet(
+        QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(ui::colors::INFO()));
+    row.price->setStyleSheet(
+        QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
+    row.vol->setStyleSheet(
+        QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void ScreenerWidget::apply_styles() {
@@ -117,7 +173,12 @@ void ScreenerWidget::apply_styles() {
             .arg(ui::colors::BORDER_MED()) +
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
 
-    // Re-render data rows with current tokens if data exists
+    // Restyle the persistent rows' static (theme/striping-driven) bits.
+    for (int i = 0; i < rows_.size(); ++i)
+        style_row(rows_[i], i % 2 != 0);
+
+    // Re-render data rows with current tokens if data exists (re-resolves the
+    // data-driven change-cell colors).
     if (!all_quotes_.isEmpty())
         apply_filter();
 }
@@ -161,7 +222,8 @@ void ScreenerWidget::hub_subscribe_all() {
             // set_error()'s label — rebuild before rendering recovered data.
             if (!list_layout_)
                 build_body();
-            rebuild_all_quotes();
+            // Coalesce: cache now, render once when the burst settles.
+            coalesce_->start();
         });
     }
     // Surface a full-batch fetch failure instead of an endless spinner. Error
@@ -183,6 +245,10 @@ void ScreenerWidget::hub_subscribe_all() {
                                          header_ = nullptr;
                                          header_labels_.clear();
                                          scroll_ = nullptr;
+                                         // The persistent row pool lived under the
+                                         // (now-deleted) scroll list; drop the dangling
+                                         // pointers so build_rows() recreates them.
+                                         rows_.clear();
                                      }
                                  });
     hub_active_ = true;
@@ -241,42 +307,25 @@ void ScreenerWidget::apply_filter() {
 }
 
 void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
-    if (!list_layout_)
+    if (!list_layout_ || rows_.isEmpty())
         build_body();
-    while (list_layout_->count() > 0) {
-        auto* item = list_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
 
-    bool alt = false;
-    for (const auto& q : rows) {
-        auto* row = new QWidget(this);
-        row->setStyleSheet(QString("background: %1;").arg(alt ? ui::colors::BG_RAISED() : "transparent"));
-        auto* rl = new QHBoxLayout(row);
-        rl->setContentsMargins(8, 4, 8, 4);
+    // Update the persistent row pool in place. The slot's symbol changes as the
+    // sort order changes, but the widgets are reused — no teardown/recreate.
+    const int n = std::min<int>(rows.size(), rows_.size());
+    for (int i = 0; i < n; ++i) {
+        const auto& q = rows[i];
+        Row& row = rows_[i];
 
-        auto* sym = new QLabel(q.symbol);
-        sym->setStyleSheet(
-            QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(ui::colors::INFO()));
-        rl->addWidget(sym, 2);
+        row.sym->setText(q.symbol);
+        row.price->setText(QString("$%1").arg(q.price, 0, 'f', 2));
 
-        auto* price = new QLabel(QString("$%1").arg(q.price, 0, 'f', 2));
-        price->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        price->setStyleSheet(
-            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
-        rl->addWidget(price, 2);
-
-        QString chg_str = QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
-        QString chg_col = q.change_pct > 0   ? ui::colors::POSITIVE()
-                          : q.change_pct < 0 ? ui::colors::NEGATIVE()
-                                             : ui::colors::TEXT_PRIMARY();
-        auto* chg = new QLabel(chg_str);
-        chg->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        chg->setStyleSheet(
+        row.chg->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+        const QString chg_col = q.change_pct > 0   ? ui::colors::POSITIVE()
+                                : q.change_pct < 0 ? ui::colors::NEGATIVE()
+                                                   : ui::colors::TEXT_PRIMARY();
+        row.chg->setStyleSheet(
             QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(chg_col));
-        rl->addWidget(chg, 1);
 
         // Format volume: e.g. 45.2M
         QString vol_str;
@@ -288,18 +337,14 @@ void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
             vol_str = QString("%1K").arg(q.volume / 1e3, 0, 'f', 0);
         else
             vol_str = QString::number(static_cast<long long>(q.volume));
+        row.vol->setText(vol_str);
 
-        auto* vol = new QLabel(vol_str);
-        vol->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        vol->setStyleSheet(
-            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        rl->addWidget(vol, 2);
-
-        list_layout_->addWidget(row);
-        alt = !alt;
+        row.container->show();
     }
-
-    list_layout_->addStretch();
+    // Hide unused slots so the visible row set matches the result count.
+    for (int i = n; i < rows_.size(); ++i)
+        if (rows_[i].container)
+            rows_[i].container->hide();
 }
 
 } // namespace fincept::screens::widgets

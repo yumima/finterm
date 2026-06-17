@@ -44,7 +44,6 @@ class MarketPulsePanel : public QWidget {
     QWidget* build_losers_section();
     QWidget* build_global_snapshot_section();
     QWidget* build_market_hours_section();
-    QWidget* build_mover_row(const QString& symbol, double change, const QString& volume);
     QWidget* build_stat_row(const QString& label, const QString& value, const QString& change, const QString& color);
     QWidget* build_breadth_bar(const QString& label, int advancing, int declining);
 
@@ -97,8 +96,22 @@ class MarketPulsePanel : public QWidget {
     BreadthRow sp500_row_;
 
     // ── Top Movers ──
+    // Persistent mover rows: built once (3 gainers + 3 losers) and updated
+    // in place on each tick rather than torn down + recreated.
+    struct MoverRow {
+        QWidget* container = nullptr;
+        QLabel* sym = nullptr;
+        QLabel* arrow = nullptr;
+        QLabel* chg = nullptr;
+        QLabel* vol = nullptr;
+    };
     QVBoxLayout* gainers_layout_ = nullptr;
     QVBoxLayout* losers_layout_ = nullptr;
+    QVector<MoverRow> gainer_rows_;
+    QVector<MoverRow> loser_rows_;
+    void make_mover_rows(QVBoxLayout* layout, QVector<MoverRow>& rows, int n);
+    void update_mover_row(MoverRow& row, const services::QuoteData& q);
+    void style_mover_row(MoverRow& row);
 
     // ── Global Snapshot ──
     struct StatRow {
@@ -135,6 +148,13 @@ class MarketPulsePanel : public QWidget {
     QHash<QString, services::QuoteData> snapshot_cache_;
     bool hub_active_ = false;
     QTimer* hours_timer_ = nullptr;
+
+    // Coalesce N per-symbol quote callbacks into a single in-place UI update
+    // per cycle. Each callback caches its quote and arms these single-shot
+    // timers; the timeout slot does the work once instead of N times.
+    QTimer* breadth_coalesce_ = nullptr;
+    QTimer* movers_coalesce_ = nullptr;
+    QTimer* snapshot_coalesce_ = nullptr;
 };
 
 } // namespace fincept::screens

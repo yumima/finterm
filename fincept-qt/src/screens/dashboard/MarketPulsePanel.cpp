@@ -127,6 +127,23 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     hours_timer_->setInterval(60000); // 1 min — market open/close status
     connect(hours_timer_, &QTimer::timeout, this, &MarketPulsePanel::refresh_market_hours);
 
+    // ── Coalesce timers ──
+    // A refresh cycle delivers ~50 per-symbol quote callbacks; without
+    // coalescing each one re-runs the whole section render. These single-shot
+    // timers collapse a burst into one in-place update per section.
+    breadth_coalesce_ = new QTimer(this);
+    breadth_coalesce_->setSingleShot(true);
+    breadth_coalesce_->setInterval(16);
+    connect(breadth_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_breadth_from_cache);
+    movers_coalesce_ = new QTimer(this);
+    movers_coalesce_->setSingleShot(true);
+    movers_coalesce_->setInterval(16);
+    connect(movers_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_movers_from_cache);
+    snapshot_coalesce_ = new QTimer(this);
+    snapshot_coalesce_->setSingleShot(true);
+    snapshot_coalesce_->setInterval(16);
+    connect(snapshot_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_snapshot_from_cache);
+
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
             [this](const ui::ThemeTokens&) { refresh_theme(); });
     refresh_theme();
@@ -277,8 +294,15 @@ void MarketPulsePanel::refresh_theme() {
     // Re-resolve data-driven status dot/label colors.
     refresh_market_hours();
 
-    // Mover rows (gainers/losers) are fully rebuilt by refresh_data().
-    // Trigger a refresh so they pick up new theme colors.
+    // Mover rows are persistent now: restyle the static (symbol/volume/border)
+    // bits here; the sign-driven arrow/change colors are re-resolved by
+    // rebuild_movers_from_cache() below.
+    for (auto& row : gainer_rows_)
+        style_mover_row(row);
+    for (auto& row : loser_rows_)
+        style_mover_row(row);
+
+    // Re-run the in-place updates so persistent rows pick up new theme colors.
     if (isVisible()) {
         rebuild_breadth_from_cache();
         rebuild_movers_from_cache();
@@ -482,39 +506,62 @@ QWidget* MarketPulsePanel::build_breadth_section() {
 
 // ── Top Movers ────────────────────────────────────────────────────────────────
 
-QWidget* MarketPulsePanel::build_mover_row(const QString& symbol, double change, const QString& volume) {
-    auto* w = new QWidget(this);
-    w->setStyleSheet(QString("border-bottom: 1px solid %1;").arg(ui::colors::BORDER_DIM()));
+// Build N persistent mover rows once. Each row is later updated in place by
+// update_mover_row() instead of being torn down + recreated every tick.
+void MarketPulsePanel::make_mover_rows(QVBoxLayout* layout, QVector<MoverRow>& rows, int n) {
+    for (int i = 0; i < n; ++i) {
+        MoverRow row;
+        row.container = new QWidget(this);
 
-    auto* hl = new QHBoxLayout(w);
-    hl->setContentsMargins(12, 5, 12, 5);
-    hl->setSpacing(4);
+        auto* hl = new QHBoxLayout(row.container);
+        hl->setContentsMargins(12, 5, 12, 5);
+        hl->setSpacing(4);
 
-    auto* sym = new QLabel(symbol);
-    sym->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
-                           .arg(ui::colors::TEXT_PRIMARY()));
-    hl->addWidget(sym);
-    hl->addStretch();
+        row.sym = new QLabel("...");
+        hl->addWidget(row.sym);
+        hl->addStretch();
 
-    bool positive = change >= 0;
-    auto* arrow = new QLabel(positive ? QChar(0x25B2) : QChar(0x25BC));
-    arrow->setStyleSheet(QString("color: %1; font-size: 8px; background: transparent;")
-                             .arg(positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
-    hl->addWidget(arrow);
+        row.arrow = new QLabel(QChar(0x25B2));
+        hl->addWidget(row.arrow);
 
-    auto* chg = new QLabel(QString("%1%2%").arg(positive ? "+" : "").arg(change, 0, 'f', 2));
-    chg->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
-                           .arg(positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
-    hl->addWidget(chg);
+        row.chg = new QLabel("+0.00%");
+        hl->addWidget(row.chg);
 
-    if (!volume.isEmpty()) {
-        auto* vol = new QLabel(QString("VOL: %1").arg(volume));
-        vol->setStyleSheet(
-            QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        hl->addWidget(vol);
+        row.vol = new QLabel("");
+        hl->addWidget(row.vol);
+
+        style_mover_row(row);
+        layout->addWidget(row.container);
+        rows.append(row);
     }
+}
 
-    return w;
+// Re-apply token-based styling (colors depend on the current sign, so this is
+// also called from update_mover_row()). The placeholder rows use POSITIVE.
+void MarketPulsePanel::style_mover_row(MoverRow& row) {
+    if (!row.container)
+        return;
+    row.container->setStyleSheet(QString("border-bottom: 1px solid %1;").arg(ui::colors::BORDER_DIM()));
+    row.sym->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+                               .arg(ui::colors::TEXT_PRIMARY()));
+    row.vol->setStyleSheet(
+        QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+}
+
+// Update a row's text + sign-driven colors in place.
+void MarketPulsePanel::update_mover_row(MoverRow& row, const services::QuoteData& q) {
+    const bool positive = q.change_pct >= 0;
+    const QString col = positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+    row.sym->setText(q.symbol);
+    row.arrow->setText(positive ? QChar(0x25B2) : QChar(0x25BC));
+    row.arrow->setStyleSheet(
+        QString("color: %1; font-size: 8px; background: transparent;").arg(col));
+    row.chg->setText(QString("%1%2%").arg(positive ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+    row.chg->setStyleSheet(
+        QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(col));
+    const QString volume = ui::formatting::format_compact_volume(q.volume);
+    row.vol->setText(volume.isEmpty() ? QString() : QString("VOL: %1").arg(volume));
+    row.container->show();
 }
 
 QWidget* MarketPulsePanel::build_gainers_section() {
@@ -530,9 +577,8 @@ QWidget* MarketPulsePanel::build_gainers_section() {
     gainers_layout_->setContentsMargins(0, 0, 0, 0);
     gainers_layout_->setSpacing(0);
 
-    // Placeholder rows while loading
-    for (int i = 0; i < 3; ++i)
-        gainers_layout_->addWidget(build_mover_row("...", 0.0, ""));
+    // Persistent placeholder rows, updated in place once data arrives.
+    make_mover_rows(gainers_layout_, gainer_rows_, 3);
 
     vl->addWidget(rows_w);
     return w;
@@ -551,8 +597,7 @@ QWidget* MarketPulsePanel::build_losers_section() {
     losers_layout_->setContentsMargins(0, 0, 0, 0);
     losers_layout_->setSpacing(0);
 
-    for (int i = 0; i < 3; ++i)
-        losers_layout_->addWidget(build_mover_row("...", 0.0, ""));
+    make_mover_rows(losers_layout_, loser_rows_, 3);
 
     vl->addWidget(rows_w);
     return w;
@@ -852,7 +897,7 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
 }
 
 void MarketPulsePanel::rebuild_movers_from_cache() {
-    if (movers_cache_.isEmpty() || !gainers_layout_ || !losers_layout_)
+    if (movers_cache_.isEmpty() || gainer_rows_.isEmpty() || loser_rows_.isEmpty())
         return;
 
     QVector<services::QuoteData> quotes;
@@ -864,34 +909,31 @@ void MarketPulsePanel::rebuild_movers_from_cache() {
     std::sort(quotes.begin(), quotes.end(),
               [](const auto& a, const auto& b) { return a.change_pct > b.change_pct; });
 
-    auto clear_layout = [](QVBoxLayout* layout) {
-        while (layout->count()) {
-            auto* item = layout->takeAt(0);
-            if (item->widget())
-                item->widget()->deleteLater();
-            delete item;
-        }
-    };
-    clear_layout(gainers_layout_);
-    clear_layout(losers_layout_);
-
+    // Update the persistent gainer rows in place (top 3 with change_pct > 0).
+    // Slots beyond the available movers are hidden so the rendered row set
+    // matches the prior build-once-per-tick behavior exactly.
     int gainers_added = 0;
     for (const auto& q : quotes) {
-        if (q.change_pct <= 0 || gainers_added >= 3)
+        if (q.change_pct <= 0 || gainers_added >= gainer_rows_.size())
             break;
-        gainers_layout_->addWidget(
-            build_mover_row(q.symbol, q.change_pct, ui::formatting::format_compact_volume(q.volume)));
+        update_mover_row(gainer_rows_[gainers_added], q);
         ++gainers_added;
     }
+    for (int i = gainers_added; i < gainer_rows_.size(); ++i)
+        if (gainer_rows_[i].container)
+            gainer_rows_[i].container->hide();
+
+    // Losers: bottom of the sorted list, change_pct < 0.
     int losers_added = 0;
-    for (int i = quotes.size() - 1; i >= 0 && losers_added < 3; --i) {
+    for (int i = quotes.size() - 1; i >= 0 && losers_added < loser_rows_.size(); --i) {
         if (quotes[i].change_pct >= 0)
             continue;
-        losers_layout_->addWidget(
-            build_mover_row(quotes[i].symbol, quotes[i].change_pct,
-                            ui::formatting::format_compact_volume(quotes[i].volume)));
+        update_mover_row(loser_rows_[losers_added], quotes[i]);
         ++losers_added;
     }
+    for (int i = losers_added; i < loser_rows_.size(); ++i)
+        if (loser_rows_[i].container)
+            loser_rows_[i].container->hide();
 }
 
 void MarketPulsePanel::rebuild_snapshot_from_cache() {
@@ -946,15 +988,15 @@ void MarketPulsePanel::hub_subscribe_all() {
             const auto q = v.value<services::QuoteData>();
             if (in_breadth) {
                 breadth_cache_.insert(sym, q);
-                rebuild_breadth_from_cache();
+                breadth_coalesce_->start();
             }
             if (in_movers) {
                 movers_cache_.insert(sym, q);
-                rebuild_movers_from_cache();
+                movers_coalesce_->start();
             }
             if (in_snapshot) {
                 snapshot_cache_.insert(sym, q);
-                rebuild_snapshot_from_cache();
+                snapshot_coalesce_->start();
             }
         });
     }

@@ -13,6 +13,12 @@ namespace fincept::screens::widgets {
 TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", parent) {
     build_body();
 
+    // Coalesce per-symbol sparkline callbacks into a single re-render per burst.
+    coalesce_ = new QTimer(this);
+    coalesce_->setSingleShot(true);
+    coalesce_->setInterval(16);
+    connect(coalesce_, &QTimer::timeout, this, &TopMoversWidget::rebuild_from_cache);
+
     connect(this, &BaseWidget::refresh_requested, this, &TopMoversWidget::refresh_data);
 
     apply_styles();
@@ -47,6 +53,20 @@ void TopMoversWidget::build_body() {
     table_->set_headers({"SYMBOL", "PRICE", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 90});
     content_layout()->addWidget(table_);
+
+    // Build the persistent row pool once: up to kMaxRows rows, each with a
+    // reusable InlineSparkline. render_table() updates these in place rather
+    // than clear_data() + re-adding rows (and new sparklines) every tick.
+    spark_widgets_.clear();
+    spark_widgets_.reserve(kMaxRows);
+    for (int i = 0; i < kMaxRows; ++i) {
+        table_->add_row({QString{}, QString{}, QString{}, QString{}});
+        auto* spark = new ui::InlineSparkline(table_);
+        table_->setCellWidget(i, 3, spark);
+        spark_widgets_.append(spark);
+        table_->setRowHidden(i, true);
+    }
+    rows_built_ = true;
 }
 
 void TopMoversWidget::apply_styles() {
@@ -92,9 +112,13 @@ void TopMoversWidget::refresh_data() {
                     // set_error() deleteLater()'d the tab bar + table. Null the
                     // raw pointers now so show_tab()/rebuild_from_cache() treat
                     // the body as absent and rebuild it on the next success.
+                    // The persistent sparkline widgets lived under the table and
+                    // are now dangling; drop them so build_body() recreates them.
                     self->table_ = nullptr;
                     self->gainers_btn_ = nullptr;
                     self->losers_btn_ = nullptr;
+                    self->spark_widgets_.clear();
+                    self->rows_built_ = false;
                 }
                 return;
             }
@@ -124,7 +148,7 @@ void TopMoversWidget::resubscribe_sparklines() {
                           if (!v.canConvert<QVector<double>>())
                               return;
                           sparkline_cache_.insert(sym, v.value<QVector<double>>());
-                          rebuild_from_cache();
+                          coalesce_->start();
                       });
         subscribed_symbols_.append(sym);
     }
@@ -146,38 +170,58 @@ void TopMoversWidget::show_tab(bool gainers) {
         return;
 
     showing_gainers_ = gainers;
+    style_tabs();
+    render_table();
+}
 
-    auto active_g = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-weight: bold; padding: 4px; }")
-                        .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE());
-    auto active_l = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-weight: bold; padding: 4px; }")
-                        .arg(ui::colors::NEGATIVE(), ui::colors::BG_BASE());
-    auto inactive = QString("QPushButton { background: %1; color: %2; border: none; "
-                            "font-weight: bold; padding: 4px; }")
-                        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY());
+// Tab-button styling. Depends only on which tab is active + the theme, so it
+// runs on tab switch and theme change — not on every data tick (which used to
+// rebuild three stylesheets per refresh).
+void TopMoversWidget::style_tabs() {
+    if (!gainers_btn_ || !losers_btn_)
+        return;
+    const auto active_g = QString("QPushButton { background: %1; color: %2; border: none; "
+                                  "font-weight: bold; padding: 4px; }")
+                              .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE());
+    const auto active_l = QString("QPushButton { background: %1; color: %2; border: none; "
+                                  "font-weight: bold; padding: 4px; }")
+                              .arg(ui::colors::NEGATIVE(), ui::colors::BG_BASE());
+    const auto inactive = QString("QPushButton { background: %1; color: %2; border: none; "
+                                  "font-weight: bold; padding: 4px; }")
+                              .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY());
+    gainers_btn_->setStyleSheet(showing_gainers_ ? active_g : inactive);
+    losers_btn_->setStyleSheet(showing_gainers_ ? inactive : active_l);
+}
 
-    gainers_btn_->setStyleSheet(gainers ? active_g : inactive);
-    losers_btn_->setStyleSheet(gainers ? inactive : active_l);
+// Fill the persistent rows from the active list, updating cells + sparklines in
+// place. Unused slots are hidden so the visible row set matches the data count.
+void TopMoversWidget::render_table() {
+    if (!table_ || !rows_built_)
+        return;
 
-    table_->clear_data();
-
-    const auto& rows = gainers ? cached_movers_.gainers : cached_movers_.losers;
-    int count = std::min(rows.size(), qsizetype(6));
+    const auto& rows = showing_gainers_ ? cached_movers_.gainers : cached_movers_.losers;
+    const int count = std::min<int>(rows.size(), kMaxRows);
     for (int i = 0; i < count; ++i) {
         const auto& q = rows[i];
-        table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
-                         QString{}});
-        int row = table_->rowCount() - 1;
-        table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
+        if (auto* c = table_->item(i, 0))
+            c->setText(q.symbol);
+        if (auto* c = table_->item(i, 1))
+            c->setText(QString("$%1").arg(q.price, 0, 'f', 2));
+        if (auto* c = table_->item(i, 2))
+            c->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+        table_->set_cell_color(i, 2, ui::change_color(q.change_pct));
 
-        auto* spark = new ui::InlineSparkline(table_);
-        const auto sit = sparkline_cache_.constFind(q.symbol);
-        if (sit != sparkline_cache_.constEnd())
-            spark->set_points(sit.value());
-        table_->setCellWidget(row, 3, spark);
+        if (i < spark_widgets_.size()) {
+            const auto sit = sparkline_cache_.constFind(q.symbol);
+            if (sit != sparkline_cache_.constEnd())
+                spark_widgets_[i]->set_points(sit.value());
+            else
+                spark_widgets_[i]->clear();
+        }
+        table_->setRowHidden(i, false);
     }
+    for (int i = count; i < kMaxRows; ++i)
+        table_->setRowHidden(i, true);
 }
 
 } // namespace fincept::screens::widgets

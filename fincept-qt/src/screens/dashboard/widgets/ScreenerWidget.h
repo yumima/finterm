@@ -6,7 +6,9 @@
 #include <QHash>
 #include <QLabel>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
+#include <QVector>
 
 namespace fincept::screens::widgets {
 
@@ -44,6 +46,24 @@ class ScreenerWidget : public BaseWidget {
     QComboBox* filter_combo_ = nullptr;
     QVBoxLayout* list_layout_ = nullptr;
     QVector<services::QuoteData> all_quotes_;
+
+    // Persistent row pool (max 20). Built once in build_body() and updated in
+    // place by render_rows() instead of being torn down + recreated. Each slot
+    // holds whatever symbol currently sorts into that rank.
+    struct Row {
+        QWidget* container = nullptr;
+        QLabel* sym = nullptr;
+        QLabel* price = nullptr;
+        QLabel* chg = nullptr;
+        QLabel* vol = nullptr;
+    };
+    QVector<Row> rows_;
+    void style_row(Row& row, bool alt);
+    void build_rows();
+
+    // Collapse the 42 per-symbol callbacks in a refresh cycle into one
+    // rebuild_all_quotes() per cycle.
+    QTimer* coalesce_ = nullptr;
 
     // Widgets needing theme-aware restyling
     QWidget* filter_bar_ = nullptr;

@@ -7,6 +7,7 @@
 #    include "datahub/DataHubMetaTypes.h"
 
 #include <QLabel>
+#include <QTableWidgetItem>
 
 namespace fincept::screens::widgets {
 
@@ -39,8 +40,10 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
                 symbols_ << trimmed;
         }
         // Dynamic symbol set: drop any cached rows for symbols no longer
-        // tracked, then rewire subscriptions to the new set.
+        // tracked, rebuild the persistent table rows for the new set, then
+        // rewire subscriptions.
         row_cache_.clear();
+        rebuild_rows();
         hub_resubscribe();
     });
     irl->addWidget(go_btn_);
@@ -52,6 +55,15 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
     table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 70, 90});
     vl->addWidget(table_);
+
+    // Coalesce: each cycle delivers a quote + a sparkline callback per symbol
+    // (2N). Collapse the burst into one in-place table update.
+    coalesce_ = new QTimer(this);
+    coalesce_->setSingleShot(true);
+    coalesce_->setInterval(16);
+    connect(coalesce_, &QTimer::timeout, this, &WatchlistWidget::render_from_cache);
+
+    rebuild_rows();
 
     connect(this, &BaseWidget::refresh_requested, this, &WatchlistWidget::refresh_data);
 
@@ -115,7 +127,7 @@ void WatchlistWidget::hub_resubscribe() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
-            render_from_cache();
+            coalesce_->start();
         });
         // Surface a quote fetch failure rather than spinning forever. The input
         // bar must survive (the user re-enters symbols there), so instead of
@@ -125,7 +137,11 @@ void WatchlistWidget::hub_resubscribe() {
         hub.subscribe_errors(this, topic, [this](const QString&) {
             set_loading(false);
             if (row_cache_.isEmpty() && table_) {
+                // Replace the persistent rows with a single error row. The
+                // mappings are dropped so a later success rebuilds cleanly.
                 table_->clear_data();
+                row_index_.clear();
+                spark_widgets_.clear();
                 table_->add_row({QStringLiteral("Quotes unavailable"), QString{}, QString{}, QString{}, QString{}});
             }
         });
@@ -133,7 +149,7 @@ void WatchlistWidget::hub_resubscribe() {
             if (!v.canConvert<QVector<double>>())
                 return;
             sparkline_cache_.insert(sym, v.value<QVector<double>>());
-            render_from_cache();
+            coalesce_->start();
         });
     }
     hub_active_ = true;
@@ -149,26 +165,68 @@ void WatchlistWidget::hub_unsubscribe_all() {
     hub_active_ = false;
 }
 
-void WatchlistWidget::render_from_cache() {
+void WatchlistWidget::rebuild_rows() {
+    // Build one persistent row + sparkline per current symbol, in symbols_
+    // order. Symbols without a quote yet show "--" placeholders rather than
+    // being hidden, so the visible rows stay contiguous — interspersed hidden
+    // rows would break the table's alternating-row striping.
     table_->clear_data();
+    row_index_.clear();
+    spark_widgets_.clear();
+
     for (const auto& sym : symbols_) {
-        auto it = row_cache_.constFind(sym);
-        if (it == row_cache_.constEnd())
+        table_->add_row({sym, QStringLiteral("--"), QStringLiteral("--"), QStringLiteral("--"), QString{}});
+        const int row = table_->rowCount() - 1;
+        row_index_.insert(sym, row);
+
+        auto* spark = new ui::InlineSparkline(table_);
+        table_->setCellWidget(row, 4, spark);
+        spark_widgets_.insert(sym, spark);
+    }
+}
+
+void WatchlistWidget::render_from_cache() {
+    if (!table_)
+        return;
+    // The error path may have torn the persistent rows down; rebuild if the
+    // mapping no longer matches the current symbol set.
+    if (row_index_.size() != symbols_.size())
+        rebuild_rows();
+
+    for (const auto& sym : symbols_) {
+        const auto idx_it = row_index_.constFind(sym);
+        if (idx_it == row_index_.constEnd())
             continue;
+        const int row = idx_it.value();
+
+        const auto it = row_cache_.constFind(sym);
+        if (it == row_cache_.constEnd()) {
+            // No quote yet — show the symbol as pending ("--") with neutral
+            // color, keeping the row visible/contiguous (correct striping).
+            if (auto* c = table_->item(row, 1)) c->setText(QStringLiteral("--"));
+            if (auto* c = table_->item(row, 2)) c->setText(QStringLiteral("--"));
+            if (auto* c = table_->item(row, 3)) c->setText(QStringLiteral("--"));
+            table_->set_cell_color(row, 2, ui::colors::TEXT_SECONDARY());
+            table_->set_cell_color(row, 3, ui::colors::TEXT_SECONDARY());
+            continue;
+        }
         const auto& q = it.value();
-        table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
-                         QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
-                         QString{}}); // TREND cell stays empty text-wise; sparkline widget overrides it
-        int row = table_->rowCount() - 1;
+
+        if (auto* c = table_->item(row, 0))
+            c->setText(q.symbol);
+        if (auto* c = table_->item(row, 1))
+            c->setText(QString("$%1").arg(q.price, 0, 'f', 2));
+        if (auto* c = table_->item(row, 2))
+            c->setText(QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2));
+        if (auto* c = table_->item(row, 3))
+            c->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
 
-        auto* spark = new ui::InlineSparkline(table_);
-        const auto sit = sparkline_cache_.constFind(q.symbol);
-        if (sit != sparkline_cache_.constEnd())
+        const auto sit = sparkline_cache_.constFind(sym);
+        auto* spark = spark_widgets_.value(sym, nullptr);
+        if (spark && sit != sparkline_cache_.constEnd())
             spark->set_points(sit.value());
-        table_->setCellWidget(row, 4, spark);
     }
 }
 
