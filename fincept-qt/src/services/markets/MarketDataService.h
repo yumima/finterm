@@ -30,6 +30,16 @@ struct QuoteData {
     double ask = 0;
     double bid_size = 0;
     double ask_size = 0;
+
+    // Lets DataHub skip re-publishing a byte-identical quote (no-change
+    // dirty-check). An unchanged tick (common off-hours / illiquid symbols)
+    // carries the same bytes from the daemon, so member-wise equality holds.
+    // INVARIANT: this is only safe because every published QuoteData is a
+    // freshly-parsed value (QVariant::fromValue deep-copies it) — never an
+    // in-place-mutated, retained instance. Do NOT add operator== to a payload
+    // type whose producer mutates and re-publishes the same instance, or the
+    // dirty-check could wrongly skip a real update.
+    bool operator==(const QuoteData&) const = default;
 };
 
 struct OfficerInfo {

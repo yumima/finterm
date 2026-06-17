@@ -426,10 +426,20 @@ void DataHub::do_publish(const QString& topic, const QVariant& value,
                          std::chrono::milliseconds ttl_override) {
     int coalesce_ms = 0;
     bool defer = false;
+    bool unchanged = false;
     StateTransition pending_state;
     {
         QMutexLocker lock(&mutex_);
         auto& st = state_for(topic);
+        // No-change dirty check: when the new value is identical to the last
+        // published one, still record the publish (so freshness/state stay
+        // correct — a topic that keeps re-publishing the same value is FRESH,
+        // not stale) but skip the subscriber fan-out below. Re-delivering an
+        // identical value only triggers identical re-renders; skipping kills
+        // the per-tick rebuild storm for flat/illiquid topics. Only skips on a
+        // certain-equal QVariant comparison — types without operator== compare
+        // unequal, so they simply never skip (safe, just not optimized).
+        unchanged = st.total_publishes > 0 && value == st.value;
         st.value = value;
         st.last_publish_ms = now_ms();
         st.total_publishes += 1;
@@ -438,19 +448,23 @@ void DataHub::do_publish(const QString& topic, const QVariant& value,
         if (ttl_override.count() > 0) {
             st.policy.ttl_ms = static_cast<int>(ttl_override.count());
         }
-        coalesce_ms = st.policy.coalesce_within_ms;
-        if (coalesce_ms > 0) {
-            st.coalesce_latest = value;
-            if (!st.coalesce_pending) {
-                st.coalesce_pending = true;
-                defer = true;  // we must arm the timer outside the lock
+        if (!unchanged) {
+            coalesce_ms = st.policy.coalesce_within_ms;
+            if (coalesce_ms > 0) {
+                st.coalesce_latest = value;
+                if (!st.coalesce_pending) {
+                    st.coalesce_pending = true;
+                    defer = true;  // we must arm the timer outside the lock
+                }
+                // else: a timer is already armed; it will pick up the new latest value
             }
-            // else: a timer is already armed; it will pick up the new latest value
         }
         pending_state = record_state_transition_locked(st);
     }
     if (pending_state.changed)
         emit topic_state_changed(topic, pending_state.to);
+    if (unchanged)
+        return;  // freshness recorded above; identical value needs no fan-out
     if (coalesce_ms > 0) {
         if (defer) {
             // Arm a one-shot timer. Runs on hub thread (we're already there
