@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QSet>
 #include <QSettings>
 #include <QTimer>
 
@@ -286,33 +287,117 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
 
     summary_ = s;
 
-    // Real SPY YTD return is provided by the script (fetched live from
-    // yfinance with a daily cache). If the script didn't include it (network
-    // failure, yfinance throttled), spy_ytd stays 0 and we skip the alpha
-    // computation rather than ship a fake benchmark.
-    const double spy_ytd  = root.value(QStringLiteral("spy_return_ytd")).toDouble(0.0);
-    const bool   have_spy = qAbs(spy_ytd) > 1e-9;
-
-    for (auto& m : summary_.members) {
-        const bool needs_computation =
-            qAbs(m.portfolio_return_ytd) < 1e-9 && m.trade_count_ytd > 0;
-        if (needs_computation) {
-            const auto p = compute_portfolio(m.id);
-            if (p.est_total_cost > 100.0) {
-                m.portfolio_return_ytd = p.est_total_pnl_pct;
-                if (have_spy) {
-                    m.spy_return_ytd = spy_ytd;
-                    m.alpha_ytd      = m.portfolio_return_ytd - spy_ytd;
-                }
-            }
-        }
-    }
-
+    // member portfolio_return_ytd / alpha_ytd are computed from REAL prices
+    // (fetch_real_prices() below) — never the old fabricated per-sector "gains".
+    // Until that async fetch lands they stay 0 and the UI shows "—".
+    const double spy_ytd  = s.members.isEmpty() ? 0.0 : s.members.first().spy_return_ytd;
     LOG_INFO("PowerTrader", QString("Loaded %1 members, %2 trades (SPY YTD %3)")
                  .arg(s.members.size()).arg(s.recent_trades.size())
-                 .arg(have_spy ? QStringLiteral("%1%").arg(spy_ytd, 0, 'f', 2)
-                               : QStringLiteral("n/a")));
+                 .arg(qAbs(spy_ytd) > 1e-9 ? QStringLiteral("%1%").arg(spy_ytd, 0, 'f', 2)
+                                           : QStringLiteral("n/a")));
     emit data_loaded(summary_);
+
+    // Kick off real-price valuation. Until it lands, returns/values render "—";
+    // when it completes, recompute_member_returns() re-emits with real numbers.
+    fetch_real_prices();
+}
+
+// ── Real-price valuation (member returns) ─────────────────────────────────────
+
+double PowerTraderService::close_on_or_before(const QString& ticker, const QDate& date) const {
+    const auto it = close_history_.constFind(ticker);
+    if (it == close_history_.constEnd() || it->isEmpty())
+        return 0.0;
+    const QMap<QDate, double>& series = it.value();
+    // Latest close on or before `date`. upperBound(date) is the first entry
+    // strictly after date; step back one for on-or-before.
+    auto ub = series.upperBound(date);
+    if (ub == series.constBegin())
+        return 0.0; // no close at/earlier than the trade date
+    --ub;
+    return ub.value();
+}
+
+void PowerTraderService::fetch_real_prices() {
+    // Unique stock/ETF tickers + earliest trade date across all members.
+    QSet<QString> ticker_set;
+    QDate earliest;
+    for (const auto& t : summary_.recent_trades) {
+        if (t.asset_type != AssetType::Stock && t.asset_type != AssetType::ETF)
+            continue;
+        if (t.ticker.isEmpty())
+            continue;
+        ticker_set.insert(t.ticker);
+        if (t.transaction_date.isValid() && (!earliest.isValid() || t.transaction_date < earliest))
+            earliest = t.transaction_date;
+    }
+    if (ticker_set.isEmpty())
+        return;
+
+    QJsonArray syms;
+    for (const auto& s : ticker_set) syms.append(s);
+    const QString start = (earliest.isValid() ? earliest.addDays(-7) : QDate::currentDate().addYears(-2))
+                              .toString(QStringLiteral("yyyy-MM-dd"));
+    const QString end   = QDate::currentDate().addDays(1).toString(QStringLiteral("yyyy-MM-dd"));
+
+    const qint64 epoch = ++price_epoch_;
+    close_history_.clear();
+
+    // A single daemon call fetches the daily close history for every ticker.
+    // The current price is the most recent real close (close_on_or_before(today)),
+    // so we don't need the live-quote action — which is deduped across the app
+    // and would be dropped if another subsystem had one in flight. batch_closes
+    // is PowerTrader-only, so there's no cross-subsystem collision.
+    QPointer<PowerTraderService> self = this;
+    QJsonObject payload;
+    payload[QStringLiteral("symbols")] = syms;
+    payload[QStringLiteral("start")]   = start;
+    payload[QStringLiteral("end")]     = end;
+    python::PythonWorker::instance().submit(
+        QStringLiteral("batch_closes"), payload,
+        [self, epoch](bool ok, QJsonObject result, QString) {
+            if (!self || epoch != self->price_epoch_) return;
+            if (ok) {
+                const QJsonObject closes = result[QStringLiteral("closes")].toObject();
+                for (auto it = closes.constBegin(); it != closes.constEnd(); ++it) {
+                    QMap<QDate, double> series;
+                    for (const auto& pv : it.value().toArray()) {
+                        const auto pair = pv.toArray();
+                        if (pair.size() < 2) continue;
+                        const QDate d = QDate::fromString(pair[0].toString(), QStringLiteral("yyyy-MM-dd"));
+                        const double px = pair[1].toDouble();
+                        if (d.isValid() && px > 0.0)
+                            series.insert(d, px);
+                    }
+                    if (!series.isEmpty())
+                        self->close_history_.insert(it.key(), series);
+                }
+            }
+            self->recompute_member_returns();
+            emit self->data_loaded(self->summary_);
+        },
+        // A multi-ticker, multi-year close download is large on a cold cache —
+        // give it room (it's async/non-blocking and the daemon caches it 1h).
+        60'000);
+}
+
+void PowerTraderService::recompute_member_returns() {
+    for (auto& m : summary_.members) {
+        const auto p = compute_portfolio(m.id);
+        if (p.priced) {
+            m.portfolio_return_ytd = p.est_total_pnl_pct;
+            m.return_priced        = true;
+            // m.spy_return_ytd is the real SPY YTD from the script (same for
+            // all members); alpha only when we have it.
+            m.alpha_ytd = qAbs(m.spy_return_ytd) > 1e-9
+                              ? (m.portfolio_return_ytd - m.spy_return_ytd)
+                              : 0;
+        } else {
+            m.return_priced        = false;
+            m.portfolio_return_ytd = 0;
+            m.alpha_ytd            = 0;
+        }
+    }
 }
 
 // ── Static classification maps ────────────────────────────────────────────────
@@ -386,6 +471,13 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
     QMap<QDate, double> cumulative_nav;  // date → running invested amount
     double running_cost = 0;
 
+    // Real-price valuation accumulators (per ticker), built from the daemon's
+    // trade-date closes. net_shares = Σ (buy $-midpoint / close) − Σ (sell …);
+    // priced_gap marks a ticker whose some trade had no real close, so it can't
+    // be fully valued (rendered "—" rather than guessed).
+    QHash<QString, double> net_shares;
+    QHash<QString, bool>   priced_gap;
+
     for (const auto& t : sorted) {
         if (t.asset_type != AssetType::Stock && t.asset_type != AssetType::ETF)
             continue;
@@ -395,6 +487,15 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
         h.ticker     = t.ticker;
         h.asset_name = t.asset_name;
         h.sector     = sec_map.value(t.ticker, QStringLiteral("Other"));
+
+        // Estimate shares from the real close on the trade date (shares =
+        // $-midpoint / close). No real close for that date → mark the position
+        // unpriced; we never guess a price.
+        const double close = close_on_or_before(t.ticker, t.transaction_date);
+        if (close > 0.0)
+            net_shares[t.ticker] += (t.direction == TradeDirection::Buy ? 1.0 : -1.0) * (midpoint / close);
+        else
+            priced_gap[t.ticker] = true;
 
         if (t.direction == TradeDirection::Buy) {
             h.est_cost_basis += midpoint;
@@ -429,47 +530,66 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
     }
     portfolio.est_total_cost = total_cost;
 
-    // Estimate market value: apply hypothetical 15% gain as a proxy when no live price
-    // (real implementation should call MarketDataService per ticker)
+    // Value each position with REAL prices: market value = estimated net shares
+    // × current price (both from the yfinance daemon). A holding is only valued
+    // when it has a current price, positive net shares, and no missing trade-date
+    // close (priced_gap) — otherwise est_market_value stays 0 and the UI shows
+    // "—". Nothing is fabricated. (Prices arrive async; until then everything is
+    // unpriced and shows "—", then re-emits when fetch_real_prices() completes.)
+    double priced_value = 0, priced_pnl = 0, priced_cost = 0;
     for (auto& h : portfolio.holdings) {
-        // Rough P&L proxy: tech up ~30%, defense up ~15%, energy up ~10% YTD
-        double sector_gain = 0.15;
-        if (h.sector == QStringLiteral("Technology"))  sector_gain = 0.28;
-        else if (h.sector == QStringLiteral("Defense"))sector_gain = 0.17;
-        else if (h.sector == QStringLiteral("Energy"))  sector_gain = 0.09;
-        else if (h.sector == QStringLiteral("Financials")) sector_gain = 0.22;
-        else if (h.sector == QStringLiteral("Healthcare"))  sector_gain = 0.08;
-        else if (h.sector == QStringLiteral("ETF"))          sector_gain = 0.12;
+        h.est_weight = total_cost > 0 ? (h.est_cost_basis / total_cost) * 100.0 : 0;
 
-        h.est_market_value = h.est_cost_basis * (1.0 + sector_gain);
-        h.est_pnl          = h.est_market_value - h.est_cost_basis;
-        h.est_pnl_pct      = sector_gain * 100.0;
-        h.est_weight       = total_cost > 0 ? (h.est_cost_basis / total_cost) * 100.0 : 0;
+        // Current price = the most recent real close we have for this ticker.
+        const double cur = close_on_or_before(h.ticker, QDate::currentDate());
+        const double sh  = net_shares.value(h.ticker, 0.0);
+        const bool   priced = cur > 0.0 && sh > 0.0 && !priced_gap.value(h.ticker, false);
+        if (priced) {
+            h.est_market_value = sh * cur;
+            h.est_pnl          = h.est_market_value - h.est_cost_basis;
+            h.est_pnl_pct      = h.est_cost_basis > 0 ? (h.est_pnl / h.est_cost_basis) * 100.0 : 0;
+            priced_value += h.est_market_value;
+            priced_pnl   += h.est_pnl;
+            priced_cost  += h.est_cost_basis;
+        } else {
+            h.est_market_value = 0;  // unpriced → UI shows "—"
+            h.est_pnl          = 0;
+            h.est_pnl_pct      = 0;
+        }
     }
 
-    // Sort by weight descending
+    // Sort by estimated cost basis (the real disclosure-derived magnitude).
     std::sort(portfolio.holdings.begin(), portfolio.holdings.end(),
               [](const MemberHolding& a, const MemberHolding& b) {
                   return a.est_cost_basis > b.est_cost_basis;
               });
 
-    double total_value = 0;
-    double total_pnl   = 0;
-    for (const auto& h : portfolio.holdings) {
-        total_value += h.est_market_value;
-        total_pnl   += h.est_pnl;
-    }
-    portfolio.est_total_value   = total_value;
-    portfolio.est_total_pnl     = total_pnl;
-    portfolio.est_total_pnl_pct = total_cost > 0 ? (total_pnl / total_cost) * 100.0 : 0;
+    portfolio.est_total_value   = priced_value;
+    portfolio.est_total_pnl     = priced_pnl;
+    portfolio.est_total_pnl_pct = priced_cost > 0 ? (priced_pnl / priced_cost) * 100.0 : 0;
+    portfolio.priced            = priced_cost > 0;  // any holding actually valued?
 
     // Derived stats
     portfolio.net_buyer_90d     = net_buyer_amount(member_id, 90);
     portfolio.avg_signal_score  = avg_signal_score(member_id);
     portfolio.avg_lag_days      = avg_disclosure_lag(member_id);
-    const auto bp               = best_pick(member_id);
-    portfolio.best_pick_ticker  = bp.first;
-    portfolio.best_pick_pnl_pct = bp.second;
+
+    // Best pick = the priced holding with the highest REAL return. Computed
+    // inline (not via best_pick(), which would recurse into compute_portfolio).
+    {
+        QString best_ticker;
+        double  best_pct = 0;
+        bool    have     = false;
+        for (const auto& h : portfolio.holdings) {
+            if (h.est_market_value > 0.0 && (!have || h.est_pnl_pct > best_pct)) {
+                best_pct    = h.est_pnl_pct;
+                best_ticker = h.ticker;
+                have        = true;
+            }
+        }
+        portfolio.best_pick_ticker  = best_ticker;
+        portfolio.best_pick_pnl_pct = best_pct;
+    }
 
     return portfolio;
 }
@@ -562,14 +682,25 @@ QVector<RankedMember> PowerTraderService::ranked_members(RankingDimension dim) c
 
         switch (dim) {
         case RankingDimension::Alpha:
-            r.rank_value = m.alpha_ytd;
-            r.rank_label = (m.alpha_ytd >= 0 ? QStringLiteral("+") : QString())
-                           + QString::number(m.alpha_ytd, 'f', 1) + QStringLiteral("%");
+            // Real alpha when the member's portfolio is priced, else "—".
+            if (m.return_priced) {
+                r.rank_value = m.alpha_ytd;
+                r.rank_label = (m.alpha_ytd >= 0 ? QStringLiteral("+") : QString())
+                               + QString::number(m.alpha_ytd, 'f', 1) + QStringLiteral("%");
+            } else {
+                r.rank_value = 0;
+                r.rank_label = QString(QChar(0x2014));
+            }
             break;
         case RankingDimension::Return:
-            r.rank_value = m.portfolio_return_ytd;
-            r.rank_label = (m.portfolio_return_ytd >= 0 ? QStringLiteral("+") : QString())
-                           + QString::number(m.portfolio_return_ytd, 'f', 1) + QStringLiteral("%");
+            if (m.return_priced) {
+                r.rank_value = m.portfolio_return_ytd;
+                r.rank_label = (m.portfolio_return_ytd >= 0 ? QStringLiteral("+") : QString())
+                               + QString::number(m.portfolio_return_ytd, 'f', 1) + QStringLiteral("%");
+            } else {
+                r.rank_value = 0;
+                r.rank_label = QString(QChar(0x2014));
+            }
             break;
         case RankingDimension::NetWorth: {
             r.rank_value = m.estimated_net_worth;
@@ -654,19 +785,11 @@ double PowerTraderService::avg_disclosure_lag(const QString& mid) const {
 }
 
 QPair<QString, double> PowerTraderService::best_pick(const QString& mid) const {
-    const auto& sec_map = ticker_sector_map();
-    QString best_ticker;
-    double best_pct = 0;
-    for (const auto& t : summary_.recent_trades) {
-        if (t.member_id != mid || t.direction != TradeDirection::Buy) continue;
-        const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
-        double gain = 15;
-        if (sector == QStringLiteral("Technology"))  gain = 28;
-        else if (sector == QStringLiteral("Defense"))gain = 17;
-        else if (sector == QStringLiteral("Financials")) gain = 22;
-        if (gain > best_pct) { best_pct = gain; best_ticker = t.ticker; }
-    }
-    return {best_ticker, best_pct};
+    // Real best pick comes from compute_portfolio's price-based per-holding
+    // returns. (compute_portfolio computes it inline and no longer calls back
+    // here, so this is not recursive.) Empty ticker until prices are available.
+    const auto p = compute_portfolio(mid);
+    return {p.best_pick_ticker, p.best_pick_pnl_pct};
 }
 
 // ── Cabinet data ──────────────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ struct CongressMember {
     double portfolio_return_ytd   = 0; // as percent, e.g. 12.4 = +12.4%
     double spy_return_ytd         = 0;
     double alpha_ytd              = 0; // portfolio_return_ytd - spy_return_ytd
+    bool   return_priced          = false; // true once return/alpha use real prices (else show "—")
     bool   watched                = false;
 };
 
@@ -99,6 +100,7 @@ struct MemberPortfolio {
     double est_total_cost    = 0;
     double est_total_pnl     = 0;
     double est_total_pnl_pct = 0;
+    bool   priced            = false;  // true once any holding was valued with real prices
     // Pre-computed rankings (set by service, 1 = best)
     int rank_alpha     = 0;
     int rank_return    = 0;

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`379d72039`](https://github.com/yumima/finterm/commit/379d72039) Remove the demo portfolio (fabricated holdings/cost-basis)
 - [`5079b8f05`](https://github.com/yumima/finterm/commit/5079b8f05) No fake order-book data: show only real broker bid/ask, never synthesize depth
 - [`7666359fa`](https://github.com/yumima/finterm/commit/7666359fa) Move dashboard portfolio selector to the title bar; fix power-trader rankings drawer dismiss
 - [`12480c00f`](https://github.com/yumima/finterm/commit/12480c00f) Fix symbol search app-wide and wire dashboard portfolio to real data

@@ -223,6 +223,60 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
+def batch_closes(symbols, start_date, end_date):
+    """Daily close history for many tickers over [start_date, end_date] in ONE
+    download. Returns {"closes": {ticker: [[unix_ts, close], ...]}} with real
+    auto-adjusted closes only — tickers/days with no data are omitted (never
+    fabricated). Used to value disclosed congressional trades at the real close
+    on their transaction date.
+    """
+    try:
+        syms = [s for s in (symbols or []) if s]
+        if not syms:
+            return {"closes": {}}
+        import io, contextlib
+        _buf = io.StringIO()
+        with contextlib.redirect_stdout(_buf):
+            data = yf.download(syms, start=start_date, end=end_date, interval="1d",
+                               group_by="ticker", progress=False, threads=True,
+                               auto_adjust=True)
+        single = len(syms) == 1
+
+        def _closes_for(s):
+            # Layouts vary (single vs multi-ticker, ticker on column level 0 or 1).
+            # Mirror the defensive access used elsewhere for grouped downloads.
+            try:
+                if single:
+                    return data["Close"]
+                if isinstance(data.columns, pd.MultiIndex):
+                    if s in data.columns.get_level_values(0):
+                        return data[s]["Close"]
+                    return data.xs(s, axis=1, level=1)["Close"]
+                return data["Close"]
+            except Exception:
+                return None
+
+        out = {}
+        for s in syms:
+            closes = _closes_for(s)
+            if closes is None:
+                continue
+            series = []
+            for idx, val in closes.items():
+                try:
+                    if val is None or pd.isna(val):
+                        continue
+                    # Date as a plain YYYY-MM-DD string — avoids epoch/timezone
+                    # round-trip ambiguity (an off-by-one date in negative-UTC TZs).
+                    series.append([pd.Timestamp(idx).strftime("%Y-%m-%d"), round(float(val), 4)])
+                except (TypeError, ValueError):
+                    continue
+            if series:
+                out[s] = series
+        return {"closes": out}
+    except Exception as e:
+        return {"error": str(e), "closes": {}}
+
 def get_historical_price(symbol, target_date):
     """Fetch closing price for a specific date
 
@@ -1870,6 +1924,9 @@ _CACHE_TTL = {
     "multiple_ratios": 600, "ipo_extras": 600, "earnings_dates": 600,
     # historical / news / search — medium
     "historical_period": 120, "news": 120, "search": 300,
+    # batched trade-date close history (power-trader real returns) — long: past
+    # daily closes don't change, so a 1h TTL avoids re-downloading wide ranges.
+    "batch_closes": 3600,
     # static SEC filing — very long
     "parse_s1": 3600,
 }
@@ -1997,6 +2054,9 @@ def _daemon_dispatch_inner(action, payload):
         p = payload or {}
         return get_historical_period(
             p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"))
+    if action == "batch_closes":
+        p = payload or {}
+        return batch_closes(p.get("symbols") or [], p.get("start"), p.get("end"))
     if action == "quote":
         return get_quote((payload or {}).get("symbol"))
     if action == "quote_orderbook":

@@ -2,7 +2,10 @@
 #pragma once
 #include "screens/power_trader/PowerTraderTypes.h"
 
+#include <QDate>
+#include <QHash>
 #include <QJsonObject>
+#include <QMap>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -108,6 +111,22 @@ class PowerTraderService : public QObject {
     void on_daemon_response(bool ok, const QJsonObject& result, const QString& error);
     void parse_summary(const QJsonObject& root);
     void parse_cabinet(const QJsonObject& root);
+
+    // ── Real pricing for member returns ───────────────────────────────────────
+    // Disclosures report only dollar ranges + dates (no shares/prices), so real
+    // P&L is derived by valuing each trade at the real close on its transaction
+    // date (shares = $-midpoint / close) and the current price. Fetched async
+    // from the yfinance daemon after parse_summary; re-emits data_loaded when
+    // ready. Missing prices → that holding/member stays "unpriced" (UI shows
+    // "—"); nothing is ever fabricated.
+    void   fetch_real_prices();
+    void   recompute_member_returns();
+    /// Real close on or before @p date for @p ticker, or 0 if unavailable.
+    /// Current price is just close_on_or_before(today) — the latest real close.
+    double close_on_or_before(const QString& ticker, const QDate& date) const;
+
+    QHash<QString, QMap<QDate, double>>   close_history_;   // ticker → date→close
+    qint64 price_epoch_ = 0;  // bumps each load so stale price callbacks drop
 
     PowerTraderSummary summary_;
     CabinetSummary     cabinet_;

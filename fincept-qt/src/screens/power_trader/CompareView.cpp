@@ -266,17 +266,25 @@ QWidget* CompareView::build_card(int slot, const QString& member_id) {
     tg->setHorizontalSpacing(6);
     tg->setVerticalSpacing(6);
 
-    const char* alpha_color = m->alpha_ytd >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    const char* ret_color   = m->portfolio_return_ytd >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    // PORTFOLIO / YTD RETURN / ALPHA are real only when the portfolio is priced
+    // (live + trade-date closes available); otherwise "—", never fabricated.
+    // NET WORTH is disclosure-derived and always real.
+    const QString kNA    = QString::fromUtf8("\xe2\x80\x94");
+    const bool    priced = portfolio.priced;
+    const char* alpha_color = (priced && m->alpha_ytd >= 0) ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    const char* ret_color   = (priced && m->portfolio_return_ytd >= 0) ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
 
     tg->addWidget(make_tile(tiles, QStringLiteral("NET WORTH"),
                             fmt_dollar(m->estimated_net_worth), ui::colors::AMBER), 0, 0);
     tg->addWidget(make_tile(tiles, QStringLiteral("PORTFOLIO"),
-                            fmt_dollar(portfolio.est_total_value), ui::colors::TEXT_PRIMARY), 0, 1);
+                            priced ? fmt_dollar(portfolio.est_total_value) : kNA,
+                            ui::colors::TEXT_PRIMARY), 0, 1);
     tg->addWidget(make_tile(tiles, QStringLiteral("YTD RETURN"),
-                            fmt_pct(m->portfolio_return_ytd), ret_color), 1, 0);
+                            priced ? fmt_pct(m->portfolio_return_ytd) : kNA,
+                            priced ? ret_color : ui::colors::TEXT_SECONDARY), 1, 0);
     tg->addWidget(make_tile(tiles, QStringLiteral("ALPHA vs SPY"),
-                            fmt_pct(m->alpha_ytd), alpha_color), 1, 1);
+                            priced ? fmt_pct(m->alpha_ytd) : kNA,
+                            priced ? alpha_color : ui::colors::TEXT_SECONDARY), 1, 1);
     col->addWidget(tiles);
 
     // Stats line
@@ -314,10 +322,12 @@ QWidget* CompareView::build_card(int slot, const QString& member_id) {
                              .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
     col->addWidget(hdr_h);
 
+    // Sort by estimated cost basis (always real); est_market_value is 0 for
+    // unpriced positions and would sink them spuriously.
     auto sorted_holdings = portfolio.holdings;
     std::sort(sorted_holdings.begin(), sorted_holdings.end(),
               [](const power_trader::MemberHolding& a, const power_trader::MemberHolding& b) {
-                  return a.est_market_value > b.est_market_value;
+                  return a.est_cost_basis > b.est_cost_basis;
               });
     const int n_h = static_cast<int>(std::min<qsizetype>(5, sorted_holdings.size()));
     if (n_h == 0) {
@@ -327,7 +337,13 @@ QWidget* CompareView::build_card(int slot, const QString& member_id) {
     }
     for (int i = 0; i < n_h; ++i) {
         const auto& h = sorted_holdings[i];
-        const char* pnl_color = h.est_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        // Real value/return when priced, else "—".
+        const bool    hp        = h.est_market_value > 0.0;
+        const char*   pnl_color = (hp && h.est_pnl_pct >= 0) ? ui::colors::POSITIVE
+                                  : hp                        ? ui::colors::NEGATIVE
+                                                              : ui::colors::TEXT_SECONDARY;
+        const QString val_str   = hp ? fmt_dollar(h.est_market_value) : QString::fromUtf8("\xe2\x80\x94");
+        const QString pct_str   = hp ? fmt_pct(h.est_pnl_pct)         : QString::fromUtf8("\xe2\x80\x94");
         auto* row = new QLabel(card);
         row->setTextFormat(Qt::RichText);
         row->setText(QString(
@@ -335,8 +351,8 @@ QWidget* CompareView::build_card(int slot, const QString& member_id) {
             "<span style='color:%3;font-size:11px;'>%4</span> "
             "<span style='color:%5;font-size:11px;'>%6</span>")
             .arg(ui::colors::CYAN(), h.ticker.leftJustified(6, ' ').toHtmlEscaped(),
-                 ui::colors::TEXT_SECONDARY(), fmt_dollar(h.est_market_value),
-                 pnl_color, fmt_pct(h.est_pnl_pct)));
+                 ui::colors::TEXT_SECONDARY(), val_str,
+                 pnl_color, pct_str));
         col->addWidget(row);
     }
 

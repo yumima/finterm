@@ -1230,31 +1230,34 @@ void MemberProfilePanel::populate_header(const power_trader::CongressMember& m,
 
 void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember& m,
                                               const power_trader::MemberPortfolio& p) {
-    // Tile 1 — EST. PORTFOLIO VALUE
-    tile_portfolio_val_->setText(fmt_dollar(p.est_total_value));
-    tile_portfolio_val_->setStyleSheet(
-        QString("QLabel { color:%1; font-size:18px; font-weight:700;"
-                " font-family:Consolas,monospace; background:transparent; }")
-            .arg(ui::colors::AMBER()));
+    // Tiles 1-3 (EST. PORTFOLIO VALUE / YTD RETURN / ALPHA vs SPY) use real
+    // market-price figures when the portfolio is priced, else "—" (never a
+    // fabricated number). Pricing arrives async; the panel re-renders when it
+    // lands. The committee-overlap tile below is always real.
+    const QString kNA = QString(QChar(0x2014)); // em-dash
+    auto tile_style = [](const char* color) {
+        return QString("QLabel { color:%1; font-size:18px; font-weight:700;"
+                       " font-family:Consolas,monospace; background:transparent; }")
+            .arg(QString::fromUtf8(color));
+    };
+    if (p.priced) {
+        tile_portfolio_val_->setText(fmt_dollar(p.est_total_value));
+        tile_portfolio_val_->setStyleSheet(tile_style(ui::colors::AMBER));
 
-    // Tile 2 — YTD RETURN
-    {
-        const bool pos = m.portfolio_return_ytd >= 0;
+        const bool ret_pos = m.portfolio_return_ytd >= 0;
         tile_ytd_return_->setText(fmt_pct(m.portfolio_return_ytd));
-        tile_ytd_return_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
-                    " font-family:Consolas,monospace; background:transparent; }")
-                .arg(pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
-    }
+        tile_ytd_return_->setStyleSheet(tile_style(ret_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
 
-    // Tile 3 — ALPHA vs SPY
-    {
-        const bool pos = m.alpha_ytd >= 0;
+        const bool a_pos = m.alpha_ytd >= 0;
         tile_alpha_->setText(fmt_pct(m.alpha_ytd));
-        tile_alpha_->setStyleSheet(
-            QString("QLabel { color:%1; font-size:18px; font-weight:700;"
-                    " font-family:Consolas,monospace; background:transparent; }")
-                .arg(pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+        tile_alpha_->setStyleSheet(tile_style(a_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
+    } else {
+        tile_portfolio_val_->setText(kNA);
+        tile_portfolio_val_->setStyleSheet(tile_style(ui::colors::TEXT_SECONDARY));
+        tile_ytd_return_->setText(kNA);
+        tile_ytd_return_->setStyleSheet(tile_style(ui::colors::TEXT_SECONDARY));
+        tile_alpha_->setText(kNA);
+        tile_alpha_->setStyleSheet(tile_style(ui::colors::TEXT_SECONDARY));
     }
 
     // Tile 4 — COMMITTEE TRADES
@@ -1450,25 +1453,26 @@ void MemberProfilePanel::populate_holdings(const power_trader::MemberPortfolio& 
         set_item(4, fmt_dollar(h.est_cost_basis),
                  ui::colors::TEXT_SECONDARY, Qt::AlignRight | Qt::AlignVCenter);
 
-        // EST. VALUE (col 5)
-        set_item(5, fmt_dollar(h.est_market_value),
-                 ui::colors::AMBER, Qt::AlignRight | Qt::AlignVCenter);
-
-        // P&L (col 6)
-        {
+        // EST. VALUE / P&L / P&L% (cols 5-7): real market-price figures when the
+        // position is priced (live + trade-date closes available), else "—". The
+        // value is never fabricated — a missing price shows "—", not a guess.
+        const QString kNA = QString(QChar(0x2014)); // em-dash
+        const bool    hp  = h.est_market_value > 0.0;
+        set_item(5, hp ? fmt_dollar(h.est_market_value) : kNA,
+                 hp ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY,
+                 Qt::AlignRight | Qt::AlignVCenter);
+        if (hp) {
             const bool pos = h.est_pnl >= 0;
-            const QString pnl_str = (pos ? "+" : "") + fmt_dollar(h.est_pnl);
-            set_item(6, pnl_str,
+            set_item(6, (pos ? "+" : "") + fmt_dollar(h.est_pnl),
                      pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
                      Qt::AlignRight | Qt::AlignVCenter);
-        }
-
-        // P&L% (col 7)
-        {
-            const bool pos = h.est_pnl_pct >= 0;
+            const bool pos_pct = h.est_pnl_pct >= 0;
             set_item(7, fmt_pct(h.est_pnl_pct),
-                     pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
+                     pos_pct ? ui::colors::POSITIVE : ui::colors::NEGATIVE,
                      Qt::AlignRight | Qt::AlignVCenter);
+        } else {
+            set_item(6, kNA, ui::colors::TEXT_SECONDARY, Qt::AlignRight | Qt::AlignVCenter);
+            set_item(7, kNA, ui::colors::TEXT_SECONDARY, Qt::AlignRight | Qt::AlignVCenter);
         }
 
         // WT% (col 8)

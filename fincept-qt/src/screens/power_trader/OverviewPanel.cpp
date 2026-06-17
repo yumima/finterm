@@ -375,16 +375,21 @@ void OverviewPanel::populate_stats() {
         total += s.total_est_amount;
     stat_disclosed_->setText(fmt_amount(total));
 
-    // BEAT SPY — members with alpha_ytd > 0
-    int beat = 0;
-    for (const auto& m : members)
+    // BEAT SPY — share of members with real, priced positive alpha. Only counts
+    // members whose returns are actually priced (return_priced); unpriced members
+    // have no real alpha and are excluded from both numerator and denominator.
+    int beat = 0, priced = 0;
+    for (const auto& m : members) {
+        if (!m.return_priced) continue;
+        ++priced;
         if (m.alpha_ytd > 0) ++beat;
-    if (!members.isEmpty()) {
-        const double pct = beat * 100.0 / members.size();
+    }
+    if (priced > 0) {
+        const double pct = beat * 100.0 / priced;
         stat_beat_spy_->setText(
-            QString("%1% (%2/%3)").arg(pct, 0, 'f', 0).arg(beat).arg(members.size()));
+            QString("%1% (%2/%3)").arg(pct, 0, 'f', 0).arg(beat).arg(priced));
     } else {
-        stat_beat_spy_->setText(QStringLiteral("—"));
+        stat_beat_spy_->setText(QStringLiteral("—")); // no priced members yet
     }
 
     // MOST ACTIVE CMTE — committee appearing most in signals, or fallback to members
@@ -434,8 +439,10 @@ void OverviewPanel::populate_alpha_chart() {
         delete item;
     }
 
-    // Sort members by alpha_ytd descending, take top 8
-    QVector<power_trader::CongressMember> sorted = members_cache_;
+    // Only members with real, priced alpha appear here — never unpriced 0s.
+    QVector<power_trader::CongressMember> sorted;
+    for (const auto& m : members_cache_)
+        if (m.return_priced) sorted.append(m);
     std::stable_sort(sorted.begin(), sorted.end(),
                      [](const power_trader::CongressMember& a,
                         const power_trader::CongressMember& b) {
@@ -445,7 +452,8 @@ void OverviewPanel::populate_alpha_chart() {
         sorted.resize(8);
 
     if (sorted.isEmpty()) {
-        auto* empty = new QLabel(QStringLiteral("No data"), alpha_chart_);
+        // No priced members yet (prices still loading or unavailable).
+        auto* empty = new QLabel(QStringLiteral("Awaiting price data…"), alpha_chart_);
         empty->setStyleSheet(
             QString("QLabel { color:%1; font-size:12px; }").arg(ui::colors::TEXT_SECONDARY()));
         layout->addWidget(empty);
