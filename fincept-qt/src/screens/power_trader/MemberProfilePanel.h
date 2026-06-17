@@ -4,9 +4,11 @@
 
 #include <QDate>
 #include <QLabel>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QTableWidget>
+#include <QTextEdit>
 #include <QVector>
 #include <QWidget>
 
@@ -92,6 +94,13 @@ private:
     void build_committees_section(QWidget* parent, QVBoxLayout* vl);
     void build_sector_section(QWidget* parent, QVBoxLayout* vl);
     void build_insights_section(QWidget* parent, QVBoxLayout* vl);
+    void build_explain_section(QWidget* parent, QVBoxLayout* vl);
+
+    // ── "Explain this trader" — local-AI streaming explanation ─────────────────
+    /// Click handler: gathers REAL portfolio/trade/insider data for the current
+    /// member and streams a plain-language explanation from the local LLM
+    /// (LlmService → hearth). Lifetime-safe + epoch-guarded against re-selection.
+    void start_explain_stream();
 
     void populate_header(const power_trader::CongressMember& m,
                          const power_trader::MemberPortfolio& p);
@@ -171,8 +180,20 @@ private:
     // ── Section 9: trader insights ────────────────────────────────────────────
     QWidget* insights_container_  = nullptr;
 
+    // ── Section 10: AI explanation (local LLM stream) ─────────────────────────
+    QPushButton* explain_btn_     = nullptr;
+    QTextEdit*   explain_display_ = nullptr;
+
     // ── State ─────────────────────────────────────────────────────────────────
     power_trader::CongressMember current_member_;
+
+    // ── "Explain this trader" stream state ─────────────────────────────────────
+    // explain_in_flight_ guards against double-launch; explain_epoch_ is bumped
+    // on every member (re)selection so a stream started for an old member is
+    // ignored once the user navigates away (the callback compares its captured
+    // epoch against the live one). Both are touched only on the UI thread.
+    bool explain_in_flight_ = false;
+    quint64 explain_epoch_  = 0;
 };
 
 } // namespace fincept::screens

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`38c6da51e`](https://github.com/yumima/finterm/commit/38c6da51e) Portfolio AI tools + exposure panel: use the real multi-portfolio schema
 - [`d99b08809`](https://github.com/yumima/finterm/commit/d99b08809) Make the configured font apply to widgets that hardcode 'Consolas'
 - [`658293129`](https://github.com/yumima/finterm/commit/658293129) Shared formatting layer: unify money/percent/compact/sentinel across screens
 - [`c85f9326a`](https://github.com/yumima/finterm/commit/c85f9326a) Equity Research: clear TODAY'S TRADING on symbol switch (no stale quote)
