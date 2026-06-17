@@ -7,7 +7,7 @@
 
 # Inherits ${_fincept_qt_match} from the parent CMakeLists (exact pin under
 # -DFINCEPT_QT_STRICT=ON, else a major.minor floor that accepts system Qt).
-find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Test)
+find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Gui Test)
 
 enable_testing()
 
@@ -26,6 +26,7 @@ target_include_directories(test_datahub PRIVATE
 
 target_link_libraries(test_datahub PRIVATE
     Qt6::Core
+    Qt6::Gui   # DataHub.cpp includes <QGuiApplication>
     Qt6::Test
 )
 
