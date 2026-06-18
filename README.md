@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f7a049fad`](https://github.com/yumima/finterm/commit/f7a049fad) AI Forecast: fix stuck "Loading…"/"Thinking…" — no-data tickers + slow local model
 - [`e90b7617d`](https://github.com/yumima/finterm/commit/e90b7617d) Equity Research: AI Forecast tab with an immutable prediction track record
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

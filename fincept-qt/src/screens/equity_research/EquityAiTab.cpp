@@ -74,6 +74,10 @@ QString prose_only(const QString& text_in) {
     QString text = text_in;
     text.remove(QRegularExpression(QStringLiteral("<think>.*?</think>"),
                                    QRegularExpression::DotMatchesEverythingOption));
+    // Also drop a dangling/unclosed <think> (truncated stream) so the raw trace
+    // never leaks into the shown or persisted prose.
+    text.remove(QRegularExpression(QStringLiteral("<think>.*"),
+                                   QRegularExpression::DotMatchesEverythingOption));
     int cut = text.lastIndexOf(QStringLiteral("```json"));
     if (cut < 0) {
         const QJsonObject o = extract_forecast_json(text);
@@ -319,6 +323,12 @@ void EquityAiTab::set_symbol(const QString& symbol) {
     info_ready_ = false;
     analysis_populated_ = false;
     data_unavailable_ = false;
+    // Abandon any in-flight forecast for the OLD symbol: forecast_epoch_ is
+    // bumped below so its streamed completion is ignored, but that early-return
+    // skips the forecasting_/button reset — do it here, or the tab would be
+    // stuck "forecasting" forever (pane frozen, Run disabled) after a switch.
+    forecasting_ = false;
+    if (run_btn_) run_btn_->setEnabled(true);
     if (think_timer_) think_timer_->stop();
     forecast_epoch_++;   // abandon any in-flight stream for the old symbol
     candles_.clear();
