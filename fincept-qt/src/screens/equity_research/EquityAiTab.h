@@ -93,6 +93,9 @@ class EquityAiTab : public QWidget {
     QVector<QPair<QString, QString>> chat_turns_;  // (role, content) — full chat history
     bool    chat_streaming_ = false;
     quint64 chat_epoch_ = 0;
+    QTimer* chat_spinner_   = nullptr;  // animates the "thinking" bubble until the first token
+    int     chat_spin_frame_ = 0;
+    int     chat_spin_idx_  = -1;       // which bubble the spinner animates (-1 = none)
 };
 
 } // namespace fincept::screens

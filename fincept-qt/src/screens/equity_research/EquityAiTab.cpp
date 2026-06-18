@@ -464,6 +464,8 @@ QWidget* EquityAiTab::build_chat_pane() {
 }
 
 void EquityAiTab::reset_chat() {
+    if (chat_spinner_) chat_spinner_->stop();
+    chat_spin_idx_ = -1;
     chat_turns_.clear();
     ++chat_epoch_;
     chat_streaming_ = false;
@@ -512,9 +514,29 @@ void EquityAiTab::send_chat() {
     chat_streaming_ = true;
     chat_send_->setEnabled(false);
     chat_turns_.append({QStringLiteral("user"), q});
-    chat_turns_.append({QStringLiteral("assistant"), QStringLiteral("…")});
+    chat_turns_.append({QStringLiteral("assistant"), QStringLiteral("⠋ thinking…")});
     const int reply_idx = chat_turns_.size() - 1;
     render_chat();
+
+    // Animate the reply bubble until the first token lands, so a slow model
+    // reads as "thinking", not hung.
+    chat_spin_idx_ = reply_idx;
+    chat_spin_frame_ = 0;
+    if (!chat_spinner_) {
+        chat_spinner_ = new QTimer(this);
+        connect(chat_spinner_, &QTimer::timeout, this, [this]() {
+            if (chat_spin_idx_ < 0 || chat_spin_idx_ >= chat_turns_.size()) {
+                chat_spinner_->stop();
+                return;
+            }
+            static const char* kFrames[] = {"⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"};
+            chat_spin_frame_ = (chat_spin_frame_ + 1) % 10;
+            chat_turns_[chat_spin_idx_].second =
+                QString::fromUtf8(kFrames[chat_spin_frame_]) + QStringLiteral(" thinking…");
+            render_chat();
+        });
+    }
+    chat_spinner_->start(110);
 
     // Stock-scoped system context + the prior conversation.
     std::vector<fincept::ai_chat::ConversationMessage> history;
@@ -546,17 +568,21 @@ void EquityAiTab::send_chat() {
             const QString snap = *acc;
             QMetaObject::invokeMethod(self.data(), [self, snap, is_done, epoch, reply_idx]() {
                 if (!self || epoch != self->chat_epoch_) return;
-                if (reply_idx < self->chat_turns_.size()) {
-                    const QString shown = prose_only(snap);
-                    self->chat_turns_[reply_idx].second = shown.isEmpty() ? QStringLiteral("…") : shown;
+                const QString shown = prose_only(snap);
+                if (!shown.isEmpty() && reply_idx < self->chat_turns_.size()) {
+                    // First real content → stop the spinner and show the answer.
+                    if (self->chat_spinner_) self->chat_spinner_->stop();
+                    self->chat_spin_idx_ = -1;
+                    self->chat_turns_[reply_idx].second = shown;
                     self->render_chat();
                 }
                 if (is_done) {
                     self->chat_streaming_ = false;
+                    if (self->chat_spinner_) self->chat_spinner_->stop();
+                    self->chat_spin_idx_ = -1;
                     if (self->chat_send_) self->chat_send_->setEnabled(true);
-                    // Never leave an empty bubble if the model returned nothing.
-                    if (reply_idx < self->chat_turns_.size() &&
-                        prose_only(snap).isEmpty()) {
+                    // Never leave a spinning/empty bubble if the model returned nothing.
+                    if (reply_idx < self->chat_turns_.size() && shown.isEmpty()) {
                         self->chat_turns_[reply_idx].second =
                             QStringLiteral("(No answer came back — try rephrasing the question.)");
                         self->render_chat();
