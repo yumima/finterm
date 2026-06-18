@@ -520,11 +520,13 @@ void EquityAiTab::send_chat() {
     std::vector<fincept::ai_chat::ConversationMessage> history;
     history.push_back({QStringLiteral("system"), QString(
         "You are a sharp equity analyst answering questions about ONE specific stock for a "
-        "retail investor. Ground every answer in the DATA block below (today's real figures "
-        "for this ticker); you may also call tools to pull fresh news, peers, financials or "
-        "filings for THIS company. Stay on this stock. Be concrete and balanced, quantify "
-        "when you can, and flag the key risk. This is informational, not financial advice. "
-        "Reply in plain prose (no markdown).\n\n<<<DATA>>>\n%1\n<<<END>>>").arg(stock_data_block())});
+        "retail investor. Answer from the DATA block below (today's real figures for this "
+        "ticker) and the conversation. If a figure or fact is NOT in the data, say plainly "
+        "that you don't have it — never guess or invent numbers, and don't claim you'll "
+        "go fetch it. (Note: a private / pre-IPO company often has no public revenue or "
+        "fundamentals — say so.) Stay on this stock. Be concrete and balanced, quantify "
+        "when you can, and flag the key risk. Informational, not financial advice. Reply "
+        "in plain prose, no markdown.\n\n<<<DATA>>>\n%1\n<<<END>>>").arg(stock_data_block())});
     for (int i = 0; i < reply_idx; ++i)  // include the just-added user turn, skip the placeholder
         history.push_back({chat_turns_[i].first, chat_turns_[i].second});
 
@@ -552,10 +554,17 @@ void EquityAiTab::send_chat() {
                 if (is_done) {
                     self->chat_streaming_ = false;
                     if (self->chat_send_) self->chat_send_->setEnabled(true);
+                    // Never leave an empty bubble if the model returned nothing.
+                    if (reply_idx < self->chat_turns_.size() &&
+                        prose_only(snap).isEmpty()) {
+                        self->chat_turns_[reply_idx].second =
+                            QStringLiteral("(No answer came back — try rephrasing the question.)");
+                        self->render_chat();
+                    }
                 }
             }, Qt::QueuedConnection);
         },
-        /*use_tools=*/true, persona);
+        /*use_tools=*/false, persona);
 }
 
 void EquityAiTab::maybe_auto_forecast() {
@@ -594,8 +603,26 @@ QString EquityAiTab::stock_data_block() const {
         if (!info_.sector.isEmpty())       L << QString("Sector: %1 / %2").arg(info_.sector, info_.industry);
         if (info_.market_cap > 0)          L << QString("Market cap: %1").arg(fmt::format_money(info_.market_cap, "USD", true));
         if (info_.pe_ratio > 0)            L << QString("P/E: %1 (fwd %2)").arg(info_.pe_ratio, 0, 'f', 1).arg(info_.forward_pe, 0, 'f', 1);
-        if (info_.profit_margins != 0)     L << QString("Profit margin: %1%").arg(info_.profit_margins * 100, 0, 'f', 1);
-        if (info_.roe != 0)                L << QString("ROE: %1%").arg(info_.roe * 100, 0, 'f', 1);
+        if (info_.total_revenue > 0)       L << QString("Revenue (ttm): %1%2")
+                                                  .arg(fmt::format_money(info_.total_revenue, "USD", true),
+                                                       info_.revenue_growth != 0
+                                                           ? QString(", YoY growth %1%").arg(info_.revenue_growth * 100, 0, 'f', 1)
+                                                           : QString());
+        if (info_.profit_margins != 0)     L << QString("Margins — gross %1%, operating %2%, net %3%")
+                                                  .arg(info_.gross_margins * 100, 0, 'f', 1)
+                                                  .arg(info_.operating_margins * 100, 0, 'f', 1)
+                                                  .arg(info_.profit_margins * 100, 0, 'f', 1);
+        if (info_.roe != 0)                L << QString("ROE: %1%  ROA: %2%").arg(info_.roe * 100, 0, 'f', 1).arg(info_.roa * 100, 0, 'f', 1);
+        if (info_.free_cashflow != 0)      L << QString("Free cash flow: %1").arg(fmt::format_money(info_.free_cashflow, "USD", true));
+        if (info_.total_cash != 0 || info_.total_debt != 0)
+            L << QString("Cash / debt: %1 / %2").arg(fmt::format_money(info_.total_cash, "USD", true),
+                                                     fmt::format_money(info_.total_debt, "USD", true));
+        if (info_.ev_to_ebitda != 0)       L << QString("EV/EBITDA: %1  P/B: %2  PEG: %3")
+                                                  .arg(info_.ev_to_ebitda, 0, 'f', 1).arg(info_.price_to_book, 0, 'f', 1).arg(info_.peg_ratio, 0, 'f', 1);
+        if (info_.beta != 0)               L << QString("Beta: %1").arg(info_.beta, 0, 'f', 2);
+        if (info_.dividend_yield > 0)      L << QString("Dividend yield: %1%").arg(info_.dividend_yield * 100, 0, 'f', 2);
+        if (info_.target_mean > 0)         L << QString("Analyst price target: mean %1 (range %2 – %3)")
+                                                  .arg(fmt::format_money(info_.target_mean), fmt::format_money(info_.target_low), fmt::format_money(info_.target_high));
     }
     L << QString("Current price: %1").arg(fmt::format_money(price));
     L << QString("52-week range: %1 – %2").arg(fmt::format_money(lo), fmt::format_money(hi));

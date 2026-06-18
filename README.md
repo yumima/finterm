@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`6e7431270`](https://github.com/yumima/finterm/commit/6e7431270) Equity Research AI: stock-scoped chat pane beside the analysis (resizable)
 - [`01a879dfb`](https://github.com/yumima/finterm/commit/01a879dfb) AI Forecast: fix forecasting_ leak on symbol switch + strip dangling <think>
 - [`f7a049fad`](https://github.com/yumima/finterm/commit/f7a049fad) AI Forecast: fix stuck "Loading…"/"Thinking…" — no-data tickers + slow local model
 - [`e90b7617d`](https://github.com/yumima/finterm/commit/e90b7617d) Equity Research: AI Forecast tab with an immutable prediction track record
