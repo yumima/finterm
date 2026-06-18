@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3e9c49edf`](https://github.com/yumima/finterm/commit/3e9c49edf) ER AI: chart legend + hover, chat read-aloud + hands-free voice, warmer TTS
 - [`ec6084f3c`](https://github.com/yumima/finterm/commit/ec6084f3c) ER AI chat: animated "thinking" spinner instead of a static "…"
 - [`ab3437595`](https://github.com/yumima/finterm/commit/ab3437595) ER AI chat: fix hang on tool calls — answer from richer data, not live tools
 - [`6e7431270`](https://github.com/yumima/finterm/commit/6e7431270) Equity Research AI: stock-scoped chat pane beside the analysis (resizable)

@@ -192,6 +192,17 @@ void PredictionChart::paintEvent(QPaintEvent*) {
     p.setPen(QPen(QColor(colors::TEXT_SECONDARY()), 1.6));
     p.drawPath(path);
 
+    // ── "Now" divider: actual price ends here; anything to the RIGHT is a
+    //    future forecast, anything to the LEFT overlaps real price history. ─────
+    {
+        const double nx = X(candles_.last().timestamp);
+        p.setPen(QPen(QColor(colors::TEXT_TERTIARY()), 1, Qt::DashLine));
+        p.drawLine(QPointF(nx, area.top()), QPointF(nx, area.bottom()));
+        p.setPen(QColor(colors::TEXT_TERTIARY()));
+        p.setFont(QFont(QStringLiteral("Consolas"), 8));
+        p.drawText(QPointF(nx - 30, area.bottom() + 14), QStringLiteral("today"));
+    }
+
     // ── Predicted segments: made-on → predicted-target ────────────────────────
     for (const auto& pr : preds_) {
         const qint64 t0 = ymd_to_secs(pr.created_at), t1 = ymd_to_secs(pr.resolve_date);
@@ -206,11 +217,15 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         p.drawLine(a, b);
         p.setBrush(QColor(col));
         p.drawEllipse(b, 3.0, 3.0);
-        // For a resolved prediction, mark where the stock ACTUALLY landed.
+        // For a resolved prediction, draw the ERROR BAR: a dotted line from the
+        // predicted target to where the stock ACTUALLY landed — the gap is the
+        // deviation (longer = bigger miss).
         if (pr.resolved && pr.price_at_resolve > 0) {
+            const QPointF r(X(t1), Y(pr.price_at_resolve));
+            p.setPen(QPen(QColor(col), 1, Qt::DotLine));
+            p.drawLine(b, r);
             p.setBrush(Qt::NoBrush);
             p.setPen(QPen(QColor(colors::TEXT_PRIMARY()), 1.2));
-            const QPointF r(X(t1), Y(pr.price_at_resolve));
             p.drawEllipse(r, 3.2, 3.2);
         }
     }
@@ -995,13 +1010,21 @@ void EquityAiTab::refresh_track_record() {
     if (current_symbol_.isEmpty()) return;
     const QVector<AiPrediction> preds = AiPredictionRepository::instance().for_ticker(current_symbol_);
 
-    // Hit rate over resolved predictions.
+    // Accuracy over resolved predictions: direction hit-rate (did it call up/down
+    // right) AND magnitude error (how far the predicted % move was from reality).
     int resolved = 0, correct = 0;
-    for (const auto& p : preds) if (p.resolved) { ++resolved; if (p.correct) ++correct; }
+    double err_sum = 0.0;
+    for (const auto& p : preds) if (p.resolved) {
+        ++resolved;
+        if (p.correct) ++correct;
+        err_sum += std::abs(p.predicted_pct - p.actual_pct);
+    }
     accuracy_lbl_->setText(resolved == 0
         ? QStringLiteral("No resolved forecasts yet")
-        : QString("Hit rate: %1%  (%2/%3 resolved)")
-              .arg(qRound(100.0 * correct / resolved)).arg(correct).arg(resolved));
+        : QString("Direction %1% right  ·  avg miss %2pp  ·  %3 resolved")
+              .arg(qRound(100.0 * correct / resolved))
+              .arg(err_sum / resolved, 0, 'f', 1)
+              .arg(resolved));
 
     if (chart_) chart_->set_data(candles_, preds);
 
@@ -1027,7 +1050,11 @@ void EquityAiTab::refresh_track_record() {
         cell(r, 5, p.resolved ? pct_str(p.actual_pct) : fmt::placeholder(),
              p.resolved ? (p.actual_pct >= 0 ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
              Qt::AlignRight | Qt::AlignVCenter);
-        cell(r, 6, p.resolved ? (p.correct ? "✓ hit" : "✗ miss") : "pending",
+        // Result = direction hit/miss + the magnitude error (|predicted − actual| move).
+        cell(r, 6, p.resolved
+                       ? QString("%1 %2pp").arg(p.correct ? QStringLiteral("✓") : QStringLiteral("✗"))
+                             .arg(std::abs(p.predicted_pct - p.actual_pct), 0, 'f', 1)
+                       : QStringLiteral("pending"),
              p.resolved ? (p.correct ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
              Qt::AlignCenter);
     }
