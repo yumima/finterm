@@ -400,6 +400,21 @@
       "key_investors": ["IVP", "NEA", "a16z"],
       "description": "AI-native answer engine / search.",
       "tags": ["ai"]
+    },
+    {
+      "id": "qumulo",
+      "name": "Qumulo",
+      "aliases": ["qumulo inc", "qumulo, inc."],
+      "last_valuation_usd": 1200000000,
+      "as_of": "2020-07-01",
+      "source_label": "Press reports (Series E)",
+      "round_name": "Series E",
+      "sector": "Technology",
+      "founded": 2012,
+      "hq_city": "Seattle", "hq_state": "WA", "hq_country": "USA",
+      "key_investors": ["BlackRock", "Goldman Sachs", "Highland Capital Partners", "Madrona Venture Group", "Kleiner Perkins"],
+      "description": "Hybrid-cloud file data platform for unstructured data at scale, founded by ex-Isilon engineers. Largest round was a $125M Series E (Jul 2020) at a ~$1.2B valuation; ~$115M ARR reported mid-2025. Competes with Dell PowerScale/Isilon and NetApp.",
+      "tags": ["enterprise", "storage", "cloud", "data-infrastructure"]
     }
   ]
 }

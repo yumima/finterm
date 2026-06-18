@@ -152,6 +152,7 @@ class IpoWatchView : public QWidget {
     void render_watchlist();
     void render_lockups();          // Finnhub-sourced — see Lens enum
     void render_private();          // private-company dossier list (PreIpoService::companies)
+    void show_add_company_dialog(); // user-add a private company → PreIpoService::add_user_company
     void render_signals();          // cross-universe derived-signal feed (signal_list)
     /// Detail-rail render for a private company, keyed by PrivateCompany::id.
     /// Pulled out separately because the per-Entry render_detail() assumes

@@ -23,6 +23,9 @@
 #include <QDate>
 #include <QDateTime>
 #include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -31,6 +34,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
@@ -268,6 +272,14 @@ void IpoWatchView::build_title_bar(QVBoxLayout* root) {
 
     status_lbl_ = new QLabel("Loading…");
     h->addWidget(status_lbl_);
+
+    auto* add_btn = new QPushButton(QStringLiteral("+ Add"));
+    add_btn->setFixedHeight(24);
+    add_btn->setCursor(Qt::PointingHandCursor);
+    add_btn->setToolTip("Add a private company to the watch list");
+    connect(add_btn, &QPushButton::clicked, this, &IpoWatchView::show_add_company_dialog);
+    h->addWidget(add_btn);
+    h->addSpacing(6);
 
     refresh_btn_ = new QPushButton(QStringLiteral("↻"));
     refresh_btn_->setFixedSize(28, 24);
@@ -2041,6 +2053,120 @@ static QString signal_kind_color(pre_ipo::SignalKind k) {
         case pre_ipo::SignalKind::AmendmentBurst: return INFO();
         default:                                  return AMBER();
     }
+}
+
+// Parse a user-typed amount into USD: accepts "1.2B", "1.2bn", "500M", "750K",
+// "2T", or a plain/decorated number ("$1,200,000,000"). Returns 0 when blank or
+// unparseable — the caller then simply omits the valuation (no fabricated value).
+static double parse_user_amount(QString s) {
+    s = s.trimmed().toUpper();
+    s.remove('$').remove(',').remove(' ');
+    if (s.isEmpty()) return 0.0;
+    double mult = 1.0;
+    if      (s.endsWith(QLatin1String("BN"))) { mult = 1e9;  s.chop(2); }
+    else if (s.endsWith('B'))                 { mult = 1e9;  s.chop(1); }
+    else if (s.endsWith('M'))                 { mult = 1e6;  s.chop(1); }
+    else if (s.endsWith('K'))                 { mult = 1e3;  s.chop(1); }
+    else if (s.endsWith('T'))                 { mult = 1e12; s.chop(1); }
+    bool ok = false;
+    const double v = s.toDouble(&ok);
+    return (ok && v > 0) ? v * mult : 0.0;
+}
+
+void IpoWatchView::show_add_company_dialog() {
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Add private company"));
+    dlg.setModal(true);
+    dlg.setMinimumWidth(440);
+    auto* form = new QFormLayout(&dlg);
+
+    auto* name      = new QLineEdit;  name->setPlaceholderText(QStringLiteral("e.g. Qumulo  (required)"));
+    auto* sector    = new QComboBox;  sector->setEditable(true);
+    sector->addItems({QString(), QStringLiteral("Technology"), QStringLiteral("Financials"),
+                      QStringLiteral("Consumer"), QStringLiteral("Industrials"),
+                      QStringLiteral("Aerospace & Defense"), QStringLiteral("Healthcare"),
+                      QStringLiteral("Energy"), QStringLiteral("Materials")});
+    auto* valuation = new QLineEdit;  valuation->setPlaceholderText(QStringLiteral("e.g. 1.2B or 1200000000  (optional)"));
+    auto* hq        = new QLineEdit;  hq->setPlaceholderText(QStringLiteral("City, ST, Country  (optional)"));
+    auto* founded   = new QLineEdit;  founded->setPlaceholderText(QStringLiteral("e.g. 2012  (optional)"));
+    auto* investors = new QLineEdit;  investors->setPlaceholderText(QStringLiteral("comma-separated  (optional)"));
+    auto* round     = new QLineEdit;  round->setPlaceholderText(QStringLiteral("e.g. Series E  (optional)"));
+    auto* source    = new QLineEdit;  source->setText(QStringLiteral("User-added"));
+    auto* desc      = new QLineEdit;  desc->setPlaceholderText(QStringLiteral("one-line description  (optional)"));
+
+    form->addRow(QStringLiteral("Name"),          name);
+    form->addRow(QStringLiteral("Sector"),        sector);
+    form->addRow(QStringLiteral("Last valuation"),valuation);
+    form->addRow(QStringLiteral("Headquarters"),  hq);
+    form->addRow(QStringLiteral("Founded"),       founded);
+    form->addRow(QStringLiteral("Key investors"), investors);
+    form->addRow(QStringLiteral("Round"),         round);
+    form->addRow(QStringLiteral("Source"),        source);
+    form->addRow(QStringLiteral("Description"),   desc);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Add"));
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    const QString nm = name->text().trimmed();
+    if (nm.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Add company"),
+                             QStringLiteral("A company name is required."));
+        return;
+    }
+
+    QJsonObject e;
+    e[QStringLiteral("name")] = nm;
+    if (!sector->currentText().trimmed().isEmpty())
+        e[QStringLiteral("sector")] = sector->currentText().trimmed();
+
+    // Only stamp a valuation (and its provenance) when one was actually given —
+    // never invent a number. "as reported · today · <source>" in the UI.
+    const double val = parse_user_amount(valuation->text());
+    if (val > 0.0) {
+        e[QStringLiteral("last_valuation_usd")] = val;
+        e[QStringLiteral("as_of")] = QDate::currentDate().toString(Qt::ISODate);
+        const QString src = source->text().trimmed();
+        e[QStringLiteral("source_label")] = src.isEmpty() ? QStringLiteral("User-added") : src;
+    }
+
+    const QStringList hqp = hq->text().split(',', Qt::SkipEmptyParts);
+    if (hqp.size() > 0) e[QStringLiteral("hq_city")]    = hqp[0].trimmed();
+    if (hqp.size() > 1) e[QStringLiteral("hq_state")]   = hqp[1].trimmed();
+    if (hqp.size() > 2) e[QStringLiteral("hq_country")] = hqp[2].trimmed();
+
+    bool yok = false;
+    const int yr = founded->text().trimmed().toInt(&yok);
+    if (yok && yr > 1800 && yr <= QDate::currentDate().year())
+        e[QStringLiteral("founded")] = yr;
+
+    QJsonArray inv;
+    for (const QString& s : investors->text().split(',', Qt::SkipEmptyParts)) {
+        const QString t = s.trimmed();
+        if (!t.isEmpty()) inv.append(t);
+    }
+    if (!inv.isEmpty()) e[QStringLiteral("key_investors")] = inv;
+
+    if (!round->text().trimmed().isEmpty()) e[QStringLiteral("round_name")]  = round->text().trimmed();
+    if (!desc->text().trimmed().isEmpty())  e[QStringLiteral("description")] = desc->text().trimmed();
+
+    const QString id = services::PreIpoService::instance().add_user_company(e);
+    if (id.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Add company"),
+                             QStringLiteral("Couldn't save the company — the data folder may not be writable."));
+        return;
+    }
+
+    // Jump to the PRIVATE lens so the user immediately sees their new company
+    // (add_user_company already re-emitted data_loaded → render()).
+    active_lens_ = LensPrivate;
+    for (int j = 0; j < LensCount; ++j)
+        if (lens_btns_[j]) lens_btns_[j]->setChecked(j == LensPrivate);
+    render();
 }
 
 void IpoWatchView::render_signals() {

@@ -49,6 +49,16 @@ class PreIpoService : public QObject {
     pre_ipo::PrivateCompany company(const QString& id) const;
     void toggle_watch(const QString& id);
 
+    /// Add (or update) a user-defined private company. `entry` uses the curated
+    /// seed schema (id, name, last_valuation_usd, sector, hq_*, founded,
+    /// key_investors, description, …); when `id` is empty it is slugified from
+    /// `name`. Upserts into the user-override seed file in the app data dir
+    /// (same file load_valuation_seed() reads), then reloads the seed and
+    /// re-emits so the company shows up immediately — no rebuild/restart.
+    /// Returns the slug id on success, or an empty string on failure (e.g. no
+    /// name, or the override file could not be written).
+    QString add_user_company(const QJsonObject& entry);
+
     QVector<pre_ipo::FormDFiling> recent_form_d() const;
     QVector<pre_ipo::S1Filing>    ipo_pipeline() const;
     QVector<pre_ipo::Signal>      signal_list() const;

@@ -269,6 +269,67 @@ void PreIpoService::toggle_watch(const QString& id) {
     }
 }
 
+QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
+    QJsonObject entry = entry_in;
+
+    // Require a name; derive the slug id from it when one isn't supplied.
+    const QString name = entry.value(QStringLiteral("name")).toString().trimmed();
+    QString id = entry.value(QStringLiteral("id")).toString().trimmed();
+    if (id.isEmpty()) id = slugify(name);
+    if (id.isEmpty() || name.isEmpty()) {
+        LOG_WARN("PreIpo", "add_user_company: a company name is required");
+        return {};
+    }
+    entry[QStringLiteral("id")]   = id;
+    entry[QStringLiteral("name")] = name;
+
+    // Override file: same path load_valuation_seed() reads its user overrides
+    // from (FINCEPT_DATA_DIR, else the app data dir).
+    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
+    if (data_dir.isEmpty())
+        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir().mkpath(data_dir);
+    const QString path = data_dir + "/pre_ipo_valuation_seed.json";
+
+    // Load any existing override entries (tolerant of a missing/invalid file).
+    QJsonObject root;
+    QJsonArray  entries;
+    QFile in(path);
+    if (in.open(QIODevice::ReadOnly)) {
+        const QJsonDocument doc = QJsonDocument::fromJson(in.readAll());
+        in.close();
+        if (doc.isObject()) { root = doc.object(); entries = root.value(QStringLiteral("entries")).toArray(); }
+    }
+
+    // Upsert by id (same semantics as the override merge in load_valuation_seed).
+    bool replaced = false;
+    for (int i = 0; i < entries.size(); ++i) {
+        if (entries[i].toObject().value(QStringLiteral("id")).toString() == id) {
+            entries[i] = entry; replaced = true; break;
+        }
+    }
+    if (!replaced) entries.append(entry);
+    if (!root.contains(QStringLiteral("version"))) root[QStringLiteral("version")] = 1;
+    root[QStringLiteral("entries")] = entries;
+
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_WARN("PreIpo", QString("add_user_company: cannot write %1").arg(path));
+        return {};
+    }
+    out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    out.close();
+
+    // Reload the seed and re-emit so the new company appears without a restart.
+    seed_loaded_ = false;
+    load_valuation_seed();
+    emit_summary();
+
+    LOG_INFO("PreIpo", QString("add_user_company: %1 %2")
+                           .arg(replaced ? QStringLiteral("updated") : QStringLiteral("added"), id));
+    return id;
+}
+
 QVector<FormDFiling> PreIpoService::recent_form_d() const { return form_d_; }
 QVector<S1Filing>    PreIpoService::ipo_pipeline()  const { return pipeline_; }
 QVector<Signal>      PreIpoService::signal_list()   const { return signals_; }
