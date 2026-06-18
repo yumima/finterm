@@ -712,6 +712,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/ContextRecordingRepository.cpp
     src/storage/repositories/PortfolioRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
+    src/storage/repositories/AiPredictionRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
     src/storage/repositories/AccountRepository.cpp
@@ -769,6 +770,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v041_migrate_fincept_provider.cpp
     src/storage/sqlite/migrations/v042_fix_llm_base_url.cpp
     src/storage/sqlite/migrations/v043_chat_session_persona.cpp
+    src/storage/sqlite/migrations/v044_ai_predictions.cpp
 )
 
 # Python runner
@@ -1423,6 +1425,7 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EquityResearchScreen.cpp
     src/screens/equity_research/EquityOverviewTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
+    src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
@@ -1657,6 +1660,7 @@ set_source_files_properties(
     src/screens/docs/DocsScreen.cpp
     src/screens/derivatives/DerivativesScreen.cpp
     src/screens/economics/EconomicsScreen.cpp
+    src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
@@ -1832,6 +1836,7 @@ set_source_files_properties(
     src/storage/repositories/SettingsRepository.cpp
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
+    src/storage/repositories/AiPredictionRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
     src/storage/repositories/AccountRepository.cpp
@@ -1879,6 +1884,7 @@ set_source_files_properties(
     src/storage/sqlite/migrations/v041_migrate_fincept_provider.cpp
     src/storage/sqlite/migrations/v042_fix_llm_base_url.cpp
     src/storage/sqlite/migrations/v043_chat_session_persona.cpp
+    src/storage/sqlite/migrations/v044_ai_predictions.cpp
     # Polymarket screen files — each defines static fmt_* helpers in same namespace
     src/screens/polymarket/PolymarketScreen.cpp
     src/screens/polymarket/PolymarketCommandBar.cpp
@@ -2012,6 +2018,7 @@ set_source_files_properties(
     src/storage/repositories/SettingsRepository.cpp
     src/storage/repositories/WatchlistRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
+    src/storage/repositories/AiPredictionRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
     PROPERTIES UNITY_BUILD_BATCH_SIZE 3

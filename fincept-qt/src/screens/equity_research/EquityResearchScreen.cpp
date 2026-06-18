@@ -6,6 +6,7 @@
 #include "core/symbol/SymbolContext.h"
 #include "services/app_context/AppContextService.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "screens/equity_research/EquityAiTab.h"
 #include "screens/equity_research/EquityAnalysisTab.h"
 #include "screens/equity_research/EquityFinancialsTab.h"
 #include "screens/equity_research/EquityNewsTab.h"
@@ -333,6 +334,7 @@ void EquityResearchScreen::build_ui() {
     overview_tab_ = new EquityOverviewTab;
     financials_tab_ = new EquityFinancialsTab;
     analysis_tab_ = new EquityAnalysisTab;
+    ai_tab_ = new EquityAiTab;
     technicals_tab_ = new EquityTechnicalsTab;
     talipp_tab_ = new EquityTalippTab;
     peers_tab_ = new EquityPeersTab;
@@ -350,6 +352,7 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(overview_tab_, "Overview");
     tab_widget_->addTab(financials_tab_, "Financials");
     tab_widget_->addTab(analysis_tab_, "Analysis");
+    tab_widget_->addTab(ai_tab_, "AI Forecast");
     tab_widget_->addTab(technicals_tab_, "Technicals");
     tab_widget_->addTab(talipp_tab_, "TALIpp");
     tab_widget_->addTab(peers_tab_, "Peers");
@@ -629,6 +632,7 @@ void EquityResearchScreen::on_info_loaded(services::equity::StockInfo info) {
     current_currency_ = info.currency;
     current_exchange_ = info.exchange;
     update_market_status_badge();
+    if (ai_tab_) ai_tab_->set_info(info);   // fundamentals enrich the AI prompt
 }
 
 void EquityResearchScreen::on_tab_changed(int index) {
@@ -650,23 +654,29 @@ void EquityResearchScreen::on_tab_changed(int index) {
             svc.load_symbol(current_symbol_);
             break;
         case 3:
+            // AI Forecast — set_symbol() subscribes to the candle stream itself;
+            // load_symbol() re-emits info_loaded so the prompt gets fundamentals.
+            ai_tab_->set_symbol(current_symbol_);
+            svc.load_symbol(current_symbol_);
+            break;
+        case 4:
             technicals_tab_->set_symbol(current_symbol_);
             svc.fetch_technicals(current_symbol_);
             break;
-        case 4:
+        case 5:
             talipp_tab_->set_symbol(current_symbol_);
             break;
-        case 5:
+        case 6:
             peers_tab_->set_symbol(current_symbol_);
             break;
-        case 6:
+        case 7:
             news_tab_->set_symbol(current_symbol_);
             svc.fetch_news(current_symbol_);
             break;
-        case 7:
+        case 8:
             sentiment_tab_->set_symbol(current_symbol_);
             break;
-        case 8:
+        case 9:
             // Relationships tab — lazy fetch on activation only. The
             // RelationshipMapService::fetch call is multi-second and can spawn
             // a Python subprocess, so we don't kick it from load_symbol().
@@ -728,12 +738,15 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     if (peers_tab_) peers_tab_->set_symbol(symbol);
     if (news_tab_) news_tab_->set_symbol(symbol);
     if (sentiment_tab_) sentiment_tab_->set_symbol(symbol);
-    // Relationships tab: forward only if it's the currently visible tab.
-    // RelationshipMapService::fetch is heavy (Python subprocess + graph
-    // rendering); we don't want to kick it in the background every time the
-    // user changes ER symbols. The tab_changed handler picks it up on
-    // activation otherwise.
-    if (relationships_tab_ && tab_widget_ && tab_widget_->currentIndex() == 8)
+    // AI Forecast + Relationships tabs: forward only if currently visible.
+    // Both are heavy on symbol-change — AI subscribes to candles and may fire
+    // an auto-forecast (an LLM call); Relationships spawns a Python graph fetch.
+    // We don't want either running in the background for every symbol the user
+    // flips through; the tab_changed handler picks them up on activation.
+    const int cur = (tab_widget_) ? tab_widget_->currentIndex() : -1;
+    if (ai_tab_ && cur == 3)
+        ai_tab_->set_symbol(symbol);
+    if (relationships_tab_ && cur == 9)
         relationships_tab_->set_symbol(symbol);
 
     // Prefetch for inactive tabs so whichever tab the user opens next is

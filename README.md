@@ -2,28 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-17)
+## Today's commits (2026-06-18)
 
 Latest first.
 
-- [`844fec509`](https://github.com/yumima/finterm/commit/844fec509) power-trader: real signals, price-since-trade, hover legend (Phase 3)
-- [`5b11d6b53`](https://github.com/yumima/finterm/commit/5b11d6b53) power-trader: per-trade drill-down + "follow this trade" actions (Phase 2)
-- [`54155431a`](https://github.com/yumima/finterm/commit/54155431a) power-trader: unify Senate/House into resizable master-detail shell (Phase 1)
-- [`d2d1a00bb`](https://github.com/yumima/finterm/commit/d2d1a00bb) Equity Research: explicitly clear cached_quote_.valid on symbol switch
-- [`74d77e252`](https://github.com/yumima/finterm/commit/74d77e252) Remove the dead PortfolioHoldingsRepository
-- [`e7fb15874`](https://github.com/yumima/finterm/commit/e7fb15874) tests: link Qt::Gui into test_datahub so the DataHub suite builds/runs
-- [`c211c2c40`](https://github.com/yumima/finterm/commit/c211c2c40) Power-trader: "Explain this trader" via the local AI (LlmService → hearth)
-- [`38c6da51e`](https://github.com/yumima/finterm/commit/38c6da51e) Portfolio AI tools + exposure panel: use the real multi-portfolio schema
-- [`d99b08809`](https://github.com/yumima/finterm/commit/d99b08809) Make the configured font apply to widgets that hardcode 'Consolas'
-- [`658293129`](https://github.com/yumima/finterm/commit/658293129) Shared formatting layer: unify money/percent/compact/sentinel across screens
-- [`c85f9326a`](https://github.com/yumima/finterm/commit/c85f9326a) Equity Research: clear TODAY'S TRADING on symbol switch (no stale quote)
-- [`b342bbfdb`](https://github.com/yumima/finterm/commit/b342bbfdb) Preserve scroll position + selection across data refreshes
-- [`1cb04ee14`](https://github.com/yumima/finterm/commit/1cb04ee14) Dashboard widgets: build rows once + update in place (kill O(N^2) per-tick churn)
-- [`80d2c45b7`](https://github.com/yumima/finterm/commit/80d2c45b7) Dashboard widgets: surface fetch errors instead of spinning/looking empty
-- [`ef82e3b33`](https://github.com/yumima/finterm/commit/ef82e3b33) Dashboard: persist per-widget gear config across restarts
-- [`52778ba04`](https://github.com/yumima/finterm/commit/52778ba04) DataHub: skip subscriber fan-out for no-change publishes (live-tick perf)
-- [`0765c3361`](https://github.com/yumima/finterm/commit/0765c3361) Fix power-trader contrast bugs: dead rgba highlight + white-on-amber badge
-- [`e3b2b99cc`](https://github.com/yumima/finterm/commit/e3b2b99cc) Defer startup disk I/O off the launch path (faster, less launch-time thrash)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

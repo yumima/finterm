@@ -20,6 +20,7 @@ namespace fincept::screens {
 class EquityOverviewTab;
 class EquityFinancialsTab;
 class EquityAnalysisTab;
+class EquityAiTab;
 class EquityTechnicalsTab;
 class EquityTalippTab;
 class EquityPeersTab;
@@ -113,6 +114,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityOverviewTab* overview_tab_ = nullptr;
     EquityFinancialsTab* financials_tab_ = nullptr;
     EquityAnalysisTab* analysis_tab_ = nullptr;
+    EquityAiTab* ai_tab_ = nullptr;
     EquityTechnicalsTab* technicals_tab_ = nullptr;
     EquityTalippTab* talipp_tab_ = nullptr;
     EquityPeersTab* peers_tab_ = nullptr;
