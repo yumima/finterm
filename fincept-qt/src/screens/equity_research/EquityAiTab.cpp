@@ -409,18 +409,16 @@ void EquityAiTab::build_ui() {
     status_lbl_->setStyleSheet(QString("color:%1;font-size:11px;").arg(colors::TEXT_TERTIARY()));
     root->addWidget(status_lbl_);
 
-    // ── Master split: analysis (left) | stock chat (right), drag-resizable ────
-    auto* split = new QSplitter(Qt::Horizontal);
+    // ── Layout: analysis | chat side-by-side on TOP, so the predicted-vs-actual
+    //    chart + track record get the FULL width across the BOTTOM. All dividers
+    //    are drag-resizable. ─────────────────────────────────────────────────────
+    auto* main_split = new QSplitter(Qt::Vertical);
 
-    auto* left = new QWidget;
-    auto* lv = new QVBoxLayout(left);
-    lv->setContentsMargins(0, 0, 0, 0);
-    lv->setSpacing(8);
-
-    // Analysis prose.
+    // Top: analysis prose (left) beside the stock chat (right).
+    auto* top_split = new QSplitter(Qt::Horizontal);
     analysis_view_ = new QTextEdit;
     analysis_view_->setReadOnly(true);
-    analysis_view_->setMinimumHeight(150);
+    analysis_view_->setMinimumHeight(110);
     analysis_view_->setStyleSheet(
         QString("QTextEdit{background:%1;color:%2;border:1px solid %3;border-radius:6px;"
                 "padding:10px;font-size:13px;}")
@@ -430,17 +428,26 @@ void EquityAiTab::build_ui() {
         "recommendation, the thesis and key risks, and a price forecast. Each "
         "forecast is recorded immutably so you can see, below, how accurate the "
         "AI has been against the real price. Ask follow-ups in the chat on the right."));
-    lv->addWidget(analysis_view_, 1);
+    top_split->addWidget(analysis_view_);
+    top_split->addWidget(build_chat_pane());
+    top_split->setStretchFactor(0, 1);
+    top_split->setStretchFactor(1, 1);
+    top_split->setCollapsible(0, false);
+    top_split->setCollapsible(1, false);
+    top_split->setSizes({560, 480});
 
-    // Predicted-vs-actual chart.
+    // Bottom (full width): predicted-vs-actual chart + track-record table.
+    auto* bottom = new QWidget;
+    auto* bv = new QVBoxLayout(bottom);
+    bv->setContentsMargins(0, 0, 0, 0);
+    bv->setSpacing(6);
     auto* chart_hdr = new QLabel(QStringLiteral("PREDICTED vs ACTUAL"));
     chart_hdr->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;")
                                  .arg(colors::TEXT_SECONDARY()));
-    lv->addWidget(chart_hdr);
+    bv->addWidget(chart_hdr);
     chart_ = new PredictionChart;
-    lv->addWidget(chart_);
+    bv->addWidget(chart_, 2);
 
-    // Track-record table.
     static const QStringList kCols = {"Made", "Horizon", "Call", "Target", "Conf", "Actual", "Result"};
     table_ = new QTableWidget;
     table_->setColumnCount(kCols.size());
@@ -449,7 +456,7 @@ void EquityAiTab::build_ui() {
     table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setShowGrid(false);
     table_->verticalHeader()->setVisible(false);
-    table_->setMinimumHeight(140);
+    table_->setMinimumHeight(120);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->setStyleSheet(
         QString("QTableWidget{background:%1;color:%2;border:1px solid %3;font-size:12px;"
@@ -459,16 +466,16 @@ void EquityAiTab::build_ui() {
                 "padding:4px 6px;font-weight:700;}")
             .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(),
                  colors::BG_SURFACE(), colors::AMBER()));
-    lv->addWidget(table_, 1);
+    bv->addWidget(table_, 1);
 
-    split->addWidget(left);
-    split->addWidget(build_chat_pane());
-    split->setStretchFactor(0, 3);
-    split->setStretchFactor(1, 2);
-    split->setCollapsible(0, false);
-    split->setCollapsible(1, false);
-    split->setSizes({620, 420});
-    root->addWidget(split, 1);
+    main_split->addWidget(top_split);
+    main_split->addWidget(bottom);
+    main_split->setStretchFactor(0, 0);
+    main_split->setStretchFactor(1, 1);
+    main_split->setCollapsible(0, false);
+    main_split->setCollapsible(1, false);
+    main_split->setSizes({260, 380});
+    root->addWidget(main_split, 1);
 }
 
 void EquityAiTab::set_symbol(const QString& symbol) {

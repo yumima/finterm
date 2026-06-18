@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f44503e8f`](https://github.com/yumima/finterm/commit/f44503e8f) ER AI chart: hover now reads the prediction lines too, not just actual price
 - [`d2536d501`](https://github.com/yumima/finterm/commit/d2536d501) ER AI: surface prediction accuracy — "today" divider, deviation, error bars
 - [`3e9c49edf`](https://github.com/yumima/finterm/commit/3e9c49edf) ER AI: chart legend + hover, chat read-aloud + hands-free voice, warmer TTS
 - [`ec6084f3c`](https://github.com/yumima/finterm/commit/ec6084f3c) ER AI chat: animated "thinking" spinner instead of a static "…"
