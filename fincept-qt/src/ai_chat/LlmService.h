@@ -64,6 +64,11 @@ struct PersonaScope {
     QString prompt;          // resolved persona system prompt
     QStringList tool_globs;  // resolved persona tool allow-list (globs)
     bool valid = false;
+    // When false, ask a local reasoning model (hearth/Ollama qwen3) to skip its
+    // chain-of-thought via the `think:false` request extension — a large latency
+    // win for short structured one-shots. Ignored for cloud providers (an API
+    // key is set), which would reject the unknown field.
+    bool think = true;
 };
 
 struct LlmResponse {

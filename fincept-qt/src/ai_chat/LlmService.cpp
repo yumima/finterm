@@ -567,6 +567,12 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     QJsonObject req;
     req["model"] = model_;
     req["messages"] = messages;
+    // Local-only `think:false` (hearth → Ollama native think control). Gated on
+    // an empty api_key so cloud OpenAI-compatible providers never receive this
+    // non-standard field (they'd 400). Skips the model's chain-of-thought for a
+    // big latency win on short structured one-shots that opt in via the persona.
+    if (!persona.think && api_key_.isEmpty())
+        req["think"] = false;
     // Temperature intentionally omitted — each provider uses its own default.
     // OpenAI deprecated max_tokens; gpt-5 / o-series require max_completion_tokens.
     // xAI also prefers max_completion_tokens. Other OpenAI-compatible providers

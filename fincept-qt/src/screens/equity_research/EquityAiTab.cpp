@@ -23,6 +23,7 @@
 #include <QSettings>
 #include <QTableWidget>
 #include <QTextEdit>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -67,8 +68,12 @@ QJsonObject extract_forecast_json(const QString& text) {
     return doc.isObject() ? doc.object() : QJsonObject{};
 }
 
-// Display prose = everything before the trailing JSON / ```json fence.
-QString prose_only(const QString& text) {
+// Display prose = the reply minus any <think>…</think> trace (qwen3 emits empty
+// ones under /no_think) and the trailing JSON / ```json fence.
+QString prose_only(const QString& text_in) {
+    QString text = text_in;
+    text.remove(QRegularExpression(QStringLiteral("<think>.*?</think>"),
+                                   QRegularExpression::DotMatchesEverythingOption));
     int cut = text.lastIndexOf(QStringLiteral("```json"));
     if (cut < 0) {
         const QJsonObject o = extract_forecast_json(text);
@@ -312,6 +317,9 @@ void EquityAiTab::set_symbol(const QString& symbol) {
     }
     current_symbol_ = symbol.toUpper();
     info_ready_ = false;
+    analysis_populated_ = false;
+    data_unavailable_ = false;
+    if (think_timer_) think_timer_->stop();
     forecast_epoch_++;   // abandon any in-flight stream for the old symbol
     candles_.clear();
     analysis_view_->setPlainText(QStringLiteral("Loading…"));
@@ -326,7 +334,17 @@ void EquityAiTab::set_symbol(const QString& symbol) {
         [this, sym](const services::query::QueryStore::State& s) {
             if (sym != current_symbol_) return;   // belt-and-suspenders: drop a stale-symbol delivery
             const auto candles = s.data.value<QVector<Candle>>();
-            if (!candles.isEmpty()) on_candles(candles);
+            if (!candles.isEmpty()) { on_candles(candles); return; }
+            // Fetch finished with no usable history (e.g. SPCX / pre-IPO /
+            // untradable) — surface it instead of spinning on "Loading…".
+            if (!s.loading && !forecasting_) {
+                data_unavailable_ = true;
+                analysis_populated_ = true;
+                status_lbl_->setText(QStringLiteral("No price history for %1.").arg(sym));
+                analysis_view_->setPlainText(QStringLiteral(
+                    "No tradable price history for %1, so the AI has nothing to forecast "
+                    "from — this is expected for pre-IPO or untradable tickers.").arg(sym));
+            }
         });
     current_historical_key_ = QStringLiteral("equity:candles:") + sym + QStringLiteral(":1y");
 }
@@ -338,10 +356,31 @@ void EquityAiTab::set_info(const StockInfo& info) {
 
 void EquityAiTab::on_candles(const QVector<Candle>& candles) {
     candles_ = candles;
+    data_unavailable_ = false;
     status_lbl_->setText(QStringLiteral("Local-AI analysis & forecast. Informational only — not advice."));
     resolve_due();            // fill realized outcomes now that we have fresh closes
     refresh_track_record();
-    maybe_auto_forecast();
+    maybe_auto_forecast();    // may start a forecast (sets forecasting_)
+    // Never leave the pane stuck on "Loading…": if nothing is running, show the
+    // last stored analysis (or the idle prompt).
+    if (!forecasting_ && !analysis_populated_) show_idle_analysis();
+}
+
+void EquityAiTab::show_idle_analysis() {
+    analysis_populated_ = true;
+    for (const AiPrediction& p : AiPredictionRepository::instance().for_ticker(current_symbol_)) {
+        if (!p.analysis.isEmpty()) {
+            analysis_view_->setPlainText(
+                QString("Latest AI analysis · %1\n\n%2\n\n— Click “Run AI Analysis” for a fresh read.")
+                    .arg(p.created_at.left(10), p.analysis));
+            return;
+        }
+    }
+    analysis_view_->setPlainText(
+        QString("Click “Run AI Analysis” for a local-AI read on %1 — a position "
+                "recommendation, the thesis and key risks, and a price forecast recorded "
+                "to the track record below.")
+            .arg(current_symbol_.isEmpty() ? QStringLiteral("this stock") : current_symbol_));
 }
 
 void EquityAiTab::maybe_auto_forecast() {
@@ -411,9 +450,10 @@ QString EquityAiTab::build_prompt() const {
 }
 
 void EquityAiTab::run_forecast(bool automatic) {
-    if (forecasting_ || current_symbol_.isEmpty()) return;
+    if (forecasting_ || current_symbol_.isEmpty() || data_unavailable_) return;
     if (candles_.size() < 5) { status_lbl_->setText(QStringLiteral("Waiting for price data…")); return; }
     if (!fincept::ai_chat::LlmService::instance().is_configured()) {
+        analysis_populated_ = true;
         analysis_view_->setPlainText(QStringLiteral(
             "Local AI is not configured. Open Settings → AI Chat to point the terminal "
             "at your local model (hearth), then try again."));
@@ -421,9 +461,21 @@ void EquityAiTab::run_forecast(bool automatic) {
     }
 
     forecasting_ = true;
+    analysis_populated_ = true;
     run_btn_->setEnabled(false);
-    status_lbl_->setText(automatic ? QStringLiteral("Auto-forecasting…") : QStringLiteral("Analyzing…"));
     analysis_view_->setPlainText(QStringLiteral("Thinking…"));
+    // A local reasoning model can be silent for a while before it streams; an
+    // elapsed-time tick keeps it from looking frozen.
+    if (!think_timer_) {
+        think_timer_ = new QTimer(this);
+        connect(think_timer_, &QTimer::timeout, this, [this]() {
+            status_lbl_->setText(QStringLiteral("Thinking… %1s  (the local model is reasoning)")
+                                     .arg(think_start_.elapsed() / 1000));
+        });
+    }
+    think_start_.restart();
+    think_timer_->start(1000);
+    status_lbl_->setText(automatic ? QStringLiteral("Auto-forecasting…") : QStringLiteral("Analyzing…"));
 
     const QString sym       = current_symbol_;
     const int     horizon   = horizon_days();
@@ -440,6 +492,11 @@ void EquityAiTab::run_forecast(bool automatic) {
         "informational only, NOT financial advice. Keep the prose under ~160 words, then "
         "end with the single JSON line exactly as requested and nothing after it.")});
 
+    // Skip the local model's chain-of-thought (think:false) — a stock forecast
+    // doesn't need it, and it cuts latency dramatically on hearth/qwen3.
+    fincept::ai_chat::PersonaScope persona;
+    persona.think = false;
+
     const quint64 epoch = ++forecast_epoch_;
     auto acc = std::make_shared<QString>();
     QPointer<EquityAiTab> self = this;
@@ -455,6 +512,7 @@ void EquityAiTab::run_forecast(bool automatic) {
                 if (!is_done) return;
 
                 self->forecasting_ = false;
+                if (self->think_timer_) self->think_timer_->stop();
                 self->run_btn_->setEnabled(true);
 
                 const QJsonObject f = extract_forecast_json(snap);
@@ -487,7 +545,7 @@ void EquityAiTab::run_forecast(bool automatic) {
                 self->refresh_track_record();
             }, Qt::QueuedConnection);
         },
-        /*use_tools=*/false);
+        /*use_tools=*/false, persona);
 }
 
 void EquityAiTab::resolve_due() {

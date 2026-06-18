@@ -3,10 +3,12 @@
 #include "services/equity/EquityResearchModels.h"
 #include "storage/repositories/AiPredictionRepository.h"
 
+#include <QElapsedTimer>
 #include <QVector>
 #include <QWidget>
 
 class QCheckBox;
+class QTimer;
 class QComboBox;
 class QLabel;
 class QPushButton;
@@ -50,6 +52,7 @@ class EquityAiTab : public QWidget {
     void resolve_due();                  // fill realized outcomes from real closes
     void refresh_track_record();         // reload the table + chart + hit-rate
     void maybe_auto_forecast();          // at most one auto-forecast per ticker per day
+    void show_idle_analysis();           // last stored analysis, or the idle prompt
 
     QString build_prompt() const;        // assemble the real-data LLM input
     int     horizon_days() const;        // from the horizon selector
@@ -60,7 +63,11 @@ class EquityAiTab : public QWidget {
     bool    info_ready_  = false;
     QVector<services::equity::Candle> candles_;
     bool    forecasting_ = false;
+    bool    analysis_populated_ = false; // the pane shows real content (not "Loading…")
+    bool    data_unavailable_ = false;   // no tradable price history → can't forecast
     quint64 forecast_epoch_ = 0;         // drop stale stream chunks on symbol switch
+    QTimer*        think_timer_ = nullptr; // ticks the "Thinking… Ns" status
+    QElapsedTimer  think_start_;
 
     // UI
     QComboBox*    horizon_sel_   = nullptr;
