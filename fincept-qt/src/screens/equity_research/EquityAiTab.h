@@ -54,8 +54,15 @@ class EquityAiTab : public QWidget {
     void maybe_auto_forecast();          // at most one auto-forecast per ticker per day
     void show_idle_analysis();           // last stored analysis, or the idle prompt
 
-    QString build_prompt() const;        // assemble the real-data LLM input
+    QString build_prompt() const;        // assemble the forecast LLM input
+    QString stock_data_block() const;    // the real-data context (shared by forecast + chat)
     int     horizon_days() const;        // from the horizon selector
+
+    // ── Stock-scoped chat (right pane) ────────────────────────────────────────
+    QWidget* build_chat_pane();
+    void     send_chat();                // user question → streamed, stock-aware answer
+    void     render_chat();              // repaint the thread from chat_turns_
+    void     reset_chat();               // clear on symbol switch
 
     QString current_symbol_;
     QString current_historical_key_;   // QueryStore key, unsubscribed on symbol switch
@@ -78,6 +85,14 @@ class EquityAiTab : public QWidget {
     QTextEdit*    analysis_view_ = nullptr;
     QTableWidget* table_         = nullptr;
     PredictionChart* chart_      = nullptr;
+
+    // Chat pane
+    QTextEdit*   chat_view_  = nullptr;
+    QLineEdit*   chat_input_ = nullptr;
+    QPushButton* chat_send_  = nullptr;
+    QVector<QPair<QString, QString>> chat_turns_;  // (role, content) — full chat history
+    bool    chat_streaming_ = false;
+    quint64 chat_epoch_ = 0;
 };
 
 } // namespace fincept::screens

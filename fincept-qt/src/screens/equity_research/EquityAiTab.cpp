@@ -15,12 +15,15 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QSettings>
+#include <QSplitter>
 #include <QTableWidget>
 #include <QTextEdit>
 #include <QTimer>
@@ -265,7 +268,15 @@ void EquityAiTab::build_ui() {
     status_lbl_->setStyleSheet(QString("color:%1;font-size:11px;").arg(colors::TEXT_TERTIARY()));
     root->addWidget(status_lbl_);
 
-    // ── Analysis prose ────────────────────────────────────────────────────────
+    // ── Master split: analysis (left) | stock chat (right), drag-resizable ────
+    auto* split = new QSplitter(Qt::Horizontal);
+
+    auto* left = new QWidget;
+    auto* lv = new QVBoxLayout(left);
+    lv->setContentsMargins(0, 0, 0, 0);
+    lv->setSpacing(8);
+
+    // Analysis prose.
     analysis_view_ = new QTextEdit;
     analysis_view_->setReadOnly(true);
     analysis_view_->setMinimumHeight(150);
@@ -277,18 +288,18 @@ void EquityAiTab::build_ui() {
         "Click “Run AI Analysis” for a local-AI read on this stock — a position "
         "recommendation, the thesis and key risks, and a price forecast. Each "
         "forecast is recorded immutably so you can see, below, how accurate the "
-        "AI has been against the real price."));
-    root->addWidget(analysis_view_, 1);
+        "AI has been against the real price. Ask follow-ups in the chat on the right."));
+    lv->addWidget(analysis_view_, 1);
 
-    // ── Predicted-vs-actual chart ─────────────────────────────────────────────
+    // Predicted-vs-actual chart.
     auto* chart_hdr = new QLabel(QStringLiteral("PREDICTED vs ACTUAL"));
     chart_hdr->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;")
                                  .arg(colors::TEXT_SECONDARY()));
-    root->addWidget(chart_hdr);
+    lv->addWidget(chart_hdr);
     chart_ = new PredictionChart;
-    root->addWidget(chart_);
+    lv->addWidget(chart_);
 
-    // ── Track-record table ────────────────────────────────────────────────────
+    // Track-record table.
     static const QStringList kCols = {"Made", "Horizon", "Call", "Target", "Conf", "Actual", "Result"};
     table_ = new QTableWidget;
     table_->setColumnCount(kCols.size());
@@ -297,7 +308,7 @@ void EquityAiTab::build_ui() {
     table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setShowGrid(false);
     table_->verticalHeader()->setVisible(false);
-    table_->setMinimumHeight(150);
+    table_->setMinimumHeight(140);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->setStyleSheet(
         QString("QTableWidget{background:%1;color:%2;border:1px solid %3;font-size:12px;"
@@ -307,7 +318,16 @@ void EquityAiTab::build_ui() {
                 "padding:4px 6px;font-weight:700;}")
             .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(),
                  colors::BG_SURFACE(), colors::AMBER()));
-    root->addWidget(table_, 1);
+    lv->addWidget(table_, 1);
+
+    split->addWidget(left);
+    split->addWidget(build_chat_pane());
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    split->setCollapsible(0, false);
+    split->setCollapsible(1, false);
+    split->setSizes({620, 420});
+    root->addWidget(split, 1);
 }
 
 void EquityAiTab::set_symbol(const QString& symbol) {
@@ -332,6 +352,7 @@ void EquityAiTab::set_symbol(const QString& symbol) {
     if (think_timer_) think_timer_->stop();
     forecast_epoch_++;   // abandon any in-flight stream for the old symbol
     candles_.clear();
+    reset_chat();         // re-scope the chat to the new ticker
     analysis_view_->setPlainText(QStringLiteral("Loading…"));
     status_lbl_->setText(QStringLiteral("Loading price history for %1…").arg(current_symbol_));
 
@@ -393,6 +414,150 @@ void EquityAiTab::show_idle_analysis() {
             .arg(current_symbol_.isEmpty() ? QStringLiteral("this stock") : current_symbol_));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Stock-scoped chat (right pane)
+// ─────────────────────────────────────────────────────────────────────────────
+
+QWidget* EquityAiTab::build_chat_pane() {
+    auto* pane = new QWidget;
+    auto* v = new QVBoxLayout(pane);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(8);
+
+    auto* hdr = new QLabel(QStringLiteral("ASK ABOUT THIS STOCK"));
+    hdr->setStyleSheet(QString("color:%1;font-size:11px;font-weight:700;letter-spacing:1px;")
+                           .arg(colors::AMBER()));
+    v->addWidget(hdr);
+
+    chat_view_ = new QTextEdit;
+    chat_view_->setReadOnly(true);
+    chat_view_->setStyleSheet(
+        QString("QTextEdit{background:%1;color:%2;border:1px solid %3;border-radius:6px;"
+                "padding:10px;font-size:13px;}")
+            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+    v->addWidget(chat_view_, 1);
+
+    auto* row = new QHBoxLayout;
+    row->setSpacing(6);
+    chat_input_ = new QLineEdit;
+    chat_input_->setPlaceholderText(QStringLiteral("Ask about this stock…  (Enter to send)"));
+    chat_input_->setStyleSheet(
+        QString("QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
+                "padding:7px 10px;font-size:13px;}QLineEdit:focus{border-color:%4;}")
+            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_MED(), colors::AMBER()));
+    connect(chat_input_, &QLineEdit::returnPressed, this, &EquityAiTab::send_chat);
+    row->addWidget(chat_input_, 1);
+    chat_send_ = new QPushButton(QStringLiteral("Send"));
+    chat_send_->setCursor(Qt::PointingHandCursor);
+    chat_send_->setStyleSheet(
+        QString("QPushButton{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
+                "padding:7px 14px;font-weight:700;}QPushButton:hover{background:%4;border-color:%2;}"
+                "QPushButton:disabled{color:%5;}")
+            .arg(colors::BG_SURFACE(), colors::AMBER(), colors::BORDER_MED(),
+                 colors::BG_RAISED(), colors::TEXT_DIM()));
+    connect(chat_send_, &QPushButton::clicked, this, &EquityAiTab::send_chat);
+    row->addWidget(chat_send_);
+    v->addLayout(row);
+
+    reset_chat();
+    return pane;
+}
+
+void EquityAiTab::reset_chat() {
+    chat_turns_.clear();
+    ++chat_epoch_;
+    chat_streaming_ = false;
+    if (chat_send_)  chat_send_->setEnabled(true);
+    if (chat_input_) chat_input_->setEnabled(true);
+    if (chat_view_)
+        chat_view_->setHtml(
+            QString("<div style='color:%1'>Ask anything about <b>%2</b> — why it moved, the "
+                    "bull / bear case, valuation, how it stacks up against peers, whether to wait "
+                    "for a pullback. I have its price history, fundamentals and my own forecast, "
+                    "and can pull fresh news &amp; data.</div>")
+                .arg(colors::TEXT_TERTIARY(),
+                     current_symbol_.isEmpty() ? QStringLiteral("this stock") : current_symbol_.toHtmlEscaped()));
+}
+
+void EquityAiTab::render_chat() {
+    if (!chat_view_) return;
+    QString html;
+    for (const auto& t : chat_turns_) {
+        const bool user = (t.first == QLatin1String("user"));
+        const QString who = user ? QStringLiteral("You") : QStringLiteral("AI");
+        const QString col = user ? QString(colors::CYAN()) : QString(colors::AMBER());
+        QString body = t.second.toHtmlEscaped();
+        body.replace('\n', QStringLiteral("<br>"));
+        html += QString("<div style='margin:8px 0'><span style='color:%1;font-weight:700'>%2</span>"
+                        "<div style='color:%3;margin-top:2px'>%4</div></div>")
+                    .arg(col, who, QString(colors::TEXT_PRIMARY()), body);
+    }
+    chat_view_->setHtml(html);
+    chat_view_->verticalScrollBar()->setValue(chat_view_->verticalScrollBar()->maximum());
+}
+
+void EquityAiTab::send_chat() {
+    if (chat_streaming_ || !chat_input_) return;
+    const QString q = chat_input_->text().trimmed();
+    if (q.isEmpty()) return;
+    if (current_symbol_.isEmpty()) return;
+    if (!fincept::ai_chat::LlmService::instance().is_configured()) {
+        chat_turns_.append({QStringLiteral("assistant"),
+                            QStringLiteral("Local AI is not configured. Open Settings → AI Chat to point "
+                                           "the terminal at your local model (hearth).")});
+        render_chat();
+        return;
+    }
+    chat_input_->clear();
+    chat_streaming_ = true;
+    chat_send_->setEnabled(false);
+    chat_turns_.append({QStringLiteral("user"), q});
+    chat_turns_.append({QStringLiteral("assistant"), QStringLiteral("…")});
+    const int reply_idx = chat_turns_.size() - 1;
+    render_chat();
+
+    // Stock-scoped system context + the prior conversation.
+    std::vector<fincept::ai_chat::ConversationMessage> history;
+    history.push_back({QStringLiteral("system"), QString(
+        "You are a sharp equity analyst answering questions about ONE specific stock for a "
+        "retail investor. Ground every answer in the DATA block below (today's real figures "
+        "for this ticker); you may also call tools to pull fresh news, peers, financials or "
+        "filings for THIS company. Stay on this stock. Be concrete and balanced, quantify "
+        "when you can, and flag the key risk. This is informational, not financial advice. "
+        "Reply in plain prose (no markdown).\n\n<<<DATA>>>\n%1\n<<<END>>>").arg(stock_data_block())});
+    for (int i = 0; i < reply_idx; ++i)  // include the just-added user turn, skip the placeholder
+        history.push_back({chat_turns_[i].first, chat_turns_[i].second});
+
+    fincept::ai_chat::PersonaScope persona;
+    persona.think = false;  // snappy answers; the chat is conversational, not a reasoning task
+
+    const quint64 epoch = ++chat_epoch_;
+    auto acc = std::make_shared<QString>();
+    QPointer<EquityAiTab> self = this;
+    fincept::ai_chat::LlmService::instance().chat_streaming(
+        // The user message is the last real turn; pass it explicitly, history holds the rest.
+        chat_turns_[reply_idx - 1].second,
+        std::vector<fincept::ai_chat::ConversationMessage>(history.begin(), history.end() - 1),
+        [self, acc, epoch, reply_idx](const QString& chunk, bool is_done) {
+            if (!self) return;
+            *acc += chunk;
+            const QString snap = *acc;
+            QMetaObject::invokeMethod(self.data(), [self, snap, is_done, epoch, reply_idx]() {
+                if (!self || epoch != self->chat_epoch_) return;
+                if (reply_idx < self->chat_turns_.size()) {
+                    const QString shown = prose_only(snap);
+                    self->chat_turns_[reply_idx].second = shown.isEmpty() ? QStringLiteral("…") : shown;
+                    self->render_chat();
+                }
+                if (is_done) {
+                    self->chat_streaming_ = false;
+                    if (self->chat_send_) self->chat_send_->setEnabled(true);
+                }
+            }, Qt::QueuedConnection);
+        },
+        /*use_tools=*/true, persona);
+}
+
 void EquityAiTab::maybe_auto_forecast() {
     if (!auto_chk_ || !auto_chk_->isChecked()) return;
     if (forecasting_ || current_symbol_.isEmpty() || candles_.size() < 20) return;
@@ -401,16 +566,17 @@ void EquityAiTab::maybe_auto_forecast() {
     run_forecast(true);
 }
 
-QString EquityAiTab::build_prompt() const {
+// The real-data context block for the current stock — shared verbatim by the
+// forecast prompt and the chat, so the AI always reasons over identical figures.
+QString EquityAiTab::stock_data_block() const {
+    if (candles_.isEmpty()) return QString("Ticker: %1 (no price data)").arg(current_symbol_);
     const double price = candles_.last().close;
-    // 52-week range from up to ~252 trailing closes.
     double hi = price, lo = price;
     const qsizetype n = std::min<qsizetype>(candles_.size(), 252);
     for (qsizetype i = candles_.size() - n; i < candles_.size(); ++i) {
         hi = std::max(hi, candles_[i].high > 0 ? candles_[i].high : candles_[i].close);
         lo = std::min(lo, candles_[i].low  > 0 ? candles_[i].low  : candles_[i].close);
     }
-    // 21-day realized daily-volatility (stddev of daily returns), as a %.
     double vol = std::nan("");
     if (candles_.size() > 22) {
         double sum = 0, sum2 = 0; int m = 0;
@@ -438,12 +604,29 @@ QString EquityAiTab::build_prompt() const {
                   pct_str(pct_over(candles_, 21)), pct_str(pct_over(candles_, 63)),
                   pct_str(pct_over(candles_, 252)));
     if (!std::isnan(vol)) L << QString("Recent daily volatility (21d): %1%").arg(vol, 0, 'f', 1);
-    // Last 10 closes for shape.
     QStringList closes;
     for (qsizetype i = std::max<qsizetype>(0, candles_.size() - 10); i < candles_.size(); ++i)
         closes << QString::number(candles_[i].close, 'f', 2);
     L << QString("Last closes: %1").arg(closes.join(", "));
 
+    // The AI's own latest forecast + its measured accuracy, so the chat can
+    // reference and defend or revise it.
+    const auto preds = AiPredictionRepository::instance().for_ticker(current_symbol_);
+    int resolved = 0, correct = 0;
+    for (const auto& p : preds) if (p.resolved) { ++resolved; if (p.correct) ++correct; }
+    if (!preds.isEmpty()) {
+        const AiPrediction& p = preds.first();
+        L << QString("Latest AI forecast (%1): %2 %3 by %4, target %5, confidence %6/100%7")
+                 .arg(p.created_at.left(10), p.direction.toUpper(), pct_str(p.predicted_pct),
+                      p.resolve_date, fmt::format_money(p.target_price), QString::number(p.confidence),
+                      resolved ? QString(" · track-record hit rate %1% (%2/%3)")
+                                     .arg(qRound(100.0 * correct / resolved)).arg(correct).arg(resolved)
+                               : QString());
+    }
+    return L.join('\n');
+}
+
+QString EquityAiTab::build_prompt() const {
     const int h = horizon_days();
     const QString hl = h == 1 ? QStringLiteral("1 trading day") : h == 7 ? QStringLiteral("1 week") : QStringLiteral("1 month");
     return QString(
@@ -456,7 +639,7 @@ QString EquityAiTab::build_prompt() const {
         "object with your %1 forecast and nothing after it:\n"
         "{\"direction\":\"up|down|flat\",\"target_price\":<number>,\"predicted_pct\":<number>,"
         "\"confidence\":<0-100>,\"recommendation\":\"buy|accumulate|hold|reduce|sell\",\"rationale\":\"one short sentence\"}")
-        .arg(hl, L.join('\n'));
+        .arg(hl, stock_data_block());
 }
 
 void EquityAiTab::run_forecast(bool automatic) {
