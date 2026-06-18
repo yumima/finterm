@@ -83,10 +83,13 @@ def stream_play(model: str, text: str, piper_bin: str) -> int:
         write_status({"fatal": "no raw audio player (paplay/pw-play/aplay) for streaming"})
         return 2
 
-    length = os.environ.get("FINCEPT_TTS_LENGTH", "1.0")
+    length = os.environ.get("FINCEPT_TTS_LENGTH", "1.08")
     noise = os.environ.get("FINCEPT_TTS_NOISE", "0.667")
+    noise_w = os.environ.get("FINCEPT_TTS_NOISE_W", "0.9")
+    sent_sil = os.environ.get("FINCEPT_TTS_SENTENCE_SILENCE", "0.35")
     pipeline = (f"{shlex.quote(piper_bin)} --model {shlex.quote(model)} --output_raw "
-                f"--length_scale {shlex.quote(length)} --noise_scale {shlex.quote(noise)} | {player}")
+                f"--length_scale {shlex.quote(length)} --noise_scale {shlex.quote(noise)} "
+                f"--noise_w {shlex.quote(noise_w)} --sentence_silence {shlex.quote(sent_sil)} | {player}")
 
     # No start_new_session: the pipeline stays in this python's process group so
     # TtsService's group-kill reaches it.
@@ -151,12 +154,16 @@ def main() -> int:
         write_status({"fatal": "--output is required in file mode"})
         return 2
 
+    # Warmer-than-default prosody so the voice isn't clipped/robotic — matches
+    # hearth's TTS route (length 1.08, width-noise 0.9, real inter-sentence pause).
     cmd = [
         piper_bin,
         "--model", model,
         "--output_file", args.output,
-        "--length_scale", os.environ.get("FINCEPT_TTS_LENGTH", "1.0"),
+        "--length_scale", os.environ.get("FINCEPT_TTS_LENGTH", "1.08"),
         "--noise_scale", os.environ.get("FINCEPT_TTS_NOISE", "0.667"),
+        "--noise_w", os.environ.get("FINCEPT_TTS_NOISE_W", "0.9"),
+        "--sentence_silence", os.environ.get("FINCEPT_TTS_SENTENCE_SILENCE", "0.35"),
     ]
 
     try:

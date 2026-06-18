@@ -29,10 +29,13 @@ class PredictionChart : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
 
   private:
     QVector<services::equity::Candle> candles_;
     QVector<AiPrediction>             preds_;
+    QPoint hover_{-1, -1};   // last mouse position over the plot (-1 = none)
 };
 
 /// "AI Forecast" tab: on-demand / daily AI analysis of a stock with an
@@ -96,6 +99,18 @@ class EquityAiTab : public QWidget {
     QTimer* chat_spinner_   = nullptr;  // animates the "thinking" bubble until the first token
     int     chat_spin_frame_ = 0;
     int     chat_spin_idx_  = -1;       // which bubble the spinner animates (-1 = none)
+
+    // Audio: read-aloud + hands-free voice conversation (reuses TtsService/SpeechService).
+    QPushButton* chat_read_btn_ = nullptr;
+    QPushButton* chat_mic_btn_  = nullptr;
+    bool    chat_voice_mode_ = false;   // 🎤 hands-free loop: listen → ask → speak → listen
+    bool    tts_speaking_ = false;      // mirrors TtsService::state_changed
+    bool    tts_pending_  = false;      // speak() requested but audio not started — ignore its
+                                        // synchronous teardown state_changed(false)
+    QString last_reply_;                // most recent AI answer (for read-aloud / speaking)
+    void toggle_voice_mode();
+    bool speak_reply(const QString& text);  // returns whether TTS actually started
+    void wire_audio();                  // one-time TtsService/SpeechService connections
 };
 
 } // namespace fincept::screens

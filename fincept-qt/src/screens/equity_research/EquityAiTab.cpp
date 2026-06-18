@@ -4,6 +4,8 @@
 #include "ai_chat/LlmService.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/query/QueryStore.h"
+#include "services/stt/SpeechService.h"
+#include "services/tts/TtsService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -16,6 +18,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPointer>
@@ -31,6 +34,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <limits>
 #include <memory>
 
 namespace fincept::screens {
@@ -107,6 +112,17 @@ qint64 ymd_to_secs(const QString& ymd) {
 
 PredictionChart::PredictionChart(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(220);
+    setMouseTracking(true);   // hover read-out without a pressed button
+}
+
+void PredictionChart::mouseMoveEvent(QMouseEvent* e) {
+    hover_ = e->pos();
+    update();
+}
+
+void PredictionChart::leaveEvent(QEvent*) {
+    hover_ = QPoint(-1, -1);
+    update();
 }
 
 void PredictionChart::set_data(const QVector<Candle>& candles, const QVector<AiPrediction>& preds) {
@@ -196,6 +212,60 @@ void PredictionChart::paintEvent(QPaintEvent*) {
             p.setPen(QPen(QColor(colors::TEXT_PRIMARY()), 1.2));
             const QPointF r(X(t1), Y(pr.price_at_resolve));
             p.drawEllipse(r, 3.2, 3.2);
+        }
+    }
+
+    // ── Legend ────────────────────────────────────────────────────────────────
+    {
+        p.setFont(QFont(QStringLiteral("Consolas"), 8));
+        double lx = area.left() + 6;
+        const double ly = area.top() + 2;
+        auto chip = [&](const char* col, Qt::PenStyle style, const QString& label, bool ring) {
+            if (ring) {
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(QColor(col), 1.4));
+                p.drawEllipse(QPointF(lx + 5, ly + 6), 3, 3);
+            } else {
+                p.setPen(QPen(QColor(col), 2, style));
+                p.drawLine(QPointF(lx, ly + 6), QPointF(lx + 13, ly + 6));
+            }
+            p.setPen(QColor(colors::TEXT_TERTIARY()));
+            p.drawText(QPointF(lx + 17, ly + 9), label);
+            lx += 17 + p.fontMetrics().horizontalAdvance(label) + 14;
+        };
+        chip(colors::TEXT_SECONDARY(), Qt::SolidLine, QStringLiteral("Actual price"), false);
+        chip(colors::AMBER(), Qt::DashLine, QStringLiteral("AI prediction (green=hit, red=miss, amber=pending)"), false);
+        chip(colors::TEXT_PRIMARY(), Qt::SolidLine, QStringLiteral("Actual @ horizon"), true);
+    }
+
+    // ── Hover read-out: crosshair + date/price of the nearest day ─────────────
+    if (hover_.x() >= area.left() && hover_.x() <= area.right() &&
+        hover_.y() >= area.top()  && hover_.y() <= area.bottom() && candles_.size() >= 2) {
+        const qint64 ht = t_min + qint64((hover_.x() - area.left()) / area.width() * (t_max - t_min));
+        const Candle* near = nullptr;
+        qint64 best = std::numeric_limits<qint64>::max();
+        for (const auto& c : candles_) {
+            if (c.timestamp < t_min) continue;
+            const qint64 d = std::llabs(c.timestamp - ht);
+            if (d < best) { best = d; near = &c; }
+        }
+        if (near) {
+            const double cx = X(near->timestamp), cy = Y(near->close);
+            p.setPen(QPen(QColor(colors::BORDER_MED()), 1, Qt::DashLine));
+            p.drawLine(QPointF(cx, area.top()), QPointF(cx, area.bottom()));
+            p.setBrush(QColor(colors::CYAN()));
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(QPointF(cx, cy), 3, 3);
+            const QString lbl = QDateTime::fromSecsSinceEpoch(near->timestamp).date().toString(QStringLiteral("MMM d, yyyy"))
+                                + QStringLiteral("   ") + fmt::format_money(near->close);
+            p.setFont(QFont(QStringLiteral("Consolas"), 8));
+            const double w = p.fontMetrics().horizontalAdvance(lbl) + 14, hh = 18;
+            const double bx = std::min(cx + 8, area.right() - w), by = area.top() + 2;
+            p.setBrush(QColor(colors::BG_RAISED()));
+            p.setPen(QPen(QColor(colors::BORDER_MED()), 1));
+            p.drawRoundedRect(QRectF(bx, by, w, hh), 3, 3);
+            p.setPen(QColor(colors::TEXT_PRIMARY()));
+            p.drawText(QRectF(bx, by, w, hh), Qt::AlignCenter, lbl);
         }
     }
 }
@@ -439,6 +509,24 @@ QWidget* EquityAiTab::build_chat_pane() {
 
     auto* row = new QHBoxLayout;
     row->setSpacing(6);
+
+    // 🎤 hands-free voice conversation toggle.
+    auto icon_btn_ss = [](bool on) {
+        return QString("QPushButton{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
+                       "padding:7px 10px;font-size:14px;}QPushButton:hover{border-color:%4;}")
+            .arg(on ? QString(colors::AMBER()) : QString(colors::BG_SURFACE()),
+                 on ? QString(colors::BG_BASE()) : QString(colors::TEXT_PRIMARY()),
+                 colors::BORDER_MED(), colors::AMBER());
+    };
+    chat_mic_btn_ = new QPushButton(QStringLiteral("🎤"));
+    chat_mic_btn_->setCursor(Qt::PointingHandCursor);
+    chat_mic_btn_->setToolTip(QStringLiteral("Hands-free voice: speak your question, hear the answer"));
+    chat_mic_btn_->setStyleSheet(icon_btn_ss(false));
+    chat_mic_btn_->setProperty("ss_on", icon_btn_ss(true));
+    chat_mic_btn_->setProperty("ss_off", icon_btn_ss(false));
+    connect(chat_mic_btn_, &QPushButton::clicked, this, &EquityAiTab::toggle_voice_mode);
+    row->addWidget(chat_mic_btn_);
+
     chat_input_ = new QLineEdit;
     chat_input_->setPlaceholderText(QStringLiteral("Ask about this stock…  (Enter to send)"));
     chat_input_->setStyleSheet(
@@ -457,8 +545,22 @@ QWidget* EquityAiTab::build_chat_pane() {
                  colors::BG_RAISED(), colors::TEXT_DIM()));
     connect(chat_send_, &QPushButton::clicked, this, &EquityAiTab::send_chat);
     row->addWidget(chat_send_);
+
+    // 🔊 read the latest answer aloud (click again to stop).
+    chat_read_btn_ = new QPushButton(QStringLiteral("🔊"));
+    chat_read_btn_->setCursor(Qt::PointingHandCursor);
+    chat_read_btn_->setToolTip(QStringLiteral("Read the last answer aloud"));
+    chat_read_btn_->setStyleSheet(icon_btn_ss(false));
+    connect(chat_read_btn_, &QPushButton::clicked, this, [this]() {
+        if (tts_speaking_)            // toggle: stop if already reading
+            services::TtsService::instance().stop();
+        else
+            speak_reply(last_reply_);
+    });
+    row->addWidget(chat_read_btn_);
     v->addLayout(row);
 
+    wire_audio();
     reset_chat();
     return pane;
 }
@@ -469,6 +571,19 @@ void EquityAiTab::reset_chat() {
     chat_turns_.clear();
     ++chat_epoch_;
     chat_streaming_ = false;
+    last_reply_.clear();
+    // Clear voice mode BEFORE stopping TTS: stop() can emit state_changed(false)
+    // synchronously, and that handler would otherwise resume listening.
+    const bool was_voice = chat_voice_mode_;
+    chat_voice_mode_ = false;
+    services::TtsService::instance().stop();       // stop any read-aloud for the old stock
+    if (was_voice) {                                // leave hands-free mode on a ticker switch
+        services::SpeechService::instance().stop_listening();
+        if (chat_mic_btn_) {
+            chat_mic_btn_->setText(QStringLiteral("🎤"));
+            chat_mic_btn_->setStyleSheet(chat_mic_btn_->property("ss_off").toString());
+        }
+    }
     if (chat_send_)  chat_send_->setEnabled(true);
     if (chat_input_) chat_input_->setEnabled(true);
     if (chat_view_)
@@ -503,6 +618,7 @@ void EquityAiTab::send_chat() {
     const QString q = chat_input_->text().trimmed();
     if (q.isEmpty()) return;
     if (current_symbol_.isEmpty()) return;
+    if (chat_voice_mode_) services::SpeechService::instance().stop_listening();  // pause mic while we think/speak
     if (!fincept::ai_chat::LlmService::instance().is_configured()) {
         chat_turns_.append({QStringLiteral("assistant"),
                             QStringLiteral("Local AI is not configured. Open Settings → AI Chat to point "
@@ -581,16 +697,75 @@ void EquityAiTab::send_chat() {
                     if (self->chat_spinner_) self->chat_spinner_->stop();
                     self->chat_spin_idx_ = -1;
                     if (self->chat_send_) self->chat_send_->setEnabled(true);
-                    // Never leave a spinning/empty bubble if the model returned nothing.
-                    if (reply_idx < self->chat_turns_.size() && shown.isEmpty()) {
-                        self->chat_turns_[reply_idx].second =
-                            QStringLiteral("(No answer came back — try rephrasing the question.)");
-                        self->render_chat();
+                    if (!shown.isEmpty()) {
+                        self->last_reply_ = shown;
+                        // Hear it; the mic resumes when TTS finishes. If TTS can't
+                        // start, resume listening now so voice mode doesn't stall.
+                        if (self->chat_voice_mode_ && !self->speak_reply(shown))
+                            services::SpeechService::instance().start_listening();
+                    } else {
+                        // Never leave a spinning/empty bubble; keep voice mode alive.
+                        if (reply_idx < self->chat_turns_.size()) {
+                            self->chat_turns_[reply_idx].second =
+                                QStringLiteral("(No answer came back — try rephrasing the question.)");
+                            self->render_chat();
+                        }
+                        if (self->chat_voice_mode_) services::SpeechService::instance().start_listening();
                     }
                 }
             }, Qt::QueuedConnection);
         },
         /*use_tools=*/false, persona);
+}
+
+void EquityAiTab::wire_audio() {
+    auto& stt = services::SpeechService::instance();
+    connect(&stt, &services::SpeechService::transcription_ready, this, [this](const QString& text) {
+        if (!chat_voice_mode_ || text.trimmed().isEmpty()) return;
+        chat_input_->setText(text.trimmed());
+        send_chat();   // ask the question we just heard
+    });
+    connect(&stt, &services::SpeechService::error_occurred, this, [this](const QString&) {
+        if (chat_voice_mode_) toggle_voice_mode();   // bail out of voice mode on STT failure
+    });
+
+    auto& tts = services::TtsService::instance();
+    connect(&tts, &services::TtsService::state_changed, this, [this](bool speaking) {
+        tts_speaking_ = speaking;
+        if (chat_read_btn_) chat_read_btn_->setText(speaking ? QStringLiteral("⏹") : QStringLiteral("🔊"));
+        if (speaking) { tts_pending_ = false; return; }   // real playback started
+        // speaking == false. Ignore the synchronous teardown false that speak()
+        // fires BEFORE audio begins — otherwise the mic would resume during the
+        // answer and transcribe the assistant's own voice (feedback loop).
+        if (tts_pending_) return;
+        if (chat_voice_mode_ && !chat_streaming_)
+            services::SpeechService::instance().start_listening();
+    });
+}
+
+bool EquityAiTab::speak_reply(const QString& text) {
+    if (text.trimmed().isEmpty()) return false;
+    tts_pending_ = true;                                   // suppress the resume until real playback
+    const bool ok = services::TtsService::instance().speak(text);
+    if (!ok) tts_pending_ = false;                          // nothing will play → clear
+    return ok;
+}
+
+void EquityAiTab::toggle_voice_mode() {
+    chat_voice_mode_ = !chat_voice_mode_;
+    if (chat_mic_btn_) {
+        chat_mic_btn_->setStyleSheet(
+            chat_mic_btn_->property(chat_voice_mode_ ? "ss_on" : "ss_off").toString());
+        chat_mic_btn_->setText(chat_voice_mode_ ? QStringLiteral("🔴") : QStringLiteral("🎤"));
+    }
+    if (chat_voice_mode_) {
+        if (current_symbol_.isEmpty()) { chat_voice_mode_ = false; return; }
+        services::TtsService::instance().stop();
+        services::SpeechService::instance().start_listening();
+    } else {
+        services::SpeechService::instance().stop_listening();
+        services::TtsService::instance().stop();
+    }
 }
 
 void EquityAiTab::maybe_auto_forecast() {
