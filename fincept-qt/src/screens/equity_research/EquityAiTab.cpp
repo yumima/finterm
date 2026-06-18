@@ -98,6 +98,16 @@ QString prose_only(const QString& text_in) {
     return s.trimmed();
 }
 
+// Pixel distance from point p to segment a→b (for hover hit-testing).
+double dist_to_segment(const QPointF& p, const QPointF& a, const QPointF& b) {
+    const QPointF ab = b - a, ap = p - a;
+    const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+    double t = len2 > 0 ? (ap.x() * ab.x() + ap.y() * ab.y()) / len2 : 0.0;
+    t = std::clamp(t, 0.0, 1.0);
+    const QPointF d = p - (a + t * ab);
+    return std::sqrt(d.x() * d.x() + d.y() * d.y());
+}
+
 // Epoch-seconds for a prediction's resolve_date / created_at, for the chart X.
 qint64 ymd_to_secs(const QString& ymd) {
     const QDate d = QDate::fromString(ymd.left(10), Qt::ISODate);
@@ -253,34 +263,80 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         chip(colors::TEXT_PRIMARY(), Qt::SolidLine, QStringLiteral("Actual @ horizon"), true);
     }
 
-    // ── Hover read-out: crosshair + date/price of the nearest day ─────────────
+    // ── Hover read-out: a forecast's details if over its line, else the
+    //    nearest day's actual close. ────────────────────────────────────────────
     if (hover_.x() >= area.left() && hover_.x() <= area.right() &&
         hover_.y() >= area.top()  && hover_.y() <= area.bottom() && candles_.size() >= 2) {
-        const qint64 ht = t_min + qint64((hover_.x() - area.left()) / area.width() * (t_max - t_min));
-        const Candle* near = nullptr;
-        qint64 best = std::numeric_limits<qint64>::max();
-        for (const auto& c : candles_) {
-            if (c.timestamp < t_min) continue;
-            const qint64 d = std::llabs(c.timestamp - ht);
-            if (d < best) { best = d; near = &c; }
-        }
-        if (near) {
-            const double cx = X(near->timestamp), cy = Y(near->close);
-            p.setPen(QPen(QColor(colors::BORDER_MED()), 1, Qt::DashLine));
-            p.drawLine(QPointF(cx, area.top()), QPointF(cx, area.bottom()));
-            p.setBrush(QColor(colors::CYAN()));
-            p.setPen(Qt::NoPen);
-            p.drawEllipse(QPointF(cx, cy), 3, 3);
-            const QString lbl = QDateTime::fromSecsSinceEpoch(near->timestamp).date().toString(QStringLiteral("MMM d, yyyy"))
-                                + QStringLiteral("   ") + fmt::format_money(near->close);
+
+        auto draw_box = [&](const QPointF& anchor, const QStringList& lines, const char* accent) {
             p.setFont(QFont(QStringLiteral("Consolas"), 8));
-            const double w = p.fontMetrics().horizontalAdvance(lbl) + 14, hh = 18;
-            const double bx = std::min(cx + 8, area.right() - w), by = area.top() + 2;
+            double w = 0;
+            for (const QString& s : lines) w = std::max(w, double(p.fontMetrics().horizontalAdvance(s)));
+            w += 14;
+            const double lh = 15, hh = lines.size() * lh + 6;
+            double bx = std::min(anchor.x() + 10, area.right() - w);
+            bx = std::max(bx, area.left());
+            const double by = std::min(std::max(anchor.y() - hh / 2, area.top()), area.bottom() - hh);
             p.setBrush(QColor(colors::BG_RAISED()));
-            p.setPen(QPen(QColor(colors::BORDER_MED()), 1));
+            p.setPen(QPen(QColor(accent ? accent : colors::BORDER_MED()), 1));
             p.drawRoundedRect(QRectF(bx, by, w, hh), 3, 3);
             p.setPen(QColor(colors::TEXT_PRIMARY()));
-            p.drawText(QRectF(bx, by, w, hh), Qt::AlignCenter, lbl);
+            for (int i = 0; i < lines.size(); ++i)
+                p.drawText(QRectF(bx + 7, by + 3 + i * lh, w - 14, lh), Qt::AlignVCenter | Qt::AlignLeft, lines[i]);
+        };
+
+        // 1) Over a prediction line? Show that forecast (predicted → target, conf,
+        //    and the actual / deviation once resolved).
+        const AiPrediction* hp = nullptr;
+        double best_d = 9.0;   // px hit threshold
+        for (const auto& pr : preds_) {
+            const qint64 t0 = ymd_to_secs(pr.created_at), t1 = ymd_to_secs(pr.resolve_date);
+            if (t0 == 0 || t1 == 0 || pr.target_price <= 0) continue;
+            const double d = dist_to_segment(QPointF(hover_), QPointF(X(t0), Y(pr.price_at_pred)),
+                                                              QPointF(X(t1), Y(pr.target_price)));
+            if (d < best_d) { best_d = d; hp = &pr; }
+        }
+        if (hp) {
+            const qint64 t0 = ymd_to_secs(hp->created_at), t1 = ymd_to_secs(hp->resolve_date);
+            const QPointF a(X(t0), Y(hp->price_at_pred)), b(X(t1), Y(hp->target_price));
+            const char* hc = !hp->resolved ? colors::AMBER()
+                           : hp->correct   ? colors::POSITIVE() : colors::NEGATIVE();
+            p.setBrush(Qt::NoBrush);
+            p.setPen(QPen(QColor(hc), 2.6));
+            p.drawLine(a, b);   // emphasise the hovered forecast
+            QStringList lines;
+            lines << QString("Forecast %1 · %2 %3 → %4 · conf %5")
+                         .arg(hp->created_at.left(10), hp->direction.toUpper(), pct_str(hp->predicted_pct),
+                              fmt::format_money(hp->target_price), QString::number(hp->confidence));
+            lines << (hp->resolved
+                          ? QString("Actual %1 · %2 · off %3pp")
+                                .arg(pct_str(hp->actual_pct),
+                                     hp->correct ? QStringLiteral("✓ hit") : QStringLiteral("✗ miss"),
+                                     QString::number(std::abs(hp->predicted_pct - hp->actual_pct), 'f', 1))
+                          : QString("resolves %1 · pending").arg(hp->resolve_date));
+            draw_box(b, lines, hc);
+        } else {
+            // 2) Otherwise → nearest day's actual close.
+            const qint64 ht = t_min + qint64((hover_.x() - area.left()) / area.width() * (t_max - t_min));
+            const Candle* near = nullptr;
+            qint64 best = std::numeric_limits<qint64>::max();
+            for (const auto& c : candles_) {
+                if (c.timestamp < t_min) continue;
+                const qint64 d = std::llabs(c.timestamp - ht);
+                if (d < best) { best = d; near = &c; }
+            }
+            if (near) {
+                const double cx = X(near->timestamp), cy = Y(near->close);
+                p.setPen(QPen(QColor(colors::BORDER_MED()), 1, Qt::DashLine));
+                p.drawLine(QPointF(cx, area.top()), QPointF(cx, area.bottom()));
+                p.setBrush(QColor(colors::CYAN()));
+                p.setPen(Qt::NoPen);
+                p.drawEllipse(QPointF(cx, cy), 3, 3);
+                draw_box(QPointF(cx, cy),
+                         {QDateTime::fromSecsSinceEpoch(near->timestamp).date().toString(QStringLiteral("MMM d, yyyy"))
+                          + QStringLiteral("   ") + fmt::format_money(near->close)},
+                         colors::BORDER_MED());
+            }
         }
     }
 }
