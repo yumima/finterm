@@ -21,7 +21,9 @@ PortfolioOrderPanel::PortfolioOrderPanel(QWidget* parent) : QWidget(parent) {
     // Lift the overlay off the table so it reads as a distinct panel.
     auto* shadow = new QGraphicsDropShadowEffect(this);
     shadow->setBlurRadius(28);
-    shadow->setXOffset(-6);
+    // Panel docks to the LEFT of the content (right of the heatmap), so the
+    // shadow falls to the right, over the table it overlays.
+    shadow->setXOffset(6);
     shadow->setYOffset(0);
     shadow->setColor(QColor(0, 0, 0, 170));
     setGraphicsEffect(shadow);
@@ -49,10 +51,15 @@ void PortfolioOrderPanel::build_ui() {
     header_row->addWidget(title);
     header_row->addStretch();
 
-    close_btn_ = new QPushButton("\u2715");
-    close_btn_->setFixedSize(18, 18);
+    // "\u00d7" (\u00d7) renders in every font; the heavy \u2715 (U+2715) used before fell
+    // back to a tofu box/dot in fonts that lack it \u2014 which is what made the
+    // close affordance read as a "dot" instead of an obvious X.
+    close_btn_ = new QPushButton("\u00d7");
+    close_btn_->setFixedSize(20, 20);
     close_btn_->setCursor(Qt::PointingHandCursor);
-    close_btn_->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none; font-size:12px; }"
+    close_btn_->setToolTip("Close");
+    close_btn_->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:none;"
+                                      "  font-size:18px; font-weight:700; }"
                                       "QPushButton:hover { color:%2; }")
                                   .arg(ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_PRIMARY()));
     connect(close_btn_, &QPushButton::clicked, this, &PortfolioOrderPanel::close_requested);

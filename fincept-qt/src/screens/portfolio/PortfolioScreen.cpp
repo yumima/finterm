@@ -1220,10 +1220,14 @@ QWidget* PortfolioScreen::build_main_view() {
                 disconnect(*conn);
                 if (!self)
                     return;
-                // Find most recent transaction for this symbol
+                // Editing a holding edits its cost lot — find the most-recent
+                // BUY for this symbol (txns are date-DESC). Matching any type
+                // would let a DIVIDEND/SELL row drive edit_position(), which
+                // rewrites the asset's quantity/avg-cost and would corrupt the
+                // position (e.g. set avg cost to a dividend's per-share amount).
                 portfolio::Transaction* match = nullptr;
                 for (auto& t : txns) {
-                    if (t.symbol == symbol) {
+                    if (t.symbol == symbol && t.transaction_type == "BUY") {
                         match = &t;
                         break;
                     }
@@ -1232,8 +1236,9 @@ QWidget* PortfolioScreen::build_main_view() {
                     return;
                 EditTransactionDialog dlg(*match, this);
                 if (dlg.exec() == QDialog::Accepted) {
-                    services::PortfolioService::instance().update_transaction(match->id, dlg.quantity(), dlg.price(),
-                                                                              dlg.date(), dlg.notes());
+                    services::PortfolioService::instance().edit_position(selected_id_, match->symbol, match->id,
+                                                                         dlg.quantity(), dlg.price(), dlg.date(),
+                                                                         dlg.notes());
                 }
             },
             Qt::SingleShotConnection);
@@ -1272,7 +1277,7 @@ QWidget* PortfolioScreen::build_main_view() {
     h_layout->addWidget(center, 1); // center takes full remaining space
 
     // Order panel is a floating overlay (parented to PortfolioScreen, not in layout)
-    // so BUY/SELL slides in from the right edge without reflowing the main grid.
+    // so BUY/SELL slides in beside the heatmap without reflowing the main grid.
     order_panel_ = new PortfolioOrderPanel(this);
     order_panel_->setVisible(false);
     order_panel_->raise();
@@ -1398,6 +1403,14 @@ void PortfolioScreen::on_order_panel_close() {
 
 // ── Order panel overlay helpers ──────────────────────────────────────────────
 
+int PortfolioScreen::order_panel_anchor_x() const {
+    // Dock immediately to the right of the heatmap sidebar (left side of the
+    // content) instead of the window's right edge.
+    if (heatmap_ && heatmap_->isVisible())
+        return heatmap_->mapTo(this, QPoint(0, 0)).x() + heatmap_->width();
+    return 0;
+}
+
 void PortfolioScreen::reposition_order_panel() {
     if (!order_panel_ || !order_panel_visible_)
         return;
@@ -1407,7 +1420,7 @@ void PortfolioScreen::reposition_order_panel() {
     const int top = command_bar_->height() + (stats_ribbon_->isVisible() ? stats_ribbon_->height() : 0);
     const int bottom = status_bar_->isVisible() ? status_bar_->height() : 0;
     const int h = height() - top - bottom;
-    order_panel_->setGeometry(width() - panel_w, top, panel_w, h);
+    order_panel_->setGeometry(order_panel_anchor_x(), top, panel_w, h);
     order_panel_->raise();
 }
 
@@ -1419,17 +1432,18 @@ void PortfolioScreen::animate_order_panel_in() {
     const int top = command_bar_->height() + (stats_ribbon_->isVisible() ? stats_ribbon_->height() : 0);
     const int bottom = status_bar_->isVisible() ? status_bar_->height() : 0;
     const int h = height() - top - bottom;
+    const int anchor_x = order_panel_anchor_x();
 
     if (!order_panel_->isVisible()) {
-        // Start fully off-screen to the right, then slide into place.
-        order_panel_->setGeometry(width(), top, panel_w, h);
+        // Start tucked behind the heatmap, then slide right into place beside it.
+        order_panel_->setGeometry(anchor_x - panel_w, top, panel_w, h);
         order_panel_->setVisible(true);
     }
     order_panel_->raise();
 
     order_panel_anim_->stop();
     order_panel_anim_->setStartValue(order_panel_->geometry());
-    order_panel_anim_->setEndValue(QRect(width() - panel_w, top, panel_w, h));
+    order_panel_anim_->setEndValue(QRect(anchor_x, top, panel_w, h));
     order_panel_anim_->start();
 }
 

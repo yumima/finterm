@@ -95,6 +95,10 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     void request_refresh(bool force_fresh = false);
     void reposition_order_panel();
     void animate_order_panel_in();
+    /// Screen-space x where the order panel docks: immediately to the right of
+    /// the heatmap sidebar (falls back to the left content edge if the heatmap
+    /// is hidden).
+    int order_panel_anchor_x() const;
     const portfolio::HoldingWithQuote* find_holding(const QString& symbol) const;
 
     /// Live-quote subscription. Resubscribes to `market:quote:<sym>` for the

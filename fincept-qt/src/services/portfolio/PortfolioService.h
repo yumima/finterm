@@ -39,8 +39,15 @@ class PortfolioService : public QObject {
 
     // ── Transactions ─────────────────────────────────────────────────────────
     void load_transactions(const QString& portfolio_id, int limit = 50);
-    void update_transaction(const QString& id, double qty, double price, const QString& date,
-                            const QString& notes = {});
+    /// Edit an existing holding in place. The blotter shows the stored asset
+    /// row (build_summary reads get_assets, NOT a sum of transactions), so
+    /// rewriting only the transaction left the displayed position unchanged.
+    /// This rewrites the edited transaction, then re-derives the asset row's
+    /// quantity and weighted-average cost from ALL of the symbol's transactions
+    /// (so multi-lot positions stay intact), invalidates the cache, and
+    /// refreshes the summary.
+    void edit_position(const QString& portfolio_id, const QString& symbol, const QString& txn_id, double qty,
+                       double price, const QString& date, const QString& notes = {});
     void delete_transaction(const QString& id, const QString& portfolio_id);
 
     // ── Dividend ──────────────────────────────────────────────────────────────

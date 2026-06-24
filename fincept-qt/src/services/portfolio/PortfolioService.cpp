@@ -653,9 +653,41 @@ void PortfolioService::load_transactions(const QString& portfolio_id, int limit)
     }
 }
 
-void PortfolioService::update_transaction(const QString& id, double qty, double price, const QString& date,
-                                          const QString& notes) {
-    PortfolioRepository::instance().update_transaction(id, qty, price, date, notes);
+void PortfolioService::edit_position(const QString& portfolio_id, const QString& symbol, const QString& txn_id,
+                                     double qty, double price, const QString& date, const QString& notes) {
+    auto& repo = PortfolioRepository::instance();
+    // Rewrite the edited transaction first…
+    repo.update_transaction(txn_id, qty, price, date, notes);
+
+    // …then re-derive the stored asset row from ALL of this symbol's
+    // transactions. The blotter shows the asset row (build_summary -> get_assets),
+    // not a transaction sum, so the edit only sticks if the asset is updated too
+    // — but overwriting it with just the edited lot would drop the other lots of
+    // a multi-buy position. Quantity-weighted average cost over BUY lots matches
+    // the convention add_asset uses; SELLs reduce quantity but leave avg intact.
+    auto txns = repo.get_symbol_transactions(portfolio_id, symbol);
+    if (txns.is_ok()) {
+        double buy_qty = 0, buy_cost = 0, sell_qty = 0;
+        for (const auto& t : txns.value()) {
+            if (t.transaction_type == "BUY") {
+                buy_qty += t.quantity;
+                buy_cost += t.quantity * t.price;
+            } else if (t.transaction_type == "SELL") {
+                sell_qty += t.quantity;
+            }
+        }
+        const double net_qty = buy_qty - sell_qty;
+        const double avg = buy_qty > 0 ? buy_cost / buy_qty : price;
+        repo.update_asset(portfolio_id, symbol, net_qty, avg);
+    } else {
+        // Couldn't re-read transactions — fall back to the edited lot's values
+        // so the edit still takes effect rather than silently doing nothing.
+        repo.update_asset(portfolio_id, symbol, qty, price);
+    }
+
+    invalidate_cache(portfolio_id);
+    load_transactions(portfolio_id, 50); // refresh the txn-history panel
+    emit asset_added(portfolio_id);      // -> PortfolioScreen::on_asset_changed -> refresh_summary
 }
 
 void PortfolioService::delete_transaction(const QString& id, const QString& portfolio_id) {

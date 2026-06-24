@@ -2,19 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-06-18)
+## Today's commits (2026-06-24)
 
 Latest first.
 
-- [`f44503e8f`](https://github.com/yumima/finterm/commit/f44503e8f) ER AI chart: hover now reads the prediction lines too, not just actual price
-- [`d2536d501`](https://github.com/yumima/finterm/commit/d2536d501) ER AI: surface prediction accuracy — "today" divider, deviation, error bars
-- [`3e9c49edf`](https://github.com/yumima/finterm/commit/3e9c49edf) ER AI: chart legend + hover, chat read-aloud + hands-free voice, warmer TTS
-- [`ec6084f3c`](https://github.com/yumima/finterm/commit/ec6084f3c) ER AI chat: animated "thinking" spinner instead of a static "…"
-- [`ab3437595`](https://github.com/yumima/finterm/commit/ab3437595) ER AI chat: fix hang on tool calls — answer from richer data, not live tools
-- [`6e7431270`](https://github.com/yumima/finterm/commit/6e7431270) Equity Research AI: stock-scoped chat pane beside the analysis (resizable)
-- [`01a879dfb`](https://github.com/yumima/finterm/commit/01a879dfb) AI Forecast: fix forecasting_ leak on symbol switch + strip dangling <think>
-- [`f7a049fad`](https://github.com/yumima/finterm/commit/f7a049fad) AI Forecast: fix stuck "Loading…"/"Thinking…" — no-data tickers + slow local model
-- [`e90b7617d`](https://github.com/yumima/finterm/commit/e90b7617d) Equity Research: AI Forecast tab with an immutable prediction track record
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

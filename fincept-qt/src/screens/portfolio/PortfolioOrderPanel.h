@@ -8,7 +8,7 @@
 
 namespace fincept::screens {
 
-/// 200px right sidebar for BUY/SELL order entry.
+/// 200px order-entry sidebar for BUY/SELL, docked to the right of the heatmap.
 class PortfolioOrderPanel : public QWidget {
     Q_OBJECT
   public:
