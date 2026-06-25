@@ -15,6 +15,51 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime
 
+# ── yfinance timezone-cache hardening ─────────────────────────────────────────
+# yfinance caches each ticker's exchange timezone in an on-disk SQLite file
+# (~/.cache/py-yfinance/tkr-tz.db via peewee). Resolving the timezone is a hard
+# prerequisite for EVERY price/history download, and yfinance treats the cache
+# as mandatory once its folder exists: when the DB file itself can't be opened
+# it raises peewee.OperationalError('unable to open database file') straight out
+# of Ticker.history() (yfinance/base.py:_get_ticker_tz), which the daemon turns
+# into an empty result. In a long-lived daemon this surfaces after many hours /
+# overnight — under memory pressure, or if anything removes or locks the db file
+# — and then EVERY symbol reports "possibly delisted; no price data" until the
+# process is restarted (portfolio perf chart goes flat, equity-research overview
+# empties, sparklines blank, …).
+#
+# The on-disk cache is only a latency optimisation. Replace it with a process-
+# local in-memory cache: timezones are still fetched live (real data) and reused
+# for the daemon's lifetime, but there is no SQLite file left to fail, so the
+# whole failure class disappears. A restart simply re-warms the in-memory map.
+# Dict get/set/pop are atomic under the GIL, so it is safe for the daemon's
+# worker threads to share one instance without locking.
+class _InMemoryTzCache:
+    """Drop-in for yfinance's _TzCache with no on-disk SQLite dependency."""
+    def __init__(self):
+        self._tz = {}
+    def lookup(self, tkr):
+        return self._tz.get(tkr)
+    def store(self, tkr, tz):
+        if tz is None:
+            self._tz.pop(tkr, None)
+        else:
+            self._tz[tkr] = tz
+    @property
+    def tz_db(self):
+        return None
+
+def _install_inmemory_tz_cache():
+    try:
+        from yfinance import cache as _yf_cache
+        _yf_cache._TzCacheManager._tz_cache = _InMemoryTzCache()
+    except Exception:
+        # Best-effort: if yfinance internals move in a future version, fall back
+        # to the stock on-disk cache rather than failing to start the daemon.
+        pass
+
+_install_inmemory_tz_cache()
+
 # ── yfinance crumb/session state ──────────────────────────────────────────────
 # Yahoo Finance periodically rotates its internal auth crumb.  When this
 # happens every outgoing request returns HTTP 401 "Invalid Crumb".  The daemon
