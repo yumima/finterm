@@ -18,6 +18,7 @@
 #    include <QImage>
 #    include <QMediaDevices>
 #    include <QMediaPlayer>
+#    include <QTimer>
 #    include <QVideoFrame>
 #    include <QVideoSink>
 #endif
@@ -374,6 +375,11 @@ class VideoPlayerWidget : public BaseWidget {
     /// landed on, while Chrome/YouTube migrate because they specify
     /// the default sink on each stream creation. We mirror that.
     QMediaDevices*     media_devices_ = nullptr;
+    // Slow poll that catches a *pure default-sink swap* — the default flips
+    // while the device list is unchanged, which QMediaDevices emits no signal
+    // for. The tail of every Bluetooth reconnect lands here, so without it TV
+    // audio gets stuck on the old sink. Only re-routes in follow-default mode.
+    QTimer*            default_sink_poll_ = nullptr;
     // Bottom-bar output-device selector. "System default" (index 0, empty
     // itemData) follows QMediaDevices::defaultAudioOutput(); any other entry
     // pins audio_output_ to that sink (id stored in pinned_audio_id_) until the

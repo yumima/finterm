@@ -795,14 +795,38 @@ void VideoPlayerWidget::build_player_view() {
 
     // Re-route + rebuild the picker when the device LIST changes — headset
     // plug/unplug, Bluetooth connect/disconnect. Note audioOutputsChanged does
-    // NOT reliably fire on a pure default-sink swap (both devices still
-    // present); that case is covered by re-pinning at the start of every fresh
-    // stream (see play_direct) and by the user picking a device explicitly.
+    // NOT fire on a pure default-sink swap (both devices still present); that
+    // case is caught by the default_sink_poll_ timer set up just below, plus
+    // re-pinning at the start of every fresh stream (see play_direct).
     media_devices_ = new QMediaDevices(this);
     connect(media_devices_, &QMediaDevices::audioOutputsChanged, this, [this]() {
         populate_audio_devices();   // refresh the combo list + selection
         refresh_audio_output();     // re-route to the (possibly new) target sink
     });
+
+    // audioOutputsChanged covers device add/remove, but Qt emits *nothing* for
+    // a pure default-sink swap — the device list is unchanged and only which
+    // sink is the system default flips. That's the tail of every Bluetooth
+    // reconnect: the headset's sink reappears in the list (one event, handled
+    // above, but the default is still the speakers at that instant), then a
+    // separate metadata event promotes it to default with no list change and
+    // no signal. The result is exactly the reported bug — a stream that
+    // started on the speakers never migrates to the headset that just became
+    // default. setDevice() on the live QAudioOutput *does* re-route mid-stream
+    // (verified), so all we lack is the trigger. defaultAudioOutput() reads a
+    // cached singleton, so poll it on a slow timer and re-route the moment the
+    // default moves out from under us. Follow-default mode only — an explicit
+    // user pick (follow_system_default_ == false) is never overridden.
+    default_sink_poll_ = new QTimer(this);
+    default_sink_poll_->setInterval(2000);
+    connect(default_sink_poll_, &QTimer::timeout, this, [this]() {
+        if (!follow_system_default_ || !audio_output_) return;
+        const QAudioDevice def = QMediaDevices::defaultAudioOutput();
+        if (!def.isNull() && def.id() != audio_output_->device().id())
+            refresh_audio_output();
+    });
+    // Started/stopped by the playbackStateChanged handler below — runs only
+    // while a stream is playing.
 
     // QVideoSink is the frame delivery pipe: it receives decoded frames from
     // the multimedia engine and emits videoFrameChanged. The queued connection
@@ -819,6 +843,15 @@ void VideoPlayerWidget::build_player_view() {
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::PlayingState)
                     play_in_progress_ = false;
+                // Only watch the default sink while a stream is actually
+                // playing — a default swap matters nowhere else (paused streams
+                // re-route on resume via resume_playback(); stopped ones via
+                // the per-stream re-pin in play_direct). Keeps the dashboard
+                // idle when the user is just browsing the channel list.
+                if (default_sink_poll_) {
+                    if (s == QMediaPlayer::PlayingState) default_sink_poll_->start();
+                    else                                 default_sink_poll_->stop();
+                }
                 // Record the pause moment so resume_playback() can pick
                 // between the cheap and the heavy recovery — both manual
                 // pause and lock-auto-pause flow through this signal.

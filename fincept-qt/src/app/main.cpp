@@ -110,6 +110,21 @@ int main(int argc, char* argv[]) {
     // (Qt Charts, QOpenGLWidget) — prevents black rendering in floating windows.
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 
+    // Pin Qt Multimedia's audio-device backend to PulseAudio. Qt 6.10 defaults
+    // to a native PipeWire device backend whose SPA-Pod format parser chokes on
+    // PipeWire 1.6.2 — it logs "spaVisitChoice: parse error" while parsing a
+    // Bluetooth sink's format and drops the device from its async monitor. The
+    // result: a headset that connects (or A2DP-renegotiates on a reconnect)
+    // after launch never appears in QMediaDevices::audioOutputs(), and the
+    // dashboard TV player can neither list it nor route audio to it — it stays
+    // stuck on the built-in speakers. The PulseAudio backend goes through
+    // libpulse (PipeWire-pulse exposes every sink, bluez included) and never
+    // touches that parser, so device hotplug is reliable. Must be set before
+    // QApplication so the first QMediaDevices query picks it up. Honour an
+    // explicit override if the user set one in the environment.
+    if (qEnvironmentVariableIsEmpty("QT_AUDIO_BACKEND"))
+        qputenv("QT_AUDIO_BACKEND", "PulseAudio");
+
     // SingleApplication enforces one process per profile.
     // The instance key is scoped to the active profile name, so
     // "FinceptTerminal --profile work" and "FinceptTerminal --profile personal"
