@@ -1115,7 +1115,7 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
     // DIGEST works for free: while chunks are still arriving the marker simply
     // hasn't appeared yet, so everything renders as brief and the detail
     // section fills in the moment the tail starts streaming.
-    const auto [brief, detail] = split_brief(text);
+    const auto [brief, detail] = brief::split(text);
 
     tldr_label_->setText(brief);
     tldr_section_->show();

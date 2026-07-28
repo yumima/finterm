@@ -17,7 +17,7 @@
 
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsFeedModel.h"
-#include "screens/news/NewsDetailPanel.h"
+#include "screens/news/NewsBriefFormat.h"
 #include "screens/news/NewsSidePanel.h"
 
 #include <QSignalSpy>
@@ -89,12 +89,12 @@ class TestNewsFeedPanel : public QObject {
 // split wrong either loses the breakdown or leaks the raw marker into the
 // text the user reads.
 void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
-    const QString marker = NewsDetailPanel::kCategoryMarker;
+    const QString marker = brief::kCategoryMarker;
 
     // Normal case: both halves, marker consumed.
     {
         const auto [brief, detail] =
-            NewsDetailPanel::split_brief("Overall read: risk-off.\n" + marker + "\n### TECH\n- Chips");
+            brief::split("Overall read: risk-off.\n" + marker + "\n### TECH\n- Chips");
         QCOMPARE(brief, QStringLiteral("Overall read: risk-off."));
         QCOMPARE(detail, QStringLiteral("### TECH\n- Chips"));
         QVERIFY(!brief.contains(marker));
@@ -104,7 +104,7 @@ void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
     // No marker — a cached brief from before this existed, or a model that
     // ignored the instruction. All of it is the summary; nothing invented.
     {
-        const auto [brief, detail] = NewsDetailPanel::split_brief(QStringLiteral("Just a brief."));
+        const auto [brief, detail] = brief::split(QStringLiteral("Just a brief."));
         QCOMPARE(brief, QStringLiteral("Just a brief."));
         QVERIFY(detail.isEmpty());
     }
@@ -113,7 +113,7 @@ void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
     // not be rendered as brief content.
     for (int cut = 1; cut < marker.size(); ++cut) {
         const QString partial = "Overall read: mixed.\n" + marker.left(cut);
-        const auto [brief, detail] = NewsDetailPanel::split_brief(partial);
+        const auto [brief, detail] = brief::split(partial);
         QVERIFY2(!brief.endsWith(QLatin1Char('<')),
                  qPrintable(QStringLiteral("leaked marker prefix at cut %1: '%2'").arg(cut).arg(brief)));
         QCOMPARE(brief, QStringLiteral("Overall read: mixed."));
@@ -123,14 +123,14 @@ void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
     // A '<' that is NOT a marker prefix is ordinary text and must survive.
     {
         const auto [brief, detail] =
-            NewsDetailPanel::split_brief(QStringLiteral("Yields fell <2% on the week"));
+            brief::split(QStringLiteral("Yields fell <2% on the week"));
         QCOMPARE(brief, QStringLiteral("Yields fell <2% on the week"));
         QVERIFY(detail.isEmpty());
     }
 
     // Marker present but nothing after it yet (tail hasn't streamed in).
     {
-        const auto [brief, detail] = NewsDetailPanel::split_brief("Brief text.\n" + marker);
+        const auto [brief, detail] = brief::split("Brief text.\n" + marker);
         QCOMPARE(brief, QStringLiteral("Brief text."));
         QVERIFY(detail.isEmpty());
     }

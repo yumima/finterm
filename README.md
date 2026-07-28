@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`380594d3e`](https://github.com/yumima/finterm/commit/380594d3e) News: hold the 1:2:2 ratio on resize; two review fixes
 - [`02f4cc537`](https://github.com/yumima/finterm/commit/02f4cc537) News: tighten the DIGEST spec — 2.6x faster, 56% less output
 - [`42c38c2aa`](https://github.com/yumima/finterm/commit/42c38c2aa) News: run AI briefs on the fast model role — the real cause of the timeouts
 - [`0cddb060a`](https://github.com/yumima/finterm/commit/0cddb060a) News: unstick the brief gate, fix row elision, 1:2:2 panes, DIGEST below summaries

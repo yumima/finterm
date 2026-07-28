@@ -1,4 +1,5 @@
 #pragma once
+#include "screens/news/NewsBriefFormat.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsMonitorService.h"
 #include "services/news/NewsNlpService.h"
@@ -8,11 +9,8 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QTextBrowser>
-#include <QStringView>
 #include <QVBoxLayout>
 #include <QWidget>
-
-#include <algorithm>
 
 namespace fincept::screens {
 
@@ -47,62 +45,6 @@ class NewsDetailPanel : public QWidget {
     /// Hide the TL;DR section (called when a new article is opened so the
     /// summary doesn't outlive its relevance to the feed snapshot).
     void hide_tldr();
-
-    /// Separates the top brief from the per-category detail in a model brief.
-    /// Both prompts are told to emit this on its own line; split_brief()
-    /// splits on it. Absent (older cached briefs, a model that ignored the
-    /// instruction) the whole text renders as the brief and the lower section
-    /// stays hidden — no worse than before this existed.
-    static constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
-
-    /// Splits a model brief into {top summary, lower per-category detail}.
-    ///
-    /// Pure and static so it can be tested without standing up the panel,
-    /// which pulls in TTS, the file manager and the article repository.
-    ///
-    /// Streaming-aware: the DIGEST arrives in chunks, so a chunk boundary can
-    /// land mid-marker and leave a dangling "<<<CATE" at the end of the text.
-    /// Rendering that fragment as brief content shows the user raw protocol
-    /// for a frame, so a trailing partial marker is trimmed off the summary.
-    ///
-    /// Defined inline so a test can call it without linking this translation
-    /// unit, which drags in TTS, the file manager and the article repository.
-    static QPair<QString, QString> split_brief(const QString& text) {
-        const int marker = text.indexOf(kCategoryMarker);
-        if (marker >= 0) {
-            return {text.left(marker).trimmed(),
-                    text.mid(marker + kCategoryMarker.size()).trimmed()};
-        }
-
-        // No complete marker. If the text ends with a prefix of one, a
-        // streaming chunk boundary landed mid-marker — drop the fragment so
-        // the user never sees "<<<CATE" tacked onto the brief. Ordinary prose
-        // containing '<' (e.g. "yields fell <2%") is left alone, because the
-        // run must match the marker from its very first character.
-        //
-        // Test each trailing run longest-first. Anchoring on lastIndexOf('<')
-        // instead is wrong: a "<<" fragment ends at the second '<', so
-        // trimming from there leaves the first one behind.
-        //
-        // Compared char by char against the Latin-1 marker — QLatin1StringView
-        // is 8-bit so it cannot be viewed as a QStringView, and this keeps the
-        // check allocation-free on a path that runs once per stream chunk.
-        const qsizetype max_len =
-            std::min<qsizetype>(kCategoryMarker.size() - 1, text.size());
-        for (qsizetype len = max_len; len > 0; --len) {
-            const QStringView tail = QStringView{text}.right(len);
-            bool is_prefix = true;
-            for (qsizetype i = 0; i < len; ++i) {
-                if (tail[i] != QLatin1Char(kCategoryMarker[i])) {
-                    is_prefix = false;
-                    break;
-                }
-            }
-            if (is_prefix)
-                return {text.left(text.size() - len).trimmed(), QString()};
-        }
-        return {text, QString()};
-    }
 
   signals:
     void analyze_requested(const QString& article_url);

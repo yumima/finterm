@@ -1,6 +1,6 @@
 #include "screens/news/NewsSidePanel.h"
 
-#include "screens/news/NewsDetailPanel.h"
+#include "screens/news/NewsBriefFormat.h"
 
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -178,7 +178,7 @@ void NewsSidePanel::show_digest(const QString& markdown) {
     // pane splits into top/bottom sections. The drawer is a single vertical
     // column, so the two halves simply stack — join them with a rule rather
     // than leaking the raw marker into the text.
-    const auto [brief, detail] = NewsDetailPanel::split_brief(markdown);
+    const auto [brief, detail] = brief::split(markdown);
     QString body = brief;
     if (!detail.isEmpty())
         body += QStringLiteral("\n\n---\n\n") + detail;
