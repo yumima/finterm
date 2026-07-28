@@ -18,6 +18,7 @@
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsFeedModel.h"
 #include "screens/news/NewsBriefFormat.h"
+#include "services/news/NewsBriefCacheKey.h"
 #include "screens/news/NewsSidePanel.h"
 
 #include <QSignalSpy>
@@ -81,6 +82,7 @@ class TestNewsFeedPanel : public QObject {
     void mark_visible_seen_reports_onscreen_ids();
     void brief_splits_into_summary_and_categories();
     void duplicate_category_sections_are_merged();
+    void brief_cache_key_covers_every_input();
     void feed_panes_split_evenly_and_hold_on_resize();
     void drawer_rows_reelide_when_width_changes();
 };
@@ -282,6 +284,62 @@ void TestNewsFeedPanel::duplicate_category_sections_are_merged() {
     // Detail with no headings at all passes through untouched.
     const QString plain = brief::split(marker + "\njust prose, no headings").second;
     QCOMPARE(plain, QStringLiteral("just prose, no headings"));
+}
+
+
+// The brief cache key has to change whenever anything that shapes the brief
+// changes, and must not change for things that don't. Getting this wrong is
+// silent: the user is served someone else's brief, or their own stale one.
+void TestNewsFeedPanel::brief_cache_key_covers_every_input() {
+    using fincept::services::brief_cache::key;
+
+    const QStringList base{QStringLiteral("Alpha leads market higher"),
+                           QStringLiteral("Beta cuts guidance"),
+                           QStringLiteral("Gamma opens new plant")};
+
+    // Deterministic, and order-independent — feed ordering churns constantly
+    // and must not fragment the cache.
+    QCOMPARE(key(base, "pf", 20, 1), key(base, "pf", 20, 1));
+    QStringList shuffled{base[2], base[0], base[1]};
+    QCOMPARE(key(shuffled, "pf", 20, 1), key(base, "pf", 20, 1));
+
+    // THE regression: the old key was the joined headlines truncated to 180
+    // characters, so two sets agreeing on their alphabetically-first entries
+    // collided and the second caller got the first one's brief. These two
+    // share a >180-character prefix and differ only at the end.
+    QStringList long_a, long_b;
+    for (int i = 0; i < 4; ++i) {
+        const QString shared =
+            QStringLiteral("AAAA a very long shared leading headline number %1 padded out").arg(i);
+        long_a << shared;
+        long_b << shared;
+    }
+    long_a << QStringLiteral("ZZZZ tail story one");
+    long_b << QStringLiteral("ZZZZ tail story two");
+    QVERIFY(long_a.join(QLatin1Char('|')).left(180) == long_b.join(QLatin1Char('|')).left(180));
+    QVERIFY2(key(long_a, "pf", 20, 1) != key(long_b, "pf", 20, 1),
+             "sets differing only past the old 180-char prefix must not share a key");
+
+    // Any differing headline changes the key.
+    QStringList changed = base;
+    changed[1] = QStringLiteral("Beta raises guidance");
+    QVERIFY(key(changed, "pf", 20, 1) != key(base, "pf", 20, 1));
+
+    // Portfolio, sample size and prompt version each participate — none of
+    // which the old key carried apart from the portfolio.
+    QVERIFY(key(base, "other-pf", 20, 1) != key(base, "pf", 20, 1));
+    QVERIFY(key(base, "pf", 35, 1) != key(base, "pf", 20, 1));
+    QVERIFY(key(base, "pf", 20, 2) != key(base, "pf", 20, 1));
+
+    // No portfolio is a distinct, still-valid key rather than a broken one.
+    const QString anon = key(base, QString(), 20, 1);
+    QVERIFY(!anon.isEmpty());
+    QVERIFY(anon != key(base, "pf", 20, 1));
+
+    // Fixed-length and namespaced, so it cannot collide with other cache users
+    // and cannot grow with the sample size.
+    QVERIFY(key(base, "pf", 20, 1).startsWith(QStringLiteral("news:summary:v1:n20:")));
+    QCOMPARE(key(base, "pf", 20, 1).size(), key(long_a, "pf", 20, 1).size());
 }
 
 // The layout contract: exactly two panes, detail on the right, and it is

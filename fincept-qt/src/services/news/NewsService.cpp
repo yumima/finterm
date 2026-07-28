@@ -1,5 +1,7 @@
 #include "services/news/NewsService.h"
 
+#include "services/news/NewsBriefCacheKey.h"
+
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -615,34 +617,15 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     const int n = std::min(count, static_cast<int>(articles.size()));
     const QString pf_id = services::AppContextService::instance().snapshot().portfolio_id;
 
-    // Cache key = digest of the FULL sorted headline set, plus everything else
-    // that changes the output: the active portfolio (the brief has a holdings
-    // section), the sample size, and the prompt version.
-    //
-    // This used to key on sig.left(180) — the raw joined headlines truncated to
-    // 180 characters, i.e. the alphabetically-first two or three headlines of
-    // up to 35. Two different article sets that happened to share those few
-    // headlines collided and the second request was served the first one's
-    // brief, which in a feed where the top story persists across refreshes is
-    // not a remote possibility. Hashing the whole set removes the collision
-    // and keeps the key a fixed 40 characters.
-    //
-    // The size and version segments matter as much: neither was in the old key,
-    // so changing the sample size or the prompt left every existing entry
-    // looking valid and briefs kept their old shape until the 10-minute TTL
-    // aged them out. Bump kBriefPromptVersion whenever the prompt changes.
+    // Cache key covers every input that changes the output — the full headline
+    // set, the portfolio, the sample size and the prompt version. See
+    // NewsBriefCacheKey.h for why each matters; the rules are non-obvious and
+    // getting them wrong is silent.
     QStringList sorted_headlines;
     for (int i = 0; i < n; ++i)
         sorted_headlines.append(articles[i].headline);
-    std::sort(sorted_headlines.begin(), sorted_headlines.end());
-    const QString sig = QString::fromLatin1(
-        QCryptographicHash::hash(sorted_headlines.join(QLatin1Char('|')).toUtf8(),
-                                 QCryptographicHash::Sha1)
-            .toHex());
-    const QString sum_key = QStringLiteral("news:summary:v%1:n%2:%3:%4")
-                                .arg(kBriefPromptVersion)
-                                .arg(n)
-                                .arg(pf_id, sig);
+    const QString sum_key =
+        brief_cache::key(sorted_headlines, pf_id, n, kBriefPromptVersion);
 
     {
         const QVariant cached = fincept::CacheManager::instance().get(sum_key);
