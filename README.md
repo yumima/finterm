@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b101d7916`](https://github.com/yumima/finterm/commit/b101d7916) News: merge duplicate category sections in AI briefs
 - [`2f2d0f570`](https://github.com/yumima/finterm/commit/2f2d0f570) News: move brief splitting into a shared header
 - [`380594d3e`](https://github.com/yumima/finterm/commit/380594d3e) News: hold the 1:2:2 ratio on resize; two review fixes
 - [`02f4cc537`](https://github.com/yumima/finterm/commit/02f4cc537) News: tighten the DIGEST spec — 2.6x faster, 56% less output

@@ -10,11 +10,11 @@
 // Header-only and free of Qt widget headers, so a test can exercise it without
 // standing up either panel.
 
-#include <QLatin1StringView>
 #include <QHash>
+#include <QLatin1StringView>
 #include <QPair>
-#include <QStringList>
 #include <QString>
+#include <QStringList>
 #include <QStringView>
 
 #include <algorithm>
@@ -32,9 +32,9 @@ inline constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
 /// The model is asked for one section per category, but it routinely emits the
 /// same heading two or three times — an observed brief had GEOPOLITICS, ENERGY
 /// and ECONOMIC each listed twice. A prompt cannot guarantee this; the render
-/// can. Bullets are merged under the FIRST occurrence of each heading, first
-/// -seen order is preserved, and byte-identical bullets are dropped (the model
-/// sometimes restates a line verbatim under its duplicate heading).
+/// can. Bullets are merged under the FIRST occurrence of each heading,
+/// first-seen order is preserved, and byte-identical bullets are dropped (the
+/// model sometimes restates a line verbatim under its duplicate heading).
 ///
 /// Text before the first heading is passed through untouched, and input with
 /// no headings at all is returned unchanged.
@@ -53,6 +53,8 @@ inline QString merge_duplicate_sections(const QString& detail) {
         const QString trimmed = line.trimmed();
         // Tolerate ##..#### so a model that varies the heading level still
         // gets deduplicated rather than silently splitting into two sections.
+        // Deliberately NOT a single '#': "#1 story" is ordinary bullet text and
+        // would be misread as a heading, swallowing the rest of the section.
         const bool is_heading = trimmed.startsWith(QLatin1String("##")) &&
                                 !trimmed.mid(2).trimmed().isEmpty();
         if (is_heading) {
@@ -73,8 +75,11 @@ inline QString merge_duplicate_sections(const QString& detail) {
                 preamble += line + QLatin1Char('\n');
             continue;
         }
+        // Blank lines inside a section are dropped rather than preserved: the
+        // body is a bullet list, and tightening it is the desired render. Only
+        // the separation BETWEEN sections is re-established by the rebuild.
         if (trimmed.isEmpty())
-            continue; // blank lines are re-inserted by the rebuild below
+            continue;
         if (!body[current].contains(line))
             body[current].append(line);
     }

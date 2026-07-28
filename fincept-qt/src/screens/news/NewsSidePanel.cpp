@@ -178,8 +178,8 @@ void NewsSidePanel::show_digest(const QString& markdown) {
     // pane splits into top/bottom sections. The drawer is a single vertical
     // column, so the two halves simply stack — join them with a rule rather
     // than leaking the raw marker into the text.
-    const auto [brief, detail] = brief::split(markdown);
-    QString body = brief;
+    const auto [summary, detail] = brief::split(markdown);
+    QString body = summary;
     if (!detail.isEmpty())
         body += QStringLiteral("\n\n---\n\n") + detail;
     digest_label_->setText(body);
