@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`558983dd6`](https://github.com/yumima/finterm/commit/558983dd6) News: split the brief into summary + per-category detail; log filter drops
 - [`8daff59a8`](https://github.com/yumima/finterm/commit/8daff59a8) DataHub: fix subscriptions outliving their owner; news divider draggable
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

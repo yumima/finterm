@@ -17,6 +17,7 @@
 
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsFeedModel.h"
+#include "screens/news/NewsDetailPanel.h"
 
 #include <QSignalSpy>
 #include <QSplitter>
@@ -74,7 +75,60 @@ class TestNewsFeedPanel : public QObject {
     void keyboard_navigation_walks_rows_in_order();
     void click_maps_to_the_row_that_was_clicked();
     void mark_visible_seen_reports_onscreen_ids();
+    void brief_splits_into_summary_and_categories();
 };
+
+// The TL;DR/DIGEST output is one blob that has to land in two places: the
+// summary up top, the per-category breakdown in the lower pane. Getting the
+// split wrong either loses the breakdown or leaks the raw marker into the
+// text the user reads.
+void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
+    const QString marker = NewsDetailPanel::kCategoryMarker;
+
+    // Normal case: both halves, marker consumed.
+    {
+        const auto [brief, detail] =
+            NewsDetailPanel::split_brief("Overall read: risk-off.\n" + marker + "\n### TECH\n- Chips");
+        QCOMPARE(brief, QStringLiteral("Overall read: risk-off."));
+        QCOMPARE(detail, QStringLiteral("### TECH\n- Chips"));
+        QVERIFY(!brief.contains(marker));
+        QVERIFY(!detail.contains(marker));
+    }
+
+    // No marker — a cached brief from before this existed, or a model that
+    // ignored the instruction. All of it is the summary; nothing invented.
+    {
+        const auto [brief, detail] = NewsDetailPanel::split_brief(QStringLiteral("Just a brief."));
+        QCOMPARE(brief, QStringLiteral("Just a brief."));
+        QVERIFY(detail.isEmpty());
+    }
+
+    // Streaming: a chunk boundary lands mid-marker. The dangling fragment must
+    // not be rendered as brief content.
+    for (int cut = 1; cut < marker.size(); ++cut) {
+        const QString partial = "Overall read: mixed.\n" + marker.left(cut);
+        const auto [brief, detail] = NewsDetailPanel::split_brief(partial);
+        QVERIFY2(!brief.endsWith(QLatin1Char('<')),
+                 qPrintable(QStringLiteral("leaked marker prefix at cut %1: '%2'").arg(cut).arg(brief)));
+        QCOMPARE(brief, QStringLiteral("Overall read: mixed."));
+        QVERIFY(detail.isEmpty());
+    }
+
+    // A '<' that is NOT a marker prefix is ordinary text and must survive.
+    {
+        const auto [brief, detail] =
+            NewsDetailPanel::split_brief(QStringLiteral("Yields fell <2% on the week"));
+        QCOMPARE(brief, QStringLiteral("Yields fell <2% on the week"));
+        QVERIFY(detail.isEmpty());
+    }
+
+    // Marker present but nothing after it yet (tail hasn't streamed in).
+    {
+        const auto [brief, detail] = NewsDetailPanel::split_brief("Brief text.\n" + marker);
+        QCOMPARE(brief, QStringLiteral("Brief text."));
+        QVERIFY(detail.isEmpty());
+    }
+}
 
 // The layout contract: exactly two panes, detail on the right, and it is
 // shown before any article has ever been selected.

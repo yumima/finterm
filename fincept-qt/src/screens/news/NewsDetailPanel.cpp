@@ -707,6 +707,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     }
     current_article_ = article;
     has_article_ = true;
+    sync_article_block();
     stack_->setCurrentIndex(1);
 
     // Render headline as a link to the article URL. Qt's rich-text engine
@@ -1084,7 +1085,17 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
     // Clear any previous brief's categories while the new one generates.
     if (tldr_detail_section_)
         tldr_detail_section_->hide();
+    sync_article_block();
     stack_->setCurrentIndex(1);
+}
+
+// The ARTICLE block is only meaningful once a story is open. Forcing the
+// content page for a TL;DR used to reveal it anyway, so a brief with nothing
+// selected displayed a permanent "Loading article..." under it — telling the
+// user something was in flight when nothing was.
+void NewsDetailPanel::sync_article_block() {
+    if (body_section_)
+        body_section_->setVisible(has_article_);
 }
 
 void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& title) {
@@ -1104,10 +1115,7 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
     // DIGEST works for free: while chunks are still arriving the marker simply
     // hasn't appeared yet, so everything renders as brief and the detail
     // section fills in the moment the tail starts streaming.
-    const int marker = text.indexOf(kCategoryMarker);
-    const QString brief = (marker < 0) ? text : text.left(marker).trimmed();
-    const QString detail =
-        (marker < 0) ? QString() : text.mid(marker + kCategoryMarker.size()).trimmed();
+    const auto [brief, detail] = split_brief(text);
 
     tldr_label_->setText(brief);
     tldr_section_->show();
@@ -1120,6 +1128,7 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
             tldr_detail_section_->show();
         }
     }
+    sync_article_block();
     stack_->setCurrentIndex(1);
 }
 

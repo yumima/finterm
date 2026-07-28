@@ -407,7 +407,14 @@ QString news_build_brief_prompt(const QString& headlines, const QString& portfol
         "You are a markets editor. From today's news headlines below, write a tight TL;DR brief in "
         "Markdown:\n"
         "- **Overall read:** one line — market tone (risk-on / risk-off / mixed) + the main driver.\n"
-        "- **Top stories:** 3-5 bullets, each a one-line takeaway + why it matters.\n";
+        // One bullet = one sentence. Asking for "takeaway + why it matters"
+        // made the model emit the significance as its own "Why it matters:"
+        // bullet underneath each story, which doubles the bullet count and
+        // reads like a form. Fold it into the sentence instead.
+        "- **Top stories:** 3-5 bullets. Write each as ONE flowing sentence that states what "
+        "happened and why it matters together — e.g. 'Mercedes-Benz held Q2 margins despite "
+        "softening China demand, a read-through for every European exporter'. Do NOT write "
+        "'Why it matters' as a label, a separate line, or a sub-bullet.\n";
     if (!portfolio.isEmpty())
         p += "- **Your portfolio:** how today's news affects the holdings listed below — name the "
              "affected positions and the likely direction; say 'no direct exposure today' if none.\n";
