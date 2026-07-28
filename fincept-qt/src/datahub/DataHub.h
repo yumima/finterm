@@ -269,6 +269,27 @@ class DataHub : public QObject {
         bool is_pattern = false;
     };
 
+    /// Predicate for "this subscription should go away now", shared by every
+    /// unsubscribe path (topic, pattern, and their error-channel mirrors).
+    ///
+    /// The `isNull()` arm is load-bearing, not defensive. subscribe() hooks
+    /// QObject::destroyed with a QueuedConnection, so on_owner_destroyed()
+    /// runs *after* ~QObject has finished — by then every QPointer to that
+    /// object has already been cleared to null. Matching on
+    /// `owner.data() == owner` alone therefore matched nothing, the
+    /// subscription vector was never emptied, and the bucket outlived its
+    /// owner forever: the topic never went idle (so drop_on_idle never
+    /// released its cache) and every publish kept walking dead entries.
+    ///
+    /// Sweeping *all* null owners is deliberate. A null QPointer is a dead
+    /// subscription regardless of which object it used to be, and these
+    /// buckets are only ever reached via this owner's own topic/pattern
+    /// index, so there is nothing live to collect by accident.
+    template <typename Sub>
+    static bool dead_or_owned_by(const Sub& s, const QObject* owner) {
+        return s.owner.isNull() || s.owner.data() == owner;
+    }
+
     struct TopicState {
         QVariant value;
         qint64 last_publish_ms = 0;

@@ -180,6 +180,18 @@ class TestDataHub : public QObject {
         const int saved_coalesce = hub.coalesce_window_ms();
         hub.set_coalesce_window_ms(0);
 
+        // Pin an explicit policy. TopicPolicy defaults to min_interval_ms
+        // = 5000, which would gate the post-publish request() below on the
+        // interval rather than on in-flight — the test would then fail while
+        // the dedup logic it is actually checking works fine. The long TTL
+        // keeps the 1 s scheduler tick from injecting refreshes of its own
+        // while QTRY_COMPARE spins an event loop.
+        hub.clear_policy_pattern("test:flight:*");
+        TopicPolicy p;
+        p.min_interval_ms = 0;
+        p.ttl_ms = 60'000;
+        hub.set_policy_pattern("test:flight:*", p);
+
         QObject owner;
         hub.subscribe(&owner, "test:flight:1",
                       [](const QVariant&) {});
@@ -200,6 +212,7 @@ class TestDataHub : public QObject {
 
         hub.unregister_producer(&prod);
         hub.set_coalesce_window_ms(saved_coalesce);
+        hub.clear_policy_pattern("test:flight:*");
     }
 
     // Cross-thread publish() must marshal to the hub thread safely.

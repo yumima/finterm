@@ -176,7 +176,7 @@ void DataHub::on_owner_destroyed(QObject* owner) {
             if (sub_it == subscriptions_.end()) continue;
             auto& vec = sub_it.value();
             vec.erase(std::remove_if(vec.begin(), vec.end(),
-                         [owner](const Subscription& s) { return s.owner.data() == owner; }),
+                         [owner](const Subscription& s) { return dead_or_owned_by(s, owner); }),
                       vec.end());
             if (vec.isEmpty()) {
                 subscriptions_.erase(sub_it);
@@ -199,7 +199,7 @@ void DataHub::on_owner_destroyed(QObject* owner) {
             if (sub_it == pattern_subscriptions_.end()) continue;
             auto& vec = sub_it.value();
             vec.erase(std::remove_if(vec.begin(), vec.end(),
-                         [owner](const Subscription& s) { return s.owner.data() == owner; }),
+                         [owner](const Subscription& s) { return dead_or_owned_by(s, owner); }),
                       vec.end());
             if (vec.isEmpty())
                 pattern_subscriptions_.erase(sub_it);
@@ -215,7 +215,7 @@ void DataHub::on_owner_destroyed(QObject* owner) {
             if (sub_it == error_subscriptions_.end()) continue;
             auto& vec = sub_it.value();
             vec.erase(std::remove_if(vec.begin(), vec.end(),
-                         [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                         [owner](const ErrorSub& e) { return dead_or_owned_by(e, owner); }),
                       vec.end());
             if (vec.isEmpty()) error_subscriptions_.erase(sub_it);
         }
@@ -228,7 +228,7 @@ void DataHub::on_owner_destroyed(QObject* owner) {
             if (sub_it == error_pattern_subscriptions_.end()) continue;
             auto& vec = sub_it.value();
             vec.erase(std::remove_if(vec.begin(), vec.end(),
-                         [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                         [owner](const ErrorSub& e) { return dead_or_owned_by(e, owner); }),
                       vec.end());
             if (vec.isEmpty()) error_pattern_subscriptions_.erase(sub_it);
         }
@@ -366,7 +366,7 @@ void DataHub::unsubscribe(QObject* owner, const QString& topic) {
     if (sub_it == subscriptions_.end()) return;
     auto& vec = sub_it.value();
     vec.erase(std::remove_if(vec.begin(), vec.end(),
-                 [owner](const Subscription& s) { return s.owner.data() == owner; }),
+                 [owner](const Subscription& s) { return dead_or_owned_by(s, owner); }),
               vec.end());
     if (vec.isEmpty()) {
         subscriptions_.erase(sub_it);
@@ -388,7 +388,7 @@ void DataHub::unsubscribe_pattern(QObject* owner, const QString& pattern) {
     if (sub_it != pattern_subscriptions_.end()) {
         auto& vec = sub_it.value();
         vec.erase(std::remove_if(vec.begin(), vec.end(),
-                     [owner](const Subscription& s) { return s.owner.data() == owner; }),
+                     [owner](const Subscription& s) { return dead_or_owned_by(s, owner); }),
                   vec.end());
         if (vec.isEmpty()) pattern_subscriptions_.erase(sub_it);
     }
@@ -555,7 +555,7 @@ void DataHub::unsubscribe_errors(QObject* owner, const QString& topic) {
     if (auto it = error_subscriptions_.find(topic); it != error_subscriptions_.end()) {
         auto& vec = it.value();
         vec.erase(std::remove_if(vec.begin(), vec.end(),
-                     [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                     [owner](const ErrorSub& e) { return dead_or_owned_by(e, owner); }),
                   vec.end());
         if (vec.isEmpty()) error_subscriptions_.erase(it);
     }
@@ -570,7 +570,7 @@ void DataHub::unsubscribe_pattern_errors(QObject* owner, const QString& pattern)
     if (auto it = error_pattern_subscriptions_.find(pattern); it != error_pattern_subscriptions_.end()) {
         auto& vec = it.value();
         vec.erase(std::remove_if(vec.begin(), vec.end(),
-                     [owner](const ErrorSub& e) { return e.owner.data() == owner; }),
+                     [owner](const ErrorSub& e) { return dead_or_owned_by(e, owner); }),
                   vec.end());
         if (vec.isEmpty()) error_pattern_subscriptions_.erase(it);
     }
@@ -1046,8 +1046,15 @@ QVector<TopicStats> DataHub::stats() const {
         s.in_flight = it->in_flight;
         s.push_only = it->policy.push_only;
         s.last_error = it->last_error;
-        if (auto sub_it = subscriptions_.find(it.key()); sub_it != subscriptions_.end())
-            s.subscriber_count = sub_it.value().size();
+        // Count live owners only. on_owner_destroyed() is queued, so between
+        // a widget's destruction and that call landing the bucket still holds
+        // its entry — reporting it would overstate who is actually listening.
+        // subscribers() already filters the same way.
+        if (auto sub_it = subscriptions_.find(it.key()); sub_it != subscriptions_.end()) {
+            s.subscriber_count = static_cast<int>(
+                std::count_if(sub_it.value().begin(), sub_it.value().end(),
+                              [](const Subscription& sub) { return !sub.owner.isNull(); }));
+        }
         out.append(std::move(s));
     }
     std::sort(out.begin(), out.end(),

@@ -19,6 +19,13 @@ class NewsFeedPanel : public QWidget {
   public:
     explicit NewsFeedPanel(QWidget* parent = nullptr);
 
+    /// Width of the headline/reading-pane divider, in px. This is the mouse
+    /// grab area, not merely the drawn line — Qt hit-tests a QSplitter handle
+    /// at exactly this width, so the previous value of 1 made the divider
+    /// effectively undraggable. The stylesheet insets the painted strip with
+    /// a margin so it still reads as a hairline.
+    static constexpr int kSplitHandleW = 6;
+
     NewsFeedModel* model() { return model_; }
     QListView* list_view() { return list_view_; }
 

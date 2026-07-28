@@ -62,7 +62,13 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
     feed_splitter_ = new QSplitter(Qt::Horizontal, stack);
     feed_splitter_->setObjectName("newsFeedSplitter");
     feed_splitter_->setChildrenCollapsible(false);
-    feed_splitter_->setHandleWidth(1);
+    // A QSplitter handle's grab area is exactly handleWidth. This was 1px —
+    // and painted in the background colour — so the divider between the
+    // headline list and the reading pane was invisible and, in practice,
+    // impossible to hit with a mouse. kSplitHandleW gives a real target; the
+    // stylesheet insets the painted strip with a margin so it still *reads*
+    // as a hairline divider while staying draggable in both directions.
+    feed_splitter_->setHandleWidth(kSplitHandleW);
     feed_splitter_->addWidget(list_view_);
 
     // Skeleton loading widget

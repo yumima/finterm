@@ -2,11 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-07-27)
+## Today's commits (2026-07-28)
 
 Latest first.
 
-- [`40b0b255d`](https://github.com/yumima/finterm/commit/40b0b255d) Portfolio: fix BUY/SELL toggle and Edit Transaction showing the wrong ticker
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -127,7 +127,14 @@ QString news_screen_styles() {
                "#newsFeedList::item { border: none; padding: 0; }"
                "#newsFeedList::item:selected { background: transparent; }"
                "#newsFeedList::item:hover { background: transparent; }"
-               "#newsFeedSplitter::handle { background: #13110f; }"
+               /* Divider between the headline list and the reading pane. The
+                  handle widget is kSplitHandleW px wide so it can be grabbed;
+                  the margin insets the painted strip to a hairline so it still
+                  looks like a thin rule. Hover tints it amber to advertise
+                  that it drags. */
+               "#newsFeedSplitter::handle:horizontal { background: %3; margin: 0px 2px; }"
+               "#newsFeedSplitter::handle:horizontal:hover { background: %12; margin: 0px 2px; }"
+               "#newsFeedSplitter::handle:horizontal:pressed { background: %12; margin: 0px 2px; }"
 
                /* ── Breaking banner ── */
                "#newsBreakingBanner { background: %17; border-bottom: 1px solid %11; }"

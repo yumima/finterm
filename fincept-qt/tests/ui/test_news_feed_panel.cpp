@@ -20,6 +20,7 @@
 
 #include <QSignalSpy>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QTest>
 
 using namespace fincept;
@@ -68,6 +69,7 @@ class TestNewsFeedPanel : public QObject {
 
   private slots:
     void splitter_has_two_panes_with_detail_visible();
+    void divider_is_grabbable_and_drags_both_ways();
     void detail_pane_stays_visible_across_reloads();
     void keyboard_navigation_walks_rows_in_order();
     void click_maps_to_the_row_that_was_clicked();
@@ -98,6 +100,57 @@ void TestNewsFeedPanel::splitter_has_two_panes_with_detail_visible() {
     QCOMPARE(sizes.size(), 2);
     QVERIFY(sizes[0] > 100);
     QVERIFY(sizes[1] > 100);
+}
+
+// The divider must be draggable. A QSplitter hit-tests its handle at exactly
+// handleWidth px, so a 1px handle (what this shipped with) is invisible and
+// unclickable even though the splitter is "resizable" in principle. Assert a
+// real grab target, and that moving it redistributes width in both
+// directions without either pane collapsing.
+void TestNewsFeedPanel::divider_is_grabbable_and_drags_both_ways() {
+    NewsFeedPanel panel;
+    auto* detail = new QWidget;
+    panel.set_detail_widget(detail);
+    panel.resize(1200, 800);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+
+    auto* split = feed_splitter(&panel);
+    QVERIFY(split);
+    QVERIFY2(split->handleWidth() >= 4,
+             "divider grab area is too narrow for a mouse to hit");
+    QVERIFY(!split->childrenCollapsible()); // neither pane can be dragged away
+
+    auto* handle = split->handle(1);
+    QVERIFY(handle);
+    QCOMPARE(handle->width(), split->handleWidth());
+    QCOMPARE(handle->cursor().shape(), Qt::SplitHCursor); // drag affordance
+
+    const QList<int> start = split->sizes();
+    const QPoint grab(handle->width() / 2, handle->height() / 2);
+
+    // Drive the real drag path — press on the handle, move, release — rather
+    // than calling setSizes(), so this exercises what a user's mouse does.
+    auto drag_by = [&](int dx) {
+        QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, grab);
+        QTest::mouseMove(handle, grab + QPoint(dx, 0));
+        QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, grab + QPoint(dx, 0));
+    };
+
+    // Drag left: headline list shrinks, reading pane grows, total preserved.
+    drag_by(-150);
+    const QList<int> left = split->sizes();
+    QVERIFY2(left[0] < start[0], "dragging left did not shrink the headline pane");
+    QVERIFY(left[1] > start[1]);
+    QCOMPARE(left[0] + left[1], start[0] + start[1]);
+
+    // And back the other way from the new position.
+    drag_by(150);
+    const QList<int> right = split->sizes();
+    QVERIFY2(right[0] > left[0], "dragging right did not grow the headline pane");
+    QVERIFY(right[1] < left[1]);
+    QVERIFY(right[1] > 0); // childrenCollapsible(false) keeps it on screen
+    QCOMPARE(right[0] + right[1], start[0] + start[1]);
 }
 
 // A feed refresh swaps the model's contents. The reading pane is not part of
