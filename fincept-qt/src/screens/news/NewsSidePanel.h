@@ -55,7 +55,17 @@ class NewsSidePanel : public QWidget {
     void monitor_deleted(const QString& id);
     void close_requested();
 
+  protected:
+    /// Re-elides the story/bookmark rows when the drawer width changes, so a
+    /// dragged-wider drawer lengthens its headlines immediately.
+    void resizeEvent(QResizeEvent* e) override;
+
   private:
+    /// Re-elides every stashed-full-text row against its current width.
+    void reelide_rows();
+    /// Defers reelide_rows() to the next event-loop turn, for use right after
+    /// populating rows (which have no width until the layout has run).
+    void schedule_reelide();
     void build_top_stories_section(QVBoxLayout* parent);
     void build_categories_section(QVBoxLayout* parent);
     void build_monitors_section(QVBoxLayout* parent);

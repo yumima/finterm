@@ -84,9 +84,13 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     /// before a DIGEST renders into it. Widen-only — never shrinks a drawer
     /// the user dragged wider.
     void ensure_drawer_open_for_digest();
-    /// Readable width for long-form digest prose in the drawer. The 280px
-    /// default suits stat rows, not paragraphs.
-    static constexpr int kDigestDrawerWidth = 460;
+    /// Proportional width for the INTEL drawer: intel : headlines : article
+    /// reads 1 : 2 : 2, so the drawer takes a fifth of the content area and
+    /// the feed's two panes split the rest evenly. Expressed as a fraction so
+    /// it holds on any monitor rather than being tuned for one.
+    int default_drawer_width() const;
+    static constexpr int kDrawerFraction = 5;   // 1/5 of the content area
+    static constexpr int kDrawerMinWidth = 280; // floor on narrow windows
 
     void refresh_data(bool force);
     void apply_filters_async();
@@ -109,7 +113,10 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Content area layout — holds the drag-resizable [drawer | feed] splitter.
     QHBoxLayout* content_layout_ = nullptr;
     QSplitter* content_splitter_ = nullptr;
-    int drawer_width_ = 280;  ///< remembered Intel-drawer width across toggles
+    /// Remembered Intel-drawer width across toggles. 0 means "never sized by
+    /// the user" — the drawer then opens at default_drawer_width() instead of
+    /// a fixed pixel count, and only starts remembering once dragged.
+    int drawer_width_ = 0;
 
     // State
     QVector<services::NewsArticle> all_articles_;
@@ -179,10 +186,20 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     QSet<QString> portfolio_tickers_; // uppercased symbols
     void reload_portfolio_holdings();
 
-    // TL;DR — guards against overlapping LlmService::chat_streaming calls
-    // while a request is in flight (we can't abort mid-stream, so the gate
-    // also prevents the user from racing themselves into duplicate work).
+    // TL;DR / DIGEST — guards against overlapping LlmService calls while a
+    // request is in flight (we can't abort mid-stream, so the gate also
+    // prevents the user from racing themselves into duplicate work).
+    //
+    // Always flip it through set_tldr_in_flight(): the flag is shared by both
+    // buttons and the only feedback for "ignored, one is already running" is
+    // that nothing happens. A single missed completion callback therefore used
+    // to disable both briefs for the rest of the session with no way back and
+    // no clue why. The watchdog guarantees it clears even if a stream dies
+    // without ever reporting done.
     bool tldr_in_flight_ = false;
+    QTimer* tldr_watchdog_ = nullptr;
+    void set_tldr_in_flight(bool in_flight);
+    static constexpr int kBriefWatchdogMs = 180000;
     // Same gate for AI Analyze: local-LLM analysis can exceed the button's
     // re-enable timeout, so guard against launching a second concurrent run.
     bool analyze_in_flight_ = false;

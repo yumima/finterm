@@ -18,9 +18,11 @@
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsFeedModel.h"
 #include "screens/news/NewsDetailPanel.h"
+#include "screens/news/NewsSidePanel.h"
 
 #include <QSignalSpy>
 #include <QSplitter>
+#include <QPushButton>
 #include <QSplitterHandle>
 #include <QTest>
 
@@ -76,6 +78,7 @@ class TestNewsFeedPanel : public QObject {
     void click_maps_to_the_row_that_was_clicked();
     void mark_visible_seen_reports_onscreen_ids();
     void brief_splits_into_summary_and_categories();
+    void drawer_rows_reelide_when_width_changes();
 };
 
 // The TL;DR/DIGEST output is one blob that has to land in two places: the
@@ -128,6 +131,62 @@ void TestNewsFeedPanel::brief_splits_into_summary_and_categories() {
         QCOMPARE(brief, QStringLiteral("Brief text."));
         QVERIFY(detail.isEmpty());
     }
+}
+
+
+// Drawer rows are elided to the pane width. Widening the drawer must lengthen
+// them immediately rather than waiting for the next feed update, and — the
+// part that is easy to get wrong — narrowing then widening again must recover
+// the full length. Re-eliding an already-elided string would ratchet down and
+// never come back, which is why the untruncated text is stashed on the button.
+void TestNewsFeedPanel::drawer_rows_reelide_when_width_changes() {
+    NewsSidePanel panel;
+    panel.resize(280, 700);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+
+    QVector<services::NewsArticle> top;
+    services::NewsArticle a;
+    a.id = QStringLiteral("x");
+    a.headline = QStringLiteral(
+        "Mercedes-Benz posts solid Q2 results as China demand pressure weighs on "
+        "the group outlook and European exporters brace for a slower second half");
+    a.source = QStringLiteral("SRC");
+    top.push_back(a);
+    panel.update_top_stories(top);
+    // Elision is deferred to the next event-loop turn (rows have no width at
+    // populate time), so let it run before sampling.
+    QCoreApplication::processEvents();
+
+    auto row = [&]() -> QPushButton* {
+        const auto rows = panel.findChildren<QPushButton*>(QStringLiteral("newsTopStoryBtn"));
+        return rows.isEmpty() ? nullptr : rows.first();
+    };
+    QVERIFY(row());
+    const QString narrow = row()->text();
+    QVERIFY(!narrow.isEmpty());
+
+    // Wider drawer -> more of the headline.
+    panel.resize(700, 700);
+    QCoreApplication::processEvents();
+    const QString wide = row()->text();
+    QVERIFY2(wide.size() < a.headline.size() + 8, "wide row should still be elided, not full text");
+    QVERIFY2(wide.size() > narrow.size(),
+             qPrintable(QStringLiteral("widening did not lengthen the row: '%1' -> '%2'")
+                            .arg(narrow, wide)));
+
+    // Back to narrow -> shrinks again.
+    panel.resize(280, 700);
+    QCoreApplication::processEvents();
+    const QString narrow_again = row()->text();
+    QVERIFY(narrow_again.size() < wide.size());
+
+    // And widening a second time recovers the full length. This is the
+    // regression guard: if the code re-elided the *displayed* text instead of
+    // the stashed original, this would come back shorter than `wide`.
+    panel.resize(700, 700);
+    QCoreApplication::processEvents();
+    QCOMPARE(row()->text(), wide);
 }
 
 // The layout contract: exactly two panes, detail on the right, and it is

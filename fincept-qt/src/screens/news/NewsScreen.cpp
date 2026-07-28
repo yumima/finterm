@@ -250,8 +250,7 @@ void NewsScreen::connect_signals() {
                 "LLM not configured. Open Settings -> AI Chat to add an API key."));
             return;
         }
-        tldr_in_flight_ = true;
-        command_bar_->set_tldr_busy(true);
+        set_tldr_in_flight(true);
         side_panel_->show_digest_loading();
 
         // Numbered headlines of the top ~30 across the full feed (sorted by the
@@ -318,12 +317,28 @@ void NewsScreen::connect_signals() {
                         return;
                     self->side_panel_->show_digest(
                         snapshot.isEmpty() ? QStringLiteral("Digest unavailable.") : snapshot);
-                    if (is_done) {
-                        self->tldr_in_flight_ = false;
-                        self->command_bar_->set_tldr_busy(false);
+                    if (is_done)
+                        self->set_tldr_in_flight(false);
+                }, Qt::QueuedConnection);
+            }, /*use_tools=*/false, digest_scope,
+            // Completion callback: fires even when the stream errors out
+            // without a final is_done chunk, which is the case that used to
+            // strand the gate. Marshalled to the UI thread — chat_streaming
+            // calls this from its worker.
+            [self](const fincept::ai_chat::LlmResponse& resp) {
+                if (!self)
+                    return;
+                QMetaObject::invokeMethod(self.data(), [self, resp]() {
+                    if (!self)
+                        return;
+                    self->set_tldr_in_flight(false);
+                    if (!resp.error.isEmpty()) {
+                        LOG_WARN("NewsScreen", "digest failed: " + resp.error);
+                        self->side_panel_->show_digest(
+                            QStringLiteral("**Digest unavailable.** %1").arg(resp.error));
                     }
                 }, Qt::QueuedConnection);
-            }, /*use_tools=*/false, digest_scope);
+            });
     });
 
     // Feed panel
@@ -365,6 +380,18 @@ void NewsScreen::connect_signals() {
     connect(command_bar_, &NewsCommandBar::language_filter_changed, this, [this](const QString& lang) {
         Q_UNUSED(lang);
         apply_filters_async();
+    });
+
+    // Brief watchdog — clears the shared TL;DR/DIGEST gate if a request dies
+    // without delivering a completion callback. Without this a single dropped
+    // stream leaves both buttons permanently inert.
+    tldr_watchdog_ = new QTimer(this);
+    tldr_watchdog_->setSingleShot(true);
+    connect(tldr_watchdog_, &QTimer::timeout, this, [this]() {
+        if (!tldr_in_flight_)
+            return;
+        LOG_WARN("NewsScreen", "brief watchdog fired — clearing a stuck in-flight gate");
+        set_tldr_in_flight(false);
     });
 
     // Pulse animation timer (500ms cycle for new item glow)
@@ -428,8 +455,7 @@ void NewsScreen::connect_signals() {
         // constructor), and the section title below names the active scope.
         if (filtered_articles_.isEmpty())
             return;
-        tldr_in_flight_ = true;
-        command_bar_->set_summarizing(true);
+        set_tldr_in_flight(true);
 
         // "TL;DR" when unfiltered, "TL;DR — MKT" when drilled in, so the brief
         // can never be mistaken for a read of the whole market.
@@ -450,8 +476,7 @@ void NewsScreen::connect_signals() {
             filtered_articles_, 20, [self, scope_title](bool ok, QString summary) {
             if (!self)
                 return;
-            self->tldr_in_flight_ = false;
-            self->command_bar_->set_summarizing(false);
+            self->set_tldr_in_flight(false);
             // Treat ok-but-empty as a failure so the panel doesn't stay stuck on
             // "Generating brief…" (show_tldr_summary hides the section on empty).
             const bool have_text = ok && !summary.trimmed().isEmpty();
@@ -792,16 +817,39 @@ void NewsScreen::on_related_clicked(const services::NewsArticle& article) {
 // Deliberately a one-time nudge on a user-initiated action, never a lock: it
 // only ever widens, so a width the user dragged wider is left alone, and the
 // splitter handle keeps behaving like a normal QSplitter afterwards.
+int NewsScreen::default_drawer_width() const {
+    const int total = content_splitter_ ? content_splitter_->width() : 0;
+    return std::max(kDrawerMinWidth, total / kDrawerFraction);
+}
+
 void NewsScreen::ensure_drawer_open_for_digest() {
     if (!side_panel_->is_drawer_open())
         on_drawer_toggle();
 
+    // Widen-only: never shrink a drawer the user dragged wider.
     const int total = content_splitter_->width();
+    const int want = default_drawer_width();
     const int current = content_splitter_->sizes().value(0);
-    if (total <= kDigestDrawerWidth + 200 || current >= kDigestDrawerWidth)
+    if (total <= want + 200 || current >= want)
         return;
-    drawer_width_ = kDigestDrawerWidth;
-    content_splitter_->setSizes({kDigestDrawerWidth, total - kDigestDrawerWidth});
+    drawer_width_ = want;
+    content_splitter_->setSizes({want, total - want});
+}
+
+// Single owner of the shared brief gate. Both TL;DR and DIGEST route through
+// it so the busy state of the two buttons and the flag can never disagree,
+// and so a stuck flag self-heals rather than silently killing both briefs for
+// the rest of the session.
+void NewsScreen::set_tldr_in_flight(bool in_flight) {
+    tldr_in_flight_ = in_flight;
+    command_bar_->set_summarizing(in_flight);
+    command_bar_->set_tldr_busy(in_flight);
+    if (!tldr_watchdog_)
+        return;
+    if (in_flight)
+        tldr_watchdog_->start(kBriefWatchdogMs);
+    else
+        tldr_watchdog_->stop();
 }
 
 void NewsScreen::on_drawer_toggle() {
@@ -820,8 +868,9 @@ void NewsScreen::on_drawer_toggle() {
         // over-request makes Qt rescale proportionally and the drawer opens too
         // wide; in that case let the stretch factors + minimumWidth place it.
         const int total = content_splitter_->width();
-        if (total > drawer_width_ + 200)
-            content_splitter_->setSizes({drawer_width_, total - drawer_width_});
+        const int w = drawer_width_ > 0 ? drawer_width_ : default_drawer_width();
+        if (total > w + 200)
+            content_splitter_->setSizes({w, total - w});
     }
     // Keep the INTEL toggle button's checked state in sync — the in-drawer
     // close button reaches here too, and otherwise the button would go stale.

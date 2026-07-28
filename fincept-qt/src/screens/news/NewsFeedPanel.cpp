@@ -376,13 +376,16 @@ void NewsFeedPanel::showEvent(QShowEvent* ev) {
     if (split_seeded_ || !detail_widget_ || width() <= 0)
         return;
     split_seeded_ = true;
-    // 55/45 in favour of the headline list. A pure ratio, deliberately: a
+    // Even split: with the INTEL drawer taking a fifth of the content area,
+    // headline list and reading pane are equal halves of what remains, giving
+    // an intel : headlines : article ratio of 1 : 2 : 2. A pure ratio,
+    // deliberately: a
     // pixel floor on the reading pane would go negative on the left side if
     // this first show reports a small width, and the split would never be
     // re-seeded to recover. Seeded exactly once — from here the handle
     // belongs to the user; we never write sizes again and never intercept
     // splitterMoved.
-    const int detail_w = width() * 45 / 100;
+    const int detail_w = width() / 2;
     feed_splitter_->setSizes({width() - detail_w, detail_w});
 }
 

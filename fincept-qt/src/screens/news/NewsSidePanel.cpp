@@ -7,6 +7,8 @@
 
 #include <QPushButton>
 #include <QFontMetrics>
+#include <QResizeEvent>
+#include <QTimer>
 #include <QScrollArea>
 
 namespace fincept::screens {
@@ -14,14 +16,27 @@ namespace fincept::screens {
 namespace {
 
 // Elides `text` to the drawer's usable width. QPushButton clips rather than
-// elides, and the previous code sidestepped that with a fixed character count
-// — which is wrong at any width but the one it was tuned for. Uses the widget
-// font with a margin for the stylesheet padding, border and priority stripe.
-QString elide_for(const QWidget* w, const QString& text) {
-    const int avail = w->width() - 28;
+// elides, and the original code sidestepped that with a fixed 50-character cut
+// — wrong at every width but the one it was tuned for.
+//
+// Untruncated row text, stashed on the button so a resize can re-elide from
+// the original rather than from an already-elided string (which would ratchet
+// down and never recover width).
+constexpr const char* kFullTextProp = "fullText";
+
+// Measured against the BUTTON, not the panel: the button carries the
+// stylesheet's 11px font while the panel keeps the larger app font. Metrics
+// taken from the panel font over-estimate character width and elide far
+// shorter than needed — which is why rows came out shorter than the old blind
+// cut. The button's own width also accounts for the scroll area, content
+// margins and scrollbar exactly instead of guessing a margin off the panel.
+QString elide_row(const QPushButton* b, const QString& text) {
+    // Stylesheet padding (4+4) + the 3px priority stripe + slack so the
+    // ellipsis never collides with the edge.
+    const int avail = b->width() - 14;
     if (avail <= 40)
-        return text; // not laid out yet; full text, re-elided on the next update
-    return QFontMetrics(w->font()).elidedText(text, Qt::ElideRight, avail);
+        return text; // not laid out yet — reelide_rows() fixes it once it is
+    return b->fontMetrics().elidedText(text, Qt::ElideRight, avail);
 }
 
 } // namespace
@@ -75,6 +90,12 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(10);
 
+
+    build_top_stories_section(layout);
+    build_categories_section(layout);
+    build_monitors_section(layout);
+    build_deviations_section(layout);
+
     // ── DIGEST ────────────────────────────────────────────────────────────
     // Output of the INTEL strip's DIGEST button lands here rather than in the
     // right-hand reading pane: results belong where the control that produced
@@ -82,7 +103,10 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     // one surface — a whole-feed digest can sit here while a filtered TL;DR is
     // read on the right.
     //
-    // First in the column so a fresh digest is visible without scrolling.
+    // Placed BELOW the at-a-glance summary sections (top stories, categories,
+    // monitors, deviations): those are scanned constantly, while a digest is
+    // read once on demand. Pushing them off-screen behind a block of prose
+    // trades a permanent cost for an occasional one.
     digest_section_ = new QWidget(content);
     digest_section_->setObjectName("newsDrawerDigestSection");
     digest_section_->hide();
@@ -102,11 +126,6 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     digest_layout->addWidget(digest_label_);
 
     layout->addWidget(digest_section_);
-
-    build_top_stories_section(layout);
-    build_categories_section(layout);
-    build_monitors_section(layout);
-    build_deviations_section(layout);
 
     // Hidden intelligence sections
     auto build_hidden_section = [&](const QString& section_title, QVBoxLayout*& out_layout) -> QWidget* {
@@ -165,6 +184,31 @@ void NewsSidePanel::show_digest(const QString& markdown) {
         body += QStringLiteral("\n\n---\n\n") + detail;
     digest_label_->setText(body);
     digest_section_->show();
+}
+
+void NewsSidePanel::resizeEvent(QResizeEvent* e) {
+    QWidget::resizeEvent(e);
+    // Only width changes elision, and only the rows that carry stashed full
+    // text are affected. Dragging the drawer wider now lengthens the headlines
+    // immediately instead of waiting for the next feed update to repopulate.
+    if (e->oldSize().width() == e->size().width())
+        return;
+    reelide_rows();
+}
+
+void NewsSidePanel::reelide_rows() {
+    for (auto* btn : findChildren<QPushButton*>(QStringLiteral("newsTopStoryBtn"))) {
+        const QString full = btn->property(kFullTextProp).toString();
+        if (!full.isEmpty())
+            btn->setText(elide_row(btn, full));
+    }
+}
+
+void NewsSidePanel::schedule_reelide() {
+    // Rows have no width until the layout runs, so elide on the next event
+    // loop turn rather than at populate time (where every row measures 0 and
+    // would keep its full, clipping text).
+    QTimer::singleShot(0, this, [this]() { reelide_rows(); });
 }
 
 void NewsSidePanel::toggle_drawer() {
@@ -301,7 +345,9 @@ void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top
         // regardless of how wide the drawer was, so a widened drawer showed a
         // short stub with dead space beside it. Elide against the actual
         // available width instead, and keep the full text in the tooltip.
-        btn->setText(elide_for(this, QString("%1. %2").arg(i + 1).arg(article.headline)));
+        const QString full = QString("%1. %2").arg(i + 1).arg(article.headline);
+        btn->setProperty(kFullTextProp, full);
+        btn->setText(full); // elided by schedule_reelide() once laid out
         btn->setToolTip(article.headline);
 
         // Priority dot via left border color
@@ -311,6 +357,7 @@ void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top
 
         top_stories_layout_->addWidget(btn);
     }
+    schedule_reelide();
 }
 
 void NewsSidePanel::update_categories(const QMap<QString, int>& counts) {
@@ -590,14 +637,16 @@ void NewsSidePanel::update_saved(const QVector<services::NewsArticle>& saved) {
 
     for (int i = 0; i < std::min(10, static_cast<int>(saved.size())); ++i) {
         const auto& a = saved[i];
-        auto* btn = new QPushButton(elide_for(this, a.headline), this);
+        auto* btn = new QPushButton(a.headline, this);
         btn->setObjectName("newsTopStoryBtn");
+        btn->setProperty(kFullTextProp, a.headline);
         btn->setToolTip(a.headline + "\n" + a.source);
         btn->setFlat(true);
         btn->setCursor(Qt::PointingHandCursor);
         connect(btn, &QPushButton::clicked, this, [this, a]() { emit article_clicked(a); });
         saved_layout_->addWidget(btn);
     }
+    schedule_reelide();
 }
 
 } // namespace fincept::screens

@@ -107,6 +107,7 @@ add_test(NAME live_hls_proxy COMMAND test_live_hls_proxy)
 add_executable(test_news_feed_panel
     ui/test_news_feed_panel.cpp
     ../src/screens/news/NewsFeedPanel.cpp
+    ../src/screens/news/NewsSidePanel.cpp
     ../src/screens/news/NewsFeedModel.cpp
     ../src/screens/news/NewsFeedDelegate.cpp
     ../src/ui/theme/Theme.cpp
