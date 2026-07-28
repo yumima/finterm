@@ -485,12 +485,16 @@ void NewsScreen::connect_signals() {
         // command bar, where it overlapped the INTEL strip.
         detail_panel_->show_tldr_loading(scope_title);
 
-        // 20 headlines, up from 8: the brief now also produces a per-category
-        // breakdown for the lower pane, and 8 rarely spans enough categories
-        // for that section to be worth rendering.
+        // 35 headlines, up from 8 originally and 20 after the category section
+        // was added. The breakdown can only name categories the sampled
+        // headlines actually contain, so a narrow sample caps coverage no
+        // matter what the prompt allows — 20 headlines regularly yielded only
+        // three sections. Measured against hearth: widening the sample and
+        // raising the cap to six went 8.9s -> 10.4s for 4 -> 6 categories,
+        // which is a good trade in the reading pane's vertical space.
         QPointer<NewsScreen> self = this;
         services::NewsService::instance().summarize_headlines(
-            filtered_articles_, 20, [self, scope_title](bool ok, QString summary) {
+            filtered_articles_, 35, [self, scope_title](bool ok, QString summary) {
             if (!self)
                 return;
             self->set_tldr_in_flight(false);
