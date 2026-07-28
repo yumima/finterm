@@ -387,6 +387,10 @@ void NewsFeedPanel::showEvent(QShowEvent* ev) {
     // splitterMoved.
     const int detail_w = width() / 2;
     feed_splitter_->setSizes({width() - detail_w, detail_w});
+    // Equal stretch so the even split survives a window resize rather than one
+    // pane absorbing every added pixel.
+    feed_splitter_->setStretchFactor(0, 1);
+    feed_splitter_->setStretchFactor(1, 1);
 }
 
 bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {

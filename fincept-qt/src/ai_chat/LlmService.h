@@ -70,6 +70,8 @@ struct PersonaScope {
     // key is set), which would reject the unknown field.
     bool think = true;
     // Per-call model override; empty means "use the configured model".
+    // Applied only when no API key is set, i.e. a local provider — this
+    // carries a hearth role name, which a cloud API would reject.
     //
     // Exists for short structured one-shots that should not pay for the
     // heavyweight chat model. On this box primary_chat resolves to

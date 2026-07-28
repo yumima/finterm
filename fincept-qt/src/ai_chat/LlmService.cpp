@@ -565,8 +565,12 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
 
     QJsonObject req;
-    // Per-call override wins over the configured model; see PersonaScope::model.
-    req["model"] = persona.model.isEmpty() ? model_ : persona.model;
+    // Per-call override wins over the configured model — but only for a local
+    // provider, matching how `think` below is gated. The override carries a
+    // hearth role name ("fast_chat"), which is meaningless to a cloud API and
+    // would come back as a 400. Cloud callers keep the configured model.
+    const bool local_provider = api_key_.isEmpty();
+    req["model"] = (local_provider && !persona.model.isEmpty()) ? persona.model : model_;
     req["messages"] = messages;
     // Local-only `think:false` (hearth → Ollama native think control). Gated on
     // an empty api_key so cloud OpenAI-compatible providers never receive this

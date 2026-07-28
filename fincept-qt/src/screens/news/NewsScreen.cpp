@@ -179,8 +179,14 @@ void NewsScreen::build_ui() {
     detail_panel_ = new NewsDetailPanel(content_widget);
     feed_panel_->set_detail_widget(detail_panel_);
 
-    content_splitter_->setStretchFactor(0, 0);  // drawer keeps its width
-    content_splitter_->setStretchFactor(1, 1);  // feed absorbs the resize
+    // 1 : 4 so the intel : headlines : article ratio of 1 : 2 : 2 SURVIVES a
+    // window resize (the feed splits its 4 evenly). The drawer was previously
+    // stretch 0, which pinned it to a pixel width and gave the feed every
+    // added pixel — the ratio then held only at the instant it was seeded and
+    // drifted apart as soon as the window changed size. Stretch factors are
+    // not a lock: dragging the handle still overrides them.
+    content_splitter_->setStretchFactor(0, 1);
+    content_splitter_->setStretchFactor(1, 4);
     content_layout_->addWidget(content_splitter_);
 
     root->addWidget(content_widget, 1);
@@ -328,15 +334,22 @@ void NewsScreen::connect_signals() {
             // without a final is_done chunk, which is the case that used to
             // strand the gate. Marshalled to the UI thread — chat_streaming
             // calls this from its worker.
-            [self](const fincept::ai_chat::LlmResponse& resp) {
+            [self, accumulated](const fincept::ai_chat::LlmResponse& resp) {
                 if (!self)
                     return;
-                QMetaObject::invokeMethod(self.data(), [self, resp]() {
+                const bool have_text = !accumulated->trimmed().isEmpty();
+                QMetaObject::invokeMethod(self.data(), [self, resp, have_text]() {
                     if (!self)
                         return;
                     self->set_tldr_in_flight(false);
-                    if (!resp.error.isEmpty()) {
-                        LOG_WARN("NewsScreen", "digest failed: " + resp.error);
+                    if (resp.error.isEmpty())
+                        return;
+                    LOG_WARN("NewsScreen", "digest failed: " + resp.error);
+                    // Only replace the pane when there is nothing to replace it
+                    // with. A late error after the model already streamed a
+                    // usable digest would otherwise wipe good output off the
+                    // screen and show a failure for a request that produced one.
+                    if (!have_text) {
                         self->side_panel_->show_digest(
                             QStringLiteral("**Digest unavailable.** %1").arg(resp.error));
                     }
@@ -587,8 +600,13 @@ void NewsScreen::showEvent(QShowEvent* e) {
         // pressed. Only on first show — a user who closes it keeps it closed
         // for the rest of the session, and restore_state() (below) wins when a
         // saved session says otherwise.
-        if (!side_panel_->is_drawer_open())
-            on_drawer_toggle();
+        // Deferred a turn: at first show the content splitter has no geometry
+        // yet, so default_drawer_width() would fall back to its floor and the
+        // proportional seed would be computed against a width of zero.
+        QTimer::singleShot(0, this, [this]() {
+            if (!side_panel_->is_drawer_open())
+                on_drawer_toggle();
+        });
     }
 
     // Force-fresh on every tab activation — user re-opening NEWS expects to

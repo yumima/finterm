@@ -23,6 +23,8 @@
 #include <QSignalSpy>
 #include <QSplitter>
 #include <QPushButton>
+
+#include <cmath>
 #include <QSplitterHandle>
 #include <QTest>
 
@@ -78,6 +80,7 @@ class TestNewsFeedPanel : public QObject {
     void click_maps_to_the_row_that_was_clicked();
     void mark_visible_seen_reports_onscreen_ids();
     void brief_splits_into_summary_and_categories();
+    void feed_panes_split_evenly_and_hold_on_resize();
     void drawer_rows_reelide_when_width_changes();
 };
 
@@ -187,6 +190,47 @@ void TestNewsFeedPanel::drawer_rows_reelide_when_width_changes() {
     panel.resize(700, 700);
     QCoreApplication::processEvents();
     QCOMPARE(row()->text(), wide);
+}
+
+
+// The feed's two panes must be equal halves — with the INTEL drawer taking a
+// fifth of the content area, that yields the intended intel : headlines :
+// article ratio of 1 : 2 : 2. Equal *stretch* matters as much as the initial
+// sizes: without it one pane absorbs every pixel a window resize adds and the
+// ratio drifts apart, which is exactly how this drifted before.
+void TestNewsFeedPanel::feed_panes_split_evenly_and_hold_on_resize() {
+    NewsFeedPanel panel;
+    auto* detail = new QWidget;
+    panel.set_detail_widget(detail);
+    panel.resize(1000, 700);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+
+    auto* split = feed_splitter(&panel);
+    QVERIFY(split);
+
+    auto near_even = [&](const char* when) {
+        const QList<int> sz = split->sizes();
+        QCOMPARE(sz.size(), 2);
+        const int total = sz[0] + sz[1];
+        QVERIFY2(total > 0, when);
+        // Within 3% of an even split — allows for the handle width and rounding.
+        const double skew = std::abs(sz[0] - sz[1]) / double(total);
+        QVERIFY2(skew < 0.03,
+                 qPrintable(QStringLiteral("%1: panes not even — %2 / %3")
+                                .arg(QString::fromLatin1(when)).arg(sz[0]).arg(sz[1])));
+    };
+
+    near_even("initial");
+
+    // Grow the window: both panes must take a share, not one of them all.
+    panel.resize(1600, 700);
+    QCoreApplication::processEvents();
+    near_even("after widening");
+
+    panel.resize(900, 700);
+    QCoreApplication::processEvents();
+    near_even("after narrowing");
 }
 
 // The layout contract: exactly two panes, detail on the right, and it is
