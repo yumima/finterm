@@ -13,9 +13,10 @@
 
 namespace fincept::screens {
 
-/// Overlay detail panel — 420px wide, appears from the right when an article
-/// is selected. Replaces the old fixed 340px panel. Has a close button to
-/// dismiss and return to full-width feed view.
+/// Article reading pane — the permanent right half of the news screen,
+/// beside the headline list. It is never hidden: with no article selected
+/// it shows a "Select an article" placeholder, so the layout never shifts
+/// under the user and there is no state where the pane has to be summoned.
 class NewsDetailPanel : public QWidget {
     Q_OBJECT
   public:
@@ -44,24 +45,16 @@ class NewsDetailPanel : public QWidget {
     /// summary doesn't outlive its relevance to the feed snapshot).
     void hide_tldr();
 
-    /// Show/hide the panel
-    void open_panel();
-    void close_panel();
-    bool is_panel_open() const { return panel_open_; }
-
   signals:
     void analyze_requested(const QString& article_url);
     void related_article_clicked(const services::NewsArticle& article);
     void open_in_browser(const QString& url);
     void copy_url(const QString& url);
     void bookmark_requested(const services::NewsArticle& article);
-    void panel_closed();
 
   private:
     QWidget* build_empty_state();
     QWidget* build_content_view();
-
-    bool panel_open_ = false;
 
     // TL;DR section — rendered ABOVE the article body so it stays visible
     // when the user scrolls through the feed. Populated by NewsScreen via
@@ -145,7 +138,6 @@ class NewsDetailPanel : public QWidget {
     QPushButton* copy_title_btn_ = nullptr;
     QPushButton* save_btn_ = nullptr;
     QPushButton* bookmark_btn_ = nullptr;
-    QPushButton* close_btn_ = nullptr;
 
     QStackedWidget* stack_ = nullptr;
     services::NewsArticle current_article_;

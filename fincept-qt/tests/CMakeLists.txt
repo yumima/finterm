@@ -7,7 +7,7 @@
 
 # Inherits ${_fincept_qt_match} from the parent CMakeLists (exact pin under
 # -DFINCEPT_QT_STRICT=ON, else a major.minor floor that accepts system Qt).
-find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Gui Test)
+find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Gui Widgets Network Test)
 
 enable_testing()
 
@@ -95,6 +95,45 @@ set_target_properties(test_live_hls_proxy PROPERTIES
 )
 
 add_test(NAME live_hls_proxy COMMAND test_live_hls_proxy)
+
+# ── News feed two-pane layout tests ──────────────────────────────────────────
+# Guards the refactor that replaced the parity-proxy 2-column feed (+ a detail
+# pane summoned between the columns) with one headline list and a permanent
+# reading pane. Widget-level, so it needs a QApplication — run under the
+# offscreen platform plugin in CI. Links the three news feed widget sources
+# plus theme/logging; it never touches NewsService, so no network or storage
+# machinery is pulled in.
+
+add_executable(test_news_feed_panel
+    ui/test_news_feed_panel.cpp
+    ../src/screens/news/NewsFeedPanel.cpp
+    ../src/screens/news/NewsFeedModel.cpp
+    ../src/screens/news/NewsFeedDelegate.cpp
+    ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/ThemeManager.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_news_feed_panel PRIVATE
+    ../src
+)
+
+target_link_libraries(test_news_feed_panel PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Widgets
+    Qt6::Network  # headers only — NewsService.h includes QNetworkAccessManager
+    Qt6::Test
+)
+
+set_target_properties(test_news_feed_panel PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME news_feed_panel COMMAND test_news_feed_panel)
+# Headless: no display in CI, and the test only asserts geometry/model wiring.
+set_tests_properties(news_feed_panel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,

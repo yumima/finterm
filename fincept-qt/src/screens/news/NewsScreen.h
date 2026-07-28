@@ -28,8 +28,8 @@ class NewsTickerStrip;
 /// Layout (top to bottom):
 ///   1. Command bar (32px) — search, category/time/sort/view pills, controls
 ///   2. Intel strip (26px) — live stats, sentiment, monitors, deviations
-///   3. Content area — full-width feed | optional right detail overlay (420px)
-///                      optional left intel drawer (280px, toggled)
+///   3. Content area — optional intel drawer (280px, toggled) on the left,
+///      then the feed's two panes: headline list | permanent reading pane
 ///   4. Ticker strip (22px) — scrolling breaking headlines
 class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
@@ -76,7 +76,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     void on_related_clicked(const services::NewsArticle& article);
 
     void on_drawer_toggle();
-    void on_detail_closed();
 
   private:
     void build_ui();
@@ -121,10 +120,9 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // Generation ID for stale async result rejection
     std::atomic<int> filter_generation_{0};
 
-    // Lazy loading — initial page + lazy-loader chunk. The 2-column wide
-    // layout fans out across two panes, so 200 = ~100 rows per pane —
-    // comfortably fills any monitor; near_bottom keeps appending PAGE_SIZE
-    // more as the user scrolls.
+    // Lazy loading — initial page + lazy-loader chunk. 200 rows in the
+    // single headline list comfortably overfills any monitor; near_bottom
+    // keeps appending PAGE_SIZE more as the user scrolls.
     int visible_article_count_ = 200;
     static constexpr int PAGE_SIZE = 200;
 

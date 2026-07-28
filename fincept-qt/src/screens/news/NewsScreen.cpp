@@ -147,7 +147,7 @@ void NewsScreen::build_ui() {
     command_bar_ = new NewsCommandBar(this);
     root->addWidget(command_bar_);
 
-    // Content area — horizontal layout: [drawer?] [feed] [detail?]
+    // Content area — horizontal layout: [drawer?] [headline list | detail]
     auto* content_widget = new QWidget(this);
     content_widget->setObjectName("newsContentArea");
     content_layout_ = new QHBoxLayout(content_widget);
@@ -164,15 +164,15 @@ void NewsScreen::build_ui() {
     side_panel_ = new NewsSidePanel(content_widget);
     content_splitter_->addWidget(side_panel_);
 
-    // Feed panel (fills remaining space). The detail pane is docked INSIDE
-    // the feed's horizontal splitter (between the two news columns) rather
-    // than off to the right — reading a story flanked by related headlines
-    // on both sides is the layout the user requested.
+    // Feed panel (fills remaining space). It hosts a two-pane splitter:
+    // the headline list on the left, the article reading pane permanently
+    // docked on the right. Previously the feed fanned headlines across two
+    // columns with the detail pane summoned between them on click.
     feed_panel_ = new NewsFeedPanel(content_widget);
     content_splitter_->addWidget(feed_panel_);
 
     detail_panel_ = new NewsDetailPanel(content_widget);
-    feed_panel_->set_middle_widget(detail_panel_);
+    feed_panel_->set_detail_widget(detail_panel_);
 
     content_splitter_->setStretchFactor(0, 0);  // drawer keeps its width
     content_splitter_->setStretchFactor(1, 1);  // feed absorbs the resize
@@ -307,9 +307,8 @@ void NewsScreen::connect_signals() {
     connect(side_panel_, &NewsSidePanel::monitor_deleted, this, &NewsScreen::on_monitor_deleted);
     connect(side_panel_, &NewsSidePanel::close_requested, this, &NewsScreen::on_drawer_toggle);
 
-    // Detail panel (overlay)
+    // Detail reading pane (permanent right pane)
     connect(detail_panel_, &NewsDetailPanel::analyze_requested, this, &NewsScreen::on_analyze_requested);
-    connect(detail_panel_, &NewsDetailPanel::panel_closed, this, &NewsScreen::on_detail_closed);
     connect(detail_panel_, &NewsDetailPanel::bookmark_requested, this, [this](const services::NewsArticle& article) {
         auto r = fincept::NewsArticleRepository::instance().toggle_saved(article.id);
         if (r.is_ok()) {
@@ -369,17 +368,13 @@ void NewsScreen::connect_signals() {
         });
     });
 
-    // Scroll-based seen tracking. The panel walks both columns (or just the
-    // left in narrow mode) and reports the article ids that became visible.
-    auto on_scroll = [this]() {
+    // Scroll-based seen tracking. The panel walks the headline list's
+    // viewport and reports the article ids that became visible.
+    connect(feed_panel_->list_view()->verticalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         feed_panel_->mark_visible_seen(pending_seen_ids_);
         if (!pending_seen_ids_.isEmpty())
             seen_flush_timer_->start();
-    };
-    connect(feed_panel_->list_view()->verticalScrollBar(),
-            &QScrollBar::valueChanged, this, on_scroll);
-    if (auto* rv = feed_panel_->list_view_right())
-        connect(rv->verticalScrollBar(), &QScrollBar::valueChanged, this, on_scroll);
+    });
 
     // Summarize button
     connect(command_bar_, &NewsCommandBar::summarize_clicked, this, [this]() {
@@ -450,10 +445,11 @@ void NewsScreen::connect_signals() {
     act_close->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     addAction(act_close);
     connect(act_close, &QAction::triggered, this, [this]() {
-        if (detail_panel_->is_panel_open())
-            detail_panel_->close_panel();
-        else if (side_panel_->is_drawer_open())
-            on_drawer_toggle();  // single path: closes + remembers width + syncs the INTEL button
+        // The reading pane is permanent now, so ESC has one job: close the
+        // Intel drawer. Single path — closes + remembers width + syncs the
+        // INTEL button.
+        if (side_panel_->is_drawer_open())
+            on_drawer_toggle();
     });
 }
 
@@ -733,11 +729,6 @@ void NewsScreen::on_drawer_toggle() {
     // Keep the INTEL toggle button's checked state in sync — the in-drawer
     // close button reaches here too, and otherwise the button would go stale.
     command_bar_->set_drawer_open(now_open);
-}
-
-void NewsScreen::on_detail_closed() {
-    // Feed gets full width back when detail panel closes
-    feed_panel_->model()->set_selected_id("");
 }
 
 // ── Core data pipeline ──────────────────────────────────────────────────────

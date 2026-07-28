@@ -82,12 +82,14 @@ QString format_article_html(const QString& plain) {
 
 NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDetailOverlay");
-    // Width is now governed by whatever QSplitter cell hosts this widget
-    // — NewsFeedPanel::set_middle_widget seeds an initial size and the user
-    // can resize via the partition handles. Setting setFixedWidth here
-    // would re-lock the widget and make the splitter handles slide the
-    // middle as a rigid block (the wrong-pane-moves bug, 2026-05-12).
-    hide(); // start hidden — shown on article click
+    // Width is governed by whatever QSplitter cell hosts this widget —
+    // NewsFeedPanel::set_detail_widget seeds an initial ratio and the user
+    // can resize via the partition handle. Setting setFixedWidth here
+    // would re-lock the widget and make the splitter handle slide the pane
+    // as a rigid block (the wrong-pane-moves bug, 2026-05-12).
+    //
+    // No hide() here: the pane is permanent. build_empty_state() covers the
+    // nothing-selected case.
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -101,17 +103,12 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     header_layout->setContentsMargins(10, 0, 6, 0);
     header_layout->setSpacing(0);
 
+    // No close button — the pane is permanent, so a dismiss affordance would
+    // only produce a layout the user cannot get back to without reselecting.
     auto* title = new QLabel("ARTICLE DETAIL", header);
     title->setObjectName("newsDetailHeaderTitle");
     header_layout->addWidget(title);
     header_layout->addStretch();
-
-    close_btn_ = new QPushButton("x", header);
-    close_btn_->setObjectName("newsDetailCloseBtn");
-    close_btn_->setFixedSize(22, 22);
-    close_btn_->setCursor(Qt::PointingHandCursor);
-    connect(close_btn_, &QPushButton::clicked, this, &NewsDetailPanel::close_panel);
-    header_layout->addWidget(close_btn_);
     root->addWidget(header);
 
     stack_ = new QStackedWidget(this);
@@ -669,23 +666,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     return scroll;
 }
 
-// ── Panel open/close ───────────────────────────────────────────────────────
-
-void NewsDetailPanel::open_panel() {
-    if (!panel_open_) {
-        panel_open_ = true;
-        show();
-    }
-}
-
-void NewsDetailPanel::close_panel() {
-    if (panel_open_) {
-        panel_open_ = false;
-        hide();
-        emit panel_closed();
-    }
-}
-
 // ── Public methods ──────────────────────────────────────────────────────────
 
 void NewsDetailPanel::show_article(const services::NewsArticle& article) {
@@ -699,7 +679,6 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     current_article_ = article;
     has_article_ = true;
     stack_->setCurrentIndex(1);
-    open_panel();
 
     // Render headline as a link to the article URL. Qt's rich-text engine
     // does NOT honour `color:inherit` — without an explicit color the anchor
@@ -1074,7 +1053,6 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
     if (tldr_section_)
         tldr_section_->show();
     stack_->setCurrentIndex(1);
-    open_panel();
 }
 
 void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& title) {
@@ -1089,7 +1067,6 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
     tldr_label_->setText(text);
     tldr_section_->show();
     stack_->setCurrentIndex(1);
-    open_panel();
 }
 
 void NewsDetailPanel::hide_tldr() {

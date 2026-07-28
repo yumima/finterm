@@ -122,11 +122,11 @@ QString news_screen_styles() {
                /* their existing look.                                        */
                "#newsContentArea { background: #13110f; }"
 
-               /* ── Feed list (both columns in the 2-col wide layout) ── */
-               "#newsFeedList, #newsFeedListRight { background: #13110f; border: none; outline: none; }"
-               "#newsFeedList::item, #newsFeedListRight::item { border: none; padding: 0; }"
-               "#newsFeedList::item:selected, #newsFeedListRight::item:selected { background: transparent; }"
-               "#newsFeedList::item:hover, #newsFeedListRight::item:hover { background: transparent; }"
+               /* ── Headline list (left pane of the feed splitter) ── */
+               "#newsFeedList { background: #13110f; border: none; outline: none; }"
+               "#newsFeedList::item { border: none; padding: 0; }"
+               "#newsFeedList::item:selected { background: transparent; }"
+               "#newsFeedList::item:hover { background: transparent; }"
                "#newsFeedSplitter::handle { background: #13110f; }"
 
                /* ── Breaking banner ── */
@@ -182,14 +182,11 @@ QString news_screen_styles() {
                "#newsDeviationCategory { color: %7; font-size: 11px; background: transparent; }"
                "#newsDeviationScore { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
 
-               /* ── Detail overlay (right panel) ── */
+               /* ── Detail reading pane (permanent right pane) ── */
                "#newsDetailOverlay { background: %2; border-left: 1px solid %5; }"
                "#newsDetailHeader { background: %8; border-bottom: 1px solid %3; }"
                "#newsDetailHeaderTitle { color: %12; font-size: 12px; font-weight: 700; "
                "  letter-spacing: 1px; background: transparent; }"
-               "#newsDetailCloseBtn { color: %6; background: transparent; border: 1px solid %3; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#newsDetailCloseBtn:hover { color: %4; background: %8; }"
                "#newsDetailContent { background: transparent; }"
                "#newsDetailEmpty { color: %6; font-size: 13px; background: transparent; }"
                "#newsDetailHeadline { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"

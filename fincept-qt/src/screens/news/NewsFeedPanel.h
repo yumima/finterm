@@ -6,7 +6,6 @@
 
 #include <QLabel>
 #include <QListView>
-#include <QSortFilterProxyModel>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QTimer>
@@ -22,23 +21,19 @@ class NewsFeedPanel : public QWidget {
 
     NewsFeedModel* model() { return model_; }
     QListView* list_view() { return list_view_; }
-    QListView* list_view_right() { return list_view_right_; }
 
-    // Inserts a widget into the feed's horizontal splitter, between the
-    // left and right list columns. Used by NewsScreen to dock the article
-    // detail pane in the middle of the feed (rather than off to the right)
-    // so the user can read a story with related headlines flanking it on
-    // either side. Pass nullptr to remove a previously-set middle widget.
-    void set_middle_widget(QWidget* widget);
+    // Docks a widget as the right half of the feed's horizontal splitter,
+    // beside the headline list. Used by NewsScreen to park the article
+    // detail pane there permanently. Pass nullptr to remove it.
+    void set_detail_widget(QWidget* widget);
 
-    // Walks both columns' visible viewports and mark_seens every article
-    // currently on screen. Appends the just-marked article ids to `out_new`
-    // so callers can flush them to persistence.
+    // Walks the headline list's visible viewport and mark_seens every
+    // article currently on screen. Appends the just-marked article ids to
+    // `out_new` so callers can flush them to persistence.
     void mark_visible_seen(QSet<QString>& out_new);
 
-    // Currently-selected article (from whichever column holds the active
-    // current index). Returns a default-constructed article if no row is
-    // active in either column.
+    // Currently-selected article. Returns a default-constructed article if
+    // no row is active.
     services::NewsArticle current_article() const;
 
     void show_breaking(const QVector<services::NewsCluster>& breaking_clusters);
@@ -69,7 +64,10 @@ class NewsFeedPanel : public QWidget {
     // resizes the source column. Cursor switches to SplitHCursor on hover;
     // width is persisted via QSettings(news/source_col_width).
     bool eventFilter(QObject* obj, QEvent* ev) override;
-    void resizeEvent(QResizeEvent* ev) override;
+    // Seeds the headline/detail split on the first show that has a real
+    // width. Construction-time width() is 0, so a pixel seed there means
+    // nothing.
+    void showEvent(QShowEvent* ev) override;
 
   private slots:
     void on_item_clicked(const QModelIndex& index);
@@ -80,23 +78,14 @@ class NewsFeedPanel : public QWidget {
     void build_skeleton();
     void remove_skeleton();
     bool is_banner_duplicate(const QString& headline) const;
-    // Map a proxy index from either column back to the source model row,
-    // returns -1 if the index is invalid.
-    int source_row_for(const QModelIndex& proxy_index) const;
-    // Toggle right column visibility based on current viewport width.
-    void update_two_column_layout();
 
     QStackedWidget* stack_ = nullptr;
-    QListView* list_view_ = nullptr;            // left column (or single)
-    QListView* list_view_right_ = nullptr;      // right column, wide mode only
-    QSplitter* feed_splitter_ = nullptr;        // horizontal: left list | optional middle | right list
-    QWidget* middle_widget_ = nullptr;          // optional widget docked between the two columns
-    QSortFilterProxyModel* proxy_left_  = nullptr;  // shows source rows where row%2==0
-    QSortFilterProxyModel* proxy_right_ = nullptr;  // shows source rows where row%2==1
+    QListView* list_view_ = nullptr;        // the headline list
+    QSplitter* feed_splitter_ = nullptr;    // horizontal: headline list | detail pane
+    QWidget* detail_widget_ = nullptr;      // detail pane docked on the right
     NewsFeedModel* model_ = nullptr;
     NewsFeedDelegate* delegate_ = nullptr;
-    QListView*     last_active_view_ = nullptr;  // most recently clicked/key-navigated column
-    static constexpr int kWideViewportThreshold = 1600; // px; below this, hide right column
+    bool split_seeded_ = false;             // one-shot guard for showEvent()
 
     // Breaking banner
     QWidget* banner_widget_ = nullptr;

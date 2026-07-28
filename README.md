@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`40b0b255d`](https://github.com/yumima/finterm/commit/40b0b255d) Portfolio: fix BUY/SELL toggle and Edit Transaction showing the wrong ticker
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
