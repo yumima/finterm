@@ -306,6 +306,10 @@ void NewsScreen::connect_signals() {
         // request ceiling and fail as "Digest unavailable".
         fincept::ai_chat::PersonaScope digest_scope;
         digest_scope.think = false;
+        // Same fast role as the TL;DR brief — see NewsService for the
+        // measurements. The configured chat model on this box is too large for
+        // the GPU and ignores think:false, which is what made digests time out.
+        digest_scope.model = QStringLiteral("fast_chat");
         fincept::ai_chat::LlmService::instance().chat_streaming(
             prompt, history, [self, accumulated](const QString& chunk, bool is_done) {
                 if (!self)

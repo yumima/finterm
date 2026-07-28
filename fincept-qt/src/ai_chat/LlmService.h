@@ -69,6 +69,15 @@ struct PersonaScope {
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
     bool think = true;
+    // Per-call model override; empty means "use the configured model".
+    //
+    // Exists for short structured one-shots that should not pay for the
+    // heavyweight chat model. On this box primary_chat resolves to
+    // qwen3:30b-a3b, which does not fit the GPU's VRAM (so it spills to CPU)
+    // and does not cleanly honour think:false — a news brief on it ran past
+    // the 120s request ceiling. Pointing those callers at a role like
+    // fast_chat keeps them on a model that fits and stops.
+    QString model;
 };
 
 struct LlmResponse {

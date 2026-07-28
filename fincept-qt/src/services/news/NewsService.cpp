@@ -35,6 +35,10 @@
 namespace fincept::services {
 
 static constexpr int kFeedTransferTimeoutMs = 8000;   // 8s per RSS feed request
+
+// Model role used for AI briefs (TL;DR / DIGEST). A hearth role name rather
+// than a concrete model so it follows whatever the user maps it to.
+constexpr const char* kBriefModelRole = "fast_chat";
 static constexpr int kWsReconnectDelayMs    = 10000;  // 10s before WebSocket reconnect
 static constexpr int kSummaryMaxChars       = 300;    // max chars for article summary
 
@@ -688,6 +692,15 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     // prompt with thinking off returns in well under 30s.
     ai_chat::PersonaScope brief_scope;
     brief_scope.think = false;
+    // Run briefs on the fast role rather than the configured chat model.
+    // Measured against hearth with this exact prompt: fast_chat (qwen3:14b)
+    // returns 495 completion tokens in 30s, primary_chat (qwen3:30b-a3b)
+    // 1554 tokens in 40s standalone — and far worse in-app, because 30b-a3b
+    // exceeds this GPU's VRAM and spills to CPU. It also ignores think:false,
+    // so the latency fix above only takes effect on a model that honours it.
+    // Empty override falls back to the configured model, so a cloud provider
+    // or a differently-named local role still works.
+    brief_scope.model = kBriefModelRole;
     watcher->setFuture(QtConcurrent::run([prompt, brief_scope]() {
         return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
     }));

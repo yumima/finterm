@@ -565,7 +565,8 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
 
     QJsonObject req;
-    req["model"] = model_;
+    // Per-call override wins over the configured model; see PersonaScope::model.
+    req["model"] = persona.model.isEmpty() ? model_ : persona.model;
     req["messages"] = messages;
     // Local-only `think:false` (hearth → Ollama native think control). Gated on
     // an empty api_key so cloud OpenAI-compatible providers never receive this

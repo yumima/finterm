@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`0cddb060a`](https://github.com/yumima/finterm/commit/0cddb060a) News: unstick the brief gate, fix row elision, 1:2:2 panes, DIGEST below summaries
 - [`47d0cfea8`](https://github.com/yumima/finterm/commit/47d0cfea8) News: fix brief timeouts (think:false), route DIGEST to the INTEL pane
 - [`713c3888d`](https://github.com/yumima/finterm/commit/713c3888d) News: open on ALL, label the TL;DR's scope, say why a brief failed
 - [`89150253b`](https://github.com/yumima/finterm/commit/89150253b) News: fold "why it matters" into the bullet; harden the brief split
