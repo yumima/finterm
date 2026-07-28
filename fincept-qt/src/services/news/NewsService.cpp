@@ -39,6 +39,11 @@ static constexpr int kFeedTransferTimeoutMs = 8000;   // 8s per RSS feed request
 // Model role used for AI briefs (TL;DR / DIGEST). A hearth role name rather
 // than a concrete model so it follows whatever the user maps it to.
 constexpr const char* kBriefModelRole = "fast_chat";
+
+// Bump when news_build_brief_prompt() changes in a way that alters output, so
+// entries cached under the previous prompt are not served for up to the
+// summary TTL. Currently: six categories over a 35-headline sample.
+constexpr int kBriefPromptVersion = 2;
 static constexpr int kWsReconnectDelayMs    = 10000;  // 10s before WebSocket reconnect
 static constexpr int kSummaryMaxChars       = 300;    // max chars for article summary
 
@@ -610,14 +615,34 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     const int n = std::min(count, static_cast<int>(articles.size()));
     const QString pf_id = services::AppContextService::instance().snapshot().portfolio_id;
 
-    // Cache key = sorted-headline signature + active portfolio (the brief differs
-    // per portfolio because of the impact section).
+    // Cache key = digest of the FULL sorted headline set, plus everything else
+    // that changes the output: the active portfolio (the brief has a holdings
+    // section), the sample size, and the prompt version.
+    //
+    // This used to key on sig.left(180) — the raw joined headlines truncated to
+    // 180 characters, i.e. the alphabetically-first two or three headlines of
+    // up to 35. Two different article sets that happened to share those few
+    // headlines collided and the second request was served the first one's
+    // brief, which in a feed where the top story persists across refreshes is
+    // not a remote possibility. Hashing the whole set removes the collision
+    // and keeps the key a fixed 40 characters.
+    //
+    // The size and version segments matter as much: neither was in the old key,
+    // so changing the sample size or the prompt left every existing entry
+    // looking valid and briefs kept their old shape until the 10-minute TTL
+    // aged them out. Bump kBriefPromptVersion whenever the prompt changes.
     QStringList sorted_headlines;
     for (int i = 0; i < n; ++i)
         sorted_headlines.append(articles[i].headline);
     std::sort(sorted_headlines.begin(), sorted_headlines.end());
-    const QString sig = sorted_headlines.join("|").left(500);
-    const QString sum_key = "news:summary:" + (pf_id.isEmpty() ? QString() : pf_id + ":") + sig.left(180);
+    const QString sig = QString::fromLatin1(
+        QCryptographicHash::hash(sorted_headlines.join(QLatin1Char('|')).toUtf8(),
+                                 QCryptographicHash::Sha1)
+            .toHex());
+    const QString sum_key = QStringLiteral("news:summary:v%1:n%2:%3:%4")
+                                .arg(kBriefPromptVersion)
+                                .arg(n)
+                                .arg(pf_id, sig);
 
     {
         const QVariant cached = fincept::CacheManager::instance().get(sum_key);

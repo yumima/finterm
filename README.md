@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3eb95f6d4`](https://github.com/yumima/finterm/commit/3eb95f6d4) News: widen TL;DR category coverage — 6 sections from 35 headlines
 - [`00f5565e4`](https://github.com/yumima/finterm/commit/00f5565e4) News: stop local bindings shadowing the brief namespace
 - [`b101d7916`](https://github.com/yumima/finterm/commit/b101d7916) News: merge duplicate category sections in AI briefs
 - [`2f2d0f570`](https://github.com/yumima/finterm/commit/2f2d0f570) News: move brief splitting into a shared header

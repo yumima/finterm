@@ -470,8 +470,18 @@ void NewsScreen::connect_signals() {
         // several hundred articles with nothing on screen saying so. Fixed at
         // both ends — the category no longer persists across sessions (see the
         // constructor), and the section title below names the active scope.
-        if (filtered_articles_.isEmpty())
+        // Say so rather than doing nothing. The DIGEST path already reports its
+        // empty-feed case; this one returned silently, which is indistinguishable
+        // from a broken button — the exact failure mode that made the stranded
+        // in-flight gate so hard to diagnose.
+        if (filtered_articles_.isEmpty()) {
+            detail_panel_->show_tldr_summary(
+                QStringLiteral("No articles in the current view to brief. Widen the filters or "
+                               "refresh the feed."),
+                (active_category_ == "ALL") ? QStringLiteral("TL;DR")
+                                            : QStringLiteral("TL;DR — %1").arg(active_category_));
             return;
+        }
         set_tldr_in_flight(true);
 
         // "TL;DR" when unfiltered, "TL;DR — MKT" when drilled in, so the brief
