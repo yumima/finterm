@@ -159,10 +159,21 @@ QString news_screen_styles() {
                "  letter-spacing: 0.5px; background: transparent; padding: 4px 0 2px; "
                "  border-bottom: 1px solid %3; }"
 
-               /* ── Top stories ── */
-               "#newsTopStoryBtn { background: transparent; color: %7; font-size: 11px; "
+               /* ── Top stories ──
+                  Primary text, not secondary: these are headlines to be read at
+                  a glance, and %7 against the drawer background was too low a
+                  contrast to scan. Hover goes amber so the row still has a
+                  distinct affordance now that the resting state is bright. */
+               "#newsTopStoryBtn { background: transparent; color: %4; font-size: 11px; "
                "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
-               "#newsTopStoryBtn:hover { color: %4; background: %8; }"
+               "#newsTopStoryBtn:hover { color: %12; background: %8; }"
+
+               /* ── DIGEST (INTEL drawer) ──
+                  Body is prose, so it gets the same primary text colour the
+                  reading pane uses rather than the dim metadata grey. */
+               "#newsDrawerDigestSection { background: transparent; }"
+               "#newsDrawerDigestBody { color: %4; font-size: 12px; background: transparent; "
+               "  padding: 2px 0 4px; }"
 
                /* ── Categories ── */
                "#newsCategoryBtn { background: transparent; color: %7; font-size: 11px; "

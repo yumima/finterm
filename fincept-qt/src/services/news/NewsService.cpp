@@ -680,8 +680,17 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                                                                "news");
                          cb(true, summary);
                      });
-    watcher->setFuture(QtConcurrent::run(
-        [prompt]() { return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false); }));
+    // think=false: this is a short structured one-shot, exactly what the flag
+    // exists for. Left on the default (think=true) the local qwen3 runs a full
+    // chain-of-thought before writing a word, which pushed real briefs to
+    // 80-110s against blocking_post()'s 120s ceiling — close enough that any
+    // variance tipped over and surfaced as "AI brief unavailable". The same
+    // prompt with thinking off returns in well under 30s.
+    ai_chat::PersonaScope brief_scope;
+    brief_scope.think = false;
+    watcher->setFuture(QtConcurrent::run([prompt, brief_scope]() {
+        return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
+    }));
 }
 
 // ── WebSocket live feed ──────────────────────────────────────────────────────

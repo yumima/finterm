@@ -226,27 +226,33 @@ void NewsScreen::connect_signals() {
 
     // DIGEST — a broader, fuller AI read of the WHOLE feed (top ~30 across
     // all_articles_, not just the current filtered view — that concise brief is
-    // the command-row TL;DR). Streams into the detail pane's brief section,
-    // titled "DIGEST". Shares tldr_in_flight_ with the TL;DR button so the two
-    // can't race the shared section; disabled while in flight.
+    // the command-row TL;DR).
+    //
+    // Renders into the INTEL drawer, not the reading pane: the button lives on
+    // the INTEL strip, so its output belongs in the pane that strip owns.
+    // Results appearing where the control is beats hunting for them, and it
+    // also decouples the two briefs — a whole-feed DIGEST can sit on the left
+    // while a filtered TL;DR is read on the right, which the old shared
+    // surface made impossible.
     connect(command_bar_, &NewsCommandBar::tldr_clicked, this, [this]() {
         if (tldr_in_flight_)
             return;
+        // Make sure the output is actually on screen before generating into it.
+        ensure_drawer_open_for_digest();
         if (all_articles_.isEmpty()) {
             // Surface the empty-feed case instead of silently no-op'ing.
-            detail_panel_->show_tldr_summary(QStringLiteral(
-                "No headlines yet. Refresh the feed and try again."), QStringLiteral("DIGEST"));
+            side_panel_->show_digest(QStringLiteral(
+                "No headlines yet. Refresh the feed and try again."));
             return;
         }
         if (!fincept::ai_chat::LlmService::instance().is_configured()) {
-            detail_panel_->show_tldr_summary(QStringLiteral(
-                "LLM not configured. Open Settings → AI Chat to add an API key."),
-                QStringLiteral("DIGEST"));
+            side_panel_->show_digest(QStringLiteral(
+                "LLM not configured. Open Settings -> AI Chat to add an API key."));
             return;
         }
         tldr_in_flight_ = true;
         command_bar_->set_tldr_busy(true);
-        detail_panel_->show_tldr_loading(QStringLiteral("DIGEST"));
+        side_panel_->show_digest_loading();
 
         // Numbered headlines of the top ~30 across the full feed (sorted by the
         // current criteria so the top is meaningful), wrapped in delimiters so
@@ -295,6 +301,12 @@ void NewsScreen::connect_signals() {
         // (chat_streaming invokes the callback on a background thread).
         auto accumulated = std::make_shared<QString>();
         QPointer<NewsScreen> self = this;
+        // think=false — see NewsService::summarize_headlines. A digest is a
+        // short structured one-shot; letting the local qwen3 run its full
+        // chain-of-thought first is what made these briefs brush the 120s
+        // request ceiling and fail as "Digest unavailable".
+        fincept::ai_chat::PersonaScope digest_scope;
+        digest_scope.think = false;
         fincept::ai_chat::LlmService::instance().chat_streaming(
             prompt, history, [self, accumulated](const QString& chunk, bool is_done) {
                 if (!self)
@@ -304,15 +316,14 @@ void NewsScreen::connect_signals() {
                 QMetaObject::invokeMethod(self.data(), [self, snapshot, is_done]() {
                     if (!self)
                         return;
-                    self->detail_panel_->show_tldr_summary(
-                        snapshot.isEmpty() ? QStringLiteral("Digest unavailable.") : snapshot,
-                        QStringLiteral("DIGEST"));
+                    self->side_panel_->show_digest(
+                        snapshot.isEmpty() ? QStringLiteral("Digest unavailable.") : snapshot);
                     if (is_done) {
                         self->tldr_in_flight_ = false;
                         self->command_bar_->set_tldr_busy(false);
                     }
                 }, Qt::QueuedConnection);
-            }, /*use_tools=*/false);
+            }, /*use_tools=*/false, digest_scope);
     });
 
     // Feed panel
@@ -541,6 +552,15 @@ void NewsScreen::showEvent(QShowEvent* e) {
         auto saved_result = fincept::NewsArticleRepository::instance().load_saved();
         if (saved_result.is_ok())
             side_panel_->update_saved(saved_result.value());
+
+        // Open the INTEL drawer by default. It carries the stats, monitors,
+        // categories and now the DIGEST output, so starting closed hid a whole
+        // pane's worth of the screen behind a button most sessions never
+        // pressed. Only on first show — a user who closes it keeps it closed
+        // for the rest of the session, and restore_state() (below) wins when a
+        // saved session says otherwise.
+        if (!side_panel_->is_drawer_open())
+            on_drawer_toggle();
     }
 
     // Force-fresh on every tab activation — user re-opening NEWS expects to
@@ -762,6 +782,26 @@ void NewsScreen::on_analyze_requested(const QString& url) {
 
 void NewsScreen::on_related_clicked(const services::NewsArticle& article) {
     on_article_clicked(article);
+}
+
+// Opens the INTEL drawer if it is closed, and widens it to a readable width
+// if it is narrower than one. The drawer's ~280px default is tuned for stat
+// rows and monitor chips; a DIGEST is long-form prose plus a category
+// breakdown, and at 280px that wraps to roughly 30 characters a line.
+//
+// Deliberately a one-time nudge on a user-initiated action, never a lock: it
+// only ever widens, so a width the user dragged wider is left alone, and the
+// splitter handle keeps behaving like a normal QSplitter afterwards.
+void NewsScreen::ensure_drawer_open_for_digest() {
+    if (!side_panel_->is_drawer_open())
+        on_drawer_toggle();
+
+    const int total = content_splitter_->width();
+    const int current = content_splitter_->sizes().value(0);
+    if (total <= kDigestDrawerWidth + 200 || current >= kDigestDrawerWidth)
+        return;
+    drawer_width_ = kDigestDrawerWidth;
+    content_splitter_->setSizes({kDigestDrawerWidth, total - kDigestDrawerWidth});
 }
 
 void NewsScreen::on_drawer_toggle() {

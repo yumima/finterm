@@ -80,6 +80,13 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
   private:
     void build_ui();
     void connect_signals();
+    /// Opens the INTEL drawer (and widens it to a readable width if narrower)
+    /// before a DIGEST renders into it. Widen-only — never shrinks a drawer
+    /// the user dragged wider.
+    void ensure_drawer_open_for_digest();
+    /// Readable width for long-form digest prose in the drawer. The 280px
+    /// default suits stat rows, not paragraphs.
+    static constexpr int kDigestDrawerWidth = 460;
 
     void refresh_data(bool force);
     void apply_filters_async();

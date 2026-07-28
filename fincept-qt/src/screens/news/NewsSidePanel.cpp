@@ -1,12 +1,31 @@
 #include "screens/news/NewsSidePanel.h"
 
+#include "screens/news/NewsDetailPanel.h"
+
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QPushButton>
+#include <QFontMetrics>
 #include <QScrollArea>
 
 namespace fincept::screens {
+
+namespace {
+
+// Elides `text` to the drawer's usable width. QPushButton clips rather than
+// elides, and the previous code sidestepped that with a fixed character count
+// — which is wrong at any width but the one it was tuned for. Uses the widget
+// font with a margin for the stylesheet padding, border and priority stripe.
+QString elide_for(const QWidget* w, const QString& text) {
+    const int avail = w->width() - 28;
+    if (avail <= 40)
+        return text; // not laid out yet; full text, re-elided on the next update
+    return QFontMetrics(w->font()).elidedText(text, Qt::ElideRight, avail);
+}
+
+} // namespace
+
 
 NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDrawerPanel");
@@ -56,6 +75,34 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(10);
 
+    // ── DIGEST ────────────────────────────────────────────────────────────
+    // Output of the INTEL strip's DIGEST button lands here rather than in the
+    // right-hand reading pane: results belong where the control that produced
+    // them lives. It also stops DIGEST and the command-row TL;DR fighting over
+    // one surface — a whole-feed digest can sit here while a filtered TL;DR is
+    // read on the right.
+    //
+    // First in the column so a fresh digest is visible without scrolling.
+    digest_section_ = new QWidget(content);
+    digest_section_->setObjectName("newsDrawerDigestSection");
+    digest_section_->hide();
+    auto* digest_layout = new QVBoxLayout(digest_section_);
+    digest_layout->setContentsMargins(0, 0, 0, 0);
+    digest_layout->setSpacing(4);
+
+    digest_title_ = new QLabel("DIGEST", digest_section_);
+    digest_title_->setObjectName("newsDrawerSectionTitle");
+    digest_layout->addWidget(digest_title_);
+
+    digest_label_ = new QLabel(digest_section_);
+    digest_label_->setObjectName("newsDrawerDigestBody");
+    digest_label_->setWordWrap(true);
+    digest_label_->setTextFormat(Qt::MarkdownText); // the model emits markdown
+    digest_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    digest_layout->addWidget(digest_label_);
+
+    layout->addWidget(digest_section_);
+
     build_top_stories_section(layout);
     build_categories_section(layout);
     build_monitors_section(layout);
@@ -90,6 +137,34 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     layout->addStretch();
     scroll->setWidget(content);
     outer->addWidget(scroll);
+}
+
+// ── DIGEST ──────────────────────────────────────────────────────────────────
+
+void NewsSidePanel::show_digest_loading() {
+    if (!digest_section_ || !digest_label_)
+        return;
+    digest_label_->setText(QStringLiteral("Generating digest…"));
+    digest_section_->show();
+}
+
+void NewsSidePanel::show_digest(const QString& markdown) {
+    if (!digest_section_ || !digest_label_)
+        return;
+    if (markdown.trimmed().isEmpty()) {
+        digest_section_->hide();
+        return;
+    }
+    // The model emits the same <<<CATEGORIES>>> two-part output the reading
+    // pane splits into top/bottom sections. The drawer is a single vertical
+    // column, so the two halves simply stack — join them with a rule rather
+    // than leaking the raw marker into the text.
+    const auto [brief, detail] = NewsDetailPanel::split_brief(markdown);
+    QString body = brief;
+    if (!detail.isEmpty())
+        body += QStringLiteral("\n\n---\n\n") + detail;
+    digest_label_->setText(body);
+    digest_section_->show();
 }
 
 void NewsSidePanel::toggle_drawer() {
@@ -222,8 +297,11 @@ void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top
         btn->setCursor(Qt::PointingHandCursor);
 
         QString pcolor = services::priority_color(article.priority);
-        QString label = QString("%1. %2").arg(i + 1).arg(article.headline.left(50));
-        btn->setText(label);
+        // Fill the pane. This used to chop every headline at a blind 50 chars
+        // regardless of how wide the drawer was, so a widened drawer showed a
+        // short stub with dead space beside it. Elide against the actual
+        // available width instead, and keep the full text in the tooltip.
+        btn->setText(elide_for(this, QString("%1. %2").arg(i + 1).arg(article.headline)));
         btn->setToolTip(article.headline);
 
         // Priority dot via left border color
@@ -512,8 +590,7 @@ void NewsSidePanel::update_saved(const QVector<services::NewsArticle>& saved) {
 
     for (int i = 0; i < std::min(10, static_cast<int>(saved.size())); ++i) {
         const auto& a = saved[i];
-        QString title = a.headline.left(40) + (a.headline.size() > 40 ? "..." : "");
-        auto* btn = new QPushButton(title, this);
+        auto* btn = new QPushButton(elide_for(this, a.headline), this);
         btn->setObjectName("newsTopStoryBtn");
         btn->setToolTip(a.headline + "\n" + a.source);
         btn->setFlat(true);

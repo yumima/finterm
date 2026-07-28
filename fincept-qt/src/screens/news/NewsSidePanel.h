@@ -36,6 +36,13 @@ class NewsSidePanel : public QWidget {
     void update_predictions(const QVector<services::PredictionMarket>& predictions);
     void update_saved(const QVector<services::NewsArticle>& saved);
 
+    /// DIGEST — the INTEL strip's whole-feed AI read renders here, in the
+    /// pane that owns the button that produced it. Pass an empty string to
+    /// hide the section. show_digest_loading() parks a placeholder while the
+    /// model is generating so the drawer isn't silently blank.
+    void show_digest_loading();
+    void show_digest(const QString& markdown);
+
     /// Toggle drawer visibility with animation
     void toggle_drawer();
     bool is_drawer_open() const { return drawer_open_; }
@@ -55,6 +62,11 @@ class NewsSidePanel : public QWidget {
     void build_deviations_section(QVBoxLayout* parent);
 
     bool drawer_open_ = false;
+
+    // DIGEST — whole-feed AI read, rendered at the top of the drawer.
+    QWidget* digest_section_ = nullptr;
+    QLabel* digest_title_ = nullptr;
+    QLabel* digest_label_ = nullptr;
 
     // Top stories
     QVBoxLayout* top_stories_layout_ = nullptr;
