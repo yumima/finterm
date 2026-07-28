@@ -80,6 +80,7 @@ class TestNewsFeedPanel : public QObject {
     void click_maps_to_the_row_that_was_clicked();
     void mark_visible_seen_reports_onscreen_ids();
     void brief_splits_into_summary_and_categories();
+    void duplicate_category_sections_are_merged();
     void feed_panes_split_evenly_and_hold_on_resize();
     void drawer_rows_reelide_when_width_changes();
 };
@@ -231,6 +232,56 @@ void TestNewsFeedPanel::feed_panes_split_evenly_and_hold_on_resize() {
     panel.resize(900, 700);
     QCoreApplication::processEvents();
     near_even("after narrowing");
+}
+
+
+// The model repeatedly emits the same "### NAME" heading more than once — an
+// observed brief listed GEOPOLITICS, ENERGY and ECONOMIC twice each. The
+// prompt asks for one section per category, but that is advisory; the render
+// has to guarantee it.
+void TestNewsFeedPanel::duplicate_category_sections_are_merged() {
+    const QString marker = brief::kCategoryMarker;
+
+    // The shape straight out of the observed failure.
+    const QString raw =
+        "Overall read: risk-off.\n" + marker + "\n"
+        "### GEOPOLITICS\n- Trump on Iran\n- Netanyahu meeting\n"
+        "### ENERGY\n- Crude below $80\n"
+        "### ECONOMIC\n- Australian banks charged\n"
+        "### GEOPOLITICS\n- Allies on alert over Hormuz\n"
+        "### ENERGY\n- Japan quake hits infrastructure\n"
+        "### ECONOMIC\n- Guardian poll on Angus Taylor\n";
+
+    const auto [summary, detail] = brief::split(raw);
+    QCOMPARE(summary, QStringLiteral("Overall read: risk-off."));
+
+    // Each heading exactly once...
+    for (const char* name : {"GEOPOLITICS", "ENERGY", "ECONOMIC"}) {
+        const QString heading = QStringLiteral("### %1").arg(QLatin1String(name));
+        QCOMPARE(detail.count(heading), 1);
+    }
+    // ...in first-seen order...
+    QVERIFY(detail.indexOf("### GEOPOLITICS") < detail.indexOf("### ENERGY"));
+    QVERIFY(detail.indexOf("### ENERGY") < detail.indexOf("### ECONOMIC"));
+
+    // ...and no bullet lost in the merge.
+    for (const char* bullet : {"Trump on Iran", "Netanyahu meeting", "Crude below $80",
+                               "Australian banks charged", "Allies on alert over Hormuz",
+                               "Japan quake hits infrastructure", "Guardian poll on Angus Taylor"})
+        QVERIFY2(detail.contains(QLatin1String(bullet)), bullet);
+
+    // A verbatim restatement under the duplicate heading collapses to one.
+    const QString dedup = brief::split(
+        marker + "\n### TECH\n- Alphabet raises AI spend\n### TECH\n- Alphabet raises AI spend\n").second;
+    QCOMPARE(dedup.count(QStringLiteral("Alphabet raises AI spend")), 1);
+
+    // Already-clean input is left alone.
+    const QString clean = brief::split(marker + "\n### TECH\n- One\n- Two\n").second;
+    QCOMPARE(clean, QStringLiteral("### TECH\n- One\n- Two"));
+
+    // Detail with no headings at all passes through untouched.
+    const QString plain = brief::split(marker + "\njust prose, no headings").second;
+    QCOMPARE(plain, QStringLiteral("just prose, no headings"));
 }
 
 // The layout contract: exactly two panes, detail on the right, and it is

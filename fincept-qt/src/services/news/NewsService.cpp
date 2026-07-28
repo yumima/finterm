@@ -428,10 +428,11 @@ QString news_build_brief_prompt(const QString& headlines, const QString& portfol
          // before the marker in its top section and everything after it in the
          // lower section, which is otherwise empty while a brief is showing.
          "Then output the marker <<<CATEGORIES>>> on its own line, followed by a "
-         "per-category breakdown. Use a '### NAME' heading per category and 1-3 bullets under "
-         "each. Only include categories the headlines actually cover, ordered by how much news "
-         "there is. Draw from: MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, "
-         "EARNINGS"
+         "per-category breakdown: at most FOUR '### NAME' headings, at most TWO one-line "
+         "bullets under each. Each category name may appear ONCE — put every bullet for a "
+         "category under its single heading, never repeat a heading. Only include categories "
+         "the headlines actually cover, ordered by how much news there is. Draw from: "
+         "MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS"
       + QString(portfolio.isEmpty() ? "" : ", PORTFOLIO")
       + ". Give each bullet the specific company/sector and the concrete detail from the "
         "headline — this section is the detail the brief above compresses.\n"
