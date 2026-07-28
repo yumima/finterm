@@ -109,7 +109,12 @@ NewsScreen::NewsScreen(QWidget* parent) : QWidget(parent) {
     // Restore persistent preferences. Read once via the member QSettings —
     // subsequent writes (filter changes) reuse this handle so we don't pay
     // the INI open/parse cost on every keystroke / pill click.
-    active_category_ = settings_.value("news/category",   "ALL").toString();
+    // Category is deliberately NOT restored — the news screen always opens on
+    // ALL. A category filter is a transient drill-down, not a preference: a
+    // stale MKT from some previous session silently hid most of the feed and
+    // read as "the news screen stopped fetching articles". Time range, sort
+    // and view mode below are genuine preferences and do persist.
+    active_category_ = QStringLiteral("ALL");
     time_range_      = settings_.value("news/time_range", "24H").toString();
     sort_mode_       = settings_.value("news/sort_mode",  "RELEVANCE").toString();
     view_mode_       = settings_.value("news/view_mode",  "WIRE").toString();
@@ -400,16 +405,38 @@ void NewsScreen::connect_signals() {
         // two briefs clobber each other in the shared label.
         if (tldr_in_flight_)
             return;
+        // TL;DR briefs what the user is actually looking at — the filtered
+        // view. That is the whole point of having it alongside DIGEST, which
+        // reads the entire feed regardless of filters. Collapsing the two
+        // would leave no way to brief a drill-down.
+        //
+        // The confusion this caused was never about scope, it was that the
+        // scope was invisible: a stale MKT filter made the brief cover 28 of
+        // several hundred articles with nothing on screen saying so. Fixed at
+        // both ends — the category no longer persists across sessions (see the
+        // constructor), and the section title below names the active scope.
         if (filtered_articles_.isEmpty())
             return;
         tldr_in_flight_ = true;
         command_bar_->set_summarizing(true);
+
+        // "TL;DR" when unfiltered, "TL;DR — MKT" when drilled in, so the brief
+        // can never be mistaken for a read of the whole market.
+        const QString scope_title = (active_category_ == "ALL")
+                                        ? QStringLiteral("TL;DR")
+                                        : QStringLiteral("TL;DR — %1").arg(active_category_);
+
         // Render the brief in the detail panel's TL;DR section (a proper, full-size
         // surface that opens the panel) instead of cramming it into the 60px
         // command bar, where it overlapped the INTEL strip.
-        detail_panel_->show_tldr_loading();
+        detail_panel_->show_tldr_loading(scope_title);
+
+        // 20 headlines, up from 8: the brief now also produces a per-category
+        // breakdown for the lower pane, and 8 rarely spans enough categories
+        // for that section to be worth rendering.
         QPointer<NewsScreen> self = this;
-        services::NewsService::instance().summarize_headlines(filtered_articles_, 8, [self](bool ok, QString summary) {
+        services::NewsService::instance().summarize_headlines(
+            filtered_articles_, 20, [self, scope_title](bool ok, QString summary) {
             if (!self)
                 return;
             self->tldr_in_flight_ = false;
@@ -417,8 +444,21 @@ void NewsScreen::connect_signals() {
             // Treat ok-but-empty as a failure so the panel doesn't stay stuck on
             // "Generating brief…" (show_tldr_summary hides the section on empty).
             const bool have_text = ok && !summary.trimmed().isEmpty();
+            if (have_text) {
+                self->detail_panel_->show_tldr_summary(summary, scope_title);
+                return;
+            }
+            // Say why. This used to render a bare "AI brief is unavailable
+            // right now", which is indistinguishable between "the local model
+            // isn't running", "it timed out" and "it returned nothing" — the
+            // reason was logged but never shown, so the one person who could
+            // act on it never saw it.
+            const QString why = fincept::ai_chat::LlmService::instance().is_configured()
+                                    ? QStringLiteral("The local model returned nothing — check that hearth is "
+                                                     "running and the chat model is loaded.")
+                                    : QStringLiteral("No LLM is configured. Open Settings -> AI Chat.");
             self->detail_panel_->show_tldr_summary(
-                have_text ? summary : QStringLiteral("AI brief is unavailable right now."));
+                QStringLiteral("**AI brief unavailable.** %1").arg(why), scope_title);
         });
     });
     connect(detail_panel_, &NewsDetailPanel::related_article_clicked, this, &NewsScreen::on_related_clicked);
@@ -523,8 +563,9 @@ void NewsScreen::hideEvent(QHideEvent* e) {
 void NewsScreen::on_category_changed(const QString& category) {
     active_category_ = category;
     visible_article_count_ = PAGE_SIZE;
-    settings_.setValue("news/category", category);
-    schedule_settings_write();
+    // Not persisted — see the constructor. The screen always reopens on ALL.
+    // Still recorded in save_state() so a restored *session* keeps the
+    // drill-down the user was in.
     ScreenStateManager::instance().notify_changed(this);
     apply_filters_async();
 }
