@@ -653,6 +653,17 @@ void PortfolioService::load_transactions(const QString& portfolio_id, int limit)
     }
 }
 
+QVector<portfolio::Transaction> PortfolioService::symbol_transactions(const QString& portfolio_id,
+                                                                     const QString& symbol) {
+    auto r = PortfolioRepository::instance().get_symbol_transactions(portfolio_id, symbol);
+    if (r.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to load transactions for " + symbol + ": " +
+                                      QString::fromStdString(r.error()));
+        return {};
+    }
+    return r.value();
+}
+
 void PortfolioService::edit_position(const QString& portfolio_id, const QString& symbol, const QString& txn_id,
                                      double qty, double price, const QString& date, const QString& notes) {
     auto& repo = PortfolioRepository::instance();

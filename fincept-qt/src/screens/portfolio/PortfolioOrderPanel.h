@@ -26,6 +26,14 @@ class PortfolioOrderPanel : public QWidget {
   private:
     void build_ui();
     void update_display();
+    /// Repaints the BUY|SELL segmented toggle (and the panel's left accent)
+    /// from side_. Also forces the two checkable buttons back into agreement
+    /// with side_, since a click toggles the button *before* the handler runs.
+    void update_tabs();
+    /// Repaints the submit button from side_. Split out of update_display()
+    /// because that early-returns when no holding is selected — which used to
+    /// leave a red "OPEN SELL ORDER" button sitting under BUY-coloured tabs.
+    void update_submit();
 
     QPushButton* buy_tab_ = nullptr;
     QPushButton* sell_tab_ = nullptr;

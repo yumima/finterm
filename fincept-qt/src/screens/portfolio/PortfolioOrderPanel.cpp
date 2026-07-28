@@ -6,7 +6,10 @@
 #include <QColor>
 #include <QGraphicsDropShadowEffect>
 #include <QHBoxLayout>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -84,43 +87,11 @@ void PortfolioOrderPanel::build_ui() {
     sell_tab_->setCheckable(true);
     side_row->addWidget(sell_tab_);
 
-    auto update_tabs = [this]() {
-        const bool is_buy = (side_ == "BUY");
-        const char* active_color = is_buy ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-
-        buy_tab_->setChecked(is_buy);
-        sell_tab_->setChecked(!is_buy);
-
-        // Segmented BUY|SELL: the active side is a solid filled button; the
-        // inactive side stays clearly legible (raised fill + secondary text +
-        // border) so it reads as a tappable toggle, not a disabled control.
-        buy_tab_->setStyleSheet(
-            QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                    "  font-size:13px; font-weight:700; }")
-                .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::BG_RAISED(),
-                     is_buy ? "#000" : ui::colors::TEXT_SECONDARY(),
-                     is_buy ? ui::colors::POSITIVE() : ui::colors::BORDER_MED()));
-        sell_tab_->setStyleSheet(
-            QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                    "  font-size:13px; font-weight:700; }")
-                .arg(!is_buy ? ui::colors::NEGATIVE() : ui::colors::BG_RAISED(),
-                     !is_buy ? "#fff" : ui::colors::TEXT_SECONDARY(),
-                     !is_buy ? ui::colors::NEGATIVE() : ui::colors::BORDER_MED()));
-
-        // Recolor the panel's left accent to match the active side.
-        setStyleSheet(QString("#PortfolioOrderPanel { background:%1; border:1px solid %2;"
-                              " border-left:3px solid %3; }")
-                          .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED(), active_color));
-    };
-
-    connect(buy_tab_, &QPushButton::clicked, this, [this, update_tabs]() {
-        side_ = "BUY";
-        update_tabs();
-    });
-    connect(sell_tab_, &QPushButton::clicked, this, [this, update_tabs]() {
-        side_ = "SELL";
-        update_tabs();
-    });
+    // Both tabs route through set_side() so a user click and a programmatic
+    // open (on_buy_requested / on_sell_requested) take the exact same path —
+    // there is one place that writes side_ and one place that repaints from it.
+    connect(buy_tab_, &QPushButton::clicked, this, [this]() { set_side(QStringLiteral("BUY")); });
+    connect(sell_tab_, &QPushButton::clicked, this, [this]() { set_side(QStringLiteral("SELL")); });
 
     layout->addLayout(side_row);
 
@@ -145,14 +116,10 @@ void PortfolioOrderPanel::build_ui() {
     add_info(qty_label_, "QTY HELD");
     add_info(mv_label_, "MKT VAL");
 
-    // Submit button
-    submit_btn_ = new QPushButton("OPEN BUY ORDER");
+    // Submit button — label and colour come from update_submit().
+    submit_btn_ = new QPushButton;
     submit_btn_->setFixedHeight(32);
     submit_btn_->setCursor(Qt::PointingHandCursor);
-    submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                                       "QPushButton:hover { opacity:0.9; }")
-                                   .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE()));
     connect(submit_btn_, &QPushButton::clicked, this, [this]() {
         if (side_ == "BUY")
             emit buy_submitted();
@@ -171,6 +138,50 @@ void PortfolioOrderPanel::build_ui() {
     layout->addWidget(note);
 
     update_tabs();
+    update_submit();
+}
+
+void PortfolioOrderPanel::update_tabs() {
+    const bool is_buy = (side_ == "BUY");
+    const char* active_color = is_buy ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+
+    // A checkable QPushButton toggles itself *before* clicked() reaches our
+    // handler, so re-assert both states from side_ rather than trusting them.
+    // Block signals: setChecked() on a checkable button emits toggled(), and
+    // we are frequently called from inside a clicked() handler.
+    QSignalBlocker buy_block(buy_tab_);
+    QSignalBlocker sell_block(sell_tab_);
+    buy_tab_->setChecked(is_buy);
+    sell_tab_->setChecked(!is_buy);
+
+    // Segmented BUY|SELL: the active side is a solid filled button; the
+    // inactive side stays clearly legible (raised fill + secondary text +
+    // border) so it reads as a tappable toggle, not a disabled control.
+    buy_tab_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                                    "  font-size:13px; font-weight:700; }")
+                                .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::BG_RAISED(),
+                                     is_buy ? "#000" : ui::colors::TEXT_SECONDARY(),
+                                     is_buy ? ui::colors::POSITIVE() : ui::colors::BORDER_MED()));
+    sell_tab_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                                     "  font-size:13px; font-weight:700; }")
+                                 .arg(!is_buy ? ui::colors::NEGATIVE() : ui::colors::BG_RAISED(),
+                                      !is_buy ? "#fff" : ui::colors::TEXT_SECONDARY(),
+                                      !is_buy ? ui::colors::NEGATIVE() : ui::colors::BORDER_MED()));
+
+    // Recolor the panel's left accent to match the active side.
+    setStyleSheet(QString("#PortfolioOrderPanel { background:%1; border:1px solid %2;"
+                          " border-left:3px solid %3; }")
+                      .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED(), active_color));
+}
+
+void PortfolioOrderPanel::update_submit() {
+    const bool is_buy = (side_ == "BUY");
+    submit_btn_->setText(QString("OPEN %1 ORDER").arg(side_));
+    submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
+                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
+                                       "QPushButton:hover { opacity:0.9; }")
+                                   .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
+                                        is_buy ? "#000" : "#fff"));
 }
 
 void PortfolioOrderPanel::set_holding(const portfolio::HoldingWithQuote* holding) {
@@ -183,13 +194,15 @@ void PortfolioOrderPanel::set_currency(const QString& currency) {
 }
 
 void PortfolioOrderPanel::set_side(const QString& side) {
-    side_ = side;
-    // Trigger tab update
-    buy_tab_->setChecked(side == "BUY");
-    sell_tab_->setChecked(side == "SELL");
-    buy_tab_->click(); // Will trigger the lambda and update styling
-    if (side == "SELL")
-        sell_tab_->click();
+    // Previously this synthesised button clicks (buy_tab_->click(), then
+    // sell_tab_->click() for SELL) to "trigger the styling". That routed a
+    // SELL open through a transient BUY state, and — because the submit
+    // button was only ever restyled by update_display(), which early-returns
+    // when no holding is selected — left the button reading "OPEN SELL ORDER"
+    // after clicking BUY (and vice versa). Write the state, then repaint.
+    side_ = (side.compare("SELL", Qt::CaseInsensitive) == 0) ? QStringLiteral("SELL") : QStringLiteral("BUY");
+    update_tabs();
+    update_submit();
 }
 
 void PortfolioOrderPanel::update_display() {
@@ -206,15 +219,6 @@ void PortfolioOrderPanel::update_display() {
     qty_label_->setText(
         QString::number(holding_->quantity, 'f', holding_->quantity == std::floor(holding_->quantity) ? 0 : 2));
     mv_label_->setText(QString("%1 %2").arg(currency_).arg(QString::number(holding_->market_value, 'f', 2)));
-
-    // Update submit button text
-    submit_btn_->setText(QString("OPEN %1 ORDER").arg(side_));
-    const char* btn_color = (side_ == "BUY") ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    const char* btn_text_color = (side_ == "BUY") ? "#000" : "#fff";
-    submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                                       "QPushButton:hover { opacity:0.9; }")
-                                   .arg(btn_color, btn_text_color));
 }
 
 } // namespace fincept::screens

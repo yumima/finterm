@@ -1210,38 +1210,42 @@ QWidget* PortfolioScreen::build_main_view() {
     blotter_ = new PortfolioBlotter;
     connect(blotter_, &PortfolioBlotter::symbol_selected, this, &PortfolioScreen::on_symbol_selected);
     connect(blotter_, &PortfolioBlotter::edit_transaction_requested, this, [this](const QString& symbol) {
-        // Load transactions for this symbol, show edit dialog for the most recent one
-        services::PortfolioService::instance().load_transactions(selected_id_, 100);
-        QPointer<PortfolioScreen> self = this;
-        auto conn = std::make_shared<QMetaObject::Connection>();
-        *conn = connect(
-            &services::PortfolioService::instance(), &services::PortfolioService::transactions_loaded, this,
-            [this, self, symbol, conn](QVector<portfolio::Transaction> txns) {
-                disconnect(*conn);
-                if (!self)
-                    return;
-                // Editing a holding edits its cost lot — find the most-recent
-                // BUY for this symbol (txns are date-DESC). Matching any type
-                // would let a DIVIDEND/SELL row drive edit_position(), which
-                // rewrites the asset's quantity/avg-cost and would corrupt the
-                // position (e.g. set avg cost to a dividend's per-share amount).
-                portfolio::Transaction* match = nullptr;
-                for (auto& t : txns) {
-                    if (t.symbol == symbol && t.transaction_type == "BUY") {
-                        match = &t;
-                        break;
-                    }
-                }
-                if (!match)
-                    return;
-                EditTransactionDialog dlg(*match, this);
-                if (dlg.exec() == QDialog::Accepted) {
-                    services::PortfolioService::instance().edit_position(selected_id_, match->symbol, match->id,
-                                                                         dlg.quantity(), dlg.price(), dlg.date(),
-                                                                         dlg.notes());
-                }
-            },
-            Qt::SingleShotConnection);
+        // Read this symbol's lots straight from the service. This used to fire
+        // load_transactions() and then arm a one-shot transactions_loaded
+        // listener — but that signal is portfolio-wide AND emitted
+        // synchronously, so the listener missed its own load (first click did
+        // nothing, hence "needs two clicks") and stayed armed until some other
+        // refresh woke it with the previously-clicked symbol still captured
+        // (hence "shows the previous ticker"). A direct read has neither
+        // failure mode, and is not capped at the 100 most-recent rows
+        // portfolio-wide, so old lots stay editable.
+        const auto txns = services::PortfolioService::instance().symbol_transactions(selected_id_, symbol);
+
+        // Editing a holding edits its cost lot — find the most-recent BUY for
+        // this symbol (txns are date-DESC). Matching any type would let a
+        // DIVIDEND/SELL row drive edit_position(), which rewrites the asset's
+        // quantity/avg-cost and would corrupt the position (e.g. set avg cost
+        // to a dividend's per-share amount).
+        const portfolio::Transaction* match = nullptr;
+        for (const auto& t : txns) {
+            if (t.transaction_type == "BUY") {
+                match = &t;
+                break;
+            }
+        }
+        if (!match) {
+            QMessageBox::information(this, "Edit Transaction",
+                                     QString("No BUY transaction recorded for %1, so there is no cost lot to edit.")
+                                         .arg(symbol));
+            return;
+        }
+
+        const portfolio::Transaction txn = *match;
+        EditTransactionDialog dlg(txn, this);
+        if (dlg.exec() == QDialog::Accepted) {
+            services::PortfolioService::instance().edit_position(selected_id_, txn.symbol, txn.id, dlg.quantity(),
+                                                                 dlg.price(), dlg.date(), dlg.notes());
+        }
     });
     connect(blotter_, &PortfolioBlotter::delete_position_requested, this, [this](const QString& symbol) {
         auto* h = find_holding(symbol);

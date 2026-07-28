@@ -7,7 +7,7 @@ namespace fincept::screens {
 
 /// Returns the full list of available column identifiers for MarketPanel.
 inline QStringList all_market_columns() {
-    return {"SYMBOL", "LAST", "CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "OPEN", "NAME"};
+    return {"SYMBOL", "LAST", "CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "OPEN", "NAME", "PRESSURE"};
 }
 
 /// Returns the default column set used for new panels.

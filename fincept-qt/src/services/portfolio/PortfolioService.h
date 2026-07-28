@@ -39,6 +39,19 @@ class PortfolioService : public QObject {
 
     // ── Transactions ─────────────────────────────────────────────────────────
     void load_transactions(const QString& portfolio_id, int limit = 50);
+    /// Synchronous read of one symbol's transactions, most-recent first.
+    ///
+    /// Use this — never load_transactions() + a one-shot transactions_loaded
+    /// listener — when a caller needs rows *now* (an edit dialog opened from a
+    /// context menu). transactions_loaded is portfolio-wide and is emitted by
+    /// unrelated refreshes (edit_position, record_dividend, summary reloads),
+    /// so a one-shot listener can be woken by someone else's load carrying a
+    /// different symbol. load_transactions() also emits synchronously, so a
+    /// listener connected *after* the call misses its own emission entirely
+    /// and then fires on the next unrelated one.
+    ///
+    /// Returns an empty vector if the read fails.
+    QVector<portfolio::Transaction> symbol_transactions(const QString& portfolio_id, const QString& symbol);
     /// Edit an existing holding in place. The blotter shows the stored asset
     /// row (build_summary reads get_assets, NOT a sum of transactions), so
     /// rewriting only the transaction left the displayed position unchanged.

@@ -170,7 +170,7 @@ void MarketPanel::open_cols_dropdown() {
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
                  ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER()));
 
-    const QStringList optional = {"CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "OPEN", "NAME"};
+    const QStringList optional = {"CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "OPEN", "NAME", "PRESSURE"};
 
     for (const QString& col : optional) {
         auto* act = menu->addAction(col);
@@ -373,9 +373,33 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
             else if (col == "HIGH")   table_->setItem(row, ci, mk(QString::number(q.high, 'f', 2), ui::colors::TEXT_SECONDARY()));
             else if (col == "LOW")    table_->setItem(row, ci, mk(QString::number(q.low,  'f', 2), ui::colors::TEXT_SECONDARY()));
             else if (col == "VOL")    table_->setItem(row, ci, mk(ui::formatting::format_compact_volume(q.volume), ui::colors::TEXT_SECONDARY()));
-            else if (col == "BID")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
-            else if (col == "ASK")    table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
+            // Same precision as LAST — at 2dp a sub-$1 symbol's bid and ask
+            // round to the same number and the spread reads as zero.
+            else if (col == "BID")    table_->setItem(row, ci, mk(q.bid > 0 ? QString::number(q.bid, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
+            else if (col == "ASK")    table_->setItem(row, ci, mk(q.ask > 0 ? QString::number(q.ask, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
             else if (col == "OPEN")   table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
+            else if (col == "PRESSURE") {
+                QString label = "--";
+                QString color = ui::colors::TEXT_SECONDARY();
+                // BOTH sizes must be present. yfinance routinely reports one
+                // side and not the other; with an `||` test the missing side
+                // reads as 0 and an absent ask turns into a confident green
+                // "BUY" — a signal manufactured out of missing data. An
+                // imbalance is only meaningful against a known other side.
+                if (q.bid_size > 0 && q.ask_size > 0) {
+                    if (q.bid_size > q.ask_size) {
+                        label = "BUY";
+                        color = ui::colors::POSITIVE();
+                    } else if (q.ask_size > q.bid_size) {
+                        label = "SELL";
+                        color = ui::colors::NEGATIVE();
+                    } else {
+                        label = "NEUTRAL";
+                        color = ui::colors::WARNING();
+                    }
+                }
+                table_->setItem(row, ci, mk(label, color));
+            }
         }
     }
 }
