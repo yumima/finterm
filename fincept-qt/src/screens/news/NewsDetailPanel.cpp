@@ -445,6 +445,35 @@ QWidget* NewsDetailPanel::build_content_view() {
             });
     });
 
+    // ── Brief detail, by category ─────────────────────────────────────────
+    // The lower half of the reading pane when a TL;DR/DIGEST is showing. The
+    // top TL;DR section carries the one-line read plus top stories; this
+    // carries the per-category breakdown (tech, geopolitics, energy,
+    // portfolio…). Before this existed the whole lower pane sat empty on a
+    // brief — the reader had a wide, tall pane showing four bullets.
+    //
+    // Sits above the ARTICLE block: when the user opens a story the brief
+    // collapses (hide_tldr) and the article body takes the space back.
+    tldr_detail_section_ = new QWidget(content);
+    tldr_detail_section_->setObjectName("newsTldrDetailSection");
+    tldr_detail_section_->hide();
+    auto* tldr_detail_layout = new QVBoxLayout(tldr_detail_section_);
+    tldr_detail_layout->setContentsMargins(0, 14, 0, 8);
+    tldr_detail_layout->setSpacing(6);
+
+    tldr_detail_title_ = new QLabel("BY CATEGORY", tldr_detail_section_);
+    tldr_detail_title_->setObjectName("newsDetailBodyTitle");
+    tldr_detail_layout->addWidget(tldr_detail_title_);
+
+    tldr_detail_label_ = new QLabel(tldr_detail_section_);
+    tldr_detail_label_->setObjectName("newsTldrBody");
+    tldr_detail_label_->setWordWrap(true);
+    tldr_detail_label_->setTextFormat(Qt::MarkdownText); // model emits markdown
+    tldr_detail_label_->setAlignment(Qt::AlignTop);
+    tldr_detail_layout->addWidget(tldr_detail_label_);
+
+    layout->addWidget(tldr_detail_section_);
+
     // ── Article body (extracted prose) ───────────────────────────────────
     // Sits right below the action button row — the empty area previously
     // there. Populated by NewsService::extract_article_body() each time
@@ -1052,6 +1081,9 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
         tldr_label_->setText(QStringLiteral("Generating %1…").arg(title));
     if (tldr_section_)
         tldr_section_->show();
+    // Clear any previous brief's categories while the new one generates.
+    if (tldr_detail_section_)
+        tldr_detail_section_->hide();
     stack_->setCurrentIndex(1);
 }
 
@@ -1060,18 +1092,45 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
         return;
     if (text.isEmpty()) {
         tldr_section_->hide();
+        if (tldr_detail_section_)
+            tldr_detail_section_->hide();
         return;
     }
     if (tldr_title_)
         tldr_title_->setText(title);
-    tldr_label_->setText(text);
+
+    // Split the model's output into the top brief and the lower per-category
+    // detail. Doing it here rather than at the call sites means the streaming
+    // DIGEST works for free: while chunks are still arriving the marker simply
+    // hasn't appeared yet, so everything renders as brief and the detail
+    // section fills in the moment the tail starts streaming.
+    const int marker = text.indexOf(kCategoryMarker);
+    const QString brief = (marker < 0) ? text : text.left(marker).trimmed();
+    const QString detail =
+        (marker < 0) ? QString() : text.mid(marker + kCategoryMarker.size()).trimmed();
+
+    tldr_label_->setText(brief);
     tldr_section_->show();
+
+    if (tldr_detail_section_ && tldr_detail_label_) {
+        if (detail.isEmpty()) {
+            tldr_detail_section_->hide();
+        } else {
+            tldr_detail_label_->setText(detail);
+            tldr_detail_section_->show();
+        }
+    }
     stack_->setCurrentIndex(1);
 }
 
 void NewsDetailPanel::hide_tldr() {
     if (tldr_section_)
         tldr_section_->hide();
+    // The category breakdown belongs to the brief — it must collapse with it,
+    // or opening an article would leave stale per-category text sitting above
+    // the story body.
+    if (tldr_detail_section_)
+        tldr_detail_section_->hide();
 }
 
 } // namespace fincept::screens

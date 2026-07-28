@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`8daff59a8`](https://github.com/yumima/finterm/commit/8daff59a8) DataHub: fix subscriptions outliving their owner; news divider draggable
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

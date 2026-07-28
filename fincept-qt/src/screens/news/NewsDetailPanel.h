@@ -45,6 +45,13 @@ class NewsDetailPanel : public QWidget {
     /// summary doesn't outlive its relevance to the feed snapshot).
     void hide_tldr();
 
+    /// Separates the top brief from the per-category detail in a model brief.
+    /// Both prompts are told to emit this on its own line; show_tldr_summary()
+    /// splits on it. Absent (older cached briefs, a model that ignored the
+    /// instruction) the whole text renders as the brief and the lower section
+    /// stays hidden — no worse than before this existed.
+    static inline const QString kCategoryMarker = QStringLiteral("<<<CATEGORIES>>>");
+
   signals:
     void analyze_requested(const QString& article_url);
     void related_article_clicked(const services::NewsArticle& article);
@@ -62,6 +69,14 @@ class NewsDetailPanel : public QWidget {
     QWidget* tldr_section_ = nullptr;
     QLabel* tldr_title_ = nullptr;  ///< section header — "TL;DR" or "DIGEST"
     QLabel* tldr_label_ = nullptr;
+
+    // Lower half of a brief: the per-category breakdown. show_tldr_summary()
+    // splits the model's output on kCategoryMarker and routes the tail here,
+    // so both the one-shot TL;DR and the streaming DIGEST fill it without
+    // either call site knowing about the split.
+    QWidget* tldr_detail_section_ = nullptr;
+    QLabel* tldr_detail_title_ = nullptr;
+    QLabel* tldr_detail_label_ = nullptr;
 
     // Article section
     QLabel* headline_label_ = nullptr;

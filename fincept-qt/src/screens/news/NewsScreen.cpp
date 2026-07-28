@@ -264,7 +264,23 @@ void NewsScreen::connect_signals() {
             "descriptive text only. Produce a market DIGEST: 4-6 sentences that "
             "group the day's main themes (by sector or event), name specific "
             "companies/sectors, and call out what is most consequential. Be "
-            "factual; do not make recommendations.")});
+            "factual; do not make recommendations.\n"
+            // Grounding — same rules as the TL;DR brief. Without them the model
+            // embellishes a headline into a claim it never made (an observed
+            // failure was asserting a private company's stock had moved).
+            "Every statement must be supported by a headline: do not add companies, "
+            "tickers, numbers or events that are not there, and never say a company's "
+            "shares moved unless a headline says so — many are private and have no "
+            "traded stock. Rank for a US/China/Europe and global-macro reader; "
+            "single-country corporate news from elsewhere (India in particular) is "
+            "the lowest priority.\n"
+            // Two-part output: the reading pane renders the text before the
+            // marker up top and the breakdown below, filling what used to be
+            // dead space whenever a digest was showing.
+            "After the digest, output the marker <<<CATEGORIES>>> on its own line, then a "
+            "per-category breakdown: a '### NAME' heading per category with 1-3 specific "
+            "bullets under each, covering only categories present in the headlines, drawn "
+            "from MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS.")});
         const QString prompt = QStringLiteral(
             "Write a market digest of these headlines, grouped by theme.\n\n"
             "<<<HEADLINES>>>\n%1\n<<<END>>>")
@@ -973,14 +989,23 @@ void NewsScreen::apply_filters_async() {
 
         auto clusters = services::cluster_articles(filtered);
 
-        // When the entire input is filtered to zero, surface why so the cause
-        // is visible in logs without users digging into the source.
-        if (!articles_copy.isEmpty() && filtered.isEmpty()) {
-            LOG_WARN("NewsScreen",
-                     QString("Filter rejected ALL %1 articles "
-                             "(time=%2 variant=%3 category=%4 search=%5 ptf=%6 range=%7)")
-                         .arg(articles_copy.size()).arg(rejected_time).arg(rejected_variant)
-                         .arg(rejected_category).arg(rejected_search).arg(rejected_ptf).arg(time_range));
+        // Surface where the articles went. This used to log only when the
+        // filter rejected *everything*, which meant the far more common
+        // "why is the feed showing 28 of 900 articles?" left no trace at all.
+        // Log the per-stage breakdown whenever most of the input is dropped;
+        // keep the all-rejected case at WARN since that one is always a bug
+        // or a misconfigured filter.
+        if (!articles_copy.isEmpty()) {
+            const int kept = static_cast<int>(filtered.size());
+            const int total = static_cast<int>(articles_copy.size());
+            const QString breakdown =
+                QString("kept=%1/%2 (time=%3 variant=%4 category=%5 search=%6 ptf=%7 range=%8)")
+                    .arg(kept).arg(total).arg(rejected_time).arg(rejected_variant)
+                    .arg(rejected_category).arg(rejected_search).arg(rejected_ptf).arg(time_range);
+            if (kept == 0)
+                LOG_WARN("NewsScreen", "Filter rejected ALL articles — " + breakdown);
+            else if (kept * 2 < total)
+                LOG_INFO("NewsScreen", "Filter dropped most articles — " + breakdown);
         }
 
         QMetaObject::invokeMethod(

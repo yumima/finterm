@@ -413,6 +413,17 @@ QString news_build_brief_prompt(const QString& headlines, const QString& portfol
              "affected positions and the likely direction; say 'no direct exposure today' if none.\n";
     p += "- **Watch:** 1-2 notable risks or things to watch.\n"
          "Be specific and concise, no preamble.\n"
+         // Second half of the output. The reading pane renders everything
+         // before the marker in its top section and everything after it in the
+         // lower section, which is otherwise empty while a brief is showing.
+         "Then output the marker <<<CATEGORIES>>> on its own line, followed by a "
+         "per-category breakdown. Use a '### NAME' heading per category and 1-3 bullets under "
+         "each. Only include categories the headlines actually cover, ordered by how much news "
+         "there is. Draw from: MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, "
+         "EARNINGS"
+      + QString(portfolio.isEmpty() ? "" : ", PORTFOLIO")
+      + ". Give each bullet the specific company/sector and the concrete detail from the "
+        "headline — this section is the detail the brief above compresses.\n"
          // Grounding rules. Without these the model embellishes a headline into
          // a claim the headline never made — an observed failure was "SpaceX
          // stock dives", which cannot happen: SpaceX is private and has no
