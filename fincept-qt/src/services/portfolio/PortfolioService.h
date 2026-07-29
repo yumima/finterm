@@ -104,6 +104,15 @@ class PortfolioService : public QObject {
     /// aggregates, and emit portfolio_fundamentals_loaded().
     void fetch_portfolio_fundamentals(const QString& portfolio_id);
 
+    // ── Peak high since entry (trailing-stop L%) ─────────────────────────────
+    /// Fetch the highest daily high between each asset's first_purchase_date
+    /// and today (one yfinance "historical_period" range call per symbol) and
+    /// cache it. Symbols with a fresh cache entry are skipped, so the common
+    /// 20 s refresh tick issues no requests at all. Emits
+    /// position_peaks_loaded() once the fan-out completes with any new peaks.
+    void fetch_position_peaks(const QString& portfolio_id,
+                              const QVector<portfolio::PortfolioAsset>& assets);
+
     // ── Risk-free rate ────────────────────────────────────────────────────────
     /// Fetch the current 10-year Treasury yield (DGS10) from FRED.
     /// Result is cached 24h in SettingsRepository. Emits risk_free_rate_loaded(rate).
@@ -185,6 +194,11 @@ class PortfolioService : public QObject {
     void portfolio_fundamentals_loaded(QString portfolio_id,
                                        portfolio::PortfolioFundamentals fundamentals);
 
+    /// Highest daily high since entry, keyed by symbol. Only carries symbols
+    /// whose fetch actually produced a price — consumers keep their existing
+    /// value (or "unknown") for anything absent.
+    void position_peaks_loaded(QString portfolio_id, QHash<QString, double> peaks);
+
   private:
     PortfolioService();
 
@@ -200,6 +214,28 @@ class PortfolioService : public QObject {
     /// wrong ribbon while DataHub's per-symbol hydration races to overwrite
     /// the per-holding rows.
     static void refresh_summary_prices_from_market_last(portfolio::PortfolioSummary& summary);
+
+    /// Cache key for a peak: symbol + entry date, so editing a position's
+    /// purchase date re-measures the peak from the new entry instead of
+    /// reusing the old window's value.
+    static QString peak_key(const QString& symbol, const QString& entry_date);
+    /// Entry date as YYYY-MM-DD, or empty when the stored value can't be
+    /// parsed (the fetch then falls back to a bounded 1y window).
+    static QString entry_date_of(const QString& first_purchase_date);
+    /// Last known peak high for this symbol+entry pair, 0 when never fetched.
+    /// Returns stale values too — a stale peak beats no peak; the TTL only
+    /// governs when fetch_position_peaks re-requests.
+    double cached_peak_high(const QString& symbol, const QString& first_purchase_date);
+    /// Raise an existing cached peak to @p price (a live print above the last
+    /// fetched daily high). Never creates an entry — a symbol whose history
+    /// never loaded must keep reading "unknown", not "at its high". Leaves
+    /// fetched_at alone so the TTL still re-measures on schedule.
+    void raise_cached_peak(const QString& symbol, const QString& first_purchase_date, double price);
+    /// Seed peak_cache_ from a disk-hydrated summary so the L% column paints
+    /// from the previous session's peaks instead of dashing until the first
+    /// fan-out returns. Entries are seeded with fetched_at = 0, so the next
+    /// build re-measures them immediately.
+    void seed_peak_cache_from_summary(const portfolio::PortfolioSummary& summary);
 
     // ── Summary cache (P11) ──────────────────────────────────────────────────
     // In-memory (not CacheManager) intentionally: PortfolioSummary holds nested
@@ -233,6 +269,21 @@ class PortfolioService : public QObject {
     // waste N yfinance calls. Cleared when the portfolio's holdings change
     // (invalidate_cache) so a position add/remove re-fetches.
     QSet<QString> fundamentals_fetched_;
+
+    // Peak high since entry, keyed by peak_key(symbol, entry_date). Survives
+    // invalidate_cache deliberately: the summary cache is dropped on every
+    // 20 s refresh tick, and re-running an N-symbol daily-history fan-out at
+    // that cadence would hammer yfinance for a number that moves at most once
+    // a day. Guarded by cache_mutex_.
+    struct PeakEntry {
+        double high = 0;      // 0 = fetched but no data (or never fetched)
+        qint64 fetched_at = 0; // epoch secs of the last completed attempt
+    };
+    QHash<QString, PeakEntry> peak_cache_;
+    // Keys with a request in flight — stops the next refresh tick from
+    // re-submitting the same symbol while the first call is still out.
+    QSet<QString> peak_inflight_;
+    static constexpr qint64 kPeakTtlSec = 6 * 3600; // 6h
 
     // Last successfully computed fundamentals, keyed by portfolio_id. When
     // fetch_portfolio_fundamentals short-circuits on the guard above, we

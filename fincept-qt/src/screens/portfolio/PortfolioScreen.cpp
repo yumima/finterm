@@ -72,6 +72,23 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
                 if (portfolio_id == selected_id_ && heatmap_)
                     heatmap_->set_portfolio_fundamentals(portfolio_id, f);
             });
+    // Peak-high fan-out landed — patch the in-memory holdings so the blotter's
+    // L% column fills in without waiting for the next summary rebuild.
+    connect(&svc, &services::PortfolioService::position_peaks_loaded, this,
+            [this](QString portfolio_id, QHash<QString, double> peaks) {
+                if (portfolio_id != selected_id_ || !summary_loaded_)
+                    return;
+                bool changed = false;
+                for (auto& h : current_summary_.holdings) {
+                    const auto it = peaks.constFind(h.symbol);
+                    if (it == peaks.constEnd())
+                        continue;
+                    portfolio::set_peak_high(h, it.value());
+                    changed = true;
+                }
+                if (changed)
+                    update_main_view_data();
+            });
     connect(&svc, &services::PortfolioService::spy_history_loaded, this,
             [this](QStringList /*dates*/, QVector<double> /*closes*/) {
                 // Recompute metrics now that SPY data is available for OLS beta.
@@ -978,6 +995,9 @@ void PortfolioScreen::hub_resubscribe_holdings() {
                 h.unrealized_pnl = h.market_value - h.cost_basis;
                 h.unrealized_pnl_percent = (h.cost_basis > 0)
                     ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+                // Live price moved — re-derive the drop from the peak (and let
+                // a new high raise the peak).
+                portfolio::refresh_drawdown(h);
                 break;
             }
             if (!hub_refresh_timer_->isActive())

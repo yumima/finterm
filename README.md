@@ -2,24 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-07-28)
+## Today's commits (2026-07-29)
 
 Latest first.
 
-- [`f7f575b1e`](https://github.com/yumima/finterm/commit/f7f575b1e) News: fix the brief cache key colliding and outliving prompt changes
-- [`3eb95f6d4`](https://github.com/yumima/finterm/commit/3eb95f6d4) News: widen TL;DR category coverage — 6 sections from 35 headlines
-- [`00f5565e4`](https://github.com/yumima/finterm/commit/00f5565e4) News: stop local bindings shadowing the brief namespace
-- [`b101d7916`](https://github.com/yumima/finterm/commit/b101d7916) News: merge duplicate category sections in AI briefs
-- [`2f2d0f570`](https://github.com/yumima/finterm/commit/2f2d0f570) News: move brief splitting into a shared header
-- [`380594d3e`](https://github.com/yumima/finterm/commit/380594d3e) News: hold the 1:2:2 ratio on resize; two review fixes
-- [`02f4cc537`](https://github.com/yumima/finterm/commit/02f4cc537) News: tighten the DIGEST spec — 2.6x faster, 56% less output
-- [`42c38c2aa`](https://github.com/yumima/finterm/commit/42c38c2aa) News: run AI briefs on the fast model role — the real cause of the timeouts
-- [`0cddb060a`](https://github.com/yumima/finterm/commit/0cddb060a) News: unstick the brief gate, fix row elision, 1:2:2 panes, DIGEST below summaries
-- [`47d0cfea8`](https://github.com/yumima/finterm/commit/47d0cfea8) News: fix brief timeouts (think:false), route DIGEST to the INTEL pane
-- [`713c3888d`](https://github.com/yumima/finterm/commit/713c3888d) News: open on ALL, label the TL;DR's scope, say why a brief failed
-- [`89150253b`](https://github.com/yumima/finterm/commit/89150253b) News: fold "why it matters" into the bullet; harden the brief split
-- [`558983dd6`](https://github.com/yumima/finterm/commit/558983dd6) News: split the brief into summary + per-category detail; log filter drops
-- [`8daff59a8`](https://github.com/yumima/finterm/commit/8daff59a8) DataHub: fix subscriptions outliving their owner; news divider draggable
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

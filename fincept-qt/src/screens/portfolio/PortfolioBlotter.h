@@ -11,7 +11,9 @@ namespace fincept::screens {
 
 class PortfolioSparkline;
 
-/// 11-column sortable positions table — blotter style.
+/// 12-column sortable positions table — blotter style. P&L is split across
+/// two percent columns: L% (drop from the peak high since entry) and P%
+/// (return on cost basis).
 class PortfolioBlotter : public QWidget {
     Q_OBJECT
   public:

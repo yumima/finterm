@@ -52,6 +52,7 @@ struct HoldingWithQuote {
     double quantity = 0;
     double avg_buy_price = 0;
     QString sector;
+    QString first_purchase_date; // entry date — anchors the peak-high lookup
 
     // Live market data
     double current_price = 0;
@@ -72,7 +73,38 @@ struct HoldingWithQuote {
     double ask = 0;
     double bid_size = 0;
     double ask_size = 0;
+
+    // Trailing-stop tracking. peak_price is the highest daily high seen since
+    // first_purchase_date, max'd against the live price; 0 means "not known
+    // yet" (the history fetch hasn't landed, or yfinance has no data for the
+    // symbol) and consumers must render a dash rather than 0%.
+    // drawdown_from_peak_percent is the drop from that peak to current_price
+    // — the blotter's L% column. Always <= 0 by construction.
+    double peak_price = 0;
+    double drawdown_from_peak_percent = 0;
 };
+
+// ── Trailing-stop maths ──────────────────────────────────────────────────────
+
+/// Re-derive drawdown after current_price moved, keeping the stored peak.
+/// A price above the stored peak IS the new peak — waiting for tomorrow's
+/// daily bar would report a phantom drawdown while the position prints highs.
+inline void refresh_drawdown(HoldingWithQuote& h) {
+    if (h.peak_price <= 0 || h.current_price <= 0) {
+        h.drawdown_from_peak_percent = 0;
+        return;
+    }
+    if (h.current_price > h.peak_price)
+        h.peak_price = h.current_price;
+    h.drawdown_from_peak_percent = (h.current_price - h.peak_price) / h.peak_price * 100.0;
+}
+
+/// Seed the peak from a fetched highest-daily-high (0 = unknown/failed fetch)
+/// and derive the drawdown against the holding's current price.
+inline void set_peak_high(HoldingWithQuote& h, double peak_high) {
+    h.peak_price = peak_high > 0 ? peak_high : 0;
+    refresh_drawdown(h);
+}
 
 struct PortfolioSummary {
     Portfolio portfolio;
@@ -141,7 +173,7 @@ struct PortfolioFundamentals {
 
 enum class HeatmapMode { Pnl, Weight, DayChange, Aft };
 
-enum class SortColumn { Symbol, Price, Change, Pnl, PnlPct, Weight, MarketValue };
+enum class SortColumn { Symbol, Price, Change, Pnl, PnlPct, Drawdown, Weight, MarketValue };
 
 enum class SortDirection { Asc, Desc };
 

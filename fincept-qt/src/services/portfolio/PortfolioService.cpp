@@ -94,6 +94,8 @@ QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
     o[QStringLiteral("ask")]                 = h.ask;
     o[QStringLiteral("bid_size")]            = h.bid_size;
     o[QStringLiteral("ask_size")]            = h.ask_size;
+    o[QStringLiteral("first_purchase_date")] = h.first_purchase_date;
+    o[QStringLiteral("peak_price")]          = h.peak_price;
     return o;
 }
 
@@ -123,6 +125,12 @@ portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     h.ask                  = 0;
     h.bid_size             = 0;
     h.ask_size             = 0;
+    h.first_purchase_date  = o[QStringLiteral("first_purchase_date")].toString();
+    // Peak survives across launches so the L% column paints on the cache emit
+    // instead of dashing until the history fan-out lands. The drawdown itself
+    // is derived, never stored — re-derive it against the cached price.
+    h.peak_price           = o[QStringLiteral("peak_price")].toDouble();
+    portfolio::refresh_drawdown(h);
     return h;
 }
 
@@ -283,6 +291,11 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
         auto summary = summary_from_json(cached_doc.object());
         if (!summary.portfolio.id.isEmpty()) {
             summary.from_cache = true;
+            // Peaks persisted with the snapshot are the only ones we have until
+            // the history fan-out returns — seed the in-memory cache with them
+            // so the live rebuild below keeps showing L% instead of flicking
+            // back to a dash.
+            seed_peak_cache_from_summary(summary);
             refresh_summary_prices_from_market_last(summary);
             emit summary_loaded(summary);
         }
@@ -360,6 +373,9 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         h.unrealized_pnl      = h.market_value - h.cost_basis;
         h.unrealized_pnl_percent =
             (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+        // Price moved — the drop from the peak moved with it (and a fresh high
+        // becomes the peak).
+        portfolio::refresh_drawdown(h);
 
         total_mv   += h.market_value;
         total_cost += h.cost_basis;
@@ -483,6 +499,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             h.quantity = asset.quantity;
             h.avg_buy_price = asset.avg_buy_price;
             h.cost_basis = asset.quantity * asset.avg_buy_price;
+            h.first_purchase_date = asset.first_purchase_date;
             // Prefer stored sector; fall back to resolver cache (which may
             // populate async — see sector_resolved handler in constructor).
             h.sector = asset.sector.isEmpty()
@@ -525,6 +542,17 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             h.market_value = h.quantity * h.current_price;
             h.unrealized_pnl = h.market_value - h.cost_basis;
             h.unrealized_pnl_percent = (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+            // Peak high since entry comes from the cache filled by
+            // fetch_position_peaks below — zero (dash in the UI) until the
+            // first fan-out for this symbol lands.
+            const double cached_peak = self->cached_peak_high(h.symbol, h.first_purchase_date);
+            portfolio::set_peak_high(h, cached_peak);
+            // A live print above the last fetched daily high IS the new peak;
+            // push it back into the cache or the next 20 s rebuild would
+            // silently discard it and under-report the drawdown after the
+            // price falls back off that spike.
+            if (h.peak_price > cached_peak)
+                self->raise_cached_peak(h.symbol, h.first_purchase_date, h.peak_price);
 
             total_mv += h.market_value;
             total_cost += h.cost_basis;
@@ -577,6 +605,10 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                                                       summary.total_unrealized_pnl_percent, today);
 
         emit self->summary_loaded(summary);
+
+        // Refresh any peak that's missing or older than the TTL. No-op on the
+        // common tick where every symbol is already cached.
+        self->fetch_position_peaks(portfolio_id, assets);
     });
 }
 
@@ -2006,6 +2038,171 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     self->fundamentals_cache_[portfolio_id] = f;
                 }
                 emit self->portfolio_fundamentals_loaded(portfolio_id, f);
+            },
+            python::PythonWorker::kNetworkActionTimeoutMs);
+    }
+}
+
+// ── Peak high since entry (trailing-stop L%) ─────────────────────────────────
+
+// static
+QString PortfolioService::entry_date_of(const QString& first_purchase_date) {
+    // Stored values come from SQLite's datetime('now') ("YYYY-MM-DD HH:MM:SS"),
+    // from an ISO timestamp written by add_asset, or from an imported
+    // date-only string. All three start with the date, so a left(10) parse
+    // covers them; anything else is reported unparseable.
+    const QString head = first_purchase_date.trimmed().left(10);
+    const QDate d = QDate::fromString(head, Qt::ISODate);
+    return d.isValid() ? d.toString(Qt::ISODate) : QString();
+}
+
+// static
+QString PortfolioService::peak_key(const QString& symbol, const QString& entry_date) {
+    return symbol.toUpper() + QLatin1Char('|') + entry_date;
+}
+
+double PortfolioService::cached_peak_high(const QString& symbol, const QString& first_purchase_date) {
+    const QString key = peak_key(symbol, entry_date_of(first_purchase_date));
+    QMutexLocker lock(&cache_mutex_);
+    const auto it = peak_cache_.constFind(key);
+    return it != peak_cache_.constEnd() ? it->high : 0.0;
+}
+
+void PortfolioService::raise_cached_peak(const QString& symbol, const QString& first_purchase_date, double price) {
+    if (price <= 0)
+        return;
+    const QString key = peak_key(symbol, entry_date_of(first_purchase_date));
+    QMutexLocker lock(&cache_mutex_);
+    auto it = peak_cache_.find(key);
+    if (it != peak_cache_.end() && price > it->high)
+        it->high = price;
+}
+
+void PortfolioService::seed_peak_cache_from_summary(const portfolio::PortfolioSummary& summary) {
+    QMutexLocker lock(&cache_mutex_);
+    for (const auto& h : summary.holdings) {
+        if (h.peak_price <= 0)
+            continue;
+        auto& entry = peak_cache_[peak_key(h.symbol, entry_date_of(h.first_purchase_date))];
+        if (h.peak_price > entry.high)
+            entry.high = h.peak_price;
+    }
+}
+
+void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
+                                            const QVector<portfolio::PortfolioAsset>& assets) {
+    if (portfolio_id.isEmpty() || assets.isEmpty())
+        return;
+
+    struct Req {
+        QString symbol;
+        QString key;
+        QString entry;  // YYYY-MM-DD, empty when unparseable
+    };
+
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    QVector<Req> pending;
+    {
+        QMutexLocker lock(&cache_mutex_);
+        for (const auto& a : assets) {
+            if (a.symbol.isEmpty())
+                continue;
+            const QString entry = entry_date_of(a.first_purchase_date);
+            const QString key   = peak_key(a.symbol, entry);
+            if (peak_inflight_.contains(key))
+                continue;
+            const auto it = peak_cache_.constFind(key);
+            if (it != peak_cache_.constEnd() && now - it->fetched_at < kPeakTtlSec)
+                continue;
+            peak_inflight_.insert(key);
+            pending.append({a.symbol, key, entry});
+        }
+    }
+    if (pending.isEmpty())
+        return;
+
+    struct Accum {
+        int pending = 0;
+        QHash<QString, double> peaks; // symbol (as stored on the asset) → peak high
+    };
+    auto state = std::make_shared<Accum>();
+    state->pending = pending.size();
+
+    // yfinance's `end` is exclusive — ask through tomorrow so today's bar is
+    // included on a live trading day.
+    const QString end = QDate::currentDate().addDays(1).toString(Qt::ISODate);
+
+    QPointer<PortfolioService> self = this;
+    for (const auto& req : pending) {
+        QJsonObject payload;
+        payload["symbol"] = req.symbol;
+        // Unparseable entry date → bounded 1y window rather than "max": an
+        // unbounded peak from a decade ago would render an L% that has nothing
+        // to do with the user's position.
+        payload["period"] = req.entry.isEmpty()
+                                ? QStringLiteral("1y")
+                                : QStringLiteral("range:") + req.entry + QLatin1Char(':') + end;
+        payload["interval"] = QStringLiteral("1d");
+
+        python::PythonWorker::instance().submit(
+            "historical_period", payload,
+            [self, portfolio_id, req, state](bool ok, QJsonObject result, QString err) {
+                if (!self)
+                    return;
+
+                double peak = 0;
+                if (ok) {
+                    // The daemon wraps a flat array under "_value".
+                    const QJsonArray arr = result.contains("_value")
+                                               ? result["_value"].toArray()
+                                               : result["history"].toArray();
+                    for (const auto& v : arr) {
+                        const double high = v.toObject()["high"].toDouble();
+                        if (high > peak)
+                            peak = high;
+                    }
+                } else {
+                    LOG_WARN("PortfolioSvc",
+                             QString("Peak-high fetch failed for %1: %2").arg(req.symbol, err.left(200)));
+                }
+
+                {
+                    QMutexLocker lock(&self->cache_mutex_);
+                    self->peak_inflight_.remove(req.key);
+                    auto& entry = self->peak_cache_[req.key];
+                    // Stamp the attempt either way: a symbol yfinance has no
+                    // history for (money-market funds, delisted tickers) must
+                    // not re-fan-out on every 20 s tick. A failed attempt
+                    // keeps whatever good value we had.
+                    entry.fetched_at = QDateTime::currentSecsSinceEpoch();
+                    if (peak > 0)
+                        entry.high = peak;
+                }
+
+                if (peak > 0)
+                    state->peaks.insert(req.symbol, peak);
+
+                if (--state->pending > 0)
+                    return;
+                if (state->peaks.isEmpty())
+                    return;
+
+                // Patch the cached summary so a cache-hit emit (and the disk
+                // snapshot written by the next build) carries the peaks
+                // instead of dropping back to dashes.
+                {
+                    QMutexLocker lock(&self->cache_mutex_);
+                    auto it = self->summary_cache_.find(portfolio_id);
+                    if (it != self->summary_cache_.end()) {
+                        for (auto& h : it->summary.holdings) {
+                            const auto p = state->peaks.constFind(h.symbol);
+                            if (p != state->peaks.constEnd())
+                                portfolio::set_peak_high(h, p.value());
+                        }
+                    }
+                }
+
+                emit self->position_peaks_loaded(portfolio_id, state->peaks);
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
     }

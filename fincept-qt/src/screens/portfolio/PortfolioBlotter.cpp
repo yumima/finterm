@@ -25,8 +25,19 @@
 
 namespace fincept::screens {
 
-static const QStringList kColumns = {"SYMBOL", "QTY",  "LAST", "AVG COST", "MKT VAL", "COST BASIS",
-                                     "P&L",    "P&L%", "CHG%", "TREND",    "WT%"};
+// L% = drop from the highest daily high since entry (trailing-stop distance),
+// P% = P&L against cost basis. They answer different questions, so they get
+// their own columns rather than sharing one "P&L%".
+static const QStringList kColumns = {"SYMBOL", "QTY", "LAST", "AVG COST", "MKT VAL", "COST BASIS",
+                                     "P&L",    "L%",  "P%",   "CHG%",     "TREND",   "WT%"};
+
+// Trailing-stop severity thresholds, in percent below the peak.
+static constexpr double kStopWarnPct = 10.0; // ≥10% off the high → amber
+static constexpr double kStopDangerPct = 15.0; // ≥15% off the high → red
+
+// Column indices — the sparkline is a cell *widget*, so its column is
+// referenced from several places.
+static constexpr int kColTrend = 10;
 
 PortfolioBlotter::PortfolioBlotter(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -111,7 +122,7 @@ void PortfolioBlotter::repaint_sparkline_cells() {
         if (!item)
             continue;
         const QString sym = item->text();
-        auto* w = qobject_cast<PortfolioSparkline*>(table_->cellWidget(r, 9));
+        auto* w = qobject_cast<PortfolioSparkline*>(table_->cellWidget(r, kColTrend));
         if (!w)
             continue;
 
@@ -195,12 +206,15 @@ void PortfolioBlotter::on_header_clicked(int section) {
             col = portfolio::SortColumn::Pnl;
             break;
         case 7:
-            col = portfolio::SortColumn::PnlPct;
+            col = portfolio::SortColumn::Drawdown;
             break;
         case 8:
+            col = portfolio::SortColumn::PnlPct;
+            break;
+        case 9:
             col = portfolio::SortColumn::Change;
             break;
-        case 10:
+        case 11:
             col = portfolio::SortColumn::Weight;
             break;
         default:
@@ -234,9 +248,9 @@ void PortfolioBlotter::populate_table() {
 
     // Clean up old sparkline cell widgets before repopulating (prevents memory leak)
     for (int r = 0; r < table_->rowCount(); ++r) {
-        auto* w = table_->cellWidget(r, 9);
+        auto* w = table_->cellWidget(r, kColTrend);
         if (w) {
-            table_->removeCellWidget(r, 9);
+            table_->removeCellWidget(r, kColTrend);
             w->deleteLater();
         }
     }
@@ -265,6 +279,12 @@ void PortfolioBlotter::populate_table() {
             case portfolio::SortColumn::PnlPct:
                 va = a.unrealized_pnl_percent;
                 vb = b.unrealized_pnl_percent;
+                break;
+            case portfolio::SortColumn::Drawdown:
+                // Unknown peaks (no history yet) sort as if flat rather than
+                // as the deepest drawdown — a dash isn't a stop-loss alert.
+                va = a.peak_price > 0 ? a.drawdown_from_peak_percent : 0;
+                vb = b.peak_price > 0 ? b.drawdown_from_peak_percent : 0;
                 break;
             case portfolio::SortColumn::Weight:
                 va = a.weight;
@@ -319,15 +339,27 @@ void PortfolioBlotter::populate_table() {
         set_cell(6, QString("%1%2").arg(h.unrealized_pnl >= 0 ? "+" : "").arg(format_value(h.unrealized_pnl)),
                  pnl_color);
 
-        // P&L%
+        // L% — drop from the peak high since entry. Dash until the peak-high
+        // fetch lands (0% would read as "at the high", which we don't know).
+        if (h.peak_price > 0) {
+            const double drop = -h.drawdown_from_peak_percent; // magnitude, >= 0
+            const char* stop_color = drop >= kStopDangerPct  ? ui::colors::NEGATIVE
+                                     : drop >= kStopWarnPct  ? ui::colors::WARNING
+                                                             : ui::colors::TEXT_SECONDARY;
+            set_cell(7, QString("%1%").arg(format_value(h.drawdown_from_peak_percent)), stop_color);
+        } else {
+            set_cell(7, QStringLiteral("—"), ui::colors::TEXT_TERTIARY);
+        }
+
+        // P% — P&L against cost basis
         set_cell(
-            7,
+            8,
             QString("%1%2%").arg(h.unrealized_pnl_percent >= 0 ? "+" : "").arg(format_value(h.unrealized_pnl_percent)),
             pnl_color);
 
         // CHG%
         const char* chg_color = h.day_change_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        set_cell(8, QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "").arg(format_value(h.day_change_percent)),
+        set_cell(9, QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "").arg(format_value(h.day_change_percent)),
                  chg_color);
 
         // TREND — show loaded data, a pending shimmer, or a failure dash
@@ -350,10 +382,10 @@ void PortfolioBlotter::populate_table() {
             sparkline->set_data(pending);
             sparkline->set_color(QColor(ui::colors::TEXT_SECONDARY()));
         }
-        table_->setCellWidget(r, 9, sparkline);
+        table_->setCellWidget(r, kColTrend, sparkline);
 
         // WT%
-        set_cell(10, QString("%1%").arg(format_value(h.weight, 1)));
+        set_cell(11, QString("%1%").arg(format_value(h.weight, 1)));
 
         // Highlight selected row
         if (h.symbol == selected_symbol_) {
