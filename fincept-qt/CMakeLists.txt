@@ -1205,6 +1205,7 @@ set(SCREEN_SOURCES
     src/screens/dashboard/widgets/WatchlistWidget.cpp
     src/screens/dashboard/widgets/PerformanceWidget.cpp
     src/screens/dashboard/widgets/MarketSentimentWidget.cpp
+    src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
     src/screens/dashboard/widgets/EconomicCalendarWidget.cpp
     src/screens/dashboard/widgets/IpoCalendarWidget.cpp
     src/screens/dashboard/widgets/ScreenerWidget.cpp
@@ -1612,6 +1613,7 @@ set_source_files_properties(
     src/screens/dashboard/canvas/WidgetRegistry.cpp
     src/screens/dashboard/canvas/WidgetTile.cpp
     src/screens/dashboard/widgets/BaseWidget.cpp
+    src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
     src/screens/dashboard/widgets/EconomicCalendarWidget.cpp
     src/screens/dashboard/widgets/IpoCalendarWidget.cpp
     src/screens/dashboard/widgets/MarketSentimentWidget.cpp
