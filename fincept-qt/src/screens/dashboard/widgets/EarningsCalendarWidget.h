@@ -62,6 +62,10 @@ class EarningsCalendarWidget : public BaseWidget {
         bool has_ly = false;
         double surprise_pct = 0; // last reported quarter's surprise
         bool has_surprise = false;
+        // Which consensus panel the estimate/year-ago pair came from. Nasdaq
+        // and Yahoo publish different numbers for the same print, so a row must
+        // never mix them — see growth_verdict() in the .cpp.
+        bool est_from_yf = false;
         double rank = 0; // market cap — orders the week view within a day
         QString fiscal_quarter;
         int num_ests = 0;

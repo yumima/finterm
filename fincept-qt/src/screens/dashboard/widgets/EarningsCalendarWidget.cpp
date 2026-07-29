@@ -1,6 +1,8 @@
 // src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 
+#include "screens/dashboard/widgets/EarningsMath.h"
+
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonWorker.h"
@@ -25,34 +27,15 @@
 
 namespace fincept::screens::widgets {
 
+using earnings::fmt_eps;
+using earnings::Growth;
+using earnings::growth_verdict;
+using earnings::parse_money;
+
 // Default portfolio for a fresh tile — the same key PortfolioSummaryWidget
 // persists, so a new tile opens on the book the user already picked.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
 
-namespace {
-
-/// Nasdaq money strings: "$1.88", "($0.12)" for negatives, "" when absent.
-/// Returns false when the field carries no usable number.
-bool parse_money(const QString& raw, double* out) {
-    QString s = raw.trimmed();
-    if (s.isEmpty() || s == QLatin1String("N/A"))
-        return false;
-    bool negative = s.startsWith(QLatin1Char('(')) && s.endsWith(QLatin1Char(')'));
-    s.remove(QLatin1Char('(')).remove(QLatin1Char(')'));
-    s.remove(QLatin1Char('$')).remove(QLatin1Char(','));
-    bool ok = false;
-    const double v = s.toDouble(&ok);
-    if (!ok)
-        return false;
-    *out = negative ? -v : v;
-    return true;
-}
-
-QString fmt_eps(double v) {
-    return (v < 0 ? QStringLiteral("-$%1") : QStringLiteral("$%1")).arg(std::abs(v), 0, 'f', 2);
-}
-
-} // namespace
 
 EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("EARNINGS CALENDAR", parent, ui::colors::AMBER()) {
@@ -730,16 +713,59 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
         }
     }
 
+    // Year-ago comparison quarter: the reported quarter closest to one year
+    // before @p print_date. A ±45-day window keeps a shifted fiscal calendar
+    // from matching the wrong quarter.
+    auto year_ago_actual = [&past](const QDate& print_date, double* out) {
+        const QDate target = print_date.addDays(-365);
+        qint64 best_gap = 46;
+        bool found = false;
+        for (const auto& p : past) {
+            if (!p.has_actual)
+                continue;
+            const qint64 gap = std::abs(p.date.daysTo(target));
+            if (gap < best_gap) {
+                best_gap = gap;
+                *out = p.actual;
+                found = true;
+            }
+        }
+        return found;
+    };
+
     if (!portfolio_view) {
-        // Week view: the row already exists from the Nasdaq feed — only the
-        // badge is missing.
-        if (!has_surprise)
-            return;
+        // Week view: the row already exists from the Nasdaq feed. Fill in the
+        // badge, and — where yfinance also has this print — switch the
+        // estimate AND the year-ago figure over to it as a pair.
+        //
+        // Not cosmetic: the portfolio view is yfinance-only, so leaving the
+        // Nasdaq estimate here let one symbol show ▼ red in one tab and ▲ green
+        // in the other. Whichever panel is "better" matters far less than a row
+        // comparing two numbers from the same panel.
         for (auto& e : entries_) {
-            if (e.symbol == symbol) {
+            if (e.symbol != symbol)
+                continue;
+            if (has_surprise) {
                 e.surprise_pct = surprise;
                 e.has_surprise = true;
             }
+            const Point* next = nullptr;
+            for (const auto& f : future) {
+                if (f.date == e.date || std::abs(f.date.daysTo(e.date)) <= 3) {
+                    next = &f; // same print, allowing for a date-only skew
+                    break;
+                }
+            }
+            if (!next || !next->has_estimate)
+                continue; // keep the Nasdaq pair intact rather than mixing
+            double ly = 0;
+            if (!year_ago_actual(next->date, &ly))
+                continue;
+            e.eps_est = next->estimate;
+            e.has_est = true;
+            e.eps_ly = ly;
+            e.has_ly = true;
+            e.est_from_yf = true;
         }
         return;
     }
@@ -758,24 +784,10 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
     const qint64 days = today.daysTo(next.date);
     e.when = days == 0 ? QStringLiteral("today") : QStringLiteral("in %1d").arg(days);
     e.held = true;
+    e.est_from_yf = true;
     e.weight = (held_total_mv_ > 0) ? held_value_.value(symbol) / held_total_mv_ * 100.0 : 0;
     e.portfolios = held_portfolios_.value(symbol);
-
-    // Year-ago comparison: the reported quarter closest to one year before the
-    // upcoming print. A ±45-day window keeps a shifted fiscal calendar from
-    // matching the wrong quarter.
-    const QDate target = next.date.addDays(-365);
-    qint64 best_gap = 46;
-    for (const auto& p : past) {
-        if (!p.has_actual)
-            continue;
-        const qint64 gap = std::abs(p.date.daysTo(target));
-        if (gap < best_gap) {
-            best_gap = gap;
-            e.eps_ly = p.actual;
-            e.has_ly = true;
-        }
-    }
+    e.has_ly = year_ago_actual(next.date, &e.eps_ly);
 
     entries_.append(e);
 }
@@ -865,22 +877,36 @@ void EarningsCalendarWidget::populate() {
         QString eps_tip = QStringLiteral("No consensus estimate published for this print.");
         if (e.has_est) {
             eps_text = fmt_eps(e.eps_est);
-            if (e.has_ly && e.eps_est > e.eps_ly) {
-                eps_colour = ui::colors::POSITIVE();
-                eps_text += QStringLiteral(" ▲");
-                eps_tip = QStringLiteral("Consensus %1 for the coming quarter — above the %2 reported a year "
-                                         "ago, so analysts expect growth.")
-                              .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly));
-            } else if (e.has_ly && e.eps_est < e.eps_ly) {
-                eps_colour = ui::colors::NEGATIVE();
-                eps_text += QStringLiteral(" ▼");
-                eps_tip = QStringLiteral("Consensus %1 for the coming quarter — below the %2 reported a year "
-                                         "ago, so analysts expect a decline.")
-                              .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly));
-            } else {
-                eps_tip = QStringLiteral("Consensus %1 for the coming quarter. No year-ago figure to compare "
-                                         "against.")
-                              .arg(fmt_eps(e.eps_est));
+            const QString source = e.est_from_yf ? QStringLiteral("Yahoo Finance")
+                                                 : QStringLiteral("Nasdaq");
+            const Growth g = e.has_ly ? growth_verdict(e.eps_est, e.eps_ly) : Growth::Unknown;
+            switch (g) {
+                case Growth::Up:
+                    eps_colour = ui::colors::POSITIVE();
+                    eps_text += QStringLiteral(" ▲");
+                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter — above the %2 reported a "
+                                             "year ago, so analysts expect growth.\nBoth figures: %3.")
+                                  .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly), source);
+                    break;
+                case Growth::Down:
+                    eps_colour = ui::colors::NEGATIVE();
+                    eps_text += QStringLiteral(" ▼");
+                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter — below the %2 reported a "
+                                             "year ago, so analysts expect a decline.\nBoth figures: %3.")
+                                  .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly), source);
+                    break;
+                case Growth::Flat:
+                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter — within 1%% of the %2 "
+                                             "reported a year ago, so effectively flat. Consensus panels "
+                                             "differ by more than that, so it isn't called either way."
+                                             "\nBoth figures: %3.")
+                                  .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly), source);
+                    break;
+                case Growth::Unknown:
+                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter (%2). No year-ago figure to "
+                                             "compare against.")
+                                  .arg(fmt_eps(e.eps_est), source);
+                    break;
             }
         }
         auto* eps_lbl = cell(eps_text, Qt::AlignHCenter, eps_colour);

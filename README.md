@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`58ab2f603`](https://github.com/yumima/finterm/commit/58ab2f603) Dashboard: split the earnings surprise into its own labelled column
 - [`60e2408e1`](https://github.com/yumima/finterm/commit/60e2408e1) Dashboard: earnings tile gets growth colour, held markers, multi-portfolio
 - [`3dccc5310`](https://github.com/yumima/finterm/commit/3dccc5310) Dashboard: add an Earnings Calendar widget (this week / portfolio)
 - [`249f32c71`](https://github.com/yumima/finterm/commit/249f32c71) Dashboard: let tiles shrink vertically instead of holding a blank band

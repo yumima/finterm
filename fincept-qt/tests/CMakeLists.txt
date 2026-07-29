@@ -136,6 +136,31 @@ add_test(NAME news_feed_panel COMMAND test_news_feed_panel)
 # Headless: no display in CI, and the test only asserts geometry/model wiring.
 set_tests_properties(news_feed_panel PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+# ── Earnings calendar maths tests ────────────────────────────────────────────
+# parse_money() and growth_verdict() decide what the Earnings Calendar tile
+# prints and what colour it prints it in. Both are pure functions in a header,
+# so the test needs no widget, no network and no Python daemon.
+
+add_executable(test_earnings_math
+    screens/test_earnings_math.cpp
+)
+
+target_include_directories(test_earnings_math PRIVATE
+    ../src
+)
+
+target_link_libraries(test_earnings_math PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_earnings_math PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME earnings_math COMMAND test_earnings_math)
+
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,
 # and asserts legitimate dirs survive while junk is gone. Guards against the
