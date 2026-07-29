@@ -33,6 +33,11 @@ class MarketSentimentService : public QObject {
 
     QNetworkRequest build_request(const QUrl& url, const QString& api_key) const;
 
+    /// Every symbol held across the user's portfolios, read straight from the
+    /// repository. Used to seed the request batch so the free tier's requests
+    /// land on names the user actually owns.
+    QStringList holdings_symbols() const;
+
     QNetworkAccessManager* nam_ = nullptr;
     quint64 active_request_id_ = 0;
 

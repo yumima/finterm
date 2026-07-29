@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`d4b32fa94`](https://github.com/yumima/finterm/commit/d4b32fa94) ER sentiment: batch Adanos requests so the free tier goes ~10x further
 - [`9ad74a1c7`](https://github.com/yumima/finterm/commit/9ad74a1c7) ER: make the sentiment empty state actionable, and fix nav payload key
 - [`4acce660a`](https://github.com/yumima/finterm/commit/4acce660a) Portfolio: refuse position edits that would go short, and show the result
 - [`07d590d28`](https://github.com/yumima/finterm/commit/07d590d28) Dashboard: earnings column becomes sequential (current est vs last actual)

@@ -4,6 +4,7 @@
 #include "services/equity/MarketSentimentSupport.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/DataSourceRepository.h"
+#include "storage/repositories/PortfolioRepository.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -83,6 +84,30 @@ QNetworkRequest MarketSentimentService::build_request(const QUrl& url, const QSt
     return request;
 }
 
+QStringList MarketSentimentService::holdings_symbols() const {
+    QStringList symbols;
+    auto& repo = PortfolioRepository::instance();
+    const auto portfolios = repo.list_portfolios();
+    if (portfolios.is_err()) {
+        return symbols;
+    }
+    for (const auto& portfolio : portfolios.value()) {
+        const auto assets = repo.get_assets(portfolio.id);
+        if (assets.is_err()) {
+            continue;
+        }
+        for (const auto& asset : assets.value()) {
+            const QString symbol = asset.symbol.trimmed().toUpper();
+            // A closed or short row isn't a holding to watch sentiment on.
+            if (symbol.isEmpty() || asset.quantity <= 0 || symbols.contains(symbol)) {
+                continue;
+            }
+            symbols.append(symbol);
+        }
+    }
+    return symbols;
+}
+
 void MarketSentimentService::fetch_snapshot(const QString& symbol, int days, bool force) {
     const QString normalized_symbol = symbol.trimmed().toUpper();
     if (normalized_symbol.isEmpty()) {
@@ -120,17 +145,35 @@ void MarketSentimentService::fetch_snapshot(const QString& symbol, int days, boo
     }
 
     // One request per platform covers up to ten tickers, so fill the batch with
-    // recently-viewed symbols whose cache entry is missing or expired. They
-    // cost nothing extra and spare four requests each next time.
+    // symbols the user is likely to open next. They cost nothing extra and
+    // spare four requests each next time.
+    //
+    // Holdings first: a position the user owns is a better bet than a ticker
+    // they glanced at, and this is what makes the very first request useful —
+    // with browsing history alone the opening fetch warms exactly one symbol.
+    // Read straight from the repository (a local SQLite read, no quotes, no
+    // network) rather than going through PortfolioService, which would drag a
+    // quote refresh along behind it.
     QStringList batch{normalized_symbol};
-    for (const auto& candidate : std::as_const(recent_symbols_)) {
-        if (batch.size() >= kMaxBatchTickers) {
-            break;
+    const auto append_candidate = [&](const QString& raw) {
+        const QString candidate = raw.trimmed().toUpper();
+        if (candidate.isEmpty() || batch.size() >= kMaxBatchTickers || batch.contains(candidate)) {
+            return;
         }
-        if (batch.contains(candidate) || CacheManager::instance().has(cache_key_for_symbol(candidate, days))) {
-            continue;
+        // Symbols with no coverage cache an "unavailable" snapshot like any
+        // other, so money-market funds and the like drop out of the batch
+        // after their first appearance instead of squatting a slot forever.
+        if (CacheManager::instance().has(cache_key_for_symbol(candidate, days))) {
+            return;
         }
         batch.append(candidate);
+    };
+
+    for (const auto& symbol_from_book : holdings_symbols()) {
+        append_candidate(symbol_from_book);
+    }
+    for (const auto& candidate : std::as_const(recent_symbols_)) {
+        append_candidate(candidate);
     }
 
     active_request_id_ += 1;

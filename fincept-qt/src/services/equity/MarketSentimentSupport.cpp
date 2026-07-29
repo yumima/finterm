@@ -1,6 +1,7 @@
 #include "services/equity/MarketSentimentSupport.h"
 
 #include <QJsonArray>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -33,6 +34,12 @@ QJsonObject unwrap_payload(const QJsonObject& payload) {
         return payload.value("data").toObject();
     }
     return payload;
+}
+
+/// Ticker without its class-share suffix: BRK-B / BRK.B → BRK.
+QString base_symbol(const QString& ticker) {
+    const int cut = ticker.indexOf(QRegularExpression(QStringLiteral("[-.]")));
+    return cut > 0 ? ticker.left(cut) : ticker;
 }
 
 QJsonArray extract_stocks(const QJsonObject& payload) {
@@ -112,6 +119,15 @@ SentimentSourceSnapshot parse_compare_payload_for(const QString& source_id, cons
         stock = stocks.first().toObject();
     } else {
         const QString wanted = ticker.trimmed().toUpper();
+        // Class-share suffixes don't survive the round trip: asking for BRK-B
+        // returns a row keyed "BRK". Match exactly first, then fall back to the
+        // base symbol — but only when exactly one row shares that base, so
+        // BRK-A and BRK-B in the same response can never claim each other's
+        // numbers.
+        const QString wanted_base = base_symbol(wanted);
+        QJsonObject base_match;
+        int base_hits = 0;
+
         for (const auto& value : stocks) {
             if (!value.isObject()) {
                 continue;
@@ -123,6 +139,13 @@ SentimentSourceSnapshot parse_compare_payload_for(const QString& source_id, cons
                 stock = candidate;
                 break;
             }
+            if (!wanted_base.isEmpty() && base_symbol(row_ticker) == wanted_base) {
+                base_match = candidate;
+                base_hits += 1;
+            }
+        }
+        if (stock.isEmpty() && base_hits == 1) {
+            stock = base_match;
         }
         if (stock.isEmpty()) {
             // Ticker was requested but the platform has nothing for it — a
