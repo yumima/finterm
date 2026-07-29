@@ -157,6 +157,11 @@ class PortfolioService : public QObject {
     void asset_added(QString portfolio_id);
     void asset_sold(QString portfolio_id);
 
+    /// An edit_position() call was refused because the result would be an
+    /// impossible position (more sold than bought). Nothing was written —
+    /// the UI should surface @p reason so the user can fix the conflict.
+    void position_edit_rejected(QString portfolio_id, QString symbol, QString reason);
+
     void export_complete(QString file_path);
     void import_complete(portfolio::ImportResult result);
 

@@ -24,6 +24,8 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace fincept::screens {
 
 // ── CreatePortfolioDialog ────────────────────────────────────────────────────
@@ -702,9 +704,11 @@ QString ImportPortfolioDialog::merge_target_id() const {
 
 // ── EditTransactionDialog ────────────────────────────────────────────────────
 
-EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, QWidget* parent) : QDialog(parent) {
+EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, double other_net_qty,
+                                             QWidget* parent)
+    : QDialog(parent), other_net_qty_(other_net_qty), sign_(txn.transaction_type == "SELL" ? -1 : 1) {
     setWindowTitle("Edit Transaction");
-    setFixedSize(380, 280);
+    setFixedSize(380, 330);
     setStyleSheet(QString("QDialog { background:%1; color:%2; }"
                           "QLabel { color:%3; font-size:12px; }"
                           "QLineEdit { background:%4; color:%2; border:1px solid %5;"
@@ -721,6 +725,17 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     title->setStyleSheet(
         QString("color:%1; font-size:13px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
+
+    // Say plainly which lot this is. "Edit Transaction" on a holding invites the
+    // reading "set what I hold now", but this edits one lot and the position is
+    // re-derived from the whole ledger.
+    auto* subtitle = new QLabel(
+        QString("This edits the %1 lot dated %2. Your position is recalculated from every "
+                "transaction for %3, not from this lot alone.")
+            .arg(txn.transaction_type, txn.transaction_date.left(10), txn.symbol));
+    subtitle->setWordWrap(true);
+    subtitle->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
+    layout->addWidget(subtitle);
 
     auto* form = new QFormLayout;
     form->setSpacing(8);
@@ -752,6 +767,16 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     form->addRow("Notes:", notes_edit_);
 
     layout->addLayout(form);
+
+    // Live read-out of what the edit leaves you holding, so a conflict with
+    // other lots is visible before OK rather than after.
+    result_label_ = new QLabel;
+    result_label_->setWordWrap(true);
+    layout->addWidget(result_label_);
+    connect(quantity_edit_, &QLineEdit::textChanged, this,
+            [this](const QString&) { update_resulting_position(); });
+    update_resulting_position();
+
     layout->addStretch();
 
     auto* btn_layout = new QHBoxLayout;
@@ -795,6 +820,27 @@ QString EditTransactionDialog::date() const {
 }
 QString EditTransactionDialog::notes() const {
     return notes_edit_->text().trimmed();
+}
+
+void EditTransactionDialog::update_resulting_position() {
+    const double net = other_net_qty_ + sign_ * quantity();
+    const auto fmt = [](double v) {
+        return QString::number(v, 'f', v == std::floor(v) ? 0 : 2);
+    };
+
+    if (net < -1e-6) {
+        // The case this read-out exists for: other lots sell more than this one
+        // buys, so the ledger would put the position short. The service refuses
+        // such an edit; say so here rather than letting OK fail.
+        result_label_->setText(QString("Position after this edit: %1 shares — other transactions for this "
+                                       "symbol sell more than this lot buys, so this edit can't be applied.")
+                                   .arg(fmt(net)));
+        result_label_->setStyleSheet(
+            QString("color:%1; font-size:11px; font-weight:700;").arg(ui::colors::NEGATIVE()));
+        return;
+    }
+    result_label_->setText(QString("Position after this edit: %1 shares").arg(fmt(net)));
+    result_label_->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 // ── SectorMappingDialog ──────────────────────────────────────────────────────

@@ -58,6 +58,15 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     connect(&svc, &services::PortfolioService::portfolio_deleted, this, &PortfolioScreen::on_portfolio_deleted);
     connect(&svc, &services::PortfolioService::asset_added, this, &PortfolioScreen::on_asset_changed);
     connect(&svc, &services::PortfolioService::asset_sold, this, &PortfolioScreen::on_asset_changed);
+    // An edit that would drive the position negative is refused by the service
+    // and nothing is written — tell the user why instead of appearing to do
+    // nothing.
+    connect(&svc, &services::PortfolioService::position_edit_rejected, this,
+            [this](QString portfolio_id, QString symbol, QString reason) {
+                if (portfolio_id != selected_id_)
+                    return;
+                QMessageBox::warning(this, QString("Can't apply this %1 edit").arg(symbol), reason);
+            });
     connect(&svc, &services::PortfolioService::snapshots_loaded, this, &PortfolioScreen::on_snapshots_loaded);
     connect(&svc, &services::PortfolioService::transactions_loaded, this, [this](QVector<portfolio::Transaction> txns) {
         if (txn_panel_)
@@ -1261,7 +1270,19 @@ QWidget* PortfolioScreen::build_main_view() {
         }
 
         const portfolio::Transaction txn = *match;
-        EditTransactionDialog dlg(txn, this);
+        // Net of every OTHER lot, so the dialog can show what this edit leaves
+        // the position at. Editing one lot doesn't set the position — the
+        // service re-derives it from the whole ledger.
+        double other_net = 0;
+        for (const auto& t : txns) {
+            if (t.id == txn.id)
+                continue;
+            if (t.transaction_type == "BUY")
+                other_net += t.quantity;
+            else if (t.transaction_type == "SELL")
+                other_net -= t.quantity;
+        }
+        EditTransactionDialog dlg(txn, other_net, this);
         if (dlg.exec() == QDialog::Accepted) {
             services::PortfolioService::instance().edit_position(selected_id_, txn.symbol, txn.id, dlg.quantity(),
                                                                  dlg.price(), dlg.date(), dlg.notes());

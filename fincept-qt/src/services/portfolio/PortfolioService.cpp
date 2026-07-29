@@ -699,32 +699,64 @@ QVector<portfolio::Transaction> PortfolioService::symbol_transactions(const QStr
 void PortfolioService::edit_position(const QString& portfolio_id, const QString& symbol, const QString& txn_id,
                                      double qty, double price, const QString& date, const QString& notes) {
     auto& repo = PortfolioRepository::instance();
-    // Rewrite the edited transaction first…
-    repo.update_transaction(txn_id, qty, price, date, notes);
 
-    // …then re-derive the stored asset row from ALL of this symbol's
-    // transactions. The blotter shows the asset row (build_summary -> get_assets),
-    // not a transaction sum, so the edit only sticks if the asset is updated too
-    // — but overwriting it with just the edited lot would drop the other lots of
+    // Re-derive the stored asset row from ALL of this symbol's transactions.
+    // The blotter shows the asset row (build_summary -> get_assets), not a
+    // transaction sum, so the edit only sticks if the asset is updated too —
+    // but overwriting it with just the edited lot would drop the other lots of
     // a multi-buy position. Quantity-weighted average cost over BUY lots matches
     // the convention add_asset uses; SELLs reduce quantity but leave avg intact.
+    //
+    // Crucially this runs BEFORE the transaction is rewritten, substituting the
+    // proposed values so the outcome can be checked first. Shrinking a BUY
+    // below the SELLs already recorded against it drives the position negative
+    // — a real case: a 425-share buy with a 424-share sell against it, edited
+    // down to 213, wrote -211 shares to the asset row and showed that in the
+    // blotter. Writing first and validating never would leave the transaction
+    // edited but the position wrong, so nothing is written until the result is
+    // known to be sane.
     auto txns = repo.get_symbol_transactions(portfolio_id, symbol);
     if (txns.is_ok()) {
         double buy_qty = 0, buy_cost = 0, sell_qty = 0;
+        bool saw_edited = false;
         for (const auto& t : txns.value()) {
+            const bool edited = (t.id == txn_id);
+            saw_edited = saw_edited || edited;
+            const double t_qty = edited ? qty : t.quantity;
+            const double t_price = edited ? price : t.price;
             if (t.transaction_type == "BUY") {
-                buy_qty += t.quantity;
-                buy_cost += t.quantity * t.price;
+                buy_qty += t_qty;
+                buy_cost += t_qty * t_price;
             } else if (t.transaction_type == "SELL") {
-                sell_qty += t.quantity;
+                sell_qty += t_qty;
             }
         }
+
         const double net_qty = buy_qty - sell_qty;
+        constexpr double kQtyEpsilon = 1e-6;
+        if (saw_edited && net_qty < -kQtyEpsilon) {
+            const QString reason =
+                tr("This portfolio records SELL transactions totalling %1 %2 shares, which is more than the "
+                   "%3 shares the edit would leave bought.\n\nApplying it would put the position at %4 "
+                   "shares. Adjust or remove the sell first.")
+                    .arg(sell_qty, 0, 'f', sell_qty == std::floor(sell_qty) ? 0 : 2)
+                    .arg(symbol)
+                    .arg(buy_qty, 0, 'f', buy_qty == std::floor(buy_qty) ? 0 : 2)
+                    .arg(net_qty, 0, 'f', net_qty == std::floor(net_qty) ? 0 : 2);
+            LOG_WARN("PortfolioSvc", QString("Rejected edit of %1 in %2: net would be %3")
+                                         .arg(symbol, portfolio_id)
+                                         .arg(net_qty));
+            emit position_edit_rejected(portfolio_id, symbol, reason);
+            return; // nothing written — transaction and asset both untouched
+        }
+
+        repo.update_transaction(txn_id, qty, price, date, notes);
         const double avg = buy_qty > 0 ? buy_cost / buy_qty : price;
         repo.update_asset(portfolio_id, symbol, net_qty, avg);
     } else {
         // Couldn't re-read transactions — fall back to the edited lot's values
         // so the edit still takes effect rather than silently doing nothing.
+        repo.update_transaction(txn_id, qty, price, date, notes);
         repo.update_asset(portfolio_id, symbol, qty, price);
     }
 

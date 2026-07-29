@@ -90,7 +90,13 @@ class SellAssetDialog : public QDialog {
 class EditTransactionDialog : public QDialog {
     Q_OBJECT
   public:
-    explicit EditTransactionDialog(const portfolio::Transaction& txn, QWidget* parent = nullptr);
+    /// @p other_net_qty is the net quantity of every OTHER transaction for this
+    /// symbol (buys minus sells). The position is derived from the whole
+    /// ledger, not from this one lot, so the dialog shows what the edit
+    /// actually leaves you holding — without it, shrinking a buy that has a
+    /// larger sell recorded against it silently produced a negative position.
+    explicit EditTransactionDialog(const portfolio::Transaction& txn, double other_net_qty = 0,
+                                   QWidget* parent = nullptr);
 
     double quantity() const;
     double price() const;
@@ -98,10 +104,15 @@ class EditTransactionDialog : public QDialog {
     QString notes() const;
 
   private:
+    void update_resulting_position();
+
     QLineEdit* quantity_edit_ = nullptr;
     QLineEdit* price_edit_ = nullptr;
     QDateEdit* date_edit_ = nullptr;
     QLineEdit* notes_edit_ = nullptr;
+    QLabel* result_label_ = nullptr;
+    double other_net_qty_ = 0;
+    int sign_ = 1; // +1 for a BUY lot, -1 for a SELL lot
 };
 
 /// Dialog for mapping symbols to sectors.

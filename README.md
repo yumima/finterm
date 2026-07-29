@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`07d590d28`](https://github.com/yumima/finterm/commit/07d590d28) Dashboard: earnings column becomes sequential (current est vs last actual)
 - [`351186328`](https://github.com/yumima/finterm/commit/351186328) Dashboard: rename LAST Q vs EST — it was read as a cross-column ratio
 - [`944354cb0`](https://github.com/yumima/finterm/commit/944354cb0) Dashboard: stop the earnings tile mixing consensus panels between views
 - [`58ab2f603`](https://github.com/yumima/finterm/commit/58ab2f603) Dashboard: split the earnings surprise into its own labelled column
