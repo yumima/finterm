@@ -120,6 +120,7 @@ class EarningsCalendarWidget : public BaseWidget {
     QVBoxLayout* list_layout_ = nullptr;
     QLabel* status_label_ = nullptr;
     QVector<QLabel*> header_labels_;
+    QLabel* surprise_header_ = nullptr;
     QLabel* weight_header_ = nullptr; // hidden in the week view
     QTimer* selection_debounce_ = nullptr;
 

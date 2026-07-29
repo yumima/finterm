@@ -123,7 +123,7 @@ void EarningsCalendarWidget::build_body() {
 
     auto make_hdr = [&](const QString& text, int stretch, Qt::Alignment align = Qt::AlignLeft) {
         auto* lbl = new QLabel(text);
-        lbl->setAlignment(align);
+        lbl->setAlignment(align | Qt::AlignVCenter);
         header_labels_.append(lbl);
         hl->addWidget(lbl, stretch);
         return lbl;
@@ -131,7 +131,19 @@ void EarningsCalendarWidget::build_body() {
     make_hdr("DATE", 3);
     make_hdr("SYMBOL", 2);
     make_hdr("WHEN", 2);
-    make_hdr("EPS EST", 3, Qt::AlignRight);
+    // Centred, and the values below are centred to match — right-aligning the
+    // header while the number sat somewhere else in the cell is what made the
+    // column look out of line.
+    auto* eps_hdr = make_hdr("EPS EST", 3, Qt::AlignHCenter);
+    eps_hdr->setToolTip(
+        QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
+                       "▲ green / ▼ red compares it with the same quarter a year ago —\n"
+                       "i.e. whether analysts expect growth, not a beat or a miss."));
+    surprise_header_ = make_hdr("LAST Q vs EST", 3, Qt::AlignHCenter);
+    surprise_header_->setToolTip(
+        QStringLiteral("Last quarter that was actually reported: how far the reported EPS\n"
+                       "landed above (+) or below (−) the consensus estimate at the time.\n"
+                       "History — it says nothing about the coming print."));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -806,7 +818,10 @@ void EarningsCalendarWidget::populate() {
 
         auto cell = [&](const QString& text, Qt::Alignment align, const QString& color) {
             auto* lbl = new QLabel(text);
-            lbl->setAlignment(align);
+            // Always pin the vertical centre: QLabel drops to top alignment
+            // when only a horizontal flag is given, which left cells sitting
+            // at slightly different heights across the row.
+            lbl->setAlignment(align | Qt::AlignVCenter);
             lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
             return lbl;
         };
@@ -844,42 +859,51 @@ void EarningsCalendarWidget::populate() {
 
         rl->addWidget(cell(e.when, Qt::AlignLeft, ui::colors::TEXT_SECONDARY()), 2);
 
-        // EPS estimate coloured by expected growth vs the year-ago quarter,
-        // plus last quarter's surprise as a badge. Nothing here claims a
-        // beat/miss on a quarter that hasn't been reported.
-        QString eps_html;
+        // EPS estimate, coloured by expected growth vs the year-ago quarter.
+        QString eps_colour = ui::colors::TEXT_PRIMARY();
+        QString eps_text = QStringLiteral("—");
+        QString eps_tip = QStringLiteral("No consensus estimate published for this print.");
         if (e.has_est) {
-            QString colour = ui::colors::TEXT_PRIMARY();
-            QString arrow;
+            eps_text = fmt_eps(e.eps_est);
             if (e.has_ly && e.eps_est > e.eps_ly) {
-                colour = ui::colors::POSITIVE();
-                arrow = QStringLiteral(" ▲");
+                eps_colour = ui::colors::POSITIVE();
+                eps_text += QStringLiteral(" ▲");
+                eps_tip = QStringLiteral("Consensus %1 for the coming quarter — above the %2 reported a year "
+                                         "ago, so analysts expect growth.")
+                              .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly));
             } else if (e.has_ly && e.eps_est < e.eps_ly) {
-                colour = ui::colors::NEGATIVE();
-                arrow = QStringLiteral(" ▼");
+                eps_colour = ui::colors::NEGATIVE();
+                eps_text += QStringLiteral(" ▼");
+                eps_tip = QStringLiteral("Consensus %1 for the coming quarter — below the %2 reported a year "
+                                         "ago, so analysts expect a decline.")
+                              .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly));
+            } else {
+                eps_tip = QStringLiteral("Consensus %1 for the coming quarter. No year-ago figure to compare "
+                                         "against.")
+                              .arg(fmt_eps(e.eps_est));
             }
-            eps_html = QStringLiteral("<span style='color:%1'>%2%3</span>")
-                           .arg(colour, fmt_eps(e.eps_est), arrow);
-        } else {
-            eps_html = QStringLiteral("<span style='color:%1'>—</span>").arg(ui::colors::TEXT_SECONDARY());
         }
-        if (e.has_surprise) {
-            eps_html += QStringLiteral("<span style='color:%1'>&nbsp;&nbsp;%2%3%</span>")
-                            .arg(e.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
-                                 e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
-                            .arg(e.surprise_pct, 0, 'f', 1);
-        }
-        auto* eps_lbl = new QLabel(eps_html);
-        eps_lbl->setTextFormat(Qt::RichText);
-        eps_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        eps_lbl->setStyleSheet("background: transparent;");
-        eps_lbl->setToolTip(e.has_surprise
-                                ? QStringLiteral("Consensus for the coming quarter; badge is last quarter's "
-                                                 "surprise (%1%2%)")
-                                      .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
-                                      .arg(e.surprise_pct, 0, 'f', 1)
-                                : QStringLiteral("Consensus estimate for the coming quarter"));
+        auto* eps_lbl = cell(eps_text, Qt::AlignHCenter, eps_colour);
+        eps_lbl->setToolTip(eps_tip);
         rl->addWidget(eps_lbl, 3);
+
+        // Last reported quarter's surprise — its own column, because it's a
+        // different quarter and a different question from the estimate.
+        QString surp_text = QStringLiteral("—");
+        QString surp_colour = ui::colors::TEXT_SECONDARY();
+        QString surp_tip = QStringLiteral("No reported-quarter history available for this symbol.");
+        if (e.has_surprise) {
+            surp_text = QStringLiteral("%1%2%")
+                            .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
+                            .arg(e.surprise_pct, 0, 'f', 1);
+            surp_colour = e.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+            surp_tip = QStringLiteral("Last quarter's reported EPS came in %1% %2 the consensus estimate.")
+                           .arg(std::abs(e.surprise_pct), 0, 'f', 1)
+                           .arg(e.surprise_pct >= 0 ? QStringLiteral("above") : QStringLiteral("below"));
+        }
+        auto* surp_lbl = cell(surp_text, Qt::AlignHCenter, surp_colour);
+        surp_lbl->setToolTip(surp_tip);
+        rl->addWidget(surp_lbl, 3);
 
         if (mode_ == Mode::Portfolio) {
             rl->addWidget(cell(e.weight > 0 ? QStringLiteral("%1%").arg(e.weight, 0, 'f', 1) : QStringLiteral("—"),
