@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3dccc5310`](https://github.com/yumima/finterm/commit/3dccc5310) Dashboard: add an Earnings Calendar widget (this week / portfolio)
 - [`249f32c71`](https://github.com/yumima/finterm/commit/249f32c71) Dashboard: let tiles shrink vertically instead of holding a blank band
 - [`4bfbeae20`](https://github.com/yumima/finterm/commit/4bfbeae20) Portfolio: split P&L% into L% (trailing stop) and P% (return on cost)
 

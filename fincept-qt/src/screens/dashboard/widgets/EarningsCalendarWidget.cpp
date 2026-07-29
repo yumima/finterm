@@ -7,43 +7,70 @@
 #include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
+#include <QAbstractItemView>
 #include <QDateTime>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLineEdit>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QSettings>
+#include <QStyledItemDelegate>
 #include <QTimeZone>
 
 #include <algorithm>
+#include <cmath>
 
 namespace fincept::screens::widgets {
 
-// Shared with PortfolioSummaryWidget on purpose: "which portfolio does the
-// dashboard mean" is one decision, not one per tile.
+// Default portfolio for a fresh tile — the same key PortfolioSummaryWidget
+// persists, so a new tile opens on the book the user already picked.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
+
+namespace {
+
+/// Nasdaq money strings: "$1.88", "($0.12)" for negatives, "" when absent.
+/// Returns false when the field carries no usable number.
+bool parse_money(const QString& raw, double* out) {
+    QString s = raw.trimmed();
+    if (s.isEmpty() || s == QLatin1String("N/A"))
+        return false;
+    bool negative = s.startsWith(QLatin1Char('(')) && s.endsWith(QLatin1Char(')'));
+    s.remove(QLatin1Char('(')).remove(QLatin1Char(')'));
+    s.remove(QLatin1Char('$')).remove(QLatin1Char(','));
+    bool ok = false;
+    const double v = s.toDouble(&ok);
+    if (!ok)
+        return false;
+    *out = negative ? -v : v;
+    return true;
+}
+
+QString fmt_eps(double v) {
+    return (v < 0 ? QStringLiteral("-$%1") : QStringLiteral("$%1")).arg(std::abs(v), 0, 'f', 2);
+}
+
+} // namespace
 
 EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("EARNINGS CALENDAR", parent, ui::colors::AMBER()) {
     build_body();
+    build_portfolio_selector();
 
-    // Portfolio selector — title bar, like PortfolioSummaryWidget, so it
-    // doesn't cost a content row. Only meaningful in the portfolio view.
-    portfolio_combo_ = new QComboBox(this);
-    portfolio_combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    portfolio_combo_->setFixedHeight(18);
-    portfolio_combo_->setMaximumWidth(150);
-    portfolio_combo_->setCursor(Qt::PointingHandCursor);
-    connect(portfolio_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
-        if (suppress_combo_signal_ || idx < 0 || idx >= portfolios_.size())
-            return;
-        select_portfolio(portfolios_.at(idx).id);
+    // Toggling several checkboxes shouldn't fire a fan-out per click.
+    selection_debounce_ = new QTimer(this);
+    selection_debounce_->setSingleShot(true);
+    selection_debounce_->setInterval(400);
+    connect(selection_debounce_, &QTimer::timeout, this, [this]() {
+        emit config_changed(config());
+        refresh_data();
     });
-    add_title_bar_control(portfolio_combo_);
-    portfolio_combo_->setVisible(false);
 
-    selected_id_ = QSettings().value(kSelectedPortfolioKey).toString();
+    const QString default_id = QSettings().value(kSelectedPortfolioKey).toString();
+    if (!default_id.isEmpty())
+        selected_ids_ = {default_id};
 
     auto& svc = services::PortfolioService::instance();
     connect(&svc, &services::PortfolioService::portfolios_loaded, this,
@@ -51,13 +78,14 @@ EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* 
     connect(&svc, &services::PortfolioService::summary_loaded, this,
             &EarningsCalendarWidget::on_summary_loaded);
     // Without this a failed summary load leaves the tile on "Loading…" forever
-    // — the fan-out that clears it is only started by summary_loaded.
+    // — the work that clears it only starts from summary_loaded.
     connect(&svc, &services::PortfolioService::summary_error, this,
             [this](QString portfolio_id, QString error) {
-                if (mode_ != Mode::Portfolio || portfolio_id != selected_id_ || pending_ > 0)
+                if (!awaiting_summaries_.remove(portfolio_id))
                     return;
-                set_loading(false);
-                show_status(QStringLiteral("Couldn't load the portfolio: %1").arg(error.left(120)));
+                LOG_WARN("EarningsCal", QString("summary failed for %1: %2").arg(portfolio_id, error.left(120)));
+                if (awaiting_summaries_.isEmpty())
+                    on_holdings_ready();
             });
 
     connect(this, &BaseWidget::refresh_requested, this, [this] { refresh_data(); });
@@ -98,11 +126,13 @@ void EarningsCalendarWidget::build_body() {
         lbl->setAlignment(align);
         header_labels_.append(lbl);
         hl->addWidget(lbl, stretch);
+        return lbl;
     };
     make_hdr("DATE", 3);
     make_hdr("SYMBOL", 2);
     make_hdr("WHEN", 2);
-    make_hdr("EPS EST", 2, Qt::AlignRight);
+    make_hdr("EPS EST", 3, Qt::AlignRight);
+    weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
     header_sep_ = new QFrame;
@@ -131,21 +161,178 @@ void EarningsCalendarWidget::build_body() {
     vl->addWidget(scroll_area_, 1);
 }
 
+// ── Portfolio selector (multi-select combo) ──────────────────────────────────
+
+void EarningsCalendarWidget::build_portfolio_selector() {
+    portfolio_combo_ = new QComboBox(this);
+    portfolio_combo_->setFixedHeight(18);
+    portfolio_combo_->setMinimumWidth(110);
+    portfolio_combo_->setMaximumWidth(170);
+    portfolio_combo_->setCursor(Qt::PointingHandCursor);
+    // Editable + read-only line edit is the standard multi-select-combo recipe:
+    // it lets the closed combo show a summary ("3 portfolios") instead of being
+    // stuck displaying whichever row happens to be current.
+    portfolio_combo_->setEditable(true);
+    portfolio_combo_->lineEdit()->setReadOnly(true);
+    portfolio_combo_->lineEdit()->setCursor(Qt::PointingHandCursor);
+    portfolio_combo_->lineEdit()->installEventFilter(this); // click opens the popup
+
+    portfolio_model_ = new QStandardItemModel(this);
+    portfolio_combo_->setModel(portfolio_model_);
+    // A styled delegate is required for the check indicators to render at all
+    // once the view carries a stylesheet.
+    portfolio_combo_->setItemDelegate(new QStyledItemDelegate(portfolio_combo_));
+    portfolio_combo_->view()->viewport()->installEventFilter(this);
+
+    connect(portfolio_model_, &QStandardItemModel::itemChanged, this,
+            &EarningsCalendarWidget::on_portfolio_item_changed);
+    // Clicking a row moves the current index, and an editable combo mirrors
+    // that row's text into the line edit — which would replace our summary
+    // ("3 portfolios") with whatever was clicked last. Put it back.
+    connect(portfolio_combo_, &QComboBox::currentIndexChanged, this,
+            [this](int) { update_selector_text(); });
+
+    add_title_bar_control(portfolio_combo_);
+    portfolio_combo_->setVisible(false);
+}
+
+bool EarningsCalendarWidget::eventFilter(QObject* obj, QEvent* event) {
+    if (portfolio_combo_) {
+        // Clicking the read-only line edit should open the list — otherwise the
+        // only hit target is the tiny arrow.
+        if (obj == portfolio_combo_->lineEdit() && event->type() == QEvent::MouseButtonRelease) {
+            portfolio_combo_->showPopup();
+            return true;
+        }
+        // Toggle the row under the cursor and keep the popup open, so several
+        // portfolios can be ticked in one visit.
+        if (obj == portfolio_combo_->view()->viewport() && event->type() == QEvent::MouseButtonRelease) {
+            auto* me = static_cast<QMouseEvent*>(event);
+            const QModelIndex idx = portfolio_combo_->view()->indexAt(me->pos());
+            if (idx.isValid()) {
+                if (auto* item = portfolio_model_->itemFromIndex(idx))
+                    item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+            }
+            return true;
+        }
+    }
+    return BaseWidget::eventFilter(obj, event);
+}
+
+void EarningsCalendarWidget::rebuild_portfolio_model() {
+    suppress_item_signal_ = true;
+    portfolio_model_->clear();
+
+    auto add_item = [&](const QString& text, bool checked) {
+        auto* item = new QStandardItem(text);
+        item->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+        item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        portfolio_model_->appendRow(item);
+        return item;
+    };
+
+    add_item(QStringLiteral("All portfolios"), all_portfolios_);
+    for (const auto& p : portfolios_)
+        add_item(p.name.isEmpty() ? p.id : p.name, all_portfolios_ || selected_ids_.contains(p.id));
+
+    suppress_item_signal_ = false;
+    update_selector_text();
+}
+
+void EarningsCalendarWidget::on_portfolio_item_changed(QStandardItem* item) {
+    if (suppress_item_signal_ || !item)
+        return;
+
+    suppress_item_signal_ = true;
+    const int row = item->row();
+    if (row == 0) {
+        // "All portfolios" drives every other row. Unticking it clears the set
+        // rather than leaving a phantom all-checked state.
+        const bool on = item->checkState() == Qt::Checked;
+        all_portfolios_ = on;
+        for (int r = 1; r < portfolio_model_->rowCount(); ++r)
+            portfolio_model_->item(r)->setCheckState(on ? Qt::Checked : Qt::Unchecked);
+    } else {
+        int checked = 0;
+        for (int r = 1; r < portfolio_model_->rowCount(); ++r)
+            if (portfolio_model_->item(r)->checkState() == Qt::Checked)
+                ++checked;
+        // Everything ticked individually IS "all" — keep the header row honest
+        // so newly created portfolios get picked up automatically.
+        all_portfolios_ = (checked == portfolios_.size() && checked > 0);
+        portfolio_model_->item(0)->setCheckState(all_portfolios_ ? Qt::Checked : Qt::Unchecked);
+    }
+
+    selected_ids_.clear();
+    for (int r = 1; r < portfolio_model_->rowCount(); ++r) {
+        if (portfolio_model_->item(r)->checkState() == Qt::Checked && (r - 1) < portfolios_.size())
+            selected_ids_.append(portfolios_.at(r - 1).id);
+    }
+    suppress_item_signal_ = false;
+
+    update_selector_text();
+    if (!selected_ids_.isEmpty())
+        QSettings().setValue(kSelectedPortfolioKey, selected_ids_.first());
+    selection_debounce_->start();
+}
+
+void EarningsCalendarWidget::update_selector_text() {
+    if (!portfolio_combo_ || !portfolio_combo_->lineEdit())
+        return;
+    QString text;
+    if (all_portfolios_)
+        text = QStringLiteral("All portfolios");
+    else if (selected_ids_.isEmpty())
+        text = QStringLiteral("No portfolio");
+    else if (selected_ids_.size() == 1) {
+        text = selected_ids_.first();
+        for (const auto& p : portfolios_)
+            if (p.id == selected_ids_.first())
+                text = p.name.isEmpty() ? p.id : p.name;
+    } else {
+        text = QStringLiteral("%1 portfolios").arg(selected_ids_.size());
+    }
+    portfolio_combo_->lineEdit()->setText(text);
+    portfolio_combo_->setToolTip(text);
+}
+
+QStringList EarningsCalendarWidget::effective_portfolio_ids() const {
+    if (all_portfolios_) {
+        QStringList ids;
+        ids.reserve(portfolios_.size());
+        for (const auto& p : portfolios_)
+            ids.append(p.id);
+        return ids;
+    }
+    return selected_ids_;
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 QJsonObject EarningsCalendarWidget::config() const {
+    QJsonArray ids;
+    for (const auto& id : selected_ids_)
+        ids.append(id);
     return QJsonObject{{"mode", mode_ == Mode::Portfolio ? "portfolio" : "week"},
-                       {"portfolio_id", selected_id_}};
+                       {"all_portfolios", all_portfolios_},
+                       {"portfolio_ids", ids}};
 }
 
 void EarningsCalendarWidget::apply_config(const QJsonObject& cfg) {
     mode_ = cfg.value("mode").toString() == "portfolio" ? Mode::Portfolio : Mode::ThisWeek;
-    // Per-instance portfolio, so two tiles can watch two portfolios. The
-    // dashboard-wide QSettings choice is only the default for a fresh tile.
-    const QString cfg_id = cfg.value("portfolio_id").toString();
-    if (!cfg_id.isEmpty())
-        selected_id_ = cfg_id;
-    portfolio_combo_->setVisible(mode_ == Mode::Portfolio);
+    all_portfolios_ = cfg.value("all_portfolios").toBool(false);
+
+    if (cfg.contains("portfolio_ids")) {
+        selected_ids_.clear();
+        for (const auto& v : cfg.value("portfolio_ids").toArray())
+            if (!v.toString().isEmpty())
+                selected_ids_.append(v.toString());
+    } else if (!cfg.value("portfolio_id").toString().isEmpty()) {
+        selected_ids_ = {cfg.value("portfolio_id").toString()}; // pre-multi-select tiles
+    }
+
+    portfolio_combo_->setVisible(true);
+    rebuild_portfolio_model();
     apply_styles();
     // Don't fetch here — a tile is built while hidden during layout restore.
     // showEvent() does the first load.
@@ -162,25 +349,30 @@ void EarningsCalendarWidget::set_mode(Mode m) {
     if (m == mode_ && loaded_once_)
         return;
     mode_ = m;
-    portfolio_combo_->setVisible(mode_ == Mode::Portfolio);
     apply_styles();
-    emit config_changed(config()); // canvas persists the choice
+    emit config_changed(config());
     refresh_data();
 }
 
 void EarningsCalendarWidget::refresh_data() {
     loaded_once_ = true;
     ++epoch_;
-    pending_ = 0;
-    ok_fetches_ = 0;
+    pending_days_ = 0;
+    pending_symbols_ = 0;
+    ok_days_ = 0;
+    ok_symbols_ = 0;
+    week_rows_ready_ = false;
     entries_.clear();
     note_.clear();
+    holdings_by_portfolio_.clear();
+    awaiting_summaries_.clear();
     set_loading(true);
     show_status(QStringLiteral("Loading…"));
+
+    // The week view needs holdings too — that's what the held marker is.
+    load_holdings();
     if (mode_ == Mode::ThisWeek)
         load_week();
-    else
-        load_portfolio();
 }
 
 // ── This week — Nasdaq public earnings calendar ──────────────────────────────
@@ -192,16 +384,12 @@ void EarningsCalendarWidget::load_week() {
     QDate start = QDate::currentDate();
     if (start.dayOfWeek() > 5)
         start = start.addDays(8 - start.dayOfWeek()); // Sat→Mon(+2), Sun→Mon(+1)
-    const QDate end = start.addDays(5 - start.dayOfWeek()); // Friday of that week
+    const QDate end = start.addDays(5 - start.dayOfWeek());
 
     const qint64 epoch = epoch_;
     for (QDate d = start; d <= end; d = d.addDays(1)) {
-        ++pending_;
+        ++pending_days_;
         fetch_day(d, epoch);
-    }
-    if (pending_ == 0) {
-        set_loading(false);
-        show_status(QStringLiteral("No trading days left this week."));
     }
 }
 
@@ -215,9 +403,9 @@ void EarningsCalendarWidget::fetch_day(const QDate& date, qint64 epoch) {
             return;
 
         if (res.is_ok() && res.value().isObject()) {
-            ++self->ok_fetches_;
-            // A market holiday returns a valid response with a null/absent
-            // data object — that's "nothing scheduled", not a failure.
+            ++self->ok_days_;
+            // A market holiday returns a valid response with a null/absent data
+            // object — that's "nothing scheduled", not a failure.
             const auto rows = res.value().object().value("data").toObject().value("rows").toArray();
             for (const auto& v : rows) {
                 const auto o = v.toObject();
@@ -231,210 +419,353 @@ void EarningsCalendarWidget::fetch_day(const QDate& date, qint64 epoch) {
                 e.when = t == "time-pre-market"    ? QStringLiteral("BMO")
                          : t == "time-after-hours" ? QStringLiteral("AMC")
                                                    : QStringLiteral("—");
-                e.eps_est = o["epsForecast"].toString().trimmed();
-                if (e.eps_est.isEmpty())
-                    e.eps_est = QStringLiteral("—");
-                // "$4,994,876,028,480" → 4.99e12. Anything unparseable ranks
-                // last rather than dropping the row.
-                QString mc = o["marketCap"].toString();
-                mc.remove(QLatin1Char('$')).remove(QLatin1Char(','));
-                e.rank = mc.toDouble();
+                e.has_est = parse_money(o["epsForecast"].toString(), &e.eps_est);
+                e.has_ly = parse_money(o["lastYearEPS"].toString(), &e.eps_ly);
+                e.fiscal_quarter = o["fiscalQuarterEnding"].toString();
+                e.num_ests = o["noOfEsts"].toString().toInt();
+                e.ly_report_date = o["lastYearRptDt"].toString();
+                double mc = 0;
+                parse_money(o["marketCap"].toString(), &mc);
+                e.rank = mc;
                 self->entries_.append(e);
             }
         }
 
-        if (--self->pending_ > 0)
+        if (--self->pending_days_ > 0)
             return;
-
-        self->set_loading(false);
-        if (self->ok_fetches_ == 0) {
-            self->show_status(QStringLiteral("Couldn't reach the Nasdaq earnings calendar."));
-            return;
-        }
-        // Date first, then the biggest names within each day.
-        std::sort(self->entries_.begin(), self->entries_.end(), [](const Entry& a, const Entry& b) {
-            if (a.date != b.date)
-                return a.date < b.date;
-            if (a.rank != b.rank)
-                return a.rank > b.rank;
-            return a.symbol < b.symbol;
-        });
-        if (self->entries_.size() > kMaxWeekRows) {
-            self->note_ = QStringLiteral("Showing the %1 largest of %2 companies reporting this week.")
-                              .arg(kMaxWeekRows)
-                              .arg(self->entries_.size());
-            self->entries_.resize(kMaxWeekRows);
-        }
-        self->populate();
+        self->week_fetches_done();
     });
 }
 
-// ── Portfolio — one yfinance earnings-dates call per holding ─────────────────
+void EarningsCalendarWidget::week_fetches_done() {
+    if (ok_days_ == 0) {
+        set_loading(false);
+        show_status(QStringLiteral("Couldn't reach the Nasdaq earnings calendar."));
+        return;
+    }
 
-void EarningsCalendarWidget::load_portfolio() {
+    // Date first, then the biggest names within each day.
+    std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) {
+        if (a.date != b.date)
+            return a.date < b.date;
+        if (a.rank != b.rank)
+            return a.rank > b.rank;
+        return a.symbol < b.symbol;
+    });
+    if (entries_.size() > kMaxWeekRows) {
+        note_ = QStringLiteral("Showing the %1 largest of %2 companies reporting this week.")
+                    .arg(kMaxWeekRows)
+                    .arg(entries_.size());
+        entries_.resize(kMaxWeekRows);
+    }
+
+    week_rows_ready_ = true;
+    set_loading(false);
+    rebuild_held_index();
+    populate();
+
+    // Surprise history costs one yfinance call per symbol, so only pay it for
+    // names the user actually holds — the rows they'll read closely.
+    if (awaiting_summaries_.isEmpty()) {
+        QStringList held_here;
+        for (const auto& e : entries_)
+            if (e.held && !held_here.contains(e.symbol))
+                held_here.append(e.symbol);
+        if (!held_here.isEmpty())
+            fetch_symbol_earnings(held_here, epoch_, /*portfolio_view=*/false);
+    }
+}
+
+// ── Holdings ─────────────────────────────────────────────────────────────────
+
+void EarningsCalendarWidget::load_holdings() {
     if (!portfolios_loaded_) {
         services::PortfolioService::instance().load_portfolios();
         return; // on_portfolios_loaded() continues
     }
-    if (selected_id_.isEmpty()) {
-        set_loading(false);
-        show_status(QStringLiteral("No portfolio configured."));
+
+    const QStringList ids = effective_portfolio_ids();
+    if (ids.isEmpty()) {
+        held_value_.clear();
+        held_portfolios_.clear();
+        held_total_mv_ = 0;
+        on_holdings_ready();
         return;
     }
-    services::PortfolioService::instance().load_summary(selected_id_);
+    awaiting_summaries_ = QSet<QString>(ids.cbegin(), ids.cend());
+    for (const auto& id : ids)
+        services::PortfolioService::instance().load_summary(id);
 }
 
 void EarningsCalendarWidget::on_portfolios_loaded(QVector<portfolio::Portfolio> portfolios) {
     portfolios_ = portfolios;
     portfolios_loaded_ = true;
 
-    suppress_combo_signal_ = true;
-    portfolio_combo_->clear();
-    for (const auto& p : portfolios_)
-        portfolio_combo_->addItem(p.name.isEmpty() ? p.id : p.name);
-    suppress_combo_signal_ = false;
+    // Drop selections whose portfolio has since been deleted; fall back to the
+    // first one so the tile still shows something.
+    QStringList live;
+    for (const auto& id : selected_ids_)
+        for (const auto& p : portfolios_)
+            if (p.id == id) {
+                live.append(id);
+                break;
+            }
+    selected_ids_ = live;
+    if (selected_ids_.isEmpty() && !all_portfolios_ && !portfolios_.isEmpty())
+        selected_ids_ = {portfolios_.first().id};
 
-    if (portfolios_.isEmpty()) {
-        selected_id_.clear();
-        portfolio_combo_->setVisible(false);
-        if (mode_ == Mode::Portfolio) {
-            set_loading(false);
-            show_status(QStringLiteral("No portfolio configured."));
-        }
-        return;
-    }
-    portfolio_combo_->setVisible(mode_ == Mode::Portfolio);
-
-    // The persisted portfolio may have been deleted since last run.
-    int idx = 0;
-    for (int i = 0; i < portfolios_.size(); ++i) {
-        if (portfolios_.at(i).id == selected_id_) {
-            idx = i;
-            break;
-        }
-    }
-    suppress_combo_signal_ = true;
-    portfolio_combo_->setCurrentIndex(idx);
-    suppress_combo_signal_ = false;
-    selected_id_ = portfolios_.at(idx).id;
+    rebuild_portfolio_model();
 
     // portfolios_loaded is a global signal — it also fires when the Portfolio
-    // screen loads. Only pull a summary if we're actually showing that view.
-    if (mode_ == Mode::Portfolio && isVisible())
-        services::PortfolioService::instance().load_summary(selected_id_);
-}
-
-void EarningsCalendarWidget::select_portfolio(const QString& id) {
-    selected_id_ = id;
-    QSettings().setValue(kSelectedPortfolioKey, id); // dashboard-wide default
-    emit config_changed(config());                   // this tile's own choice
-    if (mode_ == Mode::Portfolio)
-        refresh_data();
+    // screen loads. Only pull summaries if we're on screen and actually waiting
+    // on them.
+    if (isVisible() && loaded_once_ && holdings_by_portfolio_.isEmpty())
+        load_holdings();
 }
 
 void EarningsCalendarWidget::on_summary_loaded(const portfolio::PortfolioSummary& summary) {
-    // summary_loaded fires for every portfolio anyone loads — and the service
-    // emits twice (disk cache, then live). Ignore anything that isn't the
-    // portfolio this tile is showing.
-    if (mode_ != Mode::Portfolio || summary.portfolio.id != selected_id_)
-        return;
-    // A fan-out already in flight for this portfolio: let it finish rather
-    // than restarting on the service's second (live) emit.
-    if (pending_ > 0)
+    const QString id = summary.portfolio.id;
+    if (!effective_portfolio_ids().contains(id))
         return;
 
-    QStringList symbols;
+    // PortfolioService emits twice (disk cache, then live). Both land here;
+    // storing per portfolio means the second emit refreshes values instead of
+    // double-counting them.
+    QVector<HoldingRow> rows;
+    rows.reserve(summary.holdings.size());
     for (const auto& h : summary.holdings) {
         if (h.symbol.isEmpty() || h.quantity <= 0)
             continue;
-        if (!symbols.contains(h.symbol))
-            symbols.append(h.symbol);
+        rows.append({h.symbol, h.market_value});
     }
+    holdings_by_portfolio_.insert(id, rows);
+    rebuild_held_index();
+
+    if (awaiting_summaries_.remove(id) && awaiting_summaries_.isEmpty()) {
+        on_holdings_ready();
+        return;
+    }
+    // A late re-emit: refresh weights/markers in place, no new fan-out.
+    if (awaiting_summaries_.isEmpty() && (week_rows_ready_ || !entries_.isEmpty())) {
+        for (auto& e : entries_) {
+            e.held = held_value_.contains(e.symbol);
+            e.weight = (held_total_mv_ > 0) ? held_value_.value(e.symbol) / held_total_mv_ * 100.0 : 0;
+            e.portfolios = held_portfolios_.value(e.symbol);
+        }
+        populate();
+    }
+}
+
+void EarningsCalendarWidget::rebuild_held_index() {
+    held_value_.clear();
+    held_portfolios_.clear();
+    held_total_mv_ = 0;
+
+    for (auto it = holdings_by_portfolio_.cbegin(); it != holdings_by_portfolio_.cend(); ++it) {
+        QString name = it.key();
+        for (const auto& p : portfolios_)
+            if (p.id == it.key()) {
+                name = p.name.isEmpty() ? p.id : p.name;
+                break;
+            }
+        for (const auto& row : it.value()) {
+            held_value_[row.symbol] += row.market_value;
+            held_total_mv_ += row.market_value;
+            auto& names = held_portfolios_[row.symbol];
+            if (!names.contains(name))
+                names.append(name);
+        }
+    }
+
+    for (auto& e : entries_) {
+        e.held = held_value_.contains(e.symbol);
+        e.weight = (held_total_mv_ > 0) ? held_value_.value(e.symbol) / held_total_mv_ * 100.0 : 0;
+        e.portfolios = held_portfolios_.value(e.symbol);
+    }
+}
+
+void EarningsCalendarWidget::on_holdings_ready() {
+    rebuild_held_index();
+
+    if (mode_ == Mode::ThisWeek) {
+        if (week_rows_ready_) {
+            populate();
+            QStringList held_here;
+            for (const auto& e : entries_)
+                if (e.held && !held_here.contains(e.symbol))
+                    held_here.append(e.symbol);
+            if (!held_here.isEmpty())
+                fetch_symbol_earnings(held_here, epoch_, /*portfolio_view=*/false);
+        }
+        return;
+    }
+
+    // Portfolio view — the holdings ARE the row set.
+    QStringList symbols;
+    for (auto it = held_value_.cbegin(); it != held_value_.cend(); ++it)
+        symbols.append(it.key());
+    std::sort(symbols.begin(), symbols.end());
 
     if (symbols.isEmpty()) {
         set_loading(false);
-        show_status(QStringLiteral("This portfolio has no holdings."));
+        show_status(effective_portfolio_ids().isEmpty()
+                        ? QStringLiteral("No portfolio selected.")
+                        : QStringLiteral("The selected portfolios have no holdings."));
         return;
     }
-    if (symbols.size() > kMaxPortfolioSymbols) {
+    if (symbols.size() > kMaxSymbolFetches) {
         note_ = QStringLiteral("Checked the first %1 of %2 holdings.")
-                    .arg(kMaxPortfolioSymbols)
+                    .arg(kMaxSymbolFetches)
                     .arg(symbols.size());
-        LOG_INFO("EarningsCal", QString("Portfolio %1 has %2 holdings — capping earnings lookup at %3")
-                                    .arg(selected_id_)
-                                    .arg(symbols.size())
-                                    .arg(kMaxPortfolioSymbols));
-        symbols = symbols.mid(0, kMaxPortfolioSymbols);
+        LOG_INFO("EarningsCal", QString("capping earnings lookup at %1 of %2 holdings")
+                                    .arg(kMaxSymbolFetches)
+                                    .arg(symbols.size()));
+        symbols = symbols.mid(0, kMaxSymbolFetches);
     }
-
-    entries_.clear();
-    fetch_symbol_earnings(symbols, epoch_);
+    fetch_symbol_earnings(symbols, epoch_, /*portfolio_view=*/true);
 }
 
-void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, qint64 epoch) {
-    pending_ = symbols.size();
-    ok_fetches_ = 0;
+// ── Per-symbol earnings dates (yfinance) ─────────────────────────────────────
 
-    const QDate today = QDate::currentDate();
+void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, qint64 epoch, bool portfolio_view) {
+    pending_symbols_ = symbols.size();
+    ok_symbols_ = 0;
+
     QPointer<EarningsCalendarWidget> self = this;
-
     for (const QString& sym : symbols) {
         QJsonObject payload;
         payload["symbol"] = sym;
-        // Past prints belong to the research screen, not a "what's coming"
-        // tile: ask only for the window ahead.
-        payload["lookback_days"] = 0;
+        // ~13 months back covers the year-ago comparison quarter and the last
+        // reported surprise; 180 days forward covers the next scheduled print.
+        payload["lookback_days"] = 400;
         payload["lookahead_days"] = 180;
 
         python::PythonWorker::instance().submit(
             "earnings_dates", payload,
-            [self, sym, epoch, today](bool ok, QJsonObject result, QString err) {
+            [self, sym, epoch, portfolio_view](bool ok, QJsonObject result, QString err) {
                 if (!self || epoch != self->epoch_)
                     return;
 
                 if (ok && !result.contains("error")) {
-                    ++self->ok_fetches_;
-                    // Dates come back oldest → newest; the first one that isn't
-                    // in the past is the next print.
-                    const auto dates = result.value("dates").toArray();
-                    for (const auto& v : dates) {
-                        const auto o = v.toObject();
-                        const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
-                        const QDate d = QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).date();
-                        if (!d.isValid() || d < today)
-                            continue;
-                        Entry e;
-                        e.date = d;
-                        e.symbol = sym;
-                        const qint64 days = today.daysTo(d);
-                        e.when = days == 0 ? QStringLiteral("today")
-                                           : QStringLiteral("in %1d").arg(days);
-                        const auto est = o.value("eps_estimate");
-                        e.eps_est = est.isDouble() ? QStringLiteral("$%1").arg(est.toDouble(), 0, 'f', 2)
-                                                   : QStringLiteral("—");
-                        self->entries_.append(e);
-                        break;
-                    }
+                    ++self->ok_symbols_;
+                    self->apply_symbol_result(sym, result, portfolio_view);
                 } else if (!ok) {
                     LOG_WARN("EarningsCal",
                              QString("earnings_dates failed for %1: %2").arg(sym, err.left(120)));
                 }
 
-                if (--self->pending_ > 0)
+                if (--self->pending_symbols_ > 0)
                     return;
 
                 self->set_loading(false);
-                if (self->ok_fetches_ == 0) {
+                if (portfolio_view && self->ok_symbols_ == 0) {
                     self->show_status(QStringLiteral("Couldn't load earnings dates for these holdings."));
                     return;
                 }
-                std::sort(self->entries_.begin(), self->entries_.end(), [](const Entry& a, const Entry& b) {
-                    return a.date != b.date ? a.date < b.date : a.symbol < b.symbol;
-                });
+                if (portfolio_view) {
+                    std::sort(self->entries_.begin(), self->entries_.end(),
+                              [](const Entry& a, const Entry& b) {
+                                  return a.date != b.date ? a.date < b.date : a.symbol < b.symbol;
+                              });
+                }
                 self->populate();
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
     }
+}
+
+void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJsonObject& result,
+                                                 bool portfolio_view) {
+    const QDate today = QDate::currentDate();
+    const auto dates = result.value("dates").toArray();
+
+    struct Point {
+        QDate date;
+        double estimate = 0;
+        bool has_estimate = false;
+        double actual = 0;
+        bool has_actual = false;
+        double surprise = 0;
+        bool has_surprise = false;
+    };
+    QVector<Point> past, future;
+
+    for (const auto& v : dates) {
+        const auto o = v.toObject();
+        const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
+        const QDate d = QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).date();
+        if (!d.isValid())
+            continue;
+        Point p;
+        p.date = d;
+        p.has_estimate = o.value("eps_estimate").isDouble();
+        p.estimate = o.value("eps_estimate").toDouble();
+        p.has_actual = o.value("eps_actual").isDouble();
+        p.actual = o.value("eps_actual").toDouble();
+        p.has_surprise = o.value("surprise_pct").isDouble();
+        p.surprise = o.value("surprise_pct").toDouble();
+        (d < today ? past : future).append(p);
+    }
+
+    // Most recent reported quarter — the surprise badge.
+    double surprise = 0;
+    bool has_surprise = false;
+    for (auto it = past.crbegin(); it != past.crend(); ++it) {
+        if (it->has_surprise) {
+            surprise = it->surprise;
+            has_surprise = true;
+            break;
+        }
+    }
+
+    if (!portfolio_view) {
+        // Week view: the row already exists from the Nasdaq feed — only the
+        // badge is missing.
+        if (!has_surprise)
+            return;
+        for (auto& e : entries_) {
+            if (e.symbol == symbol) {
+                e.surprise_pct = surprise;
+                e.has_surprise = true;
+            }
+        }
+        return;
+    }
+
+    if (future.isEmpty())
+        return; // nothing scheduled — ETFs, money-market funds, etc.
+    const Point& next = future.first();
+
+    Entry e;
+    e.date = next.date;
+    e.symbol = symbol;
+    e.has_est = next.has_estimate;
+    e.eps_est = next.estimate;
+    e.surprise_pct = surprise;
+    e.has_surprise = has_surprise;
+    const qint64 days = today.daysTo(next.date);
+    e.when = days == 0 ? QStringLiteral("today") : QStringLiteral("in %1d").arg(days);
+    e.held = true;
+    e.weight = (held_total_mv_ > 0) ? held_value_.value(symbol) / held_total_mv_ * 100.0 : 0;
+    e.portfolios = held_portfolios_.value(symbol);
+
+    // Year-ago comparison: the reported quarter closest to one year before the
+    // upcoming print. A ±45-day window keeps a shifted fiscal calendar from
+    // matching the wrong quarter.
+    const QDate target = next.date.addDays(-365);
+    qint64 best_gap = 46;
+    for (const auto& p : past) {
+        if (!p.has_actual)
+            continue;
+        const qint64 gap = std::abs(p.date.daysTo(target));
+        if (gap < best_gap) {
+            best_gap = gap;
+            e.eps_ly = p.actual;
+            e.has_ly = true;
+        }
+    }
+
+    entries_.append(e);
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -452,6 +783,8 @@ void EarningsCalendarWidget::populate() {
             item->widget()->deleteLater();
         delete item;
     }
+
+    weight_header_->setVisible(mode_ == Mode::Portfolio);
 
     if (entries_.isEmpty()) {
         show_status(mode_ == Mode::ThisWeek
@@ -478,21 +811,81 @@ void EarningsCalendarWidget::populate() {
             return lbl;
         };
 
-        // Repeating the date on every row of a long day is noise — print it
-        // once per date and leave the rest blank, so the day boundary reads.
+        // Repeating the date on every row of a busy day is noise — print it once
+        // per date so the day boundary reads.
         const bool new_day = e.date != prev_date;
         prev_date = e.date;
-        auto* date_lbl = cell(new_day ? e.date.toString("ddd d MMM") : QString(), Qt::AlignLeft,
-                              e.date == today ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY());
-        rl->addWidget(date_lbl, 3);
+        rl->addWidget(cell(new_day ? e.date.toString("ddd d MMM") : QString(), Qt::AlignLeft,
+                           e.date == today ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY()),
+                      3);
 
-        auto* sym_lbl = cell(e.symbol, Qt::AlignLeft, ui::colors::CYAN());
+        // Held marker: the "does this hit my book" answer, at a glance.
+        auto* sym_lbl = cell((e.held ? QStringLiteral("● ") : QStringLiteral("  ")) + e.symbol, Qt::AlignLeft,
+                             e.held ? ui::colors::AMBER() : ui::colors::CYAN());
+        QStringList tip;
         if (!e.company.isEmpty())
-            sym_lbl->setToolTip(e.company);
+            tip << e.company;
+        if (!e.fiscal_quarter.isEmpty())
+            tip << QStringLiteral("Fiscal quarter ending %1").arg(e.fiscal_quarter);
+        if (e.has_ly)
+            tip << QStringLiteral("Year-ago EPS %1%2")
+                       .arg(fmt_eps(e.eps_ly),
+                            e.ly_report_date.isEmpty() ? QString()
+                                                       : QStringLiteral(" (reported %1)").arg(e.ly_report_date));
+        if (e.num_ests > 0)
+            tip << QStringLiteral("%1 analyst estimates").arg(e.num_ests);
+        if (e.rank > 0)
+            tip << QStringLiteral("Market cap $%1B").arg(e.rank / 1e9, 0, 'f', 1);
+        if (!e.portfolios.isEmpty())
+            tip << QStringLiteral("Held in: %1").arg(e.portfolios.join(QStringLiteral(", ")));
+        if (!tip.isEmpty())
+            sym_lbl->setToolTip(tip.join(QLatin1Char('\n')));
         rl->addWidget(sym_lbl, 2);
 
         rl->addWidget(cell(e.when, Qt::AlignLeft, ui::colors::TEXT_SECONDARY()), 2);
-        rl->addWidget(cell(e.eps_est, Qt::AlignRight, ui::colors::TEXT_PRIMARY()), 2);
+
+        // EPS estimate coloured by expected growth vs the year-ago quarter,
+        // plus last quarter's surprise as a badge. Nothing here claims a
+        // beat/miss on a quarter that hasn't been reported.
+        QString eps_html;
+        if (e.has_est) {
+            QString colour = ui::colors::TEXT_PRIMARY();
+            QString arrow;
+            if (e.has_ly && e.eps_est > e.eps_ly) {
+                colour = ui::colors::POSITIVE();
+                arrow = QStringLiteral(" ▲");
+            } else if (e.has_ly && e.eps_est < e.eps_ly) {
+                colour = ui::colors::NEGATIVE();
+                arrow = QStringLiteral(" ▼");
+            }
+            eps_html = QStringLiteral("<span style='color:%1'>%2%3</span>")
+                           .arg(colour, fmt_eps(e.eps_est), arrow);
+        } else {
+            eps_html = QStringLiteral("<span style='color:%1'>—</span>").arg(ui::colors::TEXT_SECONDARY());
+        }
+        if (e.has_surprise) {
+            eps_html += QStringLiteral("<span style='color:%1'>&nbsp;&nbsp;%2%3%</span>")
+                            .arg(e.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
+                                 e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
+                            .arg(e.surprise_pct, 0, 'f', 1);
+        }
+        auto* eps_lbl = new QLabel(eps_html);
+        eps_lbl->setTextFormat(Qt::RichText);
+        eps_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        eps_lbl->setStyleSheet("background: transparent;");
+        eps_lbl->setToolTip(e.has_surprise
+                                ? QStringLiteral("Consensus for the coming quarter; badge is last quarter's "
+                                                 "surprise (%1%2%)")
+                                      .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
+                                      .arg(e.surprise_pct, 0, 'f', 1)
+                                : QStringLiteral("Consensus estimate for the coming quarter"));
+        rl->addWidget(eps_lbl, 3);
+
+        if (mode_ == Mode::Portfolio) {
+            rl->addWidget(cell(e.weight > 0 ? QStringLiteral("%1%").arg(e.weight, 0, 'f', 1) : QStringLiteral("—"),
+                               Qt::AlignRight, ui::colors::TEXT_SECONDARY()),
+                          2);
+        }
 
         list_layout_->addWidget(row);
         alt = !alt;
@@ -521,6 +914,11 @@ void EarningsCalendarWidget::apply_styles() {
         week_btn_->setStyleSheet(mode_ == Mode::ThisWeek ? active : idle);
     if (portfolio_btn_)
         portfolio_btn_->setStyleSheet(mode_ == Mode::Portfolio ? active : idle);
+    // Follow the mode here too, not only in populate() — a view switch that
+    // lands on a status message ("no holdings") never reaches populate() and
+    // would leave the other view's WT% header standing.
+    if (weight_header_)
+        weight_header_->setVisible(mode_ == Mode::Portfolio);
 
     if (header_widget_)
         header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
@@ -548,6 +946,7 @@ void EarningsCalendarWidget::apply_styles() {
             QString("QComboBox { background:%1; color:%2; border:1px solid %3; border-radius:2px;"
                     "  padding:0 4px; font-size:%4; }"
                     "QComboBox:hover { border-color:%5; }"
+                    "QComboBox QLineEdit { background:transparent; color:%2; border:none; }"
                     "QComboBox::drop-down { border:none; width:14px; }"
                     "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
                     "  selection-background-color:%6; selection-color:%2; outline:none; }")

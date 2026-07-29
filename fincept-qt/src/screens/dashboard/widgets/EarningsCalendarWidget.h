@@ -6,9 +6,13 @@
 #include <QComboBox>
 #include <QDate>
 #include <QFrame>
+#include <QHash>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSet>
+#include <QStandardItemModel>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QVector>
 
@@ -18,13 +22,19 @@ namespace fincept::screens::widgets {
 ///
 ///   THIS WEEK  every company reporting between today and Friday, from the
 ///              Nasdaq public earnings calendar (no API key), ranked by market
-///              cap so the names that move the tape are at the top.
-///   PORTFOLIO  the next print for each holding of the selected portfolio,
-///              from yfinance's per-ticker earnings dates, so a report three
-///              weeks out still shows up (the week view would miss it).
+///              cap so the names that move the tape are at the top. Rows you
+///              hold are marked.
+///   PORTFOLIO  the next print for each holding across the selected
+///              portfolios, from yfinance's per-ticker earnings dates, with
+///              each name's weight in the combined book. A report three weeks
+///              out still shows up — the week view would miss it.
 ///
-/// The chosen view is per-instance config, so two tiles can sit side by side
-/// showing both.
+/// The estimate is coloured by expected growth (consensus vs the year-ago
+/// quarter) and carries a badge with last quarter's surprise. Nothing is
+/// coloured "beat/miss" before the company has actually reported.
+///
+/// View and portfolio selection are per-instance config, so two tiles can
+/// watch different books.
 class EarningsCalendarWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -36,6 +46,7 @@ class EarningsCalendarWidget : public BaseWidget {
   protected:
     void on_theme_changed() override;
     void showEvent(QShowEvent* e) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
   private:
     enum class Mode { ThisWeek, Portfolio };
@@ -45,11 +56,30 @@ class EarningsCalendarWidget : public BaseWidget {
         QString symbol;
         QString company;
         QString when;    // "BMO" / "AMC" (week view) or "in 5d" (portfolio view)
-        QString eps_est; // consensus estimate, already formatted
+        double eps_est = 0;
+        bool has_est = false;
+        double eps_ly = 0; // year-ago quarter's EPS — the growth comparison
+        bool has_ly = false;
+        double surprise_pct = 0; // last reported quarter's surprise
+        bool has_surprise = false;
         double rank = 0; // market cap — orders the week view within a day
+        QString fiscal_quarter;
+        int num_ests = 0;
+        QString ly_report_date;
+        bool held = false;
+        double weight = 0; // % of the combined selected book
+        QStringList portfolios;
+    };
+
+    // Per-portfolio holdings snapshot, keyed by portfolio id. Kept per source
+    // so a re-emit for one portfolio can't double-count the others.
+    struct HoldingRow {
+        QString symbol;
+        double market_value = 0;
     };
 
     void build_body();
+    void build_portfolio_selector();
     void apply_styles();
     void set_mode(Mode m);
     void refresh_data();
@@ -59,47 +89,72 @@ class EarningsCalendarWidget : public BaseWidget {
     // ── This week (Nasdaq calendar) ──────────────────────────────────────────
     void load_week();
     void fetch_day(const QDate& date, qint64 epoch);
+    void week_fetches_done();
 
-    // ── Portfolio (yfinance per-symbol earnings dates) ───────────────────────
-    void load_portfolio();
+    // ── Holdings (both views) ────────────────────────────────────────────────
+    void load_holdings();
     void on_portfolios_loaded(QVector<portfolio::Portfolio> portfolios);
     void on_summary_loaded(const portfolio::PortfolioSummary& summary);
-    void fetch_symbol_earnings(const QStringList& symbols, qint64 epoch);
-    void select_portfolio(const QString& id);
+    void rebuild_held_index();
+    void on_holdings_ready();
+
+    // ── Per-symbol earnings dates (yfinance) ─────────────────────────────────
+    void fetch_symbol_earnings(const QStringList& symbols, qint64 epoch, bool portfolio_view);
+    void apply_symbol_result(const QString& symbol, const QJsonObject& result, bool portfolio_view);
+
+    // ── Portfolio selector ───────────────────────────────────────────────────
+    void rebuild_portfolio_model();
+    void on_portfolio_item_changed(QStandardItem* item);
+    void update_selector_text();
+    QStringList effective_portfolio_ids() const;
 
     Mode mode_ = Mode::ThisWeek;
 
     QPushButton* week_btn_ = nullptr;
     QPushButton* portfolio_btn_ = nullptr;
     QComboBox* portfolio_combo_ = nullptr;
+    QStandardItemModel* portfolio_model_ = nullptr;
     QWidget* header_widget_ = nullptr;
     QFrame* header_sep_ = nullptr;
     QScrollArea* scroll_area_ = nullptr;
     QVBoxLayout* list_layout_ = nullptr;
     QLabel* status_label_ = nullptr;
     QVector<QLabel*> header_labels_;
+    QLabel* weight_header_ = nullptr; // hidden in the week view
+    QTimer* selection_debounce_ = nullptr;
 
     QVector<Entry> entries_;
-    QString note_; // e.g. "top 120 by market cap" — appended under the list
+    QString note_;
 
     // Fetch epoch: bumped on every (re)load so a fan-out still in flight when
-    // the user flips tabs or portfolios can't paint over the newer request.
+    // the user flips views or portfolios can't paint over the newer request.
     qint64 epoch_ = 0;
-    int pending_ = 0;
-    int ok_fetches_ = 0;
+    int pending_days_ = 0;
+    int pending_symbols_ = 0;
+    int ok_days_ = 0;
+    int ok_symbols_ = 0;
+    bool week_rows_ready_ = false;
 
     QVector<portfolio::Portfolio> portfolios_;
-    QString selected_id_;
+    QStringList selected_ids_;
+    bool all_portfolios_ = false;
     bool portfolios_loaded_ = false;
-    bool suppress_combo_signal_ = false;
+    bool suppress_item_signal_ = false;
     bool loaded_once_ = false;
 
+    QHash<QString, QVector<HoldingRow>> holdings_by_portfolio_;
+    QSet<QString> awaiting_summaries_;
+    // symbol → combined market value across the selected portfolios
+    QHash<QString, double> held_value_;
+    QHash<QString, QStringList> held_portfolios_;
+    double held_total_mv_ = 0;
+
     // Nasdaq returns ~300 rows a day, nearly all micro-caps. Keep the biggest
-    // names — a dashboard tile can't show 1500 rows and the user wouldn't read
-    // them; populate() says so rather than silently truncating.
+    // names — populate() says how many it dropped rather than truncating
+    // silently.
     static constexpr int kMaxWeekRows = 120;
-    // One yfinance call per holding — bound the fan-out on large portfolios.
-    static constexpr int kMaxPortfolioSymbols = 50;
+    // One yfinance call per symbol — bound the fan-out on large books.
+    static constexpr int kMaxSymbolFetches = 50;
 };
 
 } // namespace fincept::screens::widgets
