@@ -5,6 +5,7 @@
 
 #include <QGridLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -32,6 +33,10 @@ class EquitySentimentTab : public QWidget {
     QWidget* sources_widget_ = nullptr;
     QGridLayout* sources_layout_ = nullptr;
     QLabel* status_label_ = nullptr;
+    // Shown only when the provider isn't configured at all — a dead-end
+    // "go configure this elsewhere" message with no way to get there is a
+    // worse answer than no message.
+    QPushButton* configure_button_ = nullptr;
     QLabel* company_label_ = nullptr;
     QLabel* coverage_label_ = nullptr;
     QLabel* avg_buzz_value_ = nullptr;

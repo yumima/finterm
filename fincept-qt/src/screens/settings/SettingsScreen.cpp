@@ -1946,7 +1946,9 @@ QWidget* SettingsScreen::build_data_sources() {
             "QPushButton:hover{background:%1;color:%3;}")
             .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE()));
     connect(open_full, &QPushButton::clicked, this,
-            []() { EventBus::instance().publish("nav.switch_screen", {{"screen", "data_sources"}}); });
+            // "screen_id", not "screen": MainWindow's handler reads screen_id and
+            // ignores the payload otherwise, so this button did nothing.
+            []() { EventBus::instance().publish("nav.switch_screen", {{"screen_id", "data_sources"}}); });
     trl->addWidget(open_full);
     vl->addWidget(title_row);
 

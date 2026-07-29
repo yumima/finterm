@@ -1,5 +1,6 @@
 #include "screens/equity_research/EquitySentimentTab.h"
 
+#include "core/events/EventBus.h"
 #include "services/equity/MarketSentimentService.h"
 #include "ui/theme/Theme.h"
 
@@ -164,9 +165,34 @@ void EquitySentimentTab::build_ui() {
 
     status_label_ = new QLabel("Open a symbol and enable Adanos Market Sentiment in Data Sources to load a snapshot.");
     status_label_->setAlignment(Qt::AlignCenter);
+    status_label_->setWordWrap(true);
     status_label_->setStyleSheet(
         QString("color:%1; font-size:12px; padding:20px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     root->addWidget(status_label_);
+
+    // The not-configured message names a screen the user then has to go and
+    // find. Take them there instead.
+    configure_button_ = new QPushButton("OPEN DATA SOURCES");
+    configure_button_->setCursor(Qt::PointingHandCursor);
+    configure_button_->setFixedHeight(28);
+    configure_button_->setStyleSheet(
+        QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
+                "  padding:4px 16px; font-size:11px; font-weight:700; letter-spacing:1px; }"
+                "QPushButton:hover { background:%2; color:%3; }")
+            .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::AMBER()));
+    configure_button_->hide();
+    {
+        auto* row = new QHBoxLayout;
+        row->addStretch();
+        row->addWidget(configure_button_);
+        row->addStretch();
+        root->addLayout(row);
+    }
+    connect(configure_button_, &QPushButton::clicked, this, []() {
+        // Key is "screen_id" — MainWindow's nav.switch_screen handler reads
+        // that and silently ignores anything else.
+        EventBus::instance().publish("nav.switch_screen", QVariantMap{{"screen_id", "data_sources"}});
+    });
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
@@ -299,11 +325,16 @@ void EquitySentimentTab::on_snapshot_loaded(QString symbol, fincept::services::e
         content_widget_->hide();
         status_label_->setText(snapshot.message.isEmpty() ? "No market sentiment snapshot is available for this symbol." : snapshot.message);
         status_label_->show();
+        // Offer the shortcut only for the missing-provider case. When the
+        // provider IS set up and simply has no data for this ticker, sending
+        // the user to Data Sources would be a wild goose chase.
+        configure_button_->setVisible(!snapshot.configured);
         return;
     }
 
     populate(snapshot);
     status_label_->hide();
+    configure_button_->hide();
     content_widget_->show();
 }
 
