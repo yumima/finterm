@@ -122,16 +122,17 @@ void EarningsCalendarWidget::build_body() {
         QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
                        "▲ green / ▼ red compares it with the same quarter a year ago —\n"
                        "i.e. whether analysts expect growth, not a beat or a miss."));
-    // NOT "LAST Q vs EST": sitting beside a column headed EPS EST, that read as
-    // a comparison against *this* estimate. Both numbers behind this figure
-    // belong to the previous quarter — nothing current enters it.
-    surprise_header_ = make_hdr("PREV Q SURP", 3, Qt::AlignHCenter);
+    // Sequential: the estimate in the column to the left, measured against what
+    // the last quarter actually printed. Numerator is the current figure,
+    // denominator the previous one.
+    surprise_header_ = make_hdr("vs PREV Q", 3, Qt::AlignHCenter);
     surprise_header_->setToolTip(
-        QStringLiteral("Surprise on the last quarter that was actually reported:\n"
-                       "   (reported EPS − consensus for that same quarter) ÷ consensus\n"
-                       "Positive = it came in above what was expected of it.\n"
-                       "Both figures are from that past quarter — this does not\n"
-                       "compare against the estimate in the column beside it."));
+        QStringLiteral("The coming quarter's consensus against what the last reported\n"
+                       "quarter actually printed:\n"
+                       "   (this estimate − last quarter's actual) ÷ last quarter's actual\n"
+                       "Sequential, so it reflects seasonality — a retailer's Q1 will read\n"
+                       "badly against Q4 every year. The ▲▼ on the estimate itself is the\n"
+                       "year-on-year comparison, which is the seasonally honest one."));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -938,36 +939,51 @@ void EarningsCalendarWidget::populate() {
         eps_lbl->setToolTip(eps_tip);
         rl->addWidget(eps_lbl, 3);
 
-        // Last reported quarter's surprise — its own column, because it's a
-        // different quarter and a different question from the estimate.
-        QString surp_text = QStringLiteral("—");
-        QString surp_colour = ui::colors::TEXT_SECONDARY();
-        QString surp_tip = QStringLiteral("No reported-quarter history available for this symbol.");
-        if (e.has_surprise) {
-            surp_text = QStringLiteral("%1%2%")
-                            .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
-                            .arg(e.surprise_pct, 0, 'f', 1);
-            surp_colour = e.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
-            // Spell out both operands. "+56.8%" alone left it open to reading
-            // as a comparison against the estimate in the next column over.
-            if (e.has_prev_values) {
-                surp_tip = QStringLiteral("Quarter reported %1: %2 actual vs %3 expected → %4%5%.\n"
-                                          "Both figures are that quarter's own; the estimate beside this "
-                                          "column is for the coming print and isn't part of the sum.")
-                               .arg(e.prev_date.toString("d MMM yyyy"), fmt_eps(e.prev_actual),
-                                    fmt_eps(e.prev_estimate),
-                                    e.surprise_pct >= 0 ? QStringLiteral("+") : QStringLiteral(""))
-                               .arg(e.surprise_pct, 0, 'f', 1);
-            } else {
-                surp_tip = QStringLiteral("The last reported quarter came in %1% %2 the consensus that stood "
-                                          "for that quarter.")
-                               .arg(std::abs(e.surprise_pct), 0, 'f', 1)
-                               .arg(e.surprise_pct >= 0 ? QStringLiteral("above") : QStringLiteral("below"));
+        // Sequential: this estimate against what last quarter actually
+        // printed. Only computed when both numbers come from the same
+        // consensus panel — the estimate is Nasdaq's for rows we never fetched
+        // per-symbol, and pairing it with a Yahoo actual is the exact
+        // cross-panel mixing that made META read red in one view and green in
+        // the other.
+        QString seq_text = QStringLiteral("—");
+        QString seq_colour = ui::colors::TEXT_SECONDARY();
+        QString seq_tip = QStringLiteral("No reported-quarter figure available for this symbol.");
+        double seq_pct = 0;
+        const bool same_panel = e.est_from_yf && e.has_prev_values;
+        if (same_panel && e.has_est && earnings::sequential_pct(e.eps_est, e.prev_actual, &seq_pct)) {
+            seq_text = QStringLiteral("%1%2%")
+                           .arg(seq_pct >= 0 ? QStringLiteral("+") : QString())
+                           .arg(seq_pct, 0, 'f', 1);
+            switch (growth_verdict(e.eps_est, e.prev_actual)) {
+                case Growth::Up:
+                    seq_colour = ui::colors::POSITIVE();
+                    break;
+                case Growth::Down:
+                    seq_colour = ui::colors::NEGATIVE();
+                    break;
+                default:
+                    seq_colour = ui::colors::TEXT_PRIMARY(); // inside the flat band
+                    break;
             }
+            seq_tip = QStringLiteral("Consensus %1 for the coming quarter against %2 actually reported for "
+                                     "the quarter of %3 → %4%5%.\nSequential, so seasonality shows up here; "
+                                     "the ▲▼ on the estimate is the year-on-year read.")
+                          .arg(fmt_eps(e.eps_est), fmt_eps(e.prev_actual), e.prev_date.toString("MMM yyyy"),
+                               seq_pct >= 0 ? QStringLiteral("+") : QStringLiteral(""))
+                          .arg(seq_pct, 0, 'f', 1);
+            if (e.has_surprise) {
+                seq_tip += QStringLiteral("\nThat quarter came in %1%2% against its own consensus.")
+                               .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QStringLiteral(""))
+                               .arg(e.surprise_pct, 0, 'f', 1);
+            }
+        } else if (e.has_prev_values || e.has_surprise) {
+            seq_tip = QStringLiteral("Not shown: the estimate and the last reported figure come from "
+                                     "different consensus panels, and the difference between panels is "
+                                     "wider than the change being measured.");
         }
-        auto* surp_lbl = cell(surp_text, Qt::AlignHCenter, surp_colour);
-        surp_lbl->setToolTip(surp_tip);
-        rl->addWidget(surp_lbl, 3);
+        auto* seq_lbl = cell(seq_text, Qt::AlignHCenter, seq_colour);
+        seq_lbl->setToolTip(seq_tip);
+        rl->addWidget(seq_lbl, 3);
 
         if (mode_ == Mode::Portfolio) {
             rl->addWidget(cell(e.weight > 0 ? QStringLiteral("%1%").arg(e.weight, 0, 'f', 1) : QStringLiteral("—"),

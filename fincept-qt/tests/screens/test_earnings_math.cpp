@@ -105,6 +105,39 @@ class TestEarningsMath : public QObject {
         QVERIFY(growth_verdict(0.25, -0.75) == Growth::Up);
     }
 
+    // ── sequential_pct ───────────────────────────────────────────────────────
+
+    void sequential_is_current_over_previous() {
+        double v = 0;
+        // META: $7.22 expected for the coming quarter after $10.44 printed last
+        // quarter — the numerator is the current figure, not the other way up.
+        QVERIFY(sequential_pct(7.22, 10.44, &v));
+        QCOMPARE(qRound(v * 10) / 10.0, -30.8);
+
+        QVERIFY(sequential_pct(10.44, 7.22, &v));
+        QVERIFY(v > 0); // and the inverse pair reads positive
+    }
+
+    /// A loss-making previous quarter must not invert the sign: $0.25 expected
+    /// after a -$0.75 quarter is an improvement. A signed denominator would
+    /// report that as a decline.
+    void loss_base_keeps_the_sign_meaningful() {
+        double v = 0;
+        QVERIFY(sequential_pct(0.25, -0.75, &v));
+        QVERIFY(v > 0);
+
+        QVERIFY(sequential_pct(-1.50, -0.75, &v));
+        QVERIFY(v < 0); // a deepening loss is still negative
+    }
+
+    void zero_base_is_refused_not_infinite() {
+        double v = 123;
+        QVERIFY(!sequential_pct(1.50, 0.0, &v));
+        QVERIFY(!sequential_pct(1.50, 0.004, &v)); // under half a cent
+        QCOMPARE(v, 123.0);                        // untouched on refusal
+        QVERIFY(sequential_pct(1.50, 0.01, &v));   // a real cent is fine
+    }
+
     // ── fmt_eps ──────────────────────────────────────────────────────────────
 
     void formats_sign_outside_the_currency_symbol() {

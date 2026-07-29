@@ -40,6 +40,22 @@ enum class Growth { Unknown, Up, Flat, Down };
 /// decline claims a precision the inputs don't have, so anything inside the
 /// band reads flat. The band is relative, with an absolute floor so a
 /// near-zero year-ago EPS can't make every comparison look enormous.
+/// Sequential change: the coming quarter's consensus against what the last
+/// reported quarter actually printed. Returns false when the base is ~zero —
+/// the percentage is meaningless there, and dividing by it would produce an
+/// infinity the UI would happily render.
+///
+/// The denominator is |prev_actual| so a loss-making base keeps the sign
+/// meaningful: a $0.25 estimate after a -$0.75 quarter is an improvement (+),
+/// not a decline, which a signed denominator would claim.
+inline bool sequential_pct(double estimate, double prev_actual, double* out) {
+    constexpr double kZeroBase = 0.005; // half a cent
+    if (std::abs(prev_actual) < kZeroBase)
+        return false;
+    *out = (estimate - prev_actual) / std::abs(prev_actual) * 100.0;
+    return true;
+}
+
 inline Growth growth_verdict(double estimate, double year_ago) {
     constexpr double kFlatBand = 0.01; // 1%
     constexpr double kScaleFloor = 0.05;
