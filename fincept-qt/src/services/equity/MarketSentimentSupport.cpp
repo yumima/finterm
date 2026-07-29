@@ -74,16 +74,63 @@ bool source_has_signal(const SentimentSourceSnapshot& snapshot) {
 }
 
 SentimentSourceSnapshot parse_compare_payload(const QString& source_id, const QJsonObject& payload) {
+    return parse_compare_payload_for(source_id, QString(), payload);
+}
+
+QStringList tickers_in_compare_payload(const QJsonObject& payload) {
+    QStringList tickers;
+    for (const auto& value : extract_stocks(payload)) {
+        if (!value.isObject()) {
+            continue;
+        }
+        const auto object = value.toObject();
+        const QString ticker = object.value("ticker").toString(object.value("symbol").toString()).trimmed().toUpper();
+        if (!ticker.isEmpty() && !tickers.contains(ticker)) {
+            tickers.append(ticker);
+        }
+    }
+    return tickers;
+}
+
+SentimentSourceSnapshot parse_compare_payload_for(const QString& source_id, const QString& ticker,
+                                                  const QJsonObject& payload) {
     SentimentSourceSnapshot snapshot;
     snapshot.source_id = source_id;
     snapshot.label = source_label(source_id);
 
     const auto stocks = extract_stocks(payload);
-    if (stocks.isEmpty() || !stocks.first().isObject()) {
+    if (stocks.isEmpty()) {
         return snapshot;
     }
 
-    const auto stock = stocks.first().toObject();
+    // Empty ticker = legacy single-ticker call, where the only row is the answer.
+    QJsonObject stock;
+    if (ticker.isEmpty()) {
+        if (!stocks.first().isObject()) {
+            return snapshot;
+        }
+        stock = stocks.first().toObject();
+    } else {
+        const QString wanted = ticker.trimmed().toUpper();
+        for (const auto& value : stocks) {
+            if (!value.isObject()) {
+                continue;
+            }
+            const auto candidate = value.toObject();
+            const QString row_ticker =
+                candidate.value("ticker").toString(candidate.value("symbol").toString()).trimmed().toUpper();
+            if (row_ticker == wanted) {
+                stock = candidate;
+                break;
+            }
+        }
+        if (stock.isEmpty()) {
+            // Ticker was requested but the platform has nothing for it — a
+            // legitimate "no coverage" answer, not a parse failure.
+            return snapshot;
+        }
+    }
+
     snapshot.buzz_score = first_numeric(stock, {"buzz_score"});
     snapshot.bullish_pct = first_numeric(stock, {"bullish_pct"});
     snapshot.sentiment_score = first_numeric(stock, {"sentiment_score", "sentiment"});

@@ -36,7 +36,20 @@ class MarketSentimentService : public QObject {
     QNetworkAccessManager* nam_ = nullptr;
     quint64 active_request_id_ = 0;
 
-    static constexpr int kCacheTtlSec = 600;
+    // Adanos' free tier allows 250 requests a month and this view spends one
+    // per platform, so a 10-minute TTL — flipping between two tickers a few
+    // times — could burn a month's budget in an afternoon. Sentiment here is a
+    // rolling multi-day window that updates a few times a day; 6 hours loses
+    // nothing real, and the REFRESH button still forces a live pull.
+    static constexpr int kCacheTtlSec = 6 * 60 * 60;
+    /// `/compare` accepts up to 10 tickers for the price of one request.
+    static constexpr int kMaxBatchTickers = 10;
+
+    /// Symbols recently opened in Equity Research, most-recent-first. A
+    /// cache-filling request piggybacks these onto the batch: the four calls a
+    /// single symbol would have cost now warm up to ten, which is the
+    /// difference between ~62 and ~620 symbol-views a month on the free tier.
+    QStringList recent_symbols_;
 };
 
 } // namespace fincept::services::equity

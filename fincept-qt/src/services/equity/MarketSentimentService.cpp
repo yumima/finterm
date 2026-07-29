@@ -12,6 +12,7 @@
 #include <QUrlQuery>
 
 #include <memory>
+#include <utility>
 
 namespace fincept::services::equity {
 
@@ -21,10 +22,11 @@ constexpr auto kApiBase = "https://api.adanos.org";
 
 struct PendingSnapshotRequest {
     quint64 request_id = 0;
-    QString symbol;
+    QString symbol;      // the ticker the UI is waiting on
+    QStringList batch;   // every ticker this request paid for
+    int days = 7;
     int pending = 0;
-    MarketSentimentSnapshot snapshot;
-    QMap<QString, SentimentSourceSnapshot> sources;
+    QMap<QString, QJsonObject> payloads; // raw compare payload per source
 };
 
 QString cache_key_for_symbol(const QString& symbol, int days) {
@@ -109,68 +111,114 @@ void MarketSentimentService::fetch_snapshot(const QString& symbol, int days, boo
         }
     }
 
+    // Remember what the user looks at, so the next paid request can warm those
+    // symbols too.
+    recent_symbols_.removeAll(normalized_symbol);
+    recent_symbols_.prepend(normalized_symbol);
+    while (recent_symbols_.size() > kMaxBatchTickers * 2) {
+        recent_symbols_.removeLast();
+    }
+
+    // One request per platform covers up to ten tickers, so fill the batch with
+    // recently-viewed symbols whose cache entry is missing or expired. They
+    // cost nothing extra and spare four requests each next time.
+    QStringList batch{normalized_symbol};
+    for (const auto& candidate : std::as_const(recent_symbols_)) {
+        if (batch.size() >= kMaxBatchTickers) {
+            break;
+        }
+        if (batch.contains(candidate) || CacheManager::instance().has(cache_key_for_symbol(candidate, days))) {
+            continue;
+        }
+        batch.append(candidate);
+    }
+
     active_request_id_ += 1;
     const auto request_id = active_request_id_;
 
     auto pending = std::make_shared<PendingSnapshotRequest>();
     pending->request_id = request_id;
     pending->symbol = normalized_symbol;
+    pending->batch = batch;
+    pending->days = days;
     pending->pending = sentiment::source_ids().size();
-    pending->snapshot.symbol = normalized_symbol;
-    pending->snapshot.configured = true;
-    pending->snapshot.status = "loading";
 
-    auto finalize = [this, pending, key]() {
-        if (pending->request_id != active_request_id_) {
-            return;
-        }
+    auto finalize = [this, pending]() {
+        // Note there is no early-out on a superseded request here. The rows
+        // have already been paid for out of a 250-a-month budget, so they get
+        // cached regardless; only the emit is suppressed, so a stale response
+        // can't paint over the symbol the user has since moved to.
+        const bool is_current = (pending->request_id == active_request_id_);
 
         const auto ordered_sources = sentiment::source_ids();
-        pending->snapshot.sources.clear();
-        pending->snapshot.sources.reserve(ordered_sources.size());
 
-        double total_buzz = 0.0;
-        double total_bullish = 0.0;
-        int coverage = 0;
-
-        for (const auto& source_id : ordered_sources) {
-            const auto source = pending->sources.value(source_id, SentimentSourceSnapshot{source_id, sentiment::source_label(source_id)});
-            pending->snapshot.sources.append(source);
-            if (source.available) {
-                total_buzz += source.buzz_score;
-                total_bullish += source.bullish_pct;
-                coverage += 1;
+        // Every ticker the response carried is cached, not just the one that
+        // was asked for — the request has already been paid for either way.
+        QStringList tickers = pending->batch;
+        for (auto it = pending->payloads.cbegin(); it != pending->payloads.cend(); ++it) {
+            for (const auto& ticker : sentiment::tickers_in_compare_payload(it.value())) {
+                if (!tickers.contains(ticker)) {
+                    tickers.append(ticker);
+                }
             }
         }
 
-        pending->snapshot.coverage = coverage;
-        pending->snapshot.source_alignment = sentiment::compute_source_alignment(pending->snapshot.sources);
-        pending->snapshot.fetched_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        for (const auto& ticker : std::as_const(tickers)) {
+            MarketSentimentSnapshot snapshot;
+            snapshot.symbol = ticker;
+            snapshot.configured = true;
 
-        if (coverage > 0) {
-            pending->snapshot.available = true;
-            pending->snapshot.status = "ok";
-            pending->snapshot.average_buzz = total_buzz / coverage;
-            pending->snapshot.average_bullish_pct = total_bullish / coverage;
-        } else {
-            pending->snapshot.available = false;
-            pending->snapshot.status = "unavailable";
-            pending->snapshot.message = "No Adanos market sentiment snapshot is available for this symbol yet.";
+            double total_buzz = 0.0;
+            double total_bullish = 0.0;
+            int coverage = 0;
+
+            snapshot.sources.reserve(ordered_sources.size());
+            for (const auto& source_id : ordered_sources) {
+                auto source = sentiment::parse_compare_payload_for(source_id, ticker,
+                                                                   pending->payloads.value(source_id));
+                if (source.source_id.isEmpty()) {
+                    source.source_id = source_id;
+                    source.label = sentiment::source_label(source_id);
+                }
+                snapshot.sources.append(source);
+                if (source.available) {
+                    total_buzz += source.buzz_score;
+                    total_bullish += source.bullish_pct;
+                    coverage += 1;
+                }
+            }
+
+            snapshot.coverage = coverage;
+            snapshot.source_alignment = sentiment::compute_source_alignment(snapshot.sources);
+            snapshot.fetched_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+            if (coverage > 0) {
+                snapshot.available = true;
+                snapshot.status = "ok";
+                snapshot.average_buzz = total_buzz / coverage;
+                snapshot.average_bullish_pct = total_bullish / coverage;
+            } else {
+                snapshot.available = false;
+                snapshot.status = "unavailable";
+                snapshot.message = "No Adanos market sentiment snapshot is available for this symbol yet.";
+            }
+
+            CacheManager::instance().put(
+                cache_key_for_symbol(ticker, pending->days),
+                QVariant(QJsonDocument(sentiment::snapshot_to_json(snapshot)).toJson(QJsonDocument::Compact)),
+                kCacheTtlSec,
+                "equity");
+
+            if (is_current && ticker == pending->symbol) {
+                emit snapshot_loaded(pending->symbol, snapshot);
+            }
         }
-
-        CacheManager::instance().put(
-            key,
-            QVariant(QJsonDocument(sentiment::snapshot_to_json(pending->snapshot)).toJson(QJsonDocument::Compact)),
-            kCacheTtlSec,
-            "equity");
-
-        emit snapshot_loaded(pending->symbol, pending->snapshot);
     };
 
     for (const auto& source_id : sentiment::source_ids()) {
         QUrl url(QString("%1/%2/stocks/v1/compare").arg(kApiBase, source_id));
         QUrlQuery query;
-        query.addQueryItem("tickers", normalized_symbol);
+        query.addQueryItem("tickers", batch.join(QLatin1Char(',')));
         query.addQueryItem("days", QString::number(days));
         url.setQuery(query);
 
@@ -181,11 +229,10 @@ void MarketSentimentService::fetch_snapshot(const QString& symbol, int days, boo
             const QByteArray body = reply->readAll();
             reply->deleteLater();
 
-            SentimentSourceSnapshot snapshot;
             if (reply->error() == QNetworkReply::NoError) {
                 const auto doc = QJsonDocument::fromJson(body);
                 if (doc.isObject()) {
-                    snapshot = sentiment::parse_compare_payload(source_id, doc.object());
+                    pending->payloads.insert(source_id, doc.object());
                 }
             } else {
                 LOG_WARN(
@@ -199,12 +246,6 @@ void MarketSentimentService::fetch_snapshot(const QString& symbol, int days, boo
                 }
             }
 
-            if (snapshot.source_id.isEmpty()) {
-                snapshot.source_id = source_id;
-                snapshot.label = sentiment::source_label(source_id);
-            }
-
-            pending->sources.insert(source_id, snapshot);
             pending->pending -= 1;
             if (pending->pending == 0) {
                 finalize();
