@@ -52,6 +52,7 @@ CreatePortfolioDialog::CreatePortfolioDialog(QWidget* parent) : QDialog(parent) 
 
     // Header
     auto* title = new QLabel("CREATE NEW PORTFOLIO");
+    title->setObjectName("pfDialogTitle"); // for_edit() rewords it
     title->setStyleSheet(
         QString("color:%1; font-size:13px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
@@ -97,6 +98,7 @@ CreatePortfolioDialog::CreatePortfolioDialog(QWidget* parent) : QDialog(parent) 
     btn_layout->addWidget(cancel_btn);
 
     auto* create_btn = new QPushButton("CREATE");
+    create_btn->setObjectName("pfDialogConfirm"); // for_edit() relabels it
     create_btn->setFixedSize(90, 30);
     create_btn->setCursor(Qt::PointingHandCursor);
     create_btn->setStyleSheet(QString("QPushButton { background:%1; color:%3; border:none;"
@@ -112,6 +114,26 @@ CreatePortfolioDialog::CreatePortfolioDialog(QWidget* parent) : QDialog(parent) 
     layout->addLayout(btn_layout);
 
     name_edit_->setFocus();
+}
+
+CreatePortfolioDialog* CreatePortfolioDialog::for_edit(const portfolio::Portfolio& existing, QWidget* parent) {
+    auto* dlg = new CreatePortfolioDialog(parent);
+    dlg->setWindowTitle("Edit Portfolio");
+    if (auto* title = dlg->findChild<QLabel*>("pfDialogTitle")) {
+        title->setText("EDIT PORTFOLIO");
+    }
+    if (auto* confirm = dlg->findChild<QPushButton*>("pfDialogConfirm")) {
+        confirm->setText("SAVE");
+    }
+    dlg->name_edit_->setText(existing.name);
+    dlg->owner_edit_->setText(existing.owner);
+    const int idx = dlg->currency_cb_->findText(existing.currency.isEmpty() ? QStringLiteral("USD")
+                                                                            : existing.currency);
+    if (idx >= 0) {
+        dlg->currency_cb_->setCurrentIndex(idx);
+    }
+    dlg->name_edit_->selectAll();
+    return dlg;
 }
 
 QString CreatePortfolioDialog::name() const {

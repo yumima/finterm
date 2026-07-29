@@ -191,6 +191,34 @@ void PortfolioScreen::build_ui() {
     connect(command_bar_, &PortfolioCommandBar::portfolio_selected, this, &PortfolioScreen::on_portfolio_selected);
     connect(command_bar_, &PortfolioCommandBar::create_requested, this, &PortfolioScreen::on_create_requested);
     connect(command_bar_, &PortfolioCommandBar::delete_requested, this, &PortfolioScreen::on_delete_requested);
+    connect(command_bar_, &PortfolioCommandBar::edit_requested, this, [this](const QString& id) {
+        const portfolio::Portfolio* existing = nullptr;
+        for (const auto& p : portfolios_) {
+            if (p.id == id) {
+                existing = &p;
+                break;
+            }
+        }
+        if (!existing)
+            return;
+        // Not WA_DeleteOnClose: the values are read after exec() returns, and
+        // that attribute makes the dialog's lifetime depend on when the event
+        // loop next runs. Explicit deleteLater() keeps it obvious.
+        auto* dlg = CreatePortfolioDialog::for_edit(*existing, this);
+        const bool accepted = (dlg->exec() == QDialog::Accepted);
+        const QString new_name = dlg->name();
+        const QString new_owner = dlg->owner();
+        const QString new_currency = dlg->currency();
+        dlg->deleteLater();
+        if (!accepted)
+            return;
+
+        services::PortfolioService::instance().update_portfolio(id, new_name, new_owner, new_currency);
+        // The ribbon/status bar render the name from the loaded summary, which
+        // still holds the old one until it is rebuilt.
+        if (id == selected_id_)
+            services::PortfolioService::instance().load_summary(id);
+    });
     // User clicked the refresh button → bypass cache so they always feel "live".
     connect(command_bar_, &PortfolioCommandBar::refresh_requested, this,
             [this]() { request_refresh(/*force_fresh=*/true); });

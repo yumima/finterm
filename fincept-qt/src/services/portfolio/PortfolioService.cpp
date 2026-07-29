@@ -248,6 +248,32 @@ void PortfolioService::delete_portfolio(const QString& id) {
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
+void PortfolioService::update_portfolio(const QString& id, const QString& name, const QString& owner,
+                                       const QString& currency) {
+    if (id.isEmpty() || name.trimmed().isEmpty()) {
+        return;
+    }
+    auto& repo = PortfolioRepository::instance();
+    // Keep the description: the edit dialog doesn't expose it, and passing the
+    // default would silently wipe whatever an import or the MCP tools set.
+    QString description;
+    if (const auto existing = repo.get_portfolio(id); existing.is_ok()) {
+        description = existing.value().description;
+    }
+
+    const auto result = repo.update_portfolio(id, name.trimmed(), owner.trimmed(),
+                                              currency.isEmpty() ? QStringLiteral("USD") : currency, description);
+    if (result.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to update portfolio: " + QString::fromStdString(result.error()));
+        return;
+    }
+
+    // The cached summary carries the portfolio header (name/currency), so it
+    // would keep serving the old name until its TTL expired.
+    invalidate_cache(id);
+    load_portfolios();
+}
+
 void PortfolioService::load_summary(const QString& portfolio_id) {
     // Check in-memory cache first (P11). 5-min TTL — short-circuits everything.
     // Copy the cached summary out before releasing the lock: emitting a signal

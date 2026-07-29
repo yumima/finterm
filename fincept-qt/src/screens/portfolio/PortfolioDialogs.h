@@ -20,6 +20,10 @@ class CreatePortfolioDialog : public QDialog {
     Q_OBJECT
   public:
     explicit CreatePortfolioDialog(QWidget* parent = nullptr);
+    /// Rename/edit an existing portfolio: same form, prefilled, different
+    /// wording. The repository has supported update_portfolio() all along —
+    /// nothing ever called it, so a portfolio's name was fixed at creation.
+    static CreatePortfolioDialog* for_edit(const portfolio::Portfolio& existing, QWidget* parent = nullptr);
 
     QString name() const;
     QString owner() const;

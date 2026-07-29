@@ -32,6 +32,8 @@ class PortfolioCommandBar : public QWidget {
     void portfolio_selected(QString id);
     void create_requested();
     void delete_requested(QString id);
+    /// Rename / re-owner the selected portfolio.
+    void edit_requested(QString id);
     void buy_requested();
     void sell_requested();
     void dividend_requested();
@@ -66,6 +68,7 @@ class PortfolioCommandBar : public QWidget {
     QLineEdit* search_edit_ = nullptr;
     QListWidget* portfolio_list_ = nullptr;
     QPushButton* dd_create_btn_ = nullptr;
+    QPushButton* dd_rename_btn_ = nullptr;
     QPushButton* dd_delete_btn_ = nullptr;
     QPushButton* dd_export_csv_btn_ = nullptr;
     QPushButton* dd_export_json_btn_ = nullptr;

@@ -26,6 +26,10 @@ class PortfolioService : public QObject {
     void create_portfolio(const QString& name, const QString& owner, const QString& currency,
                           const QString& description = {});
     void delete_portfolio(const QString& id);
+    /// Rename / re-owner / re-denominate an existing portfolio. The repository
+    /// has always supported this; nothing surfaced it, so a portfolio's name
+    /// was fixed at creation and could only be changed by editing the database.
+    void update_portfolio(const QString& id, const QString& name, const QString& owner, const QString& currency);
 
     // ── Summary (assets + live quotes) ───────────────────────────────────────
     void load_summary(const QString& portfolio_id);

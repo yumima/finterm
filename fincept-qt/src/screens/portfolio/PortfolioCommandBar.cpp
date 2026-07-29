@@ -187,6 +187,21 @@ void PortfolioCommandBar::build_portfolio_selector() {
     });
     btn_row->addWidget(dd_create_btn_);
 
+    // Rename lives next to Delete because that is where a user goes looking
+    // for "do something to this portfolio". Without it the name was fixed at
+    // creation — the repository could rename, nothing called it.
+    dd_rename_btn_ = new QPushButton("RENAME");
+    dd_rename_btn_->setFixedHeight(24);
+    dd_rename_btn_->setCursor(Qt::PointingHandCursor);
+    connect(dd_rename_btn_, &QPushButton::clicked, this, [this]() {
+        if (!selected_id_.isEmpty()) {
+            dropdown_->hide();
+            dropdown_visible_ = false;
+            emit edit_requested(selected_id_);
+        }
+    });
+    btn_row->addWidget(dd_rename_btn_);
+
     dd_delete_btn_ = new QPushButton("DELETE");
     dd_delete_btn_->setFixedHeight(24);
     dd_delete_btn_->setCursor(Qt::PointingHandCursor);
@@ -581,6 +596,7 @@ void PortfolioCommandBar::apply_dropdown_styles() {
                                  "QPushButton:hover, QPushButton:focus { background:%1; color:%2; outline:none; }")
                              .arg(accent, ui::colors::BG_BASE()));
     };
+    outline_lg(dd_rename_btn_, ui::colors::AMBER());
     outline_lg(dd_delete_btn_, ui::colors::NEGATIVE());
     // Exports share CYAN — paired data-OUT operations. Import gets the
     // amber accent (paired with the CREATE NEW above): both bring new
