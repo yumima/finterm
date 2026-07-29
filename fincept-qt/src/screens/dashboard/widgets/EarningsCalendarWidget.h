@@ -60,8 +60,15 @@ class EarningsCalendarWidget : public BaseWidget {
         bool has_est = false;
         double eps_ly = 0; // year-ago quarter's EPS — the growth comparison
         bool has_ly = false;
-        double surprise_pct = 0; // last reported quarter's surprise
+        // Last quarter that was actually reported: what it printed, what was
+        // expected of it, and the resulting surprise. All three belong to that
+        // past quarter — none of them relates to the estimate shown alongside.
+        double surprise_pct = 0;
         bool has_surprise = false;
+        QDate prev_date;
+        double prev_actual = 0;
+        double prev_estimate = 0;
+        bool has_prev_values = false;
         // Which consensus panel the estimate/year-ago pair came from. Nasdaq
         // and Yahoo publish different numbers for the same print, so a row must
         // never mix them — see growth_verdict() in the .cpp.

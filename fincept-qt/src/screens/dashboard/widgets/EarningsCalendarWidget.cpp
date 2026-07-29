@@ -122,11 +122,16 @@ void EarningsCalendarWidget::build_body() {
         QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
                        "▲ green / ▼ red compares it with the same quarter a year ago —\n"
                        "i.e. whether analysts expect growth, not a beat or a miss."));
-    surprise_header_ = make_hdr("LAST Q vs EST", 3, Qt::AlignHCenter);
+    // NOT "LAST Q vs EST": sitting beside a column headed EPS EST, that read as
+    // a comparison against *this* estimate. Both numbers behind this figure
+    // belong to the previous quarter — nothing current enters it.
+    surprise_header_ = make_hdr("PREV Q SURP", 3, Qt::AlignHCenter);
     surprise_header_->setToolTip(
-        QStringLiteral("Last quarter that was actually reported: how far the reported EPS\n"
-                       "landed above (+) or below (−) the consensus estimate at the time.\n"
-                       "History — it says nothing about the coming print."));
+        QStringLiteral("Surprise on the last quarter that was actually reported:\n"
+                       "   (reported EPS − consensus for that same quarter) ÷ consensus\n"
+                       "Positive = it came in above what was expected of it.\n"
+                       "Both figures are from that past quarter — this does not\n"
+                       "compare against the estimate in the column beside it."));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -702,15 +707,27 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
         (d < today ? past : future).append(p);
     }
 
-    // Most recent reported quarter — the surprise badge.
+    // Most recent reported quarter. Keep the two numbers behind the surprise,
+    // not just the percentage — the tooltip shows both so there's no doubt
+    // about which pair is being divided by which.
     double surprise = 0;
     bool has_surprise = false;
+    QDate prev_date;
+    double prev_actual = 0;
+    double prev_estimate = 0;
+    bool has_prev_values = false;
     for (auto it = past.crbegin(); it != past.crend(); ++it) {
-        if (it->has_surprise) {
-            surprise = it->surprise;
-            has_surprise = true;
-            break;
+        if (!it->has_surprise)
+            continue;
+        surprise = it->surprise;
+        has_surprise = true;
+        prev_date = it->date;
+        if (it->has_actual && it->has_estimate) {
+            prev_actual = it->actual;
+            prev_estimate = it->estimate;
+            has_prev_values = true;
         }
+        break;
     }
 
     // Year-ago comparison quarter: the reported quarter closest to one year
@@ -748,6 +765,10 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
             if (has_surprise) {
                 e.surprise_pct = surprise;
                 e.has_surprise = true;
+                e.prev_date = prev_date;
+                e.prev_actual = prev_actual;
+                e.prev_estimate = prev_estimate;
+                e.has_prev_values = has_prev_values;
             }
             const Point* next = nullptr;
             for (const auto& f : future) {
@@ -781,6 +802,10 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
     e.eps_est = next.estimate;
     e.surprise_pct = surprise;
     e.has_surprise = has_surprise;
+    e.prev_date = prev_date;
+    e.prev_actual = prev_actual;
+    e.prev_estimate = prev_estimate;
+    e.has_prev_values = has_prev_values;
     const qint64 days = today.daysTo(next.date);
     e.when = days == 0 ? QStringLiteral("today") : QStringLiteral("in %1d").arg(days);
     e.held = true;
@@ -923,9 +948,22 @@ void EarningsCalendarWidget::populate() {
                             .arg(e.surprise_pct >= 0 ? QStringLiteral("+") : QString())
                             .arg(e.surprise_pct, 0, 'f', 1);
             surp_colour = e.surprise_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
-            surp_tip = QStringLiteral("Last quarter's reported EPS came in %1% %2 the consensus estimate.")
-                           .arg(std::abs(e.surprise_pct), 0, 'f', 1)
-                           .arg(e.surprise_pct >= 0 ? QStringLiteral("above") : QStringLiteral("below"));
+            // Spell out both operands. "+56.8%" alone left it open to reading
+            // as a comparison against the estimate in the next column over.
+            if (e.has_prev_values) {
+                surp_tip = QStringLiteral("Quarter reported %1: %2 actual vs %3 expected → %4%5%.\n"
+                                          "Both figures are that quarter's own; the estimate beside this "
+                                          "column is for the coming print and isn't part of the sum.")
+                               .arg(e.prev_date.toString("d MMM yyyy"), fmt_eps(e.prev_actual),
+                                    fmt_eps(e.prev_estimate),
+                                    e.surprise_pct >= 0 ? QStringLiteral("+") : QStringLiteral(""))
+                               .arg(e.surprise_pct, 0, 'f', 1);
+            } else {
+                surp_tip = QStringLiteral("The last reported quarter came in %1% %2 the consensus that stood "
+                                          "for that quarter.")
+                               .arg(std::abs(e.surprise_pct), 0, 'f', 1)
+                               .arg(e.surprise_pct >= 0 ? QStringLiteral("above") : QStringLiteral("below"));
+            }
         }
         auto* surp_lbl = cell(surp_text, Qt::AlignHCenter, surp_colour);
         surp_lbl->setToolTip(surp_tip);
