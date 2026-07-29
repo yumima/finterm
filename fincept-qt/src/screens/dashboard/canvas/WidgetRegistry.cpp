@@ -42,129 +42,134 @@ WidgetRegistry& WidgetRegistry::instance() {
 
 WidgetRegistry::WidgetRegistry() {
     // 12-column grid: default_w, default_h, min_w, min_h
+    // min_h is 1 row across the board — default_h still opens the widget at a
+    // comfortable height, but nothing stops the user dragging it down to a
+    // strip. A larger min_h only ever produced blank bands the user couldn't
+    // get rid of; content that no longer fits is clipped, which is visible and
+    // recoverable, unlike a resize that silently refuses to move.
     // Factory receives per-instance config (empty QJsonObject for fresh widgets).
     // Existing widgets ignore it until they opt into configurable behaviour.
 
     // ── Markets ───────────────────────────────────────────────────────────────
-    register_widget({"indices", "Market Indices", "Markets", "Major global indices — SPY, QQQ, DIA, IWM", 4, 5, 3, 4,
+    register_widget({"indices", "Market Indices", "Markets", "Major global indices — SPY, QQQ, DIA, IWM", 4, 5, 3, 1,
                      [](const QJsonObject&) { return widgets::create_indices_widget(); }});
 
-    register_widget({"forex", "Forex Pairs", "Markets", "Major FX pairs — EURUSD, GBPUSD, USDJPY", 4, 4, 2, 3,
+    register_widget({"forex", "Forex Pairs", "Markets", "Major FX pairs — EURUSD, GBPUSD, USDJPY", 4, 4, 2, 1,
                      [](const QJsonObject&) { return widgets::create_forex_widget(); }});
 
-    register_widget({"crypto", "Crypto Markets", "Markets", "Top cryptocurrencies — BTC, ETH, BNB, SOL", 4, 4, 2, 3,
+    register_widget({"crypto", "Crypto Markets", "Markets", "Top cryptocurrencies — BTC, ETH, BNB, SOL", 4, 4, 2, 1,
                      [](const QJsonObject&) { return widgets::create_crypto_widget(); }});
 
-    register_widget({"commodities", "Commodities", "Markets", "Gold, Oil, Natural Gas, Copper", 4, 4, 2, 3,
+    register_widget({"commodities", "Commodities", "Markets", "Gold, Oil, Natural Gas, Copper", 4, 4, 2, 1,
                      [](const QJsonObject&) { return widgets::create_commodities_widget(); }});
 
-    register_widget({"sector_heatmap", "Sector Heatmap", "Markets", "S&P 500 sector performance heatmap", 6, 5, 3, 4,
+    register_widget({"sector_heatmap", "Sector Heatmap", "Markets", "S&P 500 sector performance heatmap", 6, 5, 3, 1,
                      [](const QJsonObject&) { return new widgets::SectorHeatmapWidget; }});
 
-    register_widget({"top_movers", "Top Movers", "Markets", "Biggest gainers and losers today", 6, 5, 3, 4,
+    register_widget({"top_movers", "Top Movers", "Markets", "Biggest gainers and losers today", 6, 5, 3, 1,
                      [](const QJsonObject&) { return new widgets::TopMoversWidget; }});
 
-    register_widget({"sentiment", "Market Sentiment", "Markets", "Fear & greed, bull/bear indicators", 4, 4, 2, 3,
+    register_widget({"sentiment", "Market Sentiment", "Markets", "Fear & greed, bull/bear indicators", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::MarketSentimentWidget; }});
 
     // ── Research ──────────────────────────────────────────────────────────────
-    register_widget({"news", "News Feed", "Research", "Latest financial news headlines", 8, 4, 3, 3,
+    register_widget({"news", "News Feed", "Research", "Latest financial news headlines", 8, 4, 3, 1,
                      [](const QJsonObject&) { return new widgets::NewsWidget; }});
 
-    register_widget({"stock_quote", "Stock Quote", "Research", "Single stock detail — price, volume, chart", 4, 5, 2, 3,
+    register_widget({"stock_quote", "Stock Quote", "Research", "Single stock detail — price, volume, chart", 4, 5, 2, 1,
                      [](const QJsonObject& cfg) {
                          const QString sym = cfg.value("symbol").toString("AAPL");
                          return new widgets::StockQuoteWidget(sym);
                      }});
 
     register_widget({"screener", "Stock Screener", "Research", "Filter stocks by fundamentals and technicals", 6, 5, 3,
-                     4, [](const QJsonObject&) { return new widgets::ScreenerWidget; }});
+                     1, [](const QJsonObject&) { return new widgets::ScreenerWidget; }});
 
-    register_widget({"econ_calendar", "Economic Calendar", "Research", "Upcoming macro events and releases", 4, 4, 2, 3,
+    register_widget({"econ_calendar", "Economic Calendar", "Research", "Upcoming macro events and releases", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::EconomicCalendarWidget; }});
 
     register_widget({"ipo_calendar", "IPO Calendar", "Research",
-                     "Upcoming and recently priced IPOs — this month and next", 4, 5, 2, 3,
+                     "Upcoming and recently priced IPOs — this month and next", 4, 5, 2, 1,
                      [](const QJsonObject&) { return new widgets::IpoCalendarWidget; }});
 
     // ── Portfolio ─────────────────────────────────────────────────────────────
-    register_widget({"watchlist", "Watchlist", "Portfolio", "Your saved symbols with live prices", 6, 4, 2, 3,
+    register_widget({"watchlist", "Watchlist", "Portfolio", "Your saved symbols with live prices", 6, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::WatchlistWidget; }});
 
-    register_widget({"performance", "Performance", "Portfolio", "Portfolio P&L — today, week, month, YTD", 4, 5, 3, 4,
+    register_widget({"performance", "Performance", "Portfolio", "Portfolio P&L — today, week, month, YTD", 4, 5, 3, 1,
                      [](const QJsonObject&) { return new widgets::PerformanceWidget; }});
 
     register_widget({"portfolio_summary", "Portfolio Summary", "Portfolio",
-                     "Holdings overview with allocation breakdown", 6, 4, 2, 3,
+                     "Holdings overview with allocation breakdown", 6, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::PortfolioSummaryWidget; }});
 
     register_widget({"risk_metrics", "Risk Metrics", "Portfolio", "Volatility, beta, drawdown, Sharpe ratio", 4, 5, 3,
-                     4, [](const QJsonObject&) { return new widgets::RiskMetricsWidget; }});
+                     1, [](const QJsonObject&) { return new widgets::RiskMetricsWidget; }});
 
     // ── Trading ───────────────────────────────────────────────────────────────
-    register_widget({"quick_trade", "Quick Trade", "Trading", "Fast order entry for crypto and equities", 4, 5, 2, 3,
+    register_widget({"quick_trade", "Quick Trade", "Trading", "Fast order entry for crypto and equities", 4, 5, 2, 1,
                      [](const QJsonObject&) { return new widgets::QuickTradeWidget; }});
 
     register_widget({"open_positions", "Open Positions", "Trading",
-                     "Live open positions for a broker account — pick via gear icon", 6, 5, 3, 3,
+                     "Live open positions for a broker account — pick via gear icon", 6, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::OpenPositionsWidget(cfg); }});
 
     register_widget({"working_orders", "Working Orders", "Trading",
-                     "Pending/working orders for a broker account — click × to cancel", 6, 5, 3, 3,
+                     "Pending/working orders for a broker account — click × to cancel", 6, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::OrderBookMiniWidget(cfg); }});
 
     register_widget({"margin_usage", "Margin Usage", "Trading",
-                     "Broker account funds — available, used margin, total, usage %", 3, 4, 2, 3,
+                     "Broker account funds — available, used margin, total, usage %", 3, 4, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::MarginUsageWidget(cfg); }});
 
     register_widget({"today_pnl", "Today P&L", "Trading",
-                     "Aggregate broker account P&L — total, day, realized, open positions", 3, 4, 2, 3,
+                     "Aggregate broker account P&L — total, day, realized, open positions", 3, 4, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::TodayPnLWidget(cfg); }});
 
     register_widget({"holdings", "Holdings", "Portfolio",
-                     "Long-term broker holdings — avg cost, LTP, P&L %", 6, 5, 3, 3,
+                     "Long-term broker holdings — avg cost, LTP, P&L %", 6, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::BrokerHoldingsWidget(cfg); }});
 
     // ── Tools ────────────────────────────────────────────────────────────────
     register_widget({"video_player", "Live TV / Streams", "Tools",
-                     "Financial TV — Bloomberg, CNBC, Reuters and custom streams", 4, 5, 3, 4,
+                     "Financial TV — Bloomberg, CNBC, Reuters and custom streams", 4, 5, 3, 1,
                      [](const QJsonObject&) { return widgets::create_video_player_widget(); }});
 
     register_widget({"recent_files", "Recent Files", "Tools",
-                     "Recently saved files — exports, reports, notebooks and more", 4, 4, 2, 3,
+                     "Recently saved files — exports, reports, notebooks and more", 4, 4, 2, 1,
                      [](const QJsonObject&) { return new widgets::RecentFilesWidget; }});
 
     register_widget({"quote_strip", "Quote Strip", "Markets",
-                     "Configurable live quote list — pick symbols via gear icon", 3, 5, 2, 3,
+                     "Configurable live quote list — pick symbols via gear icon", 3, 5, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::MarketQuoteStripWidget(cfg); }});
 
     register_widget({"crypto_ticker", "Crypto Ticker", "Markets",
-                     "Live Kraken / HyperLiquid ticker strip — configurable pair list", 3, 5, 2, 3,
+                     "Live Kraken / HyperLiquid ticker strip — configurable pair list", 3, 5, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::CryptoTickerWidget(cfg); }});
 
     register_widget({"polymarket_prices", "Polymarket", "Markets",
-                     "Live prediction-market prices — configurable asset list", 3, 5, 2, 3,
+                     "Live prediction-market prices — configurable asset list", 3, 5, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::PolymarketPriceWidget(cfg); }});
 
     register_widget({"agent_errors", "Agent Errors", "Tools",
-                     "Recent agent execution failures — subscribes to agent:error:*", 5, 4, 3, 3,
+                     "Recent agent execution failures — subscribes to agent:error:*", 5, 4, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::AgentErrorsWidget(cfg); }});
 
     register_widget({"sparklines", "Sparklines", "Markets",
-                     "Configurable sparkline strip — subscribes to market:sparkline:*", 4, 5, 3, 3,
+                     "Configurable sparkline strip — subscribes to market:sparkline:*", 4, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::SparklineStripWidget(cfg); }});
 
     register_widget({"trade_tape", "Trade Tape", "Markets",
-                     "Live trade prints for a crypto pair — ws:<exchange>:trades:<pair>", 4, 5, 3, 4,
+                     "Live trade prints for a crypto pair — ws:<exchange>:trades:<pair>", 4, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::TradeTapeWidget(cfg); }});
 
     register_widget({"news_category", "News — Category", "Research",
-                     "Category-filtered news headlines — news:category:<category>", 5, 5, 3, 3,
+                     "Category-filtered news headlines — news:category:<category>", 5, 5, 3, 1,
                      [](const QJsonObject& cfg) { return new widgets::NewsCategoryWidget(cfg); }});
 
     register_widget({"web_scraper", "Web Scraper", "Tools",
                      "Scrape tables from any URL — auto-detects HTML, JSON, CSV, XML/RSS", 6, 5, 3,
-                     3, [](const QJsonObject& cfg) { return new widgets::WebScraperWidget(cfg); }});
+                     1, [](const QJsonObject& cfg) { return new widgets::WebScraperWidget(cfg); }});
 }
 
 void WidgetRegistry::register_widget(WidgetMeta meta) {

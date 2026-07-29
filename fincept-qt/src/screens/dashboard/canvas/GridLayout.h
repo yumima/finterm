@@ -17,7 +17,11 @@ struct GridCell {
     int w = 4; // column span  [1, cols]
     int h = 4; // row span     [1, inf)
     int min_w = 2;
-    int min_h = 3;
+    // One row (60 px) — just enough for the title bar. Widgets whose content
+    // needs less height than their default were otherwise stuck with a blank
+    // band the user could never drag away; the grid no longer vetoes a shrink,
+    // and content that can't fit is simply clipped.
+    int min_h = 1;
 
     bool operator==(const GridCell& o) const { return x == o.x && y == o.y && w == o.w && h == o.h; }
 };

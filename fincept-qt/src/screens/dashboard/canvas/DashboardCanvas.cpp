@@ -96,12 +96,23 @@ void DashboardCanvas::load_layout(const GridLayout& layout) {
     if (width() > 0)
         layout_.cols = responsive_cols(width());
 
-    for (const auto& item : layout_.items) {
+    for (auto& item : layout_.items) {
         const WidgetMeta* meta = WidgetRegistry::instance().find(item.id);
         if (!meta) {
             LOG_WARN("Canvas", QString("Unknown widget type: %1").arg(item.id));
             continue;
         }
+        // The registry — not the saved blob — is the source of truth for the
+        // minimums. They're persisted alongside position, so a layout saved
+        // under an older build would otherwise pin its tiles to that build's
+        // floor forever and the user could never shrink them.
+        item.cell.min_w = meta->min_w;
+        item.cell.min_h = meta->min_h;
+        // Growing w to reach a raised min_w can push the tile past the right
+        // edge on a responsive (6/9-column) grid — clamp both back in.
+        item.cell.w = std::min(std::max(item.cell.w, meta->min_w), layout_.cols);
+        item.cell.x = std::max(0, std::min(item.cell.x, layout_.cols - item.cell.w));
+        item.cell.h = std::max(item.cell.h, meta->min_h);
         auto* widget = meta->factory(item.config);
         auto* tile = new WidgetTile(item.instance_id, widget, this);
         connect_tile(tile);
@@ -257,7 +268,7 @@ void DashboardCanvas::on_drag_moved(WidgetTile* tile, QPoint canvas_pos) {
     new_ghost.w = orig ? orig->cell.w : new_ghost.w;
     new_ghost.h = orig ? orig->cell.h : new_ghost.h;
     new_ghost.min_w = orig ? orig->cell.min_w : 2;
-    new_ghost.min_h = orig ? orig->cell.min_h : 3;
+    new_ghost.min_h = orig ? orig->cell.min_h : 1;
 
     if (new_ghost == ghost_cell_)
         return;

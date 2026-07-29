@@ -85,6 +85,16 @@ WidgetTile::WidgetTile(const QString& instance_id, widgets::BaseWidget* content,
     vl->setSpacing(0);
     vl->addWidget(content_);
 
+    // The grid owns tile geometry. Without this the layout propagates the
+    // content's minimumSizeHint up as the tile's own minimum, and setGeometry
+    // silently clamps to it — dragging the bottom edge up did nothing once a
+    // widget's stacked fixed-height rows added up past the target height, no
+    // matter how low the grid's min_h went. SetNoConstraint keeps the tile at
+    // whatever the grid assigns; content taller than that is clipped.
+    vl->setSizeConstraint(QLayout::SetNoConstraint);
+    setMinimumSize(0, 0);
+    content_->setMinimumHeight(0);
+
     // Resize grip — transparent overlay in bottom-right corner, always on top
     grip_ = new ResizeGrip(this);
     grip_->setFixedSize(kGripSize, kGripSize);
