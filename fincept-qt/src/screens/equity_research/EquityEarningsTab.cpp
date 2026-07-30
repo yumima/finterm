@@ -135,11 +135,14 @@ void fit_table_height(QTableWidget* t) {
 /// Repaint a monospace stat value with a state-dependent colour. Always call
 /// it (even for the placeholder) so a value left red by the previous symbol
 /// doesn't bleed into the next one.
-void set_stat(QLabel* l, const QString& text, const QString& color) {
+/// `px` must match the size the label was built with — the stylesheet is
+/// replaced wholesale, so repainting at the default would quietly resize any
+/// stat that was deliberately made smaller.
+void set_stat(QLabel* l, const QString& text, const QString& color, int px = 16) {
     l->setText(text);
-    l->setStyleSheet(QString("color:%1; font-size:16px; font-weight:700; font-family:monospace; "
+    l->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:monospace; "
                              "background:transparent; border:0;")
-                         .arg(color));
+                         .arg(color).arg(px));
 }
 
 QTableWidgetItem* cell(const QString& text, const QString& color = QString(),
@@ -368,6 +371,12 @@ QWidget* EquityEarningsTab::build_summary_row() {
                                          .arg(ui::colors::TEXT_PRIMARY()));
     verdict_body->addWidget(verdict_headline_);
 
+    verdict_horizon_ = new QLabel;
+    verdict_horizon_->setWordWrap(true);
+    verdict_horizon_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                        .arg(ui::colors::TEXT_TERTIARY()));
+    verdict_body->addWidget(verdict_horizon_);
+
     // Caveats live with the verdict, not down in the breakdown: they are the
     // reasons not to trust the badge sitting immediately above them, and that
     // is exactly where they need to be read.
@@ -386,9 +395,22 @@ QWidget* EquityEarningsTab::build_summary_row() {
     auto* setup_grid = new QGridLayout;
     setup_grid->setSpacing(12);
     setup_grid->addWidget(make_stat("TYPICAL MOVE", setup_move_, "#22d3ee"), 0, 0);
-    setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY()), 0, 1);
-    setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY()), 1, 0);
-    setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY()), 1, 1);
+    setup_grid->addWidget(make_stat("EST SPREAD", setup_spread_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
+    setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
+    setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
+    setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 2, 0);
+    setup_grid->addWidget(make_stat("RUN-UP 20D", setup_runup20_, ui::colors::TEXT_PRIMARY(), 13), 2, 1);
+    setup_move_->setToolTip(QStringLiteral(
+        "Mean absolute close-to-close move over past prints — how big a session this name "
+        "usually has on earnings, regardless of direction."));
+    setup_spread_->setToolTip(QStringLiteral(
+        "How far apart analysts are on the coming quarter's EPS: (high − low) as a share of "
+        "the mean. A risk gauge, not a direction — a wide spread means a bigger surprise "
+        "whichever way it lands, which is why it never moves the score."));
+    setup_runup_->setToolTip(QStringLiteral("Price change over the last 5 sessions."));
+    setup_runup20_->setToolTip(QStringLiteral(
+        "Price change over the last 20 sessions — the slower version of the same question: "
+        "how much of the expected news is already in the price."));
     setup_body->addLayout(setup_grid);
     setup_body->addStretch();
     hl->addWidget(setup_panel, 1);
@@ -645,6 +667,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                                                         [](const auto& c) { return c.available; }))
                                      .arg(verdict.components.size()));
     verdict_headline_->setText(verdict.headline);
+    verdict_horizon_->setText(verdict.horizon_note);
 
     // ── Setup card ───────────────────────────────────────────────────────────
     set_stat(setup_move_,
@@ -652,22 +675,34 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                  ? QString("±%1%").arg(QString::number(verdict.typical_move_pct, 'f', 1))
                  : ui::formatting::placeholder(),
              "#22d3ee");
+    // Beat rate is descriptive only now — the track-record leg scores the size
+    // of the surprise against its own spread, because nearly every large cap
+    // beats. Colouring it as though a high rate were bullish would contradict
+    // the leg sitting directly below it, so it stays neutral.
     set_stat(setup_beat_,
              verdict.scored_quarters > 0 ? QString("%1%  (%2q)")
                                                .arg(QString::number(verdict.beat_rate * 100.0, 'f', 0))
                                                .arg(verdict.scored_quarters)
                                          : ui::formatting::placeholder(),
-             verdict.scored_quarters == 0 ? ui::colors::TEXT_PRIMARY()
-             : verdict.beat_rate >= 0.75  ? ui::colors::POSITIVE()
-             : verdict.beat_rate <= 0.4   ? ui::colors::NEGATIVE()
-                                          : ui::colors::TEXT_PRIMARY());
+             ui::colors::TEXT_PRIMARY(), 13);
     set_stat(setup_reaction_,
              verdict.reaction_quarters > 0 ? opt_pct(verdict.avg_reaction_pct)
                                            : ui::formatting::placeholder(),
              verdict.reaction_quarters > 0 ? color_for(verdict.avg_reaction_pct)
-                                           : ui::colors::TEXT_PRIMARY());
+                                           : ui::colors::TEXT_PRIMARY(),
+             13);
+    // The consensus spread is a magnitude, never a direction: amber when it is
+    // wide enough to matter, plain otherwise, but never red or green.
+    set_stat(setup_spread_,
+             verdict.dispersion_pct.has_value()
+                 ? QString("%1% wide").arg(QString::number(*verdict.dispersion_pct, 'f', 0))
+                 : ui::formatting::placeholder(),
+             verdict.dispersion_is_wide ? ui::colors::WARNING() : ui::colors::TEXT_PRIMARY(),
+             13);
     set_stat(setup_runup_, opt_pct(a.runup_5d_pct),
-             a.runup_5d_pct.has_value() ? color_for(*a.runup_5d_pct) : ui::colors::TEXT_PRIMARY());
+             a.runup_5d_pct.has_value() ? color_for(*a.runup_5d_pct) : ui::colors::TEXT_PRIMARY(), 13);
+    set_stat(setup_runup20_, opt_pct(a.runup_20d_pct),
+             a.runup_20d_pct.has_value() ? color_for(*a.runup_20d_pct) : ui::colors::TEXT_PRIMARY(), 13);
 
     fill_scorecard(verdict);
     fill_history(a, verdict);

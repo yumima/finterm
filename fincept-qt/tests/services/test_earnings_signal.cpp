@@ -59,6 +59,17 @@ EarningsTrendRow trend(const QString& period, double current, double d30, double
     return t;
 }
 
+const SignalComponent* leg(const EarningsVerdict& v, const QString& name) {
+    for (const auto& c : v.components)
+        if (c.name == name) return &c;
+    return nullptr;
+}
+
+double weight_of(const EarningsVerdict& v, const QString& name) {
+    const auto* c = leg(v, name);
+    return c ? c->weight : 0.0;
+}
+
 EarningsRevisionRow revision(const QString& period, double up30, double down30) {
     EarningsRevisionRow r;
     r.period = period;
@@ -78,7 +89,10 @@ EarningsAnalysis bullish_fixture() {
     a.next.eps_growth = 0.30;   // +30% YoY
     a.next.rev_growth = 0.20;
     a.trend.append(trend("0q", 2.10, 2.00, 1.90));       // estimates being raised
+    a.trend.append(trend("+1q", 2.30, 2.20, 2.05));      // …and so is next quarter's
+    a.trend.append(trend("+1y", 9.20, 9.00, 8.60));
     a.revisions.append(revision("0q", 12, 0));
+    a.revisions.append(revision("+1q", 10, 1));
     EarningsGrowthRow g;
     g.period = "0q";
     g.stock = 0.30;
@@ -100,8 +114,11 @@ EarningsAnalysis bearish_fixture() {
     a.next.rev_growth = -0.15;
     a.trend.clear();
     a.trend.append(trend("0q", 1.80, 2.00, 2.20));       // estimates being cut
+    a.trend.append(trend("+1q", 1.95, 2.15, 2.40));      // …next quarter harder still
+    a.trend.append(trend("+1y", 7.80, 8.40, 9.10));
     a.revisions.clear();
     a.revisions.append(revision("0q", 0, 14));
+    a.revisions.append(revision("+1q", 0, 15));
     a.growth.clear();
     EarningsGrowthRow g;
     g.period = "0q";
@@ -177,7 +194,7 @@ class TestEarningsSignal : public QObject {
     void thin_data_is_forced_to_hold() {
         EarningsAnalysis a;
         a.valid = true;
-        // A single quarter drives only the track-record leg (weight 0.18),
+        // A single quarter drives only the track-record leg (weight 0.16),
         // which is under the 0.35 confidence floor.
         a.history.append(quarter(1700000000LL, 1.0, 2.0, 100.0, 20.0));
         const auto v = evaluate_earnings(a);
@@ -373,7 +390,196 @@ class TestEarningsSignal : public QObject {
         EarningsAnalysis a;
         QCOMPARE(days_to_next_earnings(a), -1);
         a.next.timestamp = QDateTime::currentSecsSinceEpoch() + 5 * 86400 + 3600;
-        QCOMPARE(days_to_next_earnings(a), 5);
+        // Somewhere between 5 and 6 sleeps depending on the hour of day this
+        // runs — the point of the fixed-clock cases below is that the boundary
+        // is decided in market time rather than by 24-hour arithmetic.
+        const int d = days_to_next_earnings(a);
+        QVERIFY2(d == 5 || d == 6, qPrintable(QString("days was %1").arg(d)));
+    }
+
+    // A print tomorrow afternoon in New York must not read as "today" just
+    // because it is less than 24 hours away — that is the countdown the user
+    // reads to decide whether there is still time to act.
+    void days_to_next_earnings_counts_market_calendar_days() {
+        const QTimeZone et("America/New_York");
+        EarningsAnalysis a;
+        // 21:00 ET on 30 Jul; the report lands 16:30 ET on 31 Jul — 19.5 hours
+        // later, but one sleep away.
+        const QDateTime now(QDate(2026, 7, 30), QTime(21, 0), et);
+        a.next.timestamp = QDateTime(QDate(2026, 7, 31), QTime(16, 30), et).toSecsSinceEpoch();
+        QCOMPARE(days_to_next_earnings(a, now), 1);
+
+        // Same instant read from Tokyo: the answer is a fact about the
+        // exchange session, so it must not change with the viewer.
+        const QDateTime now_jst = now.toTimeZone(QTimeZone("Asia/Tokyo"));
+        QCOMPARE(days_to_next_earnings(a, now_jst), 1);
+
+        // A print later the same session is today, not tomorrow.
+        a.next.timestamp = QDateTime(QDate(2026, 7, 30), QTime(23, 0), et).toSecsSinceEpoch();
+        QCOMPARE(days_to_next_earnings(a, now), 0);
+
+        // A date Yahoo never updated after the print goes negative, which the
+        // engine reads as "imminent", not "unknown".
+        a.next.timestamp = QDateTime(QDate(2026, 7, 28), QTime(16, 30), et).toSecsSinceEpoch();
+        QCOMPARE(days_to_next_earnings(a, now), -2);
+    }
+
+    // ── Guidance ─────────────────────────────────────────────────────────────
+    // The whole point of the leg: a company can be sailing into the current
+    // quarter while the street quietly takes the next one down. Netting the
+    // two horizons together — which the breadth leg used to do — hides exactly
+    // this, and it is the setup that produced Meta's post-print drop.
+    void next_quarter_cuts_show_up_even_when_this_quarter_is_fine() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history = strong_history();
+        a.next.timestamp = QDateTime::currentSecsSinceEpoch() + 10 * 86400;
+        a.trend.append(trend("0q", 2.05, 2.00, 1.98));    // current quarter: nudged up
+        a.trend.append(trend("+1q", 1.85, 2.10, 2.20));   // next quarter: cut hard
+        a.revisions.append(revision("0q", 8, 1));         // …by the same analysts
+        a.revisions.append(revision("+1q", 1, 9));
+
+        const auto v = evaluate_earnings(a);
+        const auto* guidance = leg(v, QStringLiteral("GUIDANCE EXPECTATIONS"));
+        const auto* revisions = leg(v, QStringLiteral("REVISION MOMENTUM"));
+        const auto* breadth = leg(v, QStringLiteral("ANALYST BREADTH"));
+        QVERIFY(guidance && guidance->available);
+        QVERIFY2(guidance->score < -0.4, qPrintable(QString("guidance %1").arg(guidance->score)));
+        // The near-term legs stay positive — they are describing a different
+        // quarter, and flattening the disagreement is the failure mode.
+        QVERIFY(revisions && revisions->score > 0);
+        QVERIFY(breadth && breadth->score > 0);
+    }
+
+    // Breadth counts votes on the COMING quarter only. Pooling +1q back in
+    // would let 9 cuts on the next quarter cancel 8 raises on this one.
+    void breadth_ignores_the_next_quarter() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history = strong_history();   // revisions alone don't count as content
+        a.revisions.append(revision("0q", 8, 0));
+        a.revisions.append(revision("+1q", 0, 20));
+        const auto* breadth = leg(evaluate_earnings(a), QStringLiteral("ANALYST BREADTH"));
+        QVERIFY(breadth && breadth->available);
+        QCOMPARE(breadth->score, 1.0);
+    }
+
+    void guidance_leg_is_unavailable_without_next_quarter_data() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history = strong_history();
+        a.trend.append(trend("0q", 2.10, 2.00, 1.90));    // current quarter only
+        const auto* guidance = leg(evaluate_earnings(a), QStringLiteral("GUIDANCE EXPECTATIONS"));
+        QVERIFY(guidance);
+        QVERIFY2(!guidance->available, "guidance scored with no +1q data");
+    }
+
+    // ── Track record ─────────────────────────────────────────────────────────
+    // Beating every quarter by a hair is not the same as beating by a lot with
+    // wild swings, and a company whose beats get sold is not a bullish record.
+    void beats_that_are_not_rewarded_pull_the_track_record_down() {
+        EarningsAnalysis a;
+        a.valid = true;
+        for (int i = 0; i < 8; ++i)      // beats every quarter, sells off every time
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.08, 8.0, -5.0));
+        const auto v = evaluate_earnings(a);
+        QCOMPARE(v.beat_rate, 1.0);      // still reported for the panel
+        const auto* record = leg(v, QStringLiteral("SURPRISE TRACK RECORD"));
+        QVERIFY(record && record->available);
+        QVERIFY2(record->score < 0.3, qPrintable(QString("score %1").arg(record->score)));
+        QVERIFY(v.beat_reaction_pct.has_value());
+        QCOMPARE(*v.beat_reaction_pct, -5.0);
+    }
+
+    // Same average surprise, different consistency: the steady one must score
+    // higher. Under the old beat-rate rule both were 8/8 and identical.
+    void steady_surprises_outscore_erratic_ones() {
+        const double steady[] = {4.0, 4.5, 3.5, 4.0, 4.2, 3.8, 4.1, 3.9};
+        const double erratic[] = {20.0, -6.0, 18.0, -4.0, 15.0, -2.0, 12.0, -1.0};
+        auto score_of = [](const double* surprises) {
+            EarningsAnalysis a;
+            a.valid = true;
+            for (int i = 0; i < 8; ++i) {
+                EarningsPoint p;
+                p.timestamp = 1700000000LL - i * 7776000LL;
+                p.eps_actual = 1.0;
+                p.surprise_pct = surprises[i];
+                a.history.append(p);
+            }
+            const auto* c = leg(evaluate_earnings(a), QStringLiteral("SURPRISE TRACK RECORD"));
+            return c ? c->score : 0.0;
+        };
+        QVERIFY2(score_of(steady) > score_of(erratic),
+                 qPrintable(QString("steady %1 vs erratic %2")
+                                .arg(score_of(steady)).arg(score_of(erratic))));
+    }
+
+    // ── Horizon rotation ─────────────────────────────────────────────────────
+    // The same picture read six weeks out and three days out is not the same
+    // read: what analysts did this month is stale in one case and the whole
+    // story in the other.
+    void weights_rotate_toward_the_fast_legs_as_the_date_approaches() {
+        EarningsAnalysis far = bullish_fixture();
+        far.next.timestamp = QDateTime::currentSecsSinceEpoch() + 60 * 86400;
+        EarningsAnalysis near = bullish_fixture();
+        near.next.timestamp = QDateTime::currentSecsSinceEpoch() + 2 * 86400;
+
+        const auto vf = evaluate_earnings(far);
+        const auto vn = evaluate_earnings(near);
+
+        QVERIFY(weight_of(vn, "GUIDANCE EXPECTATIONS") > weight_of(vf, "GUIDANCE EXPECTATIONS"));
+        QVERIFY(weight_of(vn, "REVISION MOMENTUM") > weight_of(vf, "REVISION MOMENTUM"));
+        QVERIFY(weight_of(vn, "ANALYST BREADTH") > weight_of(vf, "ANALYST BREADTH"));
+        QVERIFY(weight_of(vn, "SURPRISE TRACK RECORD") < weight_of(vf, "SURPRISE TRACK RECORD"));
+        QVERIFY(weight_of(vn, "PRICE & EXPECTATIONS") < weight_of(vf, "PRICE & EXPECTATIONS"));
+
+        // Rotation redistributes weight; it must never create or destroy it,
+        // or the score would drift with the calendar for no other reason.
+        for (const auto* v : {&vf, &vn}) {
+            double total = 0;
+            for (const auto& c : v->components) total += c.weight;
+            QVERIFY2(std::abs(total - 1.0) < 1e-9, qPrintable(QString("weights summed to %1").arg(total)));
+        }
+        QVERIFY2(vn.horizon_note.contains("fast legs"), qPrintable(vn.horizon_note));
+        QVERIFY2(vf.horizon_note.contains("too early"), qPrintable(vf.horizon_note));
+    }
+
+    // With no date there is nothing to rotate on, and inventing a tilt would
+    // silently favour legs for no reason the user could see.
+    void unknown_date_leaves_weights_at_their_base_split() {
+        EarningsAnalysis a = bullish_fixture();
+        a.next.timestamp.reset();
+        const auto v = evaluate_earnings(a);
+        QCOMPARE(v.days_to_report, -1);
+        for (const auto& c : v.components)
+            QVERIFY2(std::abs(c.weight - c.base_weight) < 1e-9, qPrintable(c.name));
+        QVERIFY(v.horizon_note.contains("No report date"));
+    }
+
+    // ── Dispersion ───────────────────────────────────────────────────────────
+    // A wide consensus is a magnitude risk, not a direction. It must reach the
+    // reader as a caveat and never as a thumb on the score.
+    void wide_consensus_spread_is_a_caveat_not_a_score() {
+        EarningsAnalysis tight = bullish_fixture();
+        tight.next.eps_avg = 2.00;
+        tight.next.eps_low = 1.96;
+        tight.next.eps_high = 2.04;
+        EarningsAnalysis wide = bullish_fixture();
+        wide.next.eps_avg = 2.00;
+        wide.next.eps_low = 1.40;
+        wide.next.eps_high = 2.60;
+
+        const auto vt = evaluate_earnings(tight);
+        const auto vw = evaluate_earnings(wide);
+        QVERIFY(vt.dispersion_pct.has_value());
+        QVERIFY(std::abs(*vt.dispersion_pct - 4.0) < 1e-9);
+        QVERIFY(!vt.dispersion_is_wide);
+        QVERIFY(std::abs(*vw.dispersion_pct - 60.0) < 1e-9);
+        QVERIFY(vw.dispersion_is_wide);
+        QVERIFY(vw.caveats.join(" | ").contains("apart on this quarter"));
+        // Identical in every scored respect.
+        QVERIFY2(std::abs(vt.score - vw.score) < 1e-9,
+                 qPrintable(QString("%1 vs %2").arg(vt.score).arg(vw.score)));
     }
 
     // The caveats are the honest part of the panel — a big pre-print run-up

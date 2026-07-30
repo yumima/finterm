@@ -2,28 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-07-29)
+## Today's commits (2026-07-30)
 
 Latest first.
 
-- [`6265b4018`](https://github.com/yumima/finterm/commit/6265b4018) ER Earnings: keep every number inside the chart frame
-- [`5de6db01b`](https://github.com/yumima/finterm/commit/5de6db01b) ER Earnings: plot EPS change against the move it produced, and measure it
-- [`653f657b7`](https://github.com/yumima/finterm/commit/653f657b7) ER Earnings: don't discard good data when a background refresh fails
-- [`6ae776052`](https://github.com/yumima/finterm/commit/6ae776052) ER: add an Earnings tab with a pre-report buy/hold/sell scorecard
-- [`ceb0ae990`](https://github.com/yumima/finterm/commit/ceb0ae990) Portfolio: make the heatmap's AFT mode actually load on the first click
-- [`e791770fd`](https://github.com/yumima/finterm/commit/e791770fd) Portfolio: allow renaming a portfolio from the UI
-- [`cf03e683e`](https://github.com/yumima/finterm/commit/cf03e683e) ER sentiment: seed the request batch from portfolio holdings
-- [`d4b32fa94`](https://github.com/yumima/finterm/commit/d4b32fa94) ER sentiment: batch Adanos requests so the free tier goes ~10x further
-- [`9ad74a1c7`](https://github.com/yumima/finterm/commit/9ad74a1c7) ER: make the sentiment empty state actionable, and fix nav payload key
-- [`4acce660a`](https://github.com/yumima/finterm/commit/4acce660a) Portfolio: refuse position edits that would go short, and show the result
-- [`07d590d28`](https://github.com/yumima/finterm/commit/07d590d28) Dashboard: earnings column becomes sequential (current est vs last actual)
-- [`351186328`](https://github.com/yumima/finterm/commit/351186328) Dashboard: rename LAST Q vs EST — it was read as a cross-column ratio
-- [`944354cb0`](https://github.com/yumima/finterm/commit/944354cb0) Dashboard: stop the earnings tile mixing consensus panels between views
-- [`58ab2f603`](https://github.com/yumima/finterm/commit/58ab2f603) Dashboard: split the earnings surprise into its own labelled column
-- [`60e2408e1`](https://github.com/yumima/finterm/commit/60e2408e1) Dashboard: earnings tile gets growth colour, held markers, multi-portfolio
-- [`3dccc5310`](https://github.com/yumima/finterm/commit/3dccc5310) Dashboard: add an Earnings Calendar widget (this week / portfolio)
-- [`249f32c71`](https://github.com/yumima/finterm/commit/249f32c71) Dashboard: let tiles shrink vertically instead of holding a blank band
-- [`4bfbeae20`](https://github.com/yumima/finterm/commit/4bfbeae20) Portfolio: split P&L% into L% (trailing stop) and P% (return on cost)
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

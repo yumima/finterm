@@ -26,7 +26,10 @@ namespace fincept::screens {
 /// On top of those sits a rules-based BUY / HOLD / SELL scorecard
 /// (services::equity::evaluate_earnings) whose every leg is shown with the
 /// number it came from — the verdict is a summary of the panels below it, not
-/// an oracle, and the tab says so.
+/// an oracle, and the tab says so. The ×weights on those legs move with the
+/// days left before the print, so the card states which way they have rotated
+/// rather than leaving a reader to wonder why the same leg is worth more on
+/// one symbol than another.
 class EquityEarningsTab : public QWidget {
     Q_OBJECT
   public:
@@ -73,12 +76,17 @@ class EquityEarningsTab : public QWidget {
     QLabel* verdict_score_ = nullptr;
     QLabel* verdict_confidence_ = nullptr;
     QLabel* verdict_headline_ = nullptr;
+    // Why the ×weights on the breakdown below differ from one symbol to the
+    // next: they rotate with the time left before the print.
+    QLabel* verdict_horizon_ = nullptr;
 
     // Setup card
     QLabel* setup_move_ = nullptr;
     QLabel* setup_beat_ = nullptr;
     QLabel* setup_reaction_ = nullptr;
     QLabel* setup_runup_ = nullptr;
+    QLabel* setup_runup20_ = nullptr;
+    QLabel* setup_spread_ = nullptr;
 
     // Scorecard rows are rebuilt per symbol.
     QVBoxLayout* score_rows_layout_ = nullptr;
