@@ -1043,6 +1043,7 @@ set(UI_SOURCES
     src/ui/theme/Theme.cpp
     src/ui/theme/ThemeManager.cpp
     src/ui/theme/StyleSheets.cpp
+    src/ui/theme/Tooltips.cpp
     src/ui/widgets/Card.cpp
     src/ui/widgets/GroupBadge.cpp
     src/ui/widgets/StatusBadge.cpp

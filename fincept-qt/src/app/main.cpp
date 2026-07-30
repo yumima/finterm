@@ -61,6 +61,7 @@
 #include "storage/sqlite/migrations/MigrationRunner.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
+#include "ui/theme/Tooltips.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -146,6 +147,12 @@ int main(int argc, char* argv[]) {
 #    define FINCEPT_VERSION_STRING "0.0.0-dev"
 #endif
     app.setApplicationVersion(QStringLiteral(FINCEPT_VERSION_STRING));
+
+    // Tooltips: instant, at the pointer, wrapped into a box. Installed here
+    // rather than with the theme because it swaps the application style, and
+    // doing that after a stylesheet is set would force a second full re-polish
+    // of every widget already built.
+    fincept::ui::tooltips::install(app);
 
     // ── Secondary instance: signal primary to open a new window, then exit ───
     // The primary receives receivedMessage() and calls open_new_window().

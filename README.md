@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f7ed1f772`](https://github.com/yumima/finterm/commit/f7ed1f772) ER Earnings: score the bar, not just the business
 - [`e951aaf93`](https://github.com/yumima/finterm/commit/e951aaf93) Dashboard: add an AFT% column to Portfolio Summary, P&L becomes a percentage
 - [`cb5475c0e`](https://github.com/yumima/finterm/commit/cb5475c0e) ER Earnings: don't let a relative measure carry the guidance leg
 - [`4c7133e01`](https://github.com/yumima/finterm/commit/4c7133e01) ER Earnings: score the guide, not just the quarter
