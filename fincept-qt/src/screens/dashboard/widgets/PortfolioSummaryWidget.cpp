@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QTimeZone>
 
@@ -39,6 +40,41 @@ std::optional<double> json_num(const QJsonObject& o, const char* key) {
     if (v.isNull() || v.isUndefined() || !v.isDouble())
         return std::nullopt;
     return v.toDouble();
+}
+
+/// The holdings table's columns, in order, as ONE definition shared by the
+/// header and the rows.
+///
+/// Two layouts describing the same columns independently is how the titles
+/// drifted off their data: a QHBoxLayout hands each child its size hint first
+/// and only then splits the surplus by stretch, so a bold "DAY CHG%" header
+/// and a "+1.20%" cell claim different widths from the same stretch factor and
+/// the boundaries end up in different places. Every cell below is built with
+/// a horizontally Ignored size policy, which drops the size hint out of the
+/// calculation entirely and makes the stretch numbers the whole story — the
+/// header and the row then land on identical boundaries by construction.
+struct Column {
+    const char* title;
+    int stretch;
+    Qt::Alignment align;
+};
+
+constexpr Column kColumns[] = {
+    {"SYM",      3, Qt::AlignLeft},
+    {"SHARES",   2, Qt::AlignRight},   // share counts are short; give the space away
+    {"PRICE",    3, Qt::AlignRight},
+    {"VALUE",    3, Qt::AlignRight},
+    {"P&L%",     3, Qt::AlignRight},
+    {"DAY CHG%", 3, Qt::AlignRight},
+    {"AFT%",     4, Qt::AlignRight},   // widest: carries a sign, 2dp and a '%'
+};
+constexpr int kColSym = 0, kColShares = 1, kColPrice = 2, kColValue = 3,
+              kColPnl = 4, kColDayChg = 5, kColAft = 6;
+
+/// Strip the size hint out of the width calculation — see Column above.
+void size_by_stretch_only(QWidget* w) {
+    w->setMinimumWidth(0);
+    w->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 }
 
 } // namespace
@@ -105,33 +141,34 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     auto* hl = new QHBoxLayout(header_row_);
     hl->setContentsMargins(8, 3, 8, 3);
 
-    auto make_hdr_lbl = [&](const QString& t, Qt::Alignment a = Qt::AlignLeft) {
-        auto* l = new QLabel(t);
-        l->setAlignment(a);
+    for (const auto& col : kColumns) {
+        auto* l = new QLabel(QString::fromLatin1(col.title));
+        // QLabel drops to top alignment when only a horizontal flag is given,
+        // which is what left the titles sitting slightly above their column.
+        l->setAlignment(col.align | Qt::AlignVCenter);
+        size_by_stretch_only(l);
         header_labels_.append(l);
-        hl->addWidget(l, 1); // every column gets equal stretch
-        return l;
-    };
-    make_hdr_lbl("SYM");
-    make_hdr_lbl("SHARES",  Qt::AlignRight);
-    make_hdr_lbl("PRICE",   Qt::AlignRight);
-    make_hdr_lbl("VALUE",   Qt::AlignRight);
-    auto* pnl_hdr = make_hdr_lbl("P&L%", Qt::AlignRight);
-    pnl_hdr->setToolTip(QStringLiteral(
+        hl->addWidget(l, col.stretch);
+    }
+    header_labels_.at(kColPnl)->setToolTip(QStringLiteral(
         "Return on cost for the position: (price − average cost) ÷ average cost. "
         "The cash figure is in TOTAL P&L above."));
-    auto* aft_hdr = make_hdr_lbl("AFT%", Qt::AlignRight);
-    aft_hdr->setToolTip(QStringLiteral(
-        "Extended-hours move against the last regular close — pre-market before the "
-        "open, post-market after it.\n\n"
-        "Blank during the regular session: by then the last extended print is already "
-        "inside the price the other columns are quoting, so repeating it here would "
-        "double-count it."));
+    aft_header_ = header_labels_.at(kColAft);
+    set_aft_header_state(AftState::Idle);
     vl->addWidget(header_row_);
 
     // Scrollable holdings list
     scroll_area_ = new QScrollArea;
     scroll_area_->setWidgetResizable(true);
+    // The scrollbar eats width from the rows but not from the header above it,
+    // so the columns would drift apart by exactly the bar's width the moment a
+    // book grew past the visible area. Reserve the same gutter in the header
+    // whenever the bar is actually there.
+    connect(scroll_area_->verticalScrollBar(), &QScrollBar::rangeChanged, this,
+            [this](int min, int max) {
+                const int gutter = (max > min) ? scroll_area_->verticalScrollBar()->width() : 0;
+                header_row_->layout()->setContentsMargins(8, 3, 8 + gutter, 3);
+            });
 
     auto* list_widget = new QWidget(this);
     list_widget->setStyleSheet("background: transparent;");
@@ -145,6 +182,10 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
 
     connect(this, &BaseWidget::refresh_requested, this, [this] {
         load_holdings();
+        // Explicit user refresh supersedes anything in flight, so a fetch that
+        // is wedged can't make the button do nothing.
+        ++aft_gen_;
+        aft_in_flight_ = false;
         fetch_aft();
     });
 
@@ -356,7 +397,39 @@ PortfolioSummaryWidget::ExtSession PortfolioSummaryWidget::current_session() {
     return ExtSession::Closed;
 }
 
-void PortfolioSummaryWidget::fetch_aft() {
+void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
+    if (!aft_header_)
+        return;
+    aft_state_ = state;
+    static constexpr auto kBase = QLatin1String(
+        "Extended-hours move against the last regular close — pre-market before the "
+        "open, post-market after it.\n\n"
+        "Blank during the regular session: by then the last extended print is already "
+        "inside the price the other columns are quoting, so repeating it here would "
+        "double-count it.");
+    switch (state) {
+        case AftState::Idle:
+            aft_header_->setText(QStringLiteral("AFT%"));
+            aft_header_->setToolTip(kBase);
+            break;
+        case AftState::Loading:
+            // The suffix is the only feedback that a slow first call is still
+            // running. Without it an empty column is indistinguishable from a
+            // broken one, which is exactly how this looked before.
+            aft_header_->setText(QStringLiteral("AFT% ·"));
+            aft_header_->setToolTip(QString("%1\n\nFetching extended-hours prices…").arg(kBase));
+            break;
+        case AftState::Failed:
+            aft_header_->setText(QStringLiteral("AFT% !"));
+            aft_header_->setToolTip(
+                QString("%1\n\nThe last extended-hours fetch failed: %2\nRetrying on the next "
+                        "refresh; the tile's refresh button retries immediately.")
+                    .arg(kBase, aft_error_));
+            break;
+    }
+}
+
+void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
     if (last_holdings_.isEmpty()) {
         aft_.clear();
         return;
@@ -384,11 +457,17 @@ void PortfolioSummaryWidget::fetch_aft() {
 
     const quint64 gen = ++aft_gen_;
     aft_in_flight_ = true;
+    set_aft_header_state(AftState::Loading);
     QPointer<PortfolioSummaryWidget> guard(this);
 
+    // An explicit timeout is not optional here. PythonWorker only arms a
+    // deadline when one is given, so with the default of 0 a daemon that never
+    // answers never calls back — `aft_in_flight_` would stay true forever and
+    // every later refresh would return at the guard above, leaving the column
+    // permanently empty with nothing logged.
     python::PythonWorker::instance().submit(
         QStringLiteral("extended_hours"), payload,
-        [guard, gen](bool ok, QJsonObject result, QString err) {
+        [guard, gen, is_retry](bool ok, QJsonObject result, QString err) {
             if (!guard || gen != guard->aft_gen_)
                 return;  // superseded by a newer fetch, or the tile is gone
             guard->aft_in_flight_ = false;
@@ -398,6 +477,19 @@ void PortfolioSummaryWidget::fetch_aft() {
                 // blank a column the user may be reading.
                 LOG_WARN("PortfolioSummary",
                          QString("extended-hours fetch failed: %1").arg(err.left(120)));
+                guard->aft_error_ = err.left(120);
+                guard->set_aft_header_state(AftState::Failed);
+                // One retry. The first extended-hours call of a session pays
+                // the Yahoo cookie/crumb handshake and can time out on that
+                // alone; the retry runs against a warm session and normally
+                // returns straight away. Without it the column stays empty
+                // until the next minute tick, which reads as broken.
+                if (!is_retry) {
+                    QTimer::singleShot(1500, guard.data(), [guard, gen]() {
+                        if (guard && guard->aft_gen_ == gen)
+                            guard->fetch_aft(/*is_retry=*/true);
+                    });
+                }
                 return;
             }
             const QJsonArray rows = result.contains(QStringLiteral("_value"))
@@ -426,8 +518,11 @@ void PortfolioSummaryWidget::fetch_aft() {
                                            *regular, sess});
             }
             guard->aft_ = fresh;
+            guard->aft_error_.clear();
+            guard->set_aft_header_state(AftState::Idle);
             guard->rebuild_from_cache();
-        });
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
 }
 
 
@@ -507,19 +602,23 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(8, 4, 8, 4);
 
-        auto cell = [&](const QString& text, int stretch, Qt::Alignment align, const QString& color) {
+        // Same column spec the header was built from, so the two cannot drift.
+        auto cell = [&](int col, const QString& text, const QString& color) {
             auto* lbl = new QLabel(text);
-            lbl->setAlignment(align);
+            lbl->setAlignment(kColumns[col].align | Qt::AlignVCenter);
             lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
-            rl->addWidget(lbl, stretch);
+            size_by_stretch_only(lbl);
+            rl->addWidget(lbl, kColumns[col].stretch);
             return lbl;
         };
 
-        cell(h.symbol, 1, Qt::AlignLeft, ui::colors::TEXT_PRIMARY);
-        cell(QString::number(h.shares, 'f', h.shares == (int)h.shares ? 0 : 2), 1, Qt::AlignRight,
+        cell(kColSym, h.symbol, ui::colors::TEXT_PRIMARY);
+        cell(kColShares, QString::number(h.shares, 'f', h.shares == (int)h.shares ? 0 : 2),
              ui::colors::TEXT_SECONDARY);
-        cell(price > 0 ? QString("$%1").arg(price, 0, 'f', 2) : "--", 1, Qt::AlignRight, ui::colors::TEXT_PRIMARY);
-        cell(value > 0 ? QString("$%1").arg(value, 0, 'f', 0) : "--", 1, Qt::AlignRight, ui::colors::TEXT_PRIMARY);
+        cell(kColPrice, price > 0 ? QString("$%1").arg(price, 0, 'f', 2) : "--",
+             ui::colors::TEXT_PRIMARY);
+        cell(kColValue, value > 0 ? QString("$%1").arg(value, 0, 'f', 0) : "--",
+             ui::colors::TEXT_PRIMARY);
 
         // P&L as return on cost. The cash number for the whole book is in the
         // summary card above; per row the percentage is what compares across
@@ -538,7 +637,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                           .arg(cost, 0, 'f', 2)
                           .arg(h.avg_cost, 0, 'f', 2);
         }
-        cell(pnl_str, 1, Qt::AlignRight, pnl_color)->setToolTip(pnl_tip);
+        cell(kColPnl, pnl_str, pnl_color)->setToolTip(pnl_tip);
 
         // Per-row DAY CHG% — quote already gives us the daily percent change.
         QString chg_pct_str;
@@ -551,7 +650,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             chg_pct_str = "--";
             chg_pct_color = QString(ui::colors::TEXT_SECONDARY);
         }
-        cell(chg_pct_str, 1, Qt::AlignRight, chg_pct_color);
+        cell(kColDayChg, chg_pct_str, chg_pct_color);
 
         // AFT% — the extended-hours move, from a different feed than the rest
         // of the row and blank whenever there is no extended print to show.
@@ -578,7 +677,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                                                                         0, 'f', 2))
                                    : QString());
         }
-        cell(aft_str, 1, Qt::AlignRight, aft_color)->setToolTip(aft_tip);
+        cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);
 
         list_layout_->addWidget(row);
         alt = !alt;

@@ -107,7 +107,17 @@ class PortfolioSummaryWidget : public BaseWidget {
     static ExtSession current_session();
     /// Kick an extended-hours fetch for the current holdings. No-ops during
     /// the regular session, when there is nothing an extended print could add.
-    void fetch_aft();
+    void fetch_aft(bool is_retry = false);
+
+    /// Whether the column is idle, waiting, or stuck — shown as a suffix on
+    /// the AFT% header. An empty column with no explanation reads as a bug,
+    /// and the first extended-hours call of a session is slow often enough
+    /// that "still loading" needs to be sayable.
+    enum class AftState { Idle, Loading, Failed };
+    void set_aft_header_state(AftState state);
+    QLabel*  aft_header_ = nullptr;
+    AftState aft_state_ = AftState::Idle;
+    QString  aft_error_;
 
     struct AftQuote {
         double pct = 0;       // move against the last regular close
