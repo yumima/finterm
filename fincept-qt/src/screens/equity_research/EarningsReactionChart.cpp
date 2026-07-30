@@ -18,14 +18,28 @@ using services::equity::ReactionMetric;
 
 namespace {
 
-constexpr int kMarginLeft   = 46;   // room for the metric axis labels
-constexpr int kMarginRight  = 46;   // room for the reaction axis labels
-constexpr int kMarginTop    = 18;
-constexpr int kMarginBottom = 26;   // quarter labels
+// The two series carry their scale in the header line rather than in axis
+// gutters, which keeps every number inside a band of its own: header, plot,
+// quarter labels. Nothing floats in a margin.
+constexpr int kMarginSide   = 10;
+constexpr int kHeaderH      = 15;   // "bars: … (±x%)" / "line: … (±y%)"
+constexpr int kFooterH      = 18;   // quarter ticks
 constexpr int kMinColumnPx  = 26;
+constexpr int kLabelH       = 12;
+constexpr double kDotR      = 3.2;
+constexpr double kLabelGap  = kDotR + 5.0;   // clears the marker, not just its centre
+// Fraction of the half-height the data may use. The remainder is headroom so
+// an extreme point is never welded to the frame — and it is capped further
+// below so a label always fits above the tallest point without flipping.
+constexpr double kDataFill  = 0.84;
 
 QString pct_label(double v, int dp = 0) {
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', dp));
+}
+
+/// Centre x of column `i`.
+double cx_of(const QRect& plot, double col_w, int i) {
+    return plot.left() + col_w * (i + 0.5);
 }
 
 } // namespace
@@ -102,8 +116,8 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         return;
     }
 
-    const QRect plot(kMarginLeft, kMarginTop, width() - kMarginLeft - kMarginRight,
-                     height() - kMarginTop - kMarginBottom);
+    const QRect plot(kMarginSide, kHeaderH, width() - 2 * kMarginSide,
+                     height() - kHeaderH - kFooterH);
     if (plot.width() < kMinColumnPx || plot.height() < 40)
         return;
 
@@ -115,29 +129,31 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     const double m_ext = axis_extent(metric_vals);
     const double r_ext = axis_extent(reaction_vals);
 
-    const int zero_y = plot.center().y();
+    const double zero_y = plot.center().y();
+    // Data span leaves headroom at both ends. The cap guarantees a full label
+    // fits above the tallest point, so the outside-the-dot placement below
+    // never has to flip and land back on its own marker.
     const double half = plot.height() / 2.0;
+    const double span = std::max(12.0, std::min(half * kDataFill, half - (kLabelH + kLabelGap + 2)));
 
-    // ── Frame: zero line + quarter gridlines ─────────────────────────────────
+    // ── Header: each series names its own scale, so no axis gutters ──────────
+    const QString metric_name = metric_ == ReactionMetric::Surprise ? QStringLiteral("surprise vs consensus")
+                                : metric_ == ReactionMetric::QoQ    ? QStringLiteral("EPS vs prior quarter")
+                                                                    : QStringLiteral("EPS vs year-ago quarter");
+    const QRect header(kMarginSide, 0, plot.width(), kHeaderH);
+    p.setPen(text_sec);
+    p.drawText(header, Qt::AlignLeft | Qt::AlignVCenter,
+               QString("bars: %1  (±%2%)").arg(metric_name, QString::number(m_ext, 'f', 0)));
+    p.setPen(line_col);
+    p.drawText(header, Qt::AlignRight | Qt::AlignVCenter,
+               QString("line: next-session move  (±%1%)").arg(QString::number(r_ext, 'f', 1)));
+
+    // ── Zero line ────────────────────────────────────────────────────────────
     p.setPen(QPen(grid, 1));
-    p.drawLine(plot.left(), zero_y, plot.right(), zero_y);
+    p.drawLine(QPointF(plot.left(), zero_y), QPointF(plot.right(), zero_y));
 
     const double col_w = static_cast<double>(plot.width()) / cols.size();
     const double bar_w = std::min(18.0, col_w * 0.42);
-
-    // ── Axis labels: each series carries its own scale ───────────────────────
-    p.setPen(text_dim);
-    p.drawText(QRect(0, plot.top() - 6, kMarginLeft - 6, 12), Qt::AlignRight | Qt::AlignVCenter,
-               pct_label(m_ext));
-    p.drawText(QRect(0, zero_y - 6, kMarginLeft - 6, 12), Qt::AlignRight | Qt::AlignVCenter,
-               QStringLiteral("0"));
-    p.drawText(QRect(0, plot.bottom() - 6, kMarginLeft - 6, 12), Qt::AlignRight | Qt::AlignVCenter,
-               pct_label(-m_ext));
-    p.setPen(line_col);
-    p.drawText(QRect(plot.right() + 6, plot.top() - 6, kMarginRight - 6, 12),
-               Qt::AlignLeft | Qt::AlignVCenter, pct_label(r_ext, 1));
-    p.drawText(QRect(plot.right() + 6, plot.bottom() - 6, kMarginRight - 6, 12),
-               Qt::AlignLeft | Qt::AlignVCenter, pct_label(-r_ext, 1));
 
     // ── Bars: the selected earnings metric ───────────────────────────────────
     for (int i = 0; i < cols.size(); ++i) {
@@ -145,18 +161,19 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         const double v = *cols[i].metric;
         const bool clipped = std::abs(v) > m_ext;
         const double scaled = std::clamp(v / m_ext, -1.0, 1.0);
-        const int h = static_cast<int>(std::round(std::abs(scaled) * half));
-        const double cx = plot.left() + col_w * (i + 0.5);
-        const QRectF bar(cx - bar_w / 2.0, v >= 0 ? zero_y - h : zero_y, bar_w, std::max(1, h));
+        const double h = std::max(1.0, std::abs(scaled) * span);
+        const double cx = cx_of(plot, col_w, i);
+        const QRectF bar(cx - bar_w / 2.0, v >= 0 ? zero_y - h : zero_y, bar_w, h);
 
         QColor c = v >= 0 ? pos : neg;
-        c.setAlpha(150);
+        c.setAlpha(140);
         p.fillRect(bar, c);
 
         if (clipped) {
             // Chevron at the clipped end so a compressed axis never reads as
-            // "this quarter was the same size as its neighbour".
-            const double tip_y = v >= 0 ? bar.top() - 4 : bar.bottom() + 4;
+            // "this quarter was the same size as its neighbour". It sits in
+            // the headroom, never outside the plot.
+            const double tip_y = v >= 0 ? bar.top() - 5 : bar.bottom() + 5;
             const double base_y = v >= 0 ? bar.top() : bar.bottom();
             QPainterPath chev;
             chev.moveTo(cx - bar_w / 2.0, base_y);
@@ -178,7 +195,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         }
         const double v = *cols[i].reaction;
         const double scaled = std::clamp(v / r_ext, -1.0, 1.0);
-        const QPointF pt(plot.left() + col_w * (i + 0.5), zero_y - scaled * half);
+        const QPointF pt(cx_of(plot, col_w, i), zero_y - scaled * span);
         if (!started) {
             path.moveTo(pt);
             started = true;
@@ -189,59 +206,66 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         dot_vals.append(v);
     }
     p.setPen(QPen(line_col, 1.6));
+    p.setBrush(Qt::NoBrush);
     p.drawPath(path);
     for (int i = 0; i < dots.size(); ++i) {
         p.setBrush(dot_vals[i] >= 0 ? pos : neg);
-        p.setPen(QPen(QColor(ui::colors::BG_BASE()), 1));
+        p.setPen(QPen(QColor(ui::colors::BG_SURFACE()), 1.2));
         p.drawEllipse(dots[i], 3.2, 3.2);
     }
 
-    // ── Value labels + quarter ticks ─────────────────────────────────────────
-    // Only when the columns are wide enough to hold them without colliding.
+    // ── Quarter ticks ────────────────────────────────────────────────────────
     const QFontMetrics fm(f);
-    const bool room_for_values = col_w >= 42;
     p.setBrush(Qt::NoBrush);
+    p.setPen(text_dim);
+    // Thin the ticks rather than let them collide: every other label, then
+    // every third, until they fit.
+    const int tick_step = std::max(1, static_cast<int>(std::ceil(34.0 / std::max(1.0, col_w))));
     for (int i = 0; i < cols.size(); ++i) {
-        const double cx = plot.left() + col_w * (i + 0.5);
+        if (i % tick_step != 0) continue;
+        const double cx = cx_of(plot, col_w, i);
         const auto when = QDateTime::fromSecsSinceEpoch(cols[i].timestamp);
-        p.setPen(text_dim);
-        p.drawText(QRectF(cx - col_w / 2.0, plot.bottom() + 6, col_w, 14),
+        p.drawText(QRectF(cx - col_w / 2.0, plot.bottom() + 2, col_w, kFooterH - 2),
                    Qt::AlignCenter, when.toString("MMM yy"));
+    }
 
-        if (!room_for_values || !cols[i].reaction) continue;
+    // ── Value labels on the line ─────────────────────────────────────────────
+    // Drawn last so nothing overprints them, and only when the columns are
+    // wide enough to hold them side by side.
+    if (col_w < 42)
+        return;
+    for (int i = 0; i < cols.size(); ++i) {
+        if (!cols[i].reaction) continue;
         const double v = *cols[i].reaction;
         const double scaled = std::clamp(v / r_ext, -1.0, 1.0);
-        const double y = zero_y - scaled * half;
+        const double y = zero_y - scaled * span;
         const QString lbl = pct_label(v, 1);
-        // Park the label on the far side of the dot from the zero line so it
-        // never lands on the bar it belongs to.
-        const double ly = v >= 0 ? y - 14 : y + 2;
-        // Keep the label inside the plot: a dot pinned to the bottom of the
-        // reaction axis would otherwise print its value over the quarter
-        // labels in the margin below.
-        const QRectF lbl_rect(cx - fm.horizontalAdvance(lbl) / 2.0 - 2,
-                              std::clamp(ly, static_cast<double>(plot.top() - 14),
-                                         static_cast<double>(plot.bottom() - 12)),
-                              fm.horizontalAdvance(lbl) + 4, 12);
-        // A clamped bar can reach right through where this label sits — back
-        // it with the panel colour so the two never overprint into mush.
+        const double w = fm.horizontalAdvance(lbl) + 8;
+
+        // Outside the dot: above a rise, below a fall. The span cap above
+        // reserves the room, so the fallback flip is a belt-and-braces case
+        // (a very short widget) rather than the normal path.
+        double top = v >= 0 ? y - kLabelH - kLabelGap : y + kLabelGap;
+        if (top < plot.top())
+            top = y + kLabelGap;
+        else if (top + kLabelH > plot.bottom())
+            top = y - kLabelH - kLabelGap;
+        const double left = std::clamp(cx_of(plot, col_w, i) - w / 2.0,
+                                       static_cast<double>(plot.left()),
+                                       static_cast<double>(plot.right()) - w);
+        const QRectF lbl_rect(left, top, w, kLabelH);
+
+        // A clamped bar can reach through where the label sits — seat it on
+        // the panel colour, rounded, so the two never overprint into mush.
         QColor plate(ui::colors::BG_SURFACE());
-        plate.setAlpha(220);
-        p.fillRect(lbl_rect, plate);
+        plate.setAlpha(230);
+        p.setPen(Qt::NoPen);
+        p.setBrush(plate);
+        p.drawRoundedRect(lbl_rect, 2, 2);
+        p.setBrush(Qt::NoBrush);
         p.setPen(v >= 0 ? pos : neg);
         p.drawText(lbl_rect, Qt::AlignCenter, lbl);
     }
-
-    // ── Legend ───────────────────────────────────────────────────────────────
-    const QString metric_name = metric_ == ReactionMetric::Surprise ? QStringLiteral("surprise vs consensus")
-                                : metric_ == ReactionMetric::QoQ    ? QStringLiteral("EPS vs prior quarter")
-                                                                    : QStringLiteral("EPS vs year-ago quarter");
-    p.setPen(text_sec);
-    p.drawText(QRect(kMarginLeft, 2, plot.width(), 12), Qt::AlignLeft | Qt::AlignVCenter,
-               QString("bars: %1").arg(metric_name));
-    p.setPen(line_col);
-    p.drawText(QRect(kMarginLeft, 2, plot.width(), 12), Qt::AlignRight | Qt::AlignVCenter,
-               QStringLiteral("line: next-session price move"));
 }
 
 } // namespace fincept::screens
