@@ -239,6 +239,13 @@ struct EarningsPoint {
     std::optional<double> eps_estimate;
     std::optional<double> eps_actual;
     std::optional<double> surprise_pct;   // signed: + = beat
+    // Sequential and year-ago change in reported EPS. QoQ carries the
+    // company's seasonality (a March quarter is "down" against December every
+    // year); YoY is the seasonality-free version. Neither feeds the score —
+    // the UI plots them against reaction_pct and reports the measured
+    // correlation so the reader can see which one tracks for this name.
+    std::optional<double> eps_qoq_pct;
+    std::optional<double> eps_yoy_pct;
     std::optional<double> reaction_pct;   // close-to-close move over the print
     std::optional<double> runup_pct;      // 5 sessions into the print
     std::optional<double> price_before;

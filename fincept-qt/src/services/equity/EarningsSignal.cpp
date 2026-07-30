@@ -314,6 +314,62 @@ SignalComponent score_valuation(const EarningsAnalysis& a) {
 
 } // namespace
 
+std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m) {
+    switch (m) {
+        case ReactionMetric::Surprise: return p.surprise_pct;
+        case ReactionMetric::QoQ:      return p.eps_qoq_pct;
+        case ReactionMetric::YoY:      return p.eps_yoy_pct;
+    }
+    return std::nullopt;
+}
+
+QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a) {
+    QVector<ReactionCorrelation> out;
+    const std::pair<ReactionMetric, const char*> metrics[] = {
+        {ReactionMetric::Surprise, "SURPRISE"},
+        {ReactionMetric::QoQ, "QoQ"},
+        {ReactionMetric::YoY, "YoY"},
+    };
+
+    for (const auto& [metric, label] : metrics) {
+        ReactionCorrelation c;
+        c.metric = metric;
+        c.label = QString::fromLatin1(label);
+
+        QVector<double> xs, ys;
+        for (const auto& p : a.history) {
+            const auto x = metric_value(p, metric);
+            if (!x.has_value() || !p.reaction_pct.has_value()) continue;
+            xs.append(*x);
+            ys.append(*p.reaction_pct);
+        }
+        c.n = xs.size();
+        // Three points is the floor at which a correlation is arithmetically
+        // defined; it is nowhere near enough to be meaningful, which is why
+        // `n` travels with `r` everywhere it is displayed.
+        if (c.n >= 3) {
+            double mx = 0, my = 0;
+            for (int i = 0; i < c.n; ++i) { mx += xs[i]; my += ys[i]; }
+            mx /= c.n;
+            my /= c.n;
+            double num = 0, dx = 0, dy = 0;
+            for (int i = 0; i < c.n; ++i) {
+                const double ax = xs[i] - mx, ay = ys[i] - my;
+                num += ax * ay;
+                dx  += ax * ax;
+                dy  += ay * ay;
+            }
+            // A metric that never moved (every quarter identical) has no
+            // variance to correlate against — leave r unset rather than
+            // dividing by zero into a NaN that renders as "nan".
+            if (dx > 1e-12 && dy > 1e-12)
+                c.r = num / (std::sqrt(dx) * std::sqrt(dy));
+        }
+        out.append(c);
+    }
+    return out;
+}
+
 int days_to_next_earnings(const EarningsAnalysis& a) {
     if (!a.next.timestamp.has_value()) return -1;
     const auto when = QDateTime::fromSecsSinceEpoch(*a.next.timestamp);

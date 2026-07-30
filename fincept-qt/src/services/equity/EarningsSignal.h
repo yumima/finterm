@@ -56,6 +56,26 @@ struct EarningsVerdict {
 /// with zero confidence and an explanatory headline.
 EarningsVerdict evaluate_earnings(const EarningsAnalysis& a);
 
+/// Which earnings metric the next-day move actually tracked, for THIS name.
+enum class ReactionMetric { Surprise, QoQ, YoY };
+
+/// Measured relationship between one earnings metric and the close-to-close
+/// move over the print. Reported, never scored: a dozen quarters is far too
+/// few for significance, and the honest use of the number is "does this stock
+/// tend to trade off this input at all", not "predict the next move".
+struct ReactionCorrelation {
+    ReactionMetric metric = ReactionMetric::Surprise;
+    QString label;                 // "SURPRISE", "QoQ", "YoY"
+    std::optional<double> r;       // Pearson, -1 … +1; unset when n < 3
+    int n = 0;                     // quarters with both values present
+};
+
+/// Correlate all three metrics against the realised reaction.
+QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a);
+
+/// The metric value on one quarter, for whichever metric is selected.
+std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m);
+
 /// Days from now until the next report; -1 when unknown.
 int days_to_next_earnings(const EarningsAnalysis& a);
 

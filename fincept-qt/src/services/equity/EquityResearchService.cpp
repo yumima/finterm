@@ -1550,6 +1550,8 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         p.eps_estimate = opt_num(o, "eps_estimate");
         p.eps_actual   = opt_num(o, "eps_actual");
         p.surprise_pct = opt_num(o, "surprise_pct");
+        p.eps_qoq_pct  = opt_num(o, "eps_qoq_pct");
+        p.eps_yoy_pct  = opt_num(o, "eps_yoy_pct");
         p.reaction_pct = opt_num(o, "reaction_pct");
         p.runup_pct    = opt_num(o, "runup_pct");
         p.price_before = opt_num(o, "price_before");

@@ -106,6 +106,10 @@ void style_table(QTableWidget* t, const QStringList& headers) {
     t->setAlternatingRowColors(true);
     t->setEditTriggers(QAbstractItemView::NoEditTriggers);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
+    // No horizontal scrolling: these tables are fixed-height and sized to
+    // their content, so a scrollbar appearing would both hide columns and
+    // steal the pixels the last row is standing on. Columns compress instead.
+    t->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     t->verticalHeader()->hide();
     t->verticalHeader()->setDefaultSectionSize(24);
     t->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -179,6 +183,7 @@ QString opt_count(const std::optional<double>& v) {
 
 EquityEarningsTab::EquityEarningsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
+    set_metric(selected_metric_);   // paints the initial toggle state
 }
 
 void EquityEarningsTab::set_symbol(const QString& symbol) {
@@ -403,6 +408,13 @@ QWidget* EquityEarningsTab::build_scorecard() {
 }
 
 QWidget* EquityEarningsTab::build_history_panel() {
+    auto* row = new QWidget(nullptr);
+    row->setStyleSheet("background:transparent;");
+    auto* hl = new QHBoxLayout(row);
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(10);
+
+    // ── Left: the numbers ────────────────────────────────────────────────────
     QVBoxLayout* body = nullptr;
     auto* panel = make_panel("PAST · REPORTED QUARTERS", ui::colors::POSITIVE(), &body);
 
@@ -413,9 +425,106 @@ QWidget* EquityEarningsTab::build_history_panel() {
     body->addWidget(history_summary_);
 
     history_table_ = new QTableWidget;
-    style_table(history_table_, {"REPORTED", "EPS EST", "EPS ACTUAL", "SURPRISE", "1D REACTION", "5D RUN-UP"});
+    // Short headers: eight columns share this pane with the chart, and an
+    // elided "1D REACTIO…" reads worse than a terse but complete label.
+    style_table(history_table_,
+                {"REPORTED", "EST", "ACTUAL", "SURPRISE", "QoQ", "YoY", "1D MOVE", "5D RUN-UP"});
     body->addWidget(history_table_);
-    return panel;
+    hl->addWidget(panel, 4);
+
+    // ── Right: the same quarters as a curve ──────────────────────────────────
+    QVBoxLayout* chart_body = nullptr;
+    auto* chart_panel = make_panel("PAST · EARNINGS CHANGE vs NEXT-DAY MOVE", ui::colors::POSITIVE(), &chart_body);
+
+    auto* switch_row = new QHBoxLayout;
+    switch_row->setSpacing(4);
+    switch_row->setContentsMargins(0, 0, 0, 0);
+    switch_row->addWidget(make_caption("BARS:"));
+    for (const auto m : {services::equity::ReactionMetric::QoQ,
+                         services::equity::ReactionMetric::YoY,
+                         services::equity::ReactionMetric::Surprise}) {
+        auto* btn = new QPushButton;
+        btn->setCheckable(true);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(
+            QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                    "  font-size:12px; font-weight:700; border-radius:2px; padding:2px 8px; }"
+                    "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
+                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
+                     ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
+        connect(btn, &QPushButton::clicked, this, [this, m]() { set_metric(m); });
+        metric_buttons_.insert(m, btn);
+        switch_row->addWidget(btn);
+    }
+    switch_row->addStretch();
+    chart_body->addLayout(switch_row);
+
+    reaction_chart_ = new EarningsReactionChart;
+    chart_body->addWidget(reaction_chart_, 1);
+
+    correlation_note_ = new QLabel;
+    correlation_note_->setWordWrap(true);
+    correlation_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                         .arg(ui::colors::TEXT_TERTIARY()));
+    chart_body->addWidget(correlation_note_);
+
+    hl->addWidget(chart_panel, 5);
+    return row;
+}
+
+void EquityEarningsTab::set_metric(services::equity::ReactionMetric m) {
+    selected_metric_ = m;
+    for (auto it = metric_buttons_.constBegin(); it != metric_buttons_.constEnd(); ++it)
+        it.value()->setChecked(it.key() == m);
+    if (reaction_chart_)
+        reaction_chart_->set_metric(m);
+}
+
+void EquityEarningsTab::fill_correlations(const EarningsAnalysis& a) {
+    const auto correlations = services::equity::correlate_reactions(a);
+
+    const services::equity::ReactionCorrelation* strongest = nullptr;
+    for (const auto& c : correlations) {
+        auto* btn = metric_buttons_.value(c.metric, nullptr);
+        if (btn) {
+            // The button carries its own r, so picking a series is an informed
+            // choice rather than a guess.
+            btn->setText(c.r.has_value()
+                             ? QString("%1  r%2%3").arg(c.label,
+                                                        *c.r >= 0 ? "+" : "",
+                                                        QString::number(*c.r, 'f', 2))
+                             : c.label);
+            btn->setToolTip(c.r.has_value()
+                                ? QString("Correlation between %1 and the next-session move, "
+                                          "measured over %2 reported quarters.")
+                                      .arg(c.label.toLower())
+                                      .arg(c.n)
+                                : QString("Not enough quarters carry both %1 and a price reaction.")
+                                      .arg(c.label.toLower()));
+        }
+        if (c.r.has_value() && (!strongest || std::abs(*c.r) > std::abs(*strongest->r)))
+            strongest = &c;
+    }
+
+    if (!strongest) {
+        correlation_note_->setText(QStringLiteral(
+            "Not enough reported quarters with price history to measure a relationship."));
+        return;
+    }
+    // Say plainly how little a dozen quarters proves. The panel exists so the
+    // reader can see whether this name trades off earnings size at all — it is
+    // not a fitted predictor, and presenting r without n would imply it was.
+    const QString strength = std::abs(*strongest->r) >= 0.6   ? QStringLiteral("tracks")
+                             : std::abs(*strongest->r) >= 0.3 ? QStringLiteral("loosely tracks")
+                                                              : QStringLiteral("barely tracks");
+    correlation_note_->setText(
+        QString("Of the three, the next-session move %1 %2 (r %3%4 over %5 quarters). "
+                "At this sample size treat it as directional colour, not a predictor — and note "
+                "QoQ carries the company's seasonality, which YoY strips out.")
+            .arg(strength, strongest->label.toLower(),
+                 *strongest->r >= 0 ? "+" : "", QString::number(*strongest->r, 'f', 2))
+            .arg(strongest->n));
 }
 
 QWidget* EquityEarningsTab::build_current_panel() {
@@ -665,13 +774,19 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
                                              ui::colors::TEXT_PRIMARY()));
         history_table_->setItem(row, 3, cell(opt_pct(p.surprise_pct, 2),
                                              p.surprise_pct.has_value() ? color_for(*p.surprise_pct) : QString()));
-        history_table_->setItem(row, 4, cell(opt_pct(p.reaction_pct, 2),
+        history_table_->setItem(row, 4, cell(opt_pct(p.eps_qoq_pct, 1),
+                                             p.eps_qoq_pct.has_value() ? color_for(*p.eps_qoq_pct) : QString()));
+        history_table_->setItem(row, 5, cell(opt_pct(p.eps_yoy_pct, 1),
+                                             p.eps_yoy_pct.has_value() ? color_for(*p.eps_yoy_pct) : QString()));
+        history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),
                                              p.reaction_pct.has_value() ? color_for(*p.reaction_pct) : QString()));
-        history_table_->setItem(row, 5, cell(opt_pct(p.runup_pct, 2),
+        history_table_->setItem(row, 7, cell(opt_pct(p.runup_pct, 2),
                                              p.runup_pct.has_value() ? color_for(*p.runup_pct) : QString()));
         ++row;
     }
     fit_table_height(history_table_);
+    reaction_chart_->set_history(a.history);
+    fill_correlations(a);
 
     // Built from whichever halves have data: a symbol can have surprises with
     // no usable price history (yfinance dropped the bars), and claiming "rose

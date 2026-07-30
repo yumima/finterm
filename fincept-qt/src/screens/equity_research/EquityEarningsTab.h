@@ -1,11 +1,14 @@
 // src/screens/equity_research/EquityEarningsTab.h
 #pragma once
+#include "screens/equity_research/EarningsReactionChart.h"
 #include "services/equity/EarningsSignal.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
+#include <QHash>
 #include <QLabel>
+#include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -39,6 +42,8 @@ class EquityEarningsTab : public QWidget {
     // Section builders — each returns a panel added to the scroll column.
     QWidget* build_summary_row();
     QWidget* build_scorecard();
+    /// PAST section: the quarter table and, beside it, the same quarters
+    /// plotted against what the stock did on each print.
     QWidget* build_history_panel();
     QWidget* build_current_panel();
     QWidget* build_future_panel();
@@ -81,6 +86,16 @@ class EquityEarningsTab : public QWidget {
 
     QTableWidget* history_table_ = nullptr;
     QLabel* history_summary_ = nullptr;
+
+    // Reaction chart + its metric switch. Each button shows that metric's
+    // measured correlation with the next-session move, so the choice is
+    // informed rather than blind.
+    EarningsReactionChart* reaction_chart_ = nullptr;
+    QHash<services::equity::ReactionMetric, QPushButton*> metric_buttons_;
+    QLabel* correlation_note_ = nullptr;
+    services::equity::ReactionMetric selected_metric_ = services::equity::ReactionMetric::QoQ;
+    void set_metric(services::equity::ReactionMetric m);
+    void fill_correlations(const services::equity::EarningsAnalysis& a);
     QTableWidget* trend_table_ = nullptr;
     QTableWidget* revisions_table_ = nullptr;
     QTableWidget* estimates_table_ = nullptr;

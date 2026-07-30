@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`653f657b7`](https://github.com/yumima/finterm/commit/653f657b7) ER Earnings: don't discard good data when a background refresh fails
 - [`6ae776052`](https://github.com/yumima/finterm/commit/6ae776052) ER: add an Earnings tab with a pre-report buy/hold/sell scorecard
 - [`ceb0ae990`](https://github.com/yumima/finterm/commit/ceb0ae990) Portfolio: make the heatmap's AFT mode actually load on the first click
 - [`e791770fd`](https://github.com/yumima/finterm/commit/e791770fd) Portfolio: allow renaming a portfolio from the UI

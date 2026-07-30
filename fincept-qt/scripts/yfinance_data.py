@@ -1489,7 +1489,8 @@ def get_earnings_analysis(symbol, quarters=12):
                 rev_low, rev_high, year_ago_eps, year_ago_rev, eps_growth,
                 rev_growth},
        "history": [{timestamp, eps_estimate, eps_actual, surprise_pct,
-                    reaction_pct, runup_pct, price_before, price_after}],
+                    eps_qoq_pct, eps_yoy_pct, reaction_pct, runup_pct,
+                    price_before, price_after}],
        "estimates": [{period, label, eps_avg, eps_low, eps_high, analysts,
                       eps_growth, year_ago_eps, rev_avg, rev_growth,
                       year_ago_rev}],
@@ -1646,7 +1647,29 @@ def get_earnings_analysis(symbol, quarters=12):
                 "price_before": p_before,
                 "price_after":  p_after,
             })
-        history.sort(key=lambda d: d["timestamp"], reverse=True)
+        # Sequential / year-ago EPS change, computed on the FULL series before
+        # truncation so the oldest kept quarter still has its year-ago
+        # reference. QoQ is what a reader eyeballs first but it carries the
+        # company's seasonality (a retailer's March quarter is "down" against
+        # December every single year); YoY is the seasonality-free version.
+        # Both are reported and neither is scored — the UI shows each one's
+        # measured correlation with the next-day move instead.
+        history.sort(key=lambda d: d["timestamp"])
+        for i, row in enumerate(history):
+            act = row.get("eps_actual")
+            row["eps_qoq_pct"] = None
+            row["eps_yoy_pct"] = None
+            if act is None:
+                continue
+            prev = history[i - 1].get("eps_actual") if i >= 1 else None
+            year_ago = history[i - 4].get("eps_actual") if i >= 4 else None
+            # A base that crossed (or sits on) zero makes the percentage
+            # meaningless rather than merely large — leave it unset.
+            if prev is not None and abs(prev) > 1e-9:
+                row["eps_qoq_pct"] = (act - prev) / abs(prev) * 100.0
+            if year_ago is not None and abs(year_ago) > 1e-9:
+                row["eps_yoy_pct"] = (act - year_ago) / abs(year_ago) * 100.0
+        history.reverse()
         history = history[:max(1, int(quarters))]
 
     out["history"] = history

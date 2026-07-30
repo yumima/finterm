@@ -238,6 +238,106 @@ class TestEarningsSignal : public QObject {
         QCOMPARE(v.up_reaction_rate, 0.5);
     }
 
+    // The QoQ-vs-reaction correlation is shown to the user as a number they
+    // may act on, so its edge cases matter more than its happy path.
+    void correlation_matches_hand_computed_values() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Reaction exactly tracks surprise, and exactly opposes QoQ.
+        const double surprise[] = {2.0, 4.0, 6.0, 8.0};
+        const double reaction[] = {1.0, 2.0, 3.0, 4.0};
+        for (int i = 0; i < 4; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.eps_actual = 1.0;
+            p.surprise_pct = surprise[i];
+            p.eps_qoq_pct = -surprise[i];
+            p.reaction_pct = reaction[i];
+            a.history.append(p);
+        }
+        const auto cs = correlate_reactions(a);
+        QCOMPARE(cs.size(), 3);
+        for (const auto& c : cs) {
+            if (c.metric == ReactionMetric::Surprise) {
+                QCOMPARE(c.n, 4);
+                QVERIFY(c.r.has_value());
+                QVERIFY(std::abs(*c.r - 1.0) < 1e-9);
+            } else if (c.metric == ReactionMetric::QoQ) {
+                QVERIFY(c.r.has_value());
+                QVERIFY(std::abs(*c.r + 1.0) < 1e-9);
+            } else {
+                QCOMPARE(c.n, 0);          // no YoY values in this fixture
+                QVERIFY(!c.r.has_value());
+            }
+        }
+    }
+
+    // A metric that never varies has no correlation to report — dividing by
+    // its zero spread would surface a NaN in the UI as "rnan".
+    void constant_metric_yields_no_correlation() {
+        EarningsAnalysis a;
+        a.valid = true;
+        for (int i = 0; i < 5; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.surprise_pct = 3.0;          // identical every quarter
+            p.reaction_pct = i * 1.5;
+            a.history.append(p);
+        }
+        for (const auto& c : correlate_reactions(a)) {
+            if (c.metric == ReactionMetric::Surprise) {
+                QCOMPARE(c.n, 5);
+                QVERIFY2(!c.r.has_value(), "correlated against a zero-variance series");
+            }
+        }
+    }
+
+    // Quarters missing either side of the pair must not inflate n.
+    void quarters_without_a_reaction_are_excluded() {
+        EarningsAnalysis a;
+        a.valid = true;
+        EarningsPoint pending;             // reported today, no next session yet
+        pending.timestamp = 1700000000LL;
+        pending.surprise_pct = 5.0;
+        a.history.append(pending);
+        for (int i = 1; i < 4; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.surprise_pct = i * 2.0;
+            p.reaction_pct = i * 1.0;
+            a.history.append(p);
+        }
+        for (const auto& c : correlate_reactions(a)) {
+            if (c.metric == ReactionMetric::Surprise)
+                QCOMPARE(c.n, 3);          // the pending quarter is not a pair
+        }
+    }
+
+    void two_quarters_is_too_few_to_correlate() {
+        EarningsAnalysis a;
+        a.valid = true;
+        for (int i = 0; i < 2; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.surprise_pct = i * 3.0;
+            p.reaction_pct = i * 2.0;
+            a.history.append(p);
+        }
+        for (const auto& c : correlate_reactions(a))
+            QVERIFY(!c.r.has_value());
+    }
+
+    void metric_value_reads_the_right_field() {
+        EarningsPoint p;
+        p.surprise_pct = 1.0;
+        p.eps_qoq_pct = 2.0;
+        p.eps_yoy_pct = 3.0;
+        QCOMPARE(*metric_value(p, ReactionMetric::Surprise), 1.0);
+        QCOMPARE(*metric_value(p, ReactionMetric::QoQ), 2.0);
+        QCOMPARE(*metric_value(p, ReactionMetric::YoY), 3.0);
+        QVERIFY(!metric_value(EarningsPoint{}, ReactionMetric::QoQ).has_value());
+    }
+
     void days_to_next_earnings_handles_missing_date() {
         EarningsAnalysis a;
         QCOMPARE(days_to_next_earnings(a), -1);
