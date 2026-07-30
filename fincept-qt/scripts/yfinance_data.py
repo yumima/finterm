@@ -1494,6 +1494,55 @@ def _earnings_price_reaction(hist, event_ts):
         return None, None, None, None
 
 
+_INDEX_CLOSES = {"ts": 0.0, "closes": None}
+_INDEX_CLOSES_TTL_SEC = 900
+
+
+def _index_closes(symbol="SPY"):
+    """Daily closes for the benchmark, memoised for 15 minutes.
+
+    Used only to strip the market's own move out of a stock's pre-earnings
+    run-up: a name "up 8% into the print" in a week the index rose 7% has not
+    actually been bid up. Every earnings_analysis call would otherwise
+    re-download the same series, and the daemon is long-lived enough that one
+    memo serves a whole session.
+
+    Returns None on any failure — the caller degrades to the absolute run-up
+    rather than losing the entire response over a benchmark it can live
+    without. Two threads racing here at worst duplicates one download; the
+    dict write itself is atomic under CPython.
+    """
+    now = time.time()
+    cached = _INDEX_CLOSES["closes"]
+    if cached is not None and now - _INDEX_CLOSES["ts"] < _INDEX_CLOSES_TTL_SEC:
+        return cached
+    try:
+        h = yf.Ticker(symbol).history(period="1y", interval="1d", auto_adjust=True)
+        closes = h["Close"] if h is not None and not getattr(h, "empty", True) else None
+    except Exception:
+        closes = None
+    if closes is not None:
+        # Only a successful fetch refreshes the stamp; a failure leaves the
+        # previous (stale but real) series in place rather than caching None.
+        _INDEX_CLOSES["ts"] = now
+        _INDEX_CLOSES["closes"] = closes
+    return closes
+
+
+def _pct_back(closes, back):
+    """Percent change over the last `back` sessions, or None."""
+    try:
+        if closes is None or len(closes) <= back:
+            return None
+        last = float(closes.iloc[-1])
+        ref = float(closes.iloc[-1 - back])
+        if not ref:
+            return None
+        return (last - ref) / ref * 100.0
+    except Exception:
+        return None
+
+
 def get_earnings_analysis(symbol, quarters=12):
     """Past / current / forward earnings picture for one symbol.
 
@@ -1706,18 +1755,38 @@ def get_earnings_analysis(symbol, quarters=12):
     # Run-up *into the current setup* — the "is the move already priced in?"
     # half of the pre-earnings question. Same close-to-close basis as the
     # per-event runup above so the two are directly comparable.
-    recent = {"runup_5d": None, "runup_20d": None}
+    #
+    # The 60/90-day legs are here for the expectations gap: the scorer races
+    # the price's move over a window against the move in the consensus EPS
+    # number over the SAME window, which is how it can tell "the numbers went
+    # up" from "the multiple went up". Relative versions strip the index out,
+    # so a stock that merely rode the market isn't read as crowded.
+    recent = {"runup_5d": None, "runup_20d": None, "runup_60d": None, "runup_90d": None,
+              "rel_runup_20d": None, "rel_runup_90d": None, "pct_from_52w_high": None}
     if hist is not None and not getattr(hist, "empty", True):
         try:
             closes = hist["Close"]
+            for key, back in (("runup_5d", 5), ("runup_20d", 20),
+                              ("runup_60d", 60), ("runup_90d", 90)):
+                recent[key] = _pct_back(closes, back)
+            # Distance from the 52-week high: 0 means sitting on it. A stock at
+            # its high into a print carries a higher bar than the same stock
+            # 30% off it, whatever the fundamentals say.
+            window = closes.iloc[-252:] if len(closes) > 252 else closes
+            high = float(window.max())
             last = float(closes.iloc[-1])
-            for key, back in (("runup_5d", 5), ("runup_20d", 20)):
-                if len(closes) > back:
-                    ref = float(closes.iloc[-1 - back])
-                    if ref:
-                        recent[key] = (last - ref) / ref * 100.0
+            if high:
+                recent["pct_from_52w_high"] = (last - high) / high * 100.0
         except Exception:
             pass
+    idx_closes = _index_closes()
+    if idx_closes is not None:
+        for key, back, own_key in (("rel_runup_20d", 20, "runup_20d"),
+                                   ("rel_runup_90d", 90, "runup_90d")):
+            own = recent.get(own_key)
+            idx = _pct_back(idx_closes, back)
+            if own is not None and idx is not None:
+                recent[key] = own - idx
     out["recent"] = recent
 
     # ── next report: merge the calendar's consensus onto the date ────────────

@@ -41,6 +41,19 @@ enum class SignalDirection { Bullish, Neutral, Bearish };
 /// rotates weight between the two as the date approaches.
 enum class SignalHorizon { Short, Long };
 
+/// Which of the two questions a leg answers.
+///
+/// Setup: is the business doing well and does the street think so.
+/// Bar:   how much of that is already in the price.
+///
+/// Keeping them apart is the point. Every Setup leg is positively correlated
+/// with every other one AND with how crowded the name is, so a scorer built
+/// only from them is a quality detector — and quality is the thing that gets
+/// priced. "Strong company, very high bar" and "ordinary company, nothing
+/// expected" can produce the same composite, and the reader needs to be able
+/// to tell them apart.
+enum class SignalAxis { Setup, Bar };
+
 /// One scored leg of the verdict.
 struct SignalComponent {
     QString name;             // "REVISION MOMENTUM"
@@ -50,6 +63,7 @@ struct SignalComponent {
     double  weight = 0.0;     // share of the composite AFTER horizon rotation
     double  base_weight = 0.0;// share before rotation — what the leg is worth in principle
     SignalHorizon horizon = SignalHorizon::Long;
+    SignalAxis    axis = SignalAxis::Setup;
     bool    available = false;
 };
 
@@ -67,12 +81,25 @@ struct EarningsVerdict {
     QString horizon_note;
     int     days_to_report = -1;        // -1 when the date is unknown
 
+    // The composite, decomposed. Each is the weighted mean over the available
+    // legs of that axis, on the same ±100 scale as `score`, so they can be
+    // read side by side: setup +70 / bar −55 is a good company with most of
+    // the good news already paid for. Unset when that axis has no data.
+    std::optional<double> setup_score;
+    std::optional<double> bar_score;
+
     // Descriptive stats the UI shows next to the verdict.
     int    scored_quarters = 0;         // reported quarters with a surprise
     double beat_rate = 0.0;             // 0 … 1
     double avg_surprise_pct = 0.0;
     double surprise_stdev_pct = 0.0;    // quarter-to-quarter spread of the surprise
     std::optional<double> beat_reaction_pct;  // mean move on quarters that beat
+    // Mean reaction over the past prints this name walked into as hot as it is
+    // walking into this one, and how many those were. Set only when the
+    // current run-up is above the historical median — otherwise the subset
+    // answers a question this setup doesn't pose.
+    std::optional<double> hot_runup_reaction_pct;
+    int hot_runup_prints = 0;
     int    reaction_quarters = 0;
     double avg_reaction_pct = 0.0;      // signed mean 1-day move
     double typical_move_pct = 0.0;      // mean |1-day move| — the expected move

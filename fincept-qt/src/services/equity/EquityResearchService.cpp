@@ -1614,8 +1614,13 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
     }
 
     const auto recent = obj.value("recent").toObject();
-    a.runup_5d_pct  = opt_num(recent, "runup_5d");
-    a.runup_20d_pct = opt_num(recent, "runup_20d");
+    a.runup_5d_pct        = opt_num(recent, "runup_5d");
+    a.runup_20d_pct       = opt_num(recent, "runup_20d");
+    a.runup_60d_pct       = opt_num(recent, "runup_60d");
+    a.runup_90d_pct       = opt_num(recent, "runup_90d");
+    a.rel_runup_20d_pct   = opt_num(recent, "rel_runup_20d");
+    a.rel_runup_90d_pct   = opt_num(recent, "rel_runup_90d");
+    a.pct_from_52w_high   = opt_num(recent, "pct_from_52w_high");
 
     return a;
 }

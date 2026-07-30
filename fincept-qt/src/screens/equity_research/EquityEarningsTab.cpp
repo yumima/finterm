@@ -363,6 +363,18 @@ QWidget* EquityEarningsTab::build_summary_row() {
     score_box->addWidget(verdict_confidence_);
     badge_row->addLayout(score_box);
     badge_row->addStretch();
+
+    verdict_axes_ = new QLabel;
+    verdict_axes_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    verdict_axes_->setToolTip(QStringLiteral(
+        "SETUP is how the business and the street's view of it read: track record, "
+        "revisions, guidance drift, breadth, expected growth.\n\n"
+        "BAR is how much of that is already in the price: the expectations gap, "
+        "positioning, and where the price sits against analyst targets.\n\n"
+        "They are the same composite split in two. A high setup against a deeply "
+        "negative bar is the classic beat-and-fall configuration — good company, "
+        "nothing left to surprise anyone with."));
+    badge_row->addWidget(verdict_axes_);
     verdict_body->addLayout(badge_row);
 
     verdict_headline_ = new QLabel;
@@ -668,6 +680,22 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                                      .arg(verdict.components.size()));
     verdict_headline_->setText(verdict.headline);
     verdict_horizon_->setText(verdict.horizon_note);
+
+    // Axes: two monospace numbers, each coloured on its own sign, so a strong
+    // business against a high bar reads as the tension it is rather than as
+    // one averaged-out figure.
+    auto axis_span = [](const char* label, const std::optional<double>& v) {
+        if (!v.has_value())
+            return QString("<span style='color:%1'>%2 —</span>")
+                .arg(ui::colors::TEXT_TERTIARY(), QString::fromLatin1(label));
+        return QString("<span style='color:%1'>%2</span> "
+                       "<span style='color:%3; font-weight:700'>%4%5</span>")
+            .arg(ui::colors::TEXT_TERTIARY(), QString::fromLatin1(label), color_for(*v),
+                 *v >= 0 ? "+" : "", QString::number(*v, 'f', 0));
+    };
+    verdict_axes_->setText(QString("<div style='font-family:monospace; font-size:12px'>%1<br>%2</div>")
+                               .arg(axis_span("SETUP", verdict.setup_score),
+                                    axis_span("BAR  ", verdict.bar_score)));
 
     // ── Setup card ───────────────────────────────────────────────────────────
     set_stat(setup_move_,

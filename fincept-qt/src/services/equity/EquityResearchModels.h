@@ -331,6 +331,17 @@ struct EarningsAnalysis {
     // EarningsPoint::runup_pct so the two compare directly.
     std::optional<double> runup_5d_pct;
     std::optional<double> runup_20d_pct;
+    // Longer windows, for racing the price against the consensus number over
+    // the same period — the difference is how much of the move was earnings
+    // and how much was the multiple.
+    std::optional<double> runup_60d_pct;
+    std::optional<double> runup_90d_pct;
+    // The same run-ups with the index's move removed. A stock up 8% into a
+    // print in a week the market rose 7% has not been bid up for its earnings.
+    std::optional<double> rel_runup_20d_pct;
+    std::optional<double> rel_runup_90d_pct;
+    // Distance from the 52-week high; 0 = sitting on it, negative = below.
+    std::optional<double> pct_from_52w_high;
 
     /// True when there is nothing earnings-shaped to show (ETF, index, fund).
     bool has_content() const {

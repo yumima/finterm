@@ -70,6 +70,12 @@ double weight_of(const EarningsVerdict& v, const QString& name) {
     return c ? c->weight : 0.0;
 }
 
+EarningsAnalysis bullish_fixture();
+
+/// Composite of the untouched bullish fixture — the baseline a variant is
+/// compared against when a test changes exactly one thing about it.
+double bullish_fixture_score() { return evaluate_earnings(bullish_fixture()).score; }
+
 EarningsRevisionRow revision(const QString& period, double up30, double down30) {
     EarningsRevisionRow r;
     r.period = period;
@@ -104,6 +110,14 @@ EarningsAnalysis bullish_fixture() {
     a.valuation.forward_pe = 22.0;
     a.valuation.recommendation_mean = 1.6;
     a.valuation.analyst_count = 30;
+    // A constructive-but-not-crowded setup: the consensus number has risen
+    // faster than the price, the stock has lagged the index recently, and it
+    // is well off its high. That is the configuration this scorer is supposed
+    // to like — good news that nobody has paid for yet.
+    a.runup_90d_pct = 4.0;
+    a.runup_20d_pct = 1.0;
+    a.rel_runup_20d_pct = -2.0;
+    a.pct_from_52w_high = -25.0;
     return a;
 }
 
@@ -129,6 +143,12 @@ EarningsAnalysis bearish_fixture() {
     a.valuation.trailing_pe = 22.0;
     a.valuation.forward_pe = 30.0;
     a.valuation.recommendation_mean = 4.2;
+    // Numbers coming down while the price ran up, and sitting on its high:
+    // the bar is high and rising against a business that is not.
+    a.runup_90d_pct = 30.0;
+    a.runup_20d_pct = 14.0;
+    a.rel_runup_20d_pct = 18.0;
+    a.pct_from_52w_high = -0.5;
     return a;
 }
 
@@ -422,6 +442,88 @@ class TestEarningsSignal : public QObject {
         // engine reads as "imminent", not "unknown".
         a.next.timestamp = QDateTime(QDate(2026, 7, 28), QTime(16, 30), et).toSecsSinceEpoch();
         QCOMPARE(days_to_next_earnings(a, now), -2);
+    }
+
+    // ── The bar ──────────────────────────────────────────────────────────────
+    // The failure this whole axis exists for: a company doing everything right
+    // whose price has already run past the numbers. Every SETUP leg is
+    // maximally bullish here and the verdict must still not read BUY.
+    void a_price_that_outran_its_own_numbers_is_not_a_buy() {
+        EarningsAnalysis a = bullish_fixture();
+        a.runup_90d_pct = 45.0;          // stock up 45% over the quarter…
+        a.runup_20d_pct = 18.0;
+        a.rel_runup_20d_pct = 16.0;      // …far ahead of the index
+        a.pct_from_52w_high = -0.2;      // …and sitting on its high
+        // Estimates over the same 90 days: 2.10 vs 1.90, about +10%.
+
+        const auto v = evaluate_earnings(a);
+        const auto* gap = leg(v, QStringLiteral("EXPECTATIONS GAP"));
+        const auto* crowd = leg(v, QStringLiteral("POSITIONING"));
+        QVERIFY(gap && gap->available);
+        QVERIFY2(gap->score < -0.5, qPrintable(QString("gap %1").arg(gap->score)));
+        QVERIFY(crowd && crowd->available);
+        QVERIFY2(crowd->score < -0.5, qPrintable(QString("crowding %1").arg(crowd->score)));
+
+        // The setup half is still strong — that is the point. The bar half is
+        // what has to pull the composite down.
+        QVERIFY(v.setup_score.has_value() && *v.setup_score > 20.0);
+        QVERIFY(v.bar_score.has_value() && *v.bar_score < 0.0);
+        QVERIFY2(v.score < bullish_fixture_score(),
+                 "a run-up past the numbers left the composite untouched");
+    }
+
+    // Estimates rising faster than the price is the setup the leg rewards.
+    void numbers_rising_faster_than_the_price_scores_positive() {
+        EarningsAnalysis a = bullish_fixture();
+        a.runup_90d_pct = -12.0;         // stock down while the number went up
+        const auto* gap = leg(evaluate_earnings(a), QStringLiteral("EXPECTATIONS GAP"));
+        QVERIFY(gap && gap->available);
+        QVERIFY2(gap->score > 0.5, qPrintable(QString("gap %1").arg(gap->score)));
+    }
+
+    // Both axes are reported, and a sharp disagreement between them is stated
+    // rather than left to average out into a number that says neither thing.
+    void axis_tension_is_named_in_the_headline() {
+        EarningsAnalysis a = bullish_fixture();
+        a.runup_90d_pct = 60.0;
+        a.rel_runup_20d_pct = 25.0;
+        a.pct_from_52w_high = 0.0;
+        a.valuation.target_mean = 95.0;   // price already past the street's target
+        a.valuation.recommendation_mean = 3.0;
+        const auto v = evaluate_earnings(a);
+        QVERIFY(v.setup_score.has_value() && v.bar_score.has_value());
+        QVERIFY2(v.headline.contains("already paid for"), qPrintable(v.headline));
+    }
+
+    // A name that reliably fades after a hot week must be scored on those
+    // quarters when it is walking in hot again — not on its average quarter.
+    void a_stock_that_fades_after_a_run_is_scored_on_those_prints() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Four prints after a big run-up, all sold; four after a flat run,
+        // all bought. The unconditional average is a wash.
+        for (int i = 0; i < 4; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.05, 5.0, -6.0, 12.0));
+        for (int i = 4; i < 8; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.05, 5.0, 6.0, -1.0));
+
+        // Walking into this one hot: the conditional read applies.
+        a.runup_5d_pct = 15.0;
+        const auto hot = evaluate_earnings(a);
+        const auto* hot_leg = leg(hot, QStringLiteral("PRICE REACTION HISTORY"));
+        QVERIFY(hot_leg && hot_leg->available);
+        QVERIFY2(hot_leg->score < 0, qPrintable(QString("score %1").arg(hot_leg->score)));
+        QCOMPARE(hot.hot_runup_prints, 4);
+        QVERIFY(hot.hot_runup_reaction_pct.has_value());
+        QCOMPARE(*hot.hot_runup_reaction_pct, -6.0);
+        QVERIFY(hot_leg->detail.contains("after a run-up like today's"));
+
+        // Walking in cold: the subset answers a question this setup doesn't
+        // pose, so the leg falls back to the whole record.
+        a.runup_5d_pct = -3.0;
+        const auto cold = evaluate_earnings(a);
+        QCOMPARE(cold.hot_runup_prints, 0);
+        QVERIFY(!cold.hot_runup_reaction_pct.has_value());
     }
 
     // ── Guidance ─────────────────────────────────────────────────────────────

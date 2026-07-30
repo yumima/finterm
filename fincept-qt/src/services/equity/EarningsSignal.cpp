@@ -25,17 +25,29 @@ constexpr double kFullRevGrowth     = 0.15;  // 15% YoY revenue growth
 constexpr double kFullGrowthEdge    = 0.15;  // growth advantage over the index
 constexpr double kFullTargetUpside  = 0.20;  // distance to mean analyst target
 
-// Component weights, before the horizon rotation below. Guidance expectations
-// and revision momentum carry the most: a company's own guide is what the
-// stock actually trades on, and while nobody publishes it early, analysts move
-// their numbers toward it as they hear it. Everything else is a prior.
-constexpr double kWeightTrackRecord = 0.16;
-constexpr double kWeightReaction    = 0.10;
-constexpr double kWeightRevisions   = 0.20;
-constexpr double kWeightGuidance    = 0.22;
-constexpr double kWeightBreadth     = 0.12;
-constexpr double kWeightGrowth      = 0.14;
-constexpr double kWeightValuation   = 0.06;
+constexpr double kFullExpectationGap = 20.0;  // pts of price-vs-estimate divergence
+constexpr double kFullRelRunup       = 15.0;  // index-relative run-up into the print
+
+// Component weights, before the horizon rotation below.
+//
+// The legs split into two groups, and the split matters more than any single
+// number in it. SETUP legs describe the business and what the street thinks of
+// it; BAR legs describe how much of that is already in the price. An earlier
+// version of this scorer was SETUP-only, which made it a quality detector —
+// and quality is precisely what gets priced in. It read BUY on names that then
+// beat and fell, because every leg it had peaked exactly when the bar did.
+// BAR now carries 35% of the weight, and the two are reported separately so a
+// "strong company, very high bar" setup is legible instead of averaging into
+// a confident-looking BUY.
+constexpr double kWeightTrackRecord = 0.10;   // SETUP
+constexpr double kWeightReaction    = 0.09;   // SETUP
+constexpr double kWeightRevisions   = 0.14;   // SETUP
+constexpr double kWeightGuidance    = 0.18;   // SETUP
+constexpr double kWeightBreadth     = 0.06;   // SETUP
+constexpr double kWeightGrowth      = 0.08;   // SETUP
+constexpr double kWeightExpectations = 0.20;  // BAR
+constexpr double kWeightCrowding     = 0.09;  // BAR
+constexpr double kWeightValuation    = 0.06;  // BAR
 
 // ── Horizon rotation ─────────────────────────────────────────────────────────
 // Beyond this many days out, nothing has started moving yet and the weights
@@ -66,6 +78,15 @@ constexpr double kWideDispersionPct = 25.0;
 
 // Beating quarters needed before "beats get paid" is allowed to score.
 constexpr int kMinBeatReactions = 3;
+// Past prints needed in the "walked in hot" subset before the reaction leg
+// will narrow to it. Below this the conditional mean is one or two sessions
+// and the unconditional average describes the name better.
+constexpr int kMinConditionalPrints = 3;
+// Distance below the 52-week high at which a name stops reading as extended.
+constexpr double kNearHighPct = 20.0;
+// Gap between the two axes (on the ±100 scale) worth calling out in the
+// headline rather than leaving the reader to spot in the breakdown.
+constexpr double kAxisTensionPts = 50.0;
 
 // Quarters of history the backward-looking legs consider. Eight covers two
 // full years — long enough to be a track record, short enough that a changed
@@ -125,6 +146,7 @@ SignalComponent score_track_record(const EarningsAnalysis& a, EarningsVerdict& v
     c.name = QStringLiteral("SURPRISE TRACK RECORD");
     c.base_weight = kWeightTrackRecord;
     c.horizon = SignalHorizon::Long;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "Deliberately NOT the beat rate. Around four in five large caps beat "
         "every quarter — they guide to a number they can clear — so 'beats "
@@ -200,12 +222,19 @@ SignalComponent score_reaction(const EarningsAnalysis& a, EarningsVerdict& v) {
     c.name = QStringLiteral("PRICE REACTION HISTORY");
     c.base_weight = kWeightReaction;
     c.horizon = SignalHorizon::Long;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "How the stock actually traded on past prints, close to close. Beating "
-        "consensus and rising are different things — this leg measures the second.");
+        "consensus and rising are different things — this leg measures the "
+        "second. When the stock has already run into THIS print, it narrows to "
+        "the past prints that also followed a run: a name that reliably fades "
+        "after a strong week into the date is telling you something specific "
+        "about the setup in front of you, not about its average quarter.");
 
     int considered = 0, ups = 0;
     double sum = 0, abs_sum = 0;
+    QVector<double> runups;                    // run-ups of the same quarters
+    QVector<QPair<double, double>> pairs;       // (runup, reaction)
     for (const auto& p : a.history) {
         if (considered >= kTrackRecordQuarters) break;
         if (p.is_estimate || !p.reaction_pct.has_value()) continue;
@@ -213,6 +242,10 @@ SignalComponent score_reaction(const EarningsAnalysis& a, EarningsVerdict& v) {
         if (*p.reaction_pct > 0) ++ups;
         sum += *p.reaction_pct;
         abs_sum += std::abs(*p.reaction_pct);
+        if (p.runup_pct.has_value()) {
+            runups.append(*p.runup_pct);
+            pairs.append({*p.runup_pct, *p.reaction_pct});
+        }
     }
     if (considered == 0) {
         c.detail = QStringLiteral("No price history around past reports");
@@ -226,11 +259,135 @@ SignalComponent score_reaction(const EarningsAnalysis& a, EarningsVerdict& v) {
     v.typical_move_pct = abs_sum / considered;
     v.up_reaction_rate = up_rate;
 
+    // Conditional read: how this name traded on the prints it walked into hot.
+    // Only used when the CURRENT setup is hot too — otherwise it is answering
+    // a question nobody asked, and the unconditional average is the better
+    // description of an ordinary setup.
+    std::optional<double> conditional_avg;
+    int conditional_n = 0;
+    if (runups.size() >= 2 * kMinConditionalPrints && a.runup_5d_pct.has_value()) {
+        QVector<double> sorted = runups;
+        std::sort(sorted.begin(), sorted.end());
+        // Upper of the two middles on an even count, not their average: it
+        // makes the conditional read harder to trigger, and the safe direction
+        // for a subset-of-a-subset is "don't narrow unless clearly warranted".
+        const double median = sorted.at(sorted.size() / 2);
+        if (*a.runup_5d_pct >= median) {
+            double hot_sum = 0;
+            for (const auto& [runup, reaction] : pairs) {
+                if (runup < median) continue;
+                hot_sum += reaction;
+                ++conditional_n;
+            }
+            if (conditional_n >= kMinConditionalPrints) {
+                conditional_avg = hot_sum / conditional_n;
+                v.hot_runup_reaction_pct = conditional_avg;
+                v.hot_runup_prints = conditional_n;
+            }
+        }
+    }
+
     c.available = true;
-    c.score = clamp_unit(0.5 * (2.0 * up_rate - 1.0) +
-                         0.5 * clamp_unit(avg / kFullReactionPct));
-    c.detail = QString("Rose on %1 of %2 prints · average %3 next session")
-                   .arg(ups).arg(considered).arg(pct_str(avg));
+    if (conditional_avg) {
+        // Scored off the conditional mean alone: mixing in the up-rate over
+        // all quarters would dilute the very selection that makes this useful.
+        c.score = clamp_unit(*conditional_avg / kFullReactionPct);
+        c.detail = QString("Rose on %1 of %2 prints · average %3 · but %4 after a run-up "
+                           "like today's (%5 prints)")
+                       .arg(ups).arg(considered).arg(pct_str(avg), pct_str(*conditional_avg))
+                       .arg(conditional_n);
+    } else {
+        c.score = clamp_unit(0.5 * (2.0 * up_rate - 1.0) +
+                             0.5 * clamp_unit(avg / kFullReactionPct));
+        c.detail = QString("Rose on %1 of %2 prints · average %3 next session")
+                       .arg(ups).arg(considered).arg(pct_str(avg));
+    }
+    return c;
+}
+
+SignalComponent score_expectations(const EarningsAnalysis& a) {
+    SignalComponent c;
+    c.name = QStringLiteral("EXPECTATIONS GAP");
+    c.base_weight = kWeightExpectations;
+    c.horizon = SignalHorizon::Short;
+    c.axis = SignalAxis::Bar;
+    c.explanation = QStringLiteral(
+        "The race between the price and the number, over the same 90 days. "
+        "Estimates up 3% while the stock is up 25% means the multiple did the "
+        "work and the bar has been raised without earnings to back it — the "
+        "company then has to beat a number the market has already moved past. "
+        "Estimates rising faster than the price is the setup nobody is "
+        "positioned for, and it is the one this leg rewards.");
+
+    const auto* t = find_trend(a, QStringLiteral("0q"));
+    if (!t) t = find_trend(a, QStringLiteral("+1q"));
+    const auto est_90d = t ? revision_pct(t->current, t->d90) : std::nullopt;
+    if (!est_90d || !a.runup_90d_pct.has_value()) {
+        c.detail = QStringLiteral("Needs both a 90-day estimate history and 90 days of price");
+        return c;
+    }
+
+    // Negative when the price outran the number. The comparison is against
+    // the absolute price move on purpose: a re-rating raises the bar whether
+    // it came from the sector, the market, or the name itself.
+    const double gap = *est_90d - *a.runup_90d_pct;
+    c.available = true;
+    c.score = clamp_unit(gap / kFullExpectationGap);
+    c.detail = QString("Consensus EPS %1 over 90d while the stock did %2 — %3")
+                   .arg(pct_str(*est_90d), pct_str(*a.runup_90d_pct),
+                        gap < -5.0   ? QStringLiteral("the price has run ahead of the numbers")
+                        : gap > 5.0  ? QStringLiteral("the numbers have run ahead of the price")
+                                     : QStringLiteral("they have moved together"));
+    return c;
+}
+
+SignalComponent score_crowding(const EarningsAnalysis& a) {
+    SignalComponent c;
+    c.name = QStringLiteral("POSITIONING");
+    c.base_weight = kWeightCrowding;
+    c.horizon = SignalHorizon::Short;
+    c.axis = SignalAxis::Bar;
+    c.explanation = QStringLiteral(
+        "How extended the name is walking in: how far it has outrun the index "
+        "recently, and how close it sits to its 52-week high. Scored negative "
+        "on purpose. This is not a view on the company — it is a statement "
+        "about who already owns it and what they already expect, which is what "
+        "decides whether good news is enough.");
+
+    // Index-relative where the benchmark was available; absolute otherwise,
+    // which is noisier but still says something in a flat market.
+    const auto runup = a.rel_runup_20d_pct.has_value() ? a.rel_runup_20d_pct : a.runup_20d_pct;
+    const bool relative = a.rel_runup_20d_pct.has_value();
+    std::optional<double> runup_score;
+    if (runup)
+        runup_score = clamp_unit(-*runup / kFullRelRunup);
+
+    // 0% from the high = full crowding; kNearHighPct or further below = none.
+    std::optional<double> high_score;
+    if (a.pct_from_52w_high.has_value()) {
+        const double below = std::clamp(-*a.pct_from_52w_high, 0.0, kNearHighPct);
+        high_score = -(1.0 - below / kNearHighPct);
+    }
+
+    const auto blended = blend({{runup_score, 0.65}, {high_score, 0.35}});
+    if (!blended) {
+        c.detail = QStringLiteral("No recent price history to measure positioning against");
+        return c;
+    }
+
+    c.available = true;
+    c.score = clamp_unit(*blended);
+    QStringList bits;
+    if (runup) {
+        bits << QString("%1 over 20d%2").arg(pct_str(*runup),
+                                             relative ? QStringLiteral(" vs the index") : QString());
+    }
+    if (a.pct_from_52w_high.has_value()) {
+        bits << (*a.pct_from_52w_high > -1.0
+                     ? QStringLiteral("sitting on its 52-week high")
+                     : QString("%1 from the 52-week high").arg(pct_str(*a.pct_from_52w_high)));
+    }
+    c.detail = bits.join(QStringLiteral(" · "));
     return c;
 }
 
@@ -258,6 +415,7 @@ SignalComponent score_revisions(const EarningsAnalysis& a) {
     c.name = QStringLiteral("REVISION MOMENTUM");
     c.base_weight = kWeightRevisions;
     c.horizon = SignalHorizon::Short;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "Which way the consensus EPS number for the coming quarter has moved over "
         "the last 30 and 90 days. Estimates drift in the direction of the news "
@@ -294,6 +452,7 @@ SignalComponent score_guidance(const EarningsAnalysis& a) {
     c.name = QStringLiteral("GUIDANCE EXPECTATIONS");
     c.base_weight = kWeightGuidance;
     c.horizon = SignalHorizon::Short;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "The stock trades on the guide, not on the quarter just ended — a "
         "company can beat on both lines and still fall 10% on what it says "
@@ -368,6 +527,7 @@ SignalComponent score_breadth(const EarningsAnalysis& a) {
     c.name = QStringLiteral("ANALYST BREADTH");
     c.base_weight = kWeightBreadth;
     c.horizon = SignalHorizon::Short;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "How many analysts raised versus cut their number for the COMING "
         "quarter in the last 30 days. Counts the votes; revision momentum "
@@ -396,6 +556,7 @@ SignalComponent score_growth(const EarningsAnalysis& a) {
     c.name = QStringLiteral("EXPECTED GROWTH");
     c.base_weight = kWeightGrowth;
     c.horizon = SignalHorizon::Long;
+    c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "What the coming quarter is expected to deliver against the year-ago "
         "quarter, and whether that growth beats the index the stock sits in.");
@@ -432,6 +593,7 @@ SignalComponent score_valuation(const EarningsAnalysis& a) {
     c.name = QStringLiteral("PRICE & EXPECTATIONS");
     c.base_weight = kWeightValuation;
     c.horizon = SignalHorizon::Long;
+    c.axis = SignalAxis::Bar;
     c.explanation = QStringLiteral(
         "Where the price already sits against what the street expects: the "
         "distance to the mean target and the standing recommendation. Both lag "
@@ -635,6 +797,8 @@ EarningsVerdict evaluate_earnings(const EarningsAnalysis& a) {
     v.components.append(score_guidance(a));
     v.components.append(score_breadth(a));
     v.components.append(score_growth(a));
+    v.components.append(score_expectations(a));
+    v.components.append(score_crowding(a));
     v.components.append(score_valuation(a));
 
     // Weights depend on how much time is left for the picture to change, so
@@ -659,6 +823,20 @@ EarningsVerdict evaluate_earnings(const EarningsAnalysis& a) {
     // legitimately fall under the floor and force HOLD as the date approaches.
     v.confidence = total_weight > 0 ? available_weight / total_weight : 0.0;
     v.score = available_weight > 0 ? (weighted / available_weight) * 100.0 : 0.0;
+
+    // The same weighted mean, taken over each axis on its own. Not a second
+    // model — a decomposition, so "good company, high bar" doesn't reach the
+    // reader as a bare number halfway between the two.
+    for (const auto axis : {SignalAxis::Setup, SignalAxis::Bar}) {
+        double sum = 0, w = 0;
+        for (const auto& c : v.components) {
+            if (!c.available || c.axis != axis) continue;
+            sum += c.score * c.weight;
+            w   += c.weight;
+        }
+        if (w <= 0) continue;
+        (axis == SignalAxis::Setup ? v.setup_score : v.bar_score) = (sum / w) * 100.0;
+    }
 
     // ── Verdict ──────────────────────────────────────────────────────────────
     if (v.confidence < kMinConfidence) {
@@ -703,6 +881,20 @@ EarningsVerdict evaluate_earnings(const EarningsAnalysis& a) {
                               worst->name.toLower(), worst->detail);
         }
         v.headline = parts.isEmpty() ? lead + "." : lead + " — " + parts.join("; ") + ".";
+
+        // When the two axes disagree sharply, that tension IS the story and it
+        // must not be left for the reader to reconstruct from the breakdown.
+        // A composite near zero can mean "nothing much either way" or "a very
+        // good company at a very high price"; only one of those is worth
+        // knowing about the night before a print.
+        if (v.setup_score && v.bar_score &&
+            std::abs(*v.setup_score - *v.bar_score) >= kAxisTensionPts) {
+            v.headline += *v.setup_score > *v.bar_score
+                              ? QStringLiteral(" The business reads better than the price does — "
+                                               "most of the good news is already paid for.")
+                              : QStringLiteral(" The price reads better than the business does — "
+                                               "expectations have already come down to meet it.");
+        }
     }
 
     // ── Caveats: real risks that deliberately don't move the score ───────────

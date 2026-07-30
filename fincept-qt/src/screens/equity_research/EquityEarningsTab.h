@@ -79,6 +79,9 @@ class EquityEarningsTab : public QWidget {
     // Why the ×weights on the breakdown below differ from one symbol to the
     // next: they rotate with the time left before the print.
     QLabel* verdict_horizon_ = nullptr;
+    // The composite split into its two halves — how the business reads, and
+    // how much of that is already in the price.
+    QLabel* verdict_axes_ = nullptr;
 
     // Setup card
     QLabel* setup_move_ = nullptr;
