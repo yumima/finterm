@@ -402,11 +402,11 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
         return;
     aft_state_ = state;
     static constexpr auto kBase = QLatin1String(
-        "Extended-hours move against the last regular close — pre-market before the "
-        "open, post-market after it.\n\n"
-        "Blank during the regular session: by then the last extended print is already "
-        "inside the price the other columns are quoting, so repeating it here would "
-        "double-count it.");
+        "Move in extended-hours trading against the last regular close — pre-market "
+        "before the open, post-market after it. The cell says which session it came "
+        "from.\n\n"
+        "During the regular session this is the LAST extended move, not a live one, and "
+        "it is already inside DAY CHG% — the two are not additive.");
     switch (state) {
         case AftState::Idle:
             aft_header_->setText(QStringLiteral("AFT%"));
@@ -434,29 +434,32 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
         aft_.clear();
         return;
     }
-    // Nothing an extended print could tell the reader during the session: the
-    // last one happened before the open and is already inside the price every
-    // other column is quoting. Clear rather than leave this morning's
-    // pre-market number sitting under the header all afternoon.
-    if (current_session() == ExtSession::Regular) {
-        if (!aft_.isEmpty()) {
-            aft_.clear();
-            rebuild_from_cache();
-        }
+    QStringList symbols;
+    for (const auto& h : last_holdings_)
+        symbols << h.symbol;
+
+    // During the regular session the extended-hours numbers are frozen: the
+    // pre-market window has closed and the post-market one hasn't opened, so
+    // the answer cannot change until the bell. Fetch once — the column still
+    // shows the last extended move, which is what the Portfolio screen's
+    // heatmap has always done — then stop re-polling. Re-fetch only when the
+    // symbol set moves out from under the last one, which is how holdings that
+    // arrive late or a portfolio switch would otherwise leave rows blank.
+    if (current_session() == ExtSession::Regular && symbols == aft_fetched_symbols_)
         return;
-    }
-    if (aft_in_flight_)
+    if (aft_in_flight_ && !is_retry && symbols == aft_fetched_symbols_)
         return;
 
     QJsonArray syms;
-    for (const auto& h : last_holdings_)
-        syms.append(h.symbol);
+    for (const auto& s : symbols)
+        syms.append(s);
 
     QJsonObject payload;
     payload.insert(QStringLiteral("symbols"), syms);
 
     const quint64 gen = ++aft_gen_;
     aft_in_flight_ = true;
+    aft_fetched_symbols_ = symbols;
     set_aft_header_state(AftState::Loading);
     QPointer<PortfolioSummaryWidget> guard(this);
 
@@ -478,6 +481,10 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 LOG_WARN("PortfolioSummary",
                          QString("extended-hours fetch failed: %1").arg(err.left(120)));
                 guard->aft_error_ = err.left(120);
+                // Drop the covered-symbols marker: it is what tells the
+                // regular-session path "already fetched", and leaving it set
+                // after a failure would refuse every later retry.
+                guard->aft_fetched_symbols_.clear();
                 guard->set_aft_header_state(AftState::Failed);
                 // One retry. The first extended-hours call of a session pays
                 // the Yahoo cookie/crumb handshake and can time out on that
@@ -501,21 +508,30 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
                 if (sym.isEmpty())
                     continue;
-                // Read the field belonging to the session rather than the
-                // daemon's `ext_change_pct`. That one falls back across
-                // sessions for display (post when pre is missing, and the
-                // reverse), so in the first minutes after the close — before
-                // any post-market bar exists — it would report this morning's
-                // pre-market move under a header that says AFT.
+                // Prefer the field belonging to the current session, but fall
+                // back to the other one — the same order the daemon uses for
+                // its own `ext_change_pct`, and the reason the heatmap shows a
+                // number in cases an exact-session-only read would blank.
+                // Right after the close, before the first post-market bar
+                // exists, that fallback IS this morning's pre-market move; the
+                // label below says which session the number came from rather
+                // than letting it pass as something it isn't.
                 const QString sess = o.value(QStringLiteral("session")).toString();
-                const bool pre = sess.isEmpty() ? (current_session() == ExtSession::Pre)
-                                                : sess == QLatin1String("PRE");
-                const auto ext = json_num(o, pre ? "pre_market" : "post_market");
+                const bool prefer_pre = sess.isEmpty()
+                                            ? (current_session() == ExtSession::Pre)
+                                            : sess == QLatin1String("PRE");
+                const auto pre = json_num(o, "pre_market");
+                const auto post = json_num(o, "post_market");
+                const auto first = prefer_pre ? pre : post;
+                const auto second = prefer_pre ? post : pre;
+                const auto ext = first ? first : second;
+                const bool from_pre = first ? prefer_pre : !prefer_pre;
                 const auto regular = json_num(o, "regular");
                 if (!ext || !regular || *regular <= 0)
                     continue;
-                fresh.insert(sym, AftQuote{(*ext - *regular) / *regular * 100.0, *ext,
-                                           *regular, sess});
+                fresh.insert(sym, AftQuote{(*ext - *regular) / *regular * 100.0, *ext, *regular,
+                                           from_pre ? QStringLiteral("PRE")
+                                                    : QStringLiteral("POST")});
             }
             guard->aft_ = fresh;
             guard->aft_error_.clear();
@@ -656,10 +672,8 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // of the row and blank whenever there is no extended print to show.
         QString aft_str = QStringLiteral("--");
         QString aft_color = QString(ui::colors::TEXT_SECONDARY);
-        QString aft_tip = current_session() == ExtSession::Regular
-                              ? QStringLiteral("Regular session — the last extended-hours move is "
-                                               "already reflected in the price.")
-                              : QStringLiteral("No extended-hours trading in this name yet.");
+        QString aft_tip = QStringLiteral("No extended-hours trades in this name since the "
+                                         "last close.");
         if (const auto it = aft_.constFind(h.symbol); it != aft_.constEnd()) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);

@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QLabel>
 #include <QScrollArea>
+#include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -25,9 +26,11 @@ namespace fincept::screens::widgets {
 ///
 /// The AFT% column is fed from a different source than the rest of the row:
 /// the quote feed stops at the closing bell, so extended-hours moves come from
-/// the yfinance daemon on a slow timer. It is deliberately blank during the
-/// regular session — by then the last extended print is already inside the
-/// price every other column is quoting.
+/// the yfinance daemon on a slow timer. During the regular session it keeps
+/// showing the LAST extended move rather than blanking — that is what the
+/// Portfolio screen's heatmap has always done, and a column that empties
+/// itself for six and a half hours a day reads as broken. It is frozen then,
+/// so it is fetched once and not re-polled until the symbol set changes.
 class PortfolioSummaryWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -103,10 +106,11 @@ class PortfolioSummaryWidget : public BaseWidget {
     enum class ExtSession { Pre, Regular, Post, Closed };
     /// Which US-equity session the ET clock is in. Clock-only, like the
     /// daemon's own label: a holiday or half-day still reads Regular, which
-    /// costs at most a suppressed column on a day the market is shut.
+    /// costs at most one skipped re-poll on a day the market is shut.
     static ExtSession current_session();
-    /// Kick an extended-hours fetch for the current holdings. No-ops during
-    /// the regular session, when there is nothing an extended print could add.
+    /// Kick an extended-hours fetch for the current holdings. During the
+    /// regular session the answer cannot change, so this no-ops once the
+    /// current symbol set has been fetched.
     void fetch_aft(bool is_retry = false);
 
     /// Whether the column is idle, waiting, or stuck — shown as a suffix on
@@ -130,6 +134,10 @@ class PortfolioSummaryWidget : public BaseWidget {
     // paint another book's after-hours moves onto this one.
     quint64 aft_gen_ = 0;
     bool    aft_in_flight_ = false;
+    /// Symbols the last fetch covered. Holdings that arrive after a fetch, or
+    /// a portfolio switch, otherwise leave the new rows blank forever — the
+    /// same hole the Portfolio screen's heatmap documents.
+    QStringList aft_fetched_symbols_;
     QTimer* aft_timer_ = nullptr;
 
     // ── Portfolio selection ──────────────────────────────────────────────────
