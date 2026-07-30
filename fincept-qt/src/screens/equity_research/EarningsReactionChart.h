@@ -37,6 +37,13 @@ class EarningsReactionChart : public QWidget {
         qint64 timestamp = 0;
         std::optional<double> metric;    // the selected earnings metric
         std::optional<double> reaction;
+        // The trailing column: a consensus bar (when one is published) and,
+        // in place of a print reaction, where the price sits right now
+        // against the last completed print. Drawn provisionally — dashed
+        // outline, hollow marker — so a forecast and a live price are never
+        // mistaken for settled history.
+        bool projected = false;
+        std::optional<double> live_move;
     };
 
     QVector<Column> columns() const;

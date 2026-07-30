@@ -338,6 +338,37 @@ class TestEarningsSignal : public QObject {
         QVERIFY(!metric_value(EarningsPoint{}, ReactionMetric::QoQ).has_value());
     }
 
+    // The trailing row carries a forecast and a still-moving price. Letting
+    // either into the scorer would report a prediction as a result.
+    void projected_quarter_is_never_scored() {
+        EarningsAnalysis a;
+        a.valid = true;
+        EarningsPoint proj;
+        proj.timestamp = QDateTime::currentSecsSinceEpoch() + 86400;
+        proj.is_estimate = true;
+        proj.has_forward_estimate = true;
+        proj.eps_estimate = 9.0;
+        proj.eps_qoq_pct = 50.0;
+        proj.eps_yoy_pct = 40.0;
+        // Deliberately hostile: values that WOULD be counted if the guard
+        // were missing, including a surprise and a reaction on a quarter
+        // that has not happened.
+        proj.surprise_pct = -90.0;
+        proj.reaction_pct = -25.0;
+        proj.move_since_last_pct = -4.0;
+        a.history.append(proj);
+        for (const auto& q : strong_history()) a.history.append(q);
+
+        const auto v = evaluate_earnings(a);
+        QCOMPARE(v.scored_quarters, 8);        // the 8 real ones, not 9
+        QCOMPARE(v.beat_rate, 1.0);            // the -90% "surprise" didn't land
+        QCOMPARE(v.reaction_quarters, 8);
+        QVERIFY(v.avg_reaction_pct > 0);       // the -25% "reaction" didn't land
+
+        for (const auto& c : correlate_reactions(a))
+            QVERIFY2(c.n <= 8, "a projected quarter entered the correlation");
+    }
+
     void days_to_next_earnings_handles_missing_date() {
         EarningsAnalysis a;
         QCOMPARE(days_to_next_earnings(a), -1);

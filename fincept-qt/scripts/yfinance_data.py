@@ -1416,6 +1416,20 @@ def _df_to_period_rows(df, fields):
     return rows
 
 
+def _eps_change_pct(value, base):
+    """Percent change in EPS against `base`, or None when it can't be stated.
+
+    Half a cent is the floor, matching EarningsMath::sequential_pct on the C++
+    side: below that the percentage is dominated by rounding, and dividing by
+    it produces a number the UI would render as if it meant something. The
+    denominator is |base| so a loss-making base keeps the sign meaningful — a
+    $0.25 print after a -$0.75 quarter is an improvement, not a decline.
+    """
+    if value is None or base is None or abs(base) < 0.005:
+        return None
+    return (value - base) / abs(base) * 100.0
+
+
 def _earnings_price_reaction(hist, event_ts):
     """Realised price action around one earnings print.
 
@@ -1501,6 +1515,7 @@ def get_earnings_analysis(symbol, quarters=12):
                      target_mean, target_high, target_low, recommendation,
                      recommendation_mean, analyst_count}}
     """
+    from datetime import datetime, timezone
     if not symbol:
         return {"error": "symbol required"}
     try:
@@ -1655,20 +1670,34 @@ def get_earnings_analysis(symbol, quarters=12):
         # Both are reported and neither is scored — the UI shows each one's
         # measured correlation with the next-day move instead.
         history.sort(key=lambda d: d["timestamp"])
-        for i, row in enumerate(history):
-            act = row.get("eps_actual")
+        # Yahoo lists the same print twice on report day — once with the
+        # reported figure and once still pending. Keep one row per calendar
+        # date, preferring the one that carries an actual, or the sequential
+        # chain below counts the quarter twice and computes a 0% QoQ against
+        # its own duplicate.
+        by_date = {}
+        for row in history:
+            day = datetime.fromtimestamp(row["timestamp"], timezone.utc).date()
+            keep = by_date.get(day)
+            if keep is None or (keep.get("eps_actual") is None and row.get("eps_actual") is not None):
+                by_date[day] = row
+        history = sorted(by_date.values(), key=lambda d: d["timestamp"])
+
+        for row in history:
+            row["is_estimate"] = False
             row["eps_qoq_pct"] = None
             row["eps_yoy_pct"] = None
-            if act is None:
-                continue
-            prev = history[i - 1].get("eps_actual") if i >= 1 else None
-            year_ago = history[i - 4].get("eps_actual") if i >= 4 else None
-            # A base that crossed (or sits on) zero makes the percentage
-            # meaningless rather than merely large — leave it unset.
-            if prev is not None and abs(prev) > 1e-9:
-                row["eps_qoq_pct"] = (act - prev) / abs(prev) * 100.0
-            if year_ago is not None and abs(year_ago) > 1e-9:
-                row["eps_yoy_pct"] = (act - year_ago) / abs(year_ago) * 100.0
+        # Chain over the REPORTED quarters, not over every row: a quarter
+        # Yahoo hasn't filled in yet would otherwise break the link and drop
+        # QoQ from the quarter after it, which is the one a reader is most
+        # likely to be looking at.
+        reported = [r for r in history if r.get("eps_actual") is not None]
+        for j, row in enumerate(reported):
+            act = row["eps_actual"]
+            row["eps_qoq_pct"] = _eps_change_pct(
+                act, reported[j - 1]["eps_actual"] if j >= 1 else None)
+            row["eps_yoy_pct"] = _eps_change_pct(
+                act, reported[j - 4]["eps_actual"] if j >= 4 else None)
         history.reverse()
         history = history[:max(1, int(quarters))]
 
@@ -1741,6 +1770,84 @@ def get_earnings_analysis(symbol, quarters=12):
             if nxt.get(dst) is None:
                 nxt[dst] = cur_q.get(src)
     out["next"] = nxt
+
+    # ── The coming quarter, as a projection ──────────────────────────────────
+    # Viewed a week before the print there is no actual yet, but the consensus
+    # is published — so carry the same row shape with the estimate standing in,
+    # flagged `is_estimate` so the UI can colour it as provisional and the
+    # scorer can refuse to count it. Its QoQ/YoY are the estimate measured
+    # against real prior actuals, which is the "what are analysts expecting
+    # versus what the company just did" number the calendar widget shows.
+    # `history` is newest-first from here on.
+    reported_desc = [r for r in history if r.get("eps_actual") is not None]
+    newest_actual_ts = reported_desc[0]["timestamp"] if reported_desc else 0
+
+    # Where the price sits NOW relative to where the last print left it. This
+    # is what carries the curve up to the present instead of stopping at the
+    # last earnings reaction. Deliberately its own field, NOT reaction_pct:
+    # it is not a print reaction, and letting it into that series would enter
+    # a live number as a completed observation in the correlations.
+    move_since_last = None
+    last_close = None
+    if hist is not None and not getattr(hist, "empty", True):
+        try:
+            last_close = float(hist["Close"].iloc[-1])
+        except Exception:
+            last_close = None
+    if last_close:
+        # Base on the last print whose reaction has actually completed, not
+        # merely the last one reported. A company that reported after today's
+        # close has an actual but no post-print close yet (META, 29 Jul) — its
+        # reaction session hasn't happened, so measuring "since the last print"
+        # from it would divide by a price that doesn't exist.
+        # `history` is newest-first by this point, so a plain scan finds the
+        # most recent completed reaction.
+        base = next((r.get("price_after") for r in history if r.get("price_after")), None)
+        if base:
+            move_since_last = (last_close - base) / base * 100.0
+    # Trailing column: the bar is the next quarter's consensus (when Yahoo has
+    # a genuinely un-reported one), the point is where the price is right now.
+    # It exists if either half does, so the curve always reaches the present
+    # even when the calendar has no forward date.
+    #
+    # "Genuinely un-reported" matters: Yahoo's calendar keeps pointing at a
+    # print for a day or two after the numbers land (META's calendar said
+    # 28 Jul while earnings_dates already carried the 29 Jul actual), and
+    # projecting there would show one quarter twice — once as a forecast of
+    # something that has already happened.
+    has_forward_estimate = (nxt.get("timestamp") is not None
+                            and nxt.get("eps_avg") is not None
+                            and nxt["timestamp"] > newest_actual_ts)
+    if has_forward_estimate or move_since_last is not None:
+        prev_act = reported_desc[0].get("eps_actual") if reported_desc else None
+        year_ago_act = reported_desc[3].get("eps_actual") if len(reported_desc) >= 4 else None
+        est = nxt["eps_avg"] if has_forward_estimate else None
+        projected = {
+            "timestamp":    nxt["timestamp"] if has_forward_estimate else int(time.time()),
+            "eps_estimate": est,
+            "eps_actual":   None,
+            "surprise_pct": None,
+            "eps_qoq_pct":  _eps_change_pct(est, prev_act),
+            "eps_yoy_pct":  _eps_change_pct(est, year_ago_act),
+            # No print reaction by definition — `move_since_last_pct` is the
+            # live stand-in and is kept in its own field so it can never be
+            # counted as a completed observation.
+            "reaction_pct": None,
+            "move_since_last_pct": move_since_last,
+            "price_now":    last_close,
+            "runup_pct":    recent.get("runup_5d"),
+            "price_before": None,
+            "price_after":  None,
+            "is_estimate":  True,
+            "has_forward_estimate": has_forward_estimate,
+        }
+        # The projection supersedes any still-pending row for the same date
+        # (report filed, figures not yet published by Yahoo).
+        proj_day = datetime.fromtimestamp(projected["timestamp"], timezone.utc).date()
+        kept = [r for r in history
+                if r.get("eps_actual") is not None
+                or datetime.fromtimestamp(r["timestamp"], timezone.utc).date() != proj_day]
+        out["history"] = [projected] + kept
 
     return out
 

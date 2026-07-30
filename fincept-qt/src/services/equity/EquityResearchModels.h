@@ -236,6 +236,11 @@ struct EarningsEvent {
 /// actually traded on the print.
 struct EarningsPoint {
     qint64 timestamp = 0;                 // unix seconds at announcement
+    // The coming quarter, carried in the same shape with consensus standing
+    // in for the actual, so a week before the print the row is already there
+    // with its expected QoQ/YoY. Never scored — a forecast is not a track
+    // record — and rendered as provisional wherever it appears.
+    bool is_estimate = false;
     std::optional<double> eps_estimate;
     std::optional<double> eps_actual;
     std::optional<double> surprise_pct;   // signed: + = beat
@@ -250,6 +255,15 @@ struct EarningsPoint {
     std::optional<double> runup_pct;      // 5 sessions into the print
     std::optional<double> price_before;
     std::optional<double> price_after;
+    // Trailing (is_estimate) row only: where the price sits now against the
+    // close after the last completed print, and the price itself. Separate
+    // from reaction_pct on purpose — a live, still-moving number must never
+    // be counted as a finished observation by the correlations.
+    std::optional<double> move_since_last_pct;
+    std::optional<double> price_now;
+    // True when the trailing row carries a real forward consensus (so it
+    // draws a bar); false when it exists only to carry the price to today.
+    bool has_forward_estimate = false;
 };
 
 /// Consensus for one horizon — "0q" current quarter, "+1q", "0y", "+1y".

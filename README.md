@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`6265b4018`](https://github.com/yumima/finterm/commit/6265b4018) ER Earnings: keep every number inside the chart frame
 - [`5de6db01b`](https://github.com/yumima/finterm/commit/5de6db01b) ER Earnings: plot EPS change against the move it produced, and measure it
 - [`653f657b7`](https://github.com/yumima/finterm/commit/653f657b7) ER Earnings: don't discard good data when a background refresh fails
 - [`6ae776052`](https://github.com/yumima/finterm/commit/6ae776052) ER: add an Earnings tab with a pre-report buy/hold/sell scorecard

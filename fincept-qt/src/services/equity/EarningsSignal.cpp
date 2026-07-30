@@ -105,7 +105,8 @@ SignalComponent score_track_record(const EarningsAnalysis& a, EarningsVerdict& v
     double surprise_sum = 0;
     for (const auto& p : a.history) {
         if (considered >= kTrackRecordQuarters) break;
-        if (!p.surprise_pct.has_value()) continue;
+        // A projected quarter is a forecast, not a track record.
+        if (p.is_estimate || !p.surprise_pct.has_value()) continue;
         ++considered;
         if (*p.surprise_pct > 0) ++beats;
         surprise_sum += *p.surprise_pct;
@@ -141,7 +142,7 @@ SignalComponent score_reaction(const EarningsAnalysis& a, EarningsVerdict& v) {
     double sum = 0, abs_sum = 0;
     for (const auto& p : a.history) {
         if (considered >= kTrackRecordQuarters) break;
-        if (!p.reaction_pct.has_value()) continue;
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
         ++considered;
         if (*p.reaction_pct > 0) ++ups;
         sum += *p.reaction_pct;
@@ -338,6 +339,9 @@ QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a) {
 
         QVector<double> xs, ys;
         for (const auto& p : a.history) {
+            // The trailing row pairs a forecast with a still-moving price —
+            // not a completed observation, so it never enters the fit.
+            if (p.is_estimate) continue;
             const auto x = metric_value(p, metric);
             if (!x.has_value() || !p.reaction_pct.has_value()) continue;
             xs.append(*x);

@@ -766,20 +766,44 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
     int row = 0;
     for (const auto& p : a.history) {
         const auto when = QDateTime::fromSecsSinceEpoch(p.timestamp);
-        history_table_->setItem(row, 0, cell(when.toString("d MMM yyyy"), ui::colors::TEXT_PRIMARY(),
+        // The projected row is amber end-to-end in its identity columns: this
+        // quarter hasn't happened, and nothing about it should read like a
+        // reported number sitting one row below a reported number.
+        const QString date_text = p.is_estimate
+                                      ? (p.has_forward_estimate
+                                             ? when.toString("d MMM yyyy") + QStringLiteral("  EST")
+                                             : QStringLiteral("today"))
+                                      : when.toString("d MMM yyyy");
+        history_table_->setItem(row, 0, cell(date_text,
+                                             p.is_estimate ? ui::colors::AMBER() : ui::colors::TEXT_PRIMARY(),
                                              Qt::AlignLeft | Qt::AlignVCenter));
-        history_table_->setItem(row, 1, cell(opt_num(p.eps_estimate)));
+        history_table_->setItem(row, 1, cell(opt_num(p.eps_estimate),
+                                             p.is_estimate ? ui::colors::AMBER() : QString()));
+        // Projected row: the EST tag on the date already says why there is no
+        // actual, so the cell takes the plain missing sentinel rather than a
+        // long phrase the column can't fit.
         history_table_->setItem(row, 2, cell(p.eps_actual.has_value() ? opt_num(p.eps_actual)
+                                             : p.is_estimate          ? ui::formatting::placeholder()
                                                                       : QStringLiteral("pending"),
-                                             ui::colors::TEXT_PRIMARY()));
+                                             p.is_estimate ? ui::colors::AMBER() : ui::colors::TEXT_PRIMARY()));
         history_table_->setItem(row, 3, cell(opt_pct(p.surprise_pct, 2),
                                              p.surprise_pct.has_value() ? color_for(*p.surprise_pct) : QString()));
         history_table_->setItem(row, 4, cell(opt_pct(p.eps_qoq_pct, 1),
                                              p.eps_qoq_pct.has_value() ? color_for(*p.eps_qoq_pct) : QString()));
         history_table_->setItem(row, 5, cell(opt_pct(p.eps_yoy_pct, 1),
                                              p.eps_yoy_pct.has_value() ? color_for(*p.eps_yoy_pct) : QString()));
-        history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),
-                                             p.reaction_pct.has_value() ? color_for(*p.reaction_pct) : QString()));
+        // On the projected row there is no print reaction yet — the live
+        // "where the price is now against the last print" stands in its place,
+        // marked so it can't be misread as a completed session move.
+        if (p.is_estimate && p.move_since_last_pct.has_value()) {
+            history_table_->setItem(
+                row, 6, cell(QString("now %1").arg(opt_pct(p.move_since_last_pct, 2)),
+                             color_for(*p.move_since_last_pct)));
+        } else {
+            history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),
+                                                 p.reaction_pct.has_value() ? color_for(*p.reaction_pct)
+                                                                            : QString()));
+        }
         history_table_->setItem(row, 7, cell(opt_pct(p.runup_pct, 2),
                                              p.runup_pct.has_value() ? color_for(*p.runup_pct) : QString()));
         ++row;

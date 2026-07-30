@@ -68,12 +68,20 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
     QVector<Column> cols;
     cols.reserve(history_.size());
     for (const auto& p : history_) {
+        const auto m = services::equity::metric_value(p, metric_);
+        if (p.is_estimate) {
+            // Kept even with no consensus bar: its point is the current
+            // price, which is what carries the curve up to today.
+            if (!m.has_value() && !p.move_since_last_pct.has_value())
+                continue;
+            cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct});
+            continue;
+        }
         // A quarter with neither number is a blank slot in the series, not a
         // column worth the horizontal space.
-        const auto m = services::equity::metric_value(p, metric_);
         if (!m.has_value() && !p.reaction_pct.has_value())
             continue;
-        cols.append({p.timestamp, m, p.reaction_pct});
+        cols.append({p.timestamp, m, p.reaction_pct, false, std::nullopt});
     }
     return cols;
 }
@@ -125,6 +133,9 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     for (const auto& c : cols) {
         if (c.metric) metric_vals.append(*c.metric);
         if (c.reaction) reaction_vals.append(*c.reaction);
+        // The live move shares the price axis, so it has to size it too —
+        // otherwise a big inter-print drift would be drawn off the top.
+        if (c.live_move) reaction_vals.append(*c.live_move);
     }
     const double m_ext = axis_extent(metric_vals);
     const double r_ext = axis_extent(reaction_vals);
@@ -145,8 +156,12 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     p.drawText(header, Qt::AlignLeft | Qt::AlignVCenter,
                QString("bars: %1  (±%2%)").arg(metric_name, QString::number(m_ext, 'f', 0)));
     p.setPen(line_col);
+    const bool has_live = std::any_of(cols.begin(), cols.end(),
+                                      [](const Column& c) { return c.projected && c.live_move; });
     p.drawText(header, Qt::AlignRight | Qt::AlignVCenter,
-               QString("line: next-session move  (±%1%)").arg(QString::number(r_ext, 'f', 1)));
+               QString("line: next-session move%1  (±%2%)")
+                   .arg(has_live ? QStringLiteral(", ending at price now") : QString(),
+                        QString::number(r_ext, 'f', 1)));
 
     // ── Zero line ────────────────────────────────────────────────────────────
     p.setPen(QPen(grid, 1));
@@ -167,9 +182,21 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
 
         QColor c = v >= 0 ? pos : neg;
         c.setAlpha(140);
-        p.fillRect(bar, c);
+        if (cols[i].projected) {
+            // Consensus, not a result: hollow with a dashed outline so it
+            // never reads as a quarter the company has actually delivered.
+            QColor fill = c;
+            fill.setAlpha(45);
+            p.fillRect(bar, fill);
+            QPen outline(c.lighter(130), 1.0, Qt::DashLine);
+            p.setPen(outline);
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(bar);
+        } else {
+            p.fillRect(bar, c);
+        }
 
-        if (clipped) {
+        if (clipped && !cols[i].projected) {
             // Chevron at the clipped end so a compressed axis never reads as
             // "this quarter was the same size as its neighbour". It sits in
             // the headroom, never outside the plot.
@@ -208,10 +235,32 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     p.setPen(QPen(line_col, 1.6));
     p.setBrush(Qt::NoBrush);
     p.drawPath(path);
+
+    // ── The present: current price against the last completed print ─────────
+    // Dashed from the last settled reaction, hollow marker — this point is
+    // still moving, and must not look like one of the finished ones.
+    QPointF live_pt;
+    bool have_live = false;
+    for (int i = 0; i < cols.size(); ++i) {
+        if (!cols[i].projected || !cols[i].live_move) continue;
+        const double scaled = std::clamp(*cols[i].live_move / r_ext, -1.0, 1.0);
+        live_pt = QPointF(cx_of(plot, col_w, i), zero_y - scaled * span);
+        have_live = true;
+    }
+    if (have_live && !dots.isEmpty()) {
+        p.setPen(QPen(line_col, 1.4, Qt::DashLine));
+        p.drawLine(dots.last(), live_pt);
+    }
+
     for (int i = 0; i < dots.size(); ++i) {
         p.setBrush(dot_vals[i] >= 0 ? pos : neg);
         p.setPen(QPen(QColor(ui::colors::BG_SURFACE()), 1.2));
-        p.drawEllipse(dots[i], 3.2, 3.2);
+        p.drawEllipse(dots[i], kDotR, kDotR);
+    }
+    if (have_live) {
+        p.setPen(QPen(line_col, 1.6));
+        p.setBrush(QColor(ui::colors::BG_SURFACE()));
+        p.drawEllipse(live_pt, kDotR + 1.0, kDotR + 1.0);
     }
 
     // ── Quarter ticks ────────────────────────────────────────────────────────
@@ -222,11 +271,18 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     // every third, until they fit.
     const int tick_step = std::max(1, static_cast<int>(std::ceil(34.0 / std::max(1.0, col_w))));
     for (int i = 0; i < cols.size(); ++i) {
-        if (i % tick_step != 0) continue;
+        // The trailing column is always labelled — it is the one the reader
+        // is standing in, and thinning it away would be the worst omission.
+        if (i % tick_step != 0 && !cols[i].projected) continue;
         const double cx = cx_of(plot, col_w, i);
         const auto when = QDateTime::fromSecsSinceEpoch(cols[i].timestamp);
+        const QString tick = cols[i].projected
+                                 ? (cols[i].metric ? when.toString("MMM yy") + QStringLiteral(" est")
+                                                   : QStringLiteral("now"))
+                                 : when.toString("MMM yy");
+        p.setPen(cols[i].projected ? QColor(ui::colors::AMBER()) : text_dim);
         p.drawText(QRectF(cx - col_w / 2.0, plot.bottom() + 2, col_w, kFooterH - 2),
-                   Qt::AlignCenter, when.toString("MMM yy"));
+                   Qt::AlignCenter, tick);
     }
 
     // ── Value labels on the line ─────────────────────────────────────────────
@@ -235,8 +291,10 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     if (col_w < 42)
         return;
     for (int i = 0; i < cols.size(); ++i) {
-        if (!cols[i].reaction) continue;
-        const double v = *cols[i].reaction;
+        // The live point is labelled like the rest, so the reader can read
+        // "where are we now" off the same axis as the finished prints.
+        if (!cols[i].reaction && !(cols[i].projected && cols[i].live_move)) continue;
+        const double v = cols[i].reaction ? *cols[i].reaction : *cols[i].live_move;
         const double scaled = std::clamp(v / r_ext, -1.0, 1.0);
         const double y = zero_y - scaled * span;
         const QString lbl = pct_label(v, 1);
