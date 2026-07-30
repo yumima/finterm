@@ -64,6 +64,9 @@ constexpr double kActionThreshold = 20.0;
 // cents and twelve spanning a third of the number are different situations.
 constexpr double kWideDispersionPct = 25.0;
 
+// Beating quarters needed before "beats get paid" is allowed to score.
+constexpr int kMinBeatReactions = 3;
+
 // Quarters of history the backward-looking legs consider. Eight covers two
 // full years — long enough to be a track record, short enough that a changed
 // business isn't judged on its old self.
@@ -169,8 +172,12 @@ SignalComponent score_track_record(const EarningsAnalysis& a, EarningsVerdict& v
     const double consistency =
         (considered >= 3 && stdev > 1e-9) ? clamp_unit((avg_surprise / stdev) / kFullSurpriseIR)
                                           : clamp_unit(avg_surprise / kFullSurprisePct);
+    // "Beats get paid" needs more than one beat to mean anything: a single
+    // quarter's reaction is one draw from a wide distribution, and letting it
+    // carry 40% of the leg would put the loudest number on the thinnest
+    // evidence. Below the floor the leg falls back to the surprise alone.
     std::optional<double> paid;
-    if (!beat_reactions.isEmpty()) {
+    if (beat_reactions.size() >= kMinBeatReactions) {
         double sum = 0;
         for (const double r : beat_reactions) sum += r;
         v.beat_reaction_pct = sum / beat_reactions.size();
@@ -237,7 +244,7 @@ std::optional<double> net_revision_ratio(const EarningsAnalysis& a, const QStrin
     return (up - down) / (up + down);
 }
 
-/// "3 raised / 1 cut", or an empty string when the period has no counts.
+/// "3 up / 1 down", or an empty string when the period has no counts.
 QString revision_counts(const EarningsAnalysis& a, const QString& period) {
     const auto* r = find_revision(a, period);
     if (!r) return {};
@@ -321,6 +328,18 @@ SignalComponent score_guidance(const EarningsAnalysis& a) {
         if (dy) s_year = clamp_unit(*dy / kFullRevision90Pct);
     }
 
+    // The asymmetry is a RELATIVE measure and cannot anchor the leg on its
+    // own. A name being cut everywhere — this quarter hard, next quarter
+    // merely less hard — has a positive asymmetry, and blend() renormalises
+    // over whatever it is given, so scoring that alone would hand a company in
+    // broad decline a maximally bullish guidance read. Which way next
+    // quarter's number is actually moving has to be known first.
+    if (!s30 && !s90) {
+        c.detail = QStringLiteral(
+            "No next-quarter consensus history published — analyst counts alone can't say "
+            "which way that number is moving");
+        return c;
+    }
     const auto blended = blend({{s30, 0.35}, {s90, 0.25}, {asymmetry, 0.25}, {s_year, 0.15}});
     if (!blended) {
         c.detail = QStringLiteral("No next-quarter estimate history published");

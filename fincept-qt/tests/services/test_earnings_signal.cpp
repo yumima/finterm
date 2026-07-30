@@ -464,6 +464,43 @@ class TestEarningsSignal : public QObject {
         QCOMPARE(breadth->score, 1.0);
     }
 
+    // The asymmetry is relative, so on its own it has no direction. A company
+    // being cut everywhere — this quarter hard, next quarter merely less hard
+    // — has a POSITIVE asymmetry, and scoring that alone would read a broad
+    // decline as maximally good guidance.
+    void asymmetry_alone_cannot_carry_the_guidance_leg() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history = strong_history();
+        a.trend.append(trend("0q", 1.60, 2.00, 2.30));   // current quarter only
+        a.revisions.append(revision("0q", 0, 10));        // everyone cutting this quarter
+        a.revisions.append(revision("+1q", 5, 5));        // …split on the next one
+        const auto v = evaluate_earnings(a);
+        const auto* guidance = leg(v, QStringLiteral("GUIDANCE EXPECTATIONS"));
+        QVERIFY(guidance);
+        QVERIFY2(!guidance->available,
+                 qPrintable(QString("scored %1 off a relative measure").arg(guidance->score)));
+        QVERIFY(guidance->detail.contains("counts alone"));
+    }
+
+    // One beat with one reaction is a single draw, not evidence. It must not
+    // carry 40% of the track-record leg.
+    void a_single_rewarded_beat_does_not_score() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history.append(quarter(1700000000LL, 1.0, 1.08, 8.0, 20.0));           // lone beat, huge pop
+        a.history.append(quarter(1700000000LL - 7776000LL, 1.0, 0.95, -5.0, -2.0));
+        a.history.append(quarter(1700000000LL - 15552000LL, 1.0, 0.96, -4.0, -1.0));
+        const auto v = evaluate_earnings(a);
+        QVERIFY2(!v.beat_reaction_pct.has_value(), "a one-quarter mean was reported as a stat");
+        const auto* record = leg(v, QStringLiteral("SURPRISE TRACK RECORD"));
+        QVERIFY(record && record->available);
+        // Falls back to the surprise alone, which is negative here — the +20%
+        // session must not drag the leg positive.
+        QVERIFY2(record->score < 0, qPrintable(QString("score %1").arg(record->score)));
+        QVERIFY(!record->detail.contains("beats paid"));
+    }
+
     void guidance_leg_is_unavailable_without_next_quarter_data() {
         EarningsAnalysis a;
         a.valid = true;
