@@ -200,14 +200,25 @@ void EquityEarningsTab::set_symbol(const QString& symbol) {
 }
 
 void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s) {
-    if (!s.error.isEmpty()) {
+    const bool have_data = s.data.isValid() && !s.data.isNull();
+
+    if (!s.error.isEmpty() && !have_data) {
         loading_overlay_->hide_loading();
         show_message(QString("Couldn't load earnings data — %1").arg(s.error));
+        // Forget the symbol so re-activating the tab retries. QueryStore
+        // leaves no cached value behind a failed fetch, so the re-subscribe
+        // takes its cold path and kicks a fresh one; without this reset
+        // set_symbol's same-symbol guard would leave the tab dead until the
+        // user picked a different ticker.
+        current_symbol_.clear();
         return;
     }
-    if (!s.data.isValid() || s.data.isNull())
+    if (!have_data)
         return;  // still loading; the overlay stays up
 
+    // A failed *revalidate* arrives as error + the previously cached data.
+    // Keep rendering that data — replacing a good panel with an error page
+    // because a background refresh timed out loses more than it tells.
     loading_overlay_->hide_loading();
     const auto analysis = s.data.value<EarningsAnalysis>();
     if (!analysis.valid || !analysis.has_content()) {
@@ -662,19 +673,26 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
     }
     fit_table_height(history_table_);
 
+    // Built from whichever halves have data: a symbol can have surprises with
+    // no usable price history (yfinance dropped the bars), and claiming "rose
+    // on 0% of prints" off an empty reaction set would be a lie, not a zero.
+    QStringList summary;
     if (v.scored_quarters > 0) {
-        history_summary_->setText(
-            QString("Beat %1 of the last %2 reported quarters · average surprise %3 · "
-                    "the stock rose on %4% of prints, average %5, typical move ±%6%.")
-                .arg(static_cast<int>(std::lround(v.beat_rate * v.scored_quarters)))
-                .arg(v.scored_quarters)
-                .arg(opt_pct(v.avg_surprise_pct, 2))
-                .arg(QString::number(v.up_reaction_rate * 100.0, 'f', 0))
-                .arg(opt_pct(v.avg_reaction_pct, 2))
-                .arg(QString::number(v.typical_move_pct, 'f', 1)));
-    } else {
-        history_summary_->setText(QStringLiteral("No reported quarters with a published consensus."));
+        summary << QString("Beat %1 of the last %2 reported quarters · average surprise %3")
+                       .arg(static_cast<int>(std::lround(v.beat_rate * v.scored_quarters)))
+                       .arg(v.scored_quarters)
+                       .arg(opt_pct(v.avg_surprise_pct, 2));
     }
+    if (v.reaction_quarters > 0) {
+        summary << QString("the stock rose on %1% of %2 prints, average %3, typical move ±%4%")
+                       .arg(QString::number(v.up_reaction_rate * 100.0, 'f', 0))
+                       .arg(v.reaction_quarters)
+                       .arg(opt_pct(v.avg_reaction_pct, 2))
+                       .arg(QString::number(v.typical_move_pct, 'f', 1));
+    }
+    history_summary_->setText(
+        summary.isEmpty() ? QStringLiteral("No reported quarters with a published consensus.")
+                          : summary.join(" · ") + ".");
 }
 
 void EquityEarningsTab::fill_trend(const EarningsAnalysis& a) {
