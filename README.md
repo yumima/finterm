@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`cb5475c0e`](https://github.com/yumima/finterm/commit/cb5475c0e) ER Earnings: don't let a relative measure carry the guidance leg
 - [`4c7133e01`](https://github.com/yumima/finterm/commit/4c7133e01) ER Earnings: score the guide, not just the quarter
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

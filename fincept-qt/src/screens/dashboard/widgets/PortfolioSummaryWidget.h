@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QLabel>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens::widgets {
@@ -21,6 +22,12 @@ namespace fincept::screens::widgets {
 /// `market:quote:<sym>` on the DataHub for each holding, so prices stay live.
 /// Adds/sells in the selected portfolio (PortfolioService::asset_added/sold)
 /// trigger a re-fetch and rewire the subscriptions.
+///
+/// The AFT% column is fed from a different source than the rest of the row:
+/// the quote feed stops at the closing bell, so extended-hours moves come from
+/// the yfinance daemon on a slow timer. It is deliberately blank during the
+/// regular session — by then the last extended print is already inside the
+/// price every other column is quoting.
 class PortfolioSummaryWidget : public BaseWidget {
     Q_OBJECT
   public:
@@ -88,6 +95,32 @@ class PortfolioSummaryWidget : public BaseWidget {
 
     QHash<QString, services::QuoteData> row_cache_;
     bool hub_active_ = false;
+
+    // ── After-hours column ───────────────────────────────────────────────────
+    // The live quote feed only carries the regular session, so the AFT% column
+    // is fed separately by the daemon's `extended_hours` action — the same
+    // source the Portfolio screen's heatmap uses in AFT mode.
+    enum class ExtSession { Pre, Regular, Post, Closed };
+    /// Which US-equity session the ET clock is in. Clock-only, like the
+    /// daemon's own label: a holiday or half-day still reads Regular, which
+    /// costs at most a suppressed column on a day the market is shut.
+    static ExtSession current_session();
+    /// Kick an extended-hours fetch for the current holdings. No-ops during
+    /// the regular session, when there is nothing an extended print could add.
+    void fetch_aft();
+
+    struct AftQuote {
+        double pct = 0;       // move against the last regular close
+        double price = 0;     // the extended-hours print itself
+        double regular = 0;   // the close it is measured against
+        QString session;      // "PRE" / "POST" / "CLOSED", as the daemon saw it
+    };
+    QHash<QString, AftQuote> aft_;
+    // Bumped per fetch so a reply that lands after a portfolio switch can't
+    // paint another book's after-hours moves onto this one.
+    quint64 aft_gen_ = 0;
+    bool    aft_in_flight_ = false;
+    QTimer* aft_timer_ = nullptr;
 
     // ── Portfolio selection ──────────────────────────────────────────────────
     QComboBox* portfolio_combo_ = nullptr;

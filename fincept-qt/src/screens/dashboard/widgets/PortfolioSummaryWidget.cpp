@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
 
+#include "core/logging/Logger.h"
+#include "python/PythonWorker.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
@@ -8,13 +10,38 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QPointer>
 #include <QScrollArea>
 #include <QSettings>
+#include <QTimeZone>
+
+#include <optional>
 
 namespace fincept::screens::widgets {
 
 // QSettings key remembering which portfolio the dashboard widget last showed.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
+
+// How often the after-hours column re-fetches while the widget is on screen.
+// Deliberately slow: `extended_hours` downloads 5 days of 1-minute bars with
+// pre/post included for every holding, which is a far heavier call than the
+// quote stream feeding the other columns.
+static constexpr int kAftRefreshMs = 60'000;
+
+namespace {
+
+/// JSON number → optional. The daemon sends `null` for "no extended print",
+/// which must not collapse into a 0.0 the column would render as "flat".
+std::optional<double> json_num(const QJsonObject& o, const char* key) {
+    const auto v = o.value(QLatin1String(key));
+    if (v.isNull() || v.isUndefined() || !v.isDouble())
+        return std::nullopt;
+    return v.toDouble();
+}
+
+} // namespace
 
 PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     : BaseWidget("PORTFOLIO SUMMARY", parent, ui::colors::POSITIVE) {
@@ -83,13 +110,23 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
         l->setAlignment(a);
         header_labels_.append(l);
         hl->addWidget(l, 1); // every column gets equal stretch
+        return l;
     };
     make_hdr_lbl("SYM");
     make_hdr_lbl("SHARES",  Qt::AlignRight);
     make_hdr_lbl("PRICE",   Qt::AlignRight);
     make_hdr_lbl("VALUE",   Qt::AlignRight);
-    make_hdr_lbl("P&L",     Qt::AlignRight);
-    make_hdr_lbl("DAY CHG%", Qt::AlignRight);
+    auto* pnl_hdr = make_hdr_lbl("P&L%", Qt::AlignRight);
+    pnl_hdr->setToolTip(QStringLiteral(
+        "Return on cost for the position: (price − average cost) ÷ average cost. "
+        "The cash figure is in TOTAL P&L above."));
+    auto* aft_hdr = make_hdr_lbl("AFT%", Qt::AlignRight);
+    aft_hdr->setToolTip(QStringLiteral(
+        "Extended-hours move against the last regular close — pre-market before the "
+        "open, post-market after it.\n\n"
+        "Blank during the regular session: by then the last extended print is already "
+        "inside the price the other columns are quoting, so repeating it here would "
+        "double-count it."));
     vl->addWidget(header_row_);
 
     // Scrollable holdings list
@@ -106,7 +143,17 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     scroll_area_->setWidget(list_widget);
     vl->addWidget(scroll_area_, 1);
 
-    connect(this, &BaseWidget::refresh_requested, this, [this] { load_holdings(); });
+    connect(this, &BaseWidget::refresh_requested, this, [this] {
+        load_holdings();
+        fetch_aft();
+    });
+
+    // Extended hours refresh on its own slow cadence — see kAftRefreshMs. It
+    // runs only while the widget is on screen (showEvent/hideEvent), so a
+    // dashboard tab the user isn't looking at costs nothing.
+    aft_timer_ = new QTimer(this);
+    aft_timer_->setInterval(kAftRefreshMs);
+    connect(aft_timer_, &QTimer::timeout, this, [this] { fetch_aft(); });
 
     // Stay in sync with the real portfolio backend the Portfolio screen uses.
     auto& svc = services::PortfolioService::instance();
@@ -135,12 +182,19 @@ void PortfolioSummaryWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
     if (!hub_active_)
         load_holdings();
+    aft_timer_->start();
+    fetch_aft();
 }
 
 void PortfolioSummaryWidget::hideEvent(QHideEvent* e) {
     BaseWidget::hideEvent(e);
     if (hub_active_)
         hub_unsubscribe_all();
+    aft_timer_->stop();
+    // Supersede anything in flight: an off-screen tile shouldn't repaint, and
+    // by the time it is shown again the numbers would be stale anyway.
+    ++aft_gen_;
+    aft_in_flight_ = false;
 }
 
 void PortfolioSummaryWidget::apply_styles() {
@@ -282,6 +336,98 @@ void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary
 void PortfolioSummaryWidget::fetch_prices(const QVector<Holding>& holdings) {
     last_holdings_ = holdings;
     hub_resubscribe(holdings);
+    fetch_aft();
+}
+
+// ── After-hours column ───────────────────────────────────────────────────────
+
+PortfolioSummaryWidget::ExtSession PortfolioSummaryWidget::current_session() {
+    const QDateTime et = QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York"));
+    if (et.date().dayOfWeek() >= 6)             // Sat / Sun
+        return ExtSession::Closed;
+    const QTime t = et.time();
+    if (t < QTime(4, 0))    return ExtSession::Closed;
+    if (t < QTime(9, 30))   return ExtSession::Pre;
+    if (t < QTime(16, 0))   return ExtSession::Regular;
+    if (t < QTime(20, 0))   return ExtSession::Post;
+    // Past 20:00 the session is over, but the evening's post-market move is
+    // still the most recent thing that happened and hasn't been absorbed by a
+    // regular session yet — so it stays on screen rather than blanking at 8pm.
+    return ExtSession::Closed;
+}
+
+void PortfolioSummaryWidget::fetch_aft() {
+    if (last_holdings_.isEmpty()) {
+        aft_.clear();
+        return;
+    }
+    // Nothing an extended print could tell the reader during the session: the
+    // last one happened before the open and is already inside the price every
+    // other column is quoting. Clear rather than leave this morning's
+    // pre-market number sitting under the header all afternoon.
+    if (current_session() == ExtSession::Regular) {
+        if (!aft_.isEmpty()) {
+            aft_.clear();
+            rebuild_from_cache();
+        }
+        return;
+    }
+    if (aft_in_flight_)
+        return;
+
+    QJsonArray syms;
+    for (const auto& h : last_holdings_)
+        syms.append(h.symbol);
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("symbols"), syms);
+
+    const quint64 gen = ++aft_gen_;
+    aft_in_flight_ = true;
+    QPointer<PortfolioSummaryWidget> guard(this);
+
+    python::PythonWorker::instance().submit(
+        QStringLiteral("extended_hours"), payload,
+        [guard, gen](bool ok, QJsonObject result, QString err) {
+            if (!guard || gen != guard->aft_gen_)
+                return;  // superseded by a newer fetch, or the tile is gone
+            guard->aft_in_flight_ = false;
+            if (!ok) {
+                // Keep whatever the column already shows. A failed background
+                // refresh is a reason to leave the last good number up, not to
+                // blank a column the user may be reading.
+                LOG_WARN("PortfolioSummary",
+                         QString("extended-hours fetch failed: %1").arg(err.left(120)));
+                return;
+            }
+            const QJsonArray rows = result.contains(QStringLiteral("_value"))
+                                        ? result.value(QStringLiteral("_value")).toArray()
+                                        : result.value(QStringLiteral("data")).toArray();
+            QHash<QString, AftQuote> fresh;
+            for (const auto& v : rows) {
+                const auto o = v.toObject();
+                const QString sym = o.value(QStringLiteral("symbol")).toString();
+                if (sym.isEmpty())
+                    continue;
+                // Read the field belonging to the session rather than the
+                // daemon's `ext_change_pct`. That one falls back across
+                // sessions for display (post when pre is missing, and the
+                // reverse), so in the first minutes after the close — before
+                // any post-market bar exists — it would report this morning's
+                // pre-market move under a header that says AFT.
+                const QString sess = o.value(QStringLiteral("session")).toString();
+                const bool pre = sess.isEmpty() ? (current_session() == ExtSession::Pre)
+                                                : sess == QLatin1String("PRE");
+                const auto ext = json_num(o, pre ? "pre_market" : "post_market");
+                const auto regular = json_num(o, "regular");
+                if (!ext || !regular || *regular <= 0)
+                    continue;
+                fresh.insert(sym, AftQuote{(*ext - *regular) / *regular * 100.0, *ext,
+                                           *regular, sess});
+            }
+            guard->aft_ = fresh;
+            guard->rebuild_from_cache();
+        });
 }
 
 
@@ -366,6 +512,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             lbl->setAlignment(align);
             lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
             rl->addWidget(lbl, stretch);
+            return lbl;
         };
 
         cell(h.symbol, 1, Qt::AlignLeft, ui::colors::TEXT_PRIMARY);
@@ -374,8 +521,24 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         cell(price > 0 ? QString("$%1").arg(price, 0, 'f', 2) : "--", 1, Qt::AlignRight, ui::colors::TEXT_PRIMARY);
         cell(value > 0 ? QString("$%1").arg(value, 0, 'f', 0) : "--", 1, Qt::AlignRight, ui::colors::TEXT_PRIMARY);
 
-        QString pnl_str = pnl >= 0 ? QString("+$%1").arg(pnl, 0, 'f', 0) : QString("-$%1").arg(-pnl, 0, 'f', 0);
-        cell(pnl_str, 1, Qt::AlignRight, pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+        // P&L as return on cost. The cash number for the whole book is in the
+        // summary card above; per row the percentage is what compares across
+        // positions of different sizes. Needs a cost basis and a live price —
+        // a position with either missing would otherwise read as −100%.
+        QString pnl_str = QStringLiteral("--");
+        QString pnl_color = QString(ui::colors::TEXT_SECONDARY);
+        QString pnl_tip = QStringLiteral("No average cost recorded for this position.");
+        if (cost > 0 && price > 0) {
+            const double pnl_pct = pnl / cost * 100.0;
+            pnl_str = QString("%1%2%").arg(pnl_pct >= 0 ? "+" : "").arg(pnl_pct, 0, 'f', 2);
+            pnl_color = pnl_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
+            pnl_tip = QString("%1 on a $%2 cost basis (avg $%3 per share)")
+                          .arg(pnl >= 0 ? QString("+$%1").arg(pnl, 0, 'f', 2)
+                                        : QString("-$%1").arg(-pnl, 0, 'f', 2))
+                          .arg(cost, 0, 'f', 2)
+                          .arg(h.avg_cost, 0, 'f', 2);
+        }
+        cell(pnl_str, 1, Qt::AlignRight, pnl_color)->setToolTip(pnl_tip);
 
         // Per-row DAY CHG% — quote already gives us the daily percent change.
         QString chg_pct_str;
@@ -389,6 +552,33 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             chg_pct_color = QString(ui::colors::TEXT_SECONDARY);
         }
         cell(chg_pct_str, 1, Qt::AlignRight, chg_pct_color);
+
+        // AFT% — the extended-hours move, from a different feed than the rest
+        // of the row and blank whenever there is no extended print to show.
+        QString aft_str = QStringLiteral("--");
+        QString aft_color = QString(ui::colors::TEXT_SECONDARY);
+        QString aft_tip = current_session() == ExtSession::Regular
+                              ? QStringLiteral("Regular session — the last extended-hours move is "
+                                               "already reflected in the price.")
+                              : QStringLiteral("No extended-hours trading in this name yet.");
+        if (const auto it = aft_.constFind(h.symbol); it != aft_.constEnd()) {
+            aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
+            aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
+            aft_tip = QString("%1-market $%2 against the $%3 close%4")
+                          .arg(it->session == QLatin1String("PRE") ? QStringLiteral("Pre")
+                                                                   : QStringLiteral("Post"))
+                          .arg(it->price, 0, 'f', 2)
+                          .arg(it->regular, 0, 'f', 2)
+                          .arg(h.shares > 0
+                                   ? QString("\n%1 on this position")
+                                         .arg((it->price - it->regular) * h.shares >= 0
+                                                  ? QString("+$%1").arg((it->price - it->regular) * h.shares,
+                                                                        0, 'f', 2)
+                                                  : QString("-$%1").arg(-(it->price - it->regular) * h.shares,
+                                                                        0, 'f', 2))
+                                   : QString());
+        }
+        cell(aft_str, 1, Qt::AlignRight, aft_color)->setToolTip(aft_tip);
 
         list_layout_->addWidget(row);
         alt = !alt;
