@@ -911,6 +911,7 @@ set(SERVICE_SOURCES
     src/services/databento/DatabentoService.cpp
     src/services/dbnomics/DBnomicsService.cpp
     src/services/gov_data/GovDataService.cpp
+    src/services/equity/EarningsSignal.cpp
     src/services/equity/EquityResearchService.cpp
     src/services/equity/MarketSentimentService.cpp
     src/services/equity/MarketSentimentSupport.cpp
@@ -1423,12 +1424,13 @@ set(SCREEN_SOURCES
     src/screens/ma_analytics/MAAnalyticsScreen.cpp
     src/screens/ma_analytics/MAModulePanel.cpp
 
-    # Equity Research (7 tabs)
+    # Equity Research
     src/screens/equity_research/EquityResearchScreen.cpp
     src/screens/equity_research/EquityOverviewTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
+    src/screens/equity_research/EquityEarningsTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityPeersTab.cpp
@@ -1665,6 +1667,7 @@ set_source_files_properties(
     src/screens/economics/EconomicsScreen.cpp
     src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
+    src/screens/equity_research/EquityEarningsTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
     src/screens/equity_research/EquityOverviewTab.cpp

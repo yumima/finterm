@@ -8,6 +8,7 @@
 #include "core/symbol/SymbolDragSource.h"
 #include "screens/equity_research/EquityAiTab.h"
 #include "screens/equity_research/EquityAnalysisTab.h"
+#include "screens/equity_research/EquityEarningsTab.h"
 #include "screens/equity_research/EquityFinancialsTab.h"
 #include "screens/equity_research/EquityNewsTab.h"
 #include "screens/equity_research/EquityOverviewTab.h"
@@ -156,28 +157,28 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this, &EquityResearchScreen::on_info_loaded);
 
     // ── Per-tab freshness tracking ──────────────────────────────────────────
-    // Tab indices match the order tabs are added in build_ui:
-    //   0 Overview, 1 Financials, 2 Analysis, 3 Technicals, 4 TALipp,
-    //   5 Peers, 6 News, 7 Sentiment.
-    // Overview/Analysis share the load_symbol triple (quote+info+history),
-    // so any of those signals stamps both.
+    // Stamped by widget, not by index — the tab order has shifted twice and
+    // the hardcoded indices here were left pointing at the wrong tabs both
+    // times (technicals_loaded stamped AI Forecast, peers stamped TALIpp, …).
+    // Overview/Analysis share the load_symbol triple (quote+info+history), so
+    // any of those signals stamps both.
     // Trailing-argument-drop: Qt allows zero-arg lambda slots on signals
     // with any number of arguments, which sidesteps name churn in the
     // service's payload structs.
     connect(&svc, &services::equity::EquityResearchService::quote_loaded, this,
-            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
     connect(&svc, &services::equity::EquityResearchService::info_loaded, this,
-            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
     connect(&svc, &services::equity::EquityResearchService::historical_loaded, this,
-            [this]() { mark_tab_loaded(0); mark_tab_loaded(2); });
+            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
     connect(&svc, &services::equity::EquityResearchService::financials_loaded, this,
-            [this]() { mark_tab_loaded(1); });
+            [this]() { mark_tab_loaded(financials_tab_); });
     connect(&svc, &services::equity::EquityResearchService::technicals_loaded, this,
-            [this]() { mark_tab_loaded(3); });
+            [this]() { mark_tab_loaded(technicals_tab_); });
     connect(&svc, &services::equity::EquityResearchService::peers_loaded, this,
-            [this]() { mark_tab_loaded(5); });
+            [this]() { mark_tab_loaded(peers_tab_); });
     connect(&svc, &services::equity::EquityResearchService::news_loaded, this,
-            [this]() { mark_tab_loaded(6); });
+            [this]() { mark_tab_loaded(news_tab_); });
 
     // 1-Hz ticker keeps the relative time ("30s ago") readable as it ages.
     freshness_ticker_ = new QTimer(this);
@@ -216,7 +217,7 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
                 price_label_->setText(QString("%1%2").arg(cs).arg(price, 0, 'f', 2));
                 // Update freshness — treat the live print as the latest data
                 // landing for whichever tab is showing the price.
-                mark_tab_loaded(0);
+                mark_tab_loaded(overview_tab_);
             });
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────────
@@ -334,6 +335,7 @@ void EquityResearchScreen::build_ui() {
     overview_tab_ = new EquityOverviewTab;
     financials_tab_ = new EquityFinancialsTab;
     analysis_tab_ = new EquityAnalysisTab;
+    earnings_tab_ = new EquityEarningsTab;
     ai_tab_ = new EquityAiTab;
     technicals_tab_ = new EquityTechnicalsTab;
     talipp_tab_ = new EquityTalippTab;
@@ -352,6 +354,10 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(overview_tab_, "Overview");
     tab_widget_->addTab(financials_tab_, "Financials");
     tab_widget_->addTab(analysis_tab_, "Analysis");
+    // Earnings sits directly after Analysis: it is the same "what is this
+    // company worth" question narrowed to the next print, and the two are
+    // read together.
+    tab_widget_->addTab(earnings_tab_, "Earnings");
     tab_widget_->addTab(ai_tab_, "AI Forecast");
     tab_widget_->addTab(technicals_tab_, "Technicals");
     tab_widget_->addTab(talipp_tab_, "TALIpp");
@@ -643,50 +649,48 @@ void EquityResearchScreen::on_tab_changed(int index) {
 
     auto& svc = services::equity::EquityResearchService::instance();
 
-    switch (index) {
-        case 1:
-            financials_tab_->set_symbol(current_symbol_);
-            svc.fetch_financials(current_symbol_);
-            break;
-        case 2:
-            analysis_tab_->set_symbol(current_symbol_);
-            // Re-trigger load_symbol — cache will re-emit info_loaded immediately
-            svc.load_symbol(current_symbol_);
-            break;
-        case 3:
-            // AI Forecast — set_symbol() subscribes to the candle stream itself;
-            // load_symbol() re-emits info_loaded so the prompt gets fundamentals.
-            ai_tab_->set_symbol(current_symbol_);
-            svc.load_symbol(current_symbol_);
-            break;
-        case 4:
-            technicals_tab_->set_symbol(current_symbol_);
-            svc.fetch_technicals(current_symbol_);
-            break;
-        case 5:
-            talipp_tab_->set_symbol(current_symbol_);
-            break;
-        case 6:
-            peers_tab_->set_symbol(current_symbol_);
-            break;
-        case 7:
-            news_tab_->set_symbol(current_symbol_);
-            svc.fetch_news(current_symbol_);
-            break;
-        case 8:
-            sentiment_tab_->set_symbol(current_symbol_);
-            break;
-        case 9:
-            // Relationships tab — lazy fetch on activation only. The
-            // RelationshipMapService::fetch call is multi-second and can spawn
-            // a Python subprocess, so we don't kick it from load_symbol().
-            // set_symbol() inside RelationshipMapScreen is idempotent for the
-            // same ticker, so re-activating the tab won't re-fire the request.
-            if (relationships_tab_)
-                relationships_tab_->set_symbol(current_symbol_);
-            break;
-        default:
-            break;
+    // Dispatch on the widget, not the index: the tab order has changed twice
+    // (AI Forecast, then Earnings) and each time a positional switch silently
+    // pointed at the wrong tab.
+    QWidget* tab = tab_widget_ ? tab_widget_->widget(index) : nullptr;
+    if (!tab)
+        return;
+
+    if (tab == financials_tab_) {
+        financials_tab_->set_symbol(current_symbol_);
+        svc.fetch_financials(current_symbol_);
+    } else if (tab == analysis_tab_) {
+        analysis_tab_->set_symbol(current_symbol_);
+        // Re-trigger load_symbol — cache will re-emit info_loaded immediately
+        svc.load_symbol(current_symbol_);
+    } else if (tab == earnings_tab_) {
+        // Earnings owns its own QueryStore subscription; set_symbol is
+        // idempotent per ticker so re-activating won't re-fetch.
+        earnings_tab_->set_symbol(current_symbol_);
+    } else if (tab == ai_tab_) {
+        // AI Forecast — set_symbol() subscribes to the candle stream itself;
+        // load_symbol() re-emits info_loaded so the prompt gets fundamentals.
+        ai_tab_->set_symbol(current_symbol_);
+        svc.load_symbol(current_symbol_);
+    } else if (tab == technicals_tab_) {
+        technicals_tab_->set_symbol(current_symbol_);
+        svc.fetch_technicals(current_symbol_);
+    } else if (tab == talipp_tab_) {
+        talipp_tab_->set_symbol(current_symbol_);
+    } else if (tab == peers_tab_) {
+        peers_tab_->set_symbol(current_symbol_);
+    } else if (tab == news_tab_) {
+        news_tab_->set_symbol(current_symbol_);
+        svc.fetch_news(current_symbol_);
+    } else if (tab == sentiment_tab_) {
+        sentiment_tab_->set_symbol(current_symbol_);
+    } else if (tab == relationships_tab_) {
+        // Relationships tab — lazy fetch on activation only. The
+        // RelationshipMapService::fetch call is multi-second and can spawn
+        // a Python subprocess, so we don't kick it from load_symbol().
+        // set_symbol() inside RelationshipMapScreen is idempotent for the
+        // same ticker, so re-activating the tab won't re-fire the request.
+        relationships_tab_->set_symbol(current_symbol_);
     }
 }
 
@@ -738,15 +742,21 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     if (peers_tab_) peers_tab_->set_symbol(symbol);
     if (news_tab_) news_tab_->set_symbol(symbol);
     if (sentiment_tab_) sentiment_tab_->set_symbol(symbol);
+    // Earnings: forward only when it's the visible tab. The fetch pulls three
+    // years of daily bars plus four estimate frames — too heavy to fire for
+    // every ticker the user flips past. on_tab_changed picks it up on
+    // activation, and set_symbol is idempotent per ticker.
+    if (earnings_tab_ && tab_widget_ && tab_widget_->currentWidget() == earnings_tab_)
+        earnings_tab_->set_symbol(symbol);
     // AI Forecast + Relationships tabs: forward only if currently visible.
     // Both are heavy on symbol-change — AI subscribes to candles and may fire
     // an auto-forecast (an LLM call); Relationships spawns a Python graph fetch.
     // We don't want either running in the background for every symbol the user
     // flips through; the tab_changed handler picks them up on activation.
-    const int cur = (tab_widget_) ? tab_widget_->currentIndex() : -1;
-    if (ai_tab_ && cur == 3)
+    QWidget* cur = tab_widget_ ? tab_widget_->currentWidget() : nullptr;
+    if (ai_tab_ && cur == ai_tab_)
         ai_tab_->set_symbol(symbol);
-    if (relationships_tab_ && cur == 9)
+    if (relationships_tab_ && cur == relationships_tab_)
         relationships_tab_->set_symbol(symbol);
 
     // Prefetch for inactive tabs so whichever tab the user opens next is
@@ -1086,7 +1096,14 @@ void EquityResearchScreen::refresh_recommendation_chip() {
 }
 
 QVariantMap EquityResearchScreen::save_state() const {
-    return {{"symbol", current_symbol_}, {"tab_index", tab_widget_ ? tab_widget_->currentIndex() : 0}};
+    // Persist the tab's name alongside its index: inserting a tab shifts every
+    // index after it, so a saved layout would silently reopen on a different
+    // tab after an upgrade. The index stays for backward compatibility with
+    // states written before the name was recorded.
+    const int idx = tab_widget_ ? tab_widget_->currentIndex() : 0;
+    return {{"symbol", current_symbol_},
+            {"tab_index", idx},
+            {"tab_name", tab_widget_ ? tab_widget_->tabText(idx) : QString()}};
 }
 
 void EquityResearchScreen::restore_state(const QVariantMap& state) {
@@ -1099,7 +1116,15 @@ void EquityResearchScreen::restore_state(const QVariantMap& state) {
         load_symbol(sym);
     }
     if (tab_widget_) {
-        const int idx = state.value("tab_index", 0).toInt();
+        const QString name = state.value("tab_name").toString();
+        int idx = -1;
+        if (!name.isEmpty()) {
+            for (int i = 0; i < tab_widget_->count(); ++i) {
+                if (tab_widget_->tabText(i) == name) { idx = i; break; }
+            }
+        }
+        if (idx < 0)
+            idx = state.value("tab_index", 0).toInt();
         if (idx >= 0 && idx < tab_widget_->count())
             tab_widget_->setCurrentIndex(idx);
     }
@@ -1111,6 +1136,14 @@ void EquityResearchScreen::mark_tab_loaded(int tab_index) {
     tab_loaded_at_[tab_index] = QDateTime::currentDateTime();
     if (tab_widget_ && tab_widget_->currentIndex() == tab_index)
         update_freshness_chip();
+}
+
+void EquityResearchScreen::mark_tab_loaded(QWidget* tab) {
+    if (!tab_widget_ || !tab)
+        return;
+    const int idx = tab_widget_->indexOf(tab);
+    if (idx >= 0)
+        mark_tab_loaded(idx);
 }
 
 void EquityResearchScreen::update_freshness_chip() {

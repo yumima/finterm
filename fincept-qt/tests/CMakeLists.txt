@@ -187,6 +187,32 @@ set_target_properties(test_market_sentiment_parse PROPERTIES
 
 add_test(NAME market_sentiment_parse COMMAND test_market_sentiment_parse)
 
+# ── Earnings signal tests ────────────────────────────────────────────────────
+# The pre-earnings BUY/HOLD/SELL scorer. Pure struct-in/verdict-out — no
+# network, no widgets — so its calibration and its missing-data behaviour can
+# be pinned exactly.
+
+add_executable(test_earnings_signal
+    services/test_earnings_signal.cpp
+    ../src/services/equity/EarningsSignal.cpp
+)
+
+target_include_directories(test_earnings_signal PRIVATE
+    ../src
+)
+
+target_link_libraries(test_earnings_signal PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_earnings_signal PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME earnings_signal COMMAND test_earnings_signal)
+
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,
 # and asserts legitimate dirs survive while junk is gone. Guards against the

@@ -1374,6 +1374,354 @@ def get_earnings_dates(symbol, lookback_days=1825, lookahead_days=180):
         return {"error": str(e), "symbol": symbol, "dates": []}
 
 
+# ── Earnings analysis (ER "Earnings" tab) ────────────────────────────────────
+# One round trip that assembles everything a pre-earnings read needs: the
+# realised track record (surprises + how the stock actually traded on the
+# print), where consensus sits right now and which way it is being revised,
+# and the forward estimates. The C++ side turns this into the buy/hold/sell
+# scorecard; Python stays a pure data layer and computes no verdict.
+
+_EST_PERIOD_LABELS = {
+    "0q": "CURRENT QTR",
+    "+1q": "NEXT QTR",
+    "0y": "CURRENT YEAR",
+    "+1y": "NEXT YEAR",
+    "-1q": "PRIOR QTR",
+    "LTG": "LONG-TERM",
+}
+
+
+def _df_to_period_rows(df, fields):
+    """[{period, label, <fields>}] from an estimates DataFrame indexed by period.
+
+    `fields` maps output key → DataFrame column. Missing columns and NaNs come
+    back as None so the UI can tell "no data" from a real zero.
+    """
+    rows = []
+    if df is None or getattr(df, "empty", True):
+        return rows
+    for period, row in df.iterrows():
+        out = {"period": str(period), "label": _EST_PERIOD_LABELS.get(str(period), str(period))}
+        for key, col in fields.items():
+            v = None
+            if col in df.columns:
+                raw = row[col]
+                try:
+                    if not pd.isna(raw):
+                        v = float(raw)
+                except (TypeError, ValueError):
+                    v = None
+            out[key] = v
+        rows.append(out)
+    return rows
+
+
+def _earnings_price_reaction(hist, event_ts):
+    """Realised price action around one earnings print.
+
+    `event_ts` is the tz-aware announcement timestamp from
+    ticker.earnings_dates — Yahoo carries the time of day, which is what tells
+    us whether the print lands after the close (16:00+, the common case) or
+    before the open. That decides which session is "before" and which is
+    "after"; getting it wrong assigns the move to the wrong day and inverts
+    roughly half the reactions.
+
+    Returns (reaction_pct, runup_pct, price_before, price_after) — any element
+    None when the surrounding sessions aren't in `hist`.
+    """
+    if hist is None or getattr(hist, "empty", True):
+        return None, None, None, None
+    try:
+        closes = hist["Close"]
+        idx = hist.index
+        ts = pd.Timestamp(event_ts)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        ts = ts.tz_convert(idx.tz) if idx.tz is not None else ts.tz_localize(None)
+
+        event_day = ts.normalize()
+        # Sessions strictly before the event day, and on/after it.
+        days = idx.normalize()
+        before_pos = [i for i, d in enumerate(days) if d < event_day]
+        on_after_pos = [i for i, d in enumerate(days) if d >= event_day]
+        if not before_pos or not on_after_pos:
+            return None, None, None, None
+
+        prev_i = before_pos[-1]
+        same_i = on_after_pos[0] if days[on_after_pos[0]] == event_day else None
+
+        # After the close (or during the session) → the reaction is the next
+        # session. Before the open → the reaction is the event day itself.
+        after_close = ts.hour >= 16 or (ts.hour == 0 and ts.minute == 0)
+        if after_close and same_i is not None:
+            i_before, i_after = same_i, same_i + 1
+        elif after_close:
+            i_before, i_after = prev_i, prev_i + 1
+        else:
+            i_before = prev_i
+            i_after = same_i if same_i is not None else prev_i + 1
+        if i_after >= len(closes) or i_before < 0:
+            return None, None, None, None
+
+        p_before = float(closes.iloc[i_before])
+        p_after = float(closes.iloc[i_after])
+        reaction = ((p_after - p_before) / p_before * 100.0) if p_before else None
+
+        # Five-session run-up into the print — the "is the move already priced
+        # in" half of the question.
+        runup = None
+        i_runup = i_before - 5
+        if i_runup >= 0:
+            p_runup = float(closes.iloc[i_runup])
+            if p_runup:
+                runup = (p_before - p_runup) / p_runup * 100.0
+        return reaction, runup, p_before, p_after
+    except Exception:
+        return None, None, None, None
+
+
+def get_earnings_analysis(symbol, quarters=12):
+    """Past / current / forward earnings picture for one symbol.
+
+    Shape (every numeric may be None = no data):
+      {"symbol", "currency", "as_of",
+       "next": {timestamp, eps_avg, eps_low, eps_high, analysts, rev_avg,
+                rev_low, rev_high, year_ago_eps, year_ago_rev, eps_growth,
+                rev_growth},
+       "history": [{timestamp, eps_estimate, eps_actual, surprise_pct,
+                    reaction_pct, runup_pct, price_before, price_after}],
+       "estimates": [{period, label, eps_avg, eps_low, eps_high, analysts,
+                      eps_growth, year_ago_eps, rev_avg, rev_growth,
+                      year_ago_rev}],
+       "trend":     [{period, label, current, d7, d30, d60, d90}],
+       "revisions": [{period, label, up_7d, up_30d, down_7d, down_30d}],
+       "growth":    [{period, label, stock, index}],
+       "valuation": {price, trailing_eps, forward_eps, trailing_pe, forward_pe,
+                     target_mean, target_high, target_low, recommendation,
+                     recommendation_mean, analyst_count}}
+    """
+    if not symbol:
+        return {"error": "symbol required"}
+    try:
+        ticker = yf.Ticker(symbol)
+    except Exception as e:
+        return {"error": str(e), "symbol": symbol}
+
+    out = {"symbol": symbol, "as_of": int(time.time()), "currency": ""}
+
+    # ── info: valuation context (cheap; usually already warm) ────────────────
+    info = {}
+    try:
+        info = ticker.info or {}
+    except Exception:
+        info = {}
+
+    def _inf(key):
+        v = info.get(key)
+        try:
+            if v is None or pd.isna(v):
+                return None
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    out["currency"] = info.get("currency") or ""
+    out["valuation"] = {
+        "price":               _inf("currentPrice") or _inf("regularMarketPrice"),
+        "trailing_eps":        _inf("trailingEps"),
+        "forward_eps":         _inf("forwardEps"),
+        "trailing_pe":         _inf("trailingPE"),
+        "forward_pe":          _inf("forwardPE"),
+        "target_mean":         _inf("targetMeanPrice"),
+        "target_high":         _inf("targetHighPrice"),
+        "target_low":          _inf("targetLowPrice"),
+        "recommendation":      info.get("recommendationKey") or "",
+        "recommendation_mean": _inf("recommendationMean"),
+        "analyst_count":       _inf("numberOfAnalystOpinions"),
+        "earnings_growth":     _inf("earningsQuarterlyGrowth"),
+        "revenue_growth":      _inf("revenueGrowth"),
+    }
+
+    # ── forward estimates / revision trend ───────────────────────────────────
+    try:
+        out["estimates"] = _df_to_period_rows(
+            ticker.earnings_estimate,
+            {"eps_avg": "avg", "eps_low": "low", "eps_high": "high",
+             "analysts": "numberOfAnalysts", "year_ago_eps": "yearAgoEps",
+             "eps_growth": "growth"})
+    except Exception:
+        out["estimates"] = []
+    try:
+        rev_rows = _df_to_period_rows(
+            ticker.revenue_estimate,
+            {"rev_avg": "avg", "rev_low": "low", "rev_high": "high",
+             "rev_analysts": "numberOfAnalysts", "year_ago_rev": "yearAgoRevenue",
+             "rev_growth": "growth"})
+        by_period = {r["period"]: r for r in out["estimates"]}
+        for r in rev_rows:
+            tgt = by_period.get(r["period"])
+            if tgt is None:
+                out["estimates"].append(r)
+            else:
+                tgt.update({k: v for k, v in r.items() if k not in ("period", "label")})
+    except Exception:
+        pass
+    try:
+        out["trend"] = _df_to_period_rows(
+            ticker.eps_trend,
+            {"current": "current", "d7": "7daysAgo", "d30": "30daysAgo",
+             "d60": "60daysAgo", "d90": "90daysAgo"})
+    except Exception:
+        out["trend"] = []
+    try:
+        out["revisions"] = _df_to_period_rows(
+            ticker.eps_revisions,
+            {"up_7d": "upLast7days", "up_30d": "upLast30days",
+             "down_7d": "downLast7Days", "down_30d": "downLast30days"})
+    except Exception:
+        out["revisions"] = []
+    try:
+        out["growth"] = _df_to_period_rows(
+            ticker.growth_estimates, {"stock": "stockTrend", "index": "indexTrend"})
+    except Exception:
+        out["growth"] = []
+
+    # ── history + upcoming date, with realised price reactions ───────────────
+    hist = None
+    try:
+        # 3y of daily closes covers the 12 quarters of reactions below with
+        # room for the 5-session run-up window on the oldest one.
+        hist = ticker.history(period="3y", interval="1d", auto_adjust=True)
+    except Exception:
+        hist = None
+
+    history = []
+    upcoming = None
+    try:
+        df = ticker.earnings_dates
+    except Exception:
+        df = None
+    if df is not None and not getattr(df, "empty", True):
+        now = pd.Timestamp.now(tz=df.index.tz) if df.index.tz is not None else pd.Timestamp.now()
+
+        def _cell(row, name):
+            if name not in df.columns:
+                return None
+            v = row[name]
+            try:
+                if pd.isna(v):
+                    return None
+            except (TypeError, ValueError):
+                pass
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        for idx, row in df.iterrows():
+            ts = pd.Timestamp(idx)
+            est = _cell(row, "EPS Estimate")
+            act = _cell(row, "Reported EPS")
+            sur = _cell(row, "Surprise(%)")
+            if act is None and ts >= now:
+                # Nearest future date wins — yfinance can list more than one.
+                if upcoming is None or ts < upcoming["_ts"]:
+                    upcoming = {"_ts": ts, "timestamp": int(ts.timestamp()), "eps_avg": est}
+                continue
+            if act is None:
+                # Past date with no reported figure: Yahoo sometimes lags a day
+                # or two. Keep it (the UI shows "pending") but don't score it.
+                pass
+            reaction, runup, p_before, p_after = _earnings_price_reaction(hist, ts)
+            history.append({
+                "timestamp":    int(ts.timestamp()),
+                "eps_estimate": est,
+                "eps_actual":   act,
+                "surprise_pct": sur,
+                "reaction_pct": reaction,
+                "runup_pct":    runup,
+                "price_before": p_before,
+                "price_after":  p_after,
+            })
+        history.sort(key=lambda d: d["timestamp"], reverse=True)
+        history = history[:max(1, int(quarters))]
+
+    out["history"] = history
+
+    # Run-up *into the current setup* — the "is the move already priced in?"
+    # half of the pre-earnings question. Same close-to-close basis as the
+    # per-event runup above so the two are directly comparable.
+    recent = {"runup_5d": None, "runup_20d": None}
+    if hist is not None and not getattr(hist, "empty", True):
+        try:
+            closes = hist["Close"]
+            last = float(closes.iloc[-1])
+            for key, back in (("runup_5d", 5), ("runup_20d", 20)):
+                if len(closes) > back:
+                    ref = float(closes.iloc[-1 - back])
+                    if ref:
+                        recent[key] = (last - ref) / ref * 100.0
+        except Exception:
+            pass
+    out["recent"] = recent
+
+    # ── next report: merge the calendar's consensus onto the date ────────────
+    nxt = {"timestamp": None, "eps_avg": None, "eps_low": None, "eps_high": None,
+           "analysts": None, "rev_avg": None, "rev_low": None, "rev_high": None,
+           "year_ago_eps": None, "year_ago_rev": None, "eps_growth": None,
+           "rev_growth": None, "is_estimated": True}
+    if upcoming:
+        nxt["timestamp"] = upcoming["timestamp"]
+        nxt["eps_avg"] = upcoming["eps_avg"]
+    try:
+        cal = ticker.calendar or {}
+    except Exception:
+        cal = {}
+    if isinstance(cal, dict):
+        dates = cal.get("Earnings Date") or []
+        if not isinstance(dates, (list, tuple)):
+            dates = [dates]
+        if dates and nxt["timestamp"] is None:
+            try:
+                nxt["timestamp"] = int(pd.Timestamp(dates[0]).timestamp())
+            except Exception:
+                pass
+        # A single calendar date means Yahoo has a confirmed day; a range means
+        # it is still an estimate. Surface that so the countdown can say so.
+        nxt["is_estimated"] = len(dates) != 1
+
+        def _cal(key):
+            v = cal.get(key)
+            try:
+                return float(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        nxt["eps_avg"] = nxt["eps_avg"] if nxt["eps_avg"] is not None else _cal("Earnings Average")
+        nxt["eps_low"] = _cal("Earnings Low")
+        nxt["eps_high"] = _cal("Earnings High")
+        nxt["rev_avg"] = _cal("Revenue Average")
+        nxt["rev_low"] = _cal("Revenue Low")
+        nxt["rev_high"] = _cal("Revenue High")
+
+    # The "0q" estimate row is the same quarter the next report covers — it
+    # carries the analyst count and the year-ago comparables the calendar lacks.
+    cur_q = next((r for r in out.get("estimates", []) if r.get("period") == "0q"), None)
+    if cur_q:
+        for src, dst in (("eps_avg", "eps_avg"), ("eps_low", "eps_low"), ("eps_high", "eps_high"),
+                         ("analysts", "analysts"), ("year_ago_eps", "year_ago_eps"),
+                         ("eps_growth", "eps_growth"), ("rev_avg", "rev_avg"),
+                         ("year_ago_rev", "year_ago_rev"), ("rev_growth", "rev_growth")):
+            if nxt.get(dst) is None:
+                nxt[dst] = cur_q.get(src)
+    out["next"] = nxt
+
+    return out
+
+
 def get_news(symbol, count=20):
     """Fetch news articles for a symbol using yfinance"""
     try:
@@ -1967,6 +2315,9 @@ _CACHE_TTL = {
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     "multiple_ratios": 600, "ipo_extras": 600, "earnings_dates": 600,
+    # earnings_analysis pulls estimates + 3y of daily bars — expensive, and
+    # consensus/revisions move on a daily cadence at best.
+    "earnings_analysis": 900,
     # historical / news / search — medium
     "historical_period": 120, "news": 120, "search": 300,
     # batched trade-date close history (power-trader real returns) — long: past
@@ -2135,6 +2486,12 @@ def _daemon_dispatch_inner(action, payload):
             p.get("lookback_days", 1825),
             p.get("lookahead_days", 180),
         )
+    if action == "earnings_analysis":
+        # Full pre-earnings picture for the ER Earnings tab: surprise +
+        # price-reaction history, live consensus and its revision trend, and
+        # forward estimates. One call so the tab paints in a single hop.
+        p = payload or {}
+        return get_earnings_analysis(p.get("symbol"), p.get("quarters", 12))
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))

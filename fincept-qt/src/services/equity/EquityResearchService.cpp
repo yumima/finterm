@@ -180,7 +180,8 @@ void EquityResearchService::release_inflight(const QString& key) {
 }
 
 void EquityResearchService::run_daemon(const QString& action, const QJsonObject& payload,
-                                       std::function<void(bool, QJsonObject, QString)> cb) {
+                                       std::function<void(bool, QJsonObject, QString)> cb,
+                                       int timeout_ms) {
     QPointer<EquityResearchService> self = this;
     python::PythonWorker::instance().submit(
         action, payload,
@@ -188,7 +189,7 @@ void EquityResearchService::run_daemon(const QString& action, const QJsonObject&
             if (!self) return;
             cb(ok, std::move(result), std::move(err));
         },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+        timeout_ms);
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
@@ -1473,6 +1474,182 @@ QVector<EarningsEvent> EquityResearchService::parse_earnings(const QJsonArray& a
         events.append(e);
     }
     return events;
+}
+
+// ── Earnings analysis ────────────────────────────────────────────────────────
+namespace {
+
+/// JSON number → optional. `null` (the daemon's "no data") and non-numbers
+/// both yield nullopt, so a real 0.0 survives as a value.
+std::optional<double> opt_num(const QJsonObject& o, const char* key) {
+    const auto v = o.value(QLatin1String(key));
+    if (v.isNull() || v.isUndefined() || !v.isDouble())
+        return std::nullopt;
+    return v.toDouble();
+}
+
+void read_period_label(const QJsonObject& o, QString& period, QString& label) {
+    period = o.value("period").toString();
+    label  = o.value("label").toString();
+    if (label.isEmpty())
+        label = period;
+}
+
+} // namespace
+
+EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObject& obj) const {
+    EarningsAnalysis a;
+    a.symbol   = obj.value("symbol").toString();
+    a.currency = obj.value("currency").toString();
+    a.as_of    = obj.value("as_of").toVariant().toLongLong();
+    // `valid` means "the daemon answered", not "this symbol has earnings" —
+    // ETFs and funds legitimately come back with every section empty, which
+    // the tab reports as a clean empty state rather than an error.
+    a.valid    = !obj.contains("error");
+
+    const auto nx = obj.value("next").toObject();
+    if (!nx.isEmpty()) {
+        const auto ts = nx.value("timestamp");
+        if (!ts.isNull() && !ts.isUndefined())
+            a.next.timestamp = ts.toVariant().toLongLong();
+        a.next.is_estimated = nx.value("is_estimated").toBool(true);
+        a.next.eps_avg      = opt_num(nx, "eps_avg");
+        a.next.eps_low      = opt_num(nx, "eps_low");
+        a.next.eps_high     = opt_num(nx, "eps_high");
+        a.next.analysts     = opt_num(nx, "analysts");
+        a.next.rev_avg      = opt_num(nx, "rev_avg");
+        a.next.rev_low      = opt_num(nx, "rev_low");
+        a.next.rev_high     = opt_num(nx, "rev_high");
+        a.next.year_ago_eps = opt_num(nx, "year_ago_eps");
+        a.next.year_ago_rev = opt_num(nx, "year_ago_rev");
+        a.next.eps_growth   = opt_num(nx, "eps_growth");
+        a.next.rev_growth   = opt_num(nx, "rev_growth");
+    }
+
+    const auto val = obj.value("valuation").toObject();
+    a.valuation.price               = opt_num(val, "price");
+    a.valuation.trailing_eps        = opt_num(val, "trailing_eps");
+    a.valuation.forward_eps         = opt_num(val, "forward_eps");
+    a.valuation.trailing_pe         = opt_num(val, "trailing_pe");
+    a.valuation.forward_pe          = opt_num(val, "forward_pe");
+    a.valuation.target_mean         = opt_num(val, "target_mean");
+    a.valuation.target_high         = opt_num(val, "target_high");
+    a.valuation.target_low          = opt_num(val, "target_low");
+    a.valuation.recommendation_mean = opt_num(val, "recommendation_mean");
+    a.valuation.analyst_count       = opt_num(val, "analyst_count");
+    a.valuation.earnings_growth     = opt_num(val, "earnings_growth");
+    a.valuation.revenue_growth      = opt_num(val, "revenue_growth");
+    a.valuation.recommendation      = val.value("recommendation").toString();
+
+    for (const auto& v : obj.value("history").toArray()) {
+        const auto o = v.toObject();
+        EarningsPoint p;
+        p.timestamp = o.value("timestamp").toVariant().toLongLong();
+        if (p.timestamp <= 0)
+            continue;
+        p.eps_estimate = opt_num(o, "eps_estimate");
+        p.eps_actual   = opt_num(o, "eps_actual");
+        p.surprise_pct = opt_num(o, "surprise_pct");
+        p.reaction_pct = opt_num(o, "reaction_pct");
+        p.runup_pct    = opt_num(o, "runup_pct");
+        p.price_before = opt_num(o, "price_before");
+        p.price_after  = opt_num(o, "price_after");
+        a.history.append(p);
+    }
+
+    for (const auto& v : obj.value("estimates").toArray()) {
+        const auto o = v.toObject();
+        EarningsEstimateRow r;
+        read_period_label(o, r.period, r.label);
+        r.eps_avg      = opt_num(o, "eps_avg");
+        r.eps_low      = opt_num(o, "eps_low");
+        r.eps_high     = opt_num(o, "eps_high");
+        r.analysts     = opt_num(o, "analysts");
+        r.year_ago_eps = opt_num(o, "year_ago_eps");
+        r.eps_growth   = opt_num(o, "eps_growth");
+        r.rev_avg      = opt_num(o, "rev_avg");
+        r.rev_low      = opt_num(o, "rev_low");
+        r.rev_high     = opt_num(o, "rev_high");
+        r.year_ago_rev = opt_num(o, "year_ago_rev");
+        r.rev_growth   = opt_num(o, "rev_growth");
+        a.estimates.append(r);
+    }
+
+    for (const auto& v : obj.value("trend").toArray()) {
+        const auto o = v.toObject();
+        EarningsTrendRow r;
+        read_period_label(o, r.period, r.label);
+        r.current = opt_num(o, "current");
+        r.d7      = opt_num(o, "d7");
+        r.d30     = opt_num(o, "d30");
+        r.d60     = opt_num(o, "d60");
+        r.d90     = opt_num(o, "d90");
+        a.trend.append(r);
+    }
+
+    for (const auto& v : obj.value("revisions").toArray()) {
+        const auto o = v.toObject();
+        EarningsRevisionRow r;
+        read_period_label(o, r.period, r.label);
+        r.up_7d    = opt_num(o, "up_7d");
+        r.up_30d   = opt_num(o, "up_30d");
+        r.down_7d  = opt_num(o, "down_7d");
+        r.down_30d = opt_num(o, "down_30d");
+        a.revisions.append(r);
+    }
+
+    for (const auto& v : obj.value("growth").toArray()) {
+        const auto o = v.toObject();
+        EarningsGrowthRow r;
+        read_period_label(o, r.period, r.label);
+        r.stock = opt_num(o, "stock");
+        r.index = opt_num(o, "index");
+        a.growth.append(r);
+    }
+
+    const auto recent = obj.value("recent").toObject();
+    a.runup_5d_pct  = opt_num(recent, "runup_5d");
+    a.runup_20d_pct = opt_num(recent, "runup_20d");
+
+    return a;
+}
+
+void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QString& symbol,
+                                                        query::QueryStore::Callback cb) {
+    if (symbol.isEmpty()) return;
+    const QString key = "equity:earnings_analysis:" + symbol;
+    auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve,
+                                       query::QueryStore::Rejecter reject) {
+        const QVariant cached = fincept::CacheManager::instance().get(key);
+        if (!cached.isNull()) {
+            const auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
+            if (doc.isObject()) {
+                resolve(QVariant::fromValue(parse_earnings_analysis(doc.object())));
+                return;
+            }
+        }
+        QJsonObject payload;
+        payload["symbol"] = symbol;
+        // 25 s, not the 10 s default: the daemon fans this out into six
+        // upstream Yahoo calls (info, three estimate frames, earnings dates,
+        // 3 y of daily bars) and any one of them can stall.
+        run_daemon("earnings_analysis", payload,
+            [this, key, resolve, reject](bool ok, QJsonObject result, QString err) {
+                if (!ok) { reject(err); return; }
+                if (result.contains("error")) {
+                    reject(result.value("error").toString());
+                    return;
+                }
+                fincept::CacheManager::instance().put(
+                    key, QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
+                    kEarningsAnalysisTtlSec, "equity");
+                resolve(QVariant::fromValue(parse_earnings_analysis(result)));
+            },
+            25'000);
+    };
+    query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec,
+                                            kEarningsAnalysisTtlSec * 8,
+                                            std::move(cb), std::move(fetcher));
 }
 
 } // namespace fincept::services::equity

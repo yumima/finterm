@@ -4,6 +4,8 @@
 #include <QString>
 #include <QVector>
 
+#include <optional>
+
 namespace fincept::services::equity {
 
 // ── Symbol search ─────────────────────────────────────────────────────────────
@@ -223,6 +225,98 @@ struct EarningsEvent {
     bool   has_surprise = false;
 };
 
+// ── Earnings analysis (ER "Earnings" tab) ───────────────────────────────────
+// Backed by the daemon's `earnings_analysis` action. Unlike the older models
+// above, these use std::optional rather than a 0.0 sentinel: a 0% surprise, a
+// 0.00 EPS estimate and a flat price reaction are all real, meaningful values
+// here, and collapsing them into "missing" would silently corrupt the
+// scorecard that reads them.
+
+/// One reported quarter: what was expected, what landed, and how the stock
+/// actually traded on the print.
+struct EarningsPoint {
+    qint64 timestamp = 0;                 // unix seconds at announcement
+    std::optional<double> eps_estimate;
+    std::optional<double> eps_actual;
+    std::optional<double> surprise_pct;   // signed: + = beat
+    std::optional<double> reaction_pct;   // close-to-close move over the print
+    std::optional<double> runup_pct;      // 5 sessions into the print
+    std::optional<double> price_before;
+    std::optional<double> price_after;
+};
+
+/// Consensus for one horizon — "0q" current quarter, "+1q", "0y", "+1y".
+struct EarningsEstimateRow {
+    QString period;
+    QString label;
+    std::optional<double> eps_avg, eps_low, eps_high, analysts, year_ago_eps, eps_growth;
+    std::optional<double> rev_avg, rev_low, rev_high, year_ago_rev, rev_growth;
+};
+
+/// Where consensus sat 7/30/60/90 days ago — the revision trend.
+struct EarningsTrendRow {
+    QString period;
+    QString label;
+    std::optional<double> current, d7, d30, d60, d90;
+};
+
+/// How many analysts moved their number, and which way.
+struct EarningsRevisionRow {
+    QString period;
+    QString label;
+    std::optional<double> up_7d, up_30d, down_7d, down_30d;
+};
+
+/// Expected growth for the symbol vs its index, per horizon.
+struct EarningsGrowthRow {
+    QString period;
+    QString label;
+    std::optional<double> stock, index;
+};
+
+/// The upcoming report.
+struct EarningsNext {
+    std::optional<qint64> timestamp;
+    // Yahoo publishes a date *range* while the company hasn't confirmed —
+    // shown as "estimated" so the countdown isn't read as a fixed date.
+    bool is_estimated = true;
+    std::optional<double> eps_avg, eps_low, eps_high, analysts;
+    std::optional<double> rev_avg, rev_low, rev_high;
+    std::optional<double> year_ago_eps, year_ago_rev, eps_growth, rev_growth;
+};
+
+/// Valuation context the scorecard weighs the estimates against.
+struct EarningsValuation {
+    std::optional<double> price, trailing_eps, forward_eps, trailing_pe, forward_pe;
+    std::optional<double> target_mean, target_high, target_low;
+    std::optional<double> recommendation_mean, analyst_count;
+    std::optional<double> earnings_growth, revenue_growth;
+    QString recommendation;
+};
+
+struct EarningsAnalysis {
+    QString symbol;
+    QString currency;
+    qint64  as_of = 0;
+    bool    valid = false;
+    EarningsNext next;
+    EarningsValuation valuation;
+    QVector<EarningsPoint> history;        // newest first
+    QVector<EarningsEstimateRow> estimates;
+    QVector<EarningsTrendRow> trend;
+    QVector<EarningsRevisionRow> revisions;
+    QVector<EarningsGrowthRow> growth;
+    // Price run-up into the current setup, same close-to-close basis as
+    // EarningsPoint::runup_pct so the two compare directly.
+    std::optional<double> runup_5d_pct;
+    std::optional<double> runup_20d_pct;
+
+    /// True when there is nothing earnings-shaped to show (ETF, index, fund).
+    bool has_content() const {
+        return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value();
+    }
+};
+
 } // namespace fincept::services::equity
 
 // ── QVariant interop for QueryStore ─────────────────────────────────────────
@@ -239,3 +333,4 @@ Q_DECLARE_METATYPE(fincept::services::equity::FinancialsData)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::NewsArticle>)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::PeerData>)
 Q_DECLARE_METATYPE(QVector<fincept::services::equity::EarningsEvent>)
+Q_DECLARE_METATYPE(fincept::services::equity::EarningsAnalysis)

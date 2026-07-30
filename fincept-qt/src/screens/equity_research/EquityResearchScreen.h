@@ -20,6 +20,7 @@ namespace fincept::screens {
 class EquityOverviewTab;
 class EquityFinancialsTab;
 class EquityAnalysisTab;
+class EquityEarningsTab;
 class EquityAiTab;
 class EquityTechnicalsTab;
 class EquityTalippTab;
@@ -107,6 +108,9 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     QHash<int, QDateTime> tab_loaded_at_;
 
     void mark_tab_loaded(int tab_index);
+    /// Stamp by widget — resolves the index at call time so inserting or
+    /// reordering tabs can't silently stamp the wrong one.
+    void mark_tab_loaded(QWidget* tab);
     void update_freshness_chip();
 
     // Tabs
@@ -114,6 +118,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityOverviewTab* overview_tab_ = nullptr;
     EquityFinancialsTab* financials_tab_ = nullptr;
     EquityAnalysisTab* analysis_tab_ = nullptr;
+    EquityEarningsTab* earnings_tab_ = nullptr;
     EquityAiTab* ai_tab_ = nullptr;
     EquityTechnicalsTab* technicals_tab_ = nullptr;
     EquityTalippTab* talipp_tab_ = nullptr;

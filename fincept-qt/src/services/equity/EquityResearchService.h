@@ -1,5 +1,6 @@
 // src/services/equity/EquityResearchService.h
 #pragma once
+#include "python/PythonWorker.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
 
@@ -84,6 +85,13 @@ class EquityResearchService : public QObject {
     void subscribe_earnings(QObject* owner, const QString& symbol,
                             query::QueryStore::Callback cb);
 
+    /// Subscribe to the full earnings picture for `symbol` — surprise +
+    /// price-reaction history, live consensus, revision trend and forward
+    /// estimates. State carries EarningsAnalysis. One daemon call (~1-2 s);
+    /// backs the ER Earnings tab.
+    void subscribe_earnings_analysis(QObject* owner, const QString& symbol,
+                                     query::QueryStore::Callback cb);
+
     void fetch_financials(const QString& symbol);
     void fetch_technicals(const QString& symbol, const QString& period = "1y");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
@@ -119,9 +127,12 @@ class EquityResearchService : public QObject {
     /// Persistent yfinance daemon path — same shape as run_python but skips
     /// the ~1.5s pandas/yfinance cold-import per call. Callback receives the
     /// daemon's `result` field already parsed as a QJsonObject (or wrapped
-    /// under "_value" if the action returns a non-object).
+    /// under "_value" if the action returns a non-object). `timeout_ms` is
+    /// the deadline for the UI callback — raise it for actions that fan out
+    /// into several upstream calls (the daemon keeps working either way).
     void run_daemon(const QString& action, const QJsonObject& payload,
-                    std::function<void(bool, QJsonObject, QString)> cb);
+                    std::function<void(bool, QJsonObject, QString)> cb,
+                    int timeout_ms = python::PythonWorker::kNetworkActionTimeoutMs);
 
     /// In-flight request dedup. Returns true if the key was successfully
     /// acquired (caller proceeds with the daemon request). Returns false
@@ -142,6 +153,7 @@ class EquityResearchService : public QObject {
     QVector<PeerData> parse_peers(const QJsonArray& arr) const;
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;
     QVector<EarningsEvent> parse_earnings(const QJsonArray& arr) const;
+    EarningsAnalysis parse_earnings_analysis(const QJsonObject& obj) const;
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
     static constexpr int kQuoteTtlSec = 60;
@@ -156,6 +168,10 @@ class EquityResearchService : public QObject {
     // Earnings dates are only updated when a new quarter is announced —
     // session-long TTL is plenty.
     static constexpr int kEarningsTtlSec = 3600;
+    // Consensus and revision counts move on a daily cadence at best, but the
+    // countdown to the next report and the "estimates as of" stamp should not
+    // go stale over a long session — 15 min matches the daemon's own TTL.
+    static constexpr int kEarningsAnalysisTtlSec = 900;
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`ceb0ae990`](https://github.com/yumima/finterm/commit/ceb0ae990) Portfolio: make the heatmap's AFT mode actually load on the first click
 - [`e791770fd`](https://github.com/yumima/finterm/commit/e791770fd) Portfolio: allow renaming a portfolio from the UI
 - [`cf03e683e`](https://github.com/yumima/finterm/commit/cf03e683e) ER sentiment: seed the request batch from portfolio holdings
 - [`d4b32fa94`](https://github.com/yumima/finterm/commit/d4b32fa94) ER sentiment: batch Adanos requests so the free tier goes ~10x further
