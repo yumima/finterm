@@ -2,6 +2,7 @@
 #include "screens/portfolio/PortfolioHeatmap.h"
 
 #include "core/events/EventBus.h"
+#include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
 #include "ui/theme/Theme.h"
 
@@ -12,6 +13,7 @@
 #include <QJsonObject>
 #include <QMenu>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -85,7 +87,7 @@ void PortfolioHeatmap::build_ui() {
     aft_btn_->setToolTip(QStringLiteral(
         "After-hours / pre-market change for each symbol. "
         "Live from the yfinance daemon — refreshed each time you switch "
-        "to AFT mode."));
+        "to AFT mode. Click AFT again to re-fetch."));
     pnl_btn_->setChecked(true);
 
     auto set_mode = [this](portfolio::HeatmapMode m) {
@@ -94,6 +96,7 @@ void PortfolioHeatmap::build_ui() {
         weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
         day_btn_->setChecked   (m == portfolio::HeatmapMode::DayChange);
         aft_btn_->setChecked   (m == portfolio::HeatmapMode::Aft);
+        aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
         if (m == portfolio::HeatmapMode::Aft) {
             fetch_aft_quotes();
         } else {
@@ -101,6 +104,7 @@ void PortfolioHeatmap::build_ui() {
             // callback won't fire a stale block refresh while the user is
             // looking at a different mode.
             ++aft_gen_;
+            aft_in_flight_ = false;
             refresh_block_appearances();
         }
         emit mode_changed(m);
@@ -111,6 +115,16 @@ void PortfolioHeatmap::build_ui() {
     connect(aft_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
 
     layout->addLayout(mode_row);
+
+    // One-line AFT fetch status. The extended-hours pull is a real network
+    // round trip that can take tens of seconds (or fail outright) — without
+    // this the gray "—" tiles of a failed fetch look identical to "this
+    // symbol has no extended quote", which is what made the first click
+    // look like it did nothing. Hidden in every other mode.
+    aft_status_ = new QLabel;
+    aft_status_->setVisible(false);
+    aft_status_->setStyleSheet(QString("color:%1; font-size:10px;").arg(ui::colors::TEXT_SECONDARY()));
+    layout->addWidget(aft_status_);
 
     // Scrollable blocks area
     auto* scroll = new QScrollArea;
@@ -272,6 +286,17 @@ void PortfolioHeatmap::set_holdings(const QVector<portfolio::HoldingWithQuote>& 
     update_detail();
     update_top_movers();
     stat_holdings_->setText(QString::number(holdings.size()));
+
+    // AFT quotes are fetched on mode entry, which leaves two holes the user
+    // hits as "AFT shows nothing": holdings that arrive *after* AFT was
+    // selected (screen opened straight into AFT, or the first summary load
+    // lost the race with the click), and a symbol set that changes under us
+    // (portfolio switch, position added). Both leave aft_quotes_ not covering
+    // the tiles on screen. Re-fetch only when the symbol set differs from what
+    // the last fetch covered, so the 20 s refresh tick doesn't re-download on
+    // every quote update.
+    if (mode_ == portfolio::HeatmapMode::Aft && !aft_in_flight_ && holding_symbols() != aft_fetched_symbols_)
+        fetch_aft_quotes();
 }
 
 void PortfolioHeatmap::set_metrics(const portfolio::ComputedMetrics& metrics) {
@@ -749,6 +774,10 @@ void PortfolioHeatmap::refresh_theme() {
     detail_panel_->setStyleSheet(panel_ss);
     portfolio_panel_->setStyleSheet(panel_ss);
 
+    aft_status_->setStyleSheet(
+        QString("color:%1; font-size:10px;")
+            .arg(aft_status_error_ ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
+
     // Repaint portfolio panel data labels with current theme colours.
     if (selected_symbol_.isEmpty())
         update_portfolio_detail();
@@ -758,29 +787,65 @@ void PortfolioHeatmap::refresh_theme() {
     refresh_block_appearances();
 }
 
+void PortfolioHeatmap::set_aft_status(const QString& text, const QString& color, bool is_error) {
+    aft_status_error_ = is_error;
+    aft_status_->setStyleSheet(QString("color:%1; font-size:10px;").arg(color));
+    aft_status_->setText(text);
+}
+
+QStringList PortfolioHeatmap::holding_symbols() const {
+    QStringList out;
+    out.reserve(holdings_.size());
+    for (const auto& h : holdings_) out << h.symbol;
+    return out;
+}
+
+// Deliberately NOT the 10 s network default. The daemon serves this action
+// with a single yf.download of 5 days of 1-minute bars, prepost=True, across
+// every holding — measured at 40 s for an 18-symbol portfolio on a cold Yahoo
+// session (one stalled symbol blocks the whole batch, and curl (28) stalls
+// show up regularly in the logs). At 10 s the very first click nearly always
+// timed out and the callback dropped the failure on the floor, so the tiles
+// sat gray until a mode toggle re-fired the fetch against a now-warm session
+// — the "click DAY then AFT and it works" symptom.
+static constexpr int kAftFetchTimeoutMs = 45'000;
+
 // Fetch after-hours / pre-market percent change for each held symbol via the
 // persistent yfinance daemon. Same `extended_hours` action used by
-// PortfolioFuturesView::refresh_extended_hours — the daemon is already
-// running and warm, so this is a cheap network call rather than a fresh
-// Python subprocess. Generation counter supersedes any in-flight stale
-// requests when the user toggles AFT off and back on quickly.
-void PortfolioHeatmap::fetch_aft_quotes() {
+// PortfolioFuturesView::refresh_extended_hours. Generation counter supersedes
+// any in-flight stale requests when the user toggles AFT off and back on
+// quickly.
+void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
     if (holdings_.isEmpty()) {
         aft_quotes_.clear();
+        aft_fetched_symbols_.clear();
+        aft_in_flight_ = false;
+        set_aft_status(QStringLiteral("no holdings"), ui::colors::TEXT_SECONDARY());
         refresh_block_appearances();
         return;
     }
+
+    // A fetch covering exactly these symbols is already in flight. Clicking
+    // AFT again (the natural reaction to a slow load) must not stack a second
+    // multi-symbol download on the daemon — the pending callback will paint
+    // the tiles.
+    if (aft_in_flight_ && !is_retry && holding_symbols() == aft_fetched_symbols_)
+        return;
 
     QJsonArray syms;
     for (const auto& h : holdings_) syms.append(h.symbol);
 
     const quint64 my_gen = ++aft_gen_;
     QPointer<PortfolioHeatmap> guard(this);
+    aft_in_flight_       = true;
+    aft_fetched_symbols_ = holding_symbols();
 
     // Wipe stale quotes immediately so blocks render gray ("loading") until
     // the fresh fetch returns; without this the user briefly sees the
     // previous AFT session's colors against a different symbol set.
     aft_quotes_.clear();
+    set_aft_status(is_retry ? QStringLiteral("retrying…") : QStringLiteral("loading ext hours…"),
+                   ui::colors::TEXT_SECONDARY());
     refresh_block_appearances();
 
     QJsonObject payload;
@@ -788,9 +853,31 @@ void PortfolioHeatmap::fetch_aft_quotes() {
 
     python::PythonWorker::instance().submit(
         QStringLiteral("extended_hours"), payload,
-        [guard, my_gen](bool ok, QJsonObject result, QString /*err*/) {
+        [guard, my_gen, is_retry](bool ok, QJsonObject result, QString err) {
             if (!guard || my_gen != guard->aft_gen_) return;  // superseded or destroyed
-            if (!ok) return;
+            guard->aft_in_flight_ = false;
+            if (!ok) {
+                // One automatic retry. A first-of-session extended-hours call
+                // pays the Yahoo cookie/crumb handshake and any per-symbol
+                // stall; the retry runs against a warm session (and hits the
+                // daemon's 8 s result cache if the abandoned first call did
+                // finish), so it normally returns in under a second.
+                if (!is_retry) {
+                    guard->set_aft_status(QStringLiteral("slow — retrying…"), ui::colors::WARNING());
+                    QTimer::singleShot(1500, guard.data(), [guard, my_gen]() {
+                        if (guard && guard->aft_gen_ == my_gen && guard->mode_ == portfolio::HeatmapMode::Aft)
+                            guard->fetch_aft_quotes(/*is_retry=*/true);
+                    });
+                    return;
+                }
+                LOG_WARN("PortfolioHeatmap", QString("extended-hours fetch failed: %1").arg(err));
+                // Drop the covered-symbols marker so the next holdings tick
+                // (the screen's 20 s refresh) retries on its own.
+                guard->aft_fetched_symbols_.clear();
+                guard->set_aft_status(QStringLiteral("ext hours unavailable — click AFT to retry"),
+                                      ui::colors::NEGATIVE(), /*is_error=*/true);
+                return;
+            }
             const QJsonArray rows = result.contains(QStringLiteral("_value"))
                                         ? result.value(QStringLiteral("_value")).toArray()
                                         : result.value(QStringLiteral("data")).toArray();
@@ -803,9 +890,14 @@ void PortfolioHeatmap::fetch_aft_quotes() {
                     o.value(QStringLiteral("symbol")).toString(),
                     pct_val.toDouble());
             }
+            guard->set_aft_status(
+                guard->aft_quotes_.isEmpty()
+                    ? QStringLiteral("no extended-hours quotes")
+                    : QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")),
+                ui::colors::TEXT_SECONDARY());
             guard->refresh_block_appearances();
         },
-        python::PythonWorker::kNetworkActionTimeoutMs);
+        kAftFetchTimeoutMs);
 }
 
 } // namespace fincept::screens

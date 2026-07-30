@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -87,7 +88,22 @@ class PortfolioHeatmap : public QWidget {
     // is meaningful — missing renders neutral gray in block_color().
     QHash<QString, double> aft_quotes_;
     quint64  aft_gen_    = 0;             // supersedes in-flight stale requests
-    void fetch_aft_quotes();
+    bool     aft_in_flight_ = false;      // suppresses duplicate refetches
+    // Symbol set the last (or in-flight) AFT fetch covered. set_holdings
+    // compares against it so late-arriving holdings or a portfolio switch
+    // re-fetch instead of leaving every tile stuck on gray "—". Cleared on
+    // a failed fetch so the next holdings tick (20 s) retries.
+    QStringList aft_fetched_symbols_;
+    QLabel*  aft_status_ = nullptr;       // visible only in AFT mode
+    // Whether aft_status_ currently reads as a failure — lets refresh_theme
+    // re-derive its colour from the new palette without re-running the fetch.
+    bool     aft_status_error_ = false;
+    /// Fetch extended-hours quotes for the current holdings. `is_retry`
+    /// marks the single automatic retry so a second failure reports instead
+    /// of looping.
+    void fetch_aft_quotes(bool is_retry = false);
+    void set_aft_status(const QString& text, const QString& color, bool is_error = false);
+    QStringList holding_symbols() const;
 
     // Blocks container
     QWidget* blocks_container_ = nullptr;
