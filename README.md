@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`286e210a0`](https://github.com/yumima/finterm/commit/286e210a0) Dashboard: stop AFT% blanking itself during the trading day
 - [`765e66db7`](https://github.com/yumima/finterm/commit/765e66db7) Dashboard: fix the Portfolio Summary column alignment and the dead AFT% column
 - [`aba91ea48`](https://github.com/yumima/finterm/commit/aba91ea48) UI: tooltips appear instantly, at the pointer, wrapped into a box
 - [`f7ed1f772`](https://github.com/yumima/finterm/commit/f7ed1f772) ER Earnings: score the bar, not just the business

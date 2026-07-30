@@ -2824,6 +2824,11 @@ def compute_technicals_from_candles(candles):
 # (period=5d, interval=1m, prepost=True) and derives the regular /
 # pre-market / post-market fields directly from the bar timeline. Same
 # JSON shape for the C++ side; faster, more reliable, no info-scrape.
+# Cap on the per-symbol re-ask below, so a wholly failed bulk download
+# can't turn into one request per holding.
+_EXT_RETRY_MAX = 15
+
+
 def get_extended_hours_quotes(symbols):
     if not symbols:
         return []
@@ -2875,8 +2880,8 @@ def get_extended_hours_quotes(symbols):
     except Exception:
         _prev_end = None
 
-    rows = []
-    for sym in symbols:
+    def _slice(sym):
+        """The bulk frame's columns for one symbol, or None when it isn't there."""
         try:
             if isinstance(data.columns, _pd.MultiIndex):
                 level0 = data.columns.get_level_values(0).unique().tolist()
@@ -2886,15 +2891,19 @@ def get_extended_hours_quotes(symbols):
                 elif sym in level1:
                     hist = data.xs(sym, axis=1, level=1)
                 else:
-                    rows.append(_empty_ext_row(sym, session))
-                    continue
+                    return None
             else:
                 hist = data
             hist = hist.dropna(how="all")
             if hist.empty or "Close" not in hist.columns:
-                rows.append(_empty_ext_row(sym, session))
-                continue
+                return None
+            return hist
+        except Exception:
+            return None
 
+    def _row(sym, hist):
+        """One symbol's extended-hours row from its 1-minute frame, or None."""
+        try:
             idx = hist.index
             if idx.tz is None:
                 idx = idx.tz_localize("UTC")
@@ -2977,7 +2986,7 @@ def get_extended_hours_quotes(symbols):
                 ext_chg = ext - regular
                 ext_pct = (ext_chg / regular) * 100.0
 
-            rows.append({
+            return {
                 "symbol": sym,
                 "regular": regular,
                 "pre_market": pre,
@@ -2992,9 +3001,42 @@ def get_extended_hours_quotes(symbols):
                 # display names elsewhere; an empty string is fine.
                 "currency": "",
                 "name": sym,
-            })
+            }
         except Exception:
-            rows.append(_empty_ext_row(sym, session))
+            return None
+
+    rows = []
+    missing = []
+    for sym in symbols:
+        hist = _slice(sym)
+        row = _row(sym, hist) if hist is not None else None
+        if row is None:
+            missing.append(sym)
+            row = _empty_ext_row(sym, session)
+        rows.append(row)
+
+    # A multi-symbol 1-minute download drops tickers intermittently — the same
+    # request returns AAPL on one call and omits it on the next, which is what
+    # made the dashboard's AFT column flicker symbols in and out. Ask again for
+    # the stragglers one at a time: a single-ticker request is far more
+    # reliable, and the misses are normally a handful out of the book.
+    #
+    # Symbols that genuinely have no intraday bars (mutual funds like FNILX)
+    # come back empty from the retry too, at the cost of one request that the
+    # daemon's 8-second result cache absorbs for repeat callers.
+    if missing:
+        at = {r["symbol"]: i for i, r in enumerate(rows)}
+        for sym in missing[:_EXT_RETRY_MAX]:
+            try:
+                h = _yf.Ticker(sym).history(period="5d", interval="1m",
+                                            prepost=True, auto_adjust=True)
+            except Exception:
+                continue
+            if h is None or getattr(h, "empty", True) or "Close" not in h.columns:
+                continue
+            row = _row(sym, h)
+            if row is not None:
+                rows[at[sym]] = row
     return rows
 
 

@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QLabel>
 #include <QScrollArea>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -127,7 +128,11 @@ class PortfolioSummaryWidget : public BaseWidget {
         double pct = 0;       // move against the last regular close
         double price = 0;     // the extended-hours print itself
         double regular = 0;   // the close it is measured against
-        QString session;      // "PRE" / "POST" / "CLOSED", as the daemon saw it
+        QString session;      // "PRE" or "POST" — whichever field supplied the price
+        // When this symbol's value last arrived. Values persist across
+        // refreshes that don't mention them, so the row has to be able to say
+        // how old the number it is showing actually is.
+        qint64 fetched_at = 0;
     };
     QHash<QString, AftQuote> aft_;
     // Bumped per fetch so a reply that lands after a portfolio switch can't

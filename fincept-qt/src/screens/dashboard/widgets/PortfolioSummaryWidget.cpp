@@ -10,10 +10,12 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
 #include <QScrollArea>
+#include <QSet>
 #include <QScrollBar>
 #include <QSettings>
 #include <QTimeZone>
@@ -531,9 +533,25 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                     continue;
                 fresh.insert(sym, AftQuote{(*ext - *regular) / *regular * 100.0, *ext, *regular,
                                            from_pre ? QStringLiteral("PRE")
-                                                    : QStringLiteral("POST")});
+                                                    : QStringLiteral("POST"),
+                                           QDateTime::currentSecsSinceEpoch()});
             }
-            guard->aft_ = fresh;
+            // Merge, never replace. Yahoo's multi-symbol intraday download
+            // returns a different subset of the book from one call to the
+            // next, so assigning the reply wholesale made rows appear and
+            // vanish on every refresh even though nothing about the position
+            // had changed. A symbol keeps its last known extended-hours move
+            // until a newer one arrives for that same symbol.
+            for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it)
+                guard->aft_.insert(it.key(), it.value());
+            // Positions that left the book are the one thing that does get
+            // dropped — otherwise a sold holding's move would linger in the
+            // map and reappear if it were ever bought back.
+            QSet<QString> held;
+            for (const auto& h : guard->last_holdings_)
+                held.insert(h.symbol);
+            for (auto it = guard->aft_.begin(); it != guard->aft_.end();)
+                it = held.contains(it.key()) ? std::next(it) : guard->aft_.erase(it);
             guard->aft_error_.clear();
             guard->set_aft_header_state(AftState::Idle);
             guard->rebuild_from_cache();
@@ -677,7 +695,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         if (const auto it = aft_.constFind(h.symbol); it != aft_.constEnd()) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
-            aft_tip = QString("%1-market $%2 against the $%3 close%4")
+            aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
                           .arg(it->session == QLatin1String("PRE") ? QStringLiteral("Pre")
                                                                    : QStringLiteral("Post"))
                           .arg(it->price, 0, 'f', 2)
@@ -689,7 +707,8 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                                                                         0, 'f', 2)
                                                   : QString("-$%1").arg(-(it->price - it->regular) * h.shares,
                                                                         0, 'f', 2))
-                                   : QString());
+                                   : QString())
+                          .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));
         }
         cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);
 
