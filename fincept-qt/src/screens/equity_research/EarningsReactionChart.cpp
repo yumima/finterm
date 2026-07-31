@@ -92,7 +92,7 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
             if (!m.has_value() && !p.move_since_last_pct.has_value())
                 continue;
             cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct,
-                         std::nullopt, true});
+                         std::nullopt, std::nullopt, true});
             continue;
         }
         // A quarter with neither number is a blank slot in the series, not a
@@ -100,7 +100,7 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
         if (!m.has_value() && !p.reaction_pct.has_value())
             continue;
         cols.append({p.timestamp, m, p.reaction_pct, false, std::nullopt,
-                     std::nullopt, true});
+                     std::nullopt, std::nullopt, true});
     }
 
     // Attach the signal's estimates. Matched on exact timestamp: both series
@@ -113,6 +113,7 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
             if (c.timestamp != q.timestamp)
                 continue;
             c.predicted = q.predicted_move_pct;
+            c.predicted_bound = q.bound_pct;
             c.predicted_reconstructed = q.reconstructed;
             break;
         }
@@ -189,6 +190,11 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
                                       "past quarter, and the estimate is muted accordingly.</i>")
                      : QStringLiteral("<i>Solid here: this estimate was genuinely recorded before "
                                       "the print, with the whole model available.</i>"));
+        if (c.predicted_bound) {
+            rows << QString("Shaded band — the most it could have said either way: "
+                            "<b>±%1%</b>")
+                        .arg(QString::number(*c.predicted_bound, 'f', 2));
+        }
         if (c.reaction) {
             rows << QString("Miss: <b>%1 pp</b>")
                         .arg(QString::number(std::abs(*c.predicted - *c.reaction), 'f', 2));
@@ -259,6 +265,9 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         // belongs on that axis — and has to be allowed to stretch it, or a
         // bold estimate would be drawn clipped against the frame.
         if (c.predicted) reaction_vals.append(*c.predicted);
+        // The band is drawn, so it has to fit: sizing the axis to the line
+        // alone would clip the envelope that explains it.
+        if (c.predicted_bound) reaction_vals.append(*c.predicted_bound);
     }
     const double m_ext = axis_extent(metric_vals);
     const double r_ext = axis_extent(reaction_vals);
@@ -381,6 +390,37 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     // changes mid-series: dotted while the estimates were rebuilt after the
     // fact, solid only between two that were recorded before their prints.
     const QColor pred_col(kPredColor);   // the scorecard's accent
+
+    // ── The room the predictor had ───────────────────────────────────────────
+    // ±(typical move × how much of the model was available). Without it a
+    // reconstructed stretch — which only ever sees a third of the legs and is
+    // scaled to match — reads as a predictor with no opinion, when it is a
+    // predictor with almost no information. The band widens where the model
+    // knows more, which is the honest shape of the thing.
+    {
+        QPolygonF top, bottom;
+        auto flush = [&]() {
+            if (top.size() < 2) { top.clear(); bottom.clear(); return; }
+            QPolygonF poly = top;
+            for (int k = bottom.size() - 1; k >= 0; --k) poly << bottom[k];
+            QColor fill(pred_col);
+            fill.setAlpha(28);
+            p.setPen(Qt::NoPen);
+            p.setBrush(fill);
+            p.drawPolygon(poly);
+            top.clear();
+            bottom.clear();
+        };
+        for (int i = 0; i < cols.size(); ++i) {
+            if (!cols[i].predicted_bound) { flush(); continue; }
+            const double b = std::clamp(*cols[i].predicted_bound / r_ext, 0.0, 1.0);
+            const double cx = cx_of(plot, col_w, i);
+            top    << QPointF(cx, zero_y - b * span);
+            bottom << QPointF(cx, zero_y + b * span);
+        }
+        flush();
+    }
+
     {
         QPointF prev;
         bool have_prev = false;

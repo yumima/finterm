@@ -69,6 +69,9 @@ class EarningsReactionChart : public QWidget {
         // The signal's estimate for this print, and whether it was rebuilt
         // afterwards rather than recorded before.
         std::optional<double> predicted;
+        // The furthest that estimate could have gone. Shaded behind the line
+        // so a flat stretch reads as a narrow range rather than a dead series.
+        std::optional<double> predicted_bound;
         bool predicted_reconstructed = true;
     };
 

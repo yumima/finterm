@@ -501,6 +501,10 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
             services::equity::QuarterPrediction q;
             q.timestamp = p.timestamp;
             q.predicted_move_pct = v.predicted_move_pct;
+            // Same bound the reconstruction reports, from the live numbers —
+            // so the band visibly widens at the one column where the whole
+            // model was available.
+            q.bound_pct = v.typical_move_pct * v.confidence;
             q.reconstructed = false;
             series.append(q);
             break;
@@ -531,7 +535,11 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
         "because consensus and revisions are published without history; they run through the "
         "same formula with the missing legs counted absent, so they predict smaller moves than "
         "a live reading will. It turns solid between prints whose estimate was genuinely "
-        "recorded beforehand.");
+        "recorded beforehand.\n\nThe shaded band is the room the predictor had at each print — "
+        "the typical move scaled by how much of the model it could see. A flat dotted line "
+        "inside a narrow band is a predictor with little information, not one with no opinion; "
+        "and no honest prediction tracks the spikes, since matching them would mean knowing the "
+        "surprise in advance.");
     if (pairs > 0) {
         text = QString("Direction right on %1 of %2 prints · mean miss %3 pp%4. ")
                    .arg(hits).arg(pairs)

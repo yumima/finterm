@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`8f1a4c19d`](https://github.com/yumima/finterm/commit/8f1a4c19d) ER Earnings: hover a quarter on the chart to see what each line said
 - [`e3c95c19b`](https://github.com/yumima/finterm/commit/e3c95c19b) ER Earnings: fold the predicted line into the reaction chart
 - [`176553449`](https://github.com/yumima/finterm/commit/176553449) ER Earnings: bring back signal vs outcome, as a curve beside the breakdown
 - [`28071e738`](https://github.com/yumima/finterm/commit/28071e738) ER Earnings: drop the SIGNAL vs OUTCOME panel

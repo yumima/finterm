@@ -764,8 +764,8 @@ QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a) {
         if (available > 0 && total > 0 && pv.typical_move_pct > 0) {
             const double score = (weighted / available) * 100.0;
             const double confidence = available / total;
-            qp.predicted_move_pct =
-                pv.typical_move_pct * clamp_unit(score / kFullConvictionScore) * confidence;
+            qp.bound_pct = pv.typical_move_pct * confidence;
+            qp.predicted_move_pct = *qp.bound_pct * clamp_unit(score / kFullConvictionScore);
         }
         out.append(qp);
     }

@@ -167,6 +167,12 @@ struct QuarterPrediction {
     qint64 timestamp = 0;
     std::optional<double> predicted_move_pct;  // reconstructed, backward legs only
     std::optional<double> actual_move_pct;     // the realised close-to-close reaction
+    /// The largest magnitude this estimate could have taken: the typical move
+    /// scaled by how much of the model was available. Reported so a chart can
+    /// show the range the predictor was working in — without it, an estimate
+    /// pinned near zero looks like a broken line rather than one that had very
+    /// little room to move in the first place.
+    std::optional<double> bound_pct;
     bool reconstructed = true;                 // false once a recorded reading replaces it
 };
 

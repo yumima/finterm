@@ -857,6 +857,41 @@ class TestEarningsSignal : public QObject {
             QVERIFY(r.timestamp != 1700000000LL);
     }
 
+    // The band has to be the actual limit, or the chart drawn from it lies
+    // about how much room the predictor had.
+    void the_bound_is_the_limit_the_prediction_can_reach() {
+        EarningsAnalysis a = bullish_fixture();
+        const auto rec = reconstruct_predictions(a);
+        QVERIFY(!rec.isEmpty());
+        int checked = 0;
+        for (const auto& q : rec) {
+            if (!q.predicted_move_pct) continue;
+            QVERIFY(q.bound_pct.has_value());
+            QVERIFY(*q.bound_pct > 0);
+            QVERIFY2(std::abs(*q.predicted_move_pct) <= *q.bound_pct + 1e-9,
+                     qPrintable(QString("predicted %1 outside its own band %2")
+                                    .arg(*q.predicted_move_pct).arg(*q.bound_pct)));
+            ++checked;
+        }
+        QVERIFY(checked > 0);
+    }
+
+    // The reconstruction's band must be visibly narrower than a live reading's
+    // — that gap IS the explanation for the flat dotted stretch, so if the two
+    // ever match, the chart has stopped telling the truth about it.
+    void a_reconstructions_band_is_narrower_than_a_live_one() {
+        const auto full = evaluate_earnings(bullish_fixture());
+        const double live_bound = full.typical_move_pct * full.confidence;
+        QVERIFY(live_bound > 0);
+
+        const auto rec = reconstruct_predictions(bullish_fixture());
+        QVERIFY(!rec.isEmpty());
+        QVERIFY(rec.last().bound_pct.has_value());
+        QVERIFY2(*rec.last().bound_pct < live_bound,
+                 qPrintable(QString("reconstruction band %1 vs live %2")
+                                .arg(*rec.last().bound_pct).arg(live_bound)));
+    }
+
     // The caveats are the honest part of the panel — a big pre-print run-up
     // and an imminent date have to be called out whichever way the score leans.
     void imminent_report_and_runup_raise_caveats() {
