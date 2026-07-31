@@ -782,6 +782,335 @@ std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m) {
     return std::nullopt;
 }
 
+// ── Competing predictors ─────────────────────────────────────────────────────
+// All walk-forward: quarter i is answered using only the quarters before it.
+
+namespace {
+
+// Quarters needed before the run-up fit will speak. Below this the slope is
+// noise wearing a regression's clothes.
+constexpr int kMinFitQuarters = 4;
+// Shrinkage denominator. With n prior quarters the fitted slope is kept at
+// n/(n+kFitShrink) of itself, so a four-point fit asserts 40% of what it
+// measured and a twelve-point fit 67%. Nothing here supports more confidence
+// than that, and an unshrunk slope on this little data mostly predicts noise.
+constexpr double kFitShrink = 6.0;
+// Extrapolation cap, in multiples of the name's typical move. A run-up far
+// outside the fitted range would otherwise produce a forecast no history
+// justifies.
+constexpr double kFitClampMultiple = 2.0;
+
+// ── Adaptive model constants ─────────────────────────────────────────────────
+// Half-life, in quarters, of the exponential weights. Four puts about 65% of
+// the weight in the last year — long enough to have a sample, short enough
+// that a business from three years ago isn't outvoting the current one.
+constexpr double kEwHalfLifeQuarters = 4.0;
+// Winsorising limit, in multiples of the expected magnitude. Beyond this a
+// print is a event the fit should notice but not be steered by.
+constexpr double kWinsorMultiple = 2.5;
+// Floor on skill shrinkage. Even a model losing to the baseline keeps this
+// much of its call — collapsing to exactly zero would make it indistinguishable
+// from the NO MOVE line and hide whether it was recovering.
+constexpr double kSkillFloor = 0.20;
+// Quarters of self-replay needed before skill is measured at all. Below it the
+// model is neither credited nor penalised.
+constexpr int kMinSkillQuarters = 3;
+
+struct PriorStats {
+    int n = 0;
+    double mean_reaction = 0;
+    double typical_move = 0;
+    // Least-squares of reaction on run-up, already shrunk.
+    bool have_fit = false;
+    double intercept = 0;
+    double slope = 0;
+};
+
+/// Everything the predictors need about the quarters BEFORE index `i`.
+PriorStats stats_before(const QVector<EarningsPoint>& history, int i) {
+    PriorStats s;
+    QVector<double> xs, ys;
+    double sum = 0, abs_sum = 0;
+    for (int j = i + 1; j < history.size(); ++j) {
+        const auto& p = history[j];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        ++s.n;
+        sum += *p.reaction_pct;
+        abs_sum += std::abs(*p.reaction_pct);
+        if (p.runup_pct.has_value()) {
+            xs.append(*p.runup_pct);
+            ys.append(*p.reaction_pct);
+        }
+    }
+    if (s.n == 0) return s;
+    s.mean_reaction = sum / s.n;
+    s.typical_move = abs_sum / s.n;
+
+    if (xs.size() >= kMinFitQuarters) {
+        double mx = 0, my = 0;
+        for (int k = 0; k < xs.size(); ++k) { mx += xs[k]; my += ys[k]; }
+        mx /= xs.size();
+        my /= ys.size();
+        double cov = 0, var = 0;
+        for (int k = 0; k < xs.size(); ++k) {
+            cov += (xs[k] - mx) * (ys[k] - my);
+            var += (xs[k] - mx) * (xs[k] - mx);
+        }
+        if (var > 1e-9) {
+            const double raw_slope = cov / var;
+            const double shrink = xs.size() / (xs.size() + kFitShrink);
+            s.slope = raw_slope * shrink;
+            s.intercept = my - s.slope * mx;
+            s.have_fit = true;
+        }
+    }
+    return s;
+}
+
+std::optional<double> fit_predict(const PriorStats& s, const std::optional<double>& runup) {
+    if (!s.have_fit || !runup.has_value()) return std::nullopt;
+    const double raw = s.intercept + s.slope * *runup;
+    const double cap = std::max(1.0, s.typical_move * kFitClampMultiple);
+    return std::clamp(raw, -cap, cap);
+}
+
+} // namespace
+
+// ── The Adaptive predictor ───────────────────────────────────────────────────
+
+namespace {
+
+struct AdaptiveOut {
+    std::optional<double> value;
+    std::optional<double> bound;   // the magnitude estimate that caps the call
+};
+
+/// Exponentially-weighted view of the quarters strictly older than `i`, and
+/// the signed call that follows from them. `apply_skill` replays the model
+/// over its own past to decide how much of that call to keep; the replay
+/// itself runs with it off, which is what keeps the recursion one level deep.
+AdaptiveOut adaptive_at(const QVector<EarningsPoint>& history, int i,
+                        const std::optional<double>& runup, bool apply_skill);
+
+AdaptiveOut adaptive_core(const QVector<EarningsPoint>& history, int i,
+                          const std::optional<double>& runup) {
+    AdaptiveOut out;
+    double wsum = 0, r_sum = 0, abs_sum = 0, x_sum = 0, xw = 0;
+    QVector<double> xs, ys, ws;
+    int age = 0;
+    for (int j = i + 1; j < history.size(); ++j) {
+        const auto& p = history[j];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        const double w = std::pow(0.5, age / kEwHalfLifeQuarters);
+        ++age;
+        wsum += w;
+        r_sum += w * *p.reaction_pct;
+        abs_sum += w * std::abs(*p.reaction_pct);
+        if (p.runup_pct.has_value()) {
+            xs.append(*p.runup_pct);
+            ys.append(*p.reaction_pct);
+            ws.append(w);
+            x_sum += w * *p.runup_pct;
+            xw += w;
+        }
+    }
+    if (wsum <= 0) return out;
+
+    const double drift = r_sum / wsum;
+    const double magnitude = abs_sum / wsum;      // property 1: size first
+    if (magnitude <= 0) return out;
+    out.bound = magnitude;
+
+    // Property 3: winsorise against the expected magnitude before fitting, so
+    // one violent quarter informs the slope without dictating it.
+    const double cap = magnitude * kWinsorMultiple;
+    double slope = 0;
+    if (xs.size() >= kMinFitQuarters && xw > 0) {
+        const double xbar = x_sum / xw;
+        double ybar = 0, yw = 0;
+        for (int k = 0; k < ys.size(); ++k) { ybar += ws[k] * std::clamp(ys[k], -cap, cap); yw += ws[k]; }
+        ybar /= yw;
+        double cov = 0, var = 0;
+        for (int k = 0; k < xs.size(); ++k) {
+            const double y = std::clamp(ys[k], -cap, cap);
+            cov += ws[k] * (xs[k] - xbar) * (y - ybar);
+            var += ws[k] * (xs[k] - xbar) * (xs[k] - xbar);
+        }
+        if (var > 1e-9)
+            slope = (cov / var) * (xs.size() / (xs.size() + kFitShrink));
+        if (runup.has_value()) {
+            const double raw = drift + slope * (*runup - xbar);
+            // Property 1 again: the signed call is capped by the size estimate.
+            out.value = std::clamp(raw, -magnitude, magnitude);
+            return out;
+        }
+    }
+    out.value = std::clamp(drift, -magnitude, magnitude);
+    return out;
+}
+
+AdaptiveOut adaptive_at(const QVector<EarningsPoint>& history, int i,
+                        const std::optional<double>& runup, bool apply_skill) {
+    AdaptiveOut out = adaptive_core(history, i, runup);
+    if (!apply_skill || !out.value)
+        return out;
+
+    // Skill shrinkage: replay the model over the quarters before this one and
+    // compare its error against doing nothing. Beating the baseline buys
+    // conviction; losing to it takes conviction away.
+    double model_err = 0, zero_err = 0;
+    int n = 0;
+    for (int j = i + 1; j < history.size(); ++j) {
+        const auto& p = history[j];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        const auto inner = adaptive_core(history, j, p.runup_pct);
+        if (!inner.value) continue;
+        ++n;
+        model_err += std::abs(*inner.value - *p.reaction_pct);
+        zero_err += std::abs(*p.reaction_pct);
+    }
+    if (n >= kMinSkillQuarters && zero_err > 1e-9) {
+        const double skill = std::clamp(1.0 - model_err / zero_err, 0.0, 1.0);
+        out.value = *out.value * (kSkillFloor + (1.0 - kSkillFloor) * skill);
+    } else {
+        // Too little history to have demonstrated anything. Unproven is not
+        // the same as proven good, and leaving conviction at full here made the
+        // model loudest on the oldest quarters — precisely where it knew least.
+        // It gets the same floor as a model that has been losing.
+        out.value = *out.value * kSkillFloor;
+    }
+    return out;
+}
+
+} // namespace
+
+QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const EarningsVerdict& live) {
+    QVector<PredictorRun> runs;
+
+    PredictorRun scorecard;
+    scorecard.predictor = MovePredictor::Scorecard;
+    scorecard.label = QStringLiteral("SCORECARD");
+    scorecard.explanation = QStringLiteral(
+        "The rules-based signal. Past quarters are rebuilt from the backward legs only, so it "
+        "is answering with about a third of the model it will have live.");
+    scorecard.points = reconstruct_predictions(a);
+    scorecard.next_move_pct = live.predicted_move_pct;
+    if (live.typical_move_pct > 0)
+        scorecard.next_bound_pct = live.typical_move_pct * live.confidence;
+    runs.append(scorecard);
+
+    PredictorRun adaptive;
+    adaptive.predictor = MovePredictor::Adaptive;
+    adaptive.label = QStringLiteral("ADAPTIVE");
+    adaptive.explanation = QStringLiteral(
+        "Built for this problem rather than borrowed. Estimates how far the name usually "
+        "travels on a print first, and lets that CAP the signed call — size is persistent, "
+        "direction is dominated by the surprise nobody has beforehand. Statistics are "
+        "exponentially weighted with a four-quarter half-life so a business from three years "
+        "ago doesn't outvote the current one, and targets are winsorised so a single violent "
+        "print informs the slope without dictating it. Then it replays itself over its own "
+        "past and shrinks its output toward zero in proportion to how badly it has been losing "
+        "to the do-nothing baseline — a model that can't beat NO MOVE stops making claims.");
+
+    PredictorRun fit;
+    fit.predictor = MovePredictor::RunupFit;
+    fit.label = QStringLiteral("RUN-UP FIT");
+    fit.explanation = QStringLiteral(
+        "Least squares of the realised move on the 5-session run-up into each print, refitted "
+        "on the quarters before every prediction and shrunk toward zero for the small sample. "
+        "The run-up is the one useful thing that is genuinely known beforehand — surprise, QoQ "
+        "and YoY only exist after the company reports, which is what makes the correlations "
+        "beside this chart descriptive rather than predictive.");
+
+    PredictorRun mean_run;
+    mean_run.predictor = MovePredictor::MeanMove;
+    mean_run.label = QStringLiteral("MEAN");
+    mean_run.explanation = QStringLiteral(
+        "Baseline: this name's average past reaction, ignoring everything about the setup. "
+        "A predictor that cannot beat this is not reading the setup, it is reading the drift.");
+
+    PredictorRun zero_run;
+    zero_run.predictor = MovePredictor::NoMove;
+    zero_run.label = QStringLiteral("NO MOVE");
+    zero_run.explanation = QStringLiteral(
+        "Baseline: zero, every quarter. It is never right and it is hard to beat on average "
+        "error, because guessing a direction and missing costs more than declining to guess.");
+
+    for (int i = 0; i < a.history.size(); ++i) {
+        const auto& p = a.history[i];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        const auto s = stats_before(a.history, i);
+        if (s.n == 0) continue;
+
+        QuarterPrediction f;
+        f.timestamp = p.timestamp;
+        f.actual_move_pct = p.reaction_pct;
+        f.predicted_move_pct = fit_predict(s, p.runup_pct);
+        if (f.predicted_move_pct)
+            f.bound_pct = std::max(1.0, s.typical_move * kFitClampMultiple);
+        fit.points.append(f);
+
+        QuarterPrediction ad;
+        ad.timestamp = p.timestamp;
+        ad.actual_move_pct = p.reaction_pct;
+        const auto ao = adaptive_at(a.history, i, p.runup_pct, /*apply_skill=*/true);
+        ad.predicted_move_pct = ao.value;
+        ad.bound_pct = ao.bound;
+        adaptive.points.append(ad);
+
+        QuarterPrediction m = f;
+        m.predicted_move_pct = s.mean_reaction;
+        m.bound_pct = s.typical_move;
+        mean_run.points.append(m);
+
+        QuarterPrediction z = f;
+        z.predicted_move_pct = 0.0;
+        z.bound_pct = std::nullopt;
+        zero_run.points.append(z);
+    }
+    std::reverse(adaptive.points.begin(), adaptive.points.end());
+    std::reverse(fit.points.begin(), fit.points.end());
+    std::reverse(mean_run.points.begin(), mean_run.points.end());
+    std::reverse(zero_run.points.begin(), zero_run.points.end());
+
+    // The upcoming print, from the same rules each predictor used above.
+    const auto s_now = stats_before(a.history, -1);
+    if (s_now.n > 0) {
+        const auto ao_now = adaptive_at(a.history, -1, a.runup_5d_pct, /*apply_skill=*/true);
+        adaptive.next_move_pct = ao_now.value;
+        adaptive.next_bound_pct = ao_now.bound;
+        fit.next_move_pct = fit_predict(s_now, a.runup_5d_pct);
+        if (fit.next_move_pct)
+            fit.next_bound_pct = std::max(1.0, s_now.typical_move * kFitClampMultiple);
+        mean_run.next_move_pct = s_now.mean_reaction;
+        mean_run.next_bound_pct = s_now.typical_move;
+        zero_run.next_move_pct = 0.0;
+    }
+
+    runs.append(adaptive);
+    runs.append(fit);
+    runs.append(mean_run);
+    runs.append(zero_run);
+
+    for (auto& r : runs) {
+        double err = 0;
+        for (const auto& q : r.points) {
+            if (!q.predicted_move_pct || !q.actual_move_pct) continue;
+            ++r.graded;
+            err += std::abs(*q.predicted_move_pct - *q.actual_move_pct);
+            // A near-zero estimate is not a directional call. Grading it would
+            // hand the NO MOVE baseline a hit rate it never claimed.
+            if (std::abs(*q.predicted_move_pct) < 0.25) continue;
+            ++r.direction_calls;
+            if ((*q.predicted_move_pct > 0) == (*q.actual_move_pct > 0))
+                ++r.direction_hits;
+        }
+        if (r.graded > 0)
+            r.mean_abs_error = err / r.graded;
+    }
+    return runs;
+}
+
 QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a) {
     QVector<ReactionCorrelation> out;
     const std::pair<ReactionMetric, const char*> metrics[] = {

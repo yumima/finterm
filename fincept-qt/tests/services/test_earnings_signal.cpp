@@ -892,6 +892,82 @@ class TestEarningsSignal : public QObject {
                                 .arg(*rec.last().bound_pct).arg(live_bound)));
     }
 
+    // ── Competing predictors ─────────────────────────────────────────────────
+    // The baselines exist to be beaten or not beaten. If they ever stop being
+    // computed the comparison silently becomes a monologue.
+    void every_predictor_is_graded_walk_forward() {
+        const auto runs = compare_predictors(bullish_fixture(),
+                                             evaluate_earnings(bullish_fixture()));
+        QCOMPARE(runs.size(), 5);
+        QSet<int> seen;
+        for (const auto& r : runs) {
+            seen.insert(static_cast<int>(r.predictor));
+            QVERIFY(!r.label.isEmpty());
+            QVERIFY(!r.explanation.isEmpty());
+        }
+        QCOMPARE(seen.size(), 5);
+
+        // NO MOVE must never claim a direction, or it would be scored on calls
+        // it never made.
+        for (const auto& r : runs)
+            if (r.predictor == MovePredictor::NoMove)
+                QCOMPARE(r.direction_calls, 0);
+    }
+
+    // The adaptive model's signed call is capped by its own magnitude
+    // estimate. Direction is the part it knows least about, so it must never
+    // out-shout the size it is confident of.
+    void the_adaptive_call_never_exceeds_its_magnitude_estimate() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Violent, alternating history with big run-ups — the configuration
+        // most likely to produce a runaway extrapolation.
+        const double moves[] = {18.0, -22.0, 15.0, -19.0, 24.0, -17.0, 20.0, -21.0};
+        for (int i = 0; i < 8; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.1, 8.0,
+                                     moves[i], 14.0));
+        const auto runs = compare_predictors(a, evaluate_earnings(a));
+        for (const auto& r : runs) {
+            if (r.predictor != MovePredictor::Adaptive) continue;
+            int checked = 0;
+            for (const auto& q : r.points) {
+                if (!q.predicted_move_pct) continue;
+                QVERIFY(q.bound_pct.has_value());
+                QVERIFY2(std::abs(*q.predicted_move_pct) <= *q.bound_pct + 1e-9,
+                         qPrintable(QString("adaptive said %1 with a %2 magnitude estimate")
+                                        .arg(*q.predicted_move_pct).arg(*q.bound_pct)));
+                ++checked;
+            }
+            QVERIFY(checked > 0);
+        }
+    }
+
+    // Skill shrinkage: a model that has been losing to "assume no move" must
+    // pull its own calls in. Built from a history where the run-up carries no
+    // information at all, so nothing it fits can help it.
+    void a_model_losing_to_the_baseline_shrinks_itself() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Reaction alternates independently of a steadily rising run-up.
+        for (int i = 0; i < 10; ++i) {
+            const double reaction = (i % 2 == 0) ? 9.0 : -9.0;
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.05, 5.0,
+                                     reaction, 2.0 + i * 1.5));
+        }
+        const auto runs = compare_predictors(a, evaluate_earnings(a));
+        for (const auto& r : runs) {
+            if (r.predictor != MovePredictor::Adaptive) continue;
+            for (const auto& q : r.points) {
+                if (!q.predicted_move_pct || !q.bound_pct) continue;
+                // Well inside its own magnitude estimate: with no usable
+                // signal it must not be making full-size calls.
+                QVERIFY2(std::abs(*q.predicted_move_pct) < *q.bound_pct * 0.9,
+                         qPrintable(QString("predicted %1 against a %2 bound on noise")
+                                        .arg(*q.predicted_move_pct).arg(*q.bound_pct)));
+            }
+        }
+    }
+
     // The caveats are the honest part of the panel — a big pre-print run-up
     // and an imminent date have to be called out whichever way the score leans.
     void imminent_report_and_runup_raise_caveats() {

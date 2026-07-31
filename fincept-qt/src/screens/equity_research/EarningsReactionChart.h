@@ -35,13 +35,21 @@ class EarningsReactionChart : public QWidget {
     /// oldest → newest, left to right.
     void set_history(const QVector<services::equity::EarningsPoint>& history);
     void set_metric(services::equity::ReactionMetric m);
-    /// The signal's own estimate for each print, drawn against the realised
-    /// move on the SAME axis — both are a percentage move on the same session,
-    /// so the vertical gap between the two lines is the error and reads
-    /// directly. Matched to columns by timestamp; quarters without an estimate
-    /// simply have no point. Dotted where the estimate was rebuilt after the
-    /// fact, solid between two that were recorded before their prints.
-    void set_predictions(const QVector<services::equity::QuarterPrediction>& predictions);
+    /// One predictor's estimates, drawn against the realised move on the SAME
+    /// axis — both are a percentage move on the same session, so the vertical
+    /// gap between a line and the reaction line is that predictor's error and
+    /// reads directly. Dotted where an estimate was rebuilt after the fact,
+    /// solid between two recorded before their prints.
+    struct PredictionSeries {
+        QString label;
+        QString color;
+        QVector<services::equity::QuarterPrediction> points;
+    };
+
+    /// Show these predictors, all at once. Several lines is the point: the
+    /// question "is this estimate any good" is only answerable against the
+    /// others, and against the baselines in particular.
+    void set_prediction_series(const QVector<PredictionSeries>& series);
     services::equity::ReactionMetric metric() const { return metric_; }
 
   protected:
@@ -68,11 +76,6 @@ class EarningsReactionChart : public QWidget {
         std::optional<double> live_move;
         // The signal's estimate for this print, and whether it was rebuilt
         // afterwards rather than recorded before.
-        std::optional<double> predicted;
-        // The furthest that estimate could have gone. Shaded behind the line
-        // so a flat stretch reads as a narrow range rather than a dead series.
-        std::optional<double> predicted_bound;
-        bool predicted_reconstructed = true;
     };
 
     QVector<Column> columns() const;
@@ -88,7 +91,7 @@ class EarningsReactionChart : public QWidget {
     static double axis_extent(const QVector<double>& values);
 
     QVector<services::equity::EarningsPoint> history_;   // oldest → newest
-    QVector<services::equity::QuarterPrediction> predictions_;
+    QVector<PredictionSeries> series_;
     services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::QoQ;
 };
 

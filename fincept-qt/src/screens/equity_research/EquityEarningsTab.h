@@ -7,6 +7,7 @@
 #include "ui/widgets/LoadingOverlay.h"
 
 #include <QHash>
+#include <QSet>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
@@ -118,6 +119,19 @@ class EquityEarningsTab : public QWidget {
     QLabel* prediction_note_ = nullptr;
     void fill_predictions(const services::equity::EarningsAnalysis& a,
                           const services::equity::EarningsVerdict& v);
+    /// Which estimate the dotted line is showing. Switchable because the point
+    /// of having more than one is comparing them — each button carries its own
+    /// mean error, so picking one is an informed choice rather than a guess.
+    QHash<services::equity::MovePredictor, QPushButton*> predictor_buttons_;
+    /// Independent toggles, not a radio group: comparing is the point, and a
+    /// predictor is only judgeable against the baselines drawn beside it.
+    QSet<int> selected_predictors_;
+    QVector<services::equity::PredictorRun> predictor_runs_;
+    void toggle_predictor(services::equity::MovePredictor p);
+    void apply_selected_predictor();
+    // Kept so switching predictor can redraw without refetching.
+    QVector<services::equity::EarningsPoint> last_history_;
+    int recorded_pairs_ = 0;
     services::equity::ReactionMetric selected_metric_ = services::equity::ReactionMetric::QoQ;
     void set_metric(services::equity::ReactionMetric m);
     void fill_correlations(const services::equity::EarningsAnalysis& a);

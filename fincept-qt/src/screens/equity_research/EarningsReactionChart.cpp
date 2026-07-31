@@ -68,11 +68,23 @@ void EarningsReactionChart::set_history(const QVector<EarningsPoint>& history) {
     update();
 }
 
-void EarningsReactionChart::set_predictions(
-    const QVector<services::equity::QuarterPrediction>& predictions) {
-    predictions_ = predictions;
+void EarningsReactionChart::set_prediction_series(const QVector<PredictionSeries>& series) {
+    series_ = series;
     update();
 }
+
+namespace {
+/// A series' estimate for one column, matched on exact timestamp — every
+/// series is built from the same history rows, so a miss means that predictor
+/// had nothing to say about that quarter rather than a lookup needing slack.
+const services::equity::QuarterPrediction* point_at(
+    const EarningsReactionChart::PredictionSeries& s, qint64 ts) {
+    for (const auto& q : s.points)
+        if (q.timestamp == ts && q.predicted_move_pct.has_value())
+            return &q;
+    return nullptr;
+}
+} // namespace
 
 void EarningsReactionChart::set_metric(ReactionMetric m) {
     if (metric_ == m)
@@ -91,32 +103,14 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
             // price, which is what carries the curve up to today.
             if (!m.has_value() && !p.move_since_last_pct.has_value())
                 continue;
-            cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct,
-                         std::nullopt, std::nullopt, true});
+            cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct});
             continue;
         }
         // A quarter with neither number is a blank slot in the series, not a
         // column worth the horizontal space.
         if (!m.has_value() && !p.reaction_pct.has_value())
             continue;
-        cols.append({p.timestamp, m, p.reaction_pct, false, std::nullopt,
-                     std::nullopt, std::nullopt, true});
-    }
-
-    // Attach the signal's estimates. Matched on exact timestamp: both series
-    // are built from the same history rows, so anything that fails to match
-    // is a quarter with no estimate rather than a lookup to be loosened.
-    for (const auto& q : predictions_) {
-        if (!q.predicted_move_pct.has_value())
-            continue;
-        for (auto& c : cols) {
-            if (c.timestamp != q.timestamp)
-                continue;
-            c.predicted = q.predicted_move_pct;
-            c.predicted_bound = q.bound_pct;
-            c.predicted_reconstructed = q.reconstructed;
-            break;
-        }
+        cols.append({p.timestamp, m, p.reaction_pct, false, std::nullopt});
     }
     return cols;
 }
@@ -178,31 +172,32 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
                     .arg(kLineColor, pct_label(*c.live_move, 2));
     }
 
-    // The dotted line, explained by what this particular point is.
-    if (c.predicted) {
-        rows << QString("<span style='color:%1'>Dotted line</span> — signal predicted: <b>%2</b>")
-                    .arg(kPredColor, pct_label(*c.predicted, 2));
-        rows << (c.predicted_reconstructed
-                     ? QStringLiteral("<i>Dotted here: rebuilt after the print from the backward "
-                                      "legs only — surprise record, reaction history, run-up. "
-                                      "Consensus and revisions aren't published with history, so "
-                                      "roughly two-thirds of the model can't be recovered for a "
-                                      "past quarter, and the estimate is muted accordingly.</i>")
-                     : QStringLiteral("<i>Solid here: this estimate was genuinely recorded before "
-                                      "the print, with the whole model available.</i>"));
-        if (c.predicted_bound) {
-            rows << QString("Shaded band — the most it could have said either way: "
-                            "<b>±%1%</b>")
-                        .arg(QString::number(*c.predicted_bound, 'f', 2));
-        }
+    // Every predictor on screen, with what it said here and how far it missed.
+    bool any = false;
+    for (const auto& sr : series_) {
+        const auto* q = point_at(sr, c.timestamp);
+        if (!q) continue;
+        any = true;
+        QString line = QString("<span style='color:%1'>%2</span> — predicted <b>%3</b>")
+                           .arg(sr.color, sr.label, pct_label(*q->predicted_move_pct, 2));
         if (c.reaction) {
-            rows << QString("Miss: <b>%1 pp</b>")
-                        .arg(QString::number(std::abs(*c.predicted - *c.reaction), 'f', 2));
+            line += QString(", missed by <b>%1 pp</b>")
+                        .arg(QString::number(std::abs(*q->predicted_move_pct - *c.reaction), 'f', 2));
         }
-    } else if (!c.projected) {
-        rows << QStringLiteral("<i>No prediction for this quarter — nothing before it to "
-                               "estimate from.</i>");
+        rows << line;
+        if (series_.size() == 1 && q->bound_pct) {
+            rows << QString("Shaded band — the most it could have said either way: <b>±%1%</b>")
+                        .arg(QString::number(*q->bound_pct, 'f', 2));
+        }
+        rows << (q->reconstructed
+                     ? QStringLiteral("<i>Dotted: rebuilt after the print. Consensus and "
+                                      "revisions aren't published with history, so a past "
+                                      "quarter can only be answered from what survives.</i>")
+                     : QStringLiteral("<i>Solid: recorded before the print, whole model "
+                                      "available.</i>"));
     }
+    if (!any && !c.projected)
+        rows << QStringLiteral("<i>No predictor had anything to say about this quarter.</i>");
 
     // Fixed width so the paragraph wraps into a box rather than one long line;
     // Qt only word-wraps a tooltip when it is rich text, and only bounds the
@@ -264,10 +259,14 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         // The prediction is a move on the same session as the reaction, so it
         // belongs on that axis — and has to be allowed to stretch it, or a
         // bold estimate would be drawn clipped against the frame.
-        if (c.predicted) reaction_vals.append(*c.predicted);
-        // The band is drawn, so it has to fit: sizing the axis to the line
-        // alone would clip the envelope that explains it.
-        if (c.predicted_bound) reaction_vals.append(*c.predicted_bound);
+        // Every predictor shares this axis, and the band is drawn, so both
+        // have to fit — sizing to the reaction line alone would clip them.
+        for (const auto& s : series_) {
+            if (const auto* q = point_at(s, c.timestamp)) {
+                reaction_vals.append(*q->predicted_move_pct);
+                if (q->bound_pct) reaction_vals.append(*q->bound_pct);
+            }
+        }
     }
     const double m_ext = axis_extent(metric_vals);
     const double r_ext = axis_extent(reaction_vals);
@@ -389,64 +388,65 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     // the two IS the error. Drawn segment by segment because the dash pattern
     // changes mid-series: dotted while the estimates were rebuilt after the
     // fact, solid only between two that were recorded before their prints.
-    const QColor pred_col(kPredColor);   // the scorecard's accent
-
-    // ── The room the predictor had ───────────────────────────────────────────
-    // ±(typical move × how much of the model was available). Without it a
-    // reconstructed stretch — which only ever sees a third of the legs and is
-    // scaled to match — reads as a predictor with no opinion, when it is a
-    // predictor with almost no information. The band widens where the model
-    // knows more, which is the honest shape of the thing.
-    {
-        QPolygonF top, bottom;
-        auto flush = [&]() {
-            if (top.size() < 2) { top.clear(); bottom.clear(); return; }
-            QPolygonF poly = top;
-            for (int k = bottom.size() - 1; k >= 0; --k) poly << bottom[k];
-            QColor fill(pred_col);
-            fill.setAlpha(28);
-            p.setPen(Qt::NoPen);
-            p.setBrush(fill);
-            p.drawPolygon(poly);
-            top.clear();
-            bottom.clear();
-        };
-        for (int i = 0; i < cols.size(); ++i) {
-            if (!cols[i].predicted_bound) { flush(); continue; }
-            const double b = std::clamp(*cols[i].predicted_bound / r_ext, 0.0, 1.0);
-            const double cx = cx_of(plot, col_w, i);
-            top    << QPointF(cx, zero_y - b * span);
-            bottom << QPointF(cx, zero_y + b * span);
+    // ── Each selected predictor ──────────────────────────────────────────────
+    // Same axis as the reaction line, so the vertical distance from a line to
+    // that one IS its error. Segment by segment because the dash pattern
+    // changes mid-series: dotted while estimates were rebuilt after the fact,
+    // solid between two recorded before their prints.
+    //
+    // The band is drawn only for a lone series. With several on screen the
+    // question is which line tracks best, and overlapping envelopes bury it.
+    for (const auto& sr : series_) {
+        const QColor col(sr.color);
+        if (series_.size() == 1) {
+            QPolygonF top, bottom;
+            auto flush = [&]() {
+                if (top.size() < 2) { top.clear(); bottom.clear(); return; }
+                QPolygonF poly = top;
+                for (int k = bottom.size() - 1; k >= 0; --k) poly << bottom[k];
+                QColor fill(col);
+                fill.setAlpha(28);
+                p.setPen(Qt::NoPen);
+                p.setBrush(fill);
+                p.drawPolygon(poly);
+                top.clear();
+                bottom.clear();
+            };
+            for (int i = 0; i < cols.size(); ++i) {
+                const auto* q = point_at(sr, cols[i].timestamp);
+                if (!q || !q->bound_pct) { flush(); continue; }
+                const double b = std::clamp(*q->bound_pct / r_ext, 0.0, 1.0);
+                const double cx = cx_of(plot, col_w, i);
+                top    << QPointF(cx, zero_y - b * span);
+                bottom << QPointF(cx, zero_y + b * span);
+            }
+            flush();
         }
-        flush();
-    }
 
-    {
         QPointF prev;
         bool have_prev = false;
         bool prev_recon = true;
         for (int i = 0; i < cols.size(); ++i) {
-            if (!cols[i].predicted) { have_prev = false; continue; }
-            const double scaled = std::clamp(*cols[i].predicted / r_ext, -1.0, 1.0);
+            const auto* q = point_at(sr, cols[i].timestamp);
+            if (!q) { have_prev = false; continue; }
+            const double scaled = std::clamp(*q->predicted_move_pct / r_ext, -1.0, 1.0);
             const QPointF pt(cx_of(plot, col_w, i), zero_y - scaled * span);
             if (have_prev) {
-                const bool solid = !prev_recon && !cols[i].predicted_reconstructed;
-                p.setPen(QPen(pred_col, 1.4, solid ? Qt::SolidLine : Qt::DotLine));
+                const bool solid = !prev_recon && !q->reconstructed;
+                p.setPen(QPen(col, 1.4, solid ? Qt::SolidLine : Qt::DotLine));
                 p.drawLine(prev, pt);
             }
             prev = pt;
-            prev_recon = cols[i].predicted_reconstructed;
+            prev_recon = q->reconstructed;
             have_prev = true;
         }
         for (int i = 0; i < cols.size(); ++i) {
-            if (!cols[i].predicted) continue;
-            const double scaled = std::clamp(*cols[i].predicted / r_ext, -1.0, 1.0);
+            const auto* q = point_at(sr, cols[i].timestamp);
+            if (!q) continue;
+            const double scaled = std::clamp(*q->predicted_move_pct / r_ext, -1.0, 1.0);
             const QPointF pt(cx_of(plot, col_w, i), zero_y - scaled * span);
-            // Hollow while the estimate was reconstructed; filled once it was
-            // genuinely recorded ahead of the print.
-            p.setBrush(cols[i].predicted_reconstructed ? QBrush(QColor(ui::colors::BG_SURFACE()))
-                                                       : QBrush(pred_col));
-            p.setPen(QPen(pred_col, 1.2));
+            p.setBrush(q->reconstructed ? QBrush(QColor(ui::colors::BG_SURFACE())) : QBrush(col));
+            p.setPen(QPen(col, 1.2));
             p.drawEllipse(pt, kDotR - 0.6, kDotR - 0.6);
         }
     }

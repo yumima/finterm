@@ -155,6 +155,20 @@ QTableWidgetItem* cell(const QString& text, const QString& color = QString(),
     return it;
 }
 
+/// One colour per predictor, used by both its button and its line so a reader
+/// can tell which is which without a legend. All chosen away from the reaction
+/// line's cyan, which they are being compared against.
+QString predictor_color(services::equity::MovePredictor p) {
+    switch (p) {
+        case services::equity::MovePredictor::Scorecard: return QStringLiteral("#a855f7");
+        case services::equity::MovePredictor::Adaptive:  return QStringLiteral("#f59e0b");
+        case services::equity::MovePredictor::RunupFit:  return QStringLiteral("#ec4899");
+        case services::equity::MovePredictor::MeanMove:  return QStringLiteral("#94a3b8");
+        case services::equity::MovePredictor::NoMove:    return QStringLiteral("#64748b");
+    }
+    return QStringLiteral("#a855f7");
+}
+
 QString color_for(double v) {
     if (v > 0) return ui::colors::POSITIVE();
     if (v < 0) return ui::colors::NEGATIVE();
@@ -188,6 +202,10 @@ QString opt_count(const std::optional<double>& v) {
 
 EquityEarningsTab::EquityEarningsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
+    // Opens on the scorecard and the do-nothing baseline together: the first
+    // question about any estimate is whether it beats doing nothing.
+    selected_predictors_.insert(static_cast<int>(services::equity::MovePredictor::Scorecard));
+    selected_predictors_.insert(static_cast<int>(services::equity::MovePredictor::NoMove));
     set_metric(selected_metric_);   // paints the initial toggle state
 }
 
@@ -467,86 +485,136 @@ QWidget* EquityEarningsTab::build_scorecard() {
 // already that chart's line, so a separate chart had to draw the same series
 // twice in order to compare it with itself.
 void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const EarningsVerdict& v) {
-    auto series = services::equity::reconstruct_predictions(a);
+    predictor_runs_ = services::equity::compare_predictors(a, v);
 
-    // A reading genuinely written down before a print replaces the
-    // reconstruction for that quarter. Matched on the calendar date in market
-    // time — Yahoo moves a scheduled placeholder to the announcement time once
-    // a company reports, so the raw seconds never agree.
+    // A reading genuinely written down before a print replaces the scorecard's
+    // reconstruction for that quarter. Only the scorecard has such records —
+    // the others are fits over history and have no live counterpart.
     const QTimeZone et("America/New_York");
     auto et_date = [&et](qint64 ts) {
         return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
     };
     int recorded_pairs = 0;
-    for (const auto& r : EarningsSignalRepository::instance().for_symbol(a.symbol)) {
-        if (!r.predicted_move_pct)
+    for (auto& run : predictor_runs_) {
+        if (run.predictor != services::equity::MovePredictor::Scorecard)
             continue;
-        for (auto& q : series) {
-            if (et_date(q.timestamp) != et_date(r.report_ts))
-                continue;
-            q.predicted_move_pct = r.predicted_move_pct;
-            q.reconstructed = false;
-            ++recorded_pairs;
-            break;
+        for (const auto& r : EarningsSignalRepository::instance().for_symbol(a.symbol)) {
+            if (!r.predicted_move_pct) continue;
+            for (auto& q : run.points) {
+                if (et_date(q.timestamp) != et_date(r.report_ts)) continue;
+                q.predicted_move_pct = r.predicted_move_pct;
+                q.reconstructed = false;
+                ++recorded_pairs;
+                break;
+            }
         }
     }
+    recorded_pairs_ = recorded_pairs;
 
-    // The coming print gets the live estimate, on the projected column. Its
-    // timestamp is taken from the history row rather than next.timestamp so it
-    // matches the column the chart actually drew.
-    if (v.predicted_move_pct) {
-        for (const auto& p : a.history) {
-            if (!p.is_estimate)
-                continue;
-            services::equity::QuarterPrediction q;
-            q.timestamp = p.timestamp;
-            q.predicted_move_pct = v.predicted_move_pct;
-            // Same bound the reconstruction reports, from the live numbers —
-            // so the band visibly widens at the one column where the whole
-            // model was available.
-            q.bound_pct = v.typical_move_pct * v.confidence;
-            q.reconstructed = false;
-            series.append(q);
-            break;
-        }
+    // Each button carries the record its line earned, so the choice is made on
+    // evidence rather than on which name sounds cleverest.
+    for (auto& run : predictor_runs_) {
+        auto* btn = predictor_buttons_.value(run.predictor, nullptr);
+        if (!btn) continue;
+        btn->setText(run.graded > 0
+                         ? QString("%1  %2pp").arg(run.label,
+                                                   QString::number(run.mean_abs_error, 'f', 1))
+                         : run.label);
+        btn->setToolTip(run.graded > 0
+                            ? QString("%1\n\nMean absolute error %2 pp over %3 quarters, "
+                                      "walk-forward — each quarter answered using only the "
+                                      "quarters before it.%4")
+                                  .arg(run.explanation)
+                                  .arg(QString::number(run.mean_abs_error, 'f', 2))
+                                  .arg(run.graded)
+                                  .arg(run.direction_calls > 0
+                                           ? QString(" Direction right on %1 of %2 calls.")
+                                                 .arg(run.direction_hits).arg(run.direction_calls)
+                                           : QString())
+                            : run.explanation);
     }
-    reaction_chart_->set_predictions(series);
+    apply_selected_predictor();
+}
 
-    // Say what the dotted line is every time. A reader comparing two lines
-    // will otherwise read the muted one as a weak signal rather than a
-    // partially-blind one.
-    int pairs = 0, hits = 0;
-    double abs_err = 0;
-    for (const auto& q : series) {
-        if (!q.predicted_move_pct || !q.actual_move_pct)
+void EquityEarningsTab::toggle_predictor(services::equity::MovePredictor p) {
+    const int key = static_cast<int>(p);
+    if (selected_predictors_.contains(key))
+        selected_predictors_.remove(key);
+    else
+        selected_predictors_.insert(key);
+    apply_selected_predictor();
+}
+
+void EquityEarningsTab::apply_selected_predictor() {
+    for (auto it = predictor_buttons_.constBegin(); it != predictor_buttons_.constEnd(); ++it)
+        it.value()->setChecked(selected_predictors_.contains(static_cast<int>(it.key())));
+    if (!reaction_chart_)
+        return;
+
+    QVector<EarningsReactionChart::PredictionSeries> series;
+    QStringList shown;
+    for (const auto& run : predictor_runs_) {
+        if (!selected_predictors_.contains(static_cast<int>(run.predictor)))
             continue;
-        ++pairs;
-        abs_err += std::abs(*q.predicted_move_pct - *q.actual_move_pct);
-        // Only graded where the estimate committed to a direction; a near-zero
-        // prediction is not a call, and counting it would manufacture a hit
-        // rate out of noise.
-        if (std::abs(*q.predicted_move_pct) >= 0.25 &&
-            (*q.predicted_move_pct > 0) == (*q.actual_move_pct > 0))
-            ++hits;
+        EarningsReactionChart::PredictionSeries s;
+        s.label = run.label;
+        s.color = predictor_color(run.predictor);
+        s.points = run.points;
+        // The upcoming print, on the projected column. Its timestamp comes from
+        // the history row rather than next.timestamp so it matches the column
+        // the chart actually drew.
+        if (run.next_move_pct) {
+            for (const auto& p : last_history_) {
+                if (!p.is_estimate) continue;
+                services::equity::QuarterPrediction q;
+                q.timestamp = p.timestamp;
+                q.predicted_move_pct = run.next_move_pct;
+                q.bound_pct = run.next_bound_pct;
+                q.reconstructed = false;
+                s.points.append(q);
+                break;
+            }
+        }
+        series.append(s);
+        if (run.graded > 0)
+            shown << QString("%1 %2pp").arg(run.label.toLower(),
+                                            QString::number(run.mean_abs_error, 'f', 1));
     }
-    QString text = QStringLiteral(
-        "The dotted line is what the signal predicted for each print. Quarters before today are "
-        "rebuilt from the backward legs alone — surprise record, reaction history, run-up — "
-        "because consensus and revisions are published without history; they run through the "
-        "same formula with the missing legs counted absent, so they predict smaller moves than "
-        "a live reading will. It turns solid between prints whose estimate was genuinely "
-        "recorded beforehand.\n\nThe shaded band is the room the predictor had at each print — "
-        "the typical move scaled by how much of the model it could see. A flat dotted line "
-        "inside a narrow band is a predictor with little information, not one with no opinion; "
-        "and no honest prediction tracks the spikes, since matching them would mean knowing the "
-        "surprise in advance.");
-    if (pairs > 0) {
-        text = QString("Direction right on %1 of %2 prints · mean miss %3 pp%4. ")
-                   .arg(hits).arg(pairs)
-                   .arg(QString::number(abs_err / pairs, 'f', 1))
-                   .arg(recorded_pairs > 0 ? QString(" · %1 recorded live").arg(recorded_pairs)
-                                           : QStringLiteral(" · all reconstructed")) +
-               text;
+    reaction_chart_->set_prediction_series(series);
+
+    QStringList all;
+    for (const auto& run : predictor_runs_)
+        if (run.graded > 0)
+            all << QString("%1 %2pp").arg(run.label.toLower(),
+                                          QString::number(run.mean_abs_error, 'f', 1));
+
+    QString text;
+    if (!all.isEmpty()) {
+        text = QString("Mean miss, walk-forward — every quarter answered using only the quarters "
+                       "before it, so none of these is an in-sample fit: %1. A predictor that "
+                       "cannot beat NO MOVE is not reading the setup.\n\n")
+                   .arg(all.join(QStringLiteral(" · ")));
+    }
+    if (series.isEmpty()) {
+        text += QStringLiteral("No predictor selected — tick one above to draw it against the "
+                               "realised move.");
+    } else {
+        if (selected_predictors_.contains(static_cast<int>(services::equity::MovePredictor::Scorecard))) {
+            text += QStringLiteral(
+                "SCORECARD's past quarters are rebuilt from the backward legs alone, so they "
+                "predict smaller moves than a live reading will; the line turns solid between "
+                "prints whose estimate was genuinely recorded beforehand");
+            text += recorded_pairs_ > 0 ? QString(" (%1 so far). ").arg(recorded_pairs_)
+                                        : QStringLiteral(" (none yet). ");
+        }
+        text += series.size() == 1
+                    ? QStringLiteral("The shaded band is the room that predictor had at each "
+                                     "print; it is hidden when several lines are shown. ")
+                    : QStringLiteral("Bands are hidden while several lines are up, so the "
+                                     "comparison stays readable. ");
+        text += QStringLiteral(
+            "No honest prediction tracks the spikes: matching them would mean knowing the "
+            "surprise in advance.");
     }
     prediction_note_->setText(text);
 }
@@ -603,6 +671,35 @@ QWidget* EquityEarningsTab::build_history_panel() {
     }
     switch_row->addStretch();
     chart_body->addLayout(switch_row);
+
+    // Second switch: which estimate the dotted line draws. Same shape as the
+    // BARS row above it, and for the same reason — the number that matters
+    // when choosing lives on the button.
+    auto* pred_row = new QHBoxLayout;
+    pred_row->setSpacing(4);
+    pred_row->setContentsMargins(0, 0, 0, 0);
+    pred_row->addWidget(make_caption("PREDICTED:"));
+    for (const auto pr : {services::equity::MovePredictor::Scorecard,
+                          services::equity::MovePredictor::Adaptive,
+                          services::equity::MovePredictor::RunupFit,
+                          services::equity::MovePredictor::MeanMove,
+                          services::equity::MovePredictor::NoMove}) {
+        auto* btn = new QPushButton;
+        btn->setCheckable(true);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(
+            QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                    "  font-size:12px; font-weight:700; border-radius:2px; padding:2px 8px; }"
+                    "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
+                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
+                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                     predictor_color(pr), ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
+        connect(btn, &QPushButton::clicked, this, [this, pr]() { toggle_predictor(pr); });
+        predictor_buttons_.insert(pr, btn);
+        pred_row->addWidget(btn);
+    }
+    pred_row->addStretch();
+    chart_body->addLayout(pred_row);
 
     reaction_chart_ = new EarningsReactionChart;
     chart_body->addWidget(reaction_chart_, 1);
@@ -857,6 +954,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
 
     fill_scorecard(verdict);
     record_and_resolve(a, verdict);
+    last_history_ = a.history;
     fill_predictions(a, verdict);
     fill_history(a, verdict);
     fill_trend(a);

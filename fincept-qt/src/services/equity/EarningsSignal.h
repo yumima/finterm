@@ -181,6 +181,75 @@ struct QuarterPrediction {
 /// point is ever informed by its own outcome.
 QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a);
 
+/// Competing ways to guess the next-session move, so the scorecard's estimate
+/// can be judged against something rather than admired on its own.
+///
+/// Every one is evaluated walk-forward: quarter i is predicted using only
+/// quarters before it, refitting as the window grows. An in-sample fit on
+/// twelve points would look excellent and mean nothing.
+///
+/// The two baselines are the point of the exercise. A predictor that cannot
+/// beat "assume no move" or "assume this name's average move" is not adding
+/// information, however sophisticated its inputs — and with a dozen quarters
+/// per symbol that is the likely honest answer.
+enum class MovePredictor {
+    Scorecard,   ///< the rules-based signal, reconstructed for past quarters
+    Adaptive,    ///< see below — the one built for this problem specifically
+    RunupFit,    ///< plain least squares of reaction on the run-up
+    MeanMove,    ///< baseline: this name's average past reaction
+    NoMove,      ///< baseline: zero, every quarter
+};
+
+// ── The Adaptive predictor ───────────────────────────────────────────────────
+// Designed around three properties of this particular problem rather than
+// dropped in from a library.
+//
+// 1. SIZE IS PREDICTABLE, DIRECTION MOSTLY IS NOT. How far a name travels on a
+//    print is persistent — volatility clusters, and a stock that moved 8% on
+//    its last four prints will probably move something like 8% on the next.
+//    Which WAY it travels is dominated by the surprise, which nobody has
+//    beforehand. So the model estimates magnitude first and lets it CAP the
+//    signed call: the direction can never be more confident than the size.
+//
+// 2. RECENCY BEATS DEPTH. Twelve quarters spans three years, over which a
+//    business changes. Every statistic is exponentially weighted with a
+//    four-quarter half-life, so the last year carries most of the answer.
+//
+// 3. THE SAMPLE IS TINY AND HAS OUTLIERS. One −24% print dominates an
+//    unweighted least-squares slope. Targets are winsorised against the
+//    expected magnitude before fitting, and the slope is shrunk for the sample
+//    size on top.
+//
+// The distinctive part is SKILL SHRINKAGE. Before predicting quarter i, the
+// model replays itself over the quarters before i and measures its own mean
+// error against the do-nothing baseline. If it has been beating "assume no
+// move" it keeps most of its conviction; if it has been losing to it, its
+// output collapses toward zero. A model that cannot beat the baseline should
+// stop making claims, and this one does that by construction rather than by
+// waiting for someone to notice.
+
+/// One predictor's walk-forward record on a symbol.
+struct PredictorRun {
+    MovePredictor predictor = MovePredictor::Scorecard;
+    QString label;
+    QString explanation;
+    QVector<QuarterPrediction> points;   // oldest first, aligned to the charts
+    /// Estimate for the print that hasn't happened yet, where the predictor
+    /// has enough behind it to make one.
+    std::optional<double> next_move_pct;
+    std::optional<double> next_bound_pct;
+    // Scored only over quarters the predictor actually answered AND that have
+    // a settled reaction.
+    int    graded = 0;
+    double mean_abs_error = 0.0;
+    int    direction_hits = 0;
+    int    direction_calls = 0;   // excludes near-zero estimates: not a call
+};
+
+/// Run every predictor over `a`, walk-forward. `live` supplies the scorecard's
+/// current reading for the upcoming print; the others derive their own.
+QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const EarningsVerdict& live);
+
 /// Correlate all three metrics against the realised reaction.
 QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a);
 
