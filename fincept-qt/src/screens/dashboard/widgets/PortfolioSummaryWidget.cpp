@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
 
+#include "screens/dashboard/widgets/ExtendedHoursMath.h"
+
 #include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
 #include "services/portfolio/PortfolioService.h"
@@ -42,15 +44,6 @@ static constexpr int kAftRefreshMs = 60'000;
 static constexpr double kAftReferenceTolerance = 0.03;
 
 namespace {
-
-/// JSON number → optional. The daemon sends `null` for "no extended print",
-/// which must not collapse into a 0.0 the column would render as "flat".
-std::optional<double> json_num(const QJsonObject& o, const char* key) {
-    const auto v = o.value(QLatin1String(key));
-    if (v.isNull() || v.isUndefined() || !v.isDouble())
-        return std::nullopt;
-    return v.toDouble();
-}
 
 /// The holdings table's columns, in order, as ONE definition shared by the
 /// header and the rows.
@@ -518,36 +511,15 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
                 if (sym.isEmpty())
                     continue;
-                // Which extended price may be paired with `regular` depends on
-                // the session, and getting it wrong is not a stale number —
-                // it is a wrong one.
-                //
-                // `regular` is the most recent completed close. Post-market
-                // trades against that same close, so the pairing is sound. But
-                // pre-market trades against the PREVIOUS close, so once the
-                // day's session has ended, pairing this morning's pre-market
-                // print with this afternoon's close computes roughly the
-                // negative of the day's move and presents it as an after-hours
-                // move. That is what put −7.82% next to AMZN on a day it rose
-                // 3.9% and closed up.
-                //
-                // So the fallback runs one way only. Before the open, falling
-                // back to the prior post-market is fine — both sides reference
-                // the same close. After it, there is no fallback: no
-                // post-market print means no number.
-                const QString sess = o.value(QStringLiteral("session")).toString();
-                const bool in_pre = sess.isEmpty() ? (current_session() == ExtSession::Pre)
-                                                   : sess == QLatin1String("PRE");
-                const auto pre = json_num(o, "pre_market");
-                const auto post = json_num(o, "post_market");
-                const auto ext = in_pre ? (pre ? pre : post) : post;
-                const bool from_pre = in_pre && pre.has_value();
-                const auto regular = json_num(o, "regular");
-                if (!ext || !regular || *regular <= 0)
+                // Sign, base and session pairing all live in the tested
+                // header — this arithmetic shipped inverted once and is not
+                // something to keep a second copy of.
+                const auto q = exthours::quote_from_row(o, current_session() == ExtSession::Pre);
+                if (!q)
                     continue;
-                fresh.insert(sym, AftQuote{(*ext - *regular) / *regular * 100.0, *ext, *regular,
-                                           from_pre ? QStringLiteral("PRE")
-                                                    : QStringLiteral("POST"),
+                fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
+                                           q->from_pre ? QStringLiteral("PRE")
+                                                       : QStringLiteral("POST"),
                                            QDateTime::currentSecsSinceEpoch()});
             }
             // Merge, never replace. Yahoo's multi-symbol intraday download
@@ -713,10 +685,11 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // two are describing different sessions and the percentage is a
         // multi-day return wearing an after-hours label — which is worse than
         // showing nothing, because it looks like an answer.
-        const bool reference_agrees =
-            it == aft_.constEnd() || price <= 0 || it->regular <= 0 ||
-            std::abs(it->regular - price) / price <= kAftReferenceTolerance;
-        if (it != aft_.constEnd() && !reference_agrees) {
+        const bool reference_ok =
+            it == aft_.constEnd() ||
+            exthours::reference_agrees(exthours::ExtQuote{it->pct, it->price, it->regular, false},
+                                       price, kAftReferenceTolerance);
+        if (it != aft_.constEnd() && !reference_ok) {
             aft_tip = QString("Not shown: the extended-hours quote is measured against a $%1 "
                               "close, but this row is quoting $%2. They are different sessions, "
                               "so the percentage between them would not be an after-hours move.")

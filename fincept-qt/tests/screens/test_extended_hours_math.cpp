@@ -1,0 +1,129 @@
+// tests/screens/test_extended_hours_math.cpp
+//
+// The AFT% column reports which way a holding moved after the bell, and a sign
+// error there is not a degraded answer — it is the opposite one. AAPL fell
+// 6.5% after its print and the dashboard showed it up 6.3%; the arithmetic
+// that produced that was unremarkable to read, which is why these cases exist.
+//
+// The fixtures below are real `extended_hours` payloads captured from the
+// daemon on 30 Jul 2026 after the close, not invented numbers.
+
+#include "screens/dashboard/widgets/ExtendedHoursMath.h"
+
+#include <QtTest/QtTest>
+
+using namespace fincept::screens::widgets::exthours;
+
+namespace {
+
+/// Captured verbatim: AAPL reported and sold off, AMZN reported and rallied.
+QJsonObject row(const QString& symbol, double regular, double pre, double post,
+                const QString& session = QStringLiteral("CLOSED")) {
+    QJsonObject o;
+    o.insert("symbol", symbol);
+    o.insert("regular", regular);
+    o.insert("pre_market", pre);
+    o.insert("post_market", post);
+    o.insert("session", session);
+    return o;
+}
+
+QJsonObject aapl() { return row("AAPL", 334.16, 333.06, 312.33); }
+QJsonObject amzn() { return row("AMZN", 235.49, 233.30, 257.95); }
+QJsonObject msft() { return row("MSFT", 451.50, 438.44, 448.47); }
+
+} // namespace
+
+class TestExtendedHoursMath : public QObject {
+    Q_OBJECT
+
+  private slots:
+    // The sign, on the real numbers, stated as plainly as possible.
+    void direction_matches_the_market() {
+        const auto a = quote_from_row(aapl(), /*in_pre_session=*/false);
+        QVERIFY(a.has_value());
+        QVERIFY2(a->pct < 0, qPrintable(QString("AAPL fell after the bell but read %1%")
+                                            .arg(a->pct)));
+        QVERIFY(std::abs(a->pct - (-6.533)) < 0.01);
+
+        const auto z = quote_from_row(amzn(), false);
+        QVERIFY(z.has_value());
+        QVERIFY2(z->pct > 0, qPrintable(QString("AMZN rose after the bell but read %1%")
+                                            .arg(z->pct)));
+        QVERIFY(std::abs(z->pct - 9.538) < 0.01);
+
+        const auto m = quote_from_row(msft(), false);
+        QVERIFY(m.has_value());
+        QVERIFY(m->pct < 0);
+    }
+
+    // The specific inversion that shipped: dividing by the extended price
+    // instead of the close. It doesn't just rescale — it flips the sign, and
+    // the magnitude stays plausible enough to look like a real reading.
+    void the_close_is_the_base_not_the_extended_price() {
+        const auto a = quote_from_row(aapl(), false);
+        QVERIFY(a.has_value());
+        const double inverted = (a->regular - a->price) / a->price * 100.0;
+        QVERIFY2(inverted > 0, "fixture no longer demonstrates the inversion");
+        QVERIFY2(a->pct < 0, "the leg divided by the extended price again");
+        // Both readings are ~6.5% in magnitude, which is exactly why the wrong
+        // one survived review: nothing about it looks out of range.
+        QVERIFY(std::abs(std::abs(inverted) - std::abs(a->pct)) < 1.0);
+    }
+
+    // Pre-market belongs to the PREVIOUS close. Pairing it with today's close
+    // after the session has ended computes the day's move backwards — which is
+    // what put −7.82% beside AMZN on a day it closed up 3.9%.
+    void pre_market_is_never_paired_with_a_post_session_close() {
+        QJsonObject o = amzn();
+        o.insert("post_market", QJsonValue());   // no post print yet
+        const auto q = quote_from_row(o, /*in_pre_session=*/false);
+        QVERIFY2(!q.has_value(), "fell back to pre-market against the wrong close");
+    }
+
+    // Before the open the fallback IS correct: yesterday's post-market and
+    // today's pre-market both reference the same close.
+    void before_the_open_the_prior_post_market_is_a_valid_fallback() {
+        QJsonObject o = row("AAPL", 334.16, 0, 312.33, QStringLiteral("PRE"));
+        o.insert("pre_market", QJsonValue());
+        const auto q = quote_from_row(o, true);
+        QVERIFY(q.has_value());
+        QVERIFY(!q->from_pre);
+        QVERIFY(q->pct < 0);
+
+        // With a pre-market print present it wins, and is labelled as such.
+        const auto with_pre = quote_from_row(row("AAPL", 334.16, 340.00, 312.33,
+                                                 QStringLiteral("PRE")), true);
+        QVERIFY(with_pre.has_value());
+        QVERIFY(with_pre->from_pre);
+        QVERIFY(with_pre->pct > 0);
+    }
+
+    // A null extended print is "no trades", not a zero move.
+    void missing_prices_yield_no_quote() {
+        QJsonObject o = row("FNILX", 26.17, 0, 0);
+        o.insert("pre_market", QJsonValue());
+        o.insert("post_market", QJsonValue());
+        QVERIFY(!quote_from_row(o, false).has_value());
+
+        QJsonObject no_close = aapl();
+        no_close.insert("regular", QJsonValue());
+        QVERIFY(!quote_from_row(no_close, false).has_value());
+
+        QJsonObject zero_close = aapl();
+        zero_close.insert("regular", 0.0);
+        QVERIFY(!quote_from_row(zero_close, false).has_value());
+    }
+
+    // A reference from a different session must not reach the screen.
+    void a_mismatched_reference_is_rejected() {
+        const auto a = *quote_from_row(aapl(), false);
+        QVERIFY(reference_agrees(a, 333.43, 0.03));    // the row's own close
+        QVERIFY(!reference_agrees(a, 294.45, 0.03));   // a stale multi-day close
+        // No price to compare against is not evidence of a mismatch.
+        QVERIFY(reference_agrees(a, 0.0, 0.03));
+    }
+};
+
+QTEST_MAIN(TestExtendedHoursMath)
+#include "test_extended_hours_math.moc"

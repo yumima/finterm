@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`329a3f0bb`](https://github.com/yumima/finterm/commit/329a3f0bb) Dashboard: AFT% was pairing pre-market with the wrong close
 - [`8548fd0c7`](https://github.com/yumima/finterm/commit/8548fd0c7) Dashboard: stop the AFT% column flickering symbols in and out
 - [`286e210a0`](https://github.com/yumima/finterm/commit/286e210a0) Dashboard: stop AFT% blanking itself during the trading day
 - [`765e66db7`](https://github.com/yumima/finterm/commit/765e66db7) Dashboard: fix the Portfolio Summary column alignment and the dead AFT% column

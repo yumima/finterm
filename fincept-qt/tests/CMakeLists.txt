@@ -161,6 +161,32 @@ set_target_properties(test_earnings_math PROPERTIES
 
 add_test(NAME earnings_math COMMAND test_earnings_math)
 
+# ── Extended-hours (AFT%) maths tests ────────────────────────────────────────
+# quote_from_row() decides the sign and the base of the dashboard's AFT%
+# column. It shipped inverted once — AAPL down 6.5% displayed as up 6.3% — so
+# the fixtures are real daemon payloads rather than invented numbers. Pure
+# JSON-in/struct-out, no widget and no daemon.
+
+add_executable(test_extended_hours_math
+    screens/test_extended_hours_math.cpp
+)
+
+target_include_directories(test_extended_hours_math PRIVATE
+    ../src
+)
+
+target_link_libraries(test_extended_hours_math PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_extended_hours_math PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME extended_hours_math COMMAND test_extended_hours_math)
+
 # ── Market sentiment parse tests ─────────────────────────────────────────────
 # /compare returns up to ten tickers sorted by buzz score, so the row the
 # caller wants is rarely the first one. Pure JSON-in/struct-out — no network,
