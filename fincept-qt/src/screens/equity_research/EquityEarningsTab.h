@@ -46,6 +46,9 @@ class EquityEarningsTab : public QWidget {
     // Section builders — each returns a panel added to the scroll column.
     QWidget* build_summary_row();
     QWidget* build_scorecard();
+    /// The reaction chart on its own full-width row — it is the only panel
+    /// here that reads better the wider it gets.
+    QWidget* build_chart_panel();
     /// PAST section: the quarter table and, beside it, the same quarters
     /// plotted against what the stock did on each print.
     QWidget* build_history_panel();

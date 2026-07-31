@@ -308,7 +308,7 @@ void EquityEarningsTab::build_ui() {
     vl->setSpacing(10);
 
     vl->addWidget(build_summary_row());
-    vl->addWidget(build_scorecard());
+    vl->addWidget(build_chart_panel());
     vl->addWidget(build_history_panel());
     vl->addWidget(build_current_panel());
     vl->addWidget(build_future_panel());
@@ -667,7 +667,6 @@ QWidget* EquityEarningsTab::build_history_panel() {
     hl->setContentsMargins(0, 0, 0, 0);
     hl->setSpacing(10);
 
-    // ── Left: the numbers ────────────────────────────────────────────────────
     QVBoxLayout* body = nullptr;
     auto* panel = make_panel("PAST · REPORTED QUARTERS", ui::colors::POSITIVE(), &body);
 
@@ -678,14 +677,24 @@ QWidget* EquityEarningsTab::build_history_panel() {
     body->addWidget(history_summary_);
 
     history_table_ = new QTableWidget;
-    // Short headers: eight columns share this pane with the chart, and an
+    // Short headers: eight columns share this pane with the scorecard, and an
     // elided "1D REACTIO…" reads worse than a terse but complete label.
     style_table(history_table_,
                 {"REPORTED", "EPS EST", "EPS ACT", "SURPRISE", "QoQ", "YoY", "1D MOVE", "5D RUN-UP"});
     body->addWidget(history_table_);
     hl->addWidget(panel, 4);
 
-    // ── Right: the same quarters as a curve ──────────────────────────────────
+    // The scorecard sits beside the table rather than above the chart. The
+    // chart is the only thing here that gets better with width — twelve
+    // quarter columns plus a projected one, three series and a shaded band all
+    // share one axis — while the breakdown is six labelled rows that were
+    // stretching their gauges across a full screen for nothing.
+    hl->addWidget(build_scorecard(), 5);
+    return row;
+}
+
+/// The reaction chart, full width. See build_history_panel for why.
+QWidget* EquityEarningsTab::build_chart_panel() {
     QVBoxLayout* chart_body = nullptr;
     auto* chart_panel = make_panel("PAST · PREDICTED vs ACTUAL NEXT-DAY MOVE", ui::colors::POSITIVE(), &chart_body);
 
@@ -759,8 +768,7 @@ QWidget* EquityEarningsTab::build_history_panel() {
                                         .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
     chart_body->addWidget(prediction_note_);
 
-    hl->addWidget(chart_panel, 5);
-    return row;
+    return chart_panel;
 }
 
 void EquityEarningsTab::set_metric(services::equity::ReactionMetric m) {
