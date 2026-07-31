@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e9ae7c042`](https://github.com/yumima/finterm/commit/e9ae7c042) ER Earnings: show the live move, and keep the panel current across a print
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

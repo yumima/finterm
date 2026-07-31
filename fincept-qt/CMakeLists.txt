@@ -713,6 +713,7 @@ set(STORAGE_SOURCES
     src/storage/repositories/PortfolioRepository.cpp
     src/storage/repositories/WorkflowRepository.cpp
     src/storage/repositories/AiPredictionRepository.cpp
+    src/storage/repositories/EarningsSignalRepository.cpp
     src/storage/repositories/CustomIndexRepository.cpp
     src/storage/repositories/DataMappingRepository.cpp
     src/storage/repositories/AccountRepository.cpp
@@ -772,6 +773,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v043_chat_session_persona.cpp
     src/storage/sqlite/migrations/v044_ai_predictions.cpp
     src/storage/sqlite/migrations/v045_physical_ai_watchlist.cpp
+    src/storage/sqlite/migrations/v046_earnings_signal_records.cpp
 )
 
 # Python runner
