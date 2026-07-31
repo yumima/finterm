@@ -20,6 +20,7 @@
 #include <QSettings>
 #include <QTimeZone>
 
+#include <cmath>
 #include <optional>
 
 namespace fincept::screens::widgets {
@@ -32,6 +33,13 @@ static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
 // pre/post included for every holding, which is a far heavier call than the
 // quote stream feeding the other columns.
 static constexpr int kAftRefreshMs = 60'000;
+
+// How far the daemon's regular-close reference may sit from the price the row
+// is quoting before the extended-hours move is treated as measured against a
+// different session and suppressed. Generous enough to absorb a consolidated-
+// versus-last-trade difference, tight enough that a stale reference — which
+// turns the column into a multi-day return — cannot get through.
+static constexpr double kAftReferenceTolerance = 0.03;
 
 namespace {
 
@@ -510,24 +518,30 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
                 if (sym.isEmpty())
                     continue;
-                // Prefer the field belonging to the current session, but fall
-                // back to the other one — the same order the daemon uses for
-                // its own `ext_change_pct`, and the reason the heatmap shows a
-                // number in cases an exact-session-only read would blank.
-                // Right after the close, before the first post-market bar
-                // exists, that fallback IS this morning's pre-market move; the
-                // label below says which session the number came from rather
-                // than letting it pass as something it isn't.
+                // Which extended price may be paired with `regular` depends on
+                // the session, and getting it wrong is not a stale number —
+                // it is a wrong one.
+                //
+                // `regular` is the most recent completed close. Post-market
+                // trades against that same close, so the pairing is sound. But
+                // pre-market trades against the PREVIOUS close, so once the
+                // day's session has ended, pairing this morning's pre-market
+                // print with this afternoon's close computes roughly the
+                // negative of the day's move and presents it as an after-hours
+                // move. That is what put −7.82% next to AMZN on a day it rose
+                // 3.9% and closed up.
+                //
+                // So the fallback runs one way only. Before the open, falling
+                // back to the prior post-market is fine — both sides reference
+                // the same close. After it, there is no fallback: no
+                // post-market print means no number.
                 const QString sess = o.value(QStringLiteral("session")).toString();
-                const bool prefer_pre = sess.isEmpty()
-                                            ? (current_session() == ExtSession::Pre)
-                                            : sess == QLatin1String("PRE");
+                const bool in_pre = sess.isEmpty() ? (current_session() == ExtSession::Pre)
+                                                   : sess == QLatin1String("PRE");
                 const auto pre = json_num(o, "pre_market");
                 const auto post = json_num(o, "post_market");
-                const auto first = prefer_pre ? pre : post;
-                const auto second = prefer_pre ? post : pre;
-                const auto ext = first ? first : second;
-                const bool from_pre = first ? prefer_pre : !prefer_pre;
+                const auto ext = in_pre ? (pre ? pre : post) : post;
+                const bool from_pre = in_pre && pre.has_value();
                 const auto regular = json_num(o, "regular");
                 if (!ext || !regular || *regular <= 0)
                     continue;
@@ -692,7 +706,23 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         QString aft_color = QString(ui::colors::TEXT_SECONDARY);
         QString aft_tip = QStringLiteral("No extended-hours trades in this name since the "
                                          "last close.");
-        if (const auto it = aft_.constFind(h.symbol); it != aft_.constEnd()) {
+        const auto it = aft_.constFind(h.symbol);
+        // The percentage is only meaningful if it was measured from the same
+        // close this row is quoting. When the daemon's reference and the quote
+        // feed's last price disagree by more than a rounding difference, the
+        // two are describing different sessions and the percentage is a
+        // multi-day return wearing an after-hours label — which is worse than
+        // showing nothing, because it looks like an answer.
+        const bool reference_agrees =
+            it == aft_.constEnd() || price <= 0 || it->regular <= 0 ||
+            std::abs(it->regular - price) / price <= kAftReferenceTolerance;
+        if (it != aft_.constEnd() && !reference_agrees) {
+            aft_tip = QString("Not shown: the extended-hours quote is measured against a $%1 "
+                              "close, but this row is quoting $%2. They are different sessions, "
+                              "so the percentage between them would not be an after-hours move.")
+                          .arg(it->regular, 0, 'f', 2)
+                          .arg(price, 0, 'f', 2);
+        } else if (it != aft_.constEnd()) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
