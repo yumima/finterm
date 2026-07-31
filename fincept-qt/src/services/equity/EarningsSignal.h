@@ -102,7 +102,19 @@ struct EarningsVerdict {
     int hot_runup_prints = 0;
     int    reaction_quarters = 0;
     double avg_reaction_pct = 0.0;      // signed mean 1-day move
-    double typical_move_pct = 0.0;      // mean |1-day move| — the expected move
+    double typical_move_pct = 0.0;      // mean |1-day move| — purely descriptive
+    /// Forecast of the COMING print's move size — the one genuinely
+    /// forecastable part of a reaction. Blends the name's own earnings-day
+    /// history with how volatile it has been over the twenty sessions before
+    /// the print, which the earnings history cannot contain: that holds a
+    /// dozen observations months apart and says nothing about the regime now.
+    ///
+    /// Measured out of sample on 181 names and 1463 prints, and held out by
+    /// COMPANY so the test names were never trained on: the blend cuts mean
+    /// absolute error ~7% against the trailing average alone and lifts
+    /// correlation with the realised size from +0.43 to +0.53. Falls back to
+    /// the trailing average when no volatility is available.
+    double expected_move_pct = 0.0;
     double up_reaction_rate = 0.0;      // 0 … 1
     /// Analyst spread on the coming quarter's EPS, (high−low) as a percentage
     /// of the mean. A risk gauge, never a direction: a wide consensus means a

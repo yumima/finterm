@@ -253,6 +253,11 @@ struct EarningsPoint {
     std::optional<double> eps_yoy_pct;
     std::optional<double> reaction_pct;   // close-to-close move over the print
     std::optional<double> runup_pct;      // 5 sessions into the print
+    // Stdev of daily returns over the 20 sessions before this print, in
+    // percent. The forecastable half of a reaction is its SIZE, and a name's
+    // own earnings history offers only a dozen observations months apart;
+    // this describes the regime the print actually landed in.
+    std::optional<double> pre_vol_pct;
     std::optional<double> price_before;
     std::optional<double> price_after;
     // Trailing (is_estimate) row only: where the price sits now against the
@@ -342,6 +347,9 @@ struct EarningsAnalysis {
     std::optional<double> rel_runup_90d_pct;
     // Distance from the 52-week high; 0 = sitting on it, negative = below.
     std::optional<double> pct_from_52w_high;
+    // Same 20-session realised volatility, as it stands going into the coming
+    // print.
+    std::optional<double> pre_vol_pct;
 
     /// True when there is nothing earnings-shaped to show (ETF, index, fund).
     bool has_content() const {

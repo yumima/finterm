@@ -1554,6 +1554,7 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         p.eps_yoy_pct  = opt_num(o, "eps_yoy_pct");
         p.reaction_pct = opt_num(o, "reaction_pct");
         p.runup_pct    = opt_num(o, "runup_pct");
+        p.pre_vol_pct  = opt_num(o, "pre_vol_pct");
         p.price_before = opt_num(o, "price_before");
         p.price_after  = opt_num(o, "price_after");
         p.is_estimate  = o.value("is_estimate").toBool(false);
@@ -1621,6 +1622,7 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
     a.rel_runup_20d_pct   = opt_num(recent, "rel_runup_20d");
     a.rel_runup_90d_pct   = opt_num(recent, "rel_runup_90d");
     a.pct_from_52w_high   = opt_num(recent, "pct_from_52w_high");
+    a.pre_vol_pct         = opt_num(recent, "pre_vol_pct");
 
     return a;
 }

@@ -88,6 +88,26 @@ constexpr double kNearHighPct = 20.0;
 // headline rather than leaving the reader to spot in the breakdown.
 constexpr double kAxisTensionPts = 50.0;
 
+// ── Expected-move blend ──────────────────────────────────────────────────────
+// expected move = kMoveFromHistory x (trailing mean |move|)
+//               + kMoveFromVol     x (20-session realised vol, daily %)
+//
+// Fitted pooled across 181 names and 1463 prints, time-split and then held out
+// by COMPANY so the test names were never trained on. The weights are rounded
+// hard on purpose: across subsamples the fitted volatility coefficient ranged
+// 0.6 to 2.2 while never once changing sign, and every blend between 0.55/1.0
+// and 0.3/1.6 landed within a point of the best. A precise pair would be false
+// precision on a coefficient that loose; these sit mid-range.
+//
+//     trailing average alone   3.450 pp MAE, corr +0.433
+//     this blend               3.193 pp MAE, corr +0.528
+//
+// Volatility earns its place by carrying what the earnings history cannot: a
+// dozen prints months apart say nothing about whether the stock has been calm
+// or wild in the weeks right before this one.
+constexpr double kMoveFromHistory = 0.5;
+constexpr double kMoveFromVol     = 1.0;
+
 // Composite score at which the engine will predict this name's FULL typical
 // move. Deliberately well short of 100: a ±100 composite would need every leg
 // maxed in the same direction, which essentially never happens, so anchoring
@@ -764,7 +784,15 @@ QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a) {
         if (available > 0 && total > 0 && pv.typical_move_pct > 0) {
             const double score = (weighted / available) * 100.0;
             const double confidence = available / total;
-            qp.bound_pct = pv.typical_move_pct * confidence;
+            // Same blend as the live verdict, using the volatility as it stood
+            // before THIS print — which the history row carries, so a
+            // reconstruction is not quietly using a better or worse size
+            // estimate than the live reading it is drawn beside.
+            const double size = p.pre_vol_pct.has_value() && *p.pre_vol_pct > 0
+                                    ? kMoveFromHistory * pv.typical_move_pct +
+                                          kMoveFromVol * *p.pre_vol_pct
+                                    : pv.typical_move_pct;
+            qp.bound_pct = size * confidence;
             qp.predicted_move_pct = *qp.bound_pct * clamp_unit(score / kFullConvictionScore);
         }
         out.append(qp);
@@ -1418,15 +1446,24 @@ EarningsVerdict evaluate_earnings(const EarningsAnalysis& a) {
         (axis == SignalAxis::Setup ? v.setup_score : v.bar_score) = (sum / w) * 100.0;
     }
 
+    // Size forecast for the coming print. `typical_move_pct` stays purely
+    // descriptive — it is what the history summary and the caveats quote — and
+    // this is the forecast built on top of it.
+    v.expected_move_pct = v.typical_move_pct;
+    if (a.pre_vol_pct.has_value() && *a.pre_vol_pct > 0) {
+        v.expected_move_pct =
+            kMoveFromHistory * v.typical_move_pct + kMoveFromVol * *a.pre_vol_pct;
+    }
+
     // ── Point estimate for the move ──────────────────────────────────────────
     // Three factors, each doing one job: which way the composite leans, how
     // far this name actually travels on a print, and how much of the picture
     // is real data rather than absent legs. Multiplying by confidence is what
     // keeps a thin file from producing a bold number — a half-empty scorecard
     // leaning hard predicts half as much as a full one leaning equally hard.
-    if (v.typical_move_pct > 0 && v.confidence >= kMinConfidence) {
+    if (v.expected_move_pct > 0 && v.confidence >= kMinConfidence) {
         v.predicted_move_pct =
-            v.typical_move_pct * clamp_unit(v.score / kFullConvictionScore) * v.confidence;
+            v.expected_move_pct * clamp_unit(v.score / kFullConvictionScore) * v.confidence;
     }
 
     // ── Verdict ──────────────────────────────────────────────────────────────

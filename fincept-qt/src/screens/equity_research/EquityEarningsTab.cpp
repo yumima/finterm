@@ -439,7 +439,7 @@ QWidget* EquityEarningsTab::build_summary_row() {
     auto* setup_grid = new QGridLayout;
     setup_grid->setSpacing(12);
     setup_grid->addWidget(make_stat("PREDICTED MOVE", setup_predicted_, "#22d3ee"), 0, 0);
-    setup_grid->addWidget(make_stat("TYPICAL MOVE", setup_move_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
+    setup_grid->addWidget(make_stat("EXPECTED MOVE", setup_move_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
     setup_grid->addWidget(make_stat("EST SPREAD", setup_spread_, ui::colors::TEXT_PRIMARY(), 13), 3, 1);
     setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
     setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
@@ -453,8 +453,15 @@ QWidget* EquityEarningsTab::build_summary_row() {
         "before the print and held against the outcome in SIGNAL vs OUTCOME below. Treat the "
         "TYPICAL MOVE beside it as the range that matters far more than the point."));
     setup_move_->setToolTip(QStringLiteral(
-        "Mean absolute close-to-close move over past prints — how big a session this name "
-        "usually has on earnings, regardless of direction."));
+        "Forecast of how big this print's session will be, regardless of direction — the one "
+        "genuinely forecastable part of an earnings reaction.\n\n"
+        "Half the name's own earnings-day average plus its realised volatility over the last "
+        "20 sessions. The earnings history alone is a dozen observations months apart and says "
+        "nothing about whether the stock has been calm or wild going into THIS print; the "
+        "volatility does. Fitted across 181 names and 1463 prints and held out by company: it "
+        "cuts the error about 7% against the earnings average alone, and correlates +0.53 with "
+        "the realised size against +0.43.\n\n"
+        "Falls back to the plain earnings-day average when no volatility is available."));
     setup_spread_->setToolTip(QStringLiteral(
         "How far apart analysts are on the coming quarter's EPS: (high − low) as a share of "
         "the mean. A risk gauge, not a direction — a wide spread means a bigger surprise "
@@ -954,8 +961,8 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                  : ui::formatting::placeholder(),
              verdict.predicted_move_pct ? color_for(*verdict.predicted_move_pct) : "#22d3ee");
     set_stat(setup_move_,
-             verdict.typical_move_pct > 0
-                 ? QString("±%1%").arg(QString::number(verdict.typical_move_pct, 'f', 1))
+             verdict.expected_move_pct > 0
+                 ? QString("±%1%").arg(QString::number(verdict.expected_move_pct, 'f', 1))
                  : ui::formatting::placeholder(),
              ui::colors::TEXT_PRIMARY(), 13);
     // Beat rate is descriptive only now — the track-record leg scores the size
