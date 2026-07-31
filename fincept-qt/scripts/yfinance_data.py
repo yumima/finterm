@@ -2513,7 +2513,11 @@ _CACHE_TTL = {
     "extended_hours": 8, "batch_sparklines": 30, "top_movers": 30,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
-    "multiple_ratios": 600, "ipo_extras": 600, "earnings_dates": 600,
+    "multiple_ratios": 600, "ipo_extras": 600,
+    # earnings_dates carries the reported figure for the quarter that just
+    # printed, which Yahoo fills in within hours of the call — the tile is
+    # read on exactly those days, so it is not a 10-minute-stale field.
+    "earnings_dates": 300,
     # earnings_analysis pulls estimates + 3y of daily bars — expensive, and
     # consensus/revisions move on a daily cadence at best.
     "earnings_analysis": 900,
@@ -2597,6 +2601,44 @@ def _is_cacheable_result(result):
     return True
 
 
+# ── Freshness around a report ────────────────────────────────────────────────
+# Within a few days either side of a print, an earnings payload is the fastest
+# moving data this daemon serves: the consensus is still being revised, the
+# reported figure lands, and the price reaction only becomes computable once
+# the following session closes. A quarter-hour cache is right for the eleven
+# weeks in between and badly wrong for those few days — it is exactly when
+# someone is looking, and exactly when they would be shown yesterday's answer.
+_EARNINGS_HOT_WINDOW_SEC = 3 * 86400
+_EARNINGS_HOT_TTL_SEC = 120
+
+
+def _effective_ttl(action, result, default_ttl):
+    """Cache lifetime for one result — shortened near a report."""
+    if action != "earnings_analysis" or not isinstance(result, dict):
+        return default_ttl
+    try:
+        now = time.time()
+        stamps = []
+        nxt = result.get("next") or {}
+        if nxt.get("timestamp"):
+            stamps.append(float(nxt["timestamp"]))
+        # Newest REPORTED quarter. The projected row is skipped: when there is
+        # no scheduled date it is stamped with the current time, which would
+        # make every symbol look permanently hot.
+        for row in result.get("history") or []:
+            if row.get("is_estimate"):
+                continue
+            if row.get("timestamp"):
+                stamps.append(float(row["timestamp"]))
+            break
+        for ts in stamps:
+            if abs(now - ts) <= _EARNINGS_HOT_WINDOW_SEC:
+                return _EARNINGS_HOT_TTL_SEC
+    except Exception:
+        pass
+    return default_ttl
+
+
 def _daemon_dispatch(action, payload):
     """Run one action and return the raw result object (not wrapped).
 
@@ -2621,7 +2663,7 @@ def _daemon_dispatch(action, payload):
     result = _daemon_dispatch_with_crumb_retry(action, payload)
 
     if ttl and _is_cacheable_result(result):
-        _cache_put(key, ttl, result)
+        _cache_put(key, _effective_ttl(action, result, ttl), result)
     return result
 
 

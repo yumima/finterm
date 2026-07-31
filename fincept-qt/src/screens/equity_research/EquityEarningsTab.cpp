@@ -190,15 +190,26 @@ EquityEarningsTab::EquityEarningsTab(QWidget* parent) : QWidget(parent) {
 }
 
 void EquityEarningsTab::set_symbol(const QString& symbol) {
-    if (symbol == current_symbol_)
-        return;
-    current_symbol_ = symbol;
     if (symbol.isEmpty())
         return;
+    // Re-subscribing for the SAME symbol is deliberate. This is called every
+    // time the tab is activated, and returning early meant a tab left open
+    // across a print kept showing the picture it was first opened with —
+    // consensus, the reported actual and the reaction all land within a day of
+    // each other, and none of them arrived. QueryStore serves its cached copy
+    // while it is fresh and revalidates when it isn't, so the re-subscribe
+    // costs nothing when nothing has changed.
+    const bool new_symbol = (symbol != current_symbol_);
+    current_symbol_ = symbol;
 
-    loading_overlay_->show_loading("LOADING EARNINGS…");
-    message_label_->hide();
-    content_widget_->show();
+    if (new_symbol) {
+        // Only a genuinely new symbol blanks the panel. Flashing the overlay
+        // over data that is about to be repainted with the same numbers reads
+        // as a stutter every time the user comes back to the tab.
+        loading_overlay_->show_loading("LOADING EARNINGS…");
+        message_label_->hide();
+        content_widget_->show();
+    }
 
     auto& store = services::query::QueryStore::instance();
     store.unsubscribe_all(this);
@@ -859,9 +870,20 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
         // "where the price is now against the last print" stands in its place,
         // marked so it can't be misread as a completed session move.
         if (p.is_estimate && p.move_since_last_pct.has_value()) {
-            history_table_->setItem(
-                row, 6, cell(QString("now %1").arg(opt_pct(p.move_since_last_pct, 2)),
-                             color_for(*p.move_since_last_pct)));
+            // A one-character marker, not the word "now": the column is only
+            // wide enough for "+10.40%", so a "now " prefix pushed the value
+            // out and Qt elided the cell to "now …" — the marker survived and
+            // the number, which is the entire point of the cell, did not.
+            // The arrow plus the row's amber and its EST-tagged date carry the
+            // "this is live, not a completed session" meaning between them,
+            // and the tooltip says it in full.
+            auto* it = cell(QString("→%1").arg(opt_pct(p.move_since_last_pct, 2)),
+                            color_for(*p.move_since_last_pct));
+            it->setToolTip(QStringLiteral(
+                "Where the price sits right now against the close after the last reported "
+                "print — a live number that is still moving, not a finished one-day "
+                "reaction. It is never counted in the averages or the correlations."));
+            history_table_->setItem(row, 6, it);
         } else {
             history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),
                                                  p.reaction_pct.has_value() ? color_for(*p.reaction_pct)

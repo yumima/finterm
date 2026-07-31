@@ -171,7 +171,13 @@ class EquityResearchService : public QObject {
     // Consensus and revision counts move on a daily cadence at best, but the
     // countdown to the next report and the "estimates as of" stamp should not
     // go stale over a long session — 15 min matches the daemon's own TTL.
-    static constexpr int kEarningsAnalysisTtlSec = 900;
+    // Short on purpose. The daemon decides how often Yahoo is actually asked —
+    // it keeps its own cache and shortens it to two minutes around a report —
+    // so a revalidation here is usually an IPC round trip against a warm cache
+    // rather than a network fetch. Holding the client copy for a quarter of an
+    // hour on top of that meant a tab open across a print showed the pre-print
+    // picture long after the daemon had the new one.
+    static constexpr int kEarningsAnalysisTtlSec = 180;
 
     // ── In-flight dedup state ─────────────────────────────────────────────────
     QSet<QString> in_flight_keys_;

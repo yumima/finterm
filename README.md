@@ -2,20 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-07-30)
+## Today's commits (2026-07-31)
 
 Latest first.
 
-- [`29777455f`](https://github.com/yumima/finterm/commit/29777455f) Dashboard: pin the AFT% sign with a test against real daemon data
-- [`329a3f0bb`](https://github.com/yumima/finterm/commit/329a3f0bb) Dashboard: AFT% was pairing pre-market with the wrong close
-- [`8548fd0c7`](https://github.com/yumima/finterm/commit/8548fd0c7) Dashboard: stop the AFT% column flickering symbols in and out
-- [`286e210a0`](https://github.com/yumima/finterm/commit/286e210a0) Dashboard: stop AFT% blanking itself during the trading day
-- [`765e66db7`](https://github.com/yumima/finterm/commit/765e66db7) Dashboard: fix the Portfolio Summary column alignment and the dead AFT% column
-- [`aba91ea48`](https://github.com/yumima/finterm/commit/aba91ea48) UI: tooltips appear instantly, at the pointer, wrapped into a box
-- [`f7ed1f772`](https://github.com/yumima/finterm/commit/f7ed1f772) ER Earnings: score the bar, not just the business
-- [`e951aaf93`](https://github.com/yumima/finterm/commit/e951aaf93) Dashboard: add an AFT% column to Portfolio Summary, P&L becomes a percentage
-- [`cb5475c0e`](https://github.com/yumima/finterm/commit/cb5475c0e) ER Earnings: don't let a relative measure carry the guidance leg
-- [`4c7133e01`](https://github.com/yumima/finterm/commit/4c7133e01) ER Earnings: score the guide, not just the quarter
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
