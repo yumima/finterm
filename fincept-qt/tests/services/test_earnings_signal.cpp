@@ -898,14 +898,14 @@ class TestEarningsSignal : public QObject {
     void every_predictor_is_graded_walk_forward() {
         const auto runs = compare_predictors(bullish_fixture(),
                                              evaluate_earnings(bullish_fixture()));
-        QCOMPARE(runs.size(), 5);
+        QCOMPARE(runs.size(), 6);
         QSet<int> seen;
         for (const auto& r : runs) {
             seen.insert(static_cast<int>(r.predictor));
             QVERIFY(!r.label.isEmpty());
             QVERIFY(!r.explanation.isEmpty());
         }
-        QCOMPARE(seen.size(), 5);
+        QCOMPARE(seen.size(), 6);
 
         // NO MOVE must never claim a direction, or it would be scored on calls
         // it never made.
@@ -964,6 +964,66 @@ class TestEarningsSignal : public QObject {
                 QVERIFY2(std::abs(*q.predicted_move_pct) < *q.bound_pct * 0.9,
                          qPrintable(QString("predicted %1 against a %2 bound on noise")
                                         .arg(*q.predicted_move_pct).arg(*q.bound_pct)));
+            }
+        }
+    }
+
+    // ── The EPS model ────────────────────────────────────────────────────────
+    // The claim is that fitting the two real links — how big a surprise to
+    // expect, and what a surprise is worth in price — beats guessing nothing.
+    // On a history where those links genuinely exist, it has to.
+    void the_eps_model_learns_a_surprise_to_move_relationship() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Surprise varies; the move is exactly half of it. Nothing else
+        // carries information, so only a model that fits that link can win.
+        const double surprises[] = {12.0, 4.0, 14.0, 6.0, 16.0, 8.0, 10.0, 5.0, 13.0, 7.0};
+        for (int i = 0; i < 10; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.eps_estimate = 1.00 + i * 0.01;
+            p.eps_actual = *p.eps_estimate * (1.0 + surprises[i] / 100.0);
+            p.surprise_pct = surprises[i];
+            p.reaction_pct = surprises[i] * 0.5;
+            p.runup_pct = 1.0;
+            a.history.append(p);
+        }
+
+        const auto runs = compare_predictors(a, evaluate_earnings(a));
+        double eps_err = -1, zero_err = -1;
+        for (const auto& r : runs) {
+            if (r.predictor == MovePredictor::EpsModel && r.graded > 0) eps_err = r.mean_abs_error;
+            if (r.predictor == MovePredictor::NoMove && r.graded > 0) zero_err = r.mean_abs_error;
+        }
+        QVERIFY2(eps_err >= 0 && zero_err >= 0, "the EPS model or the baseline was never graded");
+        QVERIFY2(eps_err < zero_err,
+                 qPrintable(QString("eps model %1 pp vs doing nothing %2 pp on a history where "
+                                    "the surprise fully determines the move")
+                                .arg(eps_err).arg(zero_err)));
+    }
+
+    // With no consensus recorded on past quarters there are no (expected,
+    // actual) pairs to fit, and the model has to fall back rather than invent
+    // a relationship out of the actuals alone.
+    void the_eps_model_needs_the_historical_estimates() {
+        EarningsAnalysis a;
+        a.valid = true;
+        for (int i = 0; i < 8; ++i) {
+            EarningsPoint p;
+            p.timestamp = 1700000000LL - i * 7776000LL;
+            p.eps_actual = 1.1;              // no eps_estimate at all
+            p.surprise_pct = 5.0;
+            p.reaction_pct = 3.0;
+            p.runup_pct = 1.0;
+            a.history.append(p);
+        }
+        const auto runs = compare_predictors(a, evaluate_earnings(a));
+        for (const auto& r : runs) {
+            if (r.predictor != MovePredictor::EpsModel) continue;
+            for (const auto& q : r.points) {
+                if (!q.predicted_move_pct || !q.bound_pct) continue;
+                QVERIFY2(std::abs(*q.predicted_move_pct) <= *q.bound_pct + 1e-9,
+                         "fell back outside its own magnitude estimate");
             }
         }
     }

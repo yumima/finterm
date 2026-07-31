@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`bd7a66a8e`](https://github.com/yumima/finterm/commit/bd7a66a8e) ER Earnings: four more predictors, pickable, with the baselines that judge them
 - [`8409186d3`](https://github.com/yumima/finterm/commit/8409186d3) ER Earnings: shade the room the predictor actually had
 - [`8f1a4c19d`](https://github.com/yumima/finterm/commit/8f1a4c19d) ER Earnings: hover a quarter on the chart to see what each line said
 - [`e3c95c19b`](https://github.com/yumima/finterm/commit/e3c95c19b) ER Earnings: fold the predicted line into the reaction chart

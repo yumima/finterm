@@ -984,6 +984,145 @@ AdaptiveOut adaptive_at(const QVector<EarningsPoint>& history, int i,
 
 } // namespace
 
+// ── The EPS model ────────────────────────────────────────────────────────────
+
+namespace {
+
+/// Weighted least squares through the origin-shifted means, shrunk for sample
+/// size. Returns {intercept, slope}; slope is 0 when there is nothing to fit.
+struct Fit { double a = 0; double b = 0; bool ok = false; };
+
+Fit weighted_fit(const QVector<double>& xs, const QVector<double>& ys,
+                 const QVector<double>& ws, int min_n) {
+    Fit f;
+    if (xs.size() < min_n) return f;
+    double wsum = 0, xbar = 0, ybar = 0;
+    for (int k = 0; k < xs.size(); ++k) { wsum += ws[k]; xbar += ws[k] * xs[k]; ybar += ws[k] * ys[k]; }
+    if (wsum <= 0) return f;
+    xbar /= wsum;
+    ybar /= wsum;
+    double cov = 0, var = 0;
+    for (int k = 0; k < xs.size(); ++k) {
+        cov += ws[k] * (xs[k] - xbar) * (ys[k] - ybar);
+        var += ws[k] * (xs[k] - xbar) * (xs[k] - xbar);
+    }
+    f.a = ybar;
+    if (var > 1e-9)
+        f.b = (cov / var) * (xs.size() / (xs.size() + kFitShrink));
+    f.a = ybar - f.b * xbar;
+    f.ok = true;
+    return f;
+}
+
+/// The growth analysts are asking for at quarter `i`: the consensus standing
+/// into that print against what the company last delivered. Knowable before
+/// the print, which is the whole reason it is usable.
+std::optional<double> asked_growth(const QVector<EarningsPoint>& history, int i) {
+    if (i < 0 || i >= history.size()) return std::nullopt;
+    const auto& p = history[i];
+    if (!p.eps_estimate.has_value()) return std::nullopt;
+    for (int j = i + 1; j < history.size(); ++j) {
+        if (history[j].is_estimate || !history[j].eps_actual.has_value()) continue;
+        const double prev = *history[j].eps_actual;
+        if (std::abs(prev) < 0.005) return std::nullopt;
+        return (*p.eps_estimate - prev) / std::abs(prev) * 100.0;
+    }
+    return std::nullopt;
+}
+
+AdaptiveOut eps_core(const QVector<EarningsPoint>& history, int i,
+                     const std::optional<double>& runup) {
+    AdaptiveOut out;
+
+    // Prior quarters, exponentially weighted, newest of them first.
+    QVector<double> w, surprise, ask, reaction, runups;
+    double wsum = 0, abs_sum = 0;
+    int age = 0;
+    for (int j = i + 1; j < history.size(); ++j) {
+        const auto& p = history[j];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        const double wt = std::pow(0.5, age / kEwHalfLifeQuarters);
+        ++age;
+        wsum += wt;
+        abs_sum += wt * std::abs(*p.reaction_pct);
+        if (!p.surprise_pct.has_value()) continue;
+        const auto g = asked_growth(history, j);
+        if (!g.has_value()) continue;
+        w.append(wt);
+        surprise.append(*p.surprise_pct);
+        ask.append(*g);
+        reaction.append(*p.reaction_pct);
+        runups.append(p.runup_pct.value_or(0.0));
+    }
+    if (wsum <= 0) return out;
+    const double magnitude = abs_sum / wsum;
+    if (magnitude <= 0) return out;
+    out.bound = magnitude;
+
+    const auto ask_now = asked_growth(history, i);
+    if (!ask_now.has_value() || w.size() < kMinFitQuarters) {
+        // Not enough paired history to fit either link. Fall back to the beat
+        // bias alone rather than inventing a relationship.
+        if (surprise.isEmpty()) return out;
+        double sw = 0, ss = 0;
+        for (int k = 0; k < surprise.size(); ++k) { sw += w[k]; ss += w[k] * surprise[k]; }
+        out.value = std::clamp(sw > 0 ? ss / sw * 0.1 : 0.0, -magnitude, magnitude);
+        return out;
+    }
+
+    // Stage A — expected surprise, from the beat bias adjusted for the bar.
+    const Fit stage_a = weighted_fit(ask, surprise, w, kMinFitQuarters);
+    const double expected_surprise = stage_a.ok ? stage_a.a + stage_a.b * *ask_now : 0.0;
+
+    // Stage B — what a surprise is worth in price, for this name.
+    const Fit stage_b = weighted_fit(surprise, reaction, w, kMinFitQuarters);
+    if (!stage_b.ok) return out;
+    double predicted = stage_b.a + stage_b.b * expected_surprise;
+
+    // Stage C — take out what the run-up already paid for.
+    if (runup.has_value()) {
+        QVector<double> resid;
+        resid.reserve(reaction.size());
+        for (int k = 0; k < reaction.size(); ++k)
+            resid.append(reaction[k] - (stage_b.a + stage_b.b * surprise[k]));
+        const Fit stage_c = weighted_fit(runups, resid, w, kMinFitQuarters);
+        if (stage_c.ok)
+            predicted += stage_c.a + stage_c.b * *runup;
+    }
+
+    out.value = std::clamp(predicted, -magnitude, magnitude);
+    return out;
+}
+
+/// Same skill discipline as Adaptive: replay over its own past, keep
+/// conviction in proportion to how it did against doing nothing, and treat
+/// "not enough history to tell" as unproven rather than as proven good.
+AdaptiveOut eps_at(const QVector<EarningsPoint>& history, int i,
+                   const std::optional<double>& runup) {
+    AdaptiveOut out = eps_core(history, i, runup);
+    if (!out.value) return out;
+    double model_err = 0, zero_err = 0;
+    int n = 0;
+    for (int j = i + 1; j < history.size(); ++j) {
+        const auto& p = history[j];
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        const auto inner = eps_core(history, j, p.runup_pct);
+        if (!inner.value) continue;
+        ++n;
+        model_err += std::abs(*inner.value - *p.reaction_pct);
+        zero_err += std::abs(*p.reaction_pct);
+    }
+    if (n >= kMinSkillQuarters && zero_err > 1e-9) {
+        const double skill = std::clamp(1.0 - model_err / zero_err, 0.0, 1.0);
+        out.value = *out.value * (kSkillFloor + (1.0 - kSkillFloor) * skill);
+    } else {
+        out.value = *out.value * kSkillFloor;
+    }
+    return out;
+}
+
+} // namespace
+
 QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const EarningsVerdict& live) {
     QVector<PredictorRun> runs;
 
@@ -998,6 +1137,20 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
     if (live.typical_move_pct > 0)
         scorecard.next_bound_pct = live.typical_move_pct * live.confidence;
     runs.append(scorecard);
+
+    PredictorRun eps;
+    eps.predictor = MovePredictor::EpsModel;
+    eps.label = QStringLiteral("EPS MODEL");
+    eps.explanation = QStringLiteral(
+        "Built from what the history actually holds: every past quarter carries the consensus "
+        "that stood going into the print, the figure that landed, and the move that followed, "
+        "so each link is fitted on real pairs. Stage A expects a surprise — the company's "
+        "persistent beat bias, adjusted for how much growth analysts are asking for this time "
+        "against what it usually delivers. Stage B converts that into price using this name's "
+        "own measured sensitivity: how far it moves per point of beat, which some names pay for "
+        "and some do not. Stage C subtracts what the run-up already paid for. The revision "
+        "trajectory is deliberately excluded — it exists for the coming quarter only, so there "
+        "are no past pairs to fit it against.");
 
     PredictorRun adaptive;
     adaptive.predictor = MovePredictor::Adaptive;
@@ -1050,6 +1203,14 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
             f.bound_pct = std::max(1.0, s.typical_move * kFitClampMultiple);
         fit.points.append(f);
 
+        QuarterPrediction ep;
+        ep.timestamp = p.timestamp;
+        ep.actual_move_pct = p.reaction_pct;
+        const auto eo = eps_at(a.history, i, p.runup_pct);
+        ep.predicted_move_pct = eo.value;
+        ep.bound_pct = eo.bound;
+        eps.points.append(ep);
+
         QuarterPrediction ad;
         ad.timestamp = p.timestamp;
         ad.actual_move_pct = p.reaction_pct;
@@ -1068,6 +1229,7 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
         z.bound_pct = std::nullopt;
         zero_run.points.append(z);
     }
+    std::reverse(eps.points.begin(), eps.points.end());
     std::reverse(adaptive.points.begin(), adaptive.points.end());
     std::reverse(fit.points.begin(), fit.points.end());
     std::reverse(mean_run.points.begin(), mean_run.points.end());
@@ -1076,6 +1238,9 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
     // The upcoming print, from the same rules each predictor used above.
     const auto s_now = stats_before(a.history, -1);
     if (s_now.n > 0) {
+        const auto eo_now = eps_at(a.history, -1, a.runup_5d_pct);
+        eps.next_move_pct = eo_now.value;
+        eps.next_bound_pct = eo_now.bound;
         const auto ao_now = adaptive_at(a.history, -1, a.runup_5d_pct, /*apply_skill=*/true);
         adaptive.next_move_pct = ao_now.value;
         adaptive.next_bound_pct = ao_now.bound;
@@ -1087,6 +1252,7 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
         zero_run.next_move_pct = 0.0;
     }
 
+    runs.append(eps);
     runs.append(adaptive);
     runs.append(fit);
     runs.append(mean_run);

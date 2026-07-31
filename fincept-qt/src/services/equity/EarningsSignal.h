@@ -194,11 +194,48 @@ QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a);
 /// per symbol that is the likely honest answer.
 enum class MovePredictor {
     Scorecard,   ///< the rules-based signal, reconstructed for past quarters
+    EpsModel,    ///< two-stage: expected surprise, then surprise → move
     Adaptive,    ///< see below — the one built for this problem specifically
     RunupFit,    ///< plain least squares of reaction on the run-up
     MeanMove,    ///< baseline: this name's average past reaction
     NoMove,      ///< baseline: zero, every quarter
 };
+
+// ── The EPS model ────────────────────────────────────────────────────────────
+// The one built out of what the history actually contains. Every past quarter
+// carries the consensus that stood going INTO the print, the figure that
+// landed, and the move that followed — so the two links in the causal chain
+// can each be fitted on real pairs instead of assumed.
+//
+//   Stage A — how big a surprise to expect.
+//     A company's surprise is not noise around zero: most guide to a number
+//     they can clear, and they do it with a persistent bias. That bias is the
+//     starting point. It is then adjusted for the height of the bar, which IS
+//     knowable beforehand: the coming quarter's consensus against what the
+//     company last delivered gives the growth analysts are asking for, and
+//     regressing past surprises on that same quantity says how this name
+//     responds when the ask runs ahead of what it usually delivers.
+//
+//   Stage B — what a surprise is worth in price.
+//     Regress the realised move on the realised surprise over past quarters.
+//     The slope is this name's own sensitivity: how many percent it moves per
+//     percent of beat. Some names pay for a beat and some do not, and that is
+//     measurable rather than assumable.
+//
+//   Stage C — what is already paid for.
+//     The residual left by stage B is regressed on the run-up into the print.
+//     A stock that has already run has spent some of the beat in advance, and
+//     this is where that shows up.
+//
+// The estimate REVISION trajectory — the consensus a week, a month, three
+// months back — is deliberately absent from the fit. It exists for the coming
+// quarter only; Yahoo publishes it as a live snapshot with no history, so
+// there are no past pairs to fit it against. Fitting a coefficient on data
+// that exists for one quarter and calling it a model would be the exact
+// hindsight this whole panel is built to avoid.
+//
+// Magnitude capping and skill shrinkage are shared with Adaptive below, for
+// the reasons given there.
 
 // ── The Adaptive predictor ───────────────────────────────────────────────────
 // Designed around three properties of this particular problem rather than

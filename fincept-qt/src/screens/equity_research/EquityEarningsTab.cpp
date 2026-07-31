@@ -161,6 +161,7 @@ QTableWidgetItem* cell(const QString& text, const QString& color = QString(),
 QString predictor_color(services::equity::MovePredictor p) {
     switch (p) {
         case services::equity::MovePredictor::Scorecard: return QStringLiteral("#a855f7");
+        case services::equity::MovePredictor::EpsModel:  return QStringLiteral("#818cf8");
         case services::equity::MovePredictor::Adaptive:  return QStringLiteral("#f59e0b");
         case services::equity::MovePredictor::RunupFit:  return QStringLiteral("#ec4899");
         case services::equity::MovePredictor::MeanMove:  return QStringLiteral("#94a3b8");
@@ -588,12 +589,45 @@ void EquityEarningsTab::apply_selected_predictor() {
             all << QString("%1 %2pp").arg(run.label.toLower(),
                                           QString::number(run.mean_abs_error, 'f', 1));
 
+    // State the conclusion rather than leaving it to be inferred from a row of
+    // numbers. Across twelve large caps and fifteen quarters each, nothing
+    // here beat assuming no move — so when that is also true for the name on
+    // screen, the panel says it outright instead of drawing a confident line
+    // and letting the reader supply the optimism.
+    double best_mae = -1, nomove_mae = -1;
+    QString best_label;
+    for (const auto& run : predictor_runs_) {
+        if (run.graded == 0) continue;
+        if (run.predictor == services::equity::MovePredictor::NoMove) {
+            nomove_mae = run.mean_abs_error;
+            continue;
+        }
+        if (best_mae < 0 || run.mean_abs_error < best_mae) {
+            best_mae = run.mean_abs_error;
+            best_label = run.label;
+        }
+    }
+
     QString text;
     if (!all.isEmpty()) {
         text = QString("Mean miss, walk-forward — every quarter answered using only the quarters "
-                       "before it, so none of these is an in-sample fit: %1. A predictor that "
-                       "cannot beat NO MOVE is not reading the setup.\n\n")
+                       "before it, so none of these is an in-sample fit: %1.\n\n")
                    .arg(all.join(QStringLiteral(" · ")));
+    }
+    if (best_mae >= 0 && nomove_mae >= 0) {
+        text += best_mae < nomove_mae
+                    ? QString("%1 beats assuming no move on this name, by %2 pp. That is the only "
+                              "bar worth clearing, and it clears it on a few quarters — not "
+                              "enough to be sure of. ")
+                          .arg(best_label)
+                          .arg(QString::number(nomove_mae - best_mae, 'f', 2))
+                    : QString("Nothing here beats assuming no move — the best of them, %1, misses "
+                              "by %2 pp more. On this name the size and direction of the reaction "
+                              "are not predictable from what is available before the print, and "
+                              "the lines below are worth reading as evidence of that rather than "
+                              "as a forecast. ")
+                          .arg(best_label)
+                          .arg(QString::number(best_mae - nomove_mae, 'f', 2));
     }
     if (series.isEmpty()) {
         text += QStringLiteral("No predictor selected — tick one above to draw it against the "
@@ -680,6 +714,7 @@ QWidget* EquityEarningsTab::build_history_panel() {
     pred_row->setContentsMargins(0, 0, 0, 0);
     pred_row->addWidget(make_caption("PREDICTED:"));
     for (const auto pr : {services::equity::MovePredictor::Scorecard,
+                          services::equity::MovePredictor::EpsModel,
                           services::equity::MovePredictor::Adaptive,
                           services::equity::MovePredictor::RunupFit,
                           services::equity::MovePredictor::MeanMove,
