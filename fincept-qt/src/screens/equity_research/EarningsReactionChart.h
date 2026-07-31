@@ -46,6 +46,13 @@ class EarningsReactionChart : public QWidget {
 
   protected:
     void paintEvent(QPaintEvent* e) override;
+    /// Hovering a column explains that quarter rather than the chart in
+    /// general: which line is which, what each one read, and — for the dotted
+    /// point — whether it was recorded before the print or rebuilt afterwards.
+    /// A legend can only say what the styles mean; this says what they mean
+    /// HERE, which is the question someone squinting at two lines is asking.
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void leaveEvent(QEvent* e) override;
 
   private:
     struct Column {
@@ -66,6 +73,12 @@ class EarningsReactionChart : public QWidget {
     };
 
     QVector<Column> columns() const;
+    /// The data area, shared by painting and hit-testing so a hover can never
+    /// resolve to a different column than the one drawn under the cursor.
+    QRect plot_rect() const;
+    /// Column index under `x`, or -1 outside the plot.
+    int column_at(double x, const QVector<Column>& cols) const;
+    QString tooltip_for(const Column& c) const;
     /// Axis half-range for a series: the 80th percentile of |value|, so one
     /// outlier (a +745% quarter off a depressed base) can't flatten the rest.
     /// Bars beyond it are clamped and marked with a chevron.

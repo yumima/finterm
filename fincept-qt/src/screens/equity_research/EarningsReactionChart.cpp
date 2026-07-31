@@ -3,6 +3,9 @@
 
 #include "ui/theme/Theme.h"
 
+#include <QMouseEvent>
+#include <QToolTip>
+
 #include <QDateTime>
 #include <QFontMetrics>
 #include <QPainter>
@@ -33,6 +36,12 @@ constexpr double kLabelGap  = kDotR + 5.0;   // clears the marker, not just its 
 // below so a label always fits above the tallest point without flipping.
 constexpr double kDataFill  = 0.84;
 
+// The two series' colours, named once. The hover text describes the lines by
+// colour, so a literal drifting between the painter and the tooltip would have
+// the tooltip confidently pointing at the wrong line.
+const QString kLineColor = QStringLiteral("#22d3ee");   // realised move
+const QString kPredColor = QStringLiteral("#a855f7");   // the signal's estimate
+
 QString pct_label(double v, int dp = 0) {
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', dp));
 }
@@ -45,6 +54,8 @@ double cx_of(const QRect& plot, double col_w, int i) {
 } // namespace
 
 EarningsReactionChart::EarningsReactionChart(QWidget* parent) : QWidget(parent) {
+    // Hover explains a quarter without needing a click or a selection.
+    setMouseTracking(true);
     setMinimumHeight(230);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setAttribute(Qt::WA_StyledBackground, false);
@@ -124,6 +135,92 @@ double EarningsReactionChart::axis_extent(const QVector<double>& values) {
     return p80 > 1e-6 ? p80 : (mags.last() > 1e-6 ? mags.last() : 1.0);
 }
 
+QRect EarningsReactionChart::plot_rect() const {
+    return QRect(kMarginSide, kHeaderH, width() - 2 * kMarginSide,
+                 height() - kHeaderH - kFooterH);
+}
+
+int EarningsReactionChart::column_at(double x, const QVector<Column>& cols) const {
+    const QRect plot = plot_rect();
+    if (cols.isEmpty() || plot.width() <= 0 || x < plot.left() || x > plot.right())
+        return -1;
+    const double col_w = static_cast<double>(plot.width()) / cols.size();
+    const int i = static_cast<int>((x - plot.left()) / col_w);
+    return std::clamp(i, 0, static_cast<int>(cols.size()) - 1);
+}
+
+QString EarningsReactionChart::tooltip_for(const Column& c) const {
+    const QString metric_name = metric_ == ReactionMetric::Surprise
+                                    ? QStringLiteral("Surprise vs consensus")
+                                : metric_ == ReactionMetric::QoQ
+                                    ? QStringLiteral("EPS vs prior quarter")
+                                    : QStringLiteral("EPS vs year-ago quarter");
+    const QColor pred_col(kPredColor);
+
+    QStringList rows;
+    const auto when = QDateTime::fromSecsSinceEpoch(c.timestamp);
+    rows << QString("<b>%1</b>").arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
+                                                 : when.toString("d MMM yyyy"));
+
+    if (c.metric)
+        rows << QString("Bar — %1: <b>%2</b>").arg(metric_name, pct_label(*c.metric, 1));
+
+    // The solid line.
+    if (c.reaction) {
+        rows << QString("<span style='color:%1'>Solid line</span> — actual next-session move: "
+                        "<b>%2</b>")
+                    .arg(kLineColor, pct_label(*c.reaction, 2));
+    } else if (c.projected && c.live_move) {
+        rows << QString("<span style='color:%1'>Solid line</span> — this print hasn't happened. "
+                        "The dashed leg carries the price to today: <b>%2</b> since the last "
+                        "print's close.")
+                    .arg(kLineColor, pct_label(*c.live_move, 2));
+    }
+
+    // The dotted line, explained by what this particular point is.
+    if (c.predicted) {
+        rows << QString("<span style='color:%1'>Dotted line</span> — signal predicted: <b>%2</b>")
+                    .arg(kPredColor, pct_label(*c.predicted, 2));
+        rows << (c.predicted_reconstructed
+                     ? QStringLiteral("<i>Dotted here: rebuilt after the print from the backward "
+                                      "legs only — surprise record, reaction history, run-up. "
+                                      "Consensus and revisions aren't published with history, so "
+                                      "roughly two-thirds of the model can't be recovered for a "
+                                      "past quarter, and the estimate is muted accordingly.</i>")
+                     : QStringLiteral("<i>Solid here: this estimate was genuinely recorded before "
+                                      "the print, with the whole model available.</i>"));
+        if (c.reaction) {
+            rows << QString("Miss: <b>%1 pp</b>")
+                        .arg(QString::number(std::abs(*c.predicted - *c.reaction), 'f', 2));
+        }
+    } else if (!c.projected) {
+        rows << QStringLiteral("<i>No prediction for this quarter — nothing before it to "
+                               "estimate from.</i>");
+    }
+
+    // Fixed width so the paragraph wraps into a box rather than one long line;
+    // Qt only word-wraps a tooltip when it is rich text, and only bounds the
+    // width when a table sets one.
+    return QStringLiteral("<qt><table width=\"330\" cellpadding=\"0\" cellspacing=\"0\"><tr><td>%1"
+                          "</td></tr></table></qt>")
+        .arg(rows.join(QStringLiteral("<br>")));
+}
+
+void EarningsReactionChart::mouseMoveEvent(QMouseEvent* e) {
+    const auto cols = columns();
+    const int i = column_at(e->position().x(), cols);
+    if (i < 0)
+        QToolTip::hideText();
+    else
+        QToolTip::showText(e->globalPosition().toPoint(), tooltip_for(cols[i]), this);
+    QWidget::mouseMoveEvent(e);
+}
+
+void EarningsReactionChart::leaveEvent(QEvent* e) {
+    QToolTip::hideText();
+    QWidget::leaveEvent(e);
+}
+
 void EarningsReactionChart::paintEvent(QPaintEvent*) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -134,7 +231,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     const QColor text_sec(ui::colors::TEXT_SECONDARY());
     const QColor pos(ui::colors::POSITIVE());
     const QColor neg(ui::colors::NEGATIVE());
-    const QColor line_col(QStringLiteral("#22d3ee"));
+    const QColor line_col(kLineColor);
 
     const auto cols = columns();
     QFont f = p.font();
@@ -147,8 +244,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         return;
     }
 
-    const QRect plot(kMarginSide, kHeaderH, width() - 2 * kMarginSide,
-                     height() - kHeaderH - kFooterH);
+    const QRect plot = plot_rect();
     if (plot.width() < kMinColumnPx || plot.height() < 40)
         return;
 
@@ -284,7 +380,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     // the two IS the error. Drawn segment by segment because the dash pattern
     // changes mid-series: dotted while the estimates were rebuilt after the
     // fact, solid only between two that were recorded before their prints.
-    const QColor pred_col("#a855f7");   // the scorecard's accent
+    const QColor pred_col(kPredColor);   // the scorecard's accent
     {
         QPointF prev;
         bool have_prev = false;
