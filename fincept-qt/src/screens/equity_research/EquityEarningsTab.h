@@ -96,6 +96,8 @@ class EquityEarningsTab : public QWidget {
     QLabel* setup_runup_ = nullptr;
     QLabel* setup_runup20_ = nullptr;
     QLabel* setup_spread_ = nullptr;
+    // The engine's signed point estimate for the coming print.
+    QLabel* setup_predicted_ = nullptr;
 
     // Scorecard rows are rebuilt per symbol.
     QVBoxLayout* score_rows_layout_ = nullptr;

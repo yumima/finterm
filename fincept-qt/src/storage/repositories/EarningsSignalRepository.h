@@ -24,14 +24,18 @@ struct EarningsSignalRecord {
     double  confidence = 0.0;     // 0 … 1
     std::optional<double> setup_score;
     std::optional<double> bar_score;
-    // Deliberately not "predicted move". The scorecard leans a direction and
-    // states a typical magnitude; it does not forecast a number, and storing
-    // one would invent a claim it never made.
+    // The typical SIZE of this name's print reaction, unsigned — the band, not
+    // the call. `predicted_move_pct` below is the signed estimate; keeping the
+    // two apart is what stops "this name usually moves 7%" being read back as
+    // "we expected it to rise 7%".
     std::optional<double> expected_move_pct;
     std::optional<double> consensus_eps;
     std::optional<double> dispersion_pct;
     std::optional<double> runup_5d_pct;
     std::optional<double> price_at_capture;
+    /// The engine's signed point estimate for the next-session move. NULL on
+    /// rows written before it existed, and on setups too thin to justify one.
+    std::optional<double> predicted_move_pct;
 
     bool    resolved = false;
     std::optional<double> actual_eps;

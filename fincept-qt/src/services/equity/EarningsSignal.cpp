@@ -88,6 +88,14 @@ constexpr double kNearHighPct = 20.0;
 // headline rather than leaving the reader to spot in the breakdown.
 constexpr double kAxisTensionPts = 50.0;
 
+// Composite score at which the engine will predict this name's FULL typical
+// move. Deliberately well short of 100: a ±100 composite would need every leg
+// maxed in the same direction, which essentially never happens, so anchoring
+// full conviction there would compress every real prediction to a rounding
+// error. At ±50 a strongly-leaning setup predicts the whole typical move and
+// anything beyond is clamped.
+constexpr double kFullConvictionScore = 50.0;
+
 // Quarters of history the backward-looking legs consider. Eight covers two
 // full years — long enough to be a track record, short enough that a changed
 // business isn't judged on its old self.
@@ -836,6 +844,17 @@ EarningsVerdict evaluate_earnings(const EarningsAnalysis& a) {
         }
         if (w <= 0) continue;
         (axis == SignalAxis::Setup ? v.setup_score : v.bar_score) = (sum / w) * 100.0;
+    }
+
+    // ── Point estimate for the move ──────────────────────────────────────────
+    // Three factors, each doing one job: which way the composite leans, how
+    // far this name actually travels on a print, and how much of the picture
+    // is real data rather than absent legs. Multiplying by confidence is what
+    // keeps a thin file from producing a bold number — a half-empty scorecard
+    // leaning hard predicts half as much as a full one leaning equally hard.
+    if (v.typical_move_pct > 0 && v.confidence >= kMinConfidence) {
+        v.predicted_move_pct =
+            v.typical_move_pct * clamp_unit(v.score / kFullConvictionScore) * v.confidence;
     }
 
     // ── Verdict ──────────────────────────────────────────────────────────────

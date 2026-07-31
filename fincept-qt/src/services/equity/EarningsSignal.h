@@ -112,6 +112,22 @@ struct EarningsVerdict {
     /// `dispersion_pct` past the threshold the engine calls wide. Carried as a
     /// flag so the panel and the caveat can't drift apart on where the line is.
     bool dispersion_is_wide = false;
+
+    /// The engine's own point estimate for the next-session move, in percent,
+    /// signed. Rules-based arithmetic over the legs above — no model, nothing
+    /// learned, and nothing asked of an LLM: it is the direction the composite
+    /// leans, scaled by how far this name typically travels on a print, scaled
+    /// again by how much of the picture is actually backed by data.
+    ///
+    /// Unset rather than zero when there is no basis for one — a name with no
+    /// reaction history has no typical move to scale, and a picture under the
+    /// confidence floor has no lean worth scaling. "No prediction" and
+    /// "predicting no move" are different claims.
+    ///
+    /// It carries no validated accuracy. That is the point of recording it:
+    /// until enough prints have gone by with the number written down
+    /// beforehand, nobody can say whether it is worth anything.
+    std::optional<double> predicted_move_pct;
 };
 
 /// Score `a`. Safe on an empty/invalid analysis — returns a Neutral verdict

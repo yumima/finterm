@@ -420,12 +420,20 @@ QWidget* EquityEarningsTab::build_summary_row() {
     auto* setup_panel = make_panel("THE SETUP", "#22d3ee", &setup_body);
     auto* setup_grid = new QGridLayout;
     setup_grid->setSpacing(12);
-    setup_grid->addWidget(make_stat("TYPICAL MOVE", setup_move_, "#22d3ee"), 0, 0);
-    setup_grid->addWidget(make_stat("EST SPREAD", setup_spread_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
-    setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
-    setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
-    setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 2, 0);
-    setup_grid->addWidget(make_stat("RUN-UP 20D", setup_runup20_, ui::colors::TEXT_PRIMARY(), 13), 2, 1);
+    setup_grid->addWidget(make_stat("PREDICTED MOVE", setup_predicted_, "#22d3ee"), 0, 0);
+    setup_grid->addWidget(make_stat("TYPICAL MOVE", setup_move_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
+    setup_grid->addWidget(make_stat("EST SPREAD", setup_spread_, ui::colors::TEXT_PRIMARY(), 13), 3, 1);
+    setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
+    setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
+    setup_grid->addWidget(make_stat("RUN-UP 20D", setup_runup20_, ui::colors::TEXT_PRIMARY(), 13), 2, 0);
+    setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY(), 13), 3, 0);
+    setup_predicted_->setToolTip(QStringLiteral(
+        "The engine's own estimate for the next-session move, signed. Computed, not asked of "
+        "a model: the composite's lean scaled by how far this name typically travels on a "
+        "print, scaled again by how much of the scorecard actually had data behind it.\n\n"
+        "It has no established accuracy — that is precisely why every reading is written down "
+        "before the print and held against the outcome in SIGNAL vs OUTCOME below. Treat the "
+        "TYPICAL MOVE beside it as the range that matters far more than the point."));
     setup_move_->setToolTip(QStringLiteral(
         "Mean absolute close-to-close move over past prints — how big a session this name "
         "usually has on earnings, regardless of direction."));
@@ -476,7 +484,7 @@ QWidget* EquityEarningsTab::build_history_panel() {
     // Short headers: eight columns share this pane with the chart, and an
     // elided "1D REACTIO…" reads worse than a terse but complete label.
     style_table(history_table_,
-                {"REPORTED", "EST", "ACTUAL", "SURPRISE", "QoQ", "YoY", "1D MOVE", "5D RUN-UP"});
+                {"REPORTED", "EPS EST", "EPS ACT", "SURPRISE", "QoQ", "YoY", "1D MOVE", "5D RUN-UP"});
     body->addWidget(history_table_);
     hl->addWidget(panel, 4);
 
@@ -712,11 +720,17 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                                     axis_span("BAR  ", verdict.bar_score)));
 
     // ── Setup card ───────────────────────────────────────────────────────────
+    set_stat(setup_predicted_,
+             verdict.predicted_move_pct
+                 ? QString("%1%2%").arg(*verdict.predicted_move_pct >= 0 ? "+" : "")
+                       .arg(QString::number(*verdict.predicted_move_pct, 'f', 2))
+                 : ui::formatting::placeholder(),
+             verdict.predicted_move_pct ? color_for(*verdict.predicted_move_pct) : "#22d3ee");
     set_stat(setup_move_,
              verdict.typical_move_pct > 0
                  ? QString("±%1%").arg(QString::number(verdict.typical_move_pct, 'f', 1))
                  : ui::formatting::placeholder(),
-             "#22d3ee");
+             ui::colors::TEXT_PRIMARY(), 13);
     // Beat rate is descriptive only now — the track-record leg scores the size
     // of the surprise against its own spread, because nearly every large cap
     // beats. Colouring it as though a high rate were bullish would contradict
@@ -775,7 +789,8 @@ QWidget* EquityEarningsTab::build_track_record_panel() {
 
     track_table_ = new QTableWidget;
     style_table(track_table_,
-                {"REPORT", "READ ON", "T−", "CALL", "SCORE", "EXPECTED", "SURPRISE", "ACTUAL MOVE"});
+                {"REPORT", "READ ON", "T−", "CALL", "PREDICTED", "BAND", "SURPRISE",
+                 "ACTUAL MOVE", "ERROR"});
     body->addWidget(track_table_);
     return panel;
 }
@@ -832,6 +847,7 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     rec.dispersion_pct = v.dispersion_pct;
     rec.runup_5d_pct = a.runup_5d_pct;
     rec.price_at_capture = a.valuation.price;
+    rec.predicted_move_pct = v.predicted_move_pct;
     ledger.observe(rec);
 }
 
@@ -853,6 +869,7 @@ void EquityEarningsTab::fill_track_record(const EarningsAnalysis& a) {
     track_table_->setRowCount(latest.size());
     int row = 0;
     int calls = 0, hits = 0;
+    QVector<double> errors;
     for (const auto& r : latest) {
         const auto when = QDateTime::fromSecsSinceEpoch(r.report_ts);
         track_table_->setItem(row, 0, cell(when.toString("d MMM yyyy"), ui::colors::TEXT_PRIMARY(),
@@ -864,21 +881,25 @@ void EquityEarningsTab::fill_track_record(const EarningsAnalysis& a) {
         const QString call_color = r.verdict == QLatin1String("BUY")    ? ui::colors::POSITIVE()
                                    : r.verdict == QLatin1String("SELL") ? ui::colors::NEGATIVE()
                                                                         : ui::colors::WARNING();
-        track_table_->setItem(row, 3, cell(r.verdict, call_color));
-        track_table_->setItem(row, 4, cell(QString("%1%2").arg(r.score >= 0 ? "+" : "")
-                                               .arg(QString::number(r.score, 'f', 0)),
-                                           color_for(r.score)));
-        // Expected is a magnitude, never a direction — the scorecard does not
-        // forecast a number, and rendering ±x% as if it did would be a claim it
-        // never made.
+        track_table_->setItem(row, 3, cell(QString("%1 %2%3").arg(r.verdict,
+                                                                  r.score >= 0 ? "+" : "",
+                                                                  QString::number(r.score, 'f', 0)),
+                                           call_color));
+        // The signed point estimate — the thing that can be right or wrong.
+        track_table_->setItem(row, 4,
+            cell(opt_pct(r.predicted_move_pct, 2),
+                 r.predicted_move_pct ? color_for(*r.predicted_move_pct) : QString()));
+        // The band is unsigned and stays that way: it is how far this name
+        // usually travels, not which way it was expected to go.
         track_table_->setItem(row, 5,
             cell(r.expected_move_pct ? QString("±%1%").arg(QString::number(*r.expected_move_pct, 'f', 1))
                                      : ui::formatting::placeholder(),
                  ui::colors::TEXT_SECONDARY()));
 
         if (!r.resolved) {
-            track_table_->setItem(row, 6, cell(QStringLiteral("pending"), ui::colors::TEXT_TERTIARY()));
-            track_table_->setItem(row, 7, cell(QStringLiteral("pending"), ui::colors::TEXT_TERTIARY()));
+            for (int c = 6; c <= 8; ++c)
+                track_table_->setItem(row, c, cell(QStringLiteral("pending"),
+                                                   ui::colors::TEXT_TERTIARY()));
         } else {
             track_table_->setItem(row, 6, cell(opt_pct(r.surprise_pct, 2),
                                                r.surprise_pct ? color_for(*r.surprise_pct) : QString()));
@@ -890,6 +911,21 @@ void EquityEarningsTab::fill_track_record(const EarningsAnalysis& a) {
                                      : ui::formatting::placeholder();
             track_table_->setItem(row, 7, cell(move, r.actual_move_pct ? color_for(*r.actual_move_pct)
                                                                        : QString()));
+            // Signed error, predicted minus actual: the sign says which way the
+            // estimate was wrong, which a bare magnitude would throw away.
+            QString err = ui::formatting::placeholder();
+            QString err_color;
+            if (r.predicted_move_pct && r.actual_move_pct) {
+                const double e = *r.predicted_move_pct - *r.actual_move_pct;
+                err = QString("%1%2 pp").arg(e >= 0 ? "+" : "", QString::number(e, 'f', 2));
+                // Coloured by SIZE, not direction — a small error is good news
+                // whichever side it fell on.
+                err_color = std::abs(e) <= 2.0   ? ui::colors::POSITIVE()
+                            : std::abs(e) <= 5.0 ? ui::colors::WARNING()
+                                                 : ui::colors::NEGATIVE();
+                errors.append(std::abs(e));
+            }
+            track_table_->setItem(row, 8, cell(err, err_color));
             if (r.direction_hit.has_value()) {
                 ++calls;
                 if (*r.direction_hit) ++hits;
@@ -917,10 +953,20 @@ void EquityEarningsTab::fill_track_record(const EarningsAnalysis& a) {
         bits << QString("%1 of %2 directional calls went the way they leaned")
                     .arg(hits).arg(calls);
     }
-    track_note_->setText(bits.join(QStringLiteral(" · ")) +
-                         QStringLiteral(". EXPECTED is the typical move size, not a forecast "
-                                        "direction; the ✓/✗ marks whether a BUY or SELL lean "
-                                        "matched the sign of the reaction."));
+    if (!errors.isEmpty()) {
+        double sum = 0;
+        for (const double e : errors) sum += e;
+        bits << QString("average miss %1 pp over %2")
+                    .arg(QString::number(sum / errors.size(), 'f', 1))
+                    .arg(errors.size());
+    }
+    track_note_->setText(
+        bits.join(QStringLiteral(" · ")) +
+        QStringLiteral(". PREDICTED is the engine's signed estimate for the next-session move — "
+                       "the composite's lean scaled by this name's typical move size and by how "
+                       "much of the scorecard had data. BAND is that typical size, unsigned. "
+                       "ERROR is predicted minus actual in percentage points, coloured by how "
+                       "big the miss was rather than which way it fell."));
 }
 
 void EquityEarningsTab::fill_scorecard(const EarningsVerdict& v) {

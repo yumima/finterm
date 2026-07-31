@@ -44,6 +44,7 @@ EarningsSignalRecord EarningsSignalRepository::map_row(QSqlQuery& q) {
     r.dispersion_pct    = opt_real(q, "dispersion_pct");
     r.runup_5d_pct      = opt_real(q, "runup_5d_pct");
     r.price_at_capture  = opt_real(q, "price_at_capture");
+    r.predicted_move_pct = opt_real(q, "predicted_move_pct");
     r.resolved          = q.value(QStringLiteral("resolved")).toInt() != 0;
     r.actual_eps        = opt_real(q, "actual_eps");
     r.surprise_pct      = opt_real(q, "surprise_pct");
@@ -64,13 +65,13 @@ qint64 EarningsSignalRepository::observe(const EarningsSignalRecord& r) {
         "INSERT OR IGNORE INTO earnings_signal_records "
         "(symbol, report_ts, observed_on, captured_at, days_to_report, verdict, score, "
         " confidence, setup_score, bar_score, expected_move_pct, consensus_eps, "
-        " dispersion_pct, runup_5d_pct, price_at_capture) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " dispersion_pct, runup_5d_pct, price_at_capture, predicted_move_pct) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         {r.symbol.toUpper(), r.report_ts, r.observed_on, r.captured_at, r.days_to_report,
          r.verdict, r.score, r.confidence, to_variant(r.setup_score), to_variant(r.bar_score),
          to_variant(r.expected_move_pct), to_variant(r.consensus_eps),
          to_variant(r.dispersion_pct), to_variant(r.runup_5d_pct),
-         to_variant(r.price_at_capture)});
+         to_variant(r.price_at_capture), to_variant(r.predicted_move_pct)});
     return res.is_ok() ? res.value() : 0;
 }
 

@@ -774,6 +774,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v044_ai_predictions.cpp
     src/storage/sqlite/migrations/v045_physical_ai_watchlist.cpp
     src/storage/sqlite/migrations/v046_earnings_signal_records.cpp
+    src/storage/sqlite/migrations/v047_earnings_predicted_move.cpp
 )
 
 # Python runner

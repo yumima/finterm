@@ -721,6 +721,67 @@ class TestEarningsSignal : public QObject {
                  qPrintable(QString("%1 vs %2").arg(vt.score).arg(vw.score)));
     }
 
+    // ── The point estimate ───────────────────────────────────────────────────
+    // Rules-based, so its properties are assertable rather than a matter of
+    // taste: it leans the way the composite leans, it is bounded by how far
+    // this name actually travels, and a half-empty scorecard cannot produce a
+    // confident number.
+    void predicted_move_follows_the_lean_and_the_name() {
+        const auto bull = evaluate_earnings(bullish_fixture());
+        QVERIFY(bull.predicted_move_pct.has_value());
+        QVERIFY2(*bull.predicted_move_pct > 0,
+                 qPrintable(QString("bullish setup predicted %1").arg(*bull.predicted_move_pct)));
+        // Never larger than the move this name typically makes: the estimate is
+        // a fraction of the band, not a claim that can exceed it.
+        QVERIFY(std::abs(*bull.predicted_move_pct) <= bull.typical_move_pct + 1e-9);
+
+        const auto bear = evaluate_earnings(bearish_fixture());
+        QVERIFY(bear.predicted_move_pct.has_value());
+        QVERIFY(*bear.predicted_move_pct < 0);
+        QVERIFY(std::abs(*bear.predicted_move_pct) <= bear.typical_move_pct + 1e-9);
+    }
+
+    // A name with no reaction history has no band to scale, so there is no
+    // estimate to give. "No prediction" must not arrive as "predicting zero".
+    void no_reaction_history_means_no_prediction() {
+        EarningsAnalysis a = bullish_fixture();
+        for (auto& p : a.history)
+            p.reaction_pct.reset();
+        const auto v = evaluate_earnings(a);
+        QCOMPARE(v.typical_move_pct, 0.0);
+        QVERIFY2(!v.predicted_move_pct.has_value(), "invented an estimate with no move history");
+    }
+
+    // Below the confidence floor the engine refuses to take a side, and the
+    // estimate has to refuse with it — a number there would be a bolder claim
+    // than the verdict it sits beside.
+    void a_thin_scorecard_makes_no_prediction() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history.append(quarter(1700000000LL, 1.0, 2.0, 100.0, 20.0));
+        const auto v = evaluate_earnings(a);
+        QVERIFY(v.confidence < 0.35);
+        QVERIFY(!v.predicted_move_pct.has_value());
+    }
+
+    // Same lean, less data behind it: the estimate must shrink. This is what
+    // stops a scorecard holding two legs from speaking as loudly as one
+    // holding nine.
+    void less_data_shrinks_the_prediction() {
+        const auto full = evaluate_earnings(bullish_fixture());
+
+        EarningsAnalysis thin = bullish_fixture();
+        thin.trend.clear();          // drop revisions and guidance
+        thin.revisions.clear();      // drop breadth
+        const auto partial = evaluate_earnings(thin);
+
+        QVERIFY(partial.predicted_move_pct.has_value());
+        QVERIFY(partial.confidence < full.confidence);
+        QVERIFY2(*partial.predicted_move_pct < *full.predicted_move_pct,
+                 qPrintable(QString("thin %1 vs full %2")
+                                .arg(*partial.predicted_move_pct).arg(*full.predicted_move_pct)));
+    }
+
     // The caveats are the honest part of the panel — a big pre-print run-up
     // and an imminent date have to be called out whichever way the score leans.
     void imminent_report_and_runup_raise_caveats() {
