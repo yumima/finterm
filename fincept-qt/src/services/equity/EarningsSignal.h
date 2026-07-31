@@ -148,6 +148,33 @@ struct ReactionCorrelation {
     int n = 0;                     // quarters with both values present
 };
 
+/// One quarter's pre-print estimate placed beside what the print actually did.
+///
+/// `predicted_move_pct` on a past quarter is a RECONSTRUCTION, and a partial
+/// one: only the backward-looking legs (surprise record, reaction history,
+/// run-up into the print) have data that survives, because Yahoo publishes
+/// consensus and revisions as a live snapshot with no history. Revisions,
+/// guidance and the expectations gap — roughly two-thirds of the model's
+/// weight — cannot be recovered for a quarter that has already passed.
+///
+/// The reconstruction therefore runs through the SAME formula as the live
+/// prediction, confidence included, rather than renormalising over the legs it
+/// happens to have. That keeps a reconstructed point and a recorded one
+/// meaning the same thing, at the cost of the reconstruction predicting
+/// visibly smaller moves — the honest consequence of knowing less, not a
+/// defect to be scaled away.
+struct QuarterPrediction {
+    qint64 timestamp = 0;
+    std::optional<double> predicted_move_pct;  // reconstructed, backward legs only
+    std::optional<double> actual_move_pct;     // the realised close-to-close reaction
+    bool reconstructed = true;                 // false once a recorded reading replaces it
+};
+
+/// Reconstruct a pre-print estimate for every reported quarter in `a`, oldest
+/// first. Each quarter is scored using only the quarters BEFORE it, so no
+/// point is ever informed by its own outcome.
+QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a);
+
 /// Correlate all three metrics against the realised reaction.
 QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a);
 

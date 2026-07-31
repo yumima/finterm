@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`28071e738`](https://github.com/yumima/finterm/commit/28071e738) ER Earnings: drop the SIGNAL vs OUTCOME panel
 - [`3970a544d`](https://github.com/yumima/finterm/commit/3970a544d) ER Earnings: predict the move, in numbers, and hold it to account
 - [`02f9182ad`](https://github.com/yumima/finterm/commit/02f9182ad) ER Earnings: record what the scorecard said, so it can be checked
 - [`e9ae7c042`](https://github.com/yumima/finterm/commit/e9ae7c042) ER Earnings: show the live move, and keep the panel current across a print

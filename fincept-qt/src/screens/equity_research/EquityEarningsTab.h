@@ -1,6 +1,7 @@
 // src/screens/equity_research/EquityEarningsTab.h
 #pragma once
 #include "screens/equity_research/EarningsReactionChart.h"
+#include "screens/equity_research/SignalOutcomeChart.h"
 #include "services/equity/EarningsSignal.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
@@ -103,6 +104,13 @@ class EquityEarningsTab : public QWidget {
     // Scorecard rows are rebuilt per symbol.
     QVBoxLayout* score_rows_layout_ = nullptr;
     QLabel* caveats_label_ = nullptr;
+
+    // Shares the scorecard's row and the reaction chart's column: what the
+    // signal said before each print, against what the print did.
+    SignalOutcomeChart* outcome_chart_ = nullptr;
+    QLabel* outcome_note_ = nullptr;
+    void fill_outcome_chart(const services::equity::EarningsAnalysis& a,
+                            const services::equity::EarningsVerdict& v);
 
     QTableWidget* history_table_ = nullptr;
     QLabel* history_summary_ = nullptr;

@@ -714,6 +714,65 @@ QString horizon_note_for(const EarningsAnalysis& a, int days) {
 
 } // namespace
 
+QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a) {
+    QVector<QuarterPrediction> out;
+    if (!a.valid)
+        return out;
+
+    // `history` arrives newest-first. Index i is scored from i+1 onward — the
+    // quarters that had already happened when quarter i was still ahead — so a
+    // point can never be informed by its own result or anything after it.
+    for (int i = 0; i < a.history.size(); ++i) {
+        const auto& p = a.history[i];
+        if (p.is_estimate || !p.reaction_pct.has_value())
+            continue;   // no settled outcome to compare against
+
+        QuarterPrediction qp;
+        qp.timestamp = p.timestamp;
+        qp.actual_move_pct = p.reaction_pct;
+
+        // The world as it stood before this print: earlier quarters only, plus
+        // the run-up into this one, which WAS knowable at the time.
+        EarningsAnalysis prior;
+        prior.valid = true;
+        prior.symbol = a.symbol;
+        for (int j = i + 1; j < a.history.size(); ++j)
+            prior.history.append(a.history[j]);
+        prior.runup_5d_pct = p.runup_pct;
+        prior.runup_20d_pct = p.runup_pct;
+
+        EarningsVerdict pv;
+        const auto record = score_track_record(prior, pv);
+        const auto reaction = score_reaction(prior, pv);
+        const auto crowding = score_crowding(prior);
+
+        // Weighted over the FULL model's weights, not just these three. The
+        // legs that cannot be reconstructed count as absent, which is exactly
+        // what they are — so confidence lands near a third and the estimate is
+        // muted accordingly.
+        double weighted = 0, available = 0, total = 0;
+        for (const auto* c : {&record, &reaction, &crowding}) {
+            if (!c->available) continue;
+            weighted += c->score * c->base_weight;
+            available += c->base_weight;
+        }
+        for (const double w : {kWeightTrackRecord, kWeightReaction, kWeightRevisions,
+                               kWeightGuidance, kWeightBreadth, kWeightGrowth,
+                               kWeightExpectations, kWeightCrowding, kWeightValuation})
+            total += w;
+
+        if (available > 0 && total > 0 && pv.typical_move_pct > 0) {
+            const double score = (weighted / available) * 100.0;
+            const double confidence = available / total;
+            qp.predicted_move_pct =
+                pv.typical_move_pct * clamp_unit(score / kFullConvictionScore) * confidence;
+        }
+        out.append(qp);
+    }
+    std::reverse(out.begin(), out.end());   // oldest first, to match the charts
+    return out;
+}
+
 std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m) {
     switch (m) {
         case ReactionMetric::Surprise: return p.surprise_pct;

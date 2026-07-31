@@ -782,6 +782,81 @@ class TestEarningsSignal : public QObject {
                                 .arg(*partial.predicted_move_pct).arg(*full.predicted_move_pct)));
     }
 
+    // ── Reconstruction ───────────────────────────────────────────────────────
+    // A reconstructed point must never see its own outcome, or the chart it
+    // feeds becomes a drawing of hindsight.
+    void reconstruction_never_sees_its_own_quarter() {
+        EarningsAnalysis a;
+        a.valid = true;
+        // Seven quiet quarters, then one violent one at the front. If the
+        // newest point could see itself, its typical move would jump.
+        for (int i = 1; i < 8; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.02, 2.0, 1.0, 0.5));
+        EarningsPoint newest = quarter(1700000000LL, 1.0, 1.40, 40.0, 25.0, 0.5);
+        a.history.prepend(newest);
+
+        const auto rec = reconstruct_predictions(a);
+        QVERIFY(!rec.isEmpty());
+        // Oldest first, so the newest quarter is last.
+        const auto& latest = rec.last();
+        QCOMPARE(latest.timestamp, 1700000000LL);
+        QVERIFY(latest.actual_move_pct.has_value());
+        QCOMPARE(*latest.actual_move_pct, 25.0);
+        QVERIFY(latest.predicted_move_pct.has_value());
+        // Its estimate is built from the quiet quarters alone, so it cannot
+        // approach the 25% move it is being compared against.
+        QVERIFY2(std::abs(*latest.predicted_move_pct) < 3.0,
+                 qPrintable(QString("predicted %1 off quiet history")
+                                .arg(*latest.predicted_move_pct)));
+    }
+
+    // The oldest quarter has nothing before it, so there is nothing to predict
+    // from — it must come back without an estimate rather than with a zero.
+    void the_oldest_quarter_has_no_prior_to_predict_from() {
+        EarningsAnalysis a;
+        a.valid = true;
+        for (int i = 0; i < 3; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.05, 5.0, 3.0, 1.0));
+        const auto rec = reconstruct_predictions(a);
+        QCOMPARE(rec.size(), 3);
+        QVERIFY2(!rec.first().predicted_move_pct.has_value(),
+                 "predicted a quarter with no history behind it");
+        QVERIFY(rec.first().actual_move_pct.has_value());
+    }
+
+    // Reconstruction runs the live formula with the unavailable legs counted
+    // as absent, so it is deliberately more muted than a full-data prediction
+    // leaning the same way. Scaling that away would overstate what it knows.
+    void reconstruction_is_muted_against_a_full_scorecard() {
+        const auto full = evaluate_earnings(bullish_fixture());
+        QVERIFY(full.predicted_move_pct.has_value());
+
+        EarningsAnalysis a = bullish_fixture();
+        const auto rec = reconstruct_predictions(a);
+        QVERIFY(!rec.isEmpty());
+        QVERIFY(rec.last().predicted_move_pct.has_value());
+        QVERIFY2(std::abs(*rec.last().predicted_move_pct) < std::abs(*full.predicted_move_pct),
+                 qPrintable(QString("reconstruction %1 vs full %2")
+                                .arg(*rec.last().predicted_move_pct)
+                                .arg(*full.predicted_move_pct)));
+    }
+
+    // Quarters with no settled reaction are not plottable pairs.
+    void quarters_without_an_outcome_are_left_out() {
+        EarningsAnalysis a;
+        a.valid = true;
+        EarningsPoint pending;   // reported, reaction not yet settled
+        pending.timestamp = 1700000000LL;
+        pending.eps_actual = 1.1;
+        pending.surprise_pct = 5.0;
+        a.history.append(pending);
+        for (int i = 1; i < 5; ++i)
+            a.history.append(quarter(1700000000LL - i * 7776000LL, 1.0, 1.05, 5.0, 3.0, 1.0));
+        const auto rec = reconstruct_predictions(a);
+        for (const auto& r : rec)
+            QVERIFY(r.timestamp != 1700000000LL);
+    }
+
     // The caveats are the honest part of the panel — a big pre-print run-up
     // and an imminent date have to be called out whichever way the score leans.
     void imminent_report_and_runup_raise_caveats() {

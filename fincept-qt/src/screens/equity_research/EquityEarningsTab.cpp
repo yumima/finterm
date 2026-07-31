@@ -452,6 +452,12 @@ QWidget* EquityEarningsTab::build_summary_row() {
 }
 
 QWidget* EquityEarningsTab::build_scorecard() {
+    auto* row = new QWidget(nullptr);
+    row->setStyleSheet("background:transparent;");
+    auto* hl = new QHBoxLayout(row);
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(10);
+
     QVBoxLayout* body = nullptr;
     auto* panel = make_panel("SIGNAL BREAKDOWN", "#a855f7", &body);
 
@@ -459,7 +465,42 @@ QWidget* EquityEarningsTab::build_scorecard() {
     score_rows_layout_->setContentsMargins(0, 0, 0, 0);
     score_rows_layout_->setSpacing(6);
     body->addLayout(score_rows_layout_);
-    return panel;
+    // 4 / 5, matching the quarters-table / reaction-chart row below, so the
+    // chart in this row sits directly above the one in that row and a quarter
+    // can be read straight down through both.
+    hl->addWidget(panel, 4);
+
+    QVBoxLayout* chart_body = nullptr;
+    auto* chart_panel = make_panel("SIGNAL vs OUTCOME · PREDICTED AGAINST REALISED", "#a855f7",
+                                   &chart_body);
+    outcome_chart_ = new SignalOutcomeChart;
+    chart_body->addWidget(outcome_chart_, 1);
+
+    outcome_note_ = new QLabel;
+    outcome_note_->setWordWrap(true);
+    outcome_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                     .arg(ui::colors::TEXT_TERTIARY()));
+    chart_body->addWidget(outcome_note_);
+    hl->addWidget(chart_panel, 5);
+
+    return row;
+}
+
+void EquityEarningsTab::fill_outcome_chart(const EarningsAnalysis& a, const EarningsVerdict& v) {
+    const auto recorded = EarningsSignalRepository::instance().for_symbol(a.symbol);
+    outcome_chart_->set_data(a, recorded, v);
+
+    // The dotted stretch needs explaining every time, not once in a tooltip:
+    // a reader comparing two lines will otherwise take the muted one for a
+    // weak signal rather than a partially-blind one.
+    const QString base = QStringLiteral(
+        "Quarters before today are rebuilt from the backward legs alone — surprise record, "
+        "reaction history, run-up — because consensus and revisions are published without "
+        "history and cannot be recovered. Those run through the same formula with the missing "
+        "legs counted absent, so they predict smaller moves than a live reading will. Solid "
+        "from the first estimate actually recorded before a print.");
+    const QString stats = outcome_chart_->summary();
+    outcome_note_->setText(stats.isEmpty() ? base : stats + QStringLiteral(". ") + base);
 }
 
 QWidget* EquityEarningsTab::build_history_panel() {
@@ -761,6 +802,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
 
     fill_scorecard(verdict);
     record_and_resolve(a, verdict);
+    fill_outcome_chart(a, verdict);
     fill_history(a, verdict);
     fill_trend(a);
     fill_revisions(a);
