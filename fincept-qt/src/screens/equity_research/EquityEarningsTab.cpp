@@ -290,7 +290,6 @@ void EquityEarningsTab::build_ui() {
 
     vl->addWidget(build_summary_row());
     vl->addWidget(build_scorecard());
-    vl->addWidget(build_track_record_panel());
     vl->addWidget(build_history_panel());
     vl->addWidget(build_current_panel());
     vl->addWidget(build_future_panel());
@@ -762,7 +761,6 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
 
     fill_scorecard(verdict);
     record_and_resolve(a, verdict);
-    fill_track_record(a);
     fill_history(a, verdict);
     fill_trend(a);
     fill_revisions(a);
@@ -771,29 +769,15 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
 }
 
 // ── Signal ledger ────────────────────────────────────────────────────────────
-// The scorecard has never been checkable: Yahoo's estimates and revisions are a
-// point-in-time snapshot with no history, so what this panel would have said a
-// week before a past print cannot be reconstructed. The only honest way to find
-// out whether the read is worth anything is to write it down as it happens and
-// hold it against the outcome afterwards. That is all this does.
-
-QWidget* EquityEarningsTab::build_track_record_panel() {
-    QVBoxLayout* body = nullptr;
-    auto* panel = make_panel("SIGNAL vs OUTCOME · THIS NAME", "#a855f7", &body);
-
-    track_note_ = new QLabel;
-    track_note_->setWordWrap(true);
-    track_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                   .arg(ui::colors::TEXT_SECONDARY()));
-    body->addWidget(track_note_);
-
-    track_table_ = new QTableWidget;
-    style_table(track_table_,
-                {"REPORT", "READ ON", "T−", "CALL", "PREDICTED", "BAND", "SURPRISE",
-                 "ACTUAL MOVE", "ERROR"});
-    body->addWidget(track_table_);
-    return panel;
-}
+// Writes only. Yahoo's estimates and revisions are a point-in-time snapshot
+// with no history, so what the scorecard would have said before a past print
+// cannot be reconstructed — the only way to ever check the prediction is to
+// write each reading down as it happens and settle it afterwards.
+//
+// It has no panel. A table of one pending row restates the scorecard sitting
+// directly above it and earns none of the space it costs; the comparison only
+// becomes worth showing once there are enough settled prints to say something
+// the card doesn't already. Until then this accumulates quietly.
 
 void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const EarningsVerdict& v) {
     auto& ledger = EarningsSignalRepository::instance();
@@ -849,124 +833,6 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     rec.price_at_capture = a.valuation.price;
     rec.predicted_move_pct = v.predicted_move_pct;
     ledger.observe(rec);
-}
-
-void EquityEarningsTab::fill_track_record(const EarningsAnalysis& a) {
-    const auto rows = EarningsSignalRepository::instance().for_symbol(a.symbol);
-
-    // Newest reading per report: the last thing the panel said going in is the
-    // call to hold it to. Rows arrive newest-first, so the first sighting of a
-    // report is already the one wanted.
-    QVector<EarningsSignalRecord> latest;
-    QSet<qint64> seen;
-    for (const auto& r : rows) {
-        if (seen.contains(r.report_ts))
-            continue;
-        seen.insert(r.report_ts);
-        latest.append(r);
-    }
-
-    track_table_->setRowCount(latest.size());
-    int row = 0;
-    int calls = 0, hits = 0;
-    QVector<double> errors;
-    for (const auto& r : latest) {
-        const auto when = QDateTime::fromSecsSinceEpoch(r.report_ts);
-        track_table_->setItem(row, 0, cell(when.toString("d MMM yyyy"), ui::colors::TEXT_PRIMARY(),
-                                           Qt::AlignLeft | Qt::AlignVCenter));
-        track_table_->setItem(row, 1, cell(r.observed_on, ui::colors::TEXT_SECONDARY(),
-                                           Qt::AlignLeft | Qt::AlignVCenter));
-        track_table_->setItem(row, 2, cell(QString("%1d").arg(r.days_to_report)));
-
-        const QString call_color = r.verdict == QLatin1String("BUY")    ? ui::colors::POSITIVE()
-                                   : r.verdict == QLatin1String("SELL") ? ui::colors::NEGATIVE()
-                                                                        : ui::colors::WARNING();
-        track_table_->setItem(row, 3, cell(QString("%1 %2%3").arg(r.verdict,
-                                                                  r.score >= 0 ? "+" : "",
-                                                                  QString::number(r.score, 'f', 0)),
-                                           call_color));
-        // The signed point estimate — the thing that can be right or wrong.
-        track_table_->setItem(row, 4,
-            cell(opt_pct(r.predicted_move_pct, 2),
-                 r.predicted_move_pct ? color_for(*r.predicted_move_pct) : QString()));
-        // The band is unsigned and stays that way: it is how far this name
-        // usually travels, not which way it was expected to go.
-        track_table_->setItem(row, 5,
-            cell(r.expected_move_pct ? QString("±%1%").arg(QString::number(*r.expected_move_pct, 'f', 1))
-                                     : ui::formatting::placeholder(),
-                 ui::colors::TEXT_SECONDARY()));
-
-        if (!r.resolved) {
-            for (int c = 6; c <= 8; ++c)
-                track_table_->setItem(row, c, cell(QStringLiteral("pending"),
-                                                   ui::colors::TEXT_TERTIARY()));
-        } else {
-            track_table_->setItem(row, 6, cell(opt_pct(r.surprise_pct, 2),
-                                               r.surprise_pct ? color_for(*r.surprise_pct) : QString()));
-            const QString move = r.actual_move_pct
-                                     ? QString("%1%2").arg(opt_pct(r.actual_move_pct, 2),
-                                                           r.direction_hit.has_value()
-                                                               ? (*r.direction_hit ? "  ✓" : "  ✗")
-                                                               : "")
-                                     : ui::formatting::placeholder();
-            track_table_->setItem(row, 7, cell(move, r.actual_move_pct ? color_for(*r.actual_move_pct)
-                                                                       : QString()));
-            // Signed error, predicted minus actual: the sign says which way the
-            // estimate was wrong, which a bare magnitude would throw away.
-            QString err = ui::formatting::placeholder();
-            QString err_color;
-            if (r.predicted_move_pct && r.actual_move_pct) {
-                const double e = *r.predicted_move_pct - *r.actual_move_pct;
-                err = QString("%1%2 pp").arg(e >= 0 ? "+" : "", QString::number(e, 'f', 2));
-                // Coloured by SIZE, not direction — a small error is good news
-                // whichever side it fell on.
-                err_color = std::abs(e) <= 2.0   ? ui::colors::POSITIVE()
-                            : std::abs(e) <= 5.0 ? ui::colors::WARNING()
-                                                 : ui::colors::NEGATIVE();
-                errors.append(std::abs(e));
-            }
-            track_table_->setItem(row, 8, cell(err, err_color));
-            if (r.direction_hit.has_value()) {
-                ++calls;
-                if (*r.direction_hit) ++hits;
-            }
-        }
-        ++row;
-    }
-    fit_table_height(track_table_);
-
-    if (latest.isEmpty()) {
-        track_note_->setText(QStringLiteral(
-            "Nothing recorded yet. This table fills as prints go by: each visit to this tab "
-            "before a report writes down what the scorecard said, and the outcome is filled in "
-            "once the reaction settles. It cannot be backfilled — the consensus and revision "
-            "numbers behind a past verdict are a live snapshot with no history, so what this "
-            "panel would have said last quarter is genuinely unrecoverable."));
-        return;
-    }
-    QStringList bits;
-    bits << QString("%1 report%2 recorded").arg(latest.size()).arg(latest.size() == 1 ? "" : "s");
-    if (calls > 0) {
-        // HOLD is excluded on purpose: it is not a directional call, and
-        // counting it either way would score the engine for declining to
-        // take a side.
-        bits << QString("%1 of %2 directional calls went the way they leaned")
-                    .arg(hits).arg(calls);
-    }
-    if (!errors.isEmpty()) {
-        double sum = 0;
-        for (const double e : errors) sum += e;
-        bits << QString("average miss %1 pp over %2")
-                    .arg(QString::number(sum / errors.size(), 'f', 1))
-                    .arg(errors.size());
-    }
-    track_note_->setText(
-        bits.join(QStringLiteral(" · ")) +
-        QStringLiteral(". PREDICTED is the engine's signed estimate for the next-session move — "
-                       "the composite's lean scaled by this name's typical move size and by how "
-                       "much of the scorecard had data. BAND is that typical size, unsigned. "
-                       "ERROR is predicted minus actual in percentage points, coloured by how "
-                       "big the miss was rather than which way it fell."));
 }
 
 void EquityEarningsTab::fill_scorecard(const EarningsVerdict& v) {

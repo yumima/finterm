@@ -59,11 +59,12 @@ class EquityEarningsTab : public QWidget {
     void fill_growth(const services::equity::EarningsAnalysis& a);
     void fill_scorecard(const services::equity::EarningsVerdict& v);
     /// Write today's reading of the scorecard to the ledger, and settle any
-    /// earlier readings whose print has since happened.
+    /// earlier readings whose print has since happened. Nothing on this tab
+    /// displays the ledger — it exists so the prediction can eventually be
+    /// checked against enough outcomes to mean something, which is a question
+    /// no panel can answer today.
     void record_and_resolve(const services::equity::EarningsAnalysis& a,
                             const services::equity::EarningsVerdict& v);
-    void fill_track_record(const services::equity::EarningsAnalysis& a);
-    QWidget* build_track_record_panel();
 
     QString current_symbol_;
     QString currency_ = QStringLiteral("USD");
@@ -119,8 +120,6 @@ class EquityEarningsTab : public QWidget {
     QTableWidget* revisions_table_ = nullptr;
     QTableWidget* estimates_table_ = nullptr;
     QTableWidget* growth_table_ = nullptr;
-    QTableWidget* track_table_ = nullptr;
-    QLabel* track_note_ = nullptr;
 
     // Shown instead of the panels when the symbol has no earnings at all
     // (ETFs, indices, funds) or the fetch failed.
