@@ -2932,17 +2932,27 @@ def get_extended_hours_quotes(symbols):
             # 00:10 ET Thursday this lands on Wed 16:00 ET (yesterday's
             # close) — which is exactly the right denominator for
             # Wednesday's post-market or Thursday's pre-market.
+            # Bar timestamps travel with the prices. A consumer cannot tell a
+            # sound pairing from a stale one by looking at the numbers — the
+            # dashboard tried comparing `regular` against its own quote feed
+            # and ended up hiding every symbol with a big after-hours move,
+            # because that feed rolls over to extended-hours prices and the
+            # "mismatch" it measured WAS the move. Times are checkable; prices
+            # are not.
             regular = None
+            regular_ts = None
             mask_reg = idx <= regular_end_utc
             if bool(mask_reg.any()):
                 v = hist["Close"][mask_reg].iloc[-1]
                 if not _pd.isna(v):
                     regular = float(v)
+                    regular_ts = int(idx[mask_reg][-1].timestamp())
 
             # post-market: bars strictly after regular_end whose ET date
             # equals regular_end's ET date (i.e. the same trading day —
             # we don't want tomorrow's pre-market to bleed in as "post").
             post = None
+            post_ts = None
             mask_post = idx > regular_end_utc
             if bool(mask_post.any()):
                 idx_et = idx[mask_post].tz_convert(et)
@@ -2952,10 +2962,12 @@ def get_extended_hours_quotes(symbols):
                     v = close_series[same_day].iloc[-1]
                     if not _pd.isna(v):
                         post = float(v)
+                        post_ts = int(idx[mask_post][same_day][-1].timestamp())
 
             # pre-market: bars in TODAY's [04:00, 09:30) ET window.
             # Only populated when we're currently past 04:00 ET today.
             pre = None
+            pre_ts = None
             mask_pre = (idx >= pre_open_utc) & (idx < open_utc)
             if bool(mask_pre.any()):
                 idx_et = idx[mask_pre].tz_convert(et)
@@ -2965,20 +2977,21 @@ def get_extended_hours_quotes(symbols):
                     v = close_series[same_day].iloc[-1]
                     if not _pd.isna(v):
                         pre = float(v)
+                        pre_ts = int(idx[mask_pre][same_day][-1].timestamp())
 
             # Pick the relevant extended-hours price for display:
             # match current session; otherwise show most recently
             # observed extended-hours print (post if both exist).
             if session == "PRE" and pre is not None:
-                ext = pre
+                ext, ext_ts = pre, pre_ts
             elif session == "POST" and post is not None:
-                ext = post
+                ext, ext_ts = post, post_ts
             elif post is not None:
-                ext = post
+                ext, ext_ts = post, post_ts
             elif pre is not None:
-                ext = pre
+                ext, ext_ts = pre, pre_ts
             else:
-                ext = None
+                ext, ext_ts = None, None
 
             ext_chg = None
             ext_pct = None
@@ -2994,6 +3007,10 @@ def get_extended_hours_quotes(symbols):
                 "ext_price": ext,
                 "ext_change": ext_chg,
                 "ext_change_pct": ext_pct,
+                "regular_ts": regular_ts,
+                "pre_market_ts": pre_ts,
+                "post_market_ts": post_ts,
+                "ext_ts": ext_ts,
                 "session": session,
                 # name/currency are no longer fetched — they required
                 # the per-symbol Ticker.info call we just removed. The
@@ -3045,6 +3062,8 @@ def _empty_ext_row(sym, session):
         "symbol": sym, "regular": None,
         "pre_market": None, "post_market": None,
         "ext_price": None, "ext_change": None, "ext_change_pct": None,
+        "regular_ts": None, "pre_market_ts": None, "post_market_ts": None,
+        "ext_ts": None,
         "session": session, "currency": "", "name": sym,
     }
 

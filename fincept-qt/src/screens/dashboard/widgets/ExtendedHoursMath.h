@@ -2,6 +2,7 @@
 #pragma once
 #include <QJsonObject>
 #include <QLatin1String>
+#include <QtGlobal>
 #include <QString>
 
 #include <cmath>
@@ -19,6 +20,8 @@ struct ExtQuote {
     double price = 0;      // the extended-hours print
     double regular = 0;    // the close it is measured against
     bool   from_pre = false;
+    qint64 regular_ts = 0; // when each bar printed; 0 when the daemon didn't say
+    qint64 ext_ts = 0;
 };
 
 inline std::optional<double> json_num(const QJsonObject& o, const char* key) {
@@ -64,19 +67,36 @@ inline std::optional<ExtQuote> quote_from_row(const QJsonObject& row, bool in_pr
     // answer but the opposite one.
     q.pct = (*ext - *regular) / *regular * 100.0;
     q.from_pre = in_pre && pre.has_value();
+    const auto reg_ts = json_num(row, "regular_ts");
+    const auto ext_ts = json_num(row, q.from_pre ? "pre_market_ts" : "post_market_ts");
+    q.regular_ts = reg_ts ? static_cast<qint64>(*reg_ts) : 0;
+    q.ext_ts = ext_ts ? static_cast<qint64>(*ext_ts) : 0;
     return q;
 }
 
-/// Whether a quote was measured against the same close the row is showing.
+/// Whether the two prices in a quote can honestly be compared.
 ///
-/// When the daemon's reference and the quote feed's last price disagree by
-/// more than a rounding difference they are describing different sessions, and
-/// the percentage between them is a multi-day return wearing an after-hours
-/// label — worse than blank, because it looks like an answer.
-inline bool reference_agrees(const ExtQuote& q, double row_price, double tolerance) {
-    if (row_price <= 0 || q.regular <= 0)
-        return true;  // nothing to check it against; don't suppress on a guess
-    return std::abs(q.regular - row_price) / row_price <= tolerance;
+/// Checked on TIME, deliberately. An earlier version of this guard compared
+/// the daemon's close against the price the row was quoting and suppressed the
+/// pair when they differed by more than a few percent. That premise was wrong:
+/// the quote feed rolls over to extended-hours prices, so once a stock had
+/// moved after the bell its row price WAS the extended print, and the
+/// "mismatch" the guard measured was the after-hours move itself. It hid every
+/// symbol that moved — the exact rows the column exists for, and only those.
+///
+/// Timestamps can't be fooled that way. The extended print has to come after
+/// the close it is measured against, and that close has to be the most recent
+/// one rather than a bar left over from days ago. A payload with no times is
+/// not judged: silence is not evidence of a bad pairing.
+inline bool pairing_is_sound(const ExtQuote& q, qint64 now_secs, int max_close_age_days = 5) {
+    if (q.regular_ts <= 0 || q.ext_ts <= 0)
+        return true;
+    if (q.ext_ts <= q.regular_ts)
+        return false;
+    // Five days spans a long weekend with a holiday attached; beyond that the
+    // "close" is from a different week and the percentage is a multi-day
+    // return, not an after-hours move.
+    return (now_secs - q.regular_ts) <= static_cast<qint64>(max_close_age_days) * 86400;
 }
 
 } // namespace fincept::screens::widgets::exthours

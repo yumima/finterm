@@ -17,6 +17,12 @@ using namespace fincept::screens::widgets::exthours;
 namespace {
 
 /// Captured verbatim: AAPL reported and sold off, AMZN reported and rallied.
+// Real bar times from the same capture: the close printed at 16:00 ET and the
+// last post-market bar at 19:59 ET on 30 Jul 2026.
+constexpr qint64 kClose30Jul = 1785441600;   // 16:00 ET
+constexpr qint64 kPost30Jul  = 1785455940;   // 19:59 ET
+constexpr qint64 kNow        = 1785470000;   // shortly after, same evening
+
 QJsonObject row(const QString& symbol, double regular, double pre, double post,
                 const QString& session = QStringLiteral("CLOSED")) {
     QJsonObject o;
@@ -25,6 +31,9 @@ QJsonObject row(const QString& symbol, double regular, double pre, double post,
     o.insert("pre_market", pre);
     o.insert("post_market", post);
     o.insert("session", session);
+    o.insert("regular_ts", static_cast<qint64>(kClose30Jul));
+    o.insert("post_market_ts", static_cast<qint64>(kPost30Jul));
+    o.insert("pre_market_ts", static_cast<qint64>(kClose30Jul - 8 * 3600));
     return o;
 }
 
@@ -115,13 +124,50 @@ class TestExtendedHoursMath : public QObject {
         QVERIFY(!quote_from_row(zero_close, false).has_value());
     }
 
-    // A reference from a different session must not reach the screen.
-    void a_mismatched_reference_is_rejected() {
-        const auto a = *quote_from_row(aapl(), false);
-        QVERIFY(reference_agrees(a, 333.43, 0.03));    // the row's own close
-        QVERIFY(!reference_agrees(a, 294.45, 0.03));   // a stale multi-day close
-        // No price to compare against is not evidence of a mismatch.
-        QVERIFY(reference_agrees(a, 0.0, 0.03));
+    // THE regression this guard exists to prevent. A previous version compared
+    // the daemon's close against the price the row was quoting and dropped the
+    // pair when they differed. But the quote feed rolls over to extended-hours
+    // prices, so for a stock that moved after the bell the row price IS the
+    // extended print — AAPL's row read $312.33 against a $334.16 close — and
+    // the "mismatch" being measured was the after-hours move itself. The guard
+    // hid every symbol that moved, and only those.
+    void a_big_move_is_never_suppressed_for_being_a_big_move() {
+        for (const auto& r : {aapl(), amzn()}) {
+            const auto q = quote_from_row(r, false);
+            QVERIFY(q.has_value());
+            QVERIFY2(pairing_is_sound(*q, kNow),
+                     qPrintable(QString("suppressed a %1% move").arg(q->pct)));
+        }
+    }
+
+    // What a real mismatch looks like: the close is from days ago, so the
+    // percentage against it is a multi-day return, not an after-hours move.
+    void a_stale_close_is_rejected() {
+        QJsonObject o = aapl();
+        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 9 * 86400));
+        const auto q = quote_from_row(o, false);
+        QVERIFY(q.has_value());
+        QVERIFY(!pairing_is_sound(*q, kNow));
+    }
+
+    // The extended print must come after the close it is measured against.
+    void an_extended_print_before_the_close_is_rejected() {
+        QJsonObject o = aapl();
+        o.insert("post_market_ts", static_cast<qint64>(kClose30Jul - 3600));
+        const auto q = quote_from_row(o, false);
+        QVERIFY(q.has_value());
+        QVERIFY(!pairing_is_sound(*q, kNow));
+    }
+
+    // Silence is not evidence of a bad pairing: a payload without times is
+    // shown rather than dropped.
+    void a_payload_without_timestamps_is_not_judged() {
+        QJsonObject o = aapl();
+        o.remove("regular_ts");
+        o.remove("post_market_ts");
+        const auto q = quote_from_row(o, false);
+        QVERIFY(q.has_value());
+        QVERIFY(pairing_is_sound(*q, kNow));
     }
 };
 

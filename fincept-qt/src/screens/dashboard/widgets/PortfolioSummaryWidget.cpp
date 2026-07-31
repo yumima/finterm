@@ -36,13 +36,6 @@ static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
 // quote stream feeding the other columns.
 static constexpr int kAftRefreshMs = 60'000;
 
-// How far the daemon's regular-close reference may sit from the price the row
-// is quoting before the extended-hours move is treated as measured against a
-// different session and suppressed. Generous enough to absorb a consolidated-
-// versus-last-trade difference, tight enough that a stale reference — which
-// turns the column into a multi-day return — cannot get through.
-static constexpr double kAftReferenceTolerance = 0.03;
-
 namespace {
 
 /// The holdings table's columns, in order, as ONE definition shared by the
@@ -515,7 +508,9 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 // header — this arithmetic shipped inverted once and is not
                 // something to keep a second copy of.
                 const auto q = exthours::quote_from_row(o, current_session() == ExtSession::Pre);
-                if (!q)
+                // Rejected here rather than at render: an unsound pairing is
+                // not a value to be displayed carefully, it is not a value.
+                if (!q || !exthours::pairing_is_sound(*q, QDateTime::currentSecsSinceEpoch()))
                     continue;
                 fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
                                            q->from_pre ? QStringLiteral("PRE")
@@ -678,24 +673,13 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         QString aft_color = QString(ui::colors::TEXT_SECONDARY);
         QString aft_tip = QStringLiteral("No extended-hours trades in this name since the "
                                          "last close.");
+        // Soundness was settled when the quote was parsed, so anything still
+        // in the map is displayable. Nothing here compares the extended price
+        // against the row's own price: this feed rolls over to extended-hours
+        // pricing, so on exactly the symbols that moved, the two are the same
+        // number and any "consistency" test between them measures the move.
         const auto it = aft_.constFind(h.symbol);
-        // The percentage is only meaningful if it was measured from the same
-        // close this row is quoting. When the daemon's reference and the quote
-        // feed's last price disagree by more than a rounding difference, the
-        // two are describing different sessions and the percentage is a
-        // multi-day return wearing an after-hours label — which is worse than
-        // showing nothing, because it looks like an answer.
-        const bool reference_ok =
-            it == aft_.constEnd() ||
-            exthours::reference_agrees(exthours::ExtQuote{it->pct, it->price, it->regular, false},
-                                       price, kAftReferenceTolerance);
-        if (it != aft_.constEnd() && !reference_ok) {
-            aft_tip = QString("Not shown: the extended-hours quote is measured against a $%1 "
-                              "close, but this row is quoting $%2. They are different sessions, "
-                              "so the percentage between them would not be an after-hours move.")
-                          .arg(it->regular, 0, 'f', 2)
-                          .arg(price, 0, 'f', 2);
-        } else if (it != aft_.constEnd()) {
+        if (it != aft_.constEnd()) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")

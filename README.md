@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`29777455f`](https://github.com/yumima/finterm/commit/29777455f) Dashboard: pin the AFT% sign with a test against real daemon data
 - [`329a3f0bb`](https://github.com/yumima/finterm/commit/329a3f0bb) Dashboard: AFT% was pairing pre-market with the wrong close
 - [`8548fd0c7`](https://github.com/yumima/finterm/commit/8548fd0c7) Dashboard: stop the AFT% column flickering symbols in and out
 - [`286e210a0`](https://github.com/yumima/finterm/commit/286e210a0) Dashboard: stop AFT% blanking itself during the trading day
