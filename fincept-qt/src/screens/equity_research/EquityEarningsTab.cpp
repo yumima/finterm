@@ -38,6 +38,13 @@ QFrame* make_panel(const QString& title, const QString& accent_color, QVBoxLayou
     vl->setSpacing(12);
 
     auto* hdr = new QWidget(nullptr);
+    // Pinned to its own height. A plain QWidget stretches vertically, so in any
+    // panel whose body doesn't fill its row the header quietly absorbs the
+    // slack — which shows up as a growing gap between the title and the accent
+    // rule under it, since that rule is the header's own bottom border. It was
+    // a full row's height on SIGNAL BREAKDOWN once that panel started sharing
+    // a row with the quarters table.
+    hdr->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     hdr->setStyleSheet(QString("background:transparent; border:0; border-bottom:2px solid %1;").arg(accent_color));
     auto* hl = new QHBoxLayout(hdr);
     hl->setContentsMargins(0, 0, 0, 8);
@@ -485,6 +492,10 @@ QWidget* EquityEarningsTab::build_scorecard() {
     score_rows_layout_->setContentsMargins(0, 0, 0, 0);
     score_rows_layout_->setSpacing(6);
     body->addLayout(score_rows_layout_);
+    // Slack goes to the bottom rather than between the legs. Every other panel
+    // here already ends this way; this one didn't, which is why it had space to
+    // misplace in the first place.
+    body->addStretch();
     return panel;
 }
 

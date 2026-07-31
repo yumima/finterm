@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`17f6c9a74`](https://github.com/yumima/finterm/commit/17f6c9a74) ER Earnings: give the chart the full width, put the breakdown beside the table
 - [`443d815da`](https://github.com/yumima/finterm/commit/443d815da) ER Earnings: find the new information — realised volatility before the print
 - [`163a043ed`](https://github.com/yumima/finterm/commit/163a043ed) ER Earnings: pool the training data, and let it correct me
 - [`4b6953fb9`](https://github.com/yumima/finterm/commit/4b6953fb9) ER Earnings: a model fitted on the real pairs, and what it found
