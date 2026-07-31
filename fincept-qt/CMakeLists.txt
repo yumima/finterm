@@ -1434,7 +1434,6 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EarningsReactionChart.cpp
-    src/screens/equity_research/SignalOutcomeChart.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityEarningsTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
@@ -1674,7 +1673,6 @@ set_source_files_properties(
     src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EarningsReactionChart.cpp
-    src/screens/equity_research/SignalOutcomeChart.cpp
     src/screens/equity_research/EquityEarningsTab.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp

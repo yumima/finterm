@@ -452,12 +452,6 @@ QWidget* EquityEarningsTab::build_summary_row() {
 }
 
 QWidget* EquityEarningsTab::build_scorecard() {
-    auto* row = new QWidget(nullptr);
-    row->setStyleSheet("background:transparent;");
-    auto* hl = new QHBoxLayout(row);
-    hl->setContentsMargins(0, 0, 0, 0);
-    hl->setSpacing(10);
-
     QVBoxLayout* body = nullptr;
     auto* panel = make_panel("SIGNAL BREAKDOWN", "#a855f7", &body);
 
@@ -465,42 +459,88 @@ QWidget* EquityEarningsTab::build_scorecard() {
     score_rows_layout_->setContentsMargins(0, 0, 0, 0);
     score_rows_layout_->setSpacing(6);
     body->addLayout(score_rows_layout_);
-    // 4 / 5, matching the quarters-table / reaction-chart row below, so the
-    // chart in this row sits directly above the one in that row and a quarter
-    // can be read straight down through both.
-    hl->addWidget(panel, 4);
-
-    QVBoxLayout* chart_body = nullptr;
-    auto* chart_panel = make_panel("SIGNAL vs OUTCOME · PREDICTED AGAINST REALISED", "#a855f7",
-                                   &chart_body);
-    outcome_chart_ = new SignalOutcomeChart;
-    chart_body->addWidget(outcome_chart_, 1);
-
-    outcome_note_ = new QLabel;
-    outcome_note_->setWordWrap(true);
-    outcome_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                     .arg(ui::colors::TEXT_TERTIARY()));
-    chart_body->addWidget(outcome_note_);
-    hl->addWidget(chart_panel, 5);
-
-    return row;
+    return panel;
 }
 
-void EquityEarningsTab::fill_outcome_chart(const EarningsAnalysis& a, const EarningsVerdict& v) {
-    const auto recorded = EarningsSignalRepository::instance().for_symbol(a.symbol);
-    outcome_chart_->set_data(a, recorded, v);
+// ── The signal's estimates, drawn on the reaction chart ──────────────────────
+// Not a panel of its own. The realised move a prediction is judged against is
+// already that chart's line, so a separate chart had to draw the same series
+// twice in order to compare it with itself.
+void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const EarningsVerdict& v) {
+    auto series = services::equity::reconstruct_predictions(a);
 
-    // The dotted stretch needs explaining every time, not once in a tooltip:
-    // a reader comparing two lines will otherwise take the muted one for a
-    // weak signal rather than a partially-blind one.
-    const QString base = QStringLiteral(
-        "Quarters before today are rebuilt from the backward legs alone — surprise record, "
-        "reaction history, run-up — because consensus and revisions are published without "
-        "history and cannot be recovered. Those run through the same formula with the missing "
-        "legs counted absent, so they predict smaller moves than a live reading will. Solid "
-        "from the first estimate actually recorded before a print.");
-    const QString stats = outcome_chart_->summary();
-    outcome_note_->setText(stats.isEmpty() ? base : stats + QStringLiteral(". ") + base);
+    // A reading genuinely written down before a print replaces the
+    // reconstruction for that quarter. Matched on the calendar date in market
+    // time — Yahoo moves a scheduled placeholder to the announcement time once
+    // a company reports, so the raw seconds never agree.
+    const QTimeZone et("America/New_York");
+    auto et_date = [&et](qint64 ts) {
+        return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
+    };
+    int recorded_pairs = 0;
+    for (const auto& r : EarningsSignalRepository::instance().for_symbol(a.symbol)) {
+        if (!r.predicted_move_pct)
+            continue;
+        for (auto& q : series) {
+            if (et_date(q.timestamp) != et_date(r.report_ts))
+                continue;
+            q.predicted_move_pct = r.predicted_move_pct;
+            q.reconstructed = false;
+            ++recorded_pairs;
+            break;
+        }
+    }
+
+    // The coming print gets the live estimate, on the projected column. Its
+    // timestamp is taken from the history row rather than next.timestamp so it
+    // matches the column the chart actually drew.
+    if (v.predicted_move_pct) {
+        for (const auto& p : a.history) {
+            if (!p.is_estimate)
+                continue;
+            services::equity::QuarterPrediction q;
+            q.timestamp = p.timestamp;
+            q.predicted_move_pct = v.predicted_move_pct;
+            q.reconstructed = false;
+            series.append(q);
+            break;
+        }
+    }
+    reaction_chart_->set_predictions(series);
+
+    // Say what the dotted line is every time. A reader comparing two lines
+    // will otherwise read the muted one as a weak signal rather than a
+    // partially-blind one.
+    int pairs = 0, hits = 0;
+    double abs_err = 0;
+    for (const auto& q : series) {
+        if (!q.predicted_move_pct || !q.actual_move_pct)
+            continue;
+        ++pairs;
+        abs_err += std::abs(*q.predicted_move_pct - *q.actual_move_pct);
+        // Only graded where the estimate committed to a direction; a near-zero
+        // prediction is not a call, and counting it would manufacture a hit
+        // rate out of noise.
+        if (std::abs(*q.predicted_move_pct) >= 0.25 &&
+            (*q.predicted_move_pct > 0) == (*q.actual_move_pct > 0))
+            ++hits;
+    }
+    QString text = QStringLiteral(
+        "The dotted line is what the signal predicted for each print. Quarters before today are "
+        "rebuilt from the backward legs alone — surprise record, reaction history, run-up — "
+        "because consensus and revisions are published without history; they run through the "
+        "same formula with the missing legs counted absent, so they predict smaller moves than "
+        "a live reading will. It turns solid between prints whose estimate was genuinely "
+        "recorded beforehand.");
+    if (pairs > 0) {
+        text = QString("Direction right on %1 of %2 prints · mean miss %3 pp%4. ")
+                   .arg(hits).arg(pairs)
+                   .arg(QString::number(abs_err / pairs, 'f', 1))
+                   .arg(recorded_pairs > 0 ? QString(" · %1 recorded live").arg(recorded_pairs)
+                                           : QStringLiteral(" · all reconstructed")) +
+               text;
+    }
+    prediction_note_->setText(text);
 }
 
 QWidget* EquityEarningsTab::build_history_panel() {
@@ -530,7 +570,7 @@ QWidget* EquityEarningsTab::build_history_panel() {
 
     // ── Right: the same quarters as a curve ──────────────────────────────────
     QVBoxLayout* chart_body = nullptr;
-    auto* chart_panel = make_panel("PAST · EARNINGS CHANGE vs NEXT-DAY MOVE", ui::colors::POSITIVE(), &chart_body);
+    auto* chart_panel = make_panel("PAST · PREDICTED vs ACTUAL NEXT-DAY MOVE", ui::colors::POSITIVE(), &chart_body);
 
     auto* switch_row = new QHBoxLayout;
     switch_row->setSpacing(4);
@@ -564,6 +604,13 @@ QWidget* EquityEarningsTab::build_history_panel() {
     correlation_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
                                          .arg(ui::colors::TEXT_TERTIARY()));
     chart_body->addWidget(correlation_note_);
+
+    prediction_note_ = new QLabel;
+    prediction_note_->setWordWrap(true);
+    prediction_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; "
+                                            "border:0; border-top:1px solid %2; padding-top:6px;")
+                                        .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
+    chart_body->addWidget(prediction_note_);
 
     hl->addWidget(chart_panel, 5);
     return row;
@@ -802,7 +849,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
 
     fill_scorecard(verdict);
     record_and_resolve(a, verdict);
-    fill_outcome_chart(a, verdict);
+    fill_predictions(a, verdict);
     fill_history(a, verdict);
     fill_trend(a);
     fill_revisions(a);

@@ -1,7 +1,6 @@
 // src/screens/equity_research/EquityEarningsTab.h
 #pragma once
 #include "screens/equity_research/EarningsReactionChart.h"
-#include "screens/equity_research/SignalOutcomeChart.h"
 #include "services/equity/EarningsSignal.h"
 #include "services/equity/EquityResearchModels.h"
 #include "services/query/QueryStore.h"
@@ -105,12 +104,6 @@ class EquityEarningsTab : public QWidget {
     QVBoxLayout* score_rows_layout_ = nullptr;
     QLabel* caveats_label_ = nullptr;
 
-    // Shares the scorecard's row and the reaction chart's column: what the
-    // signal said before each print, against what the print did.
-    SignalOutcomeChart* outcome_chart_ = nullptr;
-    QLabel* outcome_note_ = nullptr;
-    void fill_outcome_chart(const services::equity::EarningsAnalysis& a,
-                            const services::equity::EarningsVerdict& v);
 
     QTableWidget* history_table_ = nullptr;
     QLabel* history_summary_ = nullptr;
@@ -121,6 +114,10 @@ class EquityEarningsTab : public QWidget {
     EarningsReactionChart* reaction_chart_ = nullptr;
     QHash<services::equity::ReactionMetric, QPushButton*> metric_buttons_;
     QLabel* correlation_note_ = nullptr;
+    // Explains the dotted prediction line drawn on the same chart.
+    QLabel* prediction_note_ = nullptr;
+    void fill_predictions(const services::equity::EarningsAnalysis& a,
+                          const services::equity::EarningsVerdict& v);
     services::equity::ReactionMetric selected_metric_ = services::equity::ReactionMetric::QoQ;
     void set_metric(services::equity::ReactionMetric m);
     void fill_correlations(const services::equity::EarningsAnalysis& a);

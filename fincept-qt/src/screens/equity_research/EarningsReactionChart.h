@@ -16,6 +16,14 @@ namespace fincept::screens {
 /// 7% price move share no natural axis — so the chart shows *co-movement*, not
 /// magnitude between series. Both are labelled with their own range.
 ///
+/// A second, dotted line carries what the pre-earnings signal predicted for
+/// each print. It shares the price axis with the reaction line — both measure
+/// the same session's move — so the gap between them is the error, read
+/// without a second chart. It lives here rather than in a panel of its own
+/// precisely because the realised move it is compared against is already this
+/// chart's line; drawing that series twice to compare it with itself was the
+/// whole problem with doing it separately.
+///
 /// Deliberately QPainter, like every other chart in this app: QOpenGLWidget
 /// spawns duplicate xdg_toplevels under Mutter.
 class EarningsReactionChart : public QWidget {
@@ -27,6 +35,13 @@ class EarningsReactionChart : public QWidget {
     /// oldest → newest, left to right.
     void set_history(const QVector<services::equity::EarningsPoint>& history);
     void set_metric(services::equity::ReactionMetric m);
+    /// The signal's own estimate for each print, drawn against the realised
+    /// move on the SAME axis — both are a percentage move on the same session,
+    /// so the vertical gap between the two lines is the error and reads
+    /// directly. Matched to columns by timestamp; quarters without an estimate
+    /// simply have no point. Dotted where the estimate was rebuilt after the
+    /// fact, solid between two that were recorded before their prints.
+    void set_predictions(const QVector<services::equity::QuarterPrediction>& predictions);
     services::equity::ReactionMetric metric() const { return metric_; }
 
   protected:
@@ -44,6 +59,10 @@ class EarningsReactionChart : public QWidget {
         // mistaken for settled history.
         bool projected = false;
         std::optional<double> live_move;
+        // The signal's estimate for this print, and whether it was rebuilt
+        // afterwards rather than recorded before.
+        std::optional<double> predicted;
+        bool predicted_reconstructed = true;
     };
 
     QVector<Column> columns() const;
@@ -53,6 +72,7 @@ class EarningsReactionChart : public QWidget {
     static double axis_extent(const QVector<double>& values);
 
     QVector<services::equity::EarningsPoint> history_;   // oldest → newest
+    QVector<services::equity::QuarterPrediction> predictions_;
     services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::QoQ;
 };
 
