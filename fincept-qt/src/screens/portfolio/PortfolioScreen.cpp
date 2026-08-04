@@ -1363,12 +1363,23 @@ QWidget* PortfolioScreen::build_main_view() {
         }
     });
     connect(order_panel_, &PortfolioOrderPanel::sell_submitted, this, [this]() {
-        auto* h = find_holding(selected_symbol_);
-        if (!h)
+        // This used to require a focused holding and silently did nothing
+        // without one ("OPEN SELL ORDER" appeared dead while BUY worked).
+        // The dialog now owns symbol choice; a focused row just pre-selects.
+        //
+        // During a portfolio switch current_summary_ still holds the OLD
+        // portfolio's holdings until on_summary_loaded — building the dialog
+        // from it would record a sell against the wrong portfolio.
+        if (!summary_loaded_)
             return;
-        SellAssetDialog dlg(h->symbol, h->quantity, this);
+        if (current_summary_.holdings.isEmpty()) {
+            QMessageBox::information(this, "Sell Asset", "This portfolio has no holdings to sell.");
+            return;
+        }
+        SellAssetDialog dlg(current_summary_.holdings, selected_symbol_, this);
         if (dlg.exec() == QDialog::Accepted) {
-            services::PortfolioService::instance().sell_asset(selected_id_, h->symbol, dlg.quantity(), dlg.price());
+            services::PortfolioService::instance().sell_asset(selected_id_, dlg.symbol(), dlg.quantity(),
+                                                              dlg.price());
         }
     });
 

@@ -76,18 +76,29 @@ class AddAssetDialog : public QDialog {
     bool selecting_ = false; // guard against recursive text-changed
 };
 
-/// Dialog for selling an asset.
+/// Dialog for selling an asset. Takes the whole holdings list so it can open
+/// even when no row is focused — the symbol combo picks which position to
+/// sell, and @p preselect_symbol pre-selects the focused row when there is
+/// one. (The order panel's SELL used to require a prior row selection and
+/// silently did nothing without one, while BUY always opened its dialog.)
 class SellAssetDialog : public QDialog {
     Q_OBJECT
   public:
-    explicit SellAssetDialog(const QString& symbol, double held_qty, QWidget* parent = nullptr);
+    explicit SellAssetDialog(const QVector<portfolio::HoldingWithQuote>& holdings,
+                             const QString& preselect_symbol = {}, QWidget* parent = nullptr);
 
+    QString symbol() const;
     double quantity() const;
     double price() const;
 
   private:
+    double held_qty() const;
+
+    QComboBox* symbol_cb_ = nullptr;
+    QLabel* held_label_ = nullptr;
     QLineEdit* quantity_edit_ = nullptr;
     QLineEdit* price_edit_ = nullptr;
+    QVector<double> held_qtys_; // parallel to symbol_cb_ items
 };
 
 /// Dialog for editing an existing transaction.

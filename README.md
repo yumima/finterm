@@ -2,23 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-07-31)
+## Today's commits (2026-08-04)
 
 Latest first.
 
-- [`17f6c9a74`](https://github.com/yumima/finterm/commit/17f6c9a74) ER Earnings: give the chart the full width, put the breakdown beside the table
-- [`443d815da`](https://github.com/yumima/finterm/commit/443d815da) ER Earnings: find the new information — realised volatility before the print
-- [`163a043ed`](https://github.com/yumima/finterm/commit/163a043ed) ER Earnings: pool the training data, and let it correct me
-- [`4b6953fb9`](https://github.com/yumima/finterm/commit/4b6953fb9) ER Earnings: a model fitted on the real pairs, and what it found
-- [`bd7a66a8e`](https://github.com/yumima/finterm/commit/bd7a66a8e) ER Earnings: four more predictors, pickable, with the baselines that judge them
-- [`8409186d3`](https://github.com/yumima/finterm/commit/8409186d3) ER Earnings: shade the room the predictor actually had
-- [`8f1a4c19d`](https://github.com/yumima/finterm/commit/8f1a4c19d) ER Earnings: hover a quarter on the chart to see what each line said
-- [`e3c95c19b`](https://github.com/yumima/finterm/commit/e3c95c19b) ER Earnings: fold the predicted line into the reaction chart
-- [`176553449`](https://github.com/yumima/finterm/commit/176553449) ER Earnings: bring back signal vs outcome, as a curve beside the breakdown
-- [`28071e738`](https://github.com/yumima/finterm/commit/28071e738) ER Earnings: drop the SIGNAL vs OUTCOME panel
-- [`3970a544d`](https://github.com/yumima/finterm/commit/3970a544d) ER Earnings: predict the move, in numbers, and hold it to account
-- [`02f9182ad`](https://github.com/yumima/finterm/commit/02f9182ad) ER Earnings: record what the scorecard said, so it can be checked
-- [`e9ae7c042`](https://github.com/yumima/finterm/commit/e9ae7c042) ER Earnings: show the live move, and keep the panel current across a print
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

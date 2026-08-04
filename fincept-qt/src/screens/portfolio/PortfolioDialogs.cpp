@@ -521,35 +521,53 @@ double AddAssetDialog::price() const {
 
 // ── SellAssetDialog ──────────────────────────────────────────────────────────
 
-SellAssetDialog::SellAssetDialog(const QString& symbol, double held_qty, QWidget* parent) : QDialog(parent) {
+// Shared stylesheet for the small form dialogs (sell, dividend): dark form
+// fields with an accent-coloured focus ring and combo dropdown.
+static QString kFormDialogStyle(const QString& accent) {
+    return QString("QDialog { background:%1; color:%2; }"
+                   "QLabel { color:%3; font-size:12px; }"
+                   "QLineEdit, QDateEdit, QComboBox {"
+                   "  background:%4; color:%2; border:1px solid %5;"
+                   "  padding:5px 8px; font-size:12px; }"
+                   "QLineEdit:focus, QDateEdit:focus, QComboBox:focus { border-color:%6; }"
+                   "QComboBox::drop-down { border:none; }"
+                   "QComboBox QAbstractItemView { background:%4; color:%2;"
+                   "  selection-background-color:%6; }")
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE(),
+             ui::colors::BORDER_MED(), accent);
+}
+
+SellAssetDialog::SellAssetDialog(const QVector<portfolio::HoldingWithQuote>& holdings,
+                                 const QString& preselect_symbol, QWidget* parent)
+    : QDialog(parent) {
     setWindowTitle("Sell Asset");
-    setFixedSize(340, 220);
-    setStyleSheet(QString("QDialog { background:%1; color:%2; }"
-                          "QLabel { color:%3; font-size:12px; }"
-                          "QLineEdit { background:%4; color:%2; border:1px solid %5;"
-                          "  padding:6px 10px; font-size:12px; }"
-                          "QLineEdit:focus { border-color:%6; }")
-                      .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(),
-                           ui::colors::BG_BASE(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
+    setFixedSize(340, 250);
+    setStyleSheet(kFormDialogStyle(ui::colors::AMBER));
 
     auto* layout = new QVBoxLayout(this);
     layout->setSpacing(10);
     layout->setContentsMargins(20, 16, 20, 16);
 
-    auto* title = new QLabel(QString("SELL %1").arg(symbol));
+    auto* title = new QLabel("SELL ASSET");
     title->setStyleSheet(
         QString("color:%1; font-size:13px; font-weight:700; letter-spacing:1px;").arg(ui::colors::NEGATIVE()));
     layout->addWidget(title);
 
-    auto* held_label = new QLabel(QString("Currently holding: %1 shares").arg(held_qty));
-    held_label->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    layout->addWidget(held_label);
+    held_label_ = new QLabel;
+    held_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    layout->addWidget(held_label_);
 
     auto* form = new QFormLayout;
     form->setSpacing(8);
 
+    symbol_cb_ = new QComboBox;
+    for (const auto& h : holdings) {
+        symbol_cb_->addItem(h.symbol);
+        held_qtys_.push_back(h.quantity);
+    }
+    form->addRow("Symbol:", symbol_cb_);
+
     quantity_edit_ = new QLineEdit;
-    quantity_edit_->setPlaceholderText(QString("Max %1").arg(held_qty));
     form->addRow("Quantity:", quantity_edit_);
 
     price_edit_ = new QLineEdit;
@@ -579,21 +597,41 @@ SellAssetDialog::SellAssetDialog(const QString& symbol, double held_qty, QWidget
                                     "  font-size:12px; font-weight:700; }"
                                     "QPushButton:hover { background:%1; }")
                                 .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
-    connect(sell_btn, &QPushButton::clicked, this, [this, held_qty]() {
-        if (quantity() > 0 && quantity() <= held_qty && price() > 0)
+    connect(sell_btn, &QPushButton::clicked, this, [this]() {
+        if (quantity() > 0 && quantity() <= held_qty() && price() > 0)
             accept();
     });
     btn_layout->addWidget(sell_btn);
 
     layout->addLayout(btn_layout);
+
+    // Keep the "Currently holding" read-out and the Max placeholder in step
+    // with whichever symbol is picked.
+    auto sync_held = [this]() {
+        held_label_->setText(QString("Currently holding: %1 shares").arg(held_qty()));
+        quantity_edit_->setPlaceholderText(QString("Max %1").arg(held_qty()));
+    };
+    const int pre = symbol_cb_->findText(preselect_symbol);
+    if (pre >= 0)
+        symbol_cb_->setCurrentIndex(pre);
+    connect(symbol_cb_, &QComboBox::currentIndexChanged, this, sync_held);
+    sync_held();
+
     quantity_edit_->setFocus();
 }
 
+QString SellAssetDialog::symbol() const {
+    return symbol_cb_->currentText();
+}
 double SellAssetDialog::quantity() const {
     return quantity_edit_->text().toDouble();
 }
 double SellAssetDialog::price() const {
     return price_edit_->text().toDouble();
+}
+double SellAssetDialog::held_qty() const {
+    const int i = symbol_cb_->currentIndex();
+    return (i >= 0 && i < held_qtys_.size()) ? held_qtys_[i] : 0;
 }
 
 // ── ImportPortfolioDialog ────────────────────────────────────────────────────
@@ -961,24 +999,10 @@ QHash<QString, QString> SectorMappingDialog::sector_map() const {
 
 // ── AddDividendDialog ─────────────────────────────────────────────────────────
 
-static QString kDividendStyle(const QString& accent) {
-    return QString("QDialog { background:%1; color:%2; }"
-                   "QLabel { color:%3; font-size:12px; }"
-                   "QLineEdit, QDateEdit, QComboBox {"
-                   "  background:%4; color:%2; border:1px solid %5;"
-                   "  padding:5px 8px; font-size:12px; }"
-                   "QLineEdit:focus, QDateEdit:focus { border-color:%6; }"
-                   "QComboBox::drop-down { border:none; }"
-                   "QComboBox QAbstractItemView { background:%4; color:%2;"
-                   "  selection-background-color:%6; }")
-        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE(),
-             ui::colors::BORDER_MED(), accent);
-}
-
 AddDividendDialog::AddDividendDialog(const QStringList& symbols, QWidget* parent) : QDialog(parent) {
     setWindowTitle("Record Dividend");
     setFixedSize(360, 300);
-    setStyleSheet(kDividendStyle(ui::colors::CYAN));
+    setStyleSheet(kFormDialogStyle(ui::colors::CYAN));
 
     auto* layout = new QVBoxLayout(this);
     layout->setSpacing(12);
