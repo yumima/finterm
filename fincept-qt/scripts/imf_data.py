@@ -36,7 +36,7 @@ class IMFDataWrapper:
         self.base_url = "http://dataservices.imf.org/REST/SDMX_JSON.svc/"
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         })
 
         # Country mappings (simplified version based on OpenBB patterns)

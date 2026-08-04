@@ -149,7 +149,7 @@ class UNComtradeWrapper:
         self.subscription_key = subscription_key or os.environ.get("UN_COMTRADE_API_KEY", None)
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "Fincept-Terminal/1.0",
+            "User-Agent": "finterm-Terminal/1.0",
             "Accept": "application/json",
         })
 

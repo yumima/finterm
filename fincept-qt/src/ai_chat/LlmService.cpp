@@ -233,7 +233,7 @@ void LlmService::ensure_config() const {
     }
 
     // Inject default system prompt when user hasn't configured one.
-    // This tells the model it is running inside the Fincept Terminal and
+    // This tells the model it is running inside finterm and
     // should use the provided tools (navigation, market data, portfolio, etc.)
     // rather than declining requests it can actually fulfil via a tool call.
     if (system_prompt_.trimmed().isEmpty()) {

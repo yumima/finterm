@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Universe Selection
+# finterm - Strategy Engine Universe Selection
 # Dynamic security filtering and selection
 # ============================================================================
 

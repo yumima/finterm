@@ -65,7 +65,7 @@ def main() -> int:
             "download-url": url,
             "sha256": sha,
             "open-url": release_url,
-            "changelog": f"Fincept Terminal v{version} — see release notes at {release_url}",
+            "changelog": f"finterm v{version} — see release notes at {release_url}",
         }
         print(f"# {key}: {match} sha256={sha[:16]}...", file=sys.stderr, flush=True)
 

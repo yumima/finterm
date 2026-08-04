@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Algorithm Imports Compatibility Layer
+# finterm - Algorithm Imports Compatibility Layer
 # Drop-in replacement for QuantConnect's AlgorithmImports.py
 # Routes all imports to fincept_engine modules (pure Python, no .NET)
 # ============================================================================

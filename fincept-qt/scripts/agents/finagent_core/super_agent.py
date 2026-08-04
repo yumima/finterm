@@ -567,10 +567,10 @@ class SuperAgent:
 
             # Detect when Agno swallowed an API error and returned it as response text
             _ERROR_PREFIXES = (
-                "Fincept API error",
-                "Fincept API request timed out",
-                "Fincept API failed",
-                "Cannot connect to Fincept API",
+                "finterm API error",
+                "finterm API request timed out",
+                "finterm API failed",
+                "Cannot connect to finterm API",
             )
             if isinstance(content, str) and any(content.startswith(p) for p in _ERROR_PREFIXES):
                 return {

@@ -42,7 +42,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # ── Pinned toolchain enforcement ─────────────────────────────────────────────
-# Fincept Terminal ships on 3 platforms and cannot tolerate compiler-version
+# finterm ships on 3 platforms and cannot tolerate compiler-version
 # drift. These checks fail the build early with an actionable message rather
 # than letting the user hit a cryptic template error 10 minutes into compile.
 if(MSVC AND MSVC_VERSION LESS 1938)

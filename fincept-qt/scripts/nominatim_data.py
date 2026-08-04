@@ -16,7 +16,7 @@ adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, ma
 session.mount('https://', adapter)
 session.mount('http://', adapter)
 session.headers.update({
-    "User-Agent": "FinceptTerminal/4.0 (support@fincept.in)",
+    "User-Agent": "finterm/4.0 (admin@hanlexon.com)",
     "Accept-Language": "en"
 })
 

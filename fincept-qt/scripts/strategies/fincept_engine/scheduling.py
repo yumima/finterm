@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Scheduling
+# finterm - Strategy Engine Scheduling
 # Date rules, time rules, and scheduled events
 # ============================================================================
 

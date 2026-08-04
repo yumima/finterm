@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-VectorBT <-> Fincept Strategy Bridge
-Executes Fincept Engine strategies within VectorBT provider
+VectorBT <-> finterm Strategy Bridge
+Executes finterm Engine strategies within VectorBT provider
 """
 
 import sys
@@ -17,10 +17,10 @@ from fincept_strategy_runner import FinceptStrategyRunner
 
 def run_fincept_strategy(strategy_id: str, params_dict: dict) -> dict:
     """
-    Execute Fincept strategy and return VectorBT-compatible results.
+    Execute finterm strategy and return VectorBT-compatible results.
 
     Args:
-        strategy_id: Fincept strategy ID (FCT-XXXXXXXX)
+        strategy_id: finterm strategy ID (FCT-XXXXXXXX)
         params_dict: Backtest parameters
 
     Returns:

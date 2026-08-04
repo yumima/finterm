@@ -1,5 +1,5 @@
 """
-Statsmodels Wrapper for Fincept Terminal
+Statsmodels Wrapper for finterm
 
 Comprehensive wrapper for statsmodels library covering:
 - Regression models (OLS, WLS, GLS, GLSAR, RecursiveLS)

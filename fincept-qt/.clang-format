@@ -1,5 +1,5 @@
 ---
-# Fincept Terminal — clang-format configuration
+# finterm — clang-format configuration
 # Based on existing codebase style (K&R braces, 4-space indent, type-attached pointers)
 Language: Cpp
 BasedOnStyle: LLVM

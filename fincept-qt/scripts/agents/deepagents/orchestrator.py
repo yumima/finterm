@@ -2,7 +2,7 @@
 orchestrator.py — Specialist subagent prompts shared by the deepagents path.
 
 This module previously also exposed a FinceptOrchestrator prompt-loop fallback
-for non-tool-calling LLMs (Fincept hosted endpoint / Ollama). That fallback
+for non-tool-calling LLMs (finterm hosted endpoint / Ollama). That fallback
 was removed: finterm is localhost-only and the hosted endpoint isn't
 reachable. Non-tool-calling providers now return an explicit error from
 cli.py instead of silently failing on a network call.

@@ -81,9 +81,9 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     };
 
     sep();
-    fincept_label_ = mk("FINCEPT ");
-    hl->addWidget(fincept_label_);
-    branding_label_ = mk("TERMINAL");
+    fin_label_ = mk("FIN");
+    hl->addWidget(fin_label_);
+    branding_label_ = mk("TERM");
     hl->addWidget(branding_label_);
     subtitle_label_ = mk("  |  PROFESSIONAL RESEARCH DESK");
     hl->addWidget(subtitle_label_);
@@ -236,7 +236,7 @@ void ToolBar::refresh_theme() {
         if (l)
             l->setStyleSheet(QString("color:%1;%2background:transparent;").arg(c, b ? "font-weight:700;" : ""));
     };
-    lbl(fincept_label_, colors::AMBER(), true);
+    lbl(fin_label_, colors::AMBER(), true);
     lbl(branding_label_, colors::TEXT_PRIMARY(), true);
     lbl(subtitle_label_, colors::TEXT_SECONDARY());
     lbl(live_dot_, colors::POSITIVE());

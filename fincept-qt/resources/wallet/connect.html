@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fincept — Connect Wallet</title>
+  <title>finterm — Connect Wallet</title>
   <link rel="icon" href="data:,">
   <style>
     :root {
@@ -198,14 +198,14 @@
 <body>
   <main class="panel">
     <div class="header">
-      <span class="brand">Fincept Terminal</span>
+      <span class="brand">finterm</span>
       <span class="sep">/</span>
       <span class="route">Crypto Center</span>
     </div>
     <div class="body">
       <h1>Connect your Solana wallet</h1>
       <p class="lede">
-        Fincept Terminal will read your wallet's public address and balances only.
+        finterm will read your wallet's public address and balances only.
         Your private keys never leave your wallet.
       </p>
 
@@ -258,9 +258,9 @@
           body: JSON.stringify({ level: level, msg: String(msg) })
         }).catch(function() {});
       } catch (_) {}
-      if (level === "error") console.error("[FinceptWallet]", msg);
-      else if (level === "warn") console.warn("[FinceptWallet]", msg);
-      else console.log("[FinceptWallet]", msg);
+      if (level === "error") console.error("[FintermWallet]", msg);
+      else if (level === "warn") console.warn("[FintermWallet]", msg);
+      else console.log("[FintermWallet]", msg);
     }
     window.addEventListener("error", function(e) {
       logToTerminal("error", "uncaught: " + (e && e.message));
@@ -387,7 +387,7 @@
 
         statusWorking("Please sign the verification message in your wallet…");
         var message = new TextEncoder().encode(
-          "Fincept Terminal wallet-connect challenge. Nonce: " + NONCE_HEX);
+          "finterm wallet-connect challenge. Nonce: " + NONCE_HEX);
         logToTerminal("info", "calling signMessage (" + message.length + " bytes)");
         var signed = await provider.signMessage(message, "utf8");
         logToTerminal("info", "signMessage resolved; type=" +

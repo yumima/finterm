@@ -1,7 +1,7 @@
 """
 Python Strategy Backtest Engine
 
-Loads and executes QCAlgorithm-compatible Python strategies from the Fincept
+Loads and executes QCAlgorithm-compatible Python strategies from the finterm
 strategy library. Supports multi-symbol backtesting with proper portfolio tracking.
 
 Usage:

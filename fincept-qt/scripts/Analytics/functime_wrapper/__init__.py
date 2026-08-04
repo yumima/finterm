@@ -1,5 +1,5 @@
 """
-functime Wrapper for Fincept Terminal
+functime Wrapper for finterm
 
 Complete wrapper for functime library covering:
 - Forecasting models (Linear, Lasso, Ridge, ElasticNet, KNN, LightGBM + Auto versions)

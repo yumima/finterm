@@ -2,7 +2,7 @@
 Market Data Tools
 
 Provides tools for agents to fetch real-time and historical market data.
-Integrates with existing Fincept Terminal data sources.
+Integrates with existing finterm data sources.
 """
 
 import json

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fincept Engine Backtesting Provider
-Executes strategies from the 418+ Fincept Terminal strategy registry
+finterm Engine Backtesting Provider
+Executes strategies from the 418+ finterm strategy registry
 """
 
 import sys
@@ -21,8 +21,8 @@ from fincept_strategy_runner import FinceptStrategyRunner
 
 class FinceptProvider:
     """
-    Fincept Engine backtesting provider.
-    Bridges Fincept Terminal frontend to 418+ QCAlgorithm strategies.
+    finterm Engine backtesting provider.
+    Bridges finterm frontend to 418+ QCAlgorithm strategies.
     """
 
     def __init__(self):
@@ -37,12 +37,12 @@ class FinceptProvider:
             grouped.setdefault(cat, []).append({
                 'id':     s['id'],
                 'name':   s['name'],
-                'params': [],  # Fincept strategies use free-form strategy_params dict
+                'params': [],  # finterm strategies use free-form strategy_params dict
             })
         return {'success': True, 'data': {'provider': 'fincept', 'strategies': grouped}}
 
     def get_indicators(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Fincept strategies are self-contained — no separate indicator catalog."""
+        """finterm strategies are self-contained — no separate indicator catalog."""
         return {'indicators': {}}
 
     def get_command_options(self, request: Dict[str, Any]) -> Dict[str, Any]:
@@ -63,7 +63,7 @@ class FinceptProvider:
 
     def run_backtest(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute a backtest for a Fincept Engine strategy.
+        Execute a backtest for a finterm Engine strategy.
 
         Request format:
         {
@@ -105,11 +105,11 @@ class FinceptProvider:
             initial_capital = request.get("initialCapital", 100000)
             strategy_params = request.get("strategy", {}).get("parameters", {})
 
-            print(f"[Fincept Engine] Executing strategy: {strategy_info['name']}")
-            print(f"[Fincept Engine] ID: {strategy_id}")
-            print(f"[Fincept Engine] Category: {strategy_info['category']}")
-            print(f"[Fincept Engine] Symbols: {symbols}")
-            print(f"[Fincept Engine] Period: {start_date} to {end_date}")
+            print(f"[finterm Engine] Executing strategy: {strategy_info['name']}")
+            print(f"[finterm Engine] ID: {strategy_id}")
+            print(f"[finterm Engine] Category: {strategy_info['category']}")
+            print(f"[finterm Engine] Symbols: {symbols}")
+            print(f"[finterm Engine] Period: {start_date} to {end_date}")
 
             # Execute strategy
             result = self.runner.execute_strategy(
@@ -126,7 +126,7 @@ class FinceptProvider:
 
             # Format response
             if result.get("success"):
-                print(f"[Fincept Engine] Backtest completed successfully")
+                print(f"[finterm Engine] Backtest completed successfully")
                 return {
                     "success": True,
                     "message": f"Backtest completed for {strategy_info['name']}",
@@ -142,7 +142,7 @@ class FinceptProvider:
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"[Fincept Engine] Error: {e}", file=sys.stderr)
+            print(f"[finterm Engine] Error: {e}", file=sys.stderr)
             print(error_details, file=sys.stderr)
             return {
                 "success": False,

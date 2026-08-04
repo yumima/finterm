@@ -196,7 +196,7 @@ def _make_request(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dic
         url = f"{BASE_URL}{endpoint}"
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         }
 
         # Ensure JSON format is requested

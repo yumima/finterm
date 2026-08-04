@@ -1,4 +1,4 @@
-# Fincept Terminal — test suite (opt-in)
+# finterm — test suite (opt-in)
 #
 # Enable by configuring with -DFINCEPT_BUILD_TESTS=ON. Disabled by default so
 # normal dev / release builds remain unchanged. Each test is a self-contained

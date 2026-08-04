@@ -1,5 +1,5 @@
 """
-FinRL Wrapper Module for Fincept Terminal
+FinRL Wrapper Module for finterm
 =========================================
 
 Complete wrapper around the FinRL (Financial Reinforcement Learning) library.

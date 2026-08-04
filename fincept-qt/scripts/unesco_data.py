@@ -58,7 +58,7 @@ class UISWrapper:
         self.base_url = "https://api.uis.unesco.org/api/public"
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0',
+            'User-Agent': 'finterm-Terminal/1.0',
             'Accept': 'application/json',
             'Accept-Encoding': 'gzip'
         })

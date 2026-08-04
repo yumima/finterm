@@ -1,6 +1,6 @@
 """
 VisionQuant Pattern Search Engine
-Core pattern recognition engine adapted from VisionQuant-Pro for Fincept Terminal.
+Core pattern recognition engine adapted from VisionQuant-Pro for finterm.
 
 CLI Protocol:
     python engine.py search '{"symbol":"AAPL","date":"20250115","top_k":10}'

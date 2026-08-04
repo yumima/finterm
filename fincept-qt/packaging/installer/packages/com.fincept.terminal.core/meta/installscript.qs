@@ -1,4 +1,4 @@
-// installscript.qs -- Fincept Terminal QtIFW component script
+// installscript.qs -- finterm QtIFW component script
 //
 // Handles:
 //   - Platform shortcuts on install (Start Menu, Desktop, .desktop entry)
@@ -30,7 +30,7 @@
 
 function Component()
 {
-    console.log("[Fincept] Component() constructor — isInstaller=" +
+    console.log("[finterm] Component() constructor — isInstaller=" +
                 installer.isInstaller() +
                 " isUninstaller=" + installer.isUninstaller() +
                 " isUpdater=" + installer.isUpdater() +
@@ -102,7 +102,7 @@ Component.prototype.createOperations = function()
 
 function onInstallationFinished()
 {
-    console.log("[Fincept] Installation finished.");
+    console.log("[finterm] Installation finished.");
 }
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ function onInstallationFinished()
 
 function onUninstallationStarted()
 {
-    console.log("[Fincept] uninstallationStarted — prompting for user-data removal.");
+    console.log("[finterm] uninstallationStarted — prompting for user-data removal.");
 
     var answer = QMessageBox.question(
         "fincept.uninstall.data",
@@ -132,20 +132,20 @@ function onUninstallationStarted()
     );
 
     if (answer === QMessageBox.Yes) {
-        console.log("[Fincept] User chose Yes — cleaning all user data.");
+        console.log("[finterm] User chose Yes — cleaning all user data.");
         try {
             cleanUserData();
         } catch (e) {
-            console.log("[Fincept] cleanUserData threw: " + e);
+            console.log("[finterm] cleanUserData threw: " + e);
         }
     } else {
-        console.log("[Fincept] User chose No — keeping user data.");
+        console.log("[finterm] User chose No — keeping user data.");
     }
 }
 
 function onUninstallationFinished()
 {
-    console.log("[Fincept] Uninstallation finished.");
+    console.log("[finterm] Uninstallation finished.");
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ function removeDirWindows(pathFwd)
 {
     if (!pathFwd) return;
     if (!installer.fileExists(pathFwd)) {
-        console.log("[Fincept] skip (not present): " + pathFwd);
+        console.log("[finterm] skip (not present): " + pathFwd);
         return;
     }
     var win = toWin(pathFwd);
@@ -347,7 +347,7 @@ function removeDirPosix(path)
 {
     if (!path) return;
     if (!installer.fileExists(path)) {
-        console.log("[Fincept] skip (not present): " + path);
+        console.log("[finterm] skip (not present): " + path);
         return;
     }
     // Use /bin/rm with -rf so missing paths never error. Shell-wrap so the
@@ -359,7 +359,7 @@ function removeFilePosix(path)
 {
     if (!path) return;
     if (!installer.fileExists(path)) {
-        console.log("[Fincept] skip (not present): " + path);
+        console.log("[finterm] skip (not present): " + path);
         return;
     }
     runAndLog("/bin/bash", ["-c", "rm -f \"" + shellEscape(path) + "\"; exit 0"]);
@@ -386,9 +386,9 @@ function runAndLog(program, args)
     // installer.execute returns [stdout, exitCode] on success,
     // or [] (empty) if the program failed to launch.
     if (!result || result.length === 0) {
-        console.log("[Fincept] FAILED to launch: " + program + " " + args.join(" "));
+        console.log("[finterm] FAILED to launch: " + program + " " + args.join(" "));
         return;
     }
     var exitCode = result.length >= 2 ? result[1] : "?";
-    console.log("[Fincept] ran " + program + " (exit=" + exitCode + ")");
+    console.log("[finterm] ran " + program + " (exit=" + exitCode + ")");
 }

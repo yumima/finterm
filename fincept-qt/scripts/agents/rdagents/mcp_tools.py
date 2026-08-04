@@ -1,5 +1,5 @@
 """
-mcp_tools.py — Helpers for wiring the Fincept MCP server into RD-Agent loops.
+mcp_tools.py — Helpers for wiring the finterm MCP server into RD-Agent loops.
 
 Usage:
     from mcp_tools import get_mcp_toolset, start_mcp_server_process, MCP_AVAILABLE
@@ -81,7 +81,7 @@ def _find_free_port(start: int = DEFAULT_PORT) -> int:
 
 def get_mcp_toolset(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> Any:
     """
-    Return an MCPServerStreamableHTTP instance pointing at the Fincept MCP server.
+    Return an MCPServerStreamableHTTP instance pointing at the finterm MCP server.
 
     The server must already be running (use start_mcp_server_process() to launch it).
 
@@ -116,7 +116,7 @@ def start_mcp_server_process(
     wait_timeout: float = 8.0,
 ) -> tuple[subprocess.Popen | None, Any]:
     """
-    Start the Fincept MCP server as a background subprocess.
+    Start the finterm MCP server as a background subprocess.
 
     If a server is already running on the chosen port, reuses it.
 
@@ -149,7 +149,7 @@ def start_mcp_server_process(
         logger.error("mcp_server.py not found at %s", server_script)
         return None, None
 
-    logger.info("Starting Fincept MCP server on %s:%d", host, port)
+    logger.info("Starting finterm MCP server on %s:%d", host, port)
     try:
         proc = subprocess.Popen(
             [sys.executable, server_script, "--host", host, "--port", str(port)],

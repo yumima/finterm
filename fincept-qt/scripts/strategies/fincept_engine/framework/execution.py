@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Execution Models
+# finterm - Execution Models
 # Order execution strategies for the framework pipeline
 # ============================================================================
 

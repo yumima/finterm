@@ -1,5 +1,5 @@
 """
-pypme Wrapper for Fincept Terminal
+pypme Wrapper for finterm
 
 Complete wrapper for pypme library covering:
 - PME (Public Market Equivalent) calculations

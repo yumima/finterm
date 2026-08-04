@@ -1,6 +1,6 @@
 """
 AttentionCAE: Self-Attention Enhanced Convolutional Autoencoder
-Adapted from VisionQuant-Pro for Fincept Terminal integration.
+Adapted from VisionQuant-Pro for finterm integration.
 
 Architecture:
   Input: 224x224x3 (K-line chart image)

@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Execution Shim
+# finterm - Execution Shim
 # Re-exports from fincept_engine + dynamic submodule stubs
 # ============================================================================
 

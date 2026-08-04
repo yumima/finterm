@@ -1,6 +1,6 @@
 """
 Statsmodels CLI - Unified Command Line Interface for Statsmodels Analytics
-Provides a unified entry point for all statsmodels functionality in Fincept Terminal.
+Provides a unified entry point for all statsmodels functionality in finterm.
 
 Categories:
 - Time Series: ARIMA, SARIMAX, VAR, Exponential Smoothing, STL Decomposition

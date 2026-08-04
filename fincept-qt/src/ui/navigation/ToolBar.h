@@ -50,7 +50,7 @@ class ToolBar : public QWidget {
     QPushButton* data_source_btn_ = nullptr;
     QTimer* clock_timer_ = nullptr;
     QVector<QLabel*> separators_;
-    QLabel* fincept_label_ = nullptr;
+    QLabel* fin_label_ = nullptr;
     QString data_source_ = "yahoo";
 
     CommandBar* command_bar_ = nullptr;

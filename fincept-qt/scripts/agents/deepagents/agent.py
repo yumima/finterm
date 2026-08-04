@@ -1,5 +1,5 @@
 """
-agent.py — Full create_deep_agent wiring for Fincept Terminal.
+agent.py — Full create_deep_agent wiring for finterm.
 
 Single responsibility:
   - create_agent() factory that wires ALL 16 create_deep_agent params
@@ -50,7 +50,7 @@ class FinceptContext:
 
 
 # ---------------------------------------------------------------------------
-# MCP tool wrappers — LangChain BaseTool instances wrapping Fincept capabilities
+# MCP tool wrappers — LangChain BaseTool instances wrapping finterm capabilities
 # ---------------------------------------------------------------------------
 
 def _make_market_data_tool() -> BaseTool:
@@ -117,7 +117,7 @@ def _build_tools() -> list[BaseTool]:
 # System prompt
 # ---------------------------------------------------------------------------
 
-_FINCEPT_SYSTEM_PROMPT = """You are a Deep Agent for Fincept Terminal, an institutional-grade financial intelligence platform.
+_FINCEPT_SYSTEM_PROMPT = """You are a Deep Agent for finterm, an institutional-grade financial intelligence platform.
 
 You have access to:
 - Financial market data (prices, OHLCV, order books)
@@ -156,7 +156,7 @@ def create_agent(
 
     Args:
         model       : BaseChatModel from models.create_model()
-        config      : Full Fincept LLM config dict (used for agent_type, backend_mode, etc.)
+        config      : Full finterm LLM config dict (used for agent_type, backend_mode, etc.)
         scripts_dir : Absolute path to scripts/ directory. Auto-detected if None.
 
     Returns:

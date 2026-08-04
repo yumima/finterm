@@ -1,5 +1,5 @@
 """
-EdgarTools — Agno-compatible toolkit wrapping the internal Fincept Edgar MCP.
+EdgarTools — Agno-compatible toolkit wrapping the internal finterm Edgar MCP.
 
 Exposes SEC EDGAR data as LLM-callable tools:
   - Company search and info
@@ -64,7 +64,7 @@ try:
 
     class EdgarTools(Toolkit):
         """
-        SEC EDGAR toolkit for Fincept agents.
+        SEC EDGAR toolkit for finterm agents.
 
         Provides access to:
         - Company search and profile data

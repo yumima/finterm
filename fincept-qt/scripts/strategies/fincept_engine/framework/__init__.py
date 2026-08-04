@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Framework
+# finterm - Strategy Engine Framework
 # LEAN-compatible framework models (Alpha, Portfolio, Execution, Risk, Selection)
 # ============================================================================
 

@@ -1,5 +1,5 @@
 """
-spreadsheet.py — unified local + Google Sheets I/O for the Fincept workflow node.
+spreadsheet.py — unified local + Google Sheets I/O for the finterm workflow node.
 
 Usage:
     python spreadsheet.py --args '<json>'

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 # ─────────────────────────────────────────────────────────────────────────────
-# Fincept Terminal — multi-stage, multi-arch Docker build
+# finterm — multi-stage, multi-arch Docker build
 #
 # One Dockerfile, all hosts. Works for Docker Desktop on Windows/macOS (they
 # run Linux containers) and native Linux hosts. Windows/macOS native installers
@@ -12,11 +12,11 @@
 # BuildKit sets TARGETARCH automatically (`amd64` or `arm64`). The build picks
 # the right Qt kit, Kitware CMake tarball, and apt architecture for us:
 #
-#   docker build -t fincept/terminal:4.0.2 .
+#   docker build -t finterm:4.0.2 .
 #       → auto-detects host arch via BuildKit
 #
 #   docker buildx build --platform linux/amd64,linux/arm64 \
-#       -t fincept/terminal:4.0.2 --push .
+#       -t finterm:4.0.2 --push .
 #       → cross-build both archs in one go
 #
 # Pins (must match fincept-qt/CMakeLists.txt + release.yml):
@@ -28,7 +28,7 @@
 # Run (X11 on Linux host):
 #   docker run --rm -it --net=host \
 #     -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix \
-#     fincept/terminal:4.0.2
+#     finterm:4.0.2
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Stage 1: Build ───────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ RUN . /etc/build.env \
          || { echo "aqtinstall attempt ${attempt} failed, retrying in 5s..."; sleep 5; }; \
        done
 
-# ── Build Fincept Terminal ───────────────────────────────────────────────────
+# ── Build finterm ───────────────────────────────────────────────────
 WORKDIR /src
 COPY fincept-qt/ ./fincept-qt/
 
@@ -239,7 +239,7 @@ RUN { \
       echo 'export QT_PLUGIN_PATH="${QT_PREFIX}/plugins"'; \
       echo 'export QT_QPA_PLATFORM_PLUGIN_PATH="${QT_PREFIX}/plugins/platforms"'; \
       echo 'exec /app/finterm.bin "$@"'; \
-    } > /usr/local/bin/fincept-entrypoint.sh \
-    && chmod +x /usr/local/bin/fincept-entrypoint.sh
+    } > /usr/local/bin/finterm-entrypoint.sh \
+    && chmod +x /usr/local/bin/finterm-entrypoint.sh
 
-ENTRYPOINT ["/usr/local/bin/fincept-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/finterm-entrypoint.sh"]

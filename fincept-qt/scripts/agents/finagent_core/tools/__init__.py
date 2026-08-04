@@ -1,5 +1,5 @@
 """
-finagent_core custom tools — internal Fincept tool adapters.
+finagent_core custom tools — internal finterm tool adapters.
 """
 
 from finagent_core.tools.edgar_tools import EdgarTools

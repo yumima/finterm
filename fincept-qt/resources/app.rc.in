@@ -25,9 +25,9 @@ BEGIN
             VALUE "CompanyName",      "finterm contributors"
             VALUE "FileDescription",  "finterm - Local-first Financial Research Terminal"
             VALUE "FileVersion",      "@CMAKE_PROJECT_VERSION@"
-            VALUE "InternalName",     "FinceptTerminal"
+            VALUE "InternalName",     "finterm"
             VALUE "LegalCopyright",   "Copyright (C) 2024-2026 finterm contributors. AGPL-3.0-or-later."
-            VALUE "OriginalFilename", "FinceptTerminal.exe"
+            VALUE "OriginalFilename", "finterm.exe"
             VALUE "ProductName",      "finterm"
             VALUE "ProductVersion",   "@CMAKE_PROJECT_VERSION@"
         END

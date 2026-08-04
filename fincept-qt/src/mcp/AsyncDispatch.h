@@ -3,7 +3,7 @@
 //
 // Phase 4 of the MCP refactor (see plans/mcp-refactor-phase-4-async-execution.md).
 //
-// Most Fincept services expose their work as `void fn(args, callback)` —
+// Most finterm services expose their work as `void fn(args, callback)` —
 // PythonRunner::run, MarketDataService::fetch_quotes, NewsService::fetch_*,
 // HttpClient calls, and so on. They all share the same shape:
 //

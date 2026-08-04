@@ -55,7 +55,7 @@ class OSCARWrapper:
         self.base_url = "https://space.oscar.wmo.int/api/v1"
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0',
+            'User-Agent': 'finterm-Terminal/1.0',
             'Accept': 'application/json',
             'Accept-Encoding': 'gzip'
         })

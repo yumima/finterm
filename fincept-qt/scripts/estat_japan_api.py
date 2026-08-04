@@ -61,7 +61,7 @@ def _make_request(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dic
         # Setup headers
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         }
 
         # Make request with timeout

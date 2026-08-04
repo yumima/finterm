@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal

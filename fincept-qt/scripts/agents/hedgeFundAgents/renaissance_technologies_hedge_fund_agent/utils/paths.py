@@ -1,5 +1,5 @@
 """
-Cross-Platform Path Utilities for Fincept Terminal
+Cross-Platform Path Utilities for finterm
 
 Provides consistent paths across Windows, macOS, and Linux for storing
 RenTech agent data (knowledge base, memory, logs, etc.)
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def get_app_data_dir() -> Path:
     """
-    Get the Fincept Terminal application data directory.
+    Get the finterm application data directory.
 
     Returns the appropriate directory for the current platform:
     - Windows: %APPDATA%\fincept-terminal\
@@ -242,7 +242,7 @@ def get_cache_file_path(cache_name: str) -> str:
 # Display paths for debugging
 def print_paths():
     """Print all configured paths (for debugging)"""
-    print("=== Fincept Terminal - RenTech Agent Paths ===")
+    print("=== finterm - RenTech Agent Paths ===")
     print(f"Platform: {platform.system()}")
     print(f"App Data Dir: {get_app_data_dir()}")
     print(f"RenTech Data Dir: {get_rentech_data_dir()}")

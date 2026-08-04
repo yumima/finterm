@@ -17,7 +17,7 @@ class KrakenAPI:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         })
         self.last_request_time = 0
         self.min_request_interval = 1.0  # 1 second between requests

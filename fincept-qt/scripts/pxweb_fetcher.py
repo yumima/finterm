@@ -32,7 +32,7 @@ class PxWebWrapper:
         """
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
-        self.session.headers.update({'User-Agent': 'Fincept-Desktop/4.0'})
+        self.session.headers.update({'User-Agent': 'finterm-Desktop/4.0'})
 
     def _make_request(self, path: str, method: str = "GET", json_data: Optional[Dict] = None) -> Dict[str, Any]:
         """

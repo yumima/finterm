@@ -199,7 +199,7 @@ void register_agent_nodes(NodeRegistry& registry) {
 
     // ── Tool Picker ────────────────────────────────────────────────
     // Takes a natural-language query (or upstream JSON context), asks the
-    // configured LLM which Fincept MCP tool best handles the request, and
+    // configured LLM which finterm MCP tool best handles the request, and
     // outputs { "tool": "<name>", "args": {...} } ready for the MCP Tool node.
     registry.register_type({
         .type_id = "agent.tool_picker",

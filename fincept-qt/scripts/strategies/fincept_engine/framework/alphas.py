@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Alpha Models
+# finterm - Alpha Models
 # Pre-built alpha models for the framework pipeline
 # ============================================================================
 

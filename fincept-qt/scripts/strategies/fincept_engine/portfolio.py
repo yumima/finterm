@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Portfolio Manager
+# finterm - Strategy Engine Portfolio Manager
 # Tracks holdings, cash, P&L, and portfolio metrics
 # ============================================================================
 

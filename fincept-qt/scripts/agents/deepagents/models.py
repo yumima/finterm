@@ -1,5 +1,5 @@
 """
-models.py — LangChain model creation from Fincept LLM config.
+models.py — LangChain model creation from finterm LLM config.
 
 Single responsibility:
   - Take a config dict with llm_provider/llm_api_key/llm_model/llm_base_url
@@ -43,7 +43,7 @@ _OPENAI_COMPAT = {
 
 def create_model(config: dict[str, Any]):
     """
-    Create a LangChain BaseChatModel from a Fincept LLM config dict.
+    Create a LangChain BaseChatModel from a finterm LLM config dict.
 
     Config keys:
         llm_provider  : str   — provider name (anthropic, openai, google, ...)

@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
 
     // SingleApplication enforces one process per profile.
     // The instance key is scoped to the active profile name, so
-    // "FinceptTerminal --profile work" and "FinceptTerminal --profile personal"
+    // "finterm --profile work" and "finterm --profile personal"
     // are treated as two separate primary instances and run simultaneously.
     // allowSecondary=true: secondary instances send "--new-window" and exit.
     const QString profile_key = QString("%1-%2").arg(fincept::AppIdentity::kApp).arg(fincept::ProfileManager::instance().active());

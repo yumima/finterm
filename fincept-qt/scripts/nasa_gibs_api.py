@@ -130,7 +130,7 @@ def _make_request(url: str, headers: Optional[Dict[str, str]] = None, return_byt
         # Setup headers
         if headers is None:
             headers = {
-                'User-Agent': 'Fincept-Terminal/1.0 (NASA GIBS API Wrapper)',
+                'User-Agent': 'finterm-Terminal/1.0 (NASA GIBS API Wrapper)',
                 'Accept': 'application/xml,image/png,image/jpeg,image/tiff,image/gif,application/json'
             }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fincept Terminal - Live Strategy Runner
+finterm - Live Strategy Runner
 Manages strategy deployment for paper/live trading with SQLite persistence.
 All state is stored in SQLite only - no in-memory state in the host.
 

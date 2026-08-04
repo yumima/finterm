@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -26,7 +26,7 @@ class IndicatorWarmupAlgorithm(QCAlgorithm):
         self.set_start_date(2013, 10, 8)   #Set Start Date
         self.set_end_date(2013, 10, 11)    #Set End Date
         self.set_cash(1000000)            #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         self.add_equity("SPY")
         self.add_equity("IBM")
         self.add_equity("BAC")

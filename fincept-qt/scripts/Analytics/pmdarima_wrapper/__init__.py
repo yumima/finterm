@@ -1,5 +1,5 @@
 """
-pmdarima Wrapper for Fincept Terminal
+pmdarima Wrapper for finterm
 
 Complete wrapper for pmdarima library covering:
 - AutoARIMA for automatic parameter selection

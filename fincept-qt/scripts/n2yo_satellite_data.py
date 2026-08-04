@@ -164,7 +164,7 @@ def _make_request(endpoint: str, params: Optional[Dict[str, str]] = None,
 
         # Setup headers and parameters
         headers = {
-            'User-Agent': 'Fincept-Terminal/1.0 (N2YO API Wrapper)',
+            'User-Agent': 'finterm-Terminal/1.0 (N2YO API Wrapper)',
             'Accept': 'application/json'
         }
 

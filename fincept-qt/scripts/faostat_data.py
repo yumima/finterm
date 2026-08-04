@@ -71,7 +71,7 @@ DOMAIN_CODES = {
 class FAOSTATWrapper:
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": "Fincept-Terminal/1.0", "Accept": "application/json"})
+        self.session.headers.update({"User-Agent": "finterm-Terminal/1.0", "Accept": "application/json"})
 
     def _get(self, path: str, params: Optional[Dict] = None) -> Dict[str, Any]:
         try:

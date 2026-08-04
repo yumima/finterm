@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -30,7 +30,7 @@ class BasicTemplateFrameworkAlgorithm(QCAlgorithm):
         self.set_end_date(2013,10,11)    #Set End Date
         self.set_cash(100000)           #Set Strategy Cash
 
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         # Forex, CFD, Equities Resolutions: Tick, Second, Minute, Hour, Daily.
         # Futures Resolution: Tick, Second, Minute
         # Options Resolution: Minute Only.

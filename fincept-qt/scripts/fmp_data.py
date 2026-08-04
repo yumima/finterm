@@ -38,7 +38,7 @@ class FMPDataWrapper:
         self.api_key = api_key or os.environ.get('FMP_API_KEY', '')
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         })
 
         # Common API parameters

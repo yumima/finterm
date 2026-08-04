@@ -43,7 +43,7 @@ class BaseCalculator(ABC):
     Abstract base class for all quantitative calculations.
 
     Provides common functionality, validation, and standardized interfaces
-    for all quantitative analysis modules in Fincept Terminal.
+    for all quantitative analysis modules in finterm.
     """
 
     def __init__(self, precision: int = 6, risk_free_rate: float = 0.0):

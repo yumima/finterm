@@ -1,5 +1,5 @@
 #!/bin/bash
-# AppRun — AppImage launcher for Fincept Terminal
+# AppRun — AppImage launcher for finterm
 # Sets up the runtime environment so Qt plugins, Python scripts,
 # and the Whisper model directory are found relative to the AppImage.
 

@@ -10,7 +10,7 @@ import requests
 from typing import Dict, Any, Optional, List
 
 API_KEY = os.environ.get('CROSSREF_API_KEY', '')
-POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL', 'research@fincept.in')
+POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL', 'admin@hanlexon.com')
 BASE_URL = "https://api.crossref.org"
 
 session = requests.Session()

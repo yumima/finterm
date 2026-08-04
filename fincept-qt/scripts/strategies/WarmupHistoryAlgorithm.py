@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -27,7 +27,7 @@ class WarmupHistoryAlgorithm(QCAlgorithm):
         self.set_start_date(2014,5,2)   #Set Start Date
         self.set_end_date(2014,5,2)     #Set End Date
         self.set_cash(100000)          #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         forex = self.add_forex("EURUSD", Resolution.SECOND)
         forex = self.add_forex("NZDUSD", Resolution.SECOND)
 

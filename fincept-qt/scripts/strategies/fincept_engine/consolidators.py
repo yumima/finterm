@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Consolidators
+# finterm - Strategy Engine Consolidators
 # Aggregate data into larger bars (minute->hour, tick->bar, renko, range)
 # ============================================================================
 

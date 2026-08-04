@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BaoStock Data Wrapper
-Provides a CLI-style endpoint interface with JSON output for Fincept Terminal.
+Provides a CLI-style endpoint interface with JSON output for finterm.
 """
 
 import io

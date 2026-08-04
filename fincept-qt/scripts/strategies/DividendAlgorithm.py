@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -25,7 +25,7 @@ class DividendAlgorithm(QCAlgorithm):
         self.set_start_date(1998,1,1)  #Set Start Date
         self.set_end_date(2006,1,21)    #Set End Date
         self.set_cash(100000)           #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         equity = self.add_equity("MSFT", Resolution.DAILY)
         equity.set_data_normalization_mode(DataNormalizationMode.RAW)
 

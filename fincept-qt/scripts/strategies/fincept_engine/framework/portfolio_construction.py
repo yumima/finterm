@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Portfolio Construction Models
+# finterm - Portfolio Construction Models
 # Portfolio optimization and construction for the framework pipeline
 # ============================================================================
 

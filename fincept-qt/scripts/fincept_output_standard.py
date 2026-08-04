@@ -1,8 +1,8 @@
 """
-Fincept Terminal - Python Output Standardization Library
+finterm - Python Output Standardization Library
 =========================================================
 
-This library provides a standard output format for all Python scripts in the Fincept Terminal.
+This library provides a standard output format for all Python scripts in finterm.
 It ensures consistent JSON output across 100+ scripts, making frontend parsing simple and reliable.
 
 Standard Output Format:

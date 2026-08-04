@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Risk Management Models
+# finterm - Risk Management Models
 # All core risk models are defined in algorithm.py.
 # This module re-exports them for organizational clarity.
 # ============================================================================

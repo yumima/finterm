@@ -127,7 +127,7 @@ void FuturesScreen::build_header() {
     h->setContentsMargins(12, 0, 12, 0);
     h->setSpacing(8);
 
-    auto* brand = new QLabel("FINCEPT FUTURES");
+    auto* brand = new QLabel("FINTERM FUTURES");
     brand->setStyleSheet(QString("color:%1;background:transparent;font-weight:700;"
                                  "letter-spacing:0.6px;font-family:'%2';font-size:%3px;")
                              .arg(colors::TEXT_PRIMARY())

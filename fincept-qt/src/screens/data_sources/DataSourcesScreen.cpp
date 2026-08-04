@@ -1,4 +1,4 @@
-// DataSourcesScreen.cpp — Fincept Data Sources, Obsidian design system v2.
+// DataSourcesScreen.cpp — finterm Data Sources, Obsidian design system v2.
 #include "screens/data_sources/DataSourcesScreen.h"
 
 #include "core/logging/Logger.h"

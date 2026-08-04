@@ -1,5 +1,5 @@
 """
-cli.py — C++ entry point for Fincept Deep Agents.
+cli.py — C++ entry point for finterm Deep Agents.
 
 Single responsibility:
   - Receive a command + JSON params from C++ via argv

@@ -1,5 +1,5 @@
 """
-TerminalToolkit - Agno Toolkit that proxies calls to Fincept Terminal internal MCP tools.
+TerminalToolkit - Agno Toolkit that proxies calls to finterm internal MCP tools.
 
 When finagent_core runs as a Python subprocess, it cannot call C++ IPC directly.
 This toolkit bridges that gap via the local HTTP bridge (mcp_bridge.rs):
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class TerminalToolkit:
     """
-    Agno-compatible toolkit that wraps Fincept Terminal's internal MCP tools.
+    Agno-compatible toolkit that wraps finterm's internal MCP tools.
 
     Each tool definition becomes a Python function registered with Agno so the LLM
     can call it. Calls are forwarded to the local HTTP bridge which routes them to

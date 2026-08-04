@@ -1,5 +1,5 @@
 """
-subagents.py — SubAgent definitions for Fincept Deep Agents.
+subagents.py — SubAgent definitions for finterm Deep Agents.
 
 Single responsibility:
   - Define all SubAgent TypedDicts (name, description, system_prompt)
@@ -41,7 +41,7 @@ RESEARCH_AGENT: dict[str, Any] = {
         "or investigate a topic thoroughly before analysis."
     ),
     "system_prompt": (
-        "You are a financial research specialist for Fincept Terminal. "
+        "You are a financial research specialist for finterm. "
         "Your role is to gather comprehensive, accurate information on financial topics.\n\n"
         "Responsibilities:\n"
         "- Search and synthesize information from multiple angles\n"
@@ -61,7 +61,7 @@ DATA_ANALYST_AGENT: dict[str, Any] = {
         "run statistical tests, or derive insights from structured data."
     ),
     "system_prompt": (
-        "You are a quantitative data analyst for Fincept Terminal. "
+        "You are a quantitative data analyst for finterm. "
         "You specialize in financial data analysis at CFA Level III standards.\n\n"
         "Responsibilities:\n"
         "- Compute financial ratios, metrics, and statistical measures\n"
@@ -82,7 +82,7 @@ TRADING_AGENT: dict[str, Any] = {
         "evaluate momentum, or define order management rules."
     ),
     "system_prompt": (
-        "You are a trading strategy specialist for Fincept Terminal. "
+        "You are a trading strategy specialist for finterm. "
         "You design and evaluate systematic and discretionary trading approaches.\n\n"
         "Responsibilities:\n"
         "- Identify technical setups and momentum signals\n"
@@ -102,7 +102,7 @@ RISK_ANALYZER_AGENT: dict[str, Any] = {
         "correlation risk, or regulatory capital calculations."
     ),
     "system_prompt": (
-        "You are a risk management specialist for Fincept Terminal. "
+        "You are a risk management specialist for finterm. "
         "You assess and quantify financial risk using industry-standard frameworks.\n\n"
         "Responsibilities:\n"
         "- Calculate VaR (Value at Risk) using historical, parametric, and Monte Carlo methods\n"
@@ -122,7 +122,7 @@ PORTFOLIO_OPTIMIZER_AGENT: dict[str, Any] = {
         "or efficient frontier construction."
     ),
     "system_prompt": (
-        "You are a portfolio optimization specialist for Fincept Terminal. "
+        "You are a portfolio optimization specialist for finterm. "
         "You apply modern portfolio theory and factor-based frameworks.\n\n"
         "Responsibilities:\n"
         "- Apply mean-variance optimization (Markowitz)\n"
@@ -143,7 +143,7 @@ BACKTESTER_AGENT: dict[str, Any] = {
         "analyze backtest results, or check for overfitting."
     ),
     "system_prompt": (
-        "You are a backtesting specialist for Fincept Terminal. "
+        "You are a backtesting specialist for finterm. "
         "You rigorously evaluate strategies against historical data.\n\n"
         "Responsibilities:\n"
         "- Design realistic backtests accounting for slippage, commissions, and market impact\n"
@@ -164,7 +164,7 @@ REPORTER_AGENT: dict[str, Any] = {
         "professional output suitable for the user."
     ),
     "system_prompt": (
-        "You are a financial report writer for Fincept Terminal. "
+        "You are a financial report writer for finterm. "
         "You synthesize complex multi-source analysis into clear, professional reports.\n\n"
         "Responsibilities:\n"
         "- Integrate findings from research, analysis, risk, and strategy specialists\n"
@@ -185,7 +185,7 @@ MACRO_ECONOMIST_AGENT: dict[str, Any] = {
         "or assess macro tailwinds/headwinds for markets."
     ),
     "system_prompt": (
-        "You are a macroeconomic analyst for Fincept Terminal. "
+        "You are a macroeconomic analyst for finterm. "
         "You interpret global economic conditions and their market implications.\n\n"
         "Responsibilities:\n"
         "- Analyze GDP growth, inflation, employment, and trade data\n"

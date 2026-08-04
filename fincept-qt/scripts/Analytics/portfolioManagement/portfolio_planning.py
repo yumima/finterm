@@ -1530,7 +1530,7 @@ class PortfolioPlanning:
         elif equity_weight > 0.4:
             return "60/40 Stock/Bond Composite"
         else:
-            return "Fincept Aggregate Bond Index"
+            return "finterm Aggregate Bond Index"
 
     def _select_secondary_benchmarks(self, strategic_allocation: Dict) -> List[str]:
         """Select secondary benchmarks"""
@@ -1542,7 +1542,7 @@ class PortfolioPlanning:
         if "international_equity" in allocation:
             benchmarks.append("MSCI EAFE Index")
         if "domestic_bonds" in allocation:
-            benchmarks.append("Fincept US Aggregate Bond Index")
+            benchmarks.append("finterm US Aggregate Bond Index")
         if "real_estate" in allocation:
             benchmarks.append("FTSE NAREIT All REITs Index")
 

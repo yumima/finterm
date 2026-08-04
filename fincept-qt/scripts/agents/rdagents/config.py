@@ -1,8 +1,8 @@
 """
-config.py — LiteLLM / rdagent LLM config wiring for Fincept rdagents.
+config.py — LiteLLM / rdagent LLM config wiring for finterm rdagents.
 
 rdagent uses environment variables for its LLM backend (LiteLLMAPIBackend).
-This module translates the Fincept LLM config dict into the correct env vars
+This module translates the finterm LLM config dict into the correct env vars
 so any provider (OpenAI, Anthropic, MiniMax, DeepSeek, Azure, etc.) works.
 
 Key env vars rdagent reads:
@@ -45,7 +45,7 @@ _DEFAULT_EMBEDDING = "text-embedding-3-small"
 
 def apply_llm_config(config: dict[str, Any]) -> dict[str, str]:
     """
-    Translate Fincept LLM config dict into rdagent env vars.
+    Translate finterm LLM config dict into rdagent env vars.
 
     Sets os.environ in place so rdagent's LiteLLMAPIBackend picks them up.
 

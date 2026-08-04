@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Securities Manager
+# finterm - Strategy Engine Securities Manager
 # Manages subscribed securities and their properties
 # ============================================================================
 

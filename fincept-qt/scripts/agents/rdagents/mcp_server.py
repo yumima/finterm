@@ -1,5 +1,5 @@
 """
-mcp_server.py — Fincept MCP HTTP server for RD-Agent tool use.
+mcp_server.py — finterm MCP HTTP server for RD-Agent tool use.
 
 Provides financial data tools that rdagent loops can call via
 MCPServerStreamableHTTP. Runs as a standalone FastMCP server.
@@ -478,7 +478,7 @@ def build_mcp_server() -> Any:
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Fincept MCP server for RD-Agent")
+    parser = argparse.ArgumentParser(description="finterm MCP server for RD-Agent")
     parser.add_argument("--port", type=int, default=18765)
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args()
@@ -488,7 +488,7 @@ def main() -> None:
         raise SystemExit(1)
 
     server = build_mcp_server()
-    print(f"Fincept MCP server starting on http://{args.host}:{args.port}/mcp", flush=True)
+    print(f"finterm MCP server starting on http://{args.host}:{args.port}/mcp", flush=True)
     server.run(transport="streamable-http", host=args.host, port=args.port, path="/mcp")
 
 

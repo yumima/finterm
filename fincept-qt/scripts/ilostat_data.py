@@ -135,7 +135,7 @@ def _session() -> requests.Session:
     """Return a pre-configured requests Session."""
     s = requests.Session()
     s.headers.update({
-        "User-Agent": "Fincept-Terminal/4.0.2 (ILOSTAT-wrapper)",
+        "User-Agent": "finterm-Terminal/4.0.2 (ILOSTAT-wrapper)",
         "Accept-Language": "en",
     })
     return s

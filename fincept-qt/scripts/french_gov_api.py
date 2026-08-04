@@ -42,7 +42,7 @@ ENTREPRISE_TIMEOUT = 30
 # Request settings
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
-    'User-Agent': 'Fincept-Terminal/1.0'
+    'User-Agent': 'finterm-Terminal/1.0'
 }
 
 # French to English translation patterns

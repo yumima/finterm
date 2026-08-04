@@ -1,4 +1,4 @@
-// Fincept Terminal — DataHub Phase 1 unit tests
+// finterm — DataHub Phase 1 unit tests
 //
 // Validates the core pub/sub primitive without any producers or
 // app-wide plumbing. Uses Qt Test.

@@ -15,7 +15,7 @@ session = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=3)
 session.mount('https://', adapter)
 session.mount('http://', adapter)
-session.headers.update({"User-Agent": "FinceptTerminal/4.0 (support@fincept.in)"})
+session.headers.update({"User-Agent": "finterm/4.0 (admin@hanlexon.com)"})
 
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:

@@ -58,7 +58,7 @@ class BEAWrapper:
         self.base_url = "https://apps.bea.gov/api/data/"
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         })
 
     def _make_request(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:

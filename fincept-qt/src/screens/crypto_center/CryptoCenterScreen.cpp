@@ -66,7 +66,7 @@ void CryptoCenterScreen::build_ui() {
     hl->setContentsMargins(14, 0, 14, 0);
     hl->setSpacing(8);
 
-    header_brand_ = new QLabel(QStringLiteral("FINCEPT"));
+    header_brand_ = new QLabel(QStringLiteral("FINTERM"));
     header_brand_->setObjectName(QStringLiteral("cryptoCenterBrand"));
     header_separator_ = new QLabel(QStringLiteral("/"));
     header_separator_->setObjectName(QStringLiteral("cryptoCenterSep"));

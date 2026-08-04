@@ -56,7 +56,7 @@ class DataGovHKWrapper:
         # Session configuration
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0',
+            'User-Agent': 'finterm-Terminal/1.0',
             'Accept': 'application/json',
             'Accept-Language': f'{self.language}-HK,{self.language};q=0.9,en;q=0.8'
         })

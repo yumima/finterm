@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -33,7 +33,7 @@ class DataConsolidationAlgorithm(QCAlgorithm):
 
         self.set_start_date(DateTime(2013, 10, 7, 9, 30, 0))  #Set Start Date
         self.set_end_date(self.start_date + timedelta(60))          #Set End Date
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         self.add_equity("SPY")
         self.add_forex("EURUSD", Resolution.HOUR)
 

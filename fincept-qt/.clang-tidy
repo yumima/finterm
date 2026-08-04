@@ -1,4 +1,4 @@
-# Fincept Terminal — clang-tidy configuration
+# finterm — clang-tidy configuration
 # Targets C++20 / Qt6 codebase.  Checks are balanced: catches real bugs without
 # flooding the developer with Qt-internal or generated-code warnings.
 

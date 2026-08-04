@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Universe Selection Models
+# finterm - Universe Selection Models
 # Dynamic security filtering and selection for the framework pipeline
 # ============================================================================
 

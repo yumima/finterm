@@ -1,5 +1,5 @@
 """
-cli.py — Entry point for Fincept rdagents integration.
+cli.py — Entry point for finterm rdagents integration.
 
 Called by AIQuantLabService.cpp via PythonRunner:
   python agents/rdagents/cli.py <command> <json_params>
@@ -660,7 +660,7 @@ def cmd_start_multitrace_research(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def cmd_start_mcp_server(params: dict[str, Any]) -> dict[str, Any]:
-    """Task 20 — Start the Fincept MCP tool server for RD-Agent loop use."""
+    """Task 20 — Start the finterm MCP tool server for RD-Agent loop use."""
     try:
         from mcp_tools import start_mcp_server_process, MCP_AVAILABLE, mcp_availability
     except ImportError as e:
@@ -683,13 +683,13 @@ def cmd_start_mcp_server(params: dict[str, Any]) -> dict[str, Any]:
         "port":     avail["running_ports"][0] if avail["running_ports"] else port,
         "pid":      proc.pid if proc else None,
         "tools":    avail["tools"],
-        "message":  "Fincept MCP server started" if toolset else "MCP server failed to start",
+        "message":  "finterm MCP server started" if toolset else "MCP server failed to start",
         "already_running": proc is None and toolset is not None,
     }
 
 
 def cmd_stop_mcp_server(params: dict[str, Any]) -> dict[str, Any]:
-    """Stop the Fincept MCP server on the given port."""
+    """Stop the finterm MCP server on the given port."""
     try:
         from mcp_tools import stop_mcp_server_process
     except ImportError as e:

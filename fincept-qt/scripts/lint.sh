@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fincept Terminal — Static Analysis / Linting
+# finterm — Static Analysis / Linting
 # Usage:
 #   ./scripts/lint.sh              # run clang-format check (fast)
 #   ./scripts/lint.sh --fix        # auto-fix formatting with clang-format

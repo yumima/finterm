@@ -285,7 +285,7 @@ QWidget* MarketsScreen::build_header_bar() {
     };
 
     // Branding
-    auto* brand = new QLabel("FINCEPT MARKETS");
+    auto* brand = new QLabel("FINTERM MARKETS");
     brand->setStyleSheet(lbl_ss(ui::colors::TEXT_PRIMARY(), true));
     h->addWidget(brand);
 

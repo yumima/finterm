@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Registry
+# finterm - Strategy Registry
 # Auto-generated index of all available strategies
 # ============================================================================
 

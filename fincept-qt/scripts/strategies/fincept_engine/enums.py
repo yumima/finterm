@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Enums
+# finterm - Strategy Engine Enums
 # Pure Python replacement for LEAN C# enums
 # ============================================================================
 

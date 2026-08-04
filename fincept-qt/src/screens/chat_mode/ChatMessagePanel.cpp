@@ -168,7 +168,7 @@ QWidget* ChatMessagePanel::build_welcome() {
     vl->setSpacing(14);
     vl->setAlignment(Qt::AlignCenter);
 
-    auto* logo = new QLabel("FINCEPT AGENT");
+    auto* logo = new QLabel("FINTERM AGENT");
     logo->setAlignment(Qt::AlignCenter);
     logo->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;letter-spacing:1px;"
                                 "font-family:%2;background:transparent;")

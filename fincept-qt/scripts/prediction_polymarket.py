@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Polymarket trading bridge for Fincept Terminal.
+"""Polymarket trading bridge for finterm.
 
 Invocation:
     python prediction_polymarket.py <command> <json_payload>

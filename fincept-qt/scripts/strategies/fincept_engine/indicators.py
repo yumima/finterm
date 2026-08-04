@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Indicators
+# finterm - Strategy Engine Indicators
 # Pure Python technical indicators (no C#/LEAN dependency)
 # ============================================================================
 

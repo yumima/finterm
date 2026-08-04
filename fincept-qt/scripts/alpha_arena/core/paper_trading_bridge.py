@@ -107,7 +107,7 @@ class BridgePortfolioState:
 
 
 def get_db_path() -> Path:
-    """Get the path to the Fincept database."""
+    """Get the path to the finterm database."""
     # Try different possible locations for the database
     possible_paths = [
         # Windows AppData

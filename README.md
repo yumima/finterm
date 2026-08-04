@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b1dccb9e8`](https://github.com/yumima/finterm/commit/b1dccb9e8) Portfolio: open the sell dialog even when no holding row is focused
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

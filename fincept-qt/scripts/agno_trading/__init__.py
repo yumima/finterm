@@ -13,7 +13,7 @@ Architecture:
 - utils/: Helper functions and utilities
 - config/: Configuration management
 
-Author: Fincept Terminal
+Author: finterm
 Version: 1.0.0
 """
 

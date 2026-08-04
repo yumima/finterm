@@ -1,5 +1,5 @@
 """
-task_manager.py — Background execution engine + TaskManager for Fincept rdagents.
+task_manager.py — Background execution engine + TaskManager for finterm rdagents.
 
 Responsibilities:
   - TaskManager: thread-safe in-memory task registry (status, progress, results)

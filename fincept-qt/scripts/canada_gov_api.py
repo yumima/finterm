@@ -43,7 +43,7 @@ def _make_request(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[
         # Setup headers
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         }
 
         # Add API key to header if available
@@ -474,7 +474,7 @@ def download_resource_preview(resource_url: str, max_lines: int = 10) -> Dict[st
     """
     try:
         headers = {
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         }
 
         # Make request to download file

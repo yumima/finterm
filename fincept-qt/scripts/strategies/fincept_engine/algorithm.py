@@ -1,7 +1,7 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Core Algorithm
+# finterm - Strategy Engine Core Algorithm
 # Pure Python QCAlgorithm compatible base class
-# This is the heart of the Fincept Strategy Engine — all strategies inherit
+# This is the heart of the finterm Strategy Engine — all strategies inherit
 # from this class. It provides the same API surface as LEAN's QCAlgorithm
 # but runs entirely in pure Python with no .NET dependency.
 # ============================================================================
@@ -614,7 +614,7 @@ class FutureChainProvider:
 
 class QCAlgorithm:
     """
-    Fincept Terminal Strategy Engine - QCAlgorithm Compatible Base Class
+    finterm Strategy Engine - QCAlgorithm Compatible Base Class
 
     All strategy files inherit from this class. Provides the same API as
     QuantConnect's QCAlgorithm but runs in pure Python.

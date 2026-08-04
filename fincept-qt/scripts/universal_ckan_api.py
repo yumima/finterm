@@ -129,7 +129,7 @@ def _make_request(country_code: str, action: str, params: Optional[Dict[str, Any
         # Prepare headers
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Fincept-Terminal/1.0',
+            'User-Agent': 'finterm-Terminal/1.0',
             'Accept': 'application/json'
         }
 

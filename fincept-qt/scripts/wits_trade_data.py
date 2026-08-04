@@ -128,7 +128,7 @@ def _make_request(url: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     try:
         headers = {
-            'User-Agent': 'Fincept-Terminal/1.0 (wits-api-wrapper)',
+            'User-Agent': 'finterm-Terminal/1.0 (wits-api-wrapper)',
             'Accept': 'application/xml,application/json'
         }
 

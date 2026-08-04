@@ -1,5 +1,5 @@
 """
-loops.py — Real FactorRDLoop and ModelRDLoop execution for Fincept rdagents.
+loops.py — Real FactorRDLoop and ModelRDLoop execution for finterm rdagents.
 
 Responsibilities:
   - build_factor_loop(): configure and return a FactorRDLoop instance

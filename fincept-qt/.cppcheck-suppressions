@@ -1,4 +1,4 @@
-# cppcheck suppressions for Fincept Terminal
+# cppcheck suppressions for finterm
 # Qt macros (Q_OBJECT, signals, slots, emit) are not understood by cppcheck without Qt config
 unknownMacro
 # System includes are not provided to cppcheck

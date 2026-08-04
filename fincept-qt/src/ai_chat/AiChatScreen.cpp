@@ -1,4 +1,4 @@
-// AiChatScreen.cpp — Fincept AI Chat, Obsidian design system
+// AiChatScreen.cpp — finterm AI Chat, Obsidian design system
 
 #include "ai_chat/AiChatScreen.h"
 

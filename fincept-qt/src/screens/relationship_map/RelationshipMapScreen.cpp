@@ -306,7 +306,7 @@ void RelationshipMapScreen::build_ui() {
 
     shl->addStretch();
 
-    status_brand_ = new QLabel("FINCEPT TERMINAL");
+    status_brand_ = new QLabel("FINTERM");
     status_brand_->setStyleSheet(QString("color: %1; font-size: 9px; font-weight: 700; %2").arg(colors::AMBER(), MF()));
     shl->addWidget(status_brand_);
 

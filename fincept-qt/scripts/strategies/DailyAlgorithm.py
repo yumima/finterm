@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -25,7 +25,7 @@ class DailyAlgorithm(QCAlgorithm):
         self.set_start_date(2013,1,1)    #Set Start Date
         self.set_end_date(2014,1,1)      #Set End Date
         self.set_cash(100000)           #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         self.add_equity("SPY", Resolution.DAILY)
         self.add_equity("IBM", Resolution.HOUR).set_leverage(1.0)
         self.macd = self.macd("SPY", 12, 26, 9, MovingAverageType.WILDERS, Resolution.DAILY, Field.CLOSE)

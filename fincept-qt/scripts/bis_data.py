@@ -939,7 +939,7 @@ async def main():
     async with BISAPI() as bis:
         try:
             if command == "fetch":
-                # Simplified fetch command for Fincept Terminal Economics tab
+                # Simplified fetch command for finterm Economics tab
                 # Usage: fetch <dataflow> <country_code> [start_period] [end_period]
                 # Returns flattened [{date, value}] array for charting
                 if len(args) < 3:

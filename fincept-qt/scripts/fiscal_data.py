@@ -49,7 +49,7 @@ def _make_request(endpoint: str, params: Dict[str, Any] = None) -> Dict[str, Any
         url = f"{BASE_URL}/{endpoint}"
 
         headers = {
-            'User-Agent': 'Fincept-Terminal/1.0 (fiscaldata-api-wrapper)',
+            'User-Agent': 'finterm-Terminal/1.0 (fiscaldata-api-wrapper)',
             'Accept': 'application/json'
         }
 

@@ -26,7 +26,7 @@ logger = get_logger("database")
 
 
 def get_main_db_path() -> Optional[Path]:
-    """Get the path to the main Fincept Terminal database for paper trading integration."""
+    """Get the path to the main finterm database for paper trading integration."""
     possible_paths = [
         # Windows AppData
         Path(os.environ.get("APPDATA", "")) / "fincept-terminal" / "fincept_terminal.db",
@@ -311,13 +311,13 @@ class AlphaArenaDatabase:
 
             local_id = cursor.lastrowid
 
-        # Also save to main Fincept database for UI integration
+        # Also save to main finterm database for UI integration
         self._save_decision_to_main_db(decision, trade_status, trade_pnl)
 
         return local_id
 
     def _save_decision_to_main_db(self, decision: ModelDecision, trade_status: Optional[str], trade_pnl: Optional[float]):
-        """Save decision to main Fincept Terminal database."""
+        """Save decision to main finterm database."""
         main_db_path = get_main_db_path()
         if not main_db_path:
             logger.warning("Main database not found, skipping decision sync")
@@ -423,7 +423,7 @@ class AlphaArenaDatabase:
         return True
 
     def _save_snapshot_to_main_db(self, snapshot: PerformanceSnapshot):
-        """Save snapshot to main Fincept Terminal database."""
+        """Save snapshot to main finterm database."""
         main_db_path = get_main_db_path()
         if not main_db_path:
             return
@@ -516,7 +516,7 @@ class AlphaArenaDatabase:
         return True
 
     def _save_leaderboard_to_main_db(self, competition_id: str, cycle_number: int, leaderboard_json: str, timestamp: str):
-        """Save leaderboard to main Fincept Terminal database."""
+        """Save leaderboard to main finterm database."""
         main_db_path = get_main_db_path()
         if not main_db_path:
             return

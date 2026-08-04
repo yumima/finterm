@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Risk Shim
+# finterm - Risk Shim
 # Re-exports from fincept_engine + dynamic submodule stubs
 # ============================================================================
 

@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Extensions
+# finterm - Strategy Engine Extensions
 # Pure Python replacement for LEAN C# extension methods
 # ============================================================================
 

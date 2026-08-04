@@ -87,7 +87,7 @@ Simulate strategies from world's top hedge funds:
 | **Pershing Square** | `pershing_square_hedge_fund_agent/` | Activist value investing | $16B |
 | **AQR Capital** | `arq_capital_hedge_fund_agent/` | Factor investing, quant | $90B |
 
-**Fincept Hedge Fund**: Custom multi-agent hedge fund system (`fincept_hedge_fund/main.py`)
+**finterm Hedge Fund**: Custom multi-agent hedge fund system (`fincept_hedge_fund/main.py`)
 
 ## Legendary Investor Agents (`/TraderInvestorsAgent/`)
 

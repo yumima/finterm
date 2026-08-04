@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -20,7 +20,7 @@ class BasicTemplateFillForwardAlgorithm(QCAlgorithm):
         self.set_start_date(2013,10,7)   #Set Start Date
         self.set_end_date(2013,11,30)    #Set End Date
         self.set_cash(100000)           #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         self.add_security(SecurityType.EQUITY, "ASUR", Resolution.SECOND)
 
     def on_data(self, data):

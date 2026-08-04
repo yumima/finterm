@@ -3,7 +3,7 @@
 
 namespace fincept::screens {
 
-/// Trademarks — Fincept and third-party trademark acknowledgments.
+/// Trademarks — finterm and third-party trademark acknowledgments.
 class TrademarksScreen : public QWidget {
     Q_OBJECT
   public:

@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -26,7 +26,7 @@ class FilteredIdentityAlgorithm(QCAlgorithm):
         self.set_end_date(self.start_date)   # Set End Date
         self.set_cash(100000)              # Set Stratgy Cash
  
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         security = self.add_forex("EURUSD", Resolution.TICK)
 
         self._symbol = security.symbol

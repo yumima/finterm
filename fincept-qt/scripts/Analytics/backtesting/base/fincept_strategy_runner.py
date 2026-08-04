@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fincept Terminal - Universal Strategy Runner
-Executes strategies from the Fincept Engine registry across all backtesting providers.
+finterm - Universal Strategy Runner
+Executes strategies from the finterm Engine registry across all backtesting providers.
 
 Supports: VectorBT, Backtesting.py, Fast-Trade, Zipline, BT
 """
@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional
 STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "strategies"
 sys.path.insert(0, str(STRATEGIES_DIR))
 
-# Import Fincept Engine
+# Import finterm Engine
 from fincept_engine import QCAlgorithm, Symbol, TradeBar, Slice
 from fincept_engine.enums import Resolution, SecurityType
 from _registry import STRATEGY_REGISTRY
@@ -25,7 +25,7 @@ from _registry import STRATEGY_REGISTRY
 
 class FinceptStrategyRunner:
     """
-    Universal runner for Fincept Terminal strategies.
+    Universal runner for finterm strategies.
     Loads strategies from _registry.py and executes them with historical data.
     """
 

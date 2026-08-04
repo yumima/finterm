@@ -187,7 +187,7 @@ def generate_kline_image(ohlcv_df, save_path, window=60, style="international",
 
 
 def json_response(status, data=None, error=None):
-    """Build a standard JSON response for the Fincept protocol."""
+    """Build a standard JSON response for the finterm protocol."""
     resp = {"status": status}
     if data is not None:
         resp["data"] = data
@@ -197,7 +197,7 @@ def json_response(status, data=None, error=None):
 
 
 def output_json(obj):
-    """Print JSON to stdout (Fincept protocol)."""
+    """Print JSON to stdout (finterm protocol)."""
     print(json.dumps(obj, default=str, ensure_ascii=False))
 
 
@@ -210,7 +210,7 @@ def output_progress(message, pct=None):
 
 
 def parse_args():
-    """Parse command + JSON params from sys.argv (Fincept protocol)."""
+    """Parse command + JSON params from sys.argv (finterm protocol)."""
     command = sys.argv[1] if len(sys.argv) > 1 else ""
     params = {}
     if len(sys.argv) > 2:

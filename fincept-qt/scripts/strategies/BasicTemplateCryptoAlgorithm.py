@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -48,7 +48,7 @@ class BasicTemplateCryptoAlgorithm(QCAlgorithm):
         # self.default_order_properties = GDAXOrderProperties()
         # self.default_order_properties.post_only = True
 
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         self.add_crypto("BTCUSD", Resolution.MINUTE)
         self.add_crypto("ETHUSD", Resolution.MINUTE)
         self.add_crypto("BTCEUR", Resolution.MINUTE)

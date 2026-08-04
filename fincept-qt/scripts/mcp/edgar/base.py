@@ -67,8 +67,8 @@ def initialize_edgar(identity: Optional[str] = None):
     if identity:
         set_identity(identity)
     elif 'EDGAR_IDENTITY' not in os.environ:
-        # Default identity for Fincept Terminal
-        set_identity("Fincept Terminal nikultilak@gmail.com")
+        # Default identity for finterm
+        set_identity("finterm admin@hanlexon.com")
 
 
 # ============================================================================

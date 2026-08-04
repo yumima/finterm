@@ -242,7 +242,7 @@ QWidget* MaritimeScreen::build_top_bar() {
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(12);
 
-    brand_label_ = new QLabel("FINCEPT MARITIME INTELLIGENCE", bar);
+    brand_label_ = new QLabel("FINTERM MARITIME INTELLIGENCE", bar);
     hl->addWidget(brand_label_);
 
     classified_label_ = new QLabel("CLASSIFIED // TRADE ROUTE ANALYSIS", bar);

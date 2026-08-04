@@ -1,4 +1,4 @@
-// Fincept Terminal — EventBus regression suite.
+// finterm — EventBus regression suite.
 //
 // Locks in two invariants that broke in production:
 //

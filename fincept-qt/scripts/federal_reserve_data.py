@@ -65,7 +65,7 @@ class FederalReserveWrapper:
         self.ny_fed_url = NY_FED_API_URL
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept-Terminal/1.0'
+            'User-Agent': 'finterm-Terminal/1.0'
         })
 
     def _make_request(self, url: str, params: Optional[Dict] = None, timeout: int = 30) -> Dict[str, Any]:

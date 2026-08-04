@@ -38,7 +38,7 @@ class CFTCDataWrapper:
         self.app_token = app_token or os.environ.get('CFTC_APP_TOKEN', '')
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Fincept Terminal - financial analysis tool (contact@fincept.com)',
+            'User-Agent': 'finterm - financial analysis tool (admin@hanlexon.com)',
             'Accept': 'application/json'
         })
 

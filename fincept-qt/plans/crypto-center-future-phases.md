@@ -132,7 +132,7 @@ No new hub topics were introduced; no `DATAHUB_TOPICS.md` update required.
 3. **Fee discount** — every paid feature in the terminal (deep backtest, AI report, premium screen) accepts $FNCPT at a 30 % discount. HoldingsBar lights up the chip; TRADE tab shows projected savings given current balance.
 4. **Activity feed (ACTIVITY tab)** — last 50 on-chain operations involving the wallet, parsed for human-readable events (sent, received, swapped) via Helius parsed-tx.
 
-**Burn deferred to Phase 5.** Real burns require either ~150 lines of client-side Solana primitives in C++ or a custom Rust on-chain program, both disproportionate for a single user-action. Phase 5's buyback worker burns from the Fincept treasury account using off-chain tooling — that's the right place for the supply mechanism. See `plans/crypto-center-phase-2.md` D6 for the full rationale.
+**Burn deferred to Phase 5.** Real burns require either ~150 lines of client-side Solana primitives in C++ or a custom Rust on-chain program, both disproportionate for a single user-action. Phase 5's buyback worker burns from the finterm treasury account using off-chain tooling — that's the right place for the supply mechanism. See `plans/crypto-center-phase-2.md` D6 for the full rationale.
 
 ### 2.2 New panels
 
@@ -380,7 +380,7 @@ Repo: `solana/programs/fincept_market/`.
 Pre-built sources:
 - **Pyth Network** — Fed rates, S&P close, BTC price.
 - **Switchboard** — custom OOB queries (HTTP fetch from NOAA, IMF).
-- **Manual review board** — multi-sig of 3 trusted Fincept staff for ambiguous markets, slashable via veFNCPT vote if they misresolve.
+- **Manual review board** — multi-sig of 3 trusted finterm staff for ambiguous markets, slashable via veFNCPT vote if they misresolve.
 
 Oracle source is part of the market metadata; UI shows the source pill.
 
@@ -458,19 +458,19 @@ These are **terminal-wide** topics (no `<pubkey>` segment) — same data shown t
 
 ### 5.4 Automation (off-chain)
 
-The buyback&burn flow runs on a Fincept-operated worker:
+The buyback&burn flow runs on a finterm-operated worker:
 
 1. End of epoch, worker tallies revenue from Stripe + on-chain prediction-market fees.
 2. Computes buyback budget (initial split: 50 % buyback, 25 % staker yield, 25 % treasury).
 3. Splits into N hourly chunks, executes through Jupiter to avoid frontrunning a single big buy.
 4. Burns the bought $FNCPT — direct SPL Token `burn_checked` from a treasury account is sufficient. The signature serves as the receipt; an on-chain event log is *not* required because the worker also publishes the per-epoch summary the dashboard reads (step 5).
-5. Publishes per-epoch summary to a Fincept HTTP endpoint that `BuybackBurnService` polls.
+5. Publishes per-epoch summary to a finterm HTTP endpoint that `BuybackBurnService` polls.
 
 Worker code lives in `services/buyback-worker/` (Python or TypeScript — separate repo decision).
 
 ### 5.5 Cross-phase reuse
 
-This phase introduces no on-chain program. Direct SPL `burn_checked` from a treasury wallet is enough for a Fincept-operated worker — the receipt is the transaction signature plus the off-chain epoch summary. (User-initiated burns from the TRADE tab were considered for Phase 2 but deferred precisely so this phase, where centralised burn coordination actually pays for itself, owns the burn primitive cleanly.)
+This phase introduces no on-chain program. Direct SPL `burn_checked` from a treasury wallet is enough for a finterm-operated worker — the receipt is the transaction signature plus the off-chain epoch summary. (User-initiated burns from the TRADE tab were considered for Phase 2 but deferred precisely so this phase, where centralised burn coordination actually pays for itself, owns the burn primitive cleanly.)
 
 ### 5.6 Acceptance criteria
 
@@ -551,7 +551,7 @@ Phase 5 ships **before** Phase 3 because the dashboard works as soon as buyback 
 
 ## 9. What we will NOT do across these phases
 
-- **Custodial features.** No "Fincept holds your tokens for you." Ever.
+- **Custodial features.** No "finterm holds your tokens for you." Ever.
 - **Multi-chain.** $FNCPT stays on Solana. Cross-chain bridges are a separate product.
 - **Fiat onramp inside the terminal.** Use Phantom/Solflare's built-in onramps; we link, don't host.
 - **Auto-trading bots.** `agent:*` topics already exist for that — we don't double-build.

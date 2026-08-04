@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine Types
+# finterm - Strategy Engine Types
 # Core data types: Symbol, Slice, TradeBar, Holdings, Orders, Insights
 # ============================================================================
 

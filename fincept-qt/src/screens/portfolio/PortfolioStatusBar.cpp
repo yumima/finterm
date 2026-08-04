@@ -36,7 +36,7 @@ PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
 
     // Left section
     brand_label_ = make_label(ui::colors::AMBER, true);
-    brand_label_->setText("FINCEPT");
+    brand_label_->setText("FINTERM");
 
     add_divider();
 

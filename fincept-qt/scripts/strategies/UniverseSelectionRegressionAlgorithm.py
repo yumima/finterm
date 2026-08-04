@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Strategy Engine
+# finterm - Strategy Engine
 # Copyright (c) 2024-2026 Fincept Corporation. All rights reserved.
 # Licensed under the MIT License.
 # https://github.com/Fincept-Corporation/FinceptTerminal
@@ -22,7 +22,7 @@ class UniverseSelectionRegressionAlgorithm(QCAlgorithm):
         self.set_start_date(2014,3,22)   #Set Start Date
         self.set_end_date(2014,4,7)      #Set End Date
         self.set_cash(100000)           #Set Strategy Cash
-        # Fincept Terminal Strategy Engine - Symbol Configuration
+        # finterm Strategy Engine - Symbol Configuration
         # security that exists with no mappings
         self.add_equity("SPY", Resolution.DAILY)
         # security that doesn't exist until half way in backtest (comes in as GOOCV)

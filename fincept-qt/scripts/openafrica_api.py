@@ -46,7 +46,7 @@ def _make_request(action: str, params: Optional[Dict[str, Any]] = None) -> Dict[
         # Prepare headers
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'Fincept-Terminal/1.0 (openAFRICA API Wrapper)'
+            'User-Agent': 'finterm-Terminal/1.0 (openAFRICA API Wrapper)'
         }
 
         # Add API key if available (for better rate limits)

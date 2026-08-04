@@ -22,8 +22,8 @@ NavigationBar::NavigationBar(QWidget* parent) : QWidget(parent) {
         return l;
     };
 
-    hl->addWidget(mk("FINCEPT", "navBrand"));
-    hl->addWidget(mk("TERMINAL", "navTitle"));
+    hl->addWidget(mk("FIN", "navBrand"));
+    hl->addWidget(mk("TERM", "navTitle"));
     hl->addWidget(mk("   ", "navSpacer"));
     hl->addWidget(mk("\xe2\x97\x8f", "navLiveDot"));
     hl->addWidget(mk(" LIVE", "navLive"));

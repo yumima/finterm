@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fincept Terminal - Strategy Test Suite
+finterm - Strategy Test Suite
 Tests all strategies for import/instantiation/initialization errors.
 """
 import os

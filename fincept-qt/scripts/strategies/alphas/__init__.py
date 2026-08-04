@@ -1,5 +1,5 @@
 # ============================================================================
-# Fincept Terminal - Alphas Shim
+# finterm - Alphas Shim
 # Re-exports from fincept_engine.framework.alphas + dynamic submodule stubs
 # ============================================================================
 
