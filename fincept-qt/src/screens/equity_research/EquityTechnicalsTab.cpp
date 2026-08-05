@@ -203,6 +203,163 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
     return "";
 }
 
+/// Display name → the snake_case column key used by interpretation() and
+/// indicator_help(). The generic rule (lowercase, spaces→underscores, drop %)
+/// covers most names; the Bollinger/AO names need explicit mapping.
+QString EquityTechnicalsTab::col_key_for(const QString& name) {
+    if (name == "BB %B")
+        return "bb_pband";
+    if (name == "BB Width")
+        return "bb_wband";
+    if (name == "BB Mid")
+        return "bb_mavg";
+    if (name == "BB Upper")
+        return "bb_hband";
+    if (name == "BB Lower")
+        return "bb_lband";
+    if (name == "Awesome Osc")
+        return "ao";
+    QString key = name.toLower();
+    key.replace(QLatin1Char(' '), QLatin1Char('_'));
+    key.remove(QLatin1Char('%'));
+    return key;
+}
+
+/// What the indicator IS and how to read it — shown as a hover tooltip.
+/// Complements interpretation(), which reads the current value.
+QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
+    if (col_key == "rsi")
+        return "Relative Strength Index (RSI)\n\n"
+               "Momentum oscillator on a 0\xe2\x80\x93""100 scale comparing the size of recent gains to "
+               "recent losses (typically over 14 periods). Above 70 is considered overbought, "
+               "below 30 oversold. Divergence between RSI and price often precedes a reversal.";
+    if (col_key == "macd")
+        return "Moving Average Convergence Divergence (MACD)\n\n"
+               "The gap between the 12- and 26-period exponential moving averages. Above zero, "
+               "short-term momentum is bullish; below zero, bearish. Crossing its 9-period "
+               "signal line is the classic trade trigger.";
+    if (col_key == "macd_signal")
+        return "MACD Signal Line\n\n"
+               "A 9-period EMA of the MACD line that smooths it out. MACD crossing above the "
+               "signal line is a bullish trigger; crossing below is bearish.";
+    if (col_key == "stoch_k")
+        return "Stochastic Oscillator %K\n\n"
+               "Where the latest close sits within the recent high\xe2\x80\x93low range, 0\xe2\x80\x93""100. "
+               "Above 80 is overbought, below 20 oversold. %K is the fast line; its crossover "
+               "with the slower %D line is the trade trigger.";
+    if (col_key == "stoch_d")
+        return "Stochastic Oscillator %D\n\n"
+               "A 3-period average of %K \xe2\x80\x94 the slow, smoother stochastic line. %K crossing "
+               "above %D in oversold territory is a classic buy trigger; crossing below in "
+               "overbought territory, a sell trigger.";
+    if (col_key == "williams_r")
+        return "Williams %R\n\n"
+               "Where the close sits within the recent high\xe2\x80\x93low range, on an inverted 0 to "
+               "\xe2\x88\x92""100 scale. Above \xe2\x88\x92""20 is overbought, below \xe2\x88\x92""80 oversold. Effectively a "
+               "fast stochastic with a flipped axis.";
+    if (col_key == "cci")
+        return "Commodity Channel Index (CCI)\n\n"
+               "How far price has stretched from its statistical average. Above +100 signals an "
+               "unusually strong up-move (overbought), below \xe2\x88\x92""100 an unusually weak one "
+               "(oversold); \xc2\xb1""200 marks extremes.";
+    if (col_key == "adx")
+        return "Average Directional Index (ADX)\n\n"
+               "Trend strength, not direction, on a 0\xe2\x80\x93""100 scale. Below 20 the market is "
+               "range-bound; above 25 a trend is in force; above 50 it is very strong. Use it "
+               "to judge whether trend-following signals are trustworthy.";
+    if (col_key == "aroon_up")
+        return "Aroon Up\n\n"
+               "How recently the period's highest high was set, 0\xe2\x80\x93""100. Above 70 means new "
+               "highs keep being made (strong uptrend); below 30 the upside is stale.";
+    if (col_key == "aroon_down")
+        return "Aroon Down\n\n"
+               "How recently the period's lowest low was set, 0\xe2\x80\x93""100. Above 70 means new lows "
+               "keep being made (strong downtrend); below 30 the downside is stale.";
+    if (col_key == "mfi")
+        return "Money Flow Index (MFI)\n\n"
+               "A volume-weighted RSI, 0\xe2\x80\x93""100: tracks whether money is flowing into or out of "
+               "the stock. Above 80 is overbought, below 20 oversold; divergence from price "
+               "warns the move lacks real flow behind it.";
+    if (col_key == "roc")
+        return "Rate of Change (ROC)\n\n"
+               "Percentage change in price over the lookback period \xe2\x80\x94 raw momentum. Positive "
+               "and rising means upside momentum is building; negative and falling, downside.";
+    if (col_key == "ao")
+        return "Awesome Oscillator (AO)\n\n"
+               "Difference between the 5- and 34-period midpoint moving averages. Above zero, "
+               "short-term momentum leads long-term (bullish); zero-line crossings and "
+               "twin-peak patterns are its trade signals.";
+    if (col_key == "kama")
+        return "Kaufman Adaptive Moving Average (KAMA)\n\n"
+               "A moving average that speeds up when the market trends and slows down in choppy "
+               "ranges, filtering whipsaws. Price above a rising KAMA supports an uptrend.";
+    if (col_key == "atr")
+        return "Average True Range (ATR)\n\n"
+               "The average size of a bar's full trading range, in price units \xe2\x80\x94 a pure "
+               "volatility gauge with no direction. Commonly used to size stop-losses "
+               "(e.g. 2\xc3\x97""ATR from entry) and positions.";
+    if (col_key == "bb_mavg")
+        return "Bollinger Band Midline\n\n"
+               "The 20-period simple moving average at the center of the Bollinger Bands, with "
+               "the bands two standard deviations either side. Acts as the trend baseline and "
+               "a dynamic support/resistance level.";
+    if (col_key == "bb_hband")
+        return "Bollinger Upper Band\n\n"
+               "Two standard deviations above the 20-period average. Price tagging or riding "
+               "the upper band signals a strong \xe2\x80\x94 possibly stretched \xe2\x80\x94 up-move; in ranges "
+               "it acts as resistance.";
+    if (col_key == "bb_lband")
+        return "Bollinger Lower Band\n\n"
+               "Two standard deviations below the 20-period average. Price tagging or riding "
+               "the lower band signals a strong \xe2\x80\x94 possibly stretched \xe2\x80\x94 down-move; in "
+               "ranges it acts as support.";
+    if (col_key == "bb_pband")
+        return "Bollinger %B\n\n"
+               "Where price sits within the Bollinger Bands: 1 = at the upper band, 0 = at the "
+               "lower, 0.5 = at the midline. Readings outside 0\xe2\x80\x93""1 mean price closed beyond "
+               "the bands \xe2\x80\x94 a statistically stretched move.";
+    if (col_key == "bb_wband")
+        return "Bollinger Band Width\n\n"
+               "The distance between the bands relative to the midline \xe2\x80\x94 a direct read of "
+               "volatility. A tight squeeze often precedes a sharp breakout; unusually wide "
+               "bands mark volatility that tends to fade.";
+    if (col_key == "obv")
+        return "On-Balance Volume (OBV)\n\n"
+               "Running total that adds the day's volume on up closes and subtracts it on down "
+               "closes. Rising OBV confirms an uptrend has volume behind it; OBV falling while "
+               "price rises warns the rally is thin.";
+    if (col_key == "vwap")
+        return "Volume-Weighted Average Price (VWAP)\n\n"
+               "The average traded price weighted by volume \xe2\x80\x94 the institutional benchmark "
+               "for execution quality. Price above VWAP means buyers are in control; below, "
+               "sellers dominated.";
+    if (col_key == "cmf")
+        return "Chaikin Money Flow (CMF)\n\n"
+               "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92""1 to "
+               "+1. Above +0.1 indicates accumulation; below \xe2\x88\x92""0.1 distribution; near zero, "
+               "balance.";
+    if (col_key == "adi")
+        return "Accumulation/Distribution Index (ADI)\n\n"
+               "Cumulative volume weighted by where each close lands within its bar's range. "
+               "Rising ADI shows accumulation confirming the trend; divergence from price "
+               "warns of a hidden shift in flow.";
+    if (col_key.startsWith("sma_"))
+        return "Simple Moving Average (SMA)\n\n"
+               "The arithmetic average close over the period \xe2\x80\x94 the plain trend baseline. "
+               "Price above a rising SMA keeps the uptrend intact; short/long SMA crossovers "
+               "(e.g. the golden cross) mark trend changes.";
+    if (col_key.startsWith("ema_"))
+        return "Exponential Moving Average (EMA)\n\n"
+               "A moving average that weights recent prices more heavily, so it turns faster "
+               "than an SMA. Price above a rising EMA supports the uptrend; crossovers signal "
+               "shifts earlier, at the cost of more whipsaws.";
+    if (col_key.startsWith("wma_"))
+        return "Weighted Moving Average (WMA)\n\n"
+               "A moving average with linearly increasing weight on the most recent prices \xe2\x80\x94 "
+               "responsiveness between an SMA and an EMA. Price above a rising WMA is bullish.";
+    return "";
+}
+
 // ── Constructor ──────────────────────────────────────────────────────────────
 
 EquityTechnicalsTab::EquityTechnicalsTab(QWidget* parent) : QWidget(parent) {
@@ -520,8 +677,13 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             continue;
         const auto& ti = it.value();
 
+        const QString col_key = col_key_for(ti.name);
+
         auto* card = new QFrame;
         const char* sc = signal_color(ti.signal);
+        const QString help = indicator_help(col_key);
+        if (!help.isEmpty())
+            card->setToolTip(help);
         card->setStyleSheet(
             QString("QFrame{background:%1;border:1px solid %2;border-left:3px solid %3;border-radius:2px;}")
                 .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(), sc));
@@ -552,11 +714,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         cl->addLayout(vr);
 
         // Interpretation
-        QString interp = interpretation(ti.category == "trend" && ti.name == "MACD" ? "macd"
-                                        : ti.category == "momentum" && ti.name == "RSI"
-                                            ? "rsi"
-                                            : ti.name.toLower().replace(' ', '_').replace(QString("%"), QString()),
-                                        ti.value);
+        QString interp = interpretation(col_key, ti.value);
         if (!interp.isEmpty()) {
             auto* desc = new QLabel(interp);
             desc->setWordWrap(true);
@@ -680,10 +838,15 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             rl->setContentsMargins(12, 5, 12, 5);
             rl->setSpacing(0);
 
-            // Name
+            const QString col_key = col_key_for(ti.name);
+
+            // Name — hover for what the indicator is and how to read it
             auto* name_lbl = new QLabel(ti.name);
             name_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
                                         .arg(ui::colors::TEXT_PRIMARY()));
+            const QString help = indicator_help(col_key);
+            if (!help.isEmpty())
+                name_lbl->setToolTip(help);
             rl->addWidget(name_lbl, 2);
 
             // Value
@@ -710,30 +873,6 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             rl->addWidget(sig_w, 1);
 
             // Interpretation
-            // Build the column key from the indicator for interpretation lookup
-            QString col_key = ti.name.toLower().replace(' ', '_').replace(QString("%"), QString());
-            // Special mappings
-            if (ti.name == "Stoch %K")
-                col_key = "stoch_k";
-            else if (ti.name == "Stoch %D")
-                col_key = "stoch_d";
-            else if (ti.name == "Williams %R")
-                col_key = "williams_r";
-            else if (ti.name == "BB %B")
-                col_key = "bb_pband";
-            else if (ti.name == "BB Width")
-                col_key = "bb_wband";
-            else if (ti.name == "BB Mid")
-                col_key = "bb_mavg";
-            else if (ti.name == "BB Upper")
-                col_key = "bb_hband";
-            else if (ti.name == "BB Lower")
-                col_key = "bb_lband";
-            else if (ti.name == "Awesome Osc")
-                col_key = "ao";
-            else if (ti.name == "MACD Signal")
-                col_key = "macd_signal";
-
             QString interp = interpretation(col_key, ti.value);
             auto* interp_lbl = new QLabel(interp.isEmpty() ? "\xe2\x80\x94" : interp);
             interp_lbl->setWordWrap(true);

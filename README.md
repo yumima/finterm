@@ -2,11 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-04)
+## Today's commits (2026-08-05)
 
 Latest first.
 
-- [`b1dccb9e8`](https://github.com/yumima/finterm/commit/b1dccb9e8) Portfolio: open the sell dialog even when no holding row is focused
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
