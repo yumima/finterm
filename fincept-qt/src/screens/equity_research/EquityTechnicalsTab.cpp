@@ -420,7 +420,8 @@ void EquityTechnicalsTab::set_symbol(const QString& symbol) {
     services::equity::EquityResearchService::instance().subscribe_technicals(
         this, symbol, current_period_,
         [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
-    current_technicals_key_ = "equity:technicals:" + symbol + ":" + current_period_;
+    current_technicals_key_ =
+        services::equity::EquityResearchService::technicals_key(symbol, current_period_);
 }
 
 void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period) {
@@ -439,7 +440,8 @@ void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period)
     services::equity::EquityResearchService::instance().subscribe_technicals(
         this, current_symbol_, period,
         [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
-    current_technicals_key_ = "equity:technicals:" + current_symbol_ + ":" + period;
+    current_technicals_key_ =
+        services::equity::EquityResearchService::technicals_key(current_symbol_, period);
 }
 
 // static
@@ -476,6 +478,16 @@ void EquityTechnicalsTab::build_ui() {
     pb_hl->setSpacing(4);
 
     auto* period_lbl = new QLabel("PERIOD");
+    // Be straight about what this control does. It selects how much history is
+    // pulled, not the bar size the indicators are built from — and since every
+    // reading is taken off the latest daily bar with a fixed lookback, the
+    // selections that clear the warm-up floor land on the same verdict.
+    period_lbl->setToolTip(
+        "How much price history is fetched.\n\n"
+        "Indicators are computed from daily bars and always from at least two years of "
+        "them, so that the 50- and 200-day averages, MACD and ADX are warmed up and the "
+        "rating has something to stand on. Because each indicator reads off the latest "
+        "bar with a fixed lookback, the shorter selections produce the same rating.");
     period_lbl->setStyleSheet(
         QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
             .arg(ui::colors::TEXT_SECONDARY()));

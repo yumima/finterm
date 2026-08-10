@@ -58,6 +58,23 @@ class EquityResearchService : public QObject {
     /// an adjacent period (e.g. 5Y when viewing 1Y) instant on next click.
     void prefetch_historical(const QString& symbol, const QString& period);
 
+    /// The daily-history window the technicals compute actually uses for a
+    /// requested period.
+    ///
+    /// The rating will not produce a verdict without SMA 50/200, MACD and ADX
+    /// warmed up, and a 1M window supplies none of them — `ta`'s ADX does not
+    /// survive 23 bars at all. So the indicator series is always computed from
+    /// at least two years of daily candles, whichever button is selected. The
+    /// consequence is deliberate: every indicator reads off the last bar with a
+    /// fixed lookback, so the sub-2y buttons now agree with each other rather
+    /// than differing only in how much of their warm-up had completed.
+    static QString technicals_history_period(const QString& requested);
+
+    /// Cache / QueryStore key for a technicals request. Derived from the
+    /// floored period above, so the buttons that resolve to the same window
+    /// share one computed series instead of five copies of it.
+    static QString technicals_key(const QString& symbol, const QString& requested);
+
     /// Subscribe to the computed technicals stream for (`symbol`, `period`).
     /// State carries TechnicalsData. Internally delegates to fetch_technicals
     /// for the actual two-stage candles→compute chain; the QueryStore layer

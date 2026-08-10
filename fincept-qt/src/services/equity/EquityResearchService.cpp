@@ -391,19 +391,37 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                                             std::move(cb), std::move(fetcher));
 }
 
+QString EquityResearchService::technicals_history_period(const QString& requested) {
+    // Anything shorter than two years cannot warm up the indicators the rating
+    // requires. Longer selections are honoured as-is — they cost nothing extra
+    // beyond the fetch, since every reading is taken off the last bar.
+    static const QSet<QString> kBelowFloor = {
+        QStringLiteral("1d"),  QStringLiteral("5d"),  QStringLiteral("1mo"),
+        QStringLiteral("3mo"), QStringLiteral("6mo"), QStringLiteral("ytd"),
+        QStringLiteral("1y"),
+    };
+    return kBelowFloor.contains(requested) ? QStringLiteral("2y") : requested;
+}
+
+QString EquityResearchService::technicals_key(const QString& symbol, const QString& requested) {
+    return "equity:technicals:" + symbol + ":" + technicals_history_period(requested);
+}
+
 void EquityResearchService::subscribe_technicals(QObject* owner, const QString& symbol,
-                                                  const QString& period,
+                                                  const QString& requested_period,
                                                   query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
-    const QString key = "equity:technicals:" + symbol + ":" + period;
-    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
-                                           query::QueryStore::Rejecter reject) {
+    // Everything below works in the floored period, so the cache entry, the
+    // QueryStore key and the `d.period` the watcher matches on all agree.
+    const QString period = technicals_history_period(requested_period);
+    const QString key = technicals_key(symbol, requested_period);
+    auto fetcher = [this, symbol, period, key](query::QueryStore::Resolver resolve,
+                                                query::QueryStore::Rejecter reject) {
         // Cache check first — fetch_technicals also checks but it emits the
         // broadcast synchronously without going through resolve, which would
         // skip the QueryStore delivery path. So we do an inline check that
         // calls resolve directly on hit.
-        const QVariant tcv = fincept::CacheManager::instance().get(
-            "equity:technicals:" + symbol + ":" + period);
+        const QVariant tcv = fincept::CacheManager::instance().get(key);
         if (!tcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (doc.isArray()) {
@@ -816,7 +834,11 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
 //     action. Both daemon hops share the warm pandas/yfinance import so the
 //     wall time is dominated only by the network roundtrip on cold candles.
 //
-void EquityResearchService::fetch_technicals(const QString& symbol, const QString& period) {
+void EquityResearchService::fetch_technicals(const QString& symbol, const QString& requested_period) {
+    // Floored so a 1M selection still gets enough daily history to warm up the
+    // indicators the rating needs. See technicals_history_period().
+    const QString period = technicals_history_period(requested_period);
+
     // ── Tier 0: technicals cache ─────────────────────────────────────────────
     {
         const QVariant tcv = fincept::CacheManager::instance().get("equity:technicals:" + symbol + ":" + period);
