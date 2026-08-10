@@ -73,7 +73,7 @@ def compute_all_technicals(historical_data_json):
             "data": json.loads(result_json),
             "indicator_columns": {
                 "trend": [
-                    "sma_20", "ema_12", "wma_9", "macd", "macd_signal", "macd_diff",
+                    "sma_20", "sma_50", "sma_200", "ema_12", "wma_9", "macd", "macd_signal", "macd_diff",
                     "trix", "mass_index", "ichimoku_conversion", "ichimoku_base",
                     "ichimoku_a", "ichimoku_b", "kst", "kst_signal", "dpo", "cci",
                     "adx", "adx_pos", "adx_neg", "vortex_pos", "vortex_neg",

@@ -2,6 +2,7 @@
 #include "services/equity/EquityResearchService.h"
 
 #include "core/logging/Logger.h"
+#include "services/equity/TechnicalRating.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "services/util/DiskCache.h"
@@ -1188,121 +1189,23 @@ FinancialsData EquityResearchService::parse_financials(const QJsonObject& obj) c
     return fd;
 }
 
-TechSignal EquityResearchService::score_indicator(const QString& name, double value, double sma20, double sma50) const {
-    // RSI (0-100): <=30 buy, >=70 sell
-    if (name == "rsi") {
-        if (value <= 25)
-            return TechSignal::StrongBuy;
-        if (value <= 40)
-            return TechSignal::Buy;
-        if (value <= 60)
-            return TechSignal::Neutral;
-        if (value <= 75)
-            return TechSignal::Sell;
-        return TechSignal::StrongSell;
+namespace {
+
+/// Copy every numeric column of a JSON row into an IndicatorRow.
+///
+/// The scorer needs columns the tab never displays — DI+/DI- to give ADX a
+/// direction, the MACD signal line to turn the MACD line into a histogram,
+/// Aroon's other leg — so the whole row is loaded rather than the display
+/// subset. Nulls (the JSON encoding of a NaN warm-up value) are not `isDouble`
+/// and drop out here; IndicatorRow::set filters any remaining non-finite value.
+void fill_row(fincept::services::equity::IndicatorRow& row, const QJsonObject& src) {
+    for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
+        if (it.value().isDouble())
+            row.set(it.key(), it.value().toDouble());
     }
-    // MACD: positive histogram = buy
-    if (name == "macd") {
-        return value > 0 ? TechSignal::Buy : TechSignal::Sell;
-    }
-    // SMA crossover
-    if (name == "sma_20" && sma50 > 0) {
-        if (sma20 > sma50 * 1.02)
-            return TechSignal::StrongBuy;
-        if (sma20 > sma50)
-            return TechSignal::Buy;
-        if (sma20 < sma50 * 0.98)
-            return TechSignal::StrongSell;
-        if (sma20 < sma50)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // CCI: <=-100 buy, >=100 sell
-    if (name == "cci") {
-        if (value <= -100)
-            return TechSignal::StrongBuy;
-        if (value <= -50)
-            return TechSignal::Buy;
-        if (value >= 100)
-            return TechSignal::StrongSell;
-        if (value >= 50)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // MFI (0-100): <=20 buy, >=80 sell
-    if (name == "mfi") {
-        if (value <= 20)
-            return TechSignal::StrongBuy;
-        if (value <= 40)
-            return TechSignal::Buy;
-        if (value >= 80)
-            return TechSignal::StrongSell;
-        if (value >= 60)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // Stochastic %K and %D
-    if (name == "stoch_k" || name == "stoch_d") {
-        if (value <= 20)
-            return TechSignal::StrongBuy;
-        if (value <= 40)
-            return TechSignal::Buy;
-        if (value >= 80)
-            return TechSignal::StrongSell;
-        if (value >= 60)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // Williams %R (-100 to 0): <=-80 buy, >=-20 sell
-    if (name == "williams_r") {
-        if (value <= -80)
-            return TechSignal::StrongBuy;
-        if (value <= -60)
-            return TechSignal::Buy;
-        if (value >= -20)
-            return TechSignal::StrongSell;
-        if (value >= -40)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // ROC: positive = buy
-    if (name == "roc") {
-        if (value > 5)
-            return TechSignal::Buy;
-        if (value < -5)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // ADX: >25 = trending (buy signal), <20 = weak
-    if (name == "adx") {
-        return value > 25 ? TechSignal::Buy : TechSignal::Neutral;
-    }
-    // BB %B: <0.2 oversold (buy), >0.8 overbought (sell)
-    if (name == "bb_pband") {
-        if (value < 0.2)
-            return TechSignal::StrongBuy;
-        if (value > 0.8)
-            return TechSignal::StrongSell;
-        return TechSignal::Neutral;
-    }
-    // CMF: >0.1 buy, <-0.1 sell
-    if (name == "cmf") {
-        if (value > 0.1)
-            return TechSignal::Buy;
-        if (value < -0.1)
-            return TechSignal::Sell;
-        return TechSignal::Neutral;
-    }
-    // OBV: use trend direction — positive change from context = neutral (no ref price)
-    // Aroon Up/Down: aroon_up > aroon_down = buy
-    if (name == "aroon_up") {
-        return value > 50 ? TechSignal::Buy : TechSignal::Neutral;
-    }
-    if (name == "aroon_down") {
-        return value > 50 ? TechSignal::Sell : TechSignal::Neutral;
-    }
-    return TechSignal::Neutral;
 }
+
+} // namespace
 
 TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, const QString& period,
                                                         const QJsonArray& rows) const {
@@ -1312,34 +1215,51 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     if (rows.isEmpty())
         return td;
 
-    // Use the last row (most recent values) — compute_technicals.py outputs lowercase snake_case
-    auto last = rows.last().toObject();
+    // compute_technicals emits lowercase snake_case columns, one row per candle.
+    const QJsonObject last = rows.last().toObject();
 
-    // Extract SMA values for cross scoring
-    double sma20 = last["sma_20"].toDouble();
-    double sma50 = last["sma_50"].toDouble(); // may be 0 if not present
+    RatingInput input;
+    input.bars = static_cast<int>(rows.size());
+    input.close = last.value("close").toDouble();
+    fill_row(input.now, last);
+    if (rows.size() >= 2)
+        fill_row(input.prev, rows.at(rows.size() - 2).toObject());
+    if (rows.size() > technical_rating::kSlopeLookback)
+        fill_row(input.back, rows.at(rows.size() - 1 - technical_rating::kSlopeLookback).toObject());
 
-    // Maps: display name → actual column key in JSON output
-    // Trend: sma_20, sma_50, ema_12, wma_9, macd, macd_signal, cci, adx, aroon_up, aroon_down
+    // The Python side isolates a failing indicator stage and leaves a
+    // `_<stage>_error` column behind rather than aborting the compute. Surface
+    // it: without this the panel merely looks thinner than usual while the
+    // rating is quietly derived from whatever survived.
+    QStringList lost;
+    for (auto it = last.constBegin(); it != last.constEnd(); ++it) {
+        const QString& key = it.key();
+        if (key.startsWith(QLatin1Char('_')) && key.endsWith(QLatin1String("_error")))
+            lost << key.mid(1, key.size() - 7);
+    }
+    if (!lost.isEmpty()) {
+        lost.sort();
+        td.data_warning = QStringLiteral("Could not compute: %1").arg(lost.join(QStringLiteral(", ")));
+    }
+
+    // Display name → column key in the computed output.
     static const QList<QPair<QString, QString>> kTrend = {
-        {"SMA 20", "sma_20"},     {"SMA 50", "sma_50"},           {"EMA 12", "ema_12"}, {"WMA 9", "wma_9"},
-        {"MACD", "macd"},         {"MACD Signal", "macd_signal"}, {"CCI", "cci"},       {"ADX", "adx"},
+        {"SMA 20", "sma_20"},     {"SMA 50", "sma_50"},           {"SMA 200", "sma_200"},
+        {"EMA 12", "ema_12"},     {"WMA 9", "wma_9"},             {"MACD", "macd"},
+        {"MACD Signal", "macd_signal"}, {"CCI", "cci"},           {"ADX", "adx"},
         {"Aroon Up", "aroon_up"}, {"Aroon Down", "aroon_down"},
     };
-    // Momentum: rsi, stoch_k, stoch_d, williams_r, roc, mfi, ao, kama
     static const QList<QPair<QString, QString>> kMomentum = {
         {"RSI", "rsi"}, {"Stoch %K", "stoch_k"}, {"Stoch %D", "stoch_d"}, {"Williams %R", "williams_r"},
         {"ROC", "roc"}, {"MFI", "mfi"},          {"Awesome Osc", "ao"},   {"KAMA", "kama"},
     };
-    // Volatility: atr, bb_mavg, bb_hband, bb_lband, bb_pband, bb_wband
     static const QList<QPair<QString, QString>> kVolatility = {
         {"ATR", "atr"},           {"BB Mid", "bb_mavg"}, {"BB Upper", "bb_hband"},
         {"BB Lower", "bb_lband"}, {"BB %B", "bb_pband"}, {"BB Width", "bb_wband"},
     };
-    // Volume: obv, vwap, mfi (mfi also in momentum), cmf, adi
     static const QList<QPair<QString, QString>> kVolume = {
         {"OBV", "obv"},
-        {"VWAP", "vwap"},
+        {"Rolling VWAP", "vwap"},
         {"CMF", "cmf"},
         {"ADI", "adi"},
     };
@@ -1348,19 +1268,16 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
         QVector<TechIndicator> out;
         for (const auto& kv : keys) {
             const QString& col = kv.second;
-            if (!last.contains(col))
-                continue;
-            auto jval = last[col];
-            if (jval.isNull() || jval.isUndefined())
-                continue;
-            double val = jval.toDouble();
-            if (std::isnan(val))
-                continue;
+            if (!input.now.has(col))
+                continue; // never computed, or still inside its warm-up window
+            const IndicatorVerdict verdict = technical_rating::score(col, input);
             TechIndicator ti;
             ti.name = kv.first;
-            ti.value = val;
+            ti.value = input.now.get(col);
             ti.category = cat;
-            ti.signal = score_indicator(col, val, sma20, sma50);
+            ti.signal = verdict.signal;
+            ti.votes = verdict.votes;
+            ti.rating_bucket = verdict.bucket;
             out.append(ti);
         }
         return out;
@@ -1371,45 +1288,19 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     td.volatility = build(kVolatility, "volatility");
     td.volume = build(kVolume, "volume");
 
-    // Tally signals
-    auto tally = [&](const QVector<TechIndicator>& v) {
-        for (const auto& ti : v) {
-            switch (ti.signal) {
-                case TechSignal::StrongBuy:
-                    td.strong_buy++;
-                    break;
-                case TechSignal::Buy:
-                    td.buy++;
-                    break;
-                case TechSignal::Neutral:
-                    td.neutral++;
-                    break;
-                case TechSignal::Sell:
-                    td.sell++;
-                    break;
-                case TechSignal::StrongSell:
-                    td.strong_sell++;
-                    break;
-            }
-        }
-    };
-    tally(td.trend);
-    tally(td.momentum);
-    tally(td.volatility);
-    tally(td.volume);
+    QVector<TechIndicator> all;
+    all << td.trend << td.momentum << td.volatility << td.volume;
 
-    int bulls = td.strong_buy * 2 + td.buy;
-    int bears = td.strong_sell * 2 + td.sell;
-    if (bulls > bears * 2)
-        td.overall_signal = TechSignal::StrongBuy;
-    else if (bulls > bears)
-        td.overall_signal = TechSignal::Buy;
-    else if (bears > bulls * 2)
-        td.overall_signal = TechSignal::StrongSell;
-    else if (bears > bulls)
-        td.overall_signal = TechSignal::Sell;
-    else
-        td.overall_signal = TechSignal::Neutral;
+    const RatingVerdict verdict = technical_rating::aggregate(all, input);
+    td.overall_signal = verdict.overall;
+    td.net_score = verdict.net;
+    td.rating_basis = verdict.basis;
+    td.voting_count = verdict.voting;
+    td.strong_buy = verdict.strong_buy;
+    td.buy = verdict.buy;
+    td.neutral = verdict.neutral;
+    td.sell = verdict.sell;
+    td.strong_sell = verdict.strong_sell;
 
     return td;
 }

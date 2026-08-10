@@ -4,6 +4,8 @@ Provides all momentum-based technical indicators from the ta library
 """
 
 import pandas as pd
+
+from ._safe import safe_assign
 from ta.momentum import (
     RSIIndicator,
     StochasticOscillator,
@@ -299,48 +301,43 @@ def calculate_all_momentum_indicators(df, **kwargs):
     result_df = df.copy()
 
     # RSI
-    result_df['rsi'] = calculate_rsi(df, **kwargs.get('rsi', {}))
+    safe_assign(result_df, 'rsi', lambda: calculate_rsi(df, **kwargs.get('rsi', {})))
 
     # Stochastic Oscillator
-    stoch = calculate_stochastic(df, **kwargs.get('stochastic', {}))
-    result_df['stoch_k'] = stoch['stoch_k']
-    result_df['stoch_d'] = stoch['stoch_d']
+    safe_assign(result_df, ['stoch_k', 'stoch_d'],
+                lambda: calculate_stochastic(df, **kwargs.get('stochastic', {})))
 
     # Stochastic RSI
-    stoch_rsi = calculate_stoch_rsi(df, **kwargs.get('stoch_rsi', {}))
-    result_df['stoch_rsi'] = stoch_rsi['stoch_rsi']
-    result_df['stoch_rsi_k'] = stoch_rsi['stoch_rsi_k']
-    result_df['stoch_rsi_d'] = stoch_rsi['stoch_rsi_d']
+    safe_assign(result_df, ['stoch_rsi', 'stoch_rsi_k', 'stoch_rsi_d'],
+                lambda: calculate_stoch_rsi(df, **kwargs.get('stoch_rsi', {})))
 
     # Williams %R
-    result_df['williams_r'] = calculate_williams_r(df, **kwargs.get('williams_r', {}))
+    safe_assign(result_df, 'williams_r', lambda: calculate_williams_r(df, **kwargs.get('williams_r', {})))
 
     # Awesome Oscillator
-    result_df['ao'] = calculate_awesome_oscillator(df, **kwargs.get('awesome_oscillator', {}))
+    safe_assign(result_df, 'ao',
+                lambda: calculate_awesome_oscillator(df, **kwargs.get('awesome_oscillator', {})))
 
     # KAMA
-    result_df['kama'] = calculate_kama(df, **kwargs.get('kama', {}))
+    safe_assign(result_df, 'kama', lambda: calculate_kama(df, **kwargs.get('kama', {})))
 
     # ROC
-    result_df['roc'] = calculate_roc(df, **kwargs.get('roc', {}))
+    safe_assign(result_df, 'roc', lambda: calculate_roc(df, **kwargs.get('roc', {})))
 
     # TSI
-    result_df['tsi'] = calculate_tsi(df, **kwargs.get('tsi', {}))
+    safe_assign(result_df, 'tsi', lambda: calculate_tsi(df, **kwargs.get('tsi', {})))
 
     # Ultimate Oscillator
-    result_df['uo'] = calculate_ultimate_oscillator(df, **kwargs.get('ultimate_oscillator', {}))
+    safe_assign(result_df, 'uo',
+                lambda: calculate_ultimate_oscillator(df, **kwargs.get('ultimate_oscillator', {})))
 
     # PPO
-    ppo = calculate_ppo(df, **kwargs.get('ppo', {}))
-    result_df['ppo'] = ppo['ppo']
-    result_df['ppo_signal'] = ppo['ppo_signal']
-    result_df['ppo_hist'] = ppo['ppo_hist']
+    safe_assign(result_df, ['ppo', 'ppo_signal', 'ppo_hist'],
+                lambda: calculate_ppo(df, **kwargs.get('ppo', {})))
 
     # PVO
     if 'volume' in df.columns:
-        pvo = calculate_pvo(df, **kwargs.get('pvo', {}))
-        result_df['pvo'] = pvo['pvo']
-        result_df['pvo_signal'] = pvo['pvo_signal']
-        result_df['pvo_hist'] = pvo['pvo_hist']
+        safe_assign(result_df, ['pvo', 'pvo_signal', 'pvo_hist'],
+                    lambda: calculate_pvo(df, **kwargs.get('pvo', {})))
 
     return result_df

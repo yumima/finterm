@@ -134,6 +134,16 @@ struct TechIndicator {
     double value = 0.0;
     TechSignal signal = TechSignal::Neutral;
     QString category; // "trend" | "momentum" | "volatility" | "volume"
+    /// Whether this indicator's signal counts toward the composite rating.
+    /// False for readings with no directional content of their own (ATR, band
+    /// widths) and for the second line of a two-line indicator (MACD signal,
+    /// Stoch %D, Aroon Down) — they are displayed, but counting them would let
+    /// one indicator vote twice. See TechnicalRating.h.
+    bool votes = false;
+    /// Weighted bucket this vote lands in ("trend" | "momentum" | "volume").
+    /// Not the same as `category`, which is the panel it is displayed under —
+    /// CCI is shown with the trend indicators but scored as an oscillator.
+    QString rating_bucket;
 };
 
 struct TechnicalsData {
@@ -144,6 +154,15 @@ struct TechnicalsData {
     QVector<TechIndicator> volatility;
     QVector<TechIndicator> volume;
     TechSignal overall_signal = TechSignal::Neutral;
+    /// Weighted composite in [-1, +1] behind `overall_signal`; drives the gauge.
+    double net_score = 0.0;
+    /// Per-bucket contributions, or why no rating was produced.
+    QString rating_basis;
+    /// Set when the Python side lost an indicator stage — the panel is thinner
+    /// than it looks and the user should be told rather than shown a confident
+    /// rating computed from the survivors.
+    QString data_warning;
+    int voting_count = 0;
     int strong_buy = 0;
     int buy = 0;
     int neutral = 0;

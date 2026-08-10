@@ -27,6 +27,8 @@ class EquityTechnicalsTab : public QWidget {
     void switch_period(QPushButton* btn, const QString& period);
 
     static QString signal_text(services::equity::TechSignal s);
+    /// Tooltip explaining why a displayed indicator is excluded from the tally.
+    static QString non_voting_note(const QString& col_key);
     static const char* signal_color(services::equity::TechSignal s);
     static QString interpretation(const QString& col_key, double value);
     static QString col_key_for(const QString& name);
@@ -59,6 +61,11 @@ class EquityTechnicalsTab : public QWidget {
     QLabel* sell_count_ = nullptr;
     QLabel* strong_sell_count_ = nullptr;
     QLabel* total_label_ = nullptr;
+    // Per-bucket contributions behind the verdict, so the number is arguable
+    // rather than an oracle.
+    QLabel* basis_label_ = nullptr;
+    // Only visible when an indicator stage was lost on the Python side.
+    QLabel* warning_label_ = nullptr;
 
     // Key indicators container
     QWidget* key_container_ = nullptr;

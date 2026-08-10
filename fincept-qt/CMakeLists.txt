@@ -916,6 +916,7 @@ set(SERVICE_SOURCES
     src/services/gov_data/GovDataService.cpp
     src/services/equity/EarningsSignal.cpp
     src/services/equity/EquityResearchService.cpp
+    src/services/equity/TechnicalRating.cpp
     src/services/equity/MarketSentimentService.cpp
     src/services/equity/MarketSentimentSupport.cpp
     src/services/finnhub/FinnhubService.cpp

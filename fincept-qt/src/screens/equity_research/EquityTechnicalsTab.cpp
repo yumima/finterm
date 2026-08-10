@@ -11,6 +11,8 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace fincept::screens {
 
 // ── Accent colors without a theme token ──────────────────────────────────────
@@ -37,6 +39,34 @@ QString EquityTechnicalsTab::signal_text(services::equity::TechSignal s) {
         default:
             return "NEUTRAL";
     }
+}
+
+/// Why a row is shown but not counted.
+///
+/// Every one of these would otherwise let a single indicator vote twice, or
+/// contribute a Neutral it never actually expressed — both of which quietly
+/// drag the composite toward the middle. Saying so on hover is cheaper than
+/// leaving the user to wonder why the badge column and the tally disagree.
+QString EquityTechnicalsTab::non_voting_note(const QString& col_key) {
+    if (col_key == "macd_signal")
+        return "Shown for reference. The MACD row already carries this pair's vote — "
+               "it scores the gap between the two lines.";
+    if (col_key == "stoch_d")
+        return "Shown for reference. The Stoch %K row already carries this pair's vote — "
+               "it scores %K against %D.";
+    if (col_key == "aroon_down")
+        return "Shown for reference. The Aroon Up row already carries this pair's vote — "
+               "it scores Up against Down.";
+    if (col_key == "bb_mavg")
+        return "Shown for reference. This is the 20-period SMA under another name, and the "
+               "SMA 20 row already votes on it.";
+    if (col_key == "atr" || col_key == "bb_wband")
+        return "Shown for reference. This measures how far price moves, not which way, so it "
+               "has no bullish or bearish reading to contribute.";
+    if (col_key == "bb_hband" || col_key == "bb_lband")
+        return "Shown for reference. This is a price level, not a signal — the BB %B row scores "
+               "where price sits between the bands.";
+    return "Shown for reference — not counted toward the rating.";
 }
 
 const char* EquityTechnicalsTab::signal_color(services::equity::TechSignal s) {
@@ -73,13 +103,17 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
         return "Deeply overbought — potential reversal zone";
     }
     if (col_key == "macd") {
-        if (value > 2)
-            return "Strong bullish momentum — histogram expanding";
+        // Only the MACD line's own value is available here, which says where it
+        // sits against zero — not against its signal line. The old text claimed
+        // the crossover ("above signal line") off the sign of this number
+        // alone, and read a bearish cross as bullish whenever both lines were
+        // above zero. The crossover is scored in TechnicalRating, which has
+        // both lines; the SIGNAL column carries it.
         if (value > 0)
-            return "Bullish — MACD above signal line";
-        if (value > -2)
-            return "Bearish — MACD below signal line";
-        return "Strong bearish momentum — histogram expanding";
+            return "Above zero — 12-day EMA is above the 26-day";
+        if (value < 0)
+            return "Below zero — 12-day EMA is below the 26-day";
+        return "At zero — the two EMAs have converged";
     }
     if (col_key == "stoch_k" || col_key == "stoch_d") {
         if (value <= 20)
@@ -185,7 +219,7 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
     if (col_key == "obv")
         return "On-balance volume — confirms price trend with volume";
     if (col_key == "vwap")
-        return "Volume-weighted avg price — institutional reference";
+        return "Rolling volume-weighted avg price — price above = bullish";
     if (col_key == "adi")
         return "Accumulation/distribution — confirms money flow";
     if (col_key.startsWith("sma_") || col_key.startsWith("ema_") || col_key.startsWith("wma_") || col_key == "kama")
@@ -219,6 +253,10 @@ QString EquityTechnicalsTab::col_key_for(const QString& name) {
         return "bb_lband";
     if (name == "Awesome Osc")
         return "ao";
+    // Displayed as "Rolling VWAP" because it is `ta`'s rolling volume-weighted
+    // price, not the session VWAP the bare label implied.
+    if (name == "Rolling VWAP")
+        return "vwap";
     QString key = name.toLower();
     key.replace(QLatin1Char(' '), QLatin1Char('_'));
     key.remove(QLatin1Char('%'));
@@ -329,10 +367,11 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "closes. Rising OBV confirms an uptrend has volume behind it; OBV falling while "
                "price rises warns the rally is thin.";
     if (col_key == "vwap")
-        return "Volume-Weighted Average Price (VWAP)\n\n"
-               "The average traded price weighted by volume \xe2\x80\x94 the institutional benchmark "
-               "for execution quality. Price above VWAP means buyers are in control; below, "
-               "sellers dominated.";
+        return "Rolling VWAP (14-period)\n\n"
+               "The average traded price weighted by volume over the last 14 bars. This is a "
+               "rolling average, not the single-session VWAP institutions benchmark execution "
+               "against \xe2\x80\x94 it does not reset each day. Price above it means buyers have "
+               "been in control over that window; below, sellers.";
     if (col_key == "cmf")
         return "Chaikin Money Flow (CMF)\n\n"
                "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92""1 to "
@@ -557,6 +596,23 @@ void EquityTechnicalsTab::build_ui() {
     total_label_->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:1px;background:transparent;border:0;")
                                     .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(total_label_);
+
+    // The four bucket scores the verdict was averaged from. A rating the user
+    // cannot argue with is a rating they cannot trust.
+    basis_label_ = new QLabel;
+    basis_label_->setAlignment(Qt::AlignCenter);
+    basis_label_->setWordWrap(true);
+    basis_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
+    rp_vl->addWidget(basis_label_);
+
+    warning_label_ = new QLabel;
+    warning_label_->setAlignment(Qt::AlignCenter);
+    warning_label_->setWordWrap(true);
+    warning_label_->setVisible(false);
+    warning_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;").arg(ui::colors::AMBER()));
+    rp_vl->addWidget(warning_label_);
     rp_vl->addStretch();
 
     top_row->addWidget(rating_panel);
@@ -637,27 +693,33 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     all << payload.trend << payload.momentum << payload.volatility << payload.volume;
 
     // ── Rating ───────────────────────────────────────────────────────────────
-    int sb = payload.strong_buy, b = payload.buy, n = payload.neutral, s = payload.sell, ss = payload.strong_sell;
-    int total = sb + b + n + s + ss;
+    const int sb = payload.strong_buy, b = payload.buy, n = payload.neutral;
+    const int s = payload.sell, ss = payload.strong_sell;
 
-    const char* rec_color = GRAY;
-    QString rec_text = signal_text(payload.overall_signal);
-    rec_color = signal_color(payload.overall_signal);
-
-    rating_label_->setText(rec_text);
+    rating_label_->setText(signal_text(payload.overall_signal));
     rating_label_->setStyleSheet(
         QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
-            .arg(rec_color));
+            .arg(signal_color(payload.overall_signal)));
 
-    int bulls = sb + b;
-    gauge_bar_->setValue(total > 0 ? static_cast<int>(100.0 * bulls / total) : 50);
+    // The gauge is drawn off the same weighted score as the verdict, so the bar
+    // and the words cannot disagree. It used to be bulls/total *including*
+    // neutrals, which pinned it near the bottom of its range and left it
+    // reading bearish next to the word STRONG BUY.
+    gauge_bar_->setValue(static_cast<int>(std::lround(50.0 + 50.0 * payload.net_score)));
 
     strong_buy_count_->setText(QString::number(sb));
     buy_count_->setText(QString::number(b));
     neutral_count_->setText(QString::number(n));
     sell_count_->setText(QString::number(s));
     strong_sell_count_->setText(QString::number(ss));
-    total_label_->setText(QString("%1 INDICATORS ANALYZED").arg(total));
+    // Counts cover the indicators that actually vote; `all` also holds the
+    // reference-only rows, and conflating the two overstated the evidence.
+    total_label_->setText(QString("%1 OF %2 INDICATORS SCORED")
+                              .arg(payload.voting_count)
+                              .arg(all.size()));
+    basis_label_->setText(payload.rating_basis);
+    warning_label_->setText(payload.data_warning);
+    warning_label_->setVisible(!payload.data_warning.isEmpty());
 
     // ── Key indicators — pick the most decision-relevant ones ────────────────
     // These are column keys we look for in the flattened indicators
@@ -705,9 +767,12 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         val->setStyleSheet(QString("color:%1;font-size:16px;font-weight:700;font-family:'Consolas',monospace;"
                                    "background:transparent;border:0;")
                                .arg(ui::colors::TEXT_PRIMARY()));
-        auto* sig = new QLabel(signal_text(ti.signal));
-        sig->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;border:0;").arg(sc));
+        auto* sig = new QLabel(ti.votes ? signal_text(ti.signal) : QStringLiteral("REFERENCE"));
+        sig->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;border:0;")
+                               .arg(ti.votes ? sc : GRAY));
         sig->setAlignment(Qt::AlignRight | Qt::AlignBottom);
+        if (!ti.votes)
+            sig->setToolTip(non_voting_note(col_key));
         vr->addWidget(val);
         vr->addStretch();
         vr->addWidget(sig);
@@ -750,10 +815,13 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         if (!cat.inds || cat.inds->isEmpty())
             continue;
 
-        // Count per category
-        int cb = 0, cs = 0, cn = 0;
+        // Count per category — voting rows only, to match the composite.
+        int cb = 0, cs = 0, cn = 0, cvoting = 0;
         for (const auto& ti : *cat.inds) {
             using S = services::equity::TechSignal;
+            if (!ti.votes)
+                continue;
+            cvoting++;
             if (ti.signal == S::StrongBuy || ti.signal == S::Buy)
                 cb++;
             else if (ti.signal == S::StrongSell || ti.signal == S::Sell)
@@ -783,7 +851,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
                 .arg(cat.color));
         hl->addWidget(htitle);
 
-        auto* cnt = new QLabel(QString("%1 indicators").arg(cat.inds->size()));
+        auto* cnt = new QLabel(QString("%1 indicators · %2 scored").arg(cat.inds->size()).arg(cvoting));
         cnt->setStyleSheet(
             QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
         hl->addWidget(cnt);
@@ -863,12 +931,16 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             auto* sig_hl = new QHBoxLayout(sig_w);
             sig_hl->setContentsMargins(0, 0, 0, 0);
             sig_hl->setAlignment(Qt::AlignCenter);
-            auto* sig_lbl = new QLabel(signal_text(ti.signal));
+            // Reference rows say so instead of showing a verdict they did not
+            // cast — a "NEUTRAL" badge on ATR reads as an assessment of ATR.
+            auto* sig_lbl = new QLabel(ti.votes ? signal_text(ti.signal) : QStringLiteral("REFERENCE"));
             sig_lbl->setAlignment(Qt::AlignCenter);
             sig_lbl->setFixedWidth(90);
             sig_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:%2;"
                                            "border-radius:2px;padding:2px 6px;border:0;")
-                                       .arg(sc, ui::colors::BG_RAISED()));
+                                       .arg(ti.votes ? sc : GRAY, ui::colors::BG_RAISED()));
+            if (!ti.votes)
+                sig_lbl->setToolTip(non_voting_note(col_key));
             sig_hl->addWidget(sig_lbl);
             rl->addWidget(sig_w, 1);
 

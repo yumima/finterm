@@ -4,6 +4,8 @@ Provides all volatility-based technical indicators from the ta library
 """
 
 import pandas as pd
+
+from ._safe import safe_assign
 from ta.volatility import (
     AverageTrueRange,
     BollingerBands,
@@ -165,37 +167,26 @@ def calculate_all_volatility_indicators(df, **kwargs):
     result_df = df.copy()
 
     # ATR
-    result_df['atr'] = calculate_atr(df, **kwargs.get('atr', {}))
+    safe_assign(result_df, 'atr', lambda: calculate_atr(df, **kwargs.get('atr', {})))
 
     # Bollinger Bands
-    bb = calculate_bollinger_bands(df, **kwargs.get('bollinger_bands', {}))
-    result_df['bb_mavg'] = bb['bb_mavg']
-    result_df['bb_hband'] = bb['bb_hband']
-    result_df['bb_lband'] = bb['bb_lband']
-    result_df['bb_pband'] = bb['bb_pband']
-    result_df['bb_wband'] = bb['bb_wband']
-    result_df['bb_hband_indicator'] = bb['bb_hband_indicator']
-    result_df['bb_lband_indicator'] = bb['bb_lband_indicator']
+    safe_assign(result_df,
+                ['bb_mavg', 'bb_hband', 'bb_lband', 'bb_pband', 'bb_wband',
+                 'bb_hband_indicator', 'bb_lband_indicator'],
+                lambda: calculate_bollinger_bands(df, **kwargs.get('bollinger_bands', {})))
 
     # Keltner Channel
-    kc = calculate_keltner_channel(df, **kwargs.get('keltner_channel', {}))
-    result_df['kc_mavg'] = kc['kc_mavg']
-    result_df['kc_hband'] = kc['kc_hband']
-    result_df['kc_lband'] = kc['kc_lband']
-    result_df['kc_pband'] = kc['kc_pband']
-    result_df['kc_wband'] = kc['kc_wband']
-    result_df['kc_hband_indicator'] = kc['kc_hband_indicator']
-    result_df['kc_lband_indicator'] = kc['kc_lband_indicator']
+    safe_assign(result_df,
+                ['kc_mavg', 'kc_hband', 'kc_lband', 'kc_pband', 'kc_wband',
+                 'kc_hband_indicator', 'kc_lband_indicator'],
+                lambda: calculate_keltner_channel(df, **kwargs.get('keltner_channel', {})))
 
     # Donchian Channel
-    dc = calculate_donchian_channel(df, **kwargs.get('donchian_channel', {}))
-    result_df['dc_hband'] = dc['dc_hband']
-    result_df['dc_lband'] = dc['dc_lband']
-    result_df['dc_mband'] = dc['dc_mband']
-    result_df['dc_pband'] = dc['dc_pband']
-    result_df['dc_wband'] = dc['dc_wband']
+    safe_assign(result_df,
+                ['dc_hband', 'dc_lband', 'dc_mband', 'dc_pband', 'dc_wband'],
+                lambda: calculate_donchian_channel(df, **kwargs.get('donchian_channel', {})))
 
     # Ulcer Index
-    result_df['ui'] = calculate_ulcer_index(df, **kwargs.get('ulcer_index', {}))
+    safe_assign(result_df, 'ui', lambda: calculate_ulcer_index(df, **kwargs.get('ulcer_index', {})))
 
     return result_df

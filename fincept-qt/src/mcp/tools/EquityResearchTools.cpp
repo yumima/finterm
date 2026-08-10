@@ -161,6 +161,10 @@ QJsonArray indicators_to_json(const QVector<services::equity::TechIndicator>& xs
             {"value", x.value},
             {"signal", tech_signal_str(x.signal)},
             {"category", x.category},
+            // Without this a consumer counts ATR's "neutral" as evidence and
+            // treats MACD Signal / Stoch %D / Aroon Down as independent votes
+            // rather than the second line of an indicator already counted.
+            {"counts_toward_rating", x.votes},
         });
     }
     return arr;
@@ -174,6 +178,13 @@ QJsonObject technicals_to_json(const services::equity::TechnicalsData& t) {
         {"volatility", indicators_to_json(t.volatility)},
         {"volume", indicators_to_json(t.volume)},
         {"overall_signal", tech_signal_str(t.overall_signal)},
+        // Weighted composite in [-1, +1] the verdict was cut from, and the
+        // per-bucket scores behind it — the counts alone do not reconstruct it,
+        // since the buckets carry different weights.
+        {"net_score", t.net_score},
+        {"rating_basis", t.rating_basis},
+        {"data_warning", t.data_warning},
+        {"voting_count", t.voting_count},
         {"strong_buy", t.strong_buy},
         {"buy", t.buy},
         {"neutral", t.neutral},

@@ -239,6 +239,33 @@ set_target_properties(test_earnings_signal PROPERTIES
 
 add_test(NAME earnings_signal COMMAND test_earnings_signal)
 
+# ── Technical rating tests ───────────────────────────────────────────────────
+# The STRONG BUY … STRONG SELL read under ER Technicals. Same shape as the
+# earnings scorer — struct in, verdict out, no network and no widgets — so the
+# rules that used to invert the verdict (oscillator-only voting, unsigned ADX,
+# MACD against zero instead of its signal line) stay pinned.
+
+add_executable(test_technical_rating
+    services/test_technical_rating.cpp
+    ../src/services/equity/TechnicalRating.cpp
+)
+
+target_include_directories(test_technical_rating PRIVATE
+    ../src
+)
+
+target_link_libraries(test_technical_rating PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_technical_rating PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME technical_rating COMMAND test_technical_rating)
+
 # ── prune_scripts_junk smoke test ────────────────────────────────────────────
 # Pure cmake -P script that builds a fixture tree, runs the real prune script,
 # and asserts legitimate dirs survive while junk is gone. Guards against the

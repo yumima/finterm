@@ -4,6 +4,8 @@ Provides all trend-based technical indicators from the ta library
 """
 
 import pandas as pd
+
+from ._safe import safe_assign
 from ta.trend import (
     SMAIndicator,
     EMAIndicator,
@@ -379,71 +381,61 @@ def calculate_all_trend_indicators(df, **kwargs):
     """
     result_df = df.copy()
 
-    # SMA
-    result_df['sma_20'] = calculate_sma(df, **kwargs.get('sma', {}))
+    # SMA — 20/50/200 are the three the technical rating votes price against.
+    # The 50 and 200 were missing before, which left the rating with no
+    # medium- or long-term trend reference at all.
+    safe_assign(result_df, 'sma_20', lambda: calculate_sma(df, **kwargs.get('sma', {})))
+    safe_assign(result_df, 'sma_50', lambda: calculate_sma(df, window=50))
+    safe_assign(result_df, 'sma_200', lambda: calculate_sma(df, window=200))
 
     # EMA
-    result_df['ema_12'] = calculate_ema(df, **kwargs.get('ema', {}))
+    safe_assign(result_df, 'ema_12', lambda: calculate_ema(df, **kwargs.get('ema', {})))
 
     # WMA
-    result_df['wma_9'] = calculate_wma(df, **kwargs.get('wma', {}))
+    safe_assign(result_df, 'wma_9', lambda: calculate_wma(df, **kwargs.get('wma', {})))
 
     # MACD
-    macd = calculate_macd(df, **kwargs.get('macd', {}))
-    result_df['macd'] = macd['macd']
-    result_df['macd_signal'] = macd['macd_signal']
-    result_df['macd_diff'] = macd['macd_diff']
+    safe_assign(result_df, ['macd', 'macd_signal', 'macd_diff'],
+                lambda: calculate_macd(df, **kwargs.get('macd', {})))
 
     # TRIX
-    result_df['trix'] = calculate_trix(df, **kwargs.get('trix', {}))
+    safe_assign(result_df, 'trix', lambda: calculate_trix(df, **kwargs.get('trix', {})))
 
     # Mass Index
-    result_df['mass_index'] = calculate_mass_index(df, **kwargs.get('mass_index', {}))
+    safe_assign(result_df, 'mass_index', lambda: calculate_mass_index(df, **kwargs.get('mass_index', {})))
 
     # Ichimoku
-    ichimoku = calculate_ichimoku(df, **kwargs.get('ichimoku', {}))
-    result_df['ichimoku_conversion'] = ichimoku['ichimoku_conversion']
-    result_df['ichimoku_base'] = ichimoku['ichimoku_base']
-    result_df['ichimoku_a'] = ichimoku['ichimoku_a']
-    result_df['ichimoku_b'] = ichimoku['ichimoku_b']
+    safe_assign(result_df,
+                ['ichimoku_conversion', 'ichimoku_base', 'ichimoku_a', 'ichimoku_b'],
+                lambda: calculate_ichimoku(df, **kwargs.get('ichimoku', {})))
 
     # KST
-    kst = calculate_kst(df, **kwargs.get('kst', {}))
-    result_df['kst'] = kst['kst']
-    result_df['kst_signal'] = kst['kst_signal']
+    safe_assign(result_df, ['kst', 'kst_signal'], lambda: calculate_kst(df, **kwargs.get('kst', {})))
 
     # DPO
-    result_df['dpo'] = calculate_dpo(df, **kwargs.get('dpo', {}))
+    safe_assign(result_df, 'dpo', lambda: calculate_dpo(df, **kwargs.get('dpo', {})))
 
     # CCI
-    result_df['cci'] = calculate_cci(df, **kwargs.get('cci', {}))
+    safe_assign(result_df, 'cci', lambda: calculate_cci(df, **kwargs.get('cci', {})))
 
-    # ADX
-    adx = calculate_adx(df, **kwargs.get('adx', {}))
-    result_df['adx'] = adx['adx']
-    result_df['adx_pos'] = adx['adx_pos']
-    result_df['adx_neg'] = adx['adx_neg']
+    # ADX — the one that used to raise on short series and abort the stage.
+    safe_assign(result_df, ['adx', 'adx_pos', 'adx_neg'],
+                lambda: calculate_adx(df, **kwargs.get('adx', {})))
 
     # Vortex
-    vortex = calculate_vortex(df, **kwargs.get('vortex', {}))
-    result_df['vortex_pos'] = vortex['vortex_pos']
-    result_df['vortex_neg'] = vortex['vortex_neg']
+    safe_assign(result_df, ['vortex_pos', 'vortex_neg'],
+                lambda: calculate_vortex(df, **kwargs.get('vortex', {})))
 
     # PSAR
-    psar = calculate_psar(df, **kwargs.get('psar', {}))
-    result_df['psar'] = psar['psar']
-    result_df['psar_up'] = psar['psar_up']
-    result_df['psar_down'] = psar['psar_down']
-    result_df['psar_up_indicator'] = psar['psar_up_indicator']
-    result_df['psar_down_indicator'] = psar['psar_down_indicator']
+    safe_assign(result_df,
+                ['psar', 'psar_up', 'psar_down', 'psar_up_indicator', 'psar_down_indicator'],
+                lambda: calculate_psar(df, **kwargs.get('psar', {})))
 
     # STC
-    result_df['stc'] = calculate_stc(df, **kwargs.get('stc', {}))
+    safe_assign(result_df, 'stc', lambda: calculate_stc(df, **kwargs.get('stc', {})))
 
     # Aroon
-    aroon = calculate_aroon(df, **kwargs.get('aroon', {}))
-    result_df['aroon_up'] = aroon['aroon_up']
-    result_df['aroon_down'] = aroon['aroon_down']
-    result_df['aroon_indicator'] = aroon['aroon_indicator']
+    safe_assign(result_df, ['aroon_up', 'aroon_down', 'aroon_indicator'],
+                lambda: calculate_aroon(df, **kwargs.get('aroon', {})))
 
     return result_df

@@ -4,6 +4,8 @@ Provides all volume-based technical indicators from the ta library
 """
 
 import pandas as pd
+
+from ._safe import safe_assign
 from ta.volume import (
     AccDistIndexIndicator,
     OnBalanceVolumeIndicator,
@@ -224,32 +226,30 @@ def calculate_all_volume_indicators(df, **kwargs):
     result_df = df.copy()
 
     # ADI
-    result_df['adi'] = calculate_adi(df, **kwargs.get('adi', {}))
+    safe_assign(result_df, 'adi', lambda: calculate_adi(df, **kwargs.get('adi', {})))
 
     # OBV
-    result_df['obv'] = calculate_obv(df, **kwargs.get('obv', {}))
+    safe_assign(result_df, 'obv', lambda: calculate_obv(df, **kwargs.get('obv', {})))
 
     # CMF
-    result_df['cmf'] = calculate_cmf(df, **kwargs.get('cmf', {}))
+    safe_assign(result_df, 'cmf', lambda: calculate_cmf(df, **kwargs.get('cmf', {})))
 
     # Force Index
-    result_df['fi'] = calculate_force_index(df, **kwargs.get('force_index', {}))
+    safe_assign(result_df, 'fi', lambda: calculate_force_index(df, **kwargs.get('force_index', {})))
 
     # Ease of Movement
-    eom = calculate_eom(df, **kwargs.get('eom', {}))
-    result_df['eom'] = eom['eom']
-    result_df['eom_signal'] = eom['eom_signal']
+    safe_assign(result_df, ['eom', 'eom_signal'], lambda: calculate_eom(df, **kwargs.get('eom', {})))
 
     # VPT
-    result_df['vpt'] = calculate_vpt(df, **kwargs.get('vpt', {}))
+    safe_assign(result_df, 'vpt', lambda: calculate_vpt(df, **kwargs.get('vpt', {})))
 
     # NVI
-    result_df['nvi'] = calculate_nvi(df, **kwargs.get('nvi', {}))
+    safe_assign(result_df, 'nvi', lambda: calculate_nvi(df, **kwargs.get('nvi', {})))
 
-    # VWAP
-    result_df['vwap'] = calculate_vwap(df, **kwargs.get('vwap', {}))
+    # VWAP — `ta`'s rolling volume-weighted price, not a session VWAP.
+    safe_assign(result_df, 'vwap', lambda: calculate_vwap(df, **kwargs.get('vwap', {})))
 
     # MFI
-    result_df['mfi'] = calculate_mfi(df, **kwargs.get('mfi', {}))
+    safe_assign(result_df, 'mfi', lambda: calculate_mfi(df, **kwargs.get('mfi', {})))
 
     return result_df
