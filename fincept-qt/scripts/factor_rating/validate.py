@@ -38,11 +38,12 @@ import pandas as pd
 from scipy import stats
 
 from . import factors as F
+from .panel import BENCHMARK as BENCH
 
 HORIZON = 21  # ~one month of trading days
 
 
-def forward_excess_return(close, benchmark="SPY", horizon=HORIZON):
+def forward_excess_return(close, benchmark=BENCH, horizon=HORIZON):
     """Forward return over `horizon`, net of the benchmark over the same span.
 
     Excess rather than raw: a rating is a statement about *this* stock, and
@@ -123,6 +124,76 @@ def summarise(name, score, fwd, step=HORIZON):
         mono, _ = stats.spearmanr(np.arange(len(dec)), dec.values)
     return {"name": name, "n": len(ic), "ic": ic.mean(), "ic_t": t,
             "spread": spread, "mono": mono, "hit": hit, "periods": periods}
+
+
+def descriptive_vs_predictive(panel, window=40, r2_floor=0.30, verbose=True):
+    """Split "is the rating correct" into the two claims it conflates.
+
+    There is no ground truth for "the correct technical rating" — "is this
+    stock bullish" is not a fact — which is why agreement with TradingView was
+    never evidence of correctness, only of two implementations sharing a
+    method. But the rating makes two separable claims, and each one *can* be
+    scored against a definition.
+
+    The label is the sign of a `window`-day regression of log price on time,
+    kept only where R² clears `r2_floor` so that "trend" means a trend and not
+    drift. Read at t it describes [t-window, t] — the past. Read `window` days
+    later it describes [t, t+window] — the future. The same yardstick, pointed
+    in two directions:
+
+      vs past      does the rating correctly describe what already happened.
+                   This is what a technical indicator is actually for, and it
+                   is the only claim the shipped rating can support.
+      vs future    does it know what happens next. This is what the words
+                   STRONG BUY imply to a user.
+
+    Last run, 178 large caps over 12 years: the proxy for the shipped rating
+    scored 80.7% against the past and 47.4% against the future — the wrong
+    side of a coin flip, agreeing with the negative information coefficient
+    measured independently in run(). The gap between those two numbers is the
+    single most important thing known about this rating.
+    """
+    close = panel["close"].drop(columns=[BENCH], errors="ignore")
+    high = panel["high"].drop(columns=[BENCH], errors="ignore")
+    low = panel["low"].drop(columns=[BENCH], errors="ignore")
+
+    back = F.trend_quality(close, window=window)
+    ahead = back.shift(-window)
+
+    ma_windows = (10, 20, 30, 50, 100, 200)
+    signals = {
+        "MA vote (proxy for shipped rating)":
+            sum(np.sign(close - close.rolling(w, min_periods=w).mean())
+                for w in ma_windows) / len(ma_windows),
+        "trend_position": F.trend_position(close, high, low),
+        "trend_quality (backward R2)": back,
+    }
+
+    def accuracy(sig, label):
+        m = (label.abs() >= r2_floor) & sig.notna() & label.notna()
+        n = int(m.to_numpy().sum())
+        if not n:
+            return float("nan"), 0
+        agree = (np.sign(sig) == np.sign(label)).to_numpy(dtype=float)
+        return float(agree[m.to_numpy()].mean()), n
+
+    rows = []
+    for name, sig in signals.items():
+        past, n = accuracy(sig, back)
+        future, _ = accuracy(sig, ahead)
+        rows.append({"name": name, "past": past, "future": future, "n": n})
+
+    if verbose:
+        print(f"ground truth = sign of the {window}-day log-price regression, "
+              f"R2 >= {r2_floor}\n")
+        print(f"{'signal':<38}{'vs PAST':>10}{'vs FUTURE':>12}{'n':>12}")
+        print("-" * 72)
+        for r in rows:
+            print(f"{r['name']:<38}{r['past']*100:>9.1f}%{r['future']*100:>11.1f}%{r['n']:>12,}")
+        print("-" * 72)
+        print("50% is a coin flip. Observations overlap heavily, so treat the "
+              "counts as descriptive, not as degrees of freedom.")
+    return rows
 
 
 def selftest(close, seed=0, verbose=True):

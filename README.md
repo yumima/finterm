@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`29f5bf39c`](https://github.com/yumima/finterm/commit/29f5bf39c) Factor rating: verify the null result, and correct my own excuse
 - [`514dddf49`](https://github.com/yumima/finterm/commit/514dddf49) Factor rating: build the model, measure it, and do not ship it
 - [`13985c5e6`](https://github.com/yumima/finterm/commit/13985c5e6) ER Technicals: add a weekly bar interval, and fix the review findings
 - [`c2d76406d`](https://github.com/yumima/finterm/commit/c2d76406d) ER Technicals: widen the average set and measure the gap in ATRs
