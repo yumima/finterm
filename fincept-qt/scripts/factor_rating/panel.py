@@ -21,6 +21,7 @@ does not eliminate it, and no conclusion here should be read as a live-tradeable
 backtest.
 """
 
+import hashlib
 import os
 import time
 
@@ -50,7 +51,11 @@ def download_panel(symbols, years=12, force=False):
 
     os.makedirs(CACHE_DIR, exist_ok=True)
     tickers = sorted(set(list(symbols) + [BENCHMARK]))
-    key = f"panel_{years}y_{len(tickers)}_{abs(hash(tuple(tickers))) % 10**8}"
+    # md5, not hash(): Python string hashing is salted per process, so a
+    # hash()-based key changed on every run and the cache never hit — the
+    # exact re-download-everything behaviour this cache exists to prevent.
+    digest = hashlib.md5(",".join(tickers).encode()).hexdigest()[:10]
+    key = f"panel_{years}y_{len(tickers)}_{digest}"
     path = _cache_path(key)
 
     if os.path.exists(path) and not force:

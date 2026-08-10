@@ -17,6 +17,12 @@ class EquityTechnicalsTab : public QWidget {
   public:
     explicit EquityTechnicalsTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
+    /// Re-warm the entry this tab is actually displaying — its own (symbol,
+    /// period, interval), not the daily default. The screen calls this on tab
+    /// activation; calling fetch_technicals(symbol) there instead silently
+    /// refreshed a daily entry nobody was looking at while a weekly selection
+    /// aged toward its stale window.
+    void refresh();
 
   private:
     void apply_technicals_state(const services::query::QueryStore::State& s);

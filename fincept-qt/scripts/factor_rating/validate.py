@@ -252,34 +252,3 @@ def baselines(panel):
     votes = [np.sign(close - close.rolling(w, min_periods=w).mean()) for w in windows]
     out["baseline: MA vote (proxy for shipped rating)"] = sum(votes) / len(windows)
     return out
-
-
-def run(panel, verbose=True):
-    close = panel["close"]
-    fwd = forward_excess_return(close)
-
-    raw = F.compute_factors(panel)
-    z = {k: F.zscore_rows(v) for k, v in raw.items()}
-    comp = F.composite(raw)
-
-    results = []
-    for name, df in z.items():
-        results.append(summarise(name, df, fwd))
-    for name, df in baselines(panel).items():
-        results.append(summarise(name, df, fwd))
-    results.append(summarise("COMPOSITE (equal weight)", comp, fwd))
-
-    if verbose:
-        print(f"{'signal':<44}{'IC':>8}{'t':>7}{'spread':>9}{'mono':>7}{'hit':>7}{'n':>5}")
-        print("-" * 87)
-        for r in results:
-            if not r.get("n"):
-                print(f"{r['name']:<44}  (no observations)")
-                continue
-            print(f"{r['name']:<44}{r['ic']:>8.4f}{r['ic_t']:>7.2f}"
-                  f"{r['spread']*100:>8.2f}%{r['mono']:>7.2f}{r['hit']*100:>6.0f}%{r['n']:>5}")
-        print("-" * 87)
-        print(f"horizon {HORIZON}d, non-overlapping; spread = top-minus-bottom decile "
-              f"mean forward excess return; mono = decile monotonicity; hit = top decile "
-              f"beat universe median")
-    return results, comp

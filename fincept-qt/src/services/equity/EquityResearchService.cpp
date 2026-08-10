@@ -436,7 +436,7 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
         if (!tcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (doc.isArray()) {
-                TechnicalsData parsed = parse_technicals(symbol, period, doc.array());
+                TechnicalsData parsed = parse_technicals(symbol, period, interval, doc.array());
                 emit technicals_loaded(parsed);
                 resolve(QVariant::fromValue(parsed));
                 return;
@@ -452,8 +452,11 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
         auto* watcher = new QObject(this);
         QPointer<QObject> watcher_guard(watcher);
         connect(this, &EquityResearchService::technicals_loaded, watcher,
-            [symbol, period, resolve, watcher_guard](TechnicalsData d) {
-                if (d.symbol != symbol || d.period != period) return;
+            [symbol, period, interval, resolve, watcher_guard](TechnicalsData d) {
+                // Interval is part of the identity: daily and weekly requests
+                // share the same floored period ("10y") and would otherwise
+                // resolve each other and poison the QueryStore entry.
+                if (d.symbol != symbol || d.period != period || d.interval != interval) return;
                 if (watcher_guard) watcher_guard->deleteLater();
                 resolve(QVariant::fromValue(d));
             });
@@ -858,7 +861,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         if (!tcv.isNull()) {
             const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (cached_doc.isArray()) {
-                emit technicals_loaded(parse_technicals(symbol, period, cached_doc.array()));
+                emit technicals_loaded(parse_technicals(symbol, period, interval, cached_doc.array()));
                 return;
             }
         }
@@ -902,14 +905,23 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                     root.insert("technicals", by_period);
                     disk_cache().save(fname, QJsonDocument(root));
                 }
-                emit self->technicals_loaded(self->parse_technicals(symbol, period, data));
+                emit self->technicals_loaded(self->parse_technicals(symbol, period, interval, data));
             },
             python::PythonWorker::kComputeActionTimeoutMs);
     };
 
     // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
-    // Cache key includes period so 1y candles aren't reused for a 5y request.
-    const QString candles_key = "equity:candles:" + symbol + ":" + interval + ":" + period;
+    // Daily candles keep the legacy key so the chart, prefetch and talipp
+    // paths (all daily-only) share one entry with the technicals compute —
+    // splitting them meant the same 5y daily series was fetched twice and the
+    // "<100ms re-open" path went cold. Only non-daily intervals get their own
+    // segment.
+    const QString candles_key =
+        interval == QLatin1String("1d")
+            ? "equity:candles:" + symbol + ":" + period
+            : "equity:candles:" + symbol + ":" + interval + ":" + period;
+    const QString candles_disk_sub =
+        interval == QLatin1String("1d") ? period : interval + ":" + period;
     QJsonArray candles_from_cache;
     {
         const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
@@ -928,7 +940,8 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     hist_payload["period"] = period;
     hist_payload["interval"] = interval;
     python::PythonWorker::instance().submit("historical_period", hist_payload,
-        [self, symbol, candles_key, run_compute, inflight_key](bool ok, QJsonObject result, QString /*err*/) {
+        [self, symbol, candles_key, candles_disk_sub, run_compute, inflight_key](bool ok, QJsonObject result,
+                                                                                  QString /*err*/) {
             if (!self) return;
             if (!ok) {
                 // Stage 1 failed — release the dedup key here since stage 2
@@ -949,10 +962,10 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 QJsonObject root = disk_cache().load(fname).object();
                 root.insert("symbol", symbol);
                 QJsonObject by_period = root.value("candles").toObject();
-                // candles_key looks like "equity:candles:<sym>:<interval>:<period>";
-                // keep both trailing parts so 10y of weekly bars does not land on
-                // top of 10y of daily bars.
-                const QString p = candles_key.section(':', -2);
+                // Daily sub-key is the bare period (shared with the chart
+                // path's writes); weekly carries its interval so 10y of weekly
+                // bars does not land on top of 10y of daily bars.
+                const QString p = candles_disk_sub;
                 by_period.insert(p, candles);
                 root.insert("candles", by_period);
                 disk_cache().save(fname, QJsonDocument(root));
@@ -1245,10 +1258,12 @@ void fill_row(fincept::services::equity::IndicatorRow& row, const QJsonObject& s
 } // namespace
 
 TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, const QString& period,
+                                                        const QString& interval,
                                                         const QJsonArray& rows) const {
     TechnicalsData td;
     td.symbol = symbol;
     td.period = period;
+    td.interval = interval;
     if (rows.isEmpty())
         return td;
 
@@ -1282,6 +1297,9 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     // Display name → column key in the computed output.
     // The averages span fast to slow on purpose — see is_moving_average() in
     // TechnicalRating.cpp for why a narrow set biased the whole rating.
+    // CANONICAL indicator list: tests/services/test_technical_rating.cpp and
+    // tools/technicals_series/score_series.cpp carry copies that must match,
+    // or the tests and the measurement tool score a different panel than ships.
     static const QList<QPair<QString, QString>> kTrend = {
         {"SMA 10", "sma_10"},     {"SMA 20", "sma_20"},   {"SMA 30", "sma_30"},
         {"SMA 50", "sma_50"},     {"SMA 100", "sma_100"}, {"SMA 200", "sma_200"},

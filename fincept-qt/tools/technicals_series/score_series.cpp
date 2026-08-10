@@ -33,6 +33,9 @@ int main(int argc, char** argv) {
     QFile in; in.open(stdin, QIODevice::ReadOnly);
     const QJsonArray rows = QJsonDocument::fromJson(in.readAll()).array();
     QTextStream out(stdout);
+    // Copy of the canonical list in EquityResearchService.cpp (kTrend et al.)
+    // — must match, or this tool measures a different indicator set than the
+    // panel ships, which defeats its purpose.
     static const QList<QPair<QString,QString>> kCols = {
         {"trend","sma_10"},{"trend","sma_20"},{"trend","sma_30"},{"trend","sma_50"},
         {"trend","sma_100"},{"trend","sma_200"},{"trend","ema_12"},{"trend","ema_26"},

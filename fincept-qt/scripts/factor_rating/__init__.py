@@ -106,7 +106,8 @@ edge per name per month before costs. Remaining limits:
 So this package is deliberately not wired into the terminal. Shipping an
 unvalidated composite as a user-facing rating would repeat the mistake it was
 written to find. What it is good for is making the next change falsifiable:
-any proposed rating can be dropped into validate.run() and scored the same way
+any proposed rating can be scored the same way through validate.summarise()
+(python -m factor_rating is the runnable pipeline)
 before anyone relies on it.
 
 To re-run:  python -m factor_rating  (from the scripts/ directory)

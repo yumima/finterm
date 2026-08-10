@@ -173,13 +173,20 @@ QVector<TechIndicator> build(const RatingInput& in, const QVector<QPair<QString,
 }
 
 /// The full display set, categorised exactly as the tab lays it out.
+///
+/// Keep in lock-step with kTrend/kMomentum/kVolatility/kVolume in
+/// EquityResearchService.cpp (the canonical list) and with kCols in
+/// tools/technicals_series/score_series.cpp — this copy had already drifted
+/// once (missing sma_30 / ema_26 / ichimoku_base), which meant the tests
+/// exercised a smaller indicator set than the panel ships.
 QVector<TechIndicator> score_all(const RatingInput& in) {
     static const QVector<QPair<QString, QString>> cols = {
-        {"trend", "sma_10"},     {"trend", "sma_20"},      {"trend", "sma_50"},
-        {"trend", "sma_100"},    {"trend", "sma_200"},
-        {"trend", "ema_12"},     {"trend", "wma_9"},       {"trend", "macd"},
-        {"trend", "macd_signal"},{"trend", "cci"},         {"trend", "adx"},
-        {"trend", "aroon_up"},   {"trend", "aroon_down"},
+        {"trend", "sma_10"},     {"trend", "sma_20"},      {"trend", "sma_30"},
+        {"trend", "sma_50"},     {"trend", "sma_100"},     {"trend", "sma_200"},
+        {"trend", "ema_12"},     {"trend", "ema_26"},      {"trend", "wma_9"},
+        {"trend", "ichimoku_base"},
+        {"trend", "macd"},       {"trend", "macd_signal"}, {"trend", "cci"},
+        {"trend", "adx"},        {"trend", "aroon_up"},    {"trend", "aroon_down"},
         {"momentum", "rsi"},     {"momentum", "stoch_k"},  {"momentum", "stoch_d"},
         {"momentum", "williams_r"}, {"momentum", "roc"},   {"momentum", "mfi"},
         {"momentum", "ao"},      {"momentum", "kama"},

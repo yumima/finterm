@@ -28,10 +28,13 @@ universe on the same date:
   reversal_1m      the last month's return, negated. Short-horizon returns
                    reverse; this is the honest version of "oversold", stated as
                    a cross-sectional effect rather than an oscillator threshold.
-  volume_trend     whether volume is confirming. Orthogonalised against the
-                   price move, because raw OBV-style measures are mostly a
-                   restatement of the price direction they are supposed to
-                   corroborate.
+  volume_trend     whether volume is confirming: the sign of the price move
+                   times the change in average volume. NOT orthogonalised
+                   against returns — an earlier draft described a residualised
+                   version that was never built, and the docstring claiming it
+                   outlived the plan. As shipped this factor partially restates
+                   price direction, which is one plausible reason it measured
+                   insignificant.
   low_volatility   inverse realised volatility. Included for the published
                    low-volatility anomaly — and it is the one factor here that
                    measured as significant, with the sign reversed: over this
@@ -52,14 +55,6 @@ import pandas as pd
 
 def _log(df):
     return np.log(df.where(df > 0))
-
-
-def true_range(high, low, close):
-    prev_close = close.shift(1)
-    a = high - low
-    b = (high - prev_close).abs()
-    c = (low - prev_close).abs()
-    return pd.concat([a, b, c]).groupby(level=0).max()
 
 
 def atr(high, low, close, window=14):
@@ -130,12 +125,14 @@ def reversal_1m(close, window=21):
 
 
 def volume_trend(close, volume, window=60):
-    """Volume confirmation, with the price move projected out.
+    """Volume confirmation: sign of the window's return times relative volume.
 
-    A raw volume-weighted trend measure is largely the price trend again, so
-    including it as an independent factor double-counts. Regressing it on the
-    contemporaneous return across the cross-section and keeping the residual
-    leaves only the part volume says that price did not.
+    sign(60d return) x (60d avg volume / 180d avg volume - 1). Deliberately
+    simple, and honestly labelled: this is NOT orthogonalised against the
+    price move — a residualised design was described in an earlier draft and
+    never implemented, so the factor partially restates price direction. It
+    measured insignificant in validation (IC -0.005); if it is ever revisited,
+    the residualisation is the first thing to actually build.
     """
     ret = close.pct_change(window)
     vol_chg = volume.rolling(window, min_periods=window).mean() / \

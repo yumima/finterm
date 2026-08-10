@@ -6,7 +6,8 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
-- [`c8caf50a9`](https://github.com/yumima/finterm/commit/c8caf50a9) ER Earnings: surface the market-implied move, mark suspect surprises
+- [`dc7b93f8e`](https://github.com/yumima/finterm/commit/dc7b93f8e) ER: fix the review findings — interval identity, cache split, leaky correlation
+- [`20acde9e0`](https://github.com/yumima/finterm/commit/20acde9e0) ER Earnings: surface the market-implied move, mark suspect surprises
 - [`d79d8d5b2`](https://github.com/yumima/finterm/commit/d79d8d5b2) ER Earnings: stop a GAAP one-off setting a company's track record
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

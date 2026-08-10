@@ -71,7 +71,15 @@ def main(argv=None):
     if args.symbols:
         syms = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
     else:
-        syms = sorted(set(large_caps()) | set(portfolio_symbols()))
+        try:
+            caps = large_caps()
+        except Exception as e:
+            # A transient scanner 5xx should degrade the universe, not abort a
+            # multi-minute validation run.
+            print(f"warning: TradingView screener unavailable ({e}); "
+                  "falling back to portfolio symbols only")
+            caps = []
+        syms = sorted(set(caps) | set(portfolio_symbols()))
     print(f"universe: {len(syms)} symbols, {args.years}y")
 
     from .panel import download_panel, clean

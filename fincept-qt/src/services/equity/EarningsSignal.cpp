@@ -810,7 +810,14 @@ QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a) {
 
 std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m) {
     switch (m) {
-        case ReactionMetric::Surprise: return p.surprise_pct;
+        case ReactionMetric::Surprise:
+            // A flagged surprise is a GAAP-vs-adjusted artefact, and this
+            // value feeds a *Pearson* correlation — far more leverage-
+            // sensitive than the Spearman the ±100% threshold was measured
+            // with. One +213% point would set the displayed r almost by
+            // itself, which is precisely the distortion the flag removes
+            // from the scored legs. Treat it as missing here too.
+            return p.surprise_suspect ? std::nullopt : p.surprise_pct;
         case ReactionMetric::QoQ:      return p.eps_qoq_pct;
         case ReactionMetric::YoY:      return p.eps_yoy_pct;
     }

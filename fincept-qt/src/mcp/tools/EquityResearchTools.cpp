@@ -563,8 +563,8 @@ std::vector<ToolDef> get_equity_research_tools() {
             "describe. This is a description of price action that has already happened, not a "
             "forecast and not a trade recommendation: measured over 178 large caps and twelve "
             "years, it agrees with the trend already in place ~96% of the time and with the "
-            "direction of the next 40 days ~53% \xe2\x80\x94 no better than chance. Signals read "
-            "no better than chance. Treat the signal values as a description of price action "
+            "direction of the next 40 days ~53% \xe2\x80\x94 no better than chance. Treat the "
+            "signal values as a description of price action "
             "that has already happened; do not present them to a user as trade advice.";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
@@ -587,9 +587,18 @@ std::vector<ToolDef> get_equity_research_tools() {
                 svc, std::move(ctx), promise,
                 [svc, sym, period](auto resolve) {
                     auto* holder = new QObject(svc);
+                    // Match on the full identity, not the symbol alone. The UI
+                    // can have a weekly fetch for the same symbol in flight
+                    // (same floored period), and a symbol-only match would
+                    // resolve this daily request with weekly-bar indicators.
+                    const QString want_period =
+                        services::equity::EquityResearchService::technicals_history_period(
+                            period, QStringLiteral("1d"));
                     QObject::connect(svc, &services::equity::EquityResearchService::technicals_loaded, holder,
-                                      [sym, resolve, holder](services::equity::TechnicalsData td) {
-                                          if (td.symbol.toUpper() != sym) return;
+                                      [sym, want_period, resolve, holder](services::equity::TechnicalsData td) {
+                                          if (td.symbol.toUpper() != sym || td.period != want_period ||
+                                              td.interval != QLatin1String("1d"))
+                                              return;
                                           resolve(ToolResult::ok_data(technicals_to_json(td)));
                                           holder->deleteLater();
                                       });

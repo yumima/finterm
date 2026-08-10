@@ -674,7 +674,9 @@ void EquityResearchScreen::on_tab_changed(int index) {
         svc.load_symbol(current_symbol_);
     } else if (tab == technicals_tab_) {
         technicals_tab_->set_symbol(current_symbol_);
-        svc.fetch_technicals(current_symbol_);
+        // The tab knows which (period, interval) it is showing; refreshing the
+        // daily default here would warm an entry nobody is looking at.
+        technicals_tab_->refresh();
     } else if (tab == talipp_tab_) {
         talipp_tab_->set_symbol(current_symbol_);
     } else if (tab == peers_tab_) {

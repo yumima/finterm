@@ -29,9 +29,9 @@ static constexpr const char* GRAY = "#6b7280";
 ///
 /// Deliberately the conventional one. It briefly read STRONG UPTREND …
 /// STRONG DOWNTREND, on the argument that the panel measurably describes the
-/// past (~81% agreement with a 40-day trend label) and measurably does not
-/// predict the future (~47%, the wrong side of a coin flip). The argument
-/// stands and the numbers are unchanged — but BUY/SELL is what every reader
+/// past and measurably does not predict the future — currently 96% / 53%
+/// under the trend-structure verdict; the accuracy label under the gauge is
+/// the authoritative pair. The argument stands — but BUY/SELL is what every reader
 /// already scans for, and a label nobody parses at a glance is its own kind of
 /// wrong. The honesty moved to where it does not cost legibility: the line
 /// under the gauge, its tooltip, and the MCP tool description all carry both
@@ -448,6 +448,13 @@ void EquityTechnicalsTab::rebind() {
         current_symbol_, current_period_, current_interval_);
 }
 
+void EquityTechnicalsTab::refresh() {
+    if (current_symbol_.isEmpty())
+        return;
+    services::equity::EquityResearchService::instance().fetch_technicals(
+        current_symbol_, current_period_, current_interval_);
+}
+
 void EquityTechnicalsTab::set_symbol(const QString& symbol) {
     if (symbol == current_symbol_)
         return;
@@ -685,10 +692,10 @@ void EquityTechnicalsTab::build_ui() {
     rp_vl->addWidget(basis_label_);
 
     // What this panel is, stated on the panel. Measured over 178 large caps
-    // across twelve years: the evidence here agrees with the trend already in
-    // place 81% of the time, and with the direction of the next 40 days 47% of
-    // the time. Both numbers belong in front of the user, because only the
-    // first one supports the words above it.
+    // across twelve years with the shipped scorer: the verdict agrees with the
+    // trend already in place 96% of the time, and with the direction of the
+    // next 40 days 53%. Both numbers belong in front of the user, because only
+    // the first one supports the words above it.
     accuracy_label_ = new QLabel("96% on the trend in place \xe2\x80\xb7 53% on the next 40 days");
     accuracy_label_->setAlignment(Qt::AlignCenter);
     accuracy_label_->setWordWrap(true);
@@ -703,9 +710,9 @@ void EquityTechnicalsTab::build_ui() {
         "headline is a tally of it.\n\n"
         "It is not a forecast. The same evidence scored against the direction of the *next* "
         "40 days lands at 53% \xe2\x80\x94 barely off a coin flip \xe2\x80\x94 and its "
-        "rank correlation with forward returns is indistinguishable from zero. That is why "
-        "Read the verdict as a description of the move already in place, not as a\n"
-        "forecast of the next one.\n\n"
+        "rank correlation with forward returns is indistinguishable from zero. Read the "
+        "verdict as a description of the move already in place, not as a forecast of the "
+        "next one.\n\n"
         "Re-run the measurement yourself: python -m factor_rating --describe");
     accuracy_label_->setStyleSheet(
         QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")

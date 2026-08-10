@@ -176,7 +176,8 @@ class EquityResearchService : public QObject {
     QVector<Candle> parse_candles(const QJsonArray& arr) const;
     FinancialsData parse_financials(const QJsonObject& obj) const;
     /// Builds the display rows and delegates the verdict to TechnicalRating.
-    TechnicalsData parse_technicals(const QString& symbol, const QString& period, const QJsonArray& rows) const;
+    TechnicalsData parse_technicals(const QString& symbol, const QString& period,
+                                    const QString& interval, const QJsonArray& rows) const;
     QVector<PeerData> parse_peers(const QJsonArray& arr) const;
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;
     QVector<EarningsEvent> parse_earnings(const QJsonArray& arr) const;

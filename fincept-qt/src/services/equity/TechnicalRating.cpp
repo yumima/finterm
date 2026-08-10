@@ -405,11 +405,12 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
     RatingVerdict v;
     v.displayed = static_cast<int>(scored.size());
 
-    struct Bucket {
-        double sum = 0.0;
-        int count = 0;
-    };
-    QHash<QString, Bucket> buckets;
+    // Per-bucket voter counts. Only counts: the verdict is cut from
+    // trend_structure(), so there is no vote-sum to accumulate — keeping the
+    // old ±2/±1 points tally here made aggregate() look like it still
+    // aggregated votes and invited careful preservation of semantics that no
+    // longer influence any output.
+    QHash<QString, int> voters;
 
     for (const auto& ti : scored) {
         if (!ti.votes)
@@ -431,32 +432,11 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
                 v.strong_sell++;
                 break;
         }
-        double points = 0.0;
-        switch (ti.signal) {
-            case S::StrongBuy:
-                points = 2.0;
-                break;
-            case S::Buy:
-                points = 1.0;
-                break;
-            case S::Neutral:
-                points = 0.0;
-                break;
-            case S::Sell:
-                points = -1.0;
-                break;
-            case S::StrongSell:
-                points = -2.0;
-                break;
-        }
-        // The weighted bucket, not the panel the row is displayed under.
-        auto& b = buckets[ti.rating_bucket];
-        b.sum += points;
-        b.count++;
+        voters[ti.rating_bucket]++;
         v.voting++;
     }
 
-    const int trend_voters = buckets.value(QLatin1String(kBucketTrend)).count;
+    const int trend_voters = voters.value(QLatin1String(kBucketTrend));
     const TrendStructure structure = trend_structure(in);
 
     if (!has_sufficient_history(in) || !structure.valid || v.voting < kMinVotingIndicators ||

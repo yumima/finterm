@@ -129,8 +129,8 @@ struct FinancialsData {
 // ── Technical indicator signal ────────────────────────────────────────────────
 //
 // Buy / sell wording, with a caveat worth carrying: scored against a 40-day
-// trend label over 178 large caps and twelve years, the evidence behind these
-// verdict agrees with the trend already in place ~96% of the time and with the
+// trend label over 178 large caps and twelve years, the verdict behind these
+// values agrees with the trend already in place ~96% of the time and with the
 // direction of the next 40 days ~53% — barely off a coin flip. These
 // names describe a move that has happened; they do not forecast one. Anything
 // presenting them onward, the MCP surface especially, should carry that.
@@ -156,6 +156,11 @@ struct TechIndicator {
 struct TechnicalsData {
     QString symbol;
     QString period;
+    /// Bar interval the indicators were computed on ("1d" | "1wk"). Part of
+    /// the result's identity: the broadcast watchers match on it, because a
+    /// weekly and a daily request can share the same floored period ("10y")
+    /// and would otherwise resolve each other's subscriptions.
+    QString interval;
     QVector<TechIndicator> trend;
     QVector<TechIndicator> momentum;
     QVector<TechIndicator> volatility;
