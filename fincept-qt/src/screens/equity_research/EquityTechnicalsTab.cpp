@@ -222,6 +222,8 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
         return "Rolling volume-weighted avg price — price above = bullish";
     if (col_key == "adi")
         return "Accumulation/distribution — confirms money flow";
+    if (col_key == "ichimoku_base")
+        return "Midpoint of the 26-period range — the equilibrium price";
     if (col_key.startsWith("sma_") || col_key.startsWith("ema_") || col_key.startsWith("wma_") || col_key == "kama")
         return "Moving average — price above = bullish, below = bearish";
     if (col_key == "macd_signal")
@@ -392,6 +394,12 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "A moving average that weights recent prices more heavily, so it turns faster "
                "than an SMA. Price above a rising EMA supports the uptrend; crossovers signal "
                "shifts earlier, at the cost of more whipsaws.";
+    if (col_key == "ichimoku_base")
+        return "Ichimoku Base Line (Kijun-sen)\n\n"
+               "The midpoint of the highest high and lowest low over the last 26 periods \xe2\x80\x94 "
+               "not an average of closes but the centre of the recent range, which makes it a "
+               "slower, steadier reference than a moving average of the same length. Price "
+               "holding above it is bullish; losing it often marks the point a trend stalls.";
     if (col_key.startsWith("wma_"))
         return "Weighted Moving Average (WMA)\n\n"
                "A moving average with linearly increasing weight on the most recent prices \xe2\x80\x94 "
@@ -408,20 +416,32 @@ EquityTechnicalsTab::EquityTechnicalsTab(QWidget* parent) : QWidget(parent) {
     // delivered alongside data on the same callback (State.error).
 }
 
-void EquityTechnicalsTab::set_symbol(const QString& symbol) {
-    if (symbol == current_symbol_)
+/// Point the subscription at the current (symbol, period, interval).
+///
+/// Dropping the old key before binding the new one matters: without it a late
+/// resolve for the previous combination still delivers and overwrites panels
+/// the user has already moved away from.
+void EquityTechnicalsTab::rebind() {
+    if (current_symbol_.isEmpty())
         return;
-    current_symbol_ = symbol;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
 
     auto& store = services::query::QueryStore::instance();
     if (!current_technicals_key_.isEmpty())
         store.unsubscribe(this, current_technicals_key_);
-    services::equity::EquityResearchService::instance().subscribe_technicals(
-        this, symbol, current_period_,
+    auto& svc = services::equity::EquityResearchService::instance();
+    svc.subscribe_technicals(
+        this, current_symbol_, current_period_, current_interval_,
         [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
-    current_technicals_key_ =
-        services::equity::EquityResearchService::technicals_key(symbol, current_period_);
+    current_technicals_key_ = services::equity::EquityResearchService::technicals_key(
+        current_symbol_, current_period_, current_interval_);
+}
+
+void EquityTechnicalsTab::set_symbol(const QString& symbol) {
+    if (symbol == current_symbol_)
+        return;
+    current_symbol_ = symbol;
+    rebind();
 }
 
 void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period) {
@@ -432,16 +452,18 @@ void EquityTechnicalsTab::switch_period(QPushButton* btn, const QString& period)
         active_period_btn_->setStyleSheet(period_btn_style_inactive());
     btn->setStyleSheet(period_btn_style_active());
     active_period_btn_ = btn;
-    loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
+    rebind();
+}
 
-    auto& store = services::query::QueryStore::instance();
-    if (!current_technicals_key_.isEmpty())
-        store.unsubscribe(this, current_technicals_key_);
-    services::equity::EquityResearchService::instance().subscribe_technicals(
-        this, current_symbol_, period,
-        [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
-    current_technicals_key_ =
-        services::equity::EquityResearchService::technicals_key(current_symbol_, period);
+void EquityTechnicalsTab::switch_interval(QPushButton* btn, const QString& interval) {
+    if (interval == current_interval_ || current_symbol_.isEmpty())
+        return;
+    current_interval_ = interval;
+    if (active_interval_btn_)
+        active_interval_btn_->setStyleSheet(period_btn_style_inactive());
+    btn->setStyleSheet(period_btn_style_active());
+    active_interval_btn_ = btn;
+    rebind();
 }
 
 // static
@@ -515,6 +537,39 @@ void EquityTechnicalsTab::build_ui() {
         return btn_1y_;
     };
     active_period_btn_ = period_to_btn(current_period_);
+
+    // ── Bar interval ─────────────────────────────────────────────────────────
+    // Separate from PERIOD because it is the control that actually changes the
+    // verdict. Every indicator is recomputed from weekly highs, lows and closes,
+    // so the weekly rating describes the multi-month trend where the daily one
+    // describes the multi-week one — they disagree often, and that disagreement
+    // is the useful part.
+    auto* bars_lbl = new QLabel("BARS");
+    bars_lbl->setToolTip(
+        "Which bars the indicators are built from.\n\n"
+        "Daily reads the multi-week trend; weekly re-derives every indicator from weekly "
+        "highs, lows and closes and reads the multi-month one. A stock can be neutral on "
+        "the daily chart and strongly trending on the weekly, and vice versa \xe2\x80\x94 "
+        "the two answer different questions.");
+    bars_lbl->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
+    pb_hl->addSpacing(14);
+    pb_hl->addWidget(bars_lbl);
+
+    auto make_interval_btn = [&](const QString& label, QPushButton*& out, const QString& interval) {
+        out = new QPushButton(label);
+        out->setCursor(Qt::PointingHandCursor);
+        out->setStyleSheet(interval == current_interval_ ? period_btn_style_active()
+                                                          : period_btn_style_inactive());
+        connect(out, &QPushButton::clicked, this,
+                [this, out, interval]() { switch_interval(out, interval); });
+        pb_hl->addWidget(out);
+    };
+    make_interval_btn("1D", btn_daily_, "1d");
+    make_interval_btn("1W", btn_weekly_, "1wk");
+    active_interval_btn_ = current_interval_ == "1wk" ? btn_weekly_ : btn_daily_;
+
     pb_hl->addStretch();
     outer->addWidget(period_bar);
 

@@ -147,7 +147,9 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                 }
             };
         repopulate_periodic("candles", "equity:candles:", kHistoricalTtlSec);
-        repopulate_periodic("technicals", "equity:technicals:", kTechnicalsTtlSec);
+        repopulate_periodic("technicals",
+                            "equity:technicals:" + QString(kTechnicalsSchemaTag) + ":",
+                            kTechnicalsTtlSec);
     }
     if (!files.isEmpty())
         LOG_INFO("EquityResearch",
@@ -391,10 +393,16 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                                             std::move(cb), std::move(fetcher));
 }
 
-QString EquityResearchService::technicals_history_period(const QString& requested) {
-    // Anything shorter than two years cannot warm up the indicators the rating
-    // requires. Longer selections are honoured as-is — they cost nothing extra
-    // beyond the fetch, since every reading is taken off the last bar.
+QString EquityResearchService::technicals_history_period(const QString& requested,
+                                                          const QString& interval) {
+    // Weekly bars need far more calendar time for the same warm-up: a
+    // 200-period average of weekly closes is four years of history by itself.
+    if (interval == QLatin1String("1wk"))
+        return QStringLiteral("10y");
+
+    // Anything shorter than two years cannot warm up the daily indicators the
+    // rating requires. Longer selections are honoured as-is — they cost nothing
+    // extra beyond the fetch, since every reading is taken off the last bar.
     static const QSet<QString> kBelowFloor = {
         QStringLiteral("1d"),  QStringLiteral("5d"),  QStringLiteral("1mo"),
         QStringLiteral("3mo"), QStringLiteral("6mo"), QStringLiteral("ytd"),
@@ -403,20 +411,23 @@ QString EquityResearchService::technicals_history_period(const QString& requeste
     return kBelowFloor.contains(requested) ? QStringLiteral("2y") : requested;
 }
 
-QString EquityResearchService::technicals_key(const QString& symbol, const QString& requested) {
-    return "equity:technicals:" + symbol + ":" + technicals_history_period(requested);
+QString EquityResearchService::technicals_key(const QString& symbol, const QString& requested,
+                                              const QString& interval) {
+    return "equity:technicals:" + QLatin1String(kTechnicalsSchemaTag) + ":" + symbol + ":" +
+           interval + ":" + technicals_history_period(requested, interval);
 }
 
 void EquityResearchService::subscribe_technicals(QObject* owner, const QString& symbol,
                                                   const QString& requested_period,
+                                                  const QString& interval,
                                                   query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
     // Everything below works in the floored period, so the cache entry, the
     // QueryStore key and the `d.period` the watcher matches on all agree.
-    const QString period = technicals_history_period(requested_period);
-    const QString key = technicals_key(symbol, requested_period);
-    auto fetcher = [this, symbol, period, key](query::QueryStore::Resolver resolve,
-                                                query::QueryStore::Rejecter reject) {
+    const QString period = technicals_history_period(requested_period, interval);
+    const QString key = technicals_key(symbol, requested_period, interval);
+    auto fetcher = [this, symbol, period, interval, key](query::QueryStore::Resolver resolve,
+                                                          query::QueryStore::Rejecter reject) {
         // Cache check first — fetch_technicals also checks but it emits the
         // broadcast synchronously without going through resolve, which would
         // skip the QueryStore delivery path. So we do an inline check that
@@ -452,7 +463,7 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
                 if (watcher_guard) watcher_guard->deleteLater();
                 reject(msg);
             });
-        fetch_technicals(symbol, period);
+        fetch_technicals(symbol, period, interval);
     };
     // SWR window — technicals are derived from daily candles and barely
     // change intraday. Same 24h cap as historical: beyond that the most-
@@ -834,14 +845,16 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
 //     action. Both daemon hops share the warm pandas/yfinance import so the
 //     wall time is dominated only by the network roundtrip on cold candles.
 //
-void EquityResearchService::fetch_technicals(const QString& symbol, const QString& requested_period) {
-    // Floored so a 1M selection still gets enough daily history to warm up the
+void EquityResearchService::fetch_technicals(const QString& symbol, const QString& requested_period,
+                                             const QString& interval) {
+    // Floored so a 1M selection still gets enough history to warm up the
     // indicators the rating needs. See technicals_history_period().
-    const QString period = technicals_history_period(requested_period);
+    const QString period = technicals_history_period(requested_period, interval);
+    const QString tech_key = technicals_key(symbol, requested_period, interval);
 
     // ── Tier 0: technicals cache ─────────────────────────────────────────────
     {
-        const QVariant tcv = fincept::CacheManager::instance().get("equity:technicals:" + symbol + ":" + period);
+        const QVariant tcv = fincept::CacheManager::instance().get(tech_key);
         if (!tcv.isNull()) {
             const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (cached_doc.isArray()) {
@@ -853,18 +866,19 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
     // Dedup: a (symbol, period) request already in flight will fan out via
     // technicals_loaded — duplicate caller drops here.
-    const QString inflight_key = "technicals:" + symbol + ":" + period;
+    const QString inflight_key = "technicals:" + symbol + ":" + interval + ":" + period;
     if (!acquire_inflight(inflight_key)) return;
 
     QPointer<EquityResearchService> self = this;
 
     // ── Stage 2: compute via daemon, given a candles array ───────────────────
-    auto run_compute = [self, symbol, period, inflight_key](const QJsonArray& candles) {
+    auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& candles) {
         if (!self) { return; }  // (key remains held — process is exiting anyway)
         QJsonObject payload;
         payload["candles"] = candles;
         python::PythonWorker::instance().submit("compute_technicals", payload,
-            [self, symbol, period, inflight_key](bool ok, QJsonObject result, QString err) {
+            [self, symbol, period, interval, tech_key, inflight_key](bool ok, QJsonObject result,
+                                                                        QString err) {
                 if (!self) return;
                 self->release_inflight(inflight_key);
                 if (!ok || !result.value("success").toBool(false)) {
@@ -877,15 +891,14 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 const QJsonArray data = result.value("data").toArray();
                 // Cache the computed series so re-opens are <100ms.
                 const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(
-                    "equity:technicals:" + symbol + ":" + period, QVariant(blob),
-                    kTechnicalsTtlSec, "equity");
+                fincept::CacheManager::instance().put(tech_key, QVariant(blob),
+                                                      kTechnicalsTtlSec, "equity");
                 {
                     const QString fname = symbol_filename(symbol);
                     QJsonObject root = disk_cache().load(fname).object();
                     root.insert("symbol", symbol);
                     QJsonObject by_period = root.value("technicals").toObject();
-                    by_period.insert(period, data);
+                    by_period.insert(interval + ":" + period, data);
                     root.insert("technicals", by_period);
                     disk_cache().save(fname, QJsonDocument(root));
                 }
@@ -896,7 +909,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
     // ── Stage 1: pull candles (cache → daemon historical_period) ─────────────
     // Cache key includes period so 1y candles aren't reused for a 5y request.
-    const QString candles_key = "equity:candles:" + symbol + ":" + period;
+    const QString candles_key = "equity:candles:" + symbol + ":" + interval + ":" + period;
     QJsonArray candles_from_cache;
     {
         const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
@@ -913,7 +926,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     QJsonObject hist_payload;
     hist_payload["symbol"] = symbol;
     hist_payload["period"] = period;
-    hist_payload["interval"] = "1d";
+    hist_payload["interval"] = interval;
     python::PythonWorker::instance().submit("historical_period", hist_payload,
         [self, symbol, candles_key, run_compute, inflight_key](bool ok, QJsonObject result, QString /*err*/) {
             if (!self) return;
@@ -936,8 +949,10 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 QJsonObject root = disk_cache().load(fname).object();
                 root.insert("symbol", symbol);
                 QJsonObject by_period = root.value("candles").toObject();
-                // candles_key looks like "equity:candles:<sym>:<period>"
-                const QString p = candles_key.section(':', -1);
+                // candles_key looks like "equity:candles:<sym>:<interval>:<period>";
+                // keep both trailing parts so 10y of weekly bars does not land on
+                // top of 10y of daily bars.
+                const QString p = candles_key.section(':', -2);
                 by_period.insert(p, candles);
                 root.insert("candles", by_period);
                 disk_cache().save(fname, QJsonDocument(root));

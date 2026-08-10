@@ -58,29 +58,38 @@ class EquityResearchService : public QObject {
     /// an adjacent period (e.g. 5Y when viewing 1Y) instant on next click.
     void prefetch_historical(const QString& symbol, const QString& period);
 
-    /// The daily-history window the technicals compute actually uses for a
-    /// requested period.
+    /// The history window the technicals compute actually uses for a requested
+    /// (period, bar interval) pair.
     ///
     /// The rating will not produce a verdict without SMA 50/200, MACD and ADX
     /// warmed up, and a 1M window supplies none of them — `ta`'s ADX does not
-    /// survive 23 bars at all. So the indicator series is always computed from
-    /// at least two years of daily candles, whichever button is selected. The
-    /// consequence is deliberate: every indicator reads off the last bar with a
-    /// fixed lookback, so the sub-2y buttons now agree with each other rather
-    /// than differing only in how much of their warm-up had completed.
-    static QString technicals_history_period(const QString& requested);
+    /// survive 23 bars at all. So the series is always computed from enough
+    /// history for the warm-up: two years of daily bars, or ten years of
+    /// weekly ones (a 200-period average of weekly bars is four years by
+    /// itself). The consequence on the daily side is deliberate: every
+    /// indicator reads off the last bar with a fixed lookback, so the sub-2y
+    /// buttons agree with each other rather than differing only in how much of
+    /// their warm-up had completed.
+    ///
+    /// The bar interval is the part that genuinely changes the answer. Weekly
+    /// bars re-derive every indicator from weekly highs, lows and closes, so
+    /// the rating describes the multi-month trend rather than the multi-week
+    /// one — the two regularly disagree, which is the point of offering both.
+    static QString technicals_history_period(const QString& requested, const QString& interval);
 
     /// Cache / QueryStore key for a technicals request. Derived from the
-    /// floored period above, so the buttons that resolve to the same window
-    /// share one computed series instead of five copies of it.
-    static QString technicals_key(const QString& symbol, const QString& requested);
+    /// floored period and the interval, so the buttons that resolve to the same
+    /// window share one computed series instead of several copies of it, while
+    /// daily and weekly stay independent.
+    static QString technicals_key(const QString& symbol, const QString& requested,
+                                  const QString& interval);
 
     /// Subscribe to the computed technicals stream for (`symbol`, `period`).
     /// State carries TechnicalsData. Internally delegates to fetch_technicals
     /// for the actual two-stage candles→compute chain; the QueryStore layer
     /// just routes the result back to the right subscriber.
     void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period,
-                              query::QueryStore::Callback cb);
+                              const QString& interval, query::QueryStore::Callback cb);
 
     /// Subscribe to the quarterly financial-statements stream for `symbol`.
     /// State carries FinancialsData.
@@ -110,7 +119,8 @@ class EquityResearchService : public QObject {
                                      query::QueryStore::Callback cb);
 
     void fetch_financials(const QString& symbol);
-    void fetch_technicals(const QString& symbol, const QString& period = "1y");
+    void fetch_technicals(const QString& symbol, const QString& period = "1y",
+                          const QString& interval = "1d");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
     void fetch_news(const QString& symbol, int count = 20);
 
@@ -177,6 +187,17 @@ class EquityResearchService : public QObject {
     static constexpr int kInfoTtlSec = 1800;       // fundamentals barely change minute-to-minute
     static constexpr int kHistoricalTtlSec = 600;  // daily candles stable within 10 min
     static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
+
+    /// Bump whenever the computed indicator set changes shape.
+    ///
+    /// A cached series written by an older build has whatever columns that
+    /// build emitted, and the rating asks whether specific ones are present —
+    /// so a pre-upgrade blob with no `sma_50` makes has_sufficient_history()
+    /// fail and the panel report "not enough history to rate" over a five-year
+    /// window. It ages out inside the TTL, but a wrong verdict in the first
+    /// ten minutes after upgrading is exactly the impression this work exists
+    /// to remove. Versioning the key retires the stale shape immediately.
+    static constexpr const char* kTechnicalsSchemaTag = "v2";
     static constexpr int kNewsTtlSec = 180;
     // Financials are quarterly — no need to refetch within a session.
     static constexpr int kFinancialsTtlSec = 3600;

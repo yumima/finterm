@@ -25,6 +25,10 @@ class EquityTechnicalsTab : public QWidget {
     void populate(const services::equity::TechnicalsData& data);
     void clear_sections();
     void switch_period(QPushButton* btn, const QString& period);
+    /// Switch the bar interval the indicators are derived from ("1d" / "1wk").
+    void switch_interval(QPushButton* btn, const QString& interval);
+    /// (Re)bind the technicals subscription to the current symbol/period/interval.
+    void rebind();
 
     static QString signal_text(services::equity::TechSignal s);
     /// Tooltip explaining why a displayed indicator is excluded from the tally.
@@ -38,6 +42,10 @@ class EquityTechnicalsTab : public QWidget {
 
     QString current_symbol_;
     QString current_period_ = "1y";
+    // Bar interval the indicators are computed on. Unlike the period, this
+    // genuinely changes the verdict — weekly bars describe the multi-month
+    // trend where daily bars describe the multi-week one.
+    QString current_interval_ = "1d";
     // The QueryStore key the current subscription is bound to. Tracked so
     // set_symbol() / switch_period() can drop the prior subscription before
     // rebinding — without this, a late resolve for the previous (symbol,
@@ -51,6 +59,9 @@ class EquityTechnicalsTab : public QWidget {
     QPushButton* btn_1y_ = nullptr;
     QPushButton* btn_5y_ = nullptr;
     QPushButton* active_period_btn_ = nullptr;
+    QPushButton* btn_daily_ = nullptr;
+    QPushButton* btn_weekly_ = nullptr;
+    QPushButton* active_interval_btn_ = nullptr;
 
     // Rating panel
     QLabel* rating_label_ = nullptr;

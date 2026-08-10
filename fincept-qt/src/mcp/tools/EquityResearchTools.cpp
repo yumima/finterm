@@ -173,6 +173,9 @@ QJsonArray indicators_to_json(const QVector<services::equity::TechIndicator>& xs
 QJsonObject technicals_to_json(const services::equity::TechnicalsData& t) {
     return QJsonObject{
         {"symbol", t.symbol},
+        // The window the indicators were actually computed from, which is not
+        // necessarily the one requested — see the `period` argument's schema.
+        {"period_used", t.period},
         {"trend", indicators_to_json(t.trend)},
         {"momentum", indicators_to_json(t.momentum)},
         {"volatility", indicators_to_json(t.volatility)},
@@ -560,7 +563,13 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Ticker symbol").required().length(1, 32)
-            .string("period", "Historical period for indicator calc").default_str("1y").length(1, 8)
+            .string("period",
+                    "Daily history for the indicator calc. Anything under 2y is raised to 2y so "
+                    "the 50/200-period averages, MACD and ADX are warmed up — without them no "
+                    "rating is produced at all. The window actually used comes back as "
+                    "`period_used`, and since every indicator reads the latest bar with a fixed "
+                    "lookback, all sub-2y requests return the same rating.")
+                .default_str("1y").length(1, 8)
             .build();
         t.async_handler = [](const QJsonObject& args, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
