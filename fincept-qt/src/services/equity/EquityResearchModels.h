@@ -128,14 +128,13 @@ struct FinancialsData {
 
 // ── Technical indicator signal ────────────────────────────────────────────────
 //
-// Bullish / bearish, not buy / sell. The distinction is not cosmetic: scored
-// against a 40-day trend label over 178 large caps and twelve years, the
-// evidence behind these values agrees with the trend already in place ~81% of
-// the time and with the direction of the next 40 days ~47% — the wrong side of
-// a coin flip. It describes a move; it does not forecast one, and the names
-// here should not imply otherwise to anything reading them, including the MCP
-// surface and any model on the other end of it.
-enum class TechSignal { StrongBullish, Bullish, Neutral, Bearish, StrongBearish };
+// Buy / sell wording, with a caveat worth carrying: scored against a 40-day
+// trend label over 178 large caps and twelve years, the evidence behind these
+// values agrees with the trend already in place ~81% of the time and with the
+// direction of the next 40 days ~47% — the wrong side of a coin flip. These
+// names describe a move that has happened; they do not forecast one. Anything
+// presenting them onward, the MCP surface especially, should carry that.
+enum class TechSignal { StrongBuy, Buy, Neutral, Sell, StrongSell };
 
 struct TechIndicator {
     QString name;
@@ -171,11 +170,11 @@ struct TechnicalsData {
     /// rating computed from the survivors.
     QString data_warning;
     int voting_count = 0;
-    int strong_bullish = 0;
-    int bullish = 0;
+    int strong_buy = 0;
+    int buy = 0;
     int neutral = 0;
-    int bearish = 0;
-    int strong_bearish = 0;
+    int sell = 0;
+    int strong_sell = 0;
 };
 
 // ── Peer comparison ───────────────────────────────────────────────────────────

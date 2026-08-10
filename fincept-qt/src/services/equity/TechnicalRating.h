@@ -8,18 +8,18 @@
 
 namespace fincept::services::equity {
 
-/// The trend reading under the ER Technicals tab.
+/// The STRONG BUY … STRONG SELL read under the ER Technicals tab.
 ///
-/// What it claims, and what it does not. This panel used to print STRONG BUY …
-/// STRONG SELL. Those words are a forecast, and the forecast was measured: over
-/// 178 large caps and twelve years of daily bars, scored against the sign of a
-/// 40-day log-price regression, the evidence here agrees with the trend already
-/// in place ~81% of the time and with the direction of the *next* 40 days ~47%
-/// — the wrong side of a coin flip, and consistent with a rank correlation
-/// against forward returns that is indistinguishable from zero. So it now reads
-/// STRONG UPTREND … STRONG DOWNTREND, which is the claim the evidence supports.
-/// The measurement lives in scripts/factor_rating and re-runs with
-/// `python -m factor_rating --describe`.
+/// What it claims, and what it does not. Over 178 large caps and twelve years of
+/// daily bars, scored against the sign of a 40-day log-price regression, the
+/// evidence here agrees with the trend already in place ~81% of the time and
+/// with the direction of the *next* 40 days ~47% — the wrong side of a coin
+/// flip, and consistent with a rank correlation against forward returns that is
+/// indistinguishable from zero. It is a good description of a move that has
+/// happened and not a forecast of one that has not, whatever the verdict's
+/// wording suggests. Both numbers are shown under the gauge and in the MCP tool
+/// description so the claim travels with the output. The measurement lives in
+/// scripts/factor_rating and re-runs with `python -m factor_rating --describe`.
 ///
 /// Two rules shape the whole design, both learned from what the previous
 /// scorer got wrong:
@@ -104,7 +104,7 @@ struct RatingVerdict {
     double net = 0.0;
     int voting = 0;   // indicators that actually cast a vote
     int displayed = 0;// indicators shown, voting or not
-    int strong_bullish = 0, bullish = 0, neutral = 0, bearish = 0, strong_bearish = 0;
+    int strong_buy = 0, buy = 0, neutral = 0, sell = 0, strong_sell = 0;
     /// Per-bucket contribution, or the reason there is no rating.
     QString basis;
 };

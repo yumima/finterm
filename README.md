@@ -6,7 +6,8 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
-- [`ede3d9d74`](https://github.com/yumima/finterm/commit/ede3d9d74) ER Technicals: say what the panel measures, not what it implies
+- [`5834c4784`](https://github.com/yumima/finterm/commit/5834c4784) ER Technicals: back to STRONG SELL / SELL / NEUTRAL / BUY / STRONG BUY
+- [`891e8803c`](https://github.com/yumima/finterm/commit/891e8803c) ER Technicals: say what the panel measures, not what it implies
 - [`2c9b8b622`](https://github.com/yumima/finterm/commit/2c9b8b622) Factor rating: score description separately from prediction
 - [`29f5bf39c`](https://github.com/yumima/finterm/commit/29f5bf39c) Factor rating: verify the null result, and correct my own excuse
 - [`514dddf49`](https://github.com/yumima/finterm/commit/514dddf49) Factor rating: build the model, measure it, and do not ship it

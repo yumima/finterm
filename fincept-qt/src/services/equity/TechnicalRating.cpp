@@ -112,9 +112,9 @@ Regime regime_of(const RatingInput& in) {
 S respect_trend(S s, const Regime& r) {
     if (!r.trending)
         return s;
-    if (r.up && (s == S::Bearish || s == S::StrongBearish))
+    if (r.up && (s == S::Sell || s == S::StrongSell))
         return S::Neutral;
-    if (!r.up && (s == S::Bullish || s == S::StrongBullish))
+    if (!r.up && (s == S::Buy || s == S::StrongBuy))
         return S::Neutral;
     return s;
 }
@@ -134,9 +134,9 @@ S score_vs_price(double ma, double prev_ma, double close, double atr) {
                                : std::abs(gap) / ma > kStrongGapPct;
 
     if (gap > 0.0)
-        return (far && rising) ? S::StrongBullish : S::Bullish;
+        return (far && rising) ? S::StrongBuy : S::Buy;
     if (gap < 0.0)
-        return (far && falling) ? S::StrongBearish : S::Bearish;
+        return (far && falling) ? S::StrongSell : S::Sell;
     return S::Neutral;
 }
 
@@ -145,9 +145,9 @@ S score_vs_price(double ma, double prev_ma, double close, double atr) {
 /// reads Buy every single bar of a sustained decline.
 S score_extremes(double value, double prev, bool have_prev, double oversold, double overbought) {
     if (value <= oversold)
-        return (have_prev && value > prev) ? S::StrongBullish : S::Neutral;
+        return (have_prev && value > prev) ? S::StrongBuy : S::Neutral;
     if (value >= overbought)
-        return (have_prev && value < prev) ? S::StrongBearish : S::Neutral;
+        return (have_prev && value < prev) ? S::StrongSell : S::Neutral;
     return S::Neutral;
 }
 
@@ -155,9 +155,9 @@ S score_extremes(double value, double prev, bool have_prev, double oversold, dou
 /// away from zero upgrades it to strong.
 S score_zero_line(double value, double prev, bool have_prev) {
     if (value > 0.0)
-        return (have_prev && value > prev) ? S::StrongBullish : S::Bullish;
+        return (have_prev && value > prev) ? S::StrongBuy : S::Buy;
     if (value < 0.0)
-        return (have_prev && value < prev) ? S::StrongBearish : S::Bearish;
+        return (have_prev && value < prev) ? S::StrongSell : S::Sell;
     return S::Neutral;
 }
 
@@ -220,9 +220,9 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             return voting(S::Neutral, kBucketTrend); // no trend to be directional about
         const double dir = in.now.get("adx_pos") - in.now.get("adx_neg");
         if (dir > 0.0)
-            return voting(value >= 25.0 ? S::StrongBullish : S::Bullish, kBucketTrend);
+            return voting(value >= 25.0 ? S::StrongBuy : S::Buy, kBucketTrend);
         if (dir < 0.0)
-            return voting(value >= 25.0 ? S::StrongBearish : S::Bearish, kBucketTrend);
+            return voting(value >= 25.0 ? S::StrongSell : S::Sell, kBucketTrend);
         return voting(S::Neutral, kBucketTrend);
     }
 
@@ -235,13 +235,13 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
         const double diff = in.now.get("aroon_up") - in.now.get("aroon_down");
         S s = S::Neutral;
         if (diff >= 50.0)
-            s = S::StrongBullish;
+            s = S::StrongBuy;
         else if (diff > 0.0)
-            s = S::Bullish;
+            s = S::Buy;
         else if (diff <= -50.0)
-            s = S::StrongBearish;
+            s = S::StrongSell;
         else if (diff < 0.0)
-            s = S::Bearish;
+            s = S::Sell;
         // Both rows show the pair's verdict; only Up carries it into the tally.
         return column == "aroon_up" ? voting(s, kBucketTrend) : display_only(s);
     }
@@ -264,9 +264,9 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             const double k = in.now.get("stoch_k");
             const double d = in.now.get("stoch_d");
             if (k <= 20.0)
-                s = k > d ? S::StrongBullish : S::Neutral;
+                s = k > d ? S::StrongBuy : S::Neutral;
             else if (k >= 80.0)
-                s = k < d ? S::StrongBearish : S::Neutral;
+                s = k < d ? S::StrongSell : S::Neutral;
         }
         s = respect_trend(s, regime);
         return column == "stoch_k" ? voting(s, kBucketMomentum) : display_only(s);
@@ -277,22 +277,22 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
     if (column == "bb_pband") {
         S s = S::Neutral;
         if (value < 0.0)
-            s = (have_prev && value > prev) ? S::StrongBullish : S::Neutral;
+            s = (have_prev && value > prev) ? S::StrongBuy : S::Neutral;
         else if (value > 1.0)
-            s = (have_prev && value < prev) ? S::StrongBearish : S::Neutral;
+            s = (have_prev && value < prev) ? S::StrongSell : S::Neutral;
         return voting(respect_trend(s, regime), kBucketMomentum);
     }
 
     // ── Rate-of-change style momentum ────────────────────────────────────────
     if (column == "roc") {
         if (value >= 10.0)
-            return voting(S::StrongBullish, kBucketMomentum);
+            return voting(S::StrongBuy, kBucketMomentum);
         if (value > 2.0)
-            return voting(S::Bullish, kBucketMomentum);
+            return voting(S::Buy, kBucketMomentum);
         if (value <= -10.0)
-            return voting(S::StrongBearish, kBucketMomentum);
+            return voting(S::StrongSell, kBucketMomentum);
         if (value < -2.0)
-            return voting(S::Bearish, kBucketMomentum);
+            return voting(S::Sell, kBucketMomentum);
         return voting(S::Neutral, kBucketMomentum);
     }
     if (column == "ao")
@@ -301,13 +301,13 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
     // ── Volume ───────────────────────────────────────────────────────────────
     if (column == "cmf") {
         if (value >= 0.20)
-            return voting(S::StrongBullish, kBucketVolume);
+            return voting(S::StrongBuy, kBucketVolume);
         if (value > 0.05)
-            return voting(S::Bullish, kBucketVolume);
+            return voting(S::Buy, kBucketVolume);
         if (value <= -0.20)
-            return voting(S::StrongBearish, kBucketVolume);
+            return voting(S::StrongSell, kBucketVolume);
         if (value < -0.05)
-            return voting(S::Bearish, kBucketVolume);
+            return voting(S::Sell, kBucketVolume);
         return voting(S::Neutral, kBucketVolume);
     }
     // Running totals: a single bar of a cumulative sum is noise, so these are
@@ -317,9 +317,9 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             return display_only(S::Neutral);
         const double earlier = in.back.get(column);
         if (value > earlier)
-            return voting(S::Bullish, kBucketVolume);
+            return voting(S::Buy, kBucketVolume);
         if (value < earlier)
-            return voting(S::Bearish, kBucketVolume);
+            return voting(S::Sell, kBucketVolume);
         return voting(S::Neutral, kBucketVolume);
     }
 
@@ -345,37 +345,37 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
         if (!ti.votes)
             continue;
         switch (ti.signal) {
-            case S::StrongBullish:
-                v.strong_bullish++;
+            case S::StrongBuy:
+                v.strong_buy++;
                 break;
-            case S::Bullish:
-                v.bullish++;
+            case S::Buy:
+                v.buy++;
                 break;
             case S::Neutral:
                 v.neutral++;
                 break;
-            case S::Bearish:
-                v.bearish++;
+            case S::Sell:
+                v.sell++;
                 break;
-            case S::StrongBearish:
-                v.strong_bearish++;
+            case S::StrongSell:
+                v.strong_sell++;
                 break;
         }
         double points = 0.0;
         switch (ti.signal) {
-            case S::StrongBullish:
+            case S::StrongBuy:
                 points = 2.0;
                 break;
-            case S::Bullish:
+            case S::Buy:
                 points = 1.0;
                 break;
             case S::Neutral:
                 points = 0.0;
                 break;
-            case S::Bearish:
+            case S::Sell:
                 points = -1.0;
                 break;
-            case S::StrongBearish:
+            case S::StrongSell:
                 points = -2.0;
                 break;
         }
@@ -427,13 +427,13 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
     v.net = weight_used > 0.0 ? weighted / weight_used : 0.0;
 
     if (v.net >= kStrongBand)
-        v.overall = S::StrongBullish;
+        v.overall = S::StrongBuy;
     else if (v.net >= kDirectionalBand)
-        v.overall = S::Bullish;
+        v.overall = S::Buy;
     else if (v.net <= -kStrongBand)
-        v.overall = S::StrongBearish;
+        v.overall = S::StrongSell;
     else if (v.net <= -kDirectionalBand)
-        v.overall = S::Bearish;
+        v.overall = S::Sell;
     else
         v.overall = S::Neutral;
 

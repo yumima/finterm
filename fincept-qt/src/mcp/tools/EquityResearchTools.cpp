@@ -144,11 +144,11 @@ QJsonArray financials_section_to_json(const QVector<QPair<QString, QJsonObject>>
 const char* tech_signal_str(services::equity::TechSignal s) {
     using TS = services::equity::TechSignal;
     switch (s) {
-        case TS::StrongBullish:  return "strong_bullish";
-        case TS::Bullish:        return "bullish";
+        case TS::StrongBuy:  return "strong_buy";
+        case TS::Buy:        return "buy";
         case TS::Neutral:    return "neutral";
-        case TS::Bearish:       return "bearish";
-        case TS::StrongBearish: return "strong_bearish";
+        case TS::Sell:       return "sell";
+        case TS::StrongSell: return "strong_sell";
     }
     return "neutral";
 }
@@ -188,11 +188,11 @@ QJsonObject technicals_to_json(const services::equity::TechnicalsData& t) {
         {"rating_basis", t.rating_basis},
         {"data_warning", t.data_warning},
         {"voting_count", t.voting_count},
-        {"strong_bullish", t.strong_bullish},
-        {"bullish", t.bullish},
+        {"strong_buy", t.strong_buy},
+        {"buy", t.buy},
         {"neutral", t.neutral},
-        {"bearish", t.bearish},
-        {"strong_bearish", t.strong_bearish},
+        {"sell", t.sell},
+        {"strong_sell", t.strong_sell},
     };
 }
 
@@ -564,7 +564,8 @@ std::vector<ToolDef> get_equity_research_tools() {
             "forecast and not a trade recommendation: measured over 178 large caps and twelve "
             "years, it agrees with the trend already in place ~81% of the time and with the "
             "direction of the next 40 days ~47% \xe2\x80\x94 no better than chance. Signals read "
-            "bullish/bearish for that reason. Do not present them to a user as buy/sell advice.";
+            "no better than chance. Treat the signal values as a description of price action "
+            "that has already happened; do not present them to a user as trade advice.";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()

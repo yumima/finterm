@@ -1338,11 +1338,11 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     td.net_score = verdict.net;
     td.rating_basis = verdict.basis;
     td.voting_count = verdict.voting;
-    td.strong_bullish = verdict.strong_bullish;
-    td.bullish = verdict.bullish;
+    td.strong_buy = verdict.strong_buy;
+    td.buy = verdict.buy;
     td.neutral = verdict.neutral;
-    td.bearish = verdict.bearish;
-    td.strong_bearish = verdict.strong_bearish;
+    td.sell = verdict.sell;
+    td.strong_sell = verdict.strong_sell;
 
     return td;
 }
