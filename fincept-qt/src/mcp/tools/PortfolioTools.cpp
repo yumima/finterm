@@ -563,12 +563,17 @@ std::vector<ToolDef> get_portfolio_tools() {
 
             QJsonArray arr;
             for (const auto& s : r.value()) {
+                // source: 'live' rows are valuations the app actually observed
+                // that day; 'backfill' rows are reconstructions from history.
+                // An agent reasoning about realised performance must not treat
+                // the two as the same kind of fact.
                 arr.append(QJsonObject{{"id", s.id},
                                        {"total_value", s.total_value},
                                        {"total_cost_basis", s.total_cost_basis},
                                        {"total_pnl", s.total_pnl},
                                        {"total_pnl_percent", s.total_pnl_percent},
-                                       {"date", s.snapshot_date}});
+                                       {"date", s.snapshot_date},
+                                       {"source", s.source}});
             }
             return ToolResult::ok_data(arr);
         };

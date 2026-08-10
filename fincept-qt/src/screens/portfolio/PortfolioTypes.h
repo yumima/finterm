@@ -150,6 +150,11 @@ struct PortfolioSnapshot {
     double total_pnl = 0;
     double total_pnl_percent = 0;
     QString snapshot_date;
+    // Provenance: "live" rows are real end-of-day valuations from quotes the
+    // app actually saw; "backfill" rows are synthetic back-projections built
+    // from TODAY'S quantities and cost basis, so they misstate any date
+    // before the most recent trade. Backfill may never overwrite "live".
+    QString source = QStringLiteral("live");
 };
 
 // ── Portfolio-level aggregated analyst / fundamental data ─────────────────────

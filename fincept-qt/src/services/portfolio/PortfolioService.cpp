@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/portfolio/PortfolioLedger.h"
 #include "services/sectors/SectorResolver.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
@@ -518,6 +519,13 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         double total_mv = 0;
         double total_cost = 0;
         double total_day = 0;
+        // True when any holding had neither a live quote nor a last-known
+        // cached price and fell back to its average buy price. A valuation
+        // containing that fallback is an estimate and must not be recorded as
+        // a 'live' observation — a cold-start offline launch would otherwise
+        // stamp NAV == cost basis (P&L exactly 0) as the day's permanent
+        // record, uncorrectable once the date has passed.
+        bool valuation_estimated = false;
 
         for (const auto& asset : assets) {
             portfolio::HoldingWithQuote h;
@@ -563,6 +571,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 // Genuine cold start — no quote and nothing cached. Fall back to
                 // avg buy price (P&L reads 0 until the first quote lands).
                 h.current_price = asset.avg_buy_price;
+                valuation_estimated = true;
             }
 
             h.market_value = h.quantity * h.current_price;
@@ -618,17 +627,23 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         portfolio_disk_cache().save(summary_filename(portfolio_id),
                                     QJsonDocument(summary_to_json(summary)));
 
-        // Save snapshot for performance history. Built from last-known
-        // `market_last:` prices when the live fetch came back empty — that's an
-        // honest best-estimate valuation (the holdings really were worth that at
-        // the last good print), not the avg_buy_price zeros the old fallback
-        // produced. save_snapshot is INSERT OR REPLACE keyed by date, so the row
-        // self-corrects on the next fresh tick; writing unconditionally keeps the
-        // history gap-free even on a fully rate-limited day.
+        // Save snapshot for performance history. Provenance depends on what
+        // actually priced the holdings: quotes and `market_last:` fallbacks are
+        // real prints, so the row is a 'live' observation that self-corrects on
+        // the next tick of the same day. If any holding had to be priced at its
+        // average buy cost (cold start, offline), the valuation is an estimate
+        // and is written through the backfill path instead — still gap-free,
+        // but correctable later, and never able to displace a real observation.
         QString today = QDate::currentDate().toString(Qt::ISODate);
-        PortfolioRepository::instance().save_snapshot(portfolio_id, summary.total_market_value,
-                                                      summary.total_cost_basis, summary.total_unrealized_pnl,
-                                                      summary.total_unrealized_pnl_percent, today);
+        if (valuation_estimated) {
+            PortfolioRepository::instance().save_backfill_snapshot(
+                portfolio_id, summary.total_market_value, summary.total_cost_basis, summary.total_unrealized_pnl,
+                summary.total_unrealized_pnl_percent, today);
+        } else {
+            PortfolioRepository::instance().save_snapshot(portfolio_id, summary.total_market_value,
+                                                          summary.total_cost_basis, summary.total_unrealized_pnl,
+                                                          summary.total_unrealized_pnl_percent, today);
+        }
 
         emit self->summary_loaded(summary);
 
@@ -1862,67 +1877,148 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         return;
 
     auto& repo = PortfolioRepository::instance();
+
+    // The transaction log drives the reconstruction: each date is valued with
+    // the quantities the log states were held ON that date. The old model
+    // (today's quantities × adjusted closes, computed daemon-side) put a
+    // phantom NAV cliff at every date where the share count has since changed
+    // — a -50%/+100% round trip in the return series at each preserved live
+    // row, which exploded volatility, VaR and drawdown.
+    auto txns_r = repo.get_transactions(portfolio_id, 1000000);
+    QHash<QString, QVector<portfolio::Transaction>> txns_by_symbol;
+    if (txns_r.is_ok()) {
+        for (const auto& t : txns_r.value())
+            txns_by_symbol[t.symbol.toUpper()].append(t);
+    }
+
+    // Legacy support: an asset row with no transaction history (pre-v006 data
+    // or direct DB edits) replays as a single opening BUY at its stored
+    // average cost, dated at its first purchase.
     auto assets_r = repo.get_assets(portfolio_id);
-    if (assets_r.is_err() || assets_r.value().isEmpty()) {
+    if (assets_r.is_ok()) {
+        for (const auto& a : assets_r.value()) {
+            const QString up = a.symbol.toUpper();
+            if (txns_by_symbol.contains(up) || a.quantity <= 0)
+                continue;
+            portfolio::Transaction t;
+            t.symbol = up;
+            t.transaction_type = QStringLiteral("BUY");
+            t.quantity = a.quantity;
+            t.price = a.avg_buy_price;
+            t.total_value = a.quantity * a.avg_buy_price;
+            t.transaction_date = entry_date_of(a.first_purchase_date);
+            txns_by_symbol[up].append(t);
+        }
+    }
+    if (txns_by_symbol.isEmpty()) {
         emit history_backfilled(portfolio_id, 0);
         return;
     }
-    const auto assets = assets_r.value();
 
-    // Persistent yfinance daemon — same shape, no per-call import cost.
-    QJsonArray positions_arr;
-    double total_cost_basis = 0.0;
-    for (const auto& a : assets) {
-        QJsonObject p;
-        p["symbol"] = a.symbol;
-        p["quantity"] = a.quantity;
-        positions_arr.append(p);
-        total_cost_basis += a.quantity * a.avg_buy_price;
-    }
+    QJsonArray symbols_arr;
+    for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it)
+        symbols_arr.append(it.key());
     QJsonObject payload;
-    payload["positions"] = positions_arr;
+    payload["symbols"] = symbols_arr;
     payload["period"] = period;
 
     QPointer<PortfolioService> self = this;
-    python::PythonWorker::instance().submit("portfolio_nav_history", payload,
-        [self, portfolio_id, total_cost_basis](bool ok, QJsonObject obj, QString err) {
+    python::PythonWorker::instance().submit("portfolio_closes_history", payload,
+        [self, portfolio_id, txns_by_symbol](bool ok, QJsonObject obj, QString err) {
         if (!self)
             return;
-        if (!ok) {
-            LOG_WARN("PortfolioSvc",
-                     QString("backfill_history failed for %1: %2").arg(portfolio_id, err.left(200)));
-            emit self->history_backfilled(portfolio_id, 0);
-            return;
-        }
-        if (obj.contains("error")) {
-            LOG_WARN("PortfolioSvc", "backfill_history: " + obj["error"].toString());
-            emit self->history_backfilled(portfolio_id, 0);
-            return;
-        }
-        const auto dates = obj["dates"].toArray();
-        const auto navs = obj["navs"].toArray();
-        if (dates.isEmpty() || dates.size() != navs.size()) {
+        if (!ok || obj.contains("error")) {
+            LOG_WARN("PortfolioSvc", QString("backfill_history failed for %1: %2")
+                                         .arg(portfolio_id,
+                                              ok ? obj["error"].toString().left(200) : err.left(200)));
             emit self->history_backfilled(portfolio_id, 0);
             return;
         }
 
-        // Upsert each row. INSERT OR REPLACE keyed by (portfolio_id, snapshot_date)
-        // so re-running backfill (with a different period or after the user adds
-        // holdings) corrects existing rows in place.
+        // Per-symbol close calendars (raw closes, YYYY-MM-DD keys) plus a
+        // union calendar to walk. Symbols yfinance has no data for (money
+        // market funds, delisted names) simply contribute nothing dated —
+        // same behaviour the live valuation has for them.
+        struct SymbolState {
+            portfolio::LedgerCursor cursor;
+            QVector<QPair<QString, double>> closes; // sorted by date
+            int next = 0;
+            double last_close = 0;
+        };
+        std::vector<SymbolState> states;
+        QSet<QString> date_set;
+        const QJsonObject closes_obj = obj["closes"].toObject();
+        for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
+            const QJsonArray series = closes_obj[it.key()].toArray();
+            if (series.isEmpty()) {
+                LOG_WARN("PortfolioSvc",
+                         QString("backfill_history: no close history for %1 — its value is "
+                                 "missing from backfilled NAV").arg(it.key()));
+                continue;
+            }
+            SymbolState st{portfolio::LedgerCursor(it.value()), {}, 0, 0};
+            st.closes.reserve(series.size());
+            for (const auto& v : series) {
+                const QJsonArray pair = v.toArray();
+                if (pair.size() != 2)
+                    continue;
+                const QString d = pair[0].toString();
+                const double close = pair[1].toDouble();
+                if (d.size() == 10 && close > 0) {
+                    st.closes.append({d, close});
+                    date_set.insert(d);
+                }
+            }
+            std::sort(st.closes.begin(), st.closes.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            states.push_back(std::move(st));
+        }
+
+        QStringList dates(date_set.cbegin(), date_set.cend());
+        std::sort(dates.begin(), dates.end());
+        const QString today = QDate::currentDate().toString(Qt::ISODate);
+
         auto& repo = PortfolioRepository::instance();
         int written = 0;
-        for (int i = 0; i < dates.size(); ++i) {
-            const QString d = dates[i].toString();
-            const double nav = navs[i].toDouble();
-            const double pnl = nav - total_cost_basis;
-            const double pnl_pct = total_cost_basis > 0 ? (pnl / total_cost_basis) * 100.0 : 0.0;
-            auto wr = repo.save_snapshot(portfolio_id, nav, total_cost_basis, pnl, pnl_pct, d);
-            if (wr.is_ok())
-                ++written;
+        int skipped_live = 0;
+        for (const QString& d : dates) {
+            // Today's row belongs to the live path — build_summary values it
+            // from actual quotes and writes it as 'live'.
+            if (d >= today)
+                continue;
+            double nav = 0;
+            double cost = 0;
+            bool any_open = false;
+            for (auto& st : states) {
+                while (st.next < st.closes.size() && st.closes[st.next].first <= d) {
+                    st.last_close = st.closes[st.next].second;
+                    ++st.next;
+                }
+                st.cursor.advance_to(d);
+                const auto& pos = st.cursor.position();
+                if (pos.quantity > 1e-9 && st.last_close > 0) {
+                    nav += pos.quantity * st.last_close;
+                    cost += pos.quantity * pos.avg_cost;
+                    any_open = true;
+                }
+            }
+            if (!any_open)
+                continue; // before the first buy — a NAV of zero is not history
+            const double pnl = nav - cost;
+            const double pnl_pct = cost > 0 ? (pnl / cost) * 100.0 : 0.0;
+            auto wr = repo.save_backfill_snapshot(portfolio_id, nav, cost, pnl, pnl_pct, d);
+            if (wr.is_ok()) {
+                if (wr.value() > 0)
+                    ++written;
+                else
+                    ++skipped_live; // live row held its ground — by design
+            }
         }
 
-        LOG_INFO("PortfolioSvc",
-                 QString("Backfilled %1 historical snapshots for %2").arg(written).arg(portfolio_id));
+        LOG_INFO("PortfolioSvc", QString("Backfilled %1 snapshots for %2 (%3 live rows preserved)")
+                                     .arg(written)
+                                     .arg(portfolio_id)
+                                     .arg(skipped_live));
         self->invalidate_cache(portfolio_id);
         emit self->history_backfilled(portfolio_id, written);
     },

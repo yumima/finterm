@@ -6,6 +6,8 @@
 #include <QDateTime>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace fincept {
 
 PortfolioRepository& PortfolioRepository::instance() {
@@ -64,6 +66,7 @@ portfolio::PortfolioSnapshot PortfolioRepository::map_snapshot(QSqlQuery& q) {
         q.value(4).toDouble(), // total_pnl
         q.value(5).toDouble(), // total_pnl_percent
         q.value(6).toString(), // snapshot_date
+        q.value(7).toString(), // source
     };
 }
 
@@ -214,17 +217,46 @@ Result<void> PortfolioRepository::delete_transaction(const QString& id) {
 
 Result<void> PortfolioRepository::save_snapshot(const QString& portfolio_id, double value, double cost_basis,
                                                 double pnl, double pnl_pct, const QString& date) {
+    // The live path: a valuation computed from quotes the app actually saw.
+    // It may overwrite anything — a same-day live row (self-correction across
+    // the day) or a synthetic backfill estimate it supersedes.
     return exec_write("INSERT OR REPLACE INTO portfolio_snapshots "
-                      "(portfolio_id, total_value, total_cost_basis, total_pnl, total_pnl_percent, snapshot_date) "
-                      "VALUES (?, ?, ?, ?, ?, ?)",
+                      "(portfolio_id, total_value, total_cost_basis, total_pnl, total_pnl_percent, "
+                      " snapshot_date, source) "
+                      "VALUES (?, ?, ?, ?, ?, ?, 'live')",
                       {portfolio_id, value, cost_basis, pnl, pnl_pct, date});
+}
+
+Result<int> PortfolioRepository::save_backfill_snapshot(const QString& portfolio_id, double value, double cost_basis,
+                                                        double pnl, double pnl_pct, const QString& date) {
+    // The estimate path: a valuation reconstructed from history rather than
+    // observed live. It fills dates that have no snapshot and may correct its
+    // own earlier estimates (the user added holdings, a longer period was
+    // requested), but a 'live' row is a real observation and must survive
+    // every backfill. Returns the number of rows actually written (0 when the
+    // guard suppressed the upsert) — callers must not count a suppressed
+    // write as a backfilled point.
+    auto r = db().execute("INSERT INTO portfolio_snapshots "
+                          "(portfolio_id, total_value, total_cost_basis, total_pnl, total_pnl_percent, "
+                          " snapshot_date, source) "
+                          "VALUES (?, ?, ?, ?, ?, ?, 'backfill') "
+                          "ON CONFLICT(portfolio_id, snapshot_date) DO UPDATE SET "
+                          "  total_value       = excluded.total_value, "
+                          "  total_cost_basis  = excluded.total_cost_basis, "
+                          "  total_pnl         = excluded.total_pnl, "
+                          "  total_pnl_percent = excluded.total_pnl_percent "
+                          "WHERE portfolio_snapshots.source <> 'live'",
+                          {portfolio_id, value, cost_basis, pnl, pnl_pct, date});
+    if (r.is_err())
+        return Result<int>::err(r.error());
+    return Result<int>::ok(std::max(0, r.value().numRowsAffected()));
 }
 
 Result<QVector<portfolio::PortfolioSnapshot>> PortfolioRepository::get_snapshots(const QString& portfolio_id,
                                                                                  int days) {
     return query_list_as<portfolio::PortfolioSnapshot>(
         "SELECT id, portfolio_id, total_value, total_cost_basis, total_pnl, "
-        "total_pnl_percent, snapshot_date "
+        "total_pnl_percent, snapshot_date, source "
         "FROM portfolio_snapshots WHERE portfolio_id = ? "
         "AND snapshot_date >= date('now', '-' || ? || ' days') "
         "ORDER BY snapshot_date ASC",

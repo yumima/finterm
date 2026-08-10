@@ -131,7 +131,11 @@ class PortfolioService : public QObject {
     void import_json(const QString& file_path, portfolio::ImportMode mode, const QString& merge_target_id = {});
 
     // ── Snapshots (performance history) ─────────────────────────────────────
-    void load_snapshots(const QString& portfolio_id, int days = 365);
+    // Default window matches the perf chart's deepest period (ALL = 10y). A
+    // 365-day default silently defeated every 5Y backfill: the rows were
+    // written, the reload couldn't see them, and the chart re-fired the same
+    // multi-symbol 5-year fetch on every period toggle.
+    void load_snapshots(const QString& portfolio_id, int days = 3650);
 
     /// Reconstruct daily NAV from yfinance OHLC for the current holdings and
     /// upsert one row per trading day into portfolio_snapshots. This is what

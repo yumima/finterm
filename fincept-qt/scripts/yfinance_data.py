@@ -2182,7 +2182,7 @@ def _candidate_yf_symbols(symbol):
     return [s, f"{s}.TO", f"{s}.NS", f"{s}.BO", f"{s}.L", f"{s}.AX", f"{s}.HK"]
 
 
-def _resolve_for_history(symbols, period):
+def _resolve_for_history(symbols, period, auto_adjust=True):
     """Resolve every input symbol to a yfinance ticker that returns data
     in the given period, AND return the close-price DataFrame for each.
 
@@ -2218,7 +2218,7 @@ def _resolve_for_history(symbols, period):
                 period=period,
                 interval="1d",
                 group_by="ticker",
-                auto_adjust=True,
+                auto_adjust=auto_adjust,
                 progress=False,
                 threads=True,
             )
@@ -2248,60 +2248,56 @@ def _resolve_for_history(symbols, period):
     return resolved
 
 
-def get_portfolio_nav_history(positions, period='6mo'):
-    """Reconstruct a daily NAV time series from current positions.
+def get_portfolio_closes_history(symbols, period='1y'):
+    """Per-symbol daily RAW close history for portfolio NAV backfill.
 
-    positions: list of {"symbol": str, "quantity": float} dicts.
-    Returns: {"dates": [...], "navs": [...], "resolved": {sym: yf_sym},
-              "missing": [sym, ...]}.
+    Returns {"closes": {input_symbol: [[YYYY-MM-DD, close], ...]},
+             "resolved": {sym: yf_sym}, "missing": [sym, ...]}.
 
-    Each input symbol is resolved to a yfinance ticker via _resolve_for_history,
-    which tries common exchange suffixes (.TO, .NS, .BO, .L, .AX, .HK) when the
-    bare symbol returns no data. Missing closes are forward-filled per symbol so
-    a symbol that listed mid-period doesn't drop the whole row.
+    Each input symbol is resolved via _resolve_for_history, which tries common
+    exchange suffixes (.TO, .NS, .BO, .L, .AX, .HK) when the bare symbol
+    returns no data.
 
-    NAV on each date = sum(close_i * quantity_i) over all resolved symbols.
+    Closes are UNADJUSTED (auto_adjust=False), deliberately. The C++ caller
+    values each date with the quantities the transaction log says were held
+    ON THAT DATE, so prices must be what the shares actually traded at then.
+    Adjusted closes fold splits and dividends into past prices — the right
+    companion for a today's-quantities back-projection, which is exactly the
+    model this replaced (it manufactured a phantom NAV cliff at every date
+    where the share count has since changed). Splits belong in the replay as
+    SPLIT transactions; dividends are cash the holdings-only NAV never held.
 
-    NOTE: this back-projects NAV using CURRENT quantity at every date — it
-    does not account for buys/sells inside the window. That's acceptable for
-    risk metrics (Beta, MDD) which measure basket variability, not realised P&L.
+    Dates ship as plain YYYY-MM-DD strings: an epoch round-trip renders daily
+    bars a day early in negative-UTC timezones.
     """
     try:
-        if not positions:
-            return {"dates": [], "navs": []}
-        symbols = [p["symbol"] for p in positions if p.get("symbol")]
-        qty_map = {p["symbol"]: float(p.get("quantity", 0)) for p in positions if p.get("symbol")}
-        if not symbols:
-            return {"dates": [], "navs": []}
+        syms = [s for s in (symbols or []) if s]
+        if not syms:
+            return {"closes": {}, "resolved": {}, "missing": []}
 
-        resolved = _resolve_for_history(symbols, period)
-        if not resolved:
-            return {"dates": [], "navs": [], "error": "no historical data for any symbol",
-                    "missing": symbols}
-
-        nav_series = None
-        for sym, (yf_sym, closes) in resolved.items():
-            contrib = closes.ffill() * qty_map[sym]
-            if nav_series is None:
-                nav_series = contrib
-            else:
-                nav_series = nav_series.add(contrib, fill_value=0)
-
-        if nav_series is None or nav_series.empty:
-            return {"dates": [], "navs": [], "error": "no usable closes",
-                    "missing": [s for s in symbols if s not in resolved]}
-
-        nav_series = nav_series.dropna()
-        dates = [idx.strftime("%Y-%m-%d") for idx in nav_series.index]
-        navs = [float(v) for v in nav_series.values]
+        resolved = _resolve_for_history(syms, period, auto_adjust=False)
+        out = {}
+        for s, (_yf_sym, closes) in resolved.items():
+            series = []
+            for idx, val in closes.items():
+                try:
+                    if val is None or pd.isna(val):
+                        continue
+                    series.append([pd.Timestamp(idx).strftime("%Y-%m-%d"), round(float(val), 4)])
+                except (TypeError, ValueError):
+                    continue
+            if series:
+                out[s] = series
+        if not out:
+            return {"closes": {}, "resolved": {}, "missing": syms,
+                    "error": "no historical data for any symbol"}
         return {
-            "dates": dates,
-            "navs": navs,
+            "closes": out,
             "resolved": {s: yf for s, (yf, _) in resolved.items()},
-            "missing": [s for s in symbols if s not in resolved],
+            "missing": [s for s in syms if s not in out],
         }
     except Exception as e:
-        return {"dates": [], "navs": [], "error": str(e)}
+        return {"error": str(e), "closes": {}}
 
 
 def _yf_ticker_with_fallback(symbol):
@@ -2525,27 +2521,12 @@ def main(args=None):
             count = int(args[2]) if len(args) > 2 else 20
             result = get_news(symbol, count)
 
-    elif command == "portfolio_nav_history":
-        # Args layout: <period> <sym1> <qty1> <sym2> <qty2> ...
-        # Period defaults to 1y if first arg looks like a symbol.
+    elif command == "portfolio_closes_history":
+        # Args layout: <period> <sym1> <sym2> ...
         if len(args) < 3:
-            result = {"error": "Usage: yfinance_data.py portfolio_nav_history <period> <sym1> <qty1> ..."}
+            result = {"error": "Usage: yfinance_data.py portfolio_closes_history <period> <sym1> ..."}
         else:
-            period = args[1]
-            tail = args[2:]
-            if len(tail) % 2 != 0:
-                result = {"error": "symbol/quantity arguments must be paired"}
-            else:
-                positions = []
-                for i in range(0, len(tail), 2):
-                    try:
-                        positions.append({"symbol": tail[i], "quantity": float(tail[i + 1])})
-                    except ValueError:
-                        result = {"error": f"invalid quantity for {tail[i]}"}
-                        positions = None
-                        break
-                if positions is not None:
-                    result = get_portfolio_nav_history(positions, period)
+            result = get_portfolio_closes_history(args[2:], args[1])
 
     elif command == "historical_period":
         if len(args) < 2:
@@ -2727,6 +2708,8 @@ _CACHE_TTL = {
     # batched trade-date close history (power-trader real returns) — long: past
     # daily closes don't change, so a 1h TTL avoids re-downloading wide ranges.
     "batch_closes": 3600,
+    # per-symbol raw closes for portfolio NAV backfill — same rationale.
+    "portfolio_closes_history": 3600,
     # static SEC filing — very long
     "parse_s1": 3600,
 }
@@ -2937,11 +2920,9 @@ def _daemon_dispatch_inner(action, payload):
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))
-    if action == "portfolio_nav_history":
+    if action == "portfolio_closes_history":
         p = payload or {}
-        positions = p.get("positions") or []
-        period = p.get("period", "6mo")
-        return get_portfolio_nav_history(positions, period)
+        return get_portfolio_closes_history(p.get("symbols") or [], p.get("period", "1y"))
     if action == "extended_hours":
         p = payload or {}
         symbols = p.get("symbols") or []

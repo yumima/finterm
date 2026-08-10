@@ -345,12 +345,15 @@ std::vector<ToolDef> get_portfolio_management_tools() {
 
             QJsonArray arr;
             for (const auto& s : r.value()) {
+                // 'live' = observed valuation, 'backfill' = reconstruction; an
+                // agent must not report a reconstruction as observed history.
                 arr.append(QJsonObject{{"id", s.id},
                                        {"total_value", s.total_value},
                                        {"total_cost_basis", s.total_cost_basis},
                                        {"total_pnl", s.total_pnl},
                                        {"total_pnl_percent", s.total_pnl_percent},
-                                       {"date", s.snapshot_date}});
+                                       {"date", s.snapshot_date},
+                                       {"source", s.source}});
             }
             return ToolResult::ok_data(arr);
         };

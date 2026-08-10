@@ -775,6 +775,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v045_physical_ai_watchlist.cpp
     src/storage/sqlite/migrations/v046_earnings_signal_records.cpp
     src/storage/sqlite/migrations/v047_earnings_predicted_move.cpp
+    src/storage/sqlite/migrations/v048_snapshot_source.cpp
 )
 
 # Python runner
@@ -929,6 +930,8 @@ set(SERVICE_SOURCES
     src/services/ai_quant_lab/AIQuantLabService.cpp
     src/services/backtesting/BacktestingService.cpp
     src/services/algo_trading/AlgoTradingService.cpp
+    src/services/portfolio/PortfolioLedger.cpp
+    src/services/portfolio/PortfolioReturns.cpp
     src/services/portfolio/PortfolioService.cpp
     src/services/portfolio/PortfolioAnalyticsService.cpp
     src/services/quantlib/QuantLibClient.cpp

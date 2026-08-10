@@ -290,3 +290,90 @@ add_executable(technicals_score_series
 target_include_directories(technicals_score_series PRIVATE ../src)
 target_link_libraries(technicals_score_series PRIVATE Qt6::Core)
 set_target_properties(technicals_score_series PROPERTIES UNITY_BUILD OFF AUTOMOC OFF)
+
+# ── Portfolio snapshot provenance tests ──────────────────────────────────────
+# Runs the real migrations against a temp SQLite file and pins the invariant
+# that backfill (synthetic, current-quantity back-projection) can never
+# overwrite a 'live' snapshot (a real valuation). The guard is SQL — an
+# ON CONFLICT ... WHERE source <> 'live' upsert — so it is exercised through
+# the actual Database/MigrationRunner/PortfolioRepository stack.
+
+find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Sql)
+
+add_executable(test_portfolio_snapshots
+    storage/test_portfolio_snapshots.cpp
+    ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/migrations/MigrationRunner.cpp
+    ../src/storage/sqlite/migrations/v006_portfolio_multi.cpp
+    ../src/storage/sqlite/migrations/v048_snapshot_source.cpp
+    ../src/storage/repositories/PortfolioRepository.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_portfolio_snapshots PRIVATE
+    ../src
+)
+
+target_link_libraries(test_portfolio_snapshots PRIVATE
+    Qt6::Core
+    Qt6::Sql
+    Qt6::Test
+)
+
+set_target_properties(test_portfolio_snapshots PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME portfolio_snapshots COMMAND test_portfolio_snapshots)
+
+# ── Portfolio ledger (cost-basis engine) tests ───────────────────────────────
+# The single average-cost convention every position number derives from.
+# Pure replay function — struct in, position out — same shape as the
+# TechnicalRating and EarningsSignal suites.
+
+add_executable(test_portfolio_ledger
+    services/test_portfolio_ledger.cpp
+    ../src/services/portfolio/PortfolioLedger.cpp
+)
+
+target_include_directories(test_portfolio_ledger PRIVATE
+    ../src
+)
+
+target_link_libraries(test_portfolio_ledger PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_portfolio_ledger PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME portfolio_ledger COMMAND test_portfolio_ledger)
+
+# ── Portfolio time-weighted return tests ─────────────────────────────────────
+# The period-return convention: deposits are flows, not performance. Pure
+# chaining function over the snapshot series + transaction log.
+
+add_executable(test_portfolio_returns
+    services/test_portfolio_returns.cpp
+    ../src/services/portfolio/PortfolioReturns.cpp
+)
+
+target_include_directories(test_portfolio_returns PRIVATE
+    ../src
+)
+
+target_link_libraries(test_portfolio_returns PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_portfolio_returns PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME portfolio_returns COMMAND test_portfolio_returns)

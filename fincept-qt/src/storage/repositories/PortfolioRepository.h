@@ -36,8 +36,15 @@ class PortfolioRepository : public BaseRepository<portfolio::Portfolio> {
     Result<void> delete_transaction(const QString& id);
 
     // ── Snapshots ────────────────────────────────────────────────────────────
+    // save_snapshot writes a real (source='live') valuation and may overwrite
+    // any existing row for the date. save_backfill_snapshot writes an estimate
+    // (source='backfill') and is barred from touching 'live' rows — it inserts
+    // missing dates and corrects earlier estimates only; it returns how many
+    // rows were actually written (0 = suppressed by the live-row guard).
     Result<void> save_snapshot(const QString& portfolio_id, double value, double cost_basis, double pnl, double pnl_pct,
                                const QString& date);
+    Result<int> save_backfill_snapshot(const QString& portfolio_id, double value, double cost_basis, double pnl,
+                                       double pnl_pct, const QString& date);
     Result<QVector<portfolio::PortfolioSnapshot>> get_snapshots(const QString& portfolio_id, int days = 365);
 
   private:
