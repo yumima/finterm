@@ -11,7 +11,7 @@
 //   - ADX voted bullish inside downtrends, being unsigned;
 //   - a MACD line below its signal line scored bullish whenever both happened
 //     to sit above zero;
-//   - Aroon cast a buy and a sell at the same time;
+//   - Aroon cast a bullish and a bearish at the same time;
 //   - a one-month window rated confidently off four surviving indicators.
 
 #include "services/equity/TechnicalRating.h"
@@ -31,8 +31,10 @@ RatingInput uptrend() {
     in.bars = 250;
     in.close = 224.0;
 
+    in.now.set("sma_10", 215.0);
     in.now.set("sma_20", 207.0);
     in.now.set("sma_50", 195.0);
+    in.now.set("sma_100", 182.0);
     in.now.set("sma_200", 170.0);
     in.now.set("ema_12", 210.0);
     in.now.set("wma_9", 213.0);
@@ -62,8 +64,10 @@ RatingInput uptrend() {
     in.now.set("adi", 546000000.0);
 
     // A bar earlier: every average lower, MACD histogram narrower.
+    in.prev.set("sma_10", 213.0);
     in.prev.set("sma_20", 205.0);
     in.prev.set("sma_50", 193.0);
+    in.prev.set("sma_100", 181.0);
     in.prev.set("sma_200", 169.0);
     in.prev.set("ema_12", 208.0);
     in.prev.set("wma_9", 211.0);
@@ -92,8 +96,10 @@ RatingInput downtrend() {
     in.bars = 250;
     in.close = 170.0;
 
+    in.now.set("sma_10", 178.0);
     in.now.set("sma_20", 195.0);
     in.now.set("sma_50", 205.0);
+    in.now.set("sma_100", 212.0);
     in.now.set("sma_200", 220.0);
     in.now.set("ema_12", 190.0);
     in.now.set("wma_9", 186.0);
@@ -122,8 +128,10 @@ RatingInput downtrend() {
     in.now.set("obv", 400000000.0);
     in.now.set("adi", 300000000.0);
 
+    in.prev.set("sma_10", 181.0);
     in.prev.set("sma_20", 197.0);
     in.prev.set("sma_50", 207.0);
+    in.prev.set("sma_100", 213.0);
     in.prev.set("sma_200", 221.0);
     in.prev.set("ema_12", 192.0);
     in.prev.set("wma_9", 189.0);
@@ -167,7 +175,8 @@ QVector<TechIndicator> build(const RatingInput& in, const QVector<QPair<QString,
 /// The full display set, categorised exactly as the tab lays it out.
 QVector<TechIndicator> score_all(const RatingInput& in) {
     static const QVector<QPair<QString, QString>> cols = {
-        {"trend", "sma_20"},     {"trend", "sma_50"},      {"trend", "sma_200"},
+        {"trend", "sma_10"},     {"trend", "sma_20"},      {"trend", "sma_50"},
+        {"trend", "sma_100"},    {"trend", "sma_200"},
         {"trend", "ema_12"},     {"trend", "wma_9"},       {"trend", "macd"},
         {"trend", "macd_signal"},{"trend", "cci"},         {"trend", "adx"},
         {"trend", "aroon_up"},   {"trend", "aroon_down"},
@@ -255,7 +264,7 @@ class TestTechnicalRating : public QObject {
     }
 
     /// Aroon Up and Aroon Down are one indicator. Scoring them independently
-    /// let a single reading cast a buy and a sell in the same tally.
+    /// let a single reading cast a bullish and a bearish in the same tally.
     void aroon_casts_exactly_one_vote() {
         RatingInput in;
         in.now.set("aroon_up", 100.0);
@@ -267,7 +276,7 @@ class TestTechnicalRating : public QObject {
         QCOMPARE(up.signal, down.signal); // shown alike, counted once
     }
 
-    /// Oversold and still falling is a falling knife, not a buy.
+    /// Oversold and still falling is a falling knife, not a bullish.
     void oscillators_wait_for_the_turn() {
         RatingInput in;
         in.now.set("rsi", 22.0);
@@ -278,7 +287,7 @@ class TestTechnicalRating : public QObject {
         QCOMPARE(technical_rating::score("rsi", in).signal, S::StrongBuy);
     }
 
-    /// Overbought inside a confirmed uptrend is not a sell signal.
+    /// Overbought inside a confirmed uptrend is not a bearish signal.
     void mean_reversion_yields_to_a_confirmed_trend() {
         RatingInput in = uptrend();
         in.now.set("rsi", 78.0);
@@ -400,11 +409,13 @@ class TestTechnicalRating : public QObject {
     /// what arms the trend filter. Missing any one of them means no rating.
     void history_gate_needs_every_structural_indicator() {
         QVERIFY(technical_rating::has_sufficient_history(uptrend()));
-        for (const char* col : {"sma_50", "macd", "macd_signal", "adx", "adx_pos", "adx_neg"}) {
+        for (const char* col : {"sma_50", "sma_200", "atr", "macd", "macd_signal",
+                                "adx", "adx_pos", "adx_neg"}) {
             RatingInput in;
             in.close = uptrend().close;
             // Rebuild the uptrend snapshot minus one structural column.
-            for (const char* c : {"sma_50", "macd", "macd_signal", "adx", "adx_pos", "adx_neg"})
+            for (const char* c : {"sma_50", "sma_200", "atr", "macd", "macd_signal",
+                                  "adx", "adx_pos", "adx_neg"})
                 if (qstrcmp(c, col) != 0)
                     in.now.set(c, uptrend().now.get(c));
             QVERIFY2(!technical_rating::has_sufficient_history(in), col);
@@ -474,10 +485,49 @@ class TestTechnicalRating : public QObject {
         }
     }
 
-    void basis_reports_every_bucket_that_voted() {
+    void basis_names_the_two_terms_behind_the_verdict() {
         const auto v = technical_rating::aggregate(score_all(uptrend()), uptrend());
-        for (const auto& bucket : {"Trend", "Momentum", "Volume"})
-            QVERIFY2(v.basis.contains(bucket), qPrintable(v.basis));
+        QVERIFY2(v.basis.contains("MA alignment"), qPrintable(v.basis));
+        QVERIFY2(v.basis.contains("50-day"), qPrintable(v.basis));
+    }
+
+    /// The headline is trend structure, not a count of the indicator table.
+    ///
+    /// Averaging ~20 correlated indicator votes described the trend worse than
+    /// two chosen readings do — 79.8% against 96.0% on held-out data — so the
+    /// tally is now reported and no longer decides. This pins that: a stock
+    /// whose averages are perfectly stacked and whose price sits well above the
+    /// 50-day must read strongly bullish even though most of its oscillators,
+    /// being overbought, have been demoted to Neutral and contribute nothing.
+    void verdict_follows_structure_not_the_tally() {
+        const auto in = uptrend();
+        const auto scored = score_all(in);
+        int neutral = 0;
+        for (const auto& ti : scored)
+            if (ti.votes && ti.signal == S::Neutral)
+                neutral++;
+        QVERIFY2(neutral >= 4, "fixture should have several demoted oscillators");
+
+        const auto v = technical_rating::aggregate(scored, in);
+        QCOMPARE(v.overall, S::StrongBuy);
+        QVERIFY2(v.net > 0.9, qPrintable(QString::number(v.net)));
+    }
+
+    /// A perfectly inverted ladder is the mirror image, to the same magnitude.
+    void inverted_ladder_is_strongly_bearish() {
+        const auto in = downtrend();
+        const auto v = technical_rating::aggregate(score_all(in), in);
+        QCOMPARE(v.overall, S::StrongSell);
+        QVERIFY2(v.net < -0.9, qPrintable(QString::number(v.net)));
+    }
+
+    /// Alignment alone is not enough: price hugging a stacked ladder is a
+    /// weaker statement than price extended above it, and the score must say so.
+    void alignment_without_extension_scores_lower() {
+        auto in = uptrend();
+        in.close = in.now.get("sma_50") + 0.05; // stacked, but sitting on the 50-day
+        const auto v = technical_rating::aggregate(score_all(in), in);
+        QVERIFY2(v.net > 0.0 && v.net < 0.7, qPrintable(QString::number(v.net)));
     }
 };
 

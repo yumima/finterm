@@ -276,3 +276,17 @@ add_test(
             -DPRUNE_SCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/../cmake/prune_scripts_junk.cmake
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/test_prune_scripts_junk.cmake
 )
+
+# ── technicals series scorer (tool, not a test) ──────────────────────────────
+# Walks the real TechnicalRating scorer over a whole history so the rating can
+# be measured against forward returns rather than argued about. Built here
+# because this is the only target that already links TechnicalRating.cpp on its
+# own. Driven by scripts/factor_rating; see tools/technicals_series/.
+
+add_executable(technicals_score_series
+    ../tools/technicals_series/score_series.cpp
+    ../src/services/equity/TechnicalRating.cpp
+)
+target_include_directories(technicals_score_series PRIVATE ../src)
+target_link_libraries(technicals_score_series PRIVATE Qt6::Core)
+set_target_properties(technicals_score_series PROPERTIES UNITY_BUILD OFF AUTOMOC OFF)

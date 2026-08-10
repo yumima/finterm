@@ -130,8 +130,8 @@ struct FinancialsData {
 //
 // Buy / sell wording, with a caveat worth carrying: scored against a 40-day
 // trend label over 178 large caps and twelve years, the evidence behind these
-// values agrees with the trend already in place ~81% of the time and with the
-// direction of the next 40 days ~47% — the wrong side of a coin flip. These
+// verdict agrees with the trend already in place ~96% of the time and with the
+// direction of the next 40 days ~53% — barely off a coin flip. These
 // names describe a move that has happened; they do not forecast one. Anything
 // presenting them onward, the MCP surface especially, should carry that.
 enum class TechSignal { StrongBuy, Buy, Neutral, Sell, StrongSell };

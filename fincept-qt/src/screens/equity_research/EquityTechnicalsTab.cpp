@@ -689,16 +689,20 @@ void EquityTechnicalsTab::build_ui() {
     // place 81% of the time, and with the direction of the next 40 days 47% of
     // the time. Both numbers belong in front of the user, because only the
     // first one supports the words above it.
-    accuracy_label_ = new QLabel("81% on the trend in place \xe2\x80\xb7 47% on the next 40 days");
+    accuracy_label_ = new QLabel("96% on the trend in place \xe2\x80\xb7 53% on the next 40 days");
     accuracy_label_->setAlignment(Qt::AlignCenter);
     accuracy_label_->setWordWrap(true);
     accuracy_label_->setToolTip(
-        "This panel reports the trend that has already happened, and it is reasonably good "
-        "at that: scored against a 40-day regression label over 178 large caps and twelve "
-        "years of daily bars, the indicators here agree with the established trend about 81% "
-        "of the time.\n\n"
+        "This panel reports the trend that has already happened, and it is good at that: "
+        "scored against a 40-day regression label over 178 large caps and twelve years of "
+        "daily bars, the verdict agrees with the established trend 96% of the time.\n\n"
+        "The verdict comes from how the 10/20/50/100/200-day averages are stacked and how far "
+        "price sits from the 50-day, in ATRs \xe2\x80\x94 not from counting the table below. "
+        "Averaging ~20 correlated indicator votes scored 80%; these two readings score 96% on "
+        "held-out years. The table is shown because the detail is useful, not because the "
+        "headline is a tally of it.\n\n"
         "It is not a forecast. The same evidence scored against the direction of the *next* "
-        "40 days lands at 47% \xe2\x80\x94 the wrong side of a coin flip \xe2\x80\x94 and its "
+        "40 days lands at 53% \xe2\x80\x94 barely off a coin flip \xe2\x80\x94 and its "
         "rank correlation with forward returns is indistinguishable from zero. That is why "
         "Read the verdict as a description of the move already in place, not as a\n"
         "forecast of the next one.\n\n"

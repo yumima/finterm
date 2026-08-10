@@ -12,9 +12,9 @@ namespace fincept::services::equity {
 ///
 /// What it claims, and what it does not. Over 178 large caps and twelve years of
 /// daily bars, scored against the sign of a 40-day log-price regression, the
-/// evidence here agrees with the trend already in place ~81% of the time and
-/// with the direction of the *next* 40 days ~47% — the wrong side of a coin
-/// flip, and consistent with a rank correlation against forward returns that is
+/// verdict here agrees with the trend already in place ~96% of the time and
+/// with the direction of the *next* 40 days ~53% — barely off a coin flip,
+/// and consistent with a rank correlation against forward returns that is
 /// indistinguishable from zero. It is a good description of a move that has
 /// happened and not a forecast of one that has not, whatever the verdict's
 /// wording suggests. Both numbers are shown under the gauge and in the MCP tool
