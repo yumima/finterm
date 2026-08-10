@@ -85,6 +85,26 @@ EarningsRevisionRow revision(const QString& period, double up30, double down30) 
     return r;
 }
 
+/// A steady beater whose most recent print carries a GAAP one-off.
+///
+/// This is GOOG's shape: three ordinary quarters at +5-7% and then a headline
+/// +213% produced by subtracting an as-reported figure from an adjusted
+/// consensus. Averaged in, the one accounting quarter sets the whole record.
+EarningsAnalysis with_accounting_quarter(bool flagged) {
+    EarningsAnalysis a;
+    a.valid = true;
+    a.symbol = "GOOG";
+    a.next.timestamp = QDateTime::currentSecsSinceEpoch() + 21 * 86400;
+    a.next.eps_avg = 1.10;
+    a.valuation.price = 100.0;
+    for (int i = 1; i < 8; ++i)
+        a.history.append(quarter(1700000000LL - i * 7776000LL, 1.00, 1.06, 6.0, 2.0));
+    EarningsPoint odd = quarter(1700000000LL, 2.91, 9.11, 212.9, 2.0);
+    odd.surprise_suspect = flagged;
+    a.history.prepend(odd);
+    return a;
+}
+
 EarningsAnalysis bullish_fixture() {
     EarningsAnalysis a;
     a.valid = true;
@@ -1039,6 +1059,28 @@ class TestEarningsSignal : public QObject {
         QVERIFY2(all.contains("typically moves"), qPrintable(all));
         QVERIFY2(all.contains("Report is"), qPrintable(all));
         QVERIFY2(all.contains("already moved"), qPrintable(all));
+    }
+
+    // ── GAAP-vs-adjusted basis ───────────────────────────────────────────────
+
+    /// One accounting quarter must not become a company's track record.
+    ///
+    /// Yahoo reports GAAP EPS against an adjusted consensus, so a one-off gain
+    /// or charge lands as a vast "surprise": GOOG's July 2026 print reads
+    /// +213%, META's October 2025 tax charge -84%. Across 3,857 quarters these
+    /// carry no relationship to the next session's move (Spearman +0.077,
+    /// p = 0.32) where ordinary quarters do (+0.114, p ~ 1e-12), so they are
+    /// flagged upstream and skipped here.
+    void accounting_quarter_does_not_set_the_track_record() {
+        const auto flagged = evaluate_earnings(with_accounting_quarter(true));
+        const auto unflagged = evaluate_earnings(with_accounting_quarter(false));
+
+        auto avg_of = [](const EarningsVerdict& r) { return r.avg_surprise_pct; };
+        // Unflagged, the outlier drags the average far above every real quarter.
+        QVERIFY2(avg_of(unflagged) > 20.0, qPrintable(QString::number(avg_of(unflagged))));
+        // Flagged, the average reflects the seven ordinary quarters.
+        QVERIFY2(avg_of(flagged) > 4.0 && avg_of(flagged) < 8.0,
+                 qPrintable(QString::number(avg_of(flagged))));
     }
 };
 

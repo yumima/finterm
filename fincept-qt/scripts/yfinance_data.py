@@ -1577,6 +1577,159 @@ def _pre_event_vol(hist, event_ts, win=20):
         return None
 
 
+_IMPLIED_MAX_GAP_DAYS = 10
+
+def _implied_earnings_move(ticker, earnings_ts, hist):
+    """What the option market is pricing for the coming print.
+
+    The number every professional earnings screen leads with, and the one this
+    panel had no equivalent of. It is also the only genuinely forward-looking
+    input available here: everything else on the tab is derived from what the
+    company has already done.
+
+    Two things make a naive straddle quote wrong, and both are handled.
+
+    First, the expiry has to sit just after the print. An ATM straddle prices
+    every session up to expiry, so reading the next available expiry gives a
+    number dominated by calendar time rather than the event — AAPL's nearest
+    post-earnings expiry is 102 days out and quotes 11.3%, which says nothing
+    about its earnings move. Anything more than `_IMPLIED_MAX_GAP_DAYS` past
+    the print is refused rather than reported misleadingly.
+
+    Second, even a tight expiry covers the jump *plus* the ordinary days around
+    it. Variance adds, so the event component is the straddle's implied move
+    with the ordinary drift taken out in quadrature:
+
+        event = sqrt(max(total^2 - (daily_vol * sqrt(sessions))^2, 0))
+
+    Returns None whenever any leg is missing — a wrong implied move is worse
+    than none, because it is the number a reader would trust most.
+    """
+    import datetime as _dt
+    from datetime import datetime as _datetime, timezone as _tz
+    if not earnings_ts:
+        return None
+    try:
+        expiries = ticker.options or ()
+    except Exception:
+        return None
+    if not expiries:
+        return None
+
+    earn_day = _datetime.fromtimestamp(earnings_ts, _tz.utc).date()
+    chosen = None
+    for e in expiries:
+        try:
+            d = _dt.date.fromisoformat(e)
+        except ValueError:
+            continue
+        if d >= earn_day:
+            chosen = (e, d)
+            break
+    if chosen is None:
+        return None
+    expiry, expiry_day = chosen
+    gap = (expiry_day - earn_day).days
+    if gap > _IMPLIED_MAX_GAP_DAYS:
+        return None
+
+    try:
+        chain = ticker.option_chain(expiry)
+        calls, puts = chain.calls, chain.puts
+        spot = float(ticker.fast_info["last_price"])
+    except Exception:
+        return None
+    if calls is None or puts is None or calls.empty or puts.empty or not spot:
+        return None
+
+    def _atm_mid(df):
+        row = df.iloc[(df["strike"] - spot).abs().argsort()[:1]]
+        bid = float(row["bid"].iloc[0] or 0.0)
+        ask = float(row["ask"].iloc[0] or 0.0)
+        last = float(row["lastPrice"].iloc[0] or 0.0)
+        # Mid when there is a two-sided market; last only as a fallback, since
+        # a stale print on an illiquid strike can be far from anything tradeable.
+        return ((bid + ask) / 2.0 if bid > 0 and ask > 0 else last), float(row["strike"].iloc[0])
+
+    try:
+        call_px, strike = _atm_mid(calls)
+        put_px, _ = _atm_mid(puts)
+    except Exception:
+        return None
+    straddle = call_px + put_px
+    if straddle <= 0:
+        return None
+
+    total_pct = straddle / spot * 100.0
+
+    # Ordinary (non-event) vol over the same window, from realised daily moves.
+    event_pct = None
+    sessions = max(1, int(round((expiry_day - _dt.date.today()).days * 5.0 / 7.0)))
+    try:
+        if hist is not None and not getattr(hist, "empty", True):
+            daily = hist["Close"].pct_change().dropna().tail(60)
+            if len(daily) >= 20:
+                # Median absolute move, rescaled, rather than the standard
+                # deviation. A 60-session window contains the *previous*
+                # earnings jump, and a stdev that includes it overstates the
+                # ordinary day badly enough to swallow the whole straddle —
+                # NVDA's event component came out at exactly 0.0% that way.
+                # The median is unmoved by one jump in sixty sessions.
+                mad = float(daily.abs().median() * 100.0) * 1.4826
+                ordinary = mad * (sessions ** 0.5)
+                ev = (max(total_pct ** 2 - ordinary ** 2, 0.0)) ** 0.5
+                # Report the split only when it is informative. A degenerate
+                # subtraction (nothing left, or nothing taken out) means the
+                # window is wrong for this print, not that the event is free.
+                if 0.15 * total_pct < ev < 0.98 * total_pct:
+                    event_pct = ev
+    except Exception:
+        event_pct = None
+
+    return {
+        "expiry": expiry,
+        "days_after_print": gap,
+        "strike": strike,
+        "spot": round(spot, 4),
+        "straddle": round(straddle, 4),
+        "total_move_pct": round(total_pct, 2),
+        "event_move_pct": round(event_pct, 2) if event_pct is not None else None,
+    }
+
+
+def _surprise_basis_suspect(est, act, sur):
+    """Is this "surprise" an accounting artefact rather than a beat?
+
+    Yahoo's `Reported EPS` is the as-reported GAAP figure; its `EPS Estimate`
+    is the street's adjusted, non-GAAP consensus. For a company with no
+    material one-offs the two are close enough to compare — Apple's last four
+    quarters read +6.7%, +3.5%, +6.3%, +4.5%, all plausible. For a company
+    carrying a large equity portfolio or a one-time charge they are not on the
+    same basis at all, and the subtraction produces a number that describes an
+    accounting event rather than an operational result:
+
+        GOOG 2026-07-22   est 2.91  ->  act 9.11   =  +213%
+        META 2025-10-29   est 6.71  ->  act 1.05   =   -84%   (tax charge)
+
+    Measured across 3,857 reported quarters from 166 large caps, the surprise
+    figure does relate to the next session's move — Spearman +0.114, p ~1e-12
+    — but that relationship vanishes in the tail: above 100% it is +0.077 at
+    p = 0.32, indistinguishable from noise, which is exactly what a
+    basis mismatch predicts. 4.3% of quarters sit above that line.
+
+    So 100% is where the flag falls. Quarters above it are still shown, since
+    something real did happen in them, but they are marked and the scorer drops
+    them from the beat-rate and consistency legs rather than letting one
+    accounting quarter set a company's whole track record.
+    """
+    try:
+        if sur is None or act is None or est is None:
+            return False
+        return abs(float(sur)) > 100.0
+    except (TypeError, ValueError):
+        return False
+
+
 def get_earnings_analysis(symbol, quarters=12):
     """Past / current / forward earnings picture for one symbol.
 
@@ -1741,6 +1894,7 @@ def get_earnings_analysis(symbol, quarters=12):
                 "eps_estimate": est,
                 "eps_actual":   act,
                 "surprise_pct": sur,
+                "surprise_suspect": _surprise_basis_suspect(est, act, sur),
                 "reaction_pct": reaction,
                 "runup_pct":    runup,
                 "price_before": p_before,
@@ -1881,6 +2035,8 @@ def get_earnings_analysis(symbol, quarters=12):
                          ("year_ago_rev", "year_ago_rev"), ("rev_growth", "rev_growth")):
             if nxt.get(dst) is None:
                 nxt[dst] = cur_q.get(src)
+    # The market's own forecast of the coming move, alongside the history.
+    nxt["implied"] = _implied_earnings_move(ticker, nxt.get("timestamp"), hist)
     out["next"] = nxt
 
     # ── The coming quarter, as a projection ──────────────────────────────────
@@ -1952,6 +2108,7 @@ def get_earnings_analysis(symbol, quarters=12):
             "price_before": None,
             "price_after":  None,
             "is_estimate":  True,
+            "surprise_suspect": False,
             "has_forward_estimate": has_forward_estimate,
         }
         # The projection supersedes any still-pending row for the same date

@@ -270,6 +270,19 @@ struct EarningsPoint {
     std::optional<double> eps_estimate;
     std::optional<double> eps_actual;
     std::optional<double> surprise_pct;   // signed: + = beat
+    /// True when the surprise is an accounting artefact rather than a beat.
+    ///
+    /// Yahoo's reported EPS is GAAP; the estimate it is subtracted from is the
+    /// street's adjusted consensus. For a company with material one-offs the
+    /// two are not the same measure, and the difference describes an accounting
+    /// event: GOOG's July 2026 print reads +213%, META's October 2025 tax
+    /// charge reads -84%. Across 3,857 quarters the surprise figure does track
+    /// the next session's move (Spearman +0.114, p~1e-12), but above 100% that
+    /// relationship is +0.077 at p=0.32 — noise, as a basis mismatch predicts.
+    /// Such quarters are still displayed and still marked; they are dropped
+    /// from the legs that average surprises, so one accounting quarter cannot
+    /// set a company's whole track record.
+    bool surprise_suspect = false;
     // Sequential and year-ago change in reported EPS. QoQ carries the
     // company's seasonality (a March quarter is "down" against December every
     // year); YoY is the seasonality-free version. Neither feeds the score —

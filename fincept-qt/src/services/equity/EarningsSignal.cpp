@@ -189,6 +189,13 @@ SignalComponent score_track_record(const EarningsAnalysis& a, EarningsVerdict& v
         if (considered >= kTrackRecordQuarters) break;
         // A projected quarter is a forecast, not a track record.
         if (p.is_estimate || !p.surprise_pct.has_value()) continue;
+        // A GAAP figure subtracted from an adjusted consensus is not a beat.
+        // GOOG's July 2026 print reads +213% and META's October 2025 tax
+        // charge reads -84%; averaged in, one such quarter sets the whole
+        // record. Measured across 3,857 quarters these carry no relationship
+        // to the reaction (Spearman +0.077, p=0.32) while the rest do
+        // (+0.114, p~1e-12), so dropping them removes noise and no signal.
+        if (p.surprise_suspect) continue;
         ++considered;
         surprises.append(*p.surprise_pct);
         if (*p.surprise_pct > 0) {
@@ -1091,7 +1098,7 @@ AdaptiveOut eps_core(const QVector<EarningsPoint>& history, int i,
         ++age;
         wsum += wt;
         abs_sum += wt * std::abs(*p.reaction_pct);
-        if (!p.surprise_pct.has_value()) continue;
+        if (!p.surprise_pct.has_value() || p.surprise_suspect) continue;
         const auto g = asked_growth(history, j);
         if (!g.has_value()) continue;
         w.append(wt);

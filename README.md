@@ -2,20 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-09)
+## Today's commits (2026-08-10)
 
 Latest first.
 
-- [`f67df95f6`](https://github.com/yumima/finterm/commit/f67df95f6) ER Technicals: cut the verdict from trend structure, not an indicator tally
-- [`f4ec6e9df`](https://github.com/yumima/finterm/commit/f4ec6e9df) ER Technicals: back to STRONG SELL / SELL / NEUTRAL / BUY / STRONG BUY
-- [`891e8803c`](https://github.com/yumima/finterm/commit/891e8803c) ER Technicals: say what the panel measures, not what it implies
-- [`2c9b8b622`](https://github.com/yumima/finterm/commit/2c9b8b622) Factor rating: score description separately from prediction
-- [`29f5bf39c`](https://github.com/yumima/finterm/commit/29f5bf39c) Factor rating: verify the null result, and correct my own excuse
-- [`514dddf49`](https://github.com/yumima/finterm/commit/514dddf49) Factor rating: build the model, measure it, and do not ship it
-- [`13985c5e6`](https://github.com/yumima/finterm/commit/13985c5e6) ER Technicals: add a weekly bar interval, and fix the review findings
-- [`c2d76406d`](https://github.com/yumima/finterm/commit/c2d76406d) ER Technicals: widen the average set and measure the gap in ATRs
-- [`669713194`](https://github.com/yumima/finterm/commit/669713194) ER Technicals: give every period enough history to rate
-- [`18b9505a5`](https://github.com/yumima/finterm/commit/18b9505a5) ER Technicals: the rating was reading the tape backwards
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
