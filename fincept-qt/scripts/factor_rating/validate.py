@@ -125,6 +125,48 @@ def summarise(name, score, fwd, step=HORIZON):
             "spread": spread, "mono": mono, "hit": hit, "periods": periods}
 
 
+def selftest(close, seed=0, verbose=True):
+    """Positive control: can this harness see a signal that is there by construction?
+
+    A null result is only worth reporting if the instrument that produced it can
+    detect a real effect. A misaligned forward return, a sign error or a broken
+    rank would all return "nothing works" just as convincingly as an honest
+    zero, and would be indistinguishable from it without this.
+
+    Feeds the scorer the forward return itself (must give IC 1), the same with
+    increasing noise (must decay smoothly), pure noise (must give 0) and the
+    negated forward return (must give -1). Returns the table so a caller can
+    assert on it.
+    """
+    fwd = forward_excess_return(close)
+    rng = np.random.default_rng(seed)
+    scale = float(np.nanstd(fwd.values))
+    cases = [("perfect foresight", fwd), ("inverted foresight", -fwd)]
+    for k in (0.5, 1.0, 2.0, 5.0):
+        cases.append((f"foresight + {k}x noise",
+                      fwd + rng.normal(0, k * scale, fwd.shape)))
+    noise = fwd.copy()
+    noise[:] = rng.normal(0, 1, fwd.shape)
+    cases.append(("pure noise", noise))
+
+    rows = [summarise(name, sig, fwd) for name, sig in cases]
+    if not rows[0].get("n"):
+        raise ValueError(
+            f"universe too small to rank: {close.shape[1]} symbols yields no date with "
+            f"the {ic_series.__defaults__[1]} names a cross-sectional IC needs. "
+            "The control is only meaningful on the full universe.")
+    if verbose:
+        print(f"{'control':<30}{'IC':>9}{'mono':>7}{'n':>5}")
+        print("-" * 51)
+        for r in rows:
+            print(f"{r['name']:<30}{r['ic']:>9.4f}{r['mono']:>7.2f}{r['n']:>5}")
+    ok = {r["name"]: r["ic"] for r in rows}
+    assert ok["perfect foresight"] > 0.99, ok
+    assert ok["inverted foresight"] < -0.99, ok
+    assert abs(ok["pure noise"]) < 0.05, ok
+    return rows
+
+
 def baselines(panel):
     """Reference signals the factor model has to beat to justify itself."""
     close = panel["close"]

@@ -46,20 +46,62 @@ and slightly negative. The technical rating in the app is defensible, internally
 consistent, and agrees with TradingView — and none of that is evidence it
 predicts anything.
 
+Was the null result itself verified
+-----------------------------------
+Yes, three ways, because a broken harness also returns "nothing works".
+
+1. Positive control (validate.selftest, runs on demand). Fed the forward
+   return itself the harness returns IC 1.000; negated, -1.000; pure noise,
+   0.004. Foresight plus increasing noise decays smoothly — 0.76, 0.55, 0.33,
+   0.14 — with perfect decile monotonicity throughout. At IC 0.137 the t-stat
+   is 17, so the instrument is not blind to a weak-but-consistent effect.
+   Alignment, sign, ranking and forward-return construction are all correct.
+
+2. Data check against a published series. The equal-weighted return of this
+   universe correlates 0.979 with Ken French's Mkt-RF over the same days. The
+   prices and returns are what they claim to be.
+
+3. Factor construction against a published factor. A decile long/short
+   momentum portfolio built from these factors correlates 0.701 with the
+   published UMD momentum factor — the same phenomenon, independently
+   constructed. It returned -4.4%/yr against UMD's +4.0%/yr over the window,
+   at twice the volatility, which is what a 178-name mega-cap-only, equal
+   weighted, size-uncontrolled version of UMD should look like.
+
+What replicated, and what I got wrong
+-------------------------------------
+Re-run over a second, independent universe — 408 small and mid caps, same
+12 years — to test the excuse offered above, that mega caps are simply the
+wrong place to look. Partly wrong:
+
+  - momentum did NOT recover (IC +0.012, t 0.77). The universe was not the
+    reason it failed, and the earlier suggestion that widening it would fix
+    things is not supported by the test.
+  - short-term reversal DID strengthen, and is now significant: IC +0.032,
+    t 2.68, decile monotonicity +0.52, against +0.030 / t 1.81 in mega caps.
+    One signal, two independent universes, same sign, consistent with a large
+    published literature. This is the only thing here that replicated.
+  - the proxy for the shipped rating stayed negative in both universes, and in
+    small/mid its deciles line up almost perfectly *inversely* (monotonicity
+    -0.93): the higher price sat above its moving averages, the worse the
+    forward return.
+
+Note the direction of that last pair. The shipped rating treats price above
+its averages as bullish. The one effect that replicates says recent losers
+outperform over the next month. They point opposite ways.
+
 What this does and does not license
 -----------------------------------
-"Not shown to work" is not "shown not to work". The test is underpowered and
-aimed at an unfavourable target:
+"Not shown to work" is still not "shown not to work", and the effects that do
+replicate are economically marginal — an IC of 0.03 is a few basis points of
+edge per name per month before costs. Remaining limits:
 
-  - ~133 non-overlapping observations at the 1-month horizon; detecting an IC
-    of 0.03 at t=2 needs roughly 160. At the 6-month horizon there are 21
-    observations, which is no power at all.
-  - Mega caps are the hardest place to find trend or momentum effects — they
-    are the most heavily arbitraged names in the market, and the momentum
-    literature documents the effect as weakest exactly here.
-  - The universe is survivorship-biased. Rank-based statistics inside a date
-    blunt that, they do not remove it.
+  - Survivorship bias, worse in the small/mid universe than the large one,
+    since today's small caps include yesterday's large caps after a collapse.
+    Rank statistics within a date blunt this; they do not remove it.
   - One regime: post-2014, one drawdown, one inflation shock.
+  - At the 6-month horizon there are 21 non-overlapping observations, which is
+    no power at all; those columns should be read as decoration.
 
 So this package is deliberately not wired into the terminal. Shipping an
 unvalidated composite as a user-facing rating would repeat the mistake it was

@@ -62,6 +62,7 @@ def main(argv=None):
     ap.add_argument("--symbols", help="comma-separated list, overrides the default universe")
     ap.add_argument("--years", type=int, default=12)
     ap.add_argument("--horizons", default="21,63", help="forward windows in trading days")
+    ap.add_argument("--selftest", action="store_true", help="run the positive control and exit")
     ap.add_argument("--refresh", action="store_true", help="ignore the cached panel")
     args = ap.parse_args(argv)
 
@@ -77,6 +78,12 @@ def main(argv=None):
     p = clean(download_panel(syms, years=args.years, force=args.refresh))
     print(f"panel: {p['close'].shape[1]} usable symbols x {p['close'].shape[0]} days "
           f"({p['close'].index[0].date()} -> {p['close'].index[-1].date()})")
+
+    if args.selftest:
+        V.selftest(p["close"])
+        print("\npositive control passed — the harness detects a signal that is present, "
+              "so a null result from it is a statement about the signal, not the instrument")
+        return 0
 
     raw = F.compute_factors(p)
     signals = {k: F.zscore_rows(v) for k, v in raw.items()}
