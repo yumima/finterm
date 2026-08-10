@@ -25,19 +25,45 @@ static constexpr const char* GRAY = "#6b7280";
 
 // ── Signal helpers ───────────────────────────────────────────────────────────
 
+/// What one indicator says about the move that has already happened.
 QString EquityTechnicalsTab::signal_text(services::equity::TechSignal s) {
     using S = services::equity::TechSignal;
     switch (s) {
-        case S::StrongBuy:
-            return "STRONG BUY";
-        case S::Buy:
-            return "BUY";
-        case S::Sell:
-            return "SELL";
-        case S::StrongSell:
-            return "STRONG SELL";
+        case S::StrongBullish:
+            return "STRONG BULLISH";
+        case S::Bullish:
+            return "BULLISH";
+        case S::Bearish:
+            return "BEARISH";
+        case S::StrongBearish:
+            return "STRONG BEARISH";
         default:
             return "NEUTRAL";
+    }
+}
+
+/// The headline verdict, stated as the trend it describes.
+///
+/// It used to read STRONG BUY … STRONG SELL. Those words are a forecast, and
+/// the forecast was measured: against the direction of the *next* 40 days this
+/// panel's evidence is right 47% of the time — the wrong side of a coin flip.
+/// Against the 40 days that already happened it is right 81% of the time. So
+/// the panel now says the thing it can actually support. Anyone who wants to
+/// read a trade into an established uptrend is free to; the terminal should not
+/// do it for them on evidence this thin.
+QString EquityTechnicalsTab::trend_text(services::equity::TechSignal s) {
+    using S = services::equity::TechSignal;
+    switch (s) {
+        case S::StrongBullish:
+            return "STRONG UPTREND";
+        case S::Bullish:
+            return "UPTREND";
+        case S::Bearish:
+            return "DOWNTREND";
+        case S::StrongBearish:
+            return "STRONG DOWNTREND";
+        default:
+            return "NO CLEAR TREND";
     }
 }
 
@@ -72,13 +98,13 @@ QString EquityTechnicalsTab::non_voting_note(const QString& col_key) {
 const char* EquityTechnicalsTab::signal_color(services::equity::TechSignal s) {
     using S = services::equity::TechSignal;
     switch (s) {
-        case S::StrongBuy:
+        case S::StrongBullish:
             return ui::colors::POSITIVE;
-        case S::Buy:
+        case S::Bullish:
             return LTGREEN;
-        case S::Sell:
+        case S::Bearish:
             return LTRED;
-        case S::StrongSell:
+        case S::StrongBearish:
             return ui::colors::NEGATIVE;
         default:
             return GRAY;
@@ -290,8 +316,8 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "stoch_d")
         return "Stochastic Oscillator %D\n\n"
                "A 3-period average of %K \xe2\x80\x94 the slow, smoother stochastic line. %K crossing "
-               "above %D in oversold territory is a classic buy trigger; crossing below in "
-               "overbought territory, a sell trigger.";
+               "above %D in oversold territory is a classic bullish trigger; crossing below in "
+               "overbought territory, a bearish trigger.";
     if (col_key == "williams_r")
         return "Williams %R\n\n"
                "Where the close sits within the recent high\xe2\x80\x93low range, on an inverted 0 to "
@@ -596,7 +622,7 @@ void EquityTechnicalsTab::build_ui() {
     rp_vl->setContentsMargins(14, 10, 14, 10);
     rp_vl->setSpacing(10);
 
-    auto* rp_title = new QLabel("TECHNICAL RATING");
+    auto* rp_title = new QLabel("TREND READING");
     rp_title->setStyleSheet(
         QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;border:0;")
             .arg(ui::colors::AMBER()));
@@ -651,11 +677,11 @@ void EquityTechnicalsTab::build_ui() {
         counts->addWidget(w, 1);
     };
 
-    make_count(ui::colors::POSITIVE, "STR.BUY", strong_buy_count_);
-    make_count(LTGREEN, "BUY", buy_count_);
+    make_count(ui::colors::POSITIVE, "STR.BULL", strong_bullish_count_);
+    make_count(LTGREEN, "BULL", bullish_count_);
     make_count(GRAY, "NEUTRAL", neutral_count_);
-    make_count(LTRED, "SELL", sell_count_);
-    make_count(ui::colors::NEGATIVE, "STR.SELL", strong_sell_count_);
+    make_count(LTRED, "BEAR", bearish_count_);
+    make_count(ui::colors::NEGATIVE, "STR.BEAR", strong_bearish_count_);
     rp_vl->addLayout(counts);
 
     total_label_ = new QLabel("0 INDICATORS");
@@ -672,6 +698,29 @@ void EquityTechnicalsTab::build_ui() {
     basis_label_->setStyleSheet(
         QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(basis_label_);
+
+    // What this panel is, stated on the panel. Measured over 178 large caps
+    // across twelve years: the evidence here agrees with the trend already in
+    // place 81% of the time, and with the direction of the next 40 days 47% of
+    // the time. Both numbers belong in front of the user, because only the
+    // first one supports the words above it.
+    accuracy_label_ = new QLabel("describes the trend in place \xe2\x80\x94 not a forecast");
+    accuracy_label_->setAlignment(Qt::AlignCenter);
+    accuracy_label_->setWordWrap(true);
+    accuracy_label_->setToolTip(
+        "This panel reports the trend that has already happened, and it is reasonably good "
+        "at that: scored against a 40-day regression label over 178 large caps and twelve "
+        "years of daily bars, the indicators here agree with the established trend about 81% "
+        "of the time.\n\n"
+        "It is not a forecast. The same evidence scored against the direction of the *next* "
+        "40 days lands at 47% \xe2\x80\x94 the wrong side of a coin flip \xe2\x80\x94 and its "
+        "rank correlation with forward returns is indistinguishable from zero. That is why "
+        "this reads UPTREND rather than BUY.\n\n"
+        "Re-run the measurement yourself: python -m factor_rating --describe");
+    accuracy_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
+            .arg(ui::colors::TEXT_SECONDARY()));
+    rp_vl->addWidget(accuracy_label_);
 
     warning_label_ = new QLabel;
     warning_label_->setAlignment(Qt::AlignCenter);
@@ -760,10 +809,10 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     all << payload.trend << payload.momentum << payload.volatility << payload.volume;
 
     // ── Rating ───────────────────────────────────────────────────────────────
-    const int sb = payload.strong_buy, b = payload.buy, n = payload.neutral;
-    const int s = payload.sell, ss = payload.strong_sell;
+    const int sb = payload.strong_bullish, b = payload.bullish, n = payload.neutral;
+    const int s = payload.bearish, ss = payload.strong_bearish;
 
-    rating_label_->setText(signal_text(payload.overall_signal));
+    rating_label_->setText(trend_text(payload.overall_signal));
     rating_label_->setStyleSheet(
         QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
             .arg(signal_color(payload.overall_signal)));
@@ -774,11 +823,11 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     // reading bearish next to the word STRONG BUY.
     gauge_bar_->setValue(static_cast<int>(std::lround(50.0 + 50.0 * payload.net_score)));
 
-    strong_buy_count_->setText(QString::number(sb));
-    buy_count_->setText(QString::number(b));
+    strong_bullish_count_->setText(QString::number(sb));
+    bullish_count_->setText(QString::number(b));
     neutral_count_->setText(QString::number(n));
-    sell_count_->setText(QString::number(s));
-    strong_sell_count_->setText(QString::number(ss));
+    bearish_count_->setText(QString::number(s));
+    strong_bearish_count_->setText(QString::number(ss));
     // Counts cover the indicators that actually vote; `all` also holds the
     // reference-only rows, and conflating the two overstated the evidence.
     total_label_->setText(QString("%1 OF %2 INDICATORS SCORED")
@@ -889,9 +938,9 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             if (!ti.votes)
                 continue;
             cvoting++;
-            if (ti.signal == S::StrongBuy || ti.signal == S::Buy)
+            if (ti.signal == S::StrongBullish || ti.signal == S::Bullish)
                 cb++;
-            else if (ti.signal == S::StrongSell || ti.signal == S::Sell)
+            else if (ti.signal == S::StrongBearish || ti.signal == S::Bearish)
                 cs++;
             else
                 cn++;
@@ -933,9 +982,9 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
                     .arg(color));
             hl->addWidget(badge);
         };
-        add_badge(cb, "BUY", ui::colors::POSITIVE);
-        add_badge(cn, "HOLD", GRAY);
-        add_badge(cs, "SELL", ui::colors::NEGATIVE);
+        add_badge(cb, "BULLISH", ui::colors::POSITIVE);
+        add_badge(cn, "NEUTRAL", GRAY);
+        add_badge(cs, "BEARISH", ui::colors::NEGATIVE);
 
         svl->addWidget(hdr);
 

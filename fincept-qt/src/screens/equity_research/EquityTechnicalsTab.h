@@ -31,6 +31,8 @@ class EquityTechnicalsTab : public QWidget {
     void rebind();
 
     static QString signal_text(services::equity::TechSignal s);
+    /// Headline vocabulary — the trend described, not a trade implied.
+    static QString trend_text(services::equity::TechSignal s);
     /// Tooltip explaining why a displayed indicator is excluded from the tally.
     static QString non_voting_note(const QString& col_key);
     static const char* signal_color(services::equity::TechSignal s);
@@ -66,15 +68,17 @@ class EquityTechnicalsTab : public QWidget {
     // Rating panel
     QLabel* rating_label_ = nullptr;
     QProgressBar* gauge_bar_ = nullptr;
-    QLabel* strong_buy_count_ = nullptr;
-    QLabel* buy_count_ = nullptr;
+    QLabel* strong_bullish_count_ = nullptr;
+    QLabel* bullish_count_ = nullptr;
     QLabel* neutral_count_ = nullptr;
-    QLabel* sell_count_ = nullptr;
-    QLabel* strong_sell_count_ = nullptr;
+    QLabel* bearish_count_ = nullptr;
+    QLabel* strong_bearish_count_ = nullptr;
     QLabel* total_label_ = nullptr;
     // Per-bucket contributions behind the verdict, so the number is arguable
     // rather than an oracle.
     QLabel* basis_label_ = nullptr;
+    // States what the panel measures, and what it does not. See trend_text().
+    QLabel* accuracy_label_ = nullptr;
     // Only visible when an indicator stage was lost on the Python side.
     QLabel* warning_label_ = nullptr;
 

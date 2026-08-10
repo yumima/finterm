@@ -7,7 +7,7 @@
 //   4. get_equity_info               — full company / valuation profile
 //   5. get_equity_historical         — OHLCV candles for a period
 //   6. get_equity_financials         — income / balance / cashflow
-//   7. get_equity_technicals         — indicators + overall signal
+//   7. get_equity_technicals         — indicators + the trend they describe
 //   8. get_equity_peers              — peer-group comparison
 //   9. get_equity_news               — recent news articles for a symbol
 //  10. compute_equity_talipp         — run a talipp indicator (generic)
@@ -144,11 +144,11 @@ QJsonArray financials_section_to_json(const QVector<QPair<QString, QJsonObject>>
 const char* tech_signal_str(services::equity::TechSignal s) {
     using TS = services::equity::TechSignal;
     switch (s) {
-        case TS::StrongBuy:  return "strong_buy";
-        case TS::Buy:        return "buy";
+        case TS::StrongBullish:  return "strong_bullish";
+        case TS::Bullish:        return "bullish";
         case TS::Neutral:    return "neutral";
-        case TS::Sell:       return "sell";
-        case TS::StrongSell: return "strong_sell";
+        case TS::Bearish:       return "bearish";
+        case TS::StrongBearish: return "strong_bearish";
     }
     return "neutral";
 }
@@ -188,11 +188,11 @@ QJsonObject technicals_to_json(const services::equity::TechnicalsData& t) {
         {"rating_basis", t.rating_basis},
         {"data_warning", t.data_warning},
         {"voting_count", t.voting_count},
-        {"strong_buy", t.strong_buy},
-        {"buy", t.buy},
+        {"strong_bullish", t.strong_bullish},
+        {"bullish", t.bullish},
         {"neutral", t.neutral},
-        {"sell", t.sell},
-        {"strong_sell", t.strong_sell},
+        {"bearish", t.bearish},
+        {"strong_bearish", t.strong_bearish},
     };
 }
 
@@ -558,7 +558,13 @@ std::vector<ToolDef> get_equity_research_tools() {
     {
         ToolDef t;
         t.name = "get_equity_technicals";
-        t.description = "Get technical indicators (trend/momentum/volatility/volume) and overall buy/sell signal.";
+        t.description =
+            "Technical indicators (trend/momentum/volatility/volume) and the overall trend they "
+            "describe. This is a description of price action that has already happened, not a "
+            "forecast and not a trade recommendation: measured over 178 large caps and twelve "
+            "years, it agrees with the trend already in place ~81% of the time and with the "
+            "direction of the next 40 days ~47% \xe2\x80\x94 no better than chance. Signals read "
+            "bullish/bearish for that reason. Do not present them to a user as buy/sell advice.";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()

@@ -107,14 +107,14 @@ Regime regime_of(const RatingInput& in) {
 /// Demote a mean-reversion call that fights a confirmed trend.
 ///
 /// Overbought inside a real uptrend is what an uptrend looks like — it is not a
-/// reason to sell, and treating it as one is how a stock breaking out to new
+/// reason to bearish, and treating it as one is how a stock breaking out to new
 /// highs came back rated STRONG SELL.
 S respect_trend(S s, const Regime& r) {
     if (!r.trending)
         return s;
-    if (r.up && (s == S::Sell || s == S::StrongSell))
+    if (r.up && (s == S::Bearish || s == S::StrongBearish))
         return S::Neutral;
-    if (!r.up && (s == S::Buy || s == S::StrongBuy))
+    if (!r.up && (s == S::Bullish || s == S::StrongBullish))
         return S::Neutral;
     return s;
 }
@@ -134,9 +134,9 @@ S score_vs_price(double ma, double prev_ma, double close, double atr) {
                                : std::abs(gap) / ma > kStrongGapPct;
 
     if (gap > 0.0)
-        return (far && rising) ? S::StrongBuy : S::Buy;
+        return (far && rising) ? S::StrongBullish : S::Bullish;
     if (gap < 0.0)
-        return (far && falling) ? S::StrongSell : S::Sell;
+        return (far && falling) ? S::StrongBearish : S::Bearish;
     return S::Neutral;
 }
 
@@ -145,9 +145,9 @@ S score_vs_price(double ma, double prev_ma, double close, double atr) {
 /// reads Buy every single bar of a sustained decline.
 S score_extremes(double value, double prev, bool have_prev, double oversold, double overbought) {
     if (value <= oversold)
-        return (have_prev && value > prev) ? S::StrongBuy : S::Neutral;
+        return (have_prev && value > prev) ? S::StrongBullish : S::Neutral;
     if (value >= overbought)
-        return (have_prev && value < prev) ? S::StrongSell : S::Neutral;
+        return (have_prev && value < prev) ? S::StrongBearish : S::Neutral;
     return S::Neutral;
 }
 
@@ -155,9 +155,9 @@ S score_extremes(double value, double prev, bool have_prev, double oversold, dou
 /// away from zero upgrades it to strong.
 S score_zero_line(double value, double prev, bool have_prev) {
     if (value > 0.0)
-        return (have_prev && value > prev) ? S::StrongBuy : S::Buy;
+        return (have_prev && value > prev) ? S::StrongBullish : S::Bullish;
     if (value < 0.0)
-        return (have_prev && value < prev) ? S::StrongSell : S::Sell;
+        return (have_prev && value < prev) ? S::StrongBearish : S::Bearish;
     return S::Neutral;
 }
 
@@ -198,7 +198,7 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
     // ── MACD — the histogram, against the signal line ────────────────────────
     // The old rule tested `macd > 0`, which says nothing about the crossover
     // that MACD exists to report: a MACD line sitting at +0.9 *below* a signal
-    // line at +4.1 is a bearish cross, and it was being scored as a buy.
+    // line at +4.1 is a bearish cross, and it was being scored as a bullish.
     if (column == "macd") {
         if (!in.now.has("macd_signal"))
             return display_only(S::Neutral);
@@ -220,28 +220,28 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             return voting(S::Neutral, kBucketTrend); // no trend to be directional about
         const double dir = in.now.get("adx_pos") - in.now.get("adx_neg");
         if (dir > 0.0)
-            return voting(value >= 25.0 ? S::StrongBuy : S::Buy, kBucketTrend);
+            return voting(value >= 25.0 ? S::StrongBullish : S::Bullish, kBucketTrend);
         if (dir < 0.0)
-            return voting(value >= 25.0 ? S::StrongSell : S::Sell, kBucketTrend);
+            return voting(value >= 25.0 ? S::StrongBearish : S::Bearish, kBucketTrend);
         return voting(S::Neutral, kBucketTrend);
     }
 
     // ── Aroon — one vote from the pair, not one each ─────────────────────────
     // Up and Down are not independent readings; scoring them separately let a
-    // single indicator cast a buy and a sell simultaneously.
+    // single indicator cast a bullish and a bearish simultaneously.
     if (column == "aroon_up" || column == "aroon_down") {
         if (!in.now.has("aroon_up") || !in.now.has("aroon_down"))
             return display_only(S::Neutral);
         const double diff = in.now.get("aroon_up") - in.now.get("aroon_down");
         S s = S::Neutral;
         if (diff >= 50.0)
-            s = S::StrongBuy;
+            s = S::StrongBullish;
         else if (diff > 0.0)
-            s = S::Buy;
+            s = S::Bullish;
         else if (diff <= -50.0)
-            s = S::StrongSell;
+            s = S::StrongBearish;
         else if (diff < 0.0)
-            s = S::Sell;
+            s = S::Bearish;
         // Both rows show the pair's verdict; only Up carries it into the tally.
         return column == "aroon_up" ? voting(s, kBucketTrend) : display_only(s);
     }
@@ -264,9 +264,9 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             const double k = in.now.get("stoch_k");
             const double d = in.now.get("stoch_d");
             if (k <= 20.0)
-                s = k > d ? S::StrongBuy : S::Neutral;
+                s = k > d ? S::StrongBullish : S::Neutral;
             else if (k >= 80.0)
-                s = k < d ? S::StrongSell : S::Neutral;
+                s = k < d ? S::StrongBearish : S::Neutral;
         }
         s = respect_trend(s, regime);
         return column == "stoch_k" ? voting(s, kBucketMomentum) : display_only(s);
@@ -277,22 +277,22 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
     if (column == "bb_pband") {
         S s = S::Neutral;
         if (value < 0.0)
-            s = (have_prev && value > prev) ? S::StrongBuy : S::Neutral;
+            s = (have_prev && value > prev) ? S::StrongBullish : S::Neutral;
         else if (value > 1.0)
-            s = (have_prev && value < prev) ? S::StrongSell : S::Neutral;
+            s = (have_prev && value < prev) ? S::StrongBearish : S::Neutral;
         return voting(respect_trend(s, regime), kBucketMomentum);
     }
 
     // ── Rate-of-change style momentum ────────────────────────────────────────
     if (column == "roc") {
         if (value >= 10.0)
-            return voting(S::StrongBuy, kBucketMomentum);
+            return voting(S::StrongBullish, kBucketMomentum);
         if (value > 2.0)
-            return voting(S::Buy, kBucketMomentum);
+            return voting(S::Bullish, kBucketMomentum);
         if (value <= -10.0)
-            return voting(S::StrongSell, kBucketMomentum);
+            return voting(S::StrongBearish, kBucketMomentum);
         if (value < -2.0)
-            return voting(S::Sell, kBucketMomentum);
+            return voting(S::Bearish, kBucketMomentum);
         return voting(S::Neutral, kBucketMomentum);
     }
     if (column == "ao")
@@ -301,13 +301,13 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
     // ── Volume ───────────────────────────────────────────────────────────────
     if (column == "cmf") {
         if (value >= 0.20)
-            return voting(S::StrongBuy, kBucketVolume);
+            return voting(S::StrongBullish, kBucketVolume);
         if (value > 0.05)
-            return voting(S::Buy, kBucketVolume);
+            return voting(S::Bullish, kBucketVolume);
         if (value <= -0.20)
-            return voting(S::StrongSell, kBucketVolume);
+            return voting(S::StrongBearish, kBucketVolume);
         if (value < -0.05)
-            return voting(S::Sell, kBucketVolume);
+            return voting(S::Bearish, kBucketVolume);
         return voting(S::Neutral, kBucketVolume);
     }
     // Running totals: a single bar of a cumulative sum is noise, so these are
@@ -317,9 +317,9 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
             return display_only(S::Neutral);
         const double earlier = in.back.get(column);
         if (value > earlier)
-            return voting(S::Buy, kBucketVolume);
+            return voting(S::Bullish, kBucketVolume);
         if (value < earlier)
-            return voting(S::Sell, kBucketVolume);
+            return voting(S::Bearish, kBucketVolume);
         return voting(S::Neutral, kBucketVolume);
     }
 
@@ -345,37 +345,37 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
         if (!ti.votes)
             continue;
         switch (ti.signal) {
-            case S::StrongBuy:
-                v.strong_buy++;
+            case S::StrongBullish:
+                v.strong_bullish++;
                 break;
-            case S::Buy:
-                v.buy++;
+            case S::Bullish:
+                v.bullish++;
                 break;
             case S::Neutral:
                 v.neutral++;
                 break;
-            case S::Sell:
-                v.sell++;
+            case S::Bearish:
+                v.bearish++;
                 break;
-            case S::StrongSell:
-                v.strong_sell++;
+            case S::StrongBearish:
+                v.strong_bearish++;
                 break;
         }
         double points = 0.0;
         switch (ti.signal) {
-            case S::StrongBuy:
+            case S::StrongBullish:
                 points = 2.0;
                 break;
-            case S::Buy:
+            case S::Bullish:
                 points = 1.0;
                 break;
             case S::Neutral:
                 points = 0.0;
                 break;
-            case S::Sell:
+            case S::Bearish:
                 points = -1.0;
                 break;
-            case S::StrongSell:
+            case S::StrongBearish:
                 points = -2.0;
                 break;
         }
@@ -427,13 +427,13 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
     v.net = weight_used > 0.0 ? weighted / weight_used : 0.0;
 
     if (v.net >= kStrongBand)
-        v.overall = S::StrongBuy;
+        v.overall = S::StrongBullish;
     else if (v.net >= kDirectionalBand)
-        v.overall = S::Buy;
+        v.overall = S::Bullish;
     else if (v.net <= -kStrongBand)
-        v.overall = S::StrongSell;
+        v.overall = S::StrongBearish;
     else if (v.net <= -kDirectionalBand)
-        v.overall = S::Sell;
+        v.overall = S::Bearish;
     else
         v.overall = S::Neutral;
 
