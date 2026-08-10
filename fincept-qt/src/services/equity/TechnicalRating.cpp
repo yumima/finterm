@@ -42,19 +42,10 @@ constexpr double kStrongGapAtr = 1.0;
 /// Fallback when ATR has not warmed up: the old flat percentage.
 constexpr double kStrongGapPct = 0.015;
 
-/// Bucket weights. Trend leads because it answers the question the rating is
-/// actually asked ("which way is this going"); the oscillators are a smaller,
-/// contrarian correction to it rather than an equal partner.
-///
-/// There is deliberately no volatility bucket. BB %B was the only volatility
-/// reading with a direction, and a bucket holding a single voter swings to a
-/// full ±1.00 on one indicator — at which point its weight, however small,
-/// behaves like a tiebreak vote nobody asked for. It is an oscillator, so it
-/// scores in the momentum bucket alongside the others.
-constexpr double kWeightTrend = 0.50;
-constexpr double kWeightMomentum = 0.30;
-constexpr double kWeightVolume = 0.20;
-
+/// Scoring buckets. Since the trend-structure rewrite these no longer carry
+/// weights — the verdict is cut from trend_structure(), not from a weighted
+/// vote — but they still name where each indicator's vote lands for the
+/// per-category tallies and the minimum-trend-evidence gate.
 constexpr auto kBucketTrend = "trend";
 constexpr auto kBucketMomentum = "momentum";
 constexpr auto kBucketVolume = "volume";

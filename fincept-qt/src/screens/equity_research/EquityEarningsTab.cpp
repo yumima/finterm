@@ -451,6 +451,7 @@ QWidget* EquityEarningsTab::build_summary_row() {
     setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
     setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
     setup_grid->addWidget(make_stat("RUN-UP 20D", setup_runup20_, ui::colors::TEXT_PRIMARY(), 13), 2, 0);
+    setup_grid->addWidget(make_stat("MARKET-IMPLIED", setup_implied_, ui::colors::TEXT_PRIMARY(), 13), 2, 1);
     setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY(), 13), 3, 0);
     setup_predicted_->setToolTip(QStringLiteral(
         "The engine's own estimate for the next-session move, signed. Computed, not asked of "
@@ -459,6 +460,19 @@ QWidget* EquityEarningsTab::build_summary_row() {
         "It has no established accuracy — that is precisely why every reading is written down "
         "before the print and held against the outcome in SIGNAL vs OUTCOME below. Treat the "
         "TYPICAL MOVE beside it as the range that matters far more than the point."));
+    setup_implied_->setToolTip(QStringLiteral(
+        "What the option market itself is pricing for this print — the at-the-money "
+        "straddle expiring just after the report date, as a percent of spot. This is the "
+        "number professional earnings screens lead with, and the only genuinely "
+        "forward-looking figure on this tab: everything else is derived from what the "
+        "company already did.\n\n"
+        "Only shown when an expiry lands within ten days after the print. A straddle "
+        "prices every session to expiry, so a far expiry would quote weeks of ordinary "
+        "volatility as if it were the earnings move.\n\n"
+        "Compare it with EXPECTED MOVE: implied well above the historical estimate means "
+        "the market is braced for more than this name usually does, and vice versa. "
+        "Unlike the rest of the tab this figure cannot be backtested here (no historical "
+        "option data), so it is reported as the market's pricing, never scored."));
     setup_move_->setToolTip(QStringLiteral(
         "Forecast of how big this print's session will be, regardless of direction — the one "
         "genuinely forecastable part of an earnings reaction.\n\n"
@@ -984,6 +998,18 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                  ? QString("±%1%").arg(QString::number(verdict.expected_move_pct, 'f', 1))
                  : ui::formatting::placeholder(),
              ui::colors::TEXT_PRIMARY(), 13);
+    if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value()) {
+        const auto& imp = *a.next.implied;
+        // The straddle expires a few sessions after the print; saying so on the
+        // stat keeps "±7.5% through Aug 28" from being read as a same-day move.
+        set_stat(setup_implied_,
+                 QString("±%1%  by %2")
+                     .arg(QString::number(*imp.total_move_pct, 'f', 1))
+                     .arg(QDate::fromString(imp.expiry, Qt::ISODate).toString("MMM d")),
+                 ui::colors::TEXT_PRIMARY(), 13);
+    } else {
+        set_stat(setup_implied_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 13);
+    }
     // Beat rate is descriptive only now — the track-record leg scores the size
     // of the surprise against its own spread, because nearly every large cap
     // beats. Colouring it as though a high rate were bullish would contradict
@@ -1200,8 +1226,27 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
                                              : p.is_estimate          ? ui::formatting::placeholder()
                                                                       : QStringLiteral("pending"),
                                              p.is_estimate ? ui::colors::AMBER() : ui::colors::TEXT_PRIMARY()));
-        history_table_->setItem(row, 3, cell(opt_pct(p.surprise_pct, 2),
-                                             p.surprise_pct.has_value() ? color_for(*p.surprise_pct) : QString()));
+        // A flagged surprise is a GAAP figure subtracted from an adjusted
+        // consensus — an accounting artefact, not a beat (GOOG +213%, META
+        // -84%). Painting it green or red endorses it; grey plus a tooltip
+        // reports it without doing so. The scorer already skips these rows.
+        {
+            auto* sur_cell = cell(opt_pct(p.surprise_pct, 2),
+                                  !p.surprise_pct.has_value() ? QString()
+                                  : p.surprise_suspect        ? QString(ui::colors::TEXT_SECONDARY())
+                                                              : color_for(*p.surprise_pct));
+            if (p.surprise_suspect)
+                sur_cell->setToolTip(
+                    "Likely a GAAP-vs-adjusted mismatch, not a real beat or miss.\n\n"
+                    "Yahoo reports as-reported (GAAP) EPS against the street's adjusted "
+                    "consensus. When a quarter carries a large one-off — an investment "
+                    "gain, a tax charge — the two are not the same measure, and the "
+                    "difference describes the one-off rather than the business. Measured "
+                    "across 3,857 quarters, surprises beyond ±100% carry no relationship "
+                    "to the price reaction (p = 0.32) while ordinary ones do.\n\n"
+                    "Shown for the record; excluded from the beat rate and the scorecard.");
+            history_table_->setItem(row, 3, sur_cell);
+        }
         history_table_->setItem(row, 4, cell(opt_pct(p.eps_qoq_pct, 1),
                                              p.eps_qoq_pct.has_value() ? color_for(*p.eps_qoq_pct) : QString()));
         history_table_->setItem(row, 5, cell(opt_pct(p.eps_yoy_pct, 1),

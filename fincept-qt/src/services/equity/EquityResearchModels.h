@@ -340,6 +340,31 @@ struct EarningsGrowthRow {
 };
 
 /// The upcoming report.
+/// What the option market is pricing for the coming print — the number every
+/// professional earnings screen leads with, and the panel's only genuinely
+/// forward-looking input (everything else is derived from what the company
+/// already did).
+///
+/// Absent whenever it cannot be computed honestly: no listed options, or no
+/// expiry within ten days after the print. That guard matters — an ATM
+/// straddle prices every session to expiry, so quoting AAPL's nearest
+/// post-earnings expiry (102 days out, 11.3%) as "the earnings move" would be
+/// confidently wrong. `event_move_pct` further strips the ordinary days
+/// between now and expiry out in quadrature, and is itself optional because
+/// the decomposition degenerates on roughly half of real chains; the total is
+/// the trustworthy figure.
+///
+/// Unlike the rest of the tab this cannot be backtested here — there is no
+/// historical option-chain source in this stack — so it is presented as the
+/// market's pricing, never folded into the scorecard.
+struct EarningsImpliedMove {
+    QString expiry;
+    int days_after_print = 0;
+    std::optional<double> total_move_pct;  // ATM straddle ÷ spot
+    std::optional<double> event_move_pct;  // total minus ordinary days, in quadrature
+    std::optional<double> straddle, spot, strike;
+};
+
 struct EarningsNext {
     std::optional<qint64> timestamp;
     // Yahoo publishes a date *range* while the company hasn't confirmed —
@@ -348,6 +373,7 @@ struct EarningsNext {
     std::optional<double> eps_avg, eps_low, eps_high, analysts;
     std::optional<double> rev_avg, rev_low, rev_high;
     std::optional<double> year_ago_eps, year_ago_rev, eps_growth, rev_growth;
+    std::optional<EarningsImpliedMove> implied;
 };
 
 /// Valuation context the scorecard weighs the estimates against.

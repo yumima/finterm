@@ -1457,6 +1457,22 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         a.next.year_ago_rev = opt_num(nx, "year_ago_rev");
         a.next.eps_growth   = opt_num(nx, "eps_growth");
         a.next.rev_growth   = opt_num(nx, "rev_growth");
+
+        // Absent whenever the daemon could not compute it honestly (no listed
+        // options, or no expiry within ten days of the print) — see the model.
+        const auto imp = nx.value("implied").toObject();
+        if (!imp.isEmpty()) {
+            EarningsImpliedMove m;
+            m.expiry           = imp.value("expiry").toString();
+            m.days_after_print = imp.value("days_after_print").toInt();
+            m.total_move_pct   = opt_num(imp, "total_move_pct");
+            m.event_move_pct   = opt_num(imp, "event_move_pct");
+            m.straddle         = opt_num(imp, "straddle");
+            m.spot             = opt_num(imp, "spot");
+            m.strike           = opt_num(imp, "strike");
+            if (m.total_move_pct.has_value())
+                a.next.implied = m;
+        }
     }
 
     const auto val = obj.value("valuation").toObject();

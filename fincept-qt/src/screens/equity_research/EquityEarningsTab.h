@@ -101,6 +101,9 @@ class EquityEarningsTab : public QWidget {
     QLabel* setup_runup_ = nullptr;
     QLabel* setup_runup20_ = nullptr;
     QLabel* setup_spread_ = nullptr;
+    // Options-priced move for the coming print — absent unless an expiry sits
+    // just after the report date. See EarningsImpliedMove.
+    QLabel* setup_implied_ = nullptr;
     // The engine's signed point estimate for the coming print.
     QLabel* setup_predicted_ = nullptr;
 
