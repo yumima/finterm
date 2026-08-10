@@ -384,12 +384,16 @@ def calculate_all_trend_indicators(df, **kwargs):
     # SMA — 20/50/200 are the three the technical rating votes price against.
     # The 50 and 200 were missing before, which left the rating with no
     # medium- or long-term trend reference at all.
+    safe_assign(result_df, 'sma_10', lambda: calculate_sma(df, window=10))
     safe_assign(result_df, 'sma_20', lambda: calculate_sma(df, **kwargs.get('sma', {})))
+    safe_assign(result_df, 'sma_30', lambda: calculate_sma(df, window=30))
     safe_assign(result_df, 'sma_50', lambda: calculate_sma(df, window=50))
+    safe_assign(result_df, 'sma_100', lambda: calculate_sma(df, window=100))
     safe_assign(result_df, 'sma_200', lambda: calculate_sma(df, window=200))
 
     # EMA
     safe_assign(result_df, 'ema_12', lambda: calculate_ema(df, **kwargs.get('ema', {})))
+    safe_assign(result_df, 'ema_26', lambda: calculate_ema(df, window=26))
 
     # WMA
     safe_assign(result_df, 'wma_9', lambda: calculate_wma(df, **kwargs.get('wma', {})))

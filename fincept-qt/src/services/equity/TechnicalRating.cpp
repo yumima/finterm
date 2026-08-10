@@ -1,6 +1,7 @@
 // src/services/equity/TechnicalRating.cpp
 #include "services/equity/TechnicalRating.h"
 
+#include <QSet>
 #include <QStringList>
 
 #include <cmath>
@@ -27,8 +28,18 @@ using S = TechSignal;
 
 /// How far price has to sit from a moving average — and the average itself has
 /// to be sloping the same way — before the reading is called *strong* rather
-/// than merely positive. 1.5% is roughly a day's range on a large cap, so it
-/// keeps a stock oscillating around its own average out of the strong buckets.
+/// than merely positive.
+///
+/// Measured in ATRs, not percent. A fixed percentage is the wrong ruler: 1.5%
+/// is intraday noise on a name that moves 6% a day and a large move on one that
+/// moves 0.8%, so a flat threshold hands out the strong tier almost
+/// automatically on speculative names and almost never on quiet ones. Scoring
+/// the gap in units of the stock's own daily range makes "far from its average"
+/// mean the same thing for every instrument, and it is what stops a volatile
+/// small cap from out-scoring a steadily trending large cap on identical
+/// evidence.
+constexpr double kStrongGapAtr = 1.0;
+/// Fallback when ATR has not warmed up: the old flat percentage.
 constexpr double kStrongGapPct = 0.015;
 
 /// Bucket weights. Trend leads because it answers the question the rating is
@@ -56,9 +67,21 @@ constexpr double kDirectionalBand = 0.15;
 /// the trend evidence the old scorer threw away. `bb_mavg` is deliberately
 /// absent: it is the 20-period SMA under another name, and letting it vote
 /// would count the same average twice.
+///
+/// The list is deliberately long and spans fast to slow. Benchmarked against
+/// TradingView across the user's holdings, a bucket of seven mostly-medium
+/// averages saturated: in any clean uptrend all seven agreed and the bucket
+/// pinned at +1.00, where the reference — which reads fifteen averages from
+/// 10-period to 200-period — sat at +0.80 because its fastest members had
+/// already rolled over. That saturation was the whole of our systematic
+/// bullish bias. Disagreement between fast and slow averages is signal, and a
+/// set too narrow to express it rounds every trend up to its maximum.
 bool is_moving_average(const QString& column) {
-    return column == "sma_20" || column == "sma_50" || column == "sma_200" || column == "ema_12" ||
-           column == "wma_9" || column == "kama" || column == "vwap";
+    static const QSet<QString> kAverages = {
+        "sma_10", "sma_20", "sma_30", "sma_50", "sma_100", "sma_200",
+        "ema_12", "ema_26", "wma_9",  "kama",   "vwap",    "ichimoku_base",
+    };
+    return kAverages.contains(column);
 }
 
 /// Direction of the prevailing trend, when there is one worth respecting.
@@ -96,23 +119,24 @@ S respect_trend(S s, const Regime& r) {
     return s;
 }
 
-/// Price against a moving average.
-S score_vs_price(double ma, double prev_ma, double close) {
+/// Price against a moving average, with the gap measured in the stock's own
+/// daily range. `atr` of 0 means ATR was unavailable and the flat percentage
+/// fallback applies.
+S score_vs_price(double ma, double prev_ma, double close, double atr) {
     if (!(ma > 0.0) || !(close > 0.0))
         return S::Neutral;
-    const double gap = (close - ma) / ma;
+    const double gap = close - ma;
     const bool have_slope = prev_ma > 0.0;
     const bool rising = have_slope && ma > prev_ma;
     const bool falling = have_slope && ma < prev_ma;
 
-    if (gap > kStrongGapPct && rising)
-        return S::StrongBuy;
+    const bool far = atr > 0.0 ? std::abs(gap) > kStrongGapAtr * atr
+                               : std::abs(gap) / ma > kStrongGapPct;
+
     if (gap > 0.0)
-        return S::Buy;
-    if (gap < -kStrongGapPct && falling)
-        return S::StrongSell;
+        return (far && rising) ? S::StrongBuy : S::Buy;
     if (gap < 0.0)
-        return S::Sell;
+        return (far && falling) ? S::StrongSell : S::Sell;
     return S::Neutral;
 }
 
@@ -162,12 +186,14 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
 
     // ── Moving averages — price above is bullish, below bearish ──────────────
     if (is_moving_average(column))
-        return voting(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close),
+        return voting(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close,
+                                     in.now.get("atr", 0.0)),
                       column == "vwap" ? kBucketVolume : kBucketTrend);
 
     // The Bollinger mid-line is the 20-SMA; show it, do not count it twice.
     if (column == "bb_mavg")
-        return display_only(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close));
+        return display_only(
+            score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close, in.now.get("atr", 0.0)));
 
     // ── MACD — the histogram, against the signal line ────────────────────────
     // The old rule tested `macd > 0`, which says nothing about the crossover

@@ -1265,10 +1265,15 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     }
 
     // Display name → column key in the computed output.
+    // The averages span fast to slow on purpose — see is_moving_average() in
+    // TechnicalRating.cpp for why a narrow set biased the whole rating.
     static const QList<QPair<QString, QString>> kTrend = {
-        {"SMA 20", "sma_20"},     {"SMA 50", "sma_50"},           {"SMA 200", "sma_200"},
-        {"EMA 12", "ema_12"},     {"WMA 9", "wma_9"},             {"MACD", "macd"},
-        {"MACD Signal", "macd_signal"}, {"CCI", "cci"},           {"ADX", "adx"},
+        {"SMA 10", "sma_10"},     {"SMA 20", "sma_20"},   {"SMA 30", "sma_30"},
+        {"SMA 50", "sma_50"},     {"SMA 100", "sma_100"}, {"SMA 200", "sma_200"},
+        {"EMA 12", "ema_12"},     {"EMA 26", "ema_26"},   {"WMA 9", "wma_9"},
+        {"Ichimoku Base", "ichimoku_base"},
+        {"MACD", "macd"},         {"MACD Signal", "macd_signal"},
+        {"CCI", "cci"},           {"ADX", "adx"},
         {"Aroon Up", "aroon_up"}, {"Aroon Down", "aroon_down"},
     };
     static const QList<QPair<QString, QString>> kMomentum = {

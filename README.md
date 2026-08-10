@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`669713194`](https://github.com/yumima/finterm/commit/669713194) ER Technicals: give every period enough history to rate
 - [`18b9505a5`](https://github.com/yumima/finterm/commit/18b9505a5) ER Technicals: the rating was reading the tape backwards
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
