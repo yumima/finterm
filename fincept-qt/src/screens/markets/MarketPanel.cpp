@@ -170,7 +170,10 @@ void MarketPanel::open_cols_dropdown() {
             .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
                  ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER()));
 
-    const QStringList optional = {"CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "OPEN", "NAME", "PRESSURE"};
+    // "OPEN" is deliberately absent: QuoteData carries no open price, so the
+    // column could only ever render "--". A selectable column that is always
+    // empty reads as missing data rather than as an unsupported field.
+    const QStringList optional = {"CHG", "CHG%", "HIGH", "LOW", "VOL", "BID", "ASK", "NAME", "PRESSURE"};
 
     for (const QString& col : optional) {
         auto* act = menu->addAction(col);
@@ -377,7 +380,11 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
             // round to the same number and the spread reads as zero.
             else if (col == "BID")    table_->setItem(row, ci, mk(q.bid > 0 ? QString::number(q.bid, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
             else if (col == "ASK")    table_->setItem(row, ci, mk(q.ask > 0 ? QString::number(q.ask, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
-            else if (col == "OPEN")   table_->setItem(row, ci, mk("--", ui::colors::TEXT_SECONDARY()));
+            // OPEN is not carried by QuoteData, so this could only ever
+            // render "--". A column the user can select and that is
+            // permanently empty reads as missing data rather than as an
+            // unsupported field; it is removed from the selectable set (see
+            // MarketPanelConfig) and this arm is gone with it.
             else if (col == "PRESSURE") {
                 QString label = "--";
                 QString color = ui::colors::TEXT_SECONDARY();

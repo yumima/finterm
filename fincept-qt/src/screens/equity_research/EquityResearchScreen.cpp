@@ -630,6 +630,9 @@ QWidget* EquityResearchScreen::build_quote_bar() {
     change_label_ = make_label("—");
     vol_label_ = make_label("VOL: —");
     hl_label_ = make_label("H/L: —");
+    // Populated from StockInfo in on_info_loaded. It previously had no
+    // writer at all and rendered a permanent em-dash, which reads as "this
+    // company has no market cap" rather than "nothing filled this in".
     mktcap_label_ = make_label("MKT CAP: —");
     rec_label_ = make_label("—");
     hl->addStretch();
@@ -650,12 +653,33 @@ void EquityResearchScreen::on_quote_loaded(services::equity::QuoteData q) {
     update_quote_bar(q);
 }
 
+namespace {
+// Compact market-cap text for the quote bar. Local rather than widening
+// EquityOverviewTab's private API for a single call site.
+QString format_market_cap(double v) {
+    const double a = std::abs(v);
+    if (a >= 1e12) return QStringLiteral("%1T").arg(v / 1e12, 0, 'f', 2);
+    if (a >= 1e9)  return QStringLiteral("%1B").arg(v / 1e9,  0, 'f', 2);
+    if (a >= 1e6)  return QStringLiteral("%1M").arg(v / 1e6,  0, 'f', 2);
+    return QString::number(v, 'f', 0);
+}
+} // namespace
+
 void EquityResearchScreen::on_info_loaded(services::equity::StockInfo info) {
     if (info.symbol != current_symbol_)
         return;
     current_currency_ = info.currency;
     current_exchange_ = info.exchange;
     update_market_status_badge();
+    if (mktcap_label_) {
+        // The label had no writer at all until now — a permanent em-dash
+        // reads as "this company has no market cap", not "nothing filled
+        // this in". Absent data still renders the dash, but only when it is
+        // genuinely absent.
+        mktcap_label_->setText(info.market_cap > 0
+                                   ? QStringLiteral("MKT CAP: ") + format_market_cap(info.market_cap)
+                                   : QStringLiteral("MKT CAP: \u2014"));
+    }
     if (ai_tab_) ai_tab_->set_info(info);   // fundamentals enrich the AI prompt
 }
 

@@ -3,6 +3,8 @@
 
 #include "screens/settings/SettingsScreen.h"
 
+#include "core/keys/CredentialCatalogue.h"
+
 #include "ai_chat/LlmService.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
@@ -133,15 +135,20 @@ using CredDef = QPair<QString, QString>; // {env_key, display_name}
 //   - LLM provider keys (Anthropic, OpenAI) → Settings → LLM Config
 //   - MCP server / tool keys → Settings → MCP Servers (per-server)
 //   - Voice provider keys (Whisper local, Deepgram opt-in) → Settings → Voice
-static const QList<CredDef> CRED_KEYS = {
-    {"FRED_API_KEY", "FRED (Federal Reserve)"},
-    {"FINNHUB_API_KEY", "Finnhub"},
-    {"DATABENTO_API_KEY", "Databento"},
-    {"CONGRESS_GOV_API_KEY", "Congress.gov (Power Trader)"},
-    {"ALPHA_VANTAGE_API_KEY", "Alpha Vantage"},
-    {"POLYGON_API_KEY", "Polygon.io"},
-    {"TIINGO_API_KEY", "Tiingo"},
-};
+// Every credential the app can use, from the generated catalogue — the same
+// source PythonRunner injects and allow-lists from. This was a separate
+// hand-maintained list of 7, so the other 148 keys the app supports had no
+// way to be entered: a user could only set them as shell variables, where
+// the credential strip then deleted them.
+static const QList<CredDef>& cred_keys() {
+    static const QList<CredDef> kAll = [] {
+        QList<CredDef> out;
+        for (const auto& c : keys::catalogue())
+            out.append({QString::fromLatin1(c.env_name), QString::fromLatin1(c.label)});
+        return out;
+    }();
+    return kAll;
+}
 
 // ── Construction ──────────────────────────────────────────────────────────────
 
@@ -348,7 +355,7 @@ QWidget* SettingsScreen::build_credentials() {
     vl->addSpacing(16);
 
     // One card per credential
-    for (const auto& def : CRED_KEYS) {
+    for (const auto& def : cred_keys()) {
         const QString& key = def.first;
         const QString& name = def.second;
 
@@ -437,7 +444,7 @@ QWidget* SettingsScreen::build_credentials() {
 }
 
 void SettingsScreen::load_credentials() {
-    for (const auto& def : CRED_KEYS) {
+    for (const auto& def : cred_keys()) {
         const QString& key = def.first;
         auto* field = cred_fields_.value(key, nullptr);
         auto* status = cred_status_.value(key, nullptr);

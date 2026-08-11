@@ -21,9 +21,6 @@ class NewsSidePanel : public QWidget {
     Q_OBJECT
   public:
     explicit NewsSidePanel(QWidget* parent = nullptr);
-
-    void update_stats(int feed_count, int article_count, int cluster_count, int source_count);
-    void update_sentiment(int bullish, int bearish, int neutral);
     void update_top_stories(const QVector<services::NewsArticle>& top);
     void update_categories(const QMap<QString, int>& counts);
     void update_monitors(const QVector<services::NewsMonitor>& monitors,

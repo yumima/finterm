@@ -262,7 +262,23 @@ void PlanningView::recalculate() {
     double current_value = summary_.total_market_value;
     double age = current_age_->value();
     double retire = retire_age_->value();
+    // A retirement age at or before today's is reachable from the spin
+    // boxes; without this the projection runs over a zero or negative
+    // horizon and reports a "plan" for a date in the past.
     double years = retire - age;
+    if (years <= 0.0) {
+        years_label_->setText(QStringLiteral("—"));
+        target_label_->setText(QStringLiteral("—"));
+        projected_label_->setText(QStringLiteral("—"));
+        gap_label_->setText(QStringLiteral("—"));
+        gap_label_->setStyleSheet(
+            QString("color:%1; font-size:18px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+        status_label_->setText(
+            tr("Set a retirement age later than your current age to project a plan."));
+        status_label_->setStyleSheet(
+            QString("color:%1; font-size:12px; padding:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        return;
+    }
     double annual_exp = annual_expense_->value();
     double monthly = monthly_contrib_->value();
     double ret = expected_return_->value() / 100.0;
@@ -302,7 +318,16 @@ void PlanningView::recalculate() {
                                    .arg(QString::number(gap, 'f', 0)));
         status_label_->setStyleSheet(QString("color:%1; font-size:12px; padding:12px;").arg(ui::colors::POSITIVE()));
     } else {
-        double needed_monthly = (-gap) / ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate);
+        // The annuity factor divides by monthly_rate, which the future-value
+        // branch above already guards as possibly ~0 — inflation at or above
+        // the expected return is entirely reachable from these spin boxes.
+        // Left unguarded this printed "increase savings by inf/nan", or a
+        // NEGATIVE amount when real returns are negative.
+        const double annuity_factor =
+            (monthly_rate > 0.0001)
+                ? ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate)
+                : static_cast<double>(months); // r→0: the factor tends to n
+        double needed_monthly = annuity_factor > 0.0 ? (-gap) / annuity_factor : 0.0;
         status_label_->setText(QString("\u26A0 Shortfall of %1 %2. Consider increasing monthly savings "
                                        "by %1 %3 to close the gap.")
                                    .arg(currency_)

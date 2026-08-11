@@ -302,11 +302,20 @@ StrategyAnalytics compute_all(const Strategy& s, const OptionChain& chain,
     const MaxPnL pnl = compute_max_pnl(curve, s);
     const QVector<double> bes = compute_breakevens(curve);
 
-    // Pick a t for POP — use the strategy's nearest-leg expiry.
+    // Pick a t for POP — the strategy's nearest leg that has not already
+    // expired.
+    //
+    // The old scan seeded dte = 0 and accepted any d when dte was still 0, so
+    // a FIRST leg expiring today (d == 0) latched it at zero and no later leg
+    // could replace it: the `dte == 0` arm kept re-matching and assigning 0.
+    // t_years(0) is 0, compute_pop returns 0 for t <= 0, and the ribbon
+    // showed "POP 0%" for a perfectly ordinary calendar spread.
     int dte = 0;
     for (const auto& leg : s.legs) {
         const int d = days_to_expiry(leg.expiry);
-        if (dte == 0 || (d > 0 && d < dte))
+        if (d <= 0)
+            continue; // already expired — it cannot define the horizon
+        if (dte == 0 || d < dte)
             dte = d;
     }
     const double sigma_for_pop = (o.fallback_iv > 0) ? o.fallback_iv : 0.20;

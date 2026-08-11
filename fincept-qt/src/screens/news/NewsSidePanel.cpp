@@ -316,14 +316,6 @@ void NewsSidePanel::build_deviations_section(QVBoxLayout* parent) {
 
 // ── Update methods ──────────────────────────────────────────────────────────
 
-void NewsSidePanel::update_stats(int /*feed_count*/, int /*article_count*/, int /*cluster_count*/,
-                                 int /*source_count*/) {
-    // Stats now shown in intel strip — no-op here for backward compat
-}
-
-void NewsSidePanel::update_sentiment(int /*bullish*/, int /*bearish*/, int /*neutral*/) {
-    // Sentiment now shown in intel strip — no-op here for backward compat
-}
 
 void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top) {
     // Clear existing

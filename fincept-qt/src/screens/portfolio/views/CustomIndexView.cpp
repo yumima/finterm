@@ -1,6 +1,8 @@
 // src/screens/portfolio/views/CustomIndexView.cpp
 #include "screens/portfolio/views/CustomIndexView.h"
 
+#include "services/portfolio/PortfolioService.h"
+
 #include "core/logging/Logger.h"
 #include "ui/theme/Theme.h"
 
@@ -515,6 +517,34 @@ void CustomIndexView::show_index_performance(const QString& index_id, const QStr
 
 // ── Index value computation ───────────────────────────────────────────────────
 
+// Cumulative split ratio recorded for `symbol` since `since` (YYYY-MM-DD).
+//
+// Every level here is a ratio of today's price to the price when the index
+// was created. A 4:1 split cuts the current price to a quarter while the
+// stored baseline stays at its pre-split value, so the index drops 75% on a
+// day the holder lost nothing — and stays there. The portfolio already
+// records splits as transactions and the ledger already applies them, so the
+// baseline can be restated in today's terms from the same source.
+//
+// Only splits the user actually recorded can be seen. That is the same
+// limitation the rest of the portfolio has, and it fails in the honest
+// direction: an unrecorded split was already wrong everywhere else too.
+static double split_ratio_since(const QString& portfolio_id, const QString& symbol, const QString& since) {
+    if (portfolio_id.isEmpty() || symbol.isEmpty())
+        return 1.0;
+    const auto txns =
+        fincept::services::PortfolioService::instance().symbol_transactions(portfolio_id, symbol);
+    double ratio = 1.0;
+    for (const auto& t : txns) {
+        if (t.transaction_type != QLatin1String("SPLIT") || t.quantity <= 0.0)
+            continue;
+        if (!since.isEmpty() && t.transaction_date.left(10) < since.left(10))
+            continue;
+        ratio *= t.quantity; // quantity carries new-shares-per-old-share
+    }
+    return ratio > 0.0 ? ratio : 1.0;
+}
+
 double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
     if (idx.constituents.isEmpty())
         return idx.base_value;
@@ -525,6 +555,14 @@ double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
         price_map[h.symbol] = h.current_price;
     }
 
+    // Baselines restated in today's share terms, so a split does not read as
+    // a crash. Computed once here rather than at each of the four methods.
+    QHash<QString, double> baseline;
+    for (const auto& c : idx.constituents) {
+        const double r = split_ratio_since(idx.portfolio_id, c.symbol, idx.created_at);
+        baseline[c.symbol] = c.price_at_create / r;
+    }
+
     const int n = idx.constituents.size();
     const QString method = idx.method;
 
@@ -533,18 +571,19 @@ double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
         double sum_cur = 0.0;
         double sum_base = 0.0;
         for (const auto& c : idx.constituents) {
-            const double cur = price_map.value(c.symbol, c.price_at_create);
-            sum_cur += cur;
-            sum_base += c.price_at_create;
+            const double base = baseline.value(c.symbol, c.price_at_create);
+            sum_cur += price_map.value(c.symbol, base);
+            sum_base += base;
         }
         return sum_base > 0.0 ? (sum_cur / sum_base * idx.base_value) : idx.base_value;
 
     } else if (method == "Equal Weighted") {
         double ratio_sum = 0.0;
         for (const auto& c : idx.constituents) {
-            if (c.price_at_create > 0.0) {
-                const double cur = price_map.value(c.symbol, c.price_at_create);
-                ratio_sum += cur / c.price_at_create;
+            const double base = baseline.value(c.symbol, c.price_at_create);
+            if (base > 0.0) {
+                const double cur = price_map.value(c.symbol, base);
+                ratio_sum += cur / base;
             }
         }
         return (ratio_sum / n) * idx.base_value;
@@ -553,10 +592,11 @@ double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
         double log_sum = 0.0;
         int valid = 0;
         for (const auto& c : idx.constituents) {
-            if (c.price_at_create > 0.0) {
-                const double cur = price_map.value(c.symbol, c.price_at_create);
+            const double base = baseline.value(c.symbol, c.price_at_create);
+            if (base > 0.0) {
+                const double cur = price_map.value(c.symbol, base);
                 if (cur > 0.0) {
-                    log_sum += std::log(cur / c.price_at_create);
+                    log_sum += std::log(cur / base);
                     ++valid;
                 }
             }
@@ -569,9 +609,10 @@ double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
         double weighted_ratio = 0.0;
         double total_weight = 0.0;
         for (const auto& c : idx.constituents) {
-            if (c.price_at_create > 0.0 && c.weight > 0.0) {
-                const double cur = price_map.value(c.symbol, c.price_at_create);
-                weighted_ratio += c.weight * (cur / c.price_at_create);
+            const double base = baseline.value(c.symbol, c.price_at_create);
+            if (base > 0.0 && c.weight > 0.0) {
+                const double cur = price_map.value(c.symbol, base);
+                weighted_ratio += c.weight * (cur / base);
                 total_weight += c.weight;
             }
         }

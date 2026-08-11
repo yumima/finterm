@@ -465,3 +465,18 @@ if(Python3_Interpreter_FOUND)
     # regression.
     set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
+
+# ── Credential catalogue sync ────────────────────────────────────────────────
+# The catalogue is generated from the scripts that read the keys, and is also
+# the allow-list deciding which credentials survive into a child process. A
+# key missing from it is DELETED from the subprocess environment, so the data
+# source reports "not configured" for a key the user set correctly. This
+# fails the build rather than letting that reach a user.
+
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME credential_catalogue_in_sync
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/gen_credential_catalogue.py --check
+    )
+endif()

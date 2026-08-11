@@ -48,6 +48,18 @@ static constexpr const char* kService = fincept::AppIdentity::kBundleId;
 
 namespace fincept {
 
+QString SecureStorage::backend_name() {
+#if defined(Q_OS_WIN)
+    return QStringLiteral("Windows Credential Manager");
+#elif defined(Q_OS_MAC)
+    return QStringLiteral("macOS Keychain");
+#elif defined(FINCEPT_HAVE_LIBSECRET)
+    return QStringLiteral("libsecret (Secret Service)");
+#else
+    return QStringLiteral("obfuscated file (NOT SECURE)");
+#endif
+}
+
 SecureStorage& SecureStorage::instance() {
     static SecureStorage s;
 

@@ -51,8 +51,11 @@ PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
     add_divider();
 
     // Live indicator
-    live_label_ = make_label(ui::colors::POSITIVE, true);
-    live_label_->setText("\u25CF LIVE");
+    // Set from real state in set_summary(), not once at construction. A
+    // permanently-green "● LIVE" is a connectivity indicator that cannot
+    // indicate anything — it said LIVE with the network down.
+    live_label_ = make_label(ui::colors::TEXT_SECONDARY, true);
+    live_label_->setText(QStringLiteral("\u25CB —"));
 
     add_divider();
 
@@ -104,6 +107,20 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
 
     set_portfolio_name(s.portfolio.name);
     positions_label_->setText(QString("%1 positions").arg(s.total_positions));
+
+    // LIVE vs CACHED from the summary's own provenance: from_cache is set
+    // when the numbers came off disk rather than a fresh computation.
+    if (live_label_) {
+        const bool live = !s.from_cache;
+        live_label_->setText(live ? QStringLiteral("\u25CF LIVE") : QStringLiteral("\u25CB CACHED"));
+        live_label_->setStyleSheet(
+            QString("color:%1; font-weight:700;")
+                .arg(live ? ui::colors::POSITIVE() : ui::colors::TEXT_SECONDARY()));
+        live_label_->setToolTip(live
+                                    ? QStringLiteral("Values computed from a fresh quote fetch.")
+                                    : QStringLiteral("Values restored from the on-disk cache — a refresh\n"
+                                                     "is in flight; they update when it lands."));
+    }
 
     nav_label_->setText(QString("NAV %1 %2").arg(s.portfolio.currency, fmt(s.total_market_value)));
 

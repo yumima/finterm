@@ -20,27 +20,26 @@
 #include <QStringList>
 #include <QUuid>
 
+#include "core/keys/CredentialCatalogue.h"
+
 namespace fincept::python {
 
 // ── Credential catalogue ─────────────────────────────────────────────────────
-// Env-var names that SettingsScreen lets the user configure and store in
-// SecureStorage (see SettingsScreen.cpp CRED_KEYS). build_python_env() pulls
-// each from SecureStorage and injects it into the subprocess env so Python
-// scripts that read os.environ.get("FRED_API_KEY") work whether or not the
-// user has the variable in their shell. SecureStorage is the source of truth:
-// the injected value overrides any inherited shell value.
+// Generated from the scripts that actually read the keys — see
+// core/keys/CredentialCatalogue.h and gen_credential_catalogue.py.
 //
-// Keep this list in sync with SettingsScreen.cpp CRED_KEYS. C++-only services
-// (Binance/Kraken/Polymarket) are listed too — injection is harmless when no
-// Python script reads them, and it future-proofs new scripts.
-static const QStringList kManagedCredentialKeys = {
-    "ALPHA_VANTAGE_API_KEY", "POLYGON_API_KEY",      "DATABENTO_API_KEY",
-    "FRED_API_KEY",          "NEWSAPI_KEY",          "BINANCE_API_KEY",
-    "BINANCE_SECRET_KEY",    "KRAKEN_API_KEY",       "KRAKEN_SECRET_KEY",
-    "IEX_CLOUD_TOKEN",       "FINNHUB_API_KEY",      "TIINGO_API_KEY",
-    "QUANDL_API_KEY",        "POLYMARKET_API_KEY",   "POLYMARKET_SECRET",
-    "POLYMARKET_PASSPHRASE", "POLYMARKET_WALLET",    "CONGRESS_GOV_API_KEY",
-};
+// This was a hand-maintained list of 18 while the scripts read 142 and
+// SettingsScreen offered 7. Because the allow-list below also decides what
+// survives the credential strip, every unlisted key was DELETED from the
+// child environment: a user who exported EIA_API_KEY had it removed before
+// the script ran, and the panel told them it was not configured.
+//
+// build_python_env() pulls each from SecureStorage and injects it, so a
+// script reading os.environ.get("FRED_API_KEY") works whether or not the
+// user has it in their shell. SecureStorage wins over an inherited value.
+static const QStringList& managed_credential_keys() {
+    return keys::env_names();
+}
 
 // ── Sensitive shell-env stripping ────────────────────────────────────────────
 // After SecureStorage injection, drop any *other* credential-shaped variable
@@ -51,7 +50,7 @@ static const QStringList kManagedCredentialKeys = {
 //
 // Suffix list narrowed vs. PR #214: we omit bare _TOKEN because legitimate
 // non-credential vars use it (CSRF_TOKEN, GITHUB_TOKEN for tooling). The
-// kManagedCredentialKeys allow-list is checked first so any key the user
+// managed_credential_keys() allow-list is checked first so any key the user
 // configured in Settings is preserved, regardless of suffix.
 static void strip_unmanaged_credentials(QProcessEnvironment& env,
                                         const QStringList& managed) {
@@ -150,7 +149,7 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     // read os.environ.get("FRED_API_KEY") only worked when the user happened to
     // export the variable in their shell before launching the app.
     int injected = 0;
-    for (const QString& key : kManagedCredentialKeys) {
+    for (const QString& key : managed_credential_keys()) {
         auto r = SecureStorage::instance().retrieve(key);
         if (r.is_ok() && !r.value().isEmpty()) {
             env.insert(key, r.value());
@@ -161,7 +160,7 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     // Strip any other credential-shaped variable the user inherited from their
     // shell. The allow-list above is preserved; everything else matching the
     // sensitive suffixes is removed before the subprocess sees it.
-    strip_unmanaged_credentials(env, kManagedCredentialKeys);
+    strip_unmanaged_credentials(env, managed_credential_keys());
 
     if (injected > 0) {
         LOG_DEBUG("Python", QString("Injected %1 credentials from SecureStorage").arg(injected));

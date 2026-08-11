@@ -1279,7 +1279,8 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     command_bar_->update_sentiment(bullish, bearish, neutral);
 
     // Side panel (drawer) — still gets data for when user opens it
-    side_panel_->update_sentiment(bullish, bearish, neutral);
+    // (the side panel had no-op stubs for these; the intel strip in the
+    // command bar is where they actually render)
 
     // Top 5 stories
     QVector<services::NewsArticle> top5;
