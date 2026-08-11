@@ -142,15 +142,24 @@ struct PortfolioSummary {
 
 // ── Computed analytics ───────────────────────────────────────────────────────
 
+// The one metrics engine's output (PortfolioService::compute_metrics). Every
+// value is derived from the flow-adjusted daily NAV return series; a metric
+// that cannot be computed honestly is absent, and consumers must render a
+// dash — the app used to fill these gaps with proxies (cross-holding
+// dispersion annualized as "volatility", mean-return-over-a-constant as
+// "beta") that were systematically wrong.
 struct ComputedMetrics {
     std::optional<double> sharpe;
-    std::optional<double> beta;
+    std::optional<double> sortino;            // downside deviation vs the live risk-free MAR
+    std::optional<double> beta;               // OLS slope vs SPY daily returns
+    std::optional<double> alpha;              // annualized OLS intercept, % (only with beta)
     std::optional<double> volatility;         // annualized %
     std::optional<double> max_drawdown;       // %
-    std::optional<double> var_95;             // 1-day VaR in currency
+    std::optional<double> var_95;             // 1-day VaR in currency (historical simulation)
     std::optional<double> cvar_95;            // 1-day CVaR (expected shortfall) in currency
     std::optional<double> risk_score;         // 0-100 composite
     std::optional<double> concentration_top3; // sum of top 3 weights %
+    int return_days = 0;                      // observations behind the series-based metrics
 };
 
 // ── Snapshot for performance history ─────────────────────────────────────────

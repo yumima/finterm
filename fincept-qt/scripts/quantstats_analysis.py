@@ -1,7 +1,18 @@
 """
 QuantStats Analysis — Comprehensive quantitative statistics for a portfolio.
-Input: JSON via stdin: {"symbols": ["AAPL","MSFT"], "weights": [0.5, 0.5]}
-Output: JSON to stdout with performance, risk, and ratio metrics
+Input: JSON via stdin:
+  {"symbols": ["AAPL","MSFT"],
+   "weights_by_symbol": {"AAPL": 0.5, "MSFT": 0.5},   # preferred
+   "weights": [0.5, 0.5],                             # legacy positional
+   "risk_free": 0.042}                                # annual decimal
+Output: JSON to stdout with performance, risk, and ratio metrics.
+
+Weights are keyed by symbol because yf.download orders columns its own way
+and a single failed symbol used to shift every weight onto the wrong ticker
+(or silently fall back to equal weight). Any symbol that returns no data is
+reported in "dropped_symbols" — the caller decides whether a partial answer
+is still an answer. Note the model: constant weights, i.e. a daily-rebalanced
+portfolio, not buy-and-hold; stated here so nobody mistakes it.
 """
 import sys
 import json
@@ -28,37 +39,52 @@ def convert_numpy(obj):
     return obj
 
 
-def compute_stats(symbols, weights, period="1y"):
+def compute_stats(symbols, weights_by_symbol, risk_free=0.04, period="1y"):
     import yfinance as yf
 
-    data = yf.download(symbols, period=period, interval="1d", progress=False)
+    # auto_adjust=True deliberately: statistics over TOTAL returns, so a
+    # dividend is performance rather than a phantom down-day.
+    data = yf.download(symbols, period=period, interval="1d", progress=False,
+                       auto_adjust=True)
     if data is None or data.empty:
         return {"error": "Could not fetch price data"}
 
     close = data["Close"]
-    if len(symbols) == 1:
-        import pandas as pd
-        if not isinstance(close, pd.DataFrame):
-            close = pd.DataFrame({symbols[0]: close})
+    import pandas as pd
+    if not isinstance(close, pd.DataFrame):
+        close = pd.DataFrame({symbols[0]: close})
+
+    close = close.dropna(axis=1, how="all")
+    dropped = [s for s in symbols if s not in close.columns]
+    if close.shape[1] == 0:
+        return {"error": "No symbol returned price data", "dropped_symbols": dropped}
 
     returns = close.pct_change().dropna()
-    w = np.array(weights)
-    if len(w) != returns.shape[1]:
-        w = np.ones(returns.shape[1]) / returns.shape[1]
+    # Weights aligned BY SYMBOL to the columns that actually arrived, then
+    # renormalised over the survivors.
+    w = np.array([float(weights_by_symbol.get(c, 0.0)) for c in returns.columns])
+    if w.sum() <= 0:
+        w = np.ones(returns.shape[1])
+    w = w / w.sum()
 
     port_returns = (returns * w).sum(axis=1)
     cumulative = (1 + port_returns).cumprod()
 
-    rf_daily = 0.04 / 252
+    rf = float(risk_free)
+    rf_daily = rf / 252
     trading_days = len(port_returns)
     ann_factor = 252
 
     total_return = float(cumulative.iloc[-1] / cumulative.iloc[0] - 1) if len(cumulative) > 0 else 0
     ann_return = float((1 + total_return) ** (ann_factor / max(trading_days, 1)) - 1)
     ann_vol = float(port_returns.std() * np.sqrt(ann_factor))
-    sharpe = float((ann_return - 0.04) / ann_vol) if ann_vol > 0 else 0
-    sortino_vol = float(port_returns[port_returns < 0].std() * np.sqrt(ann_factor))
-    sortino = float((ann_return - 0.04) / sortino_vol) if sortino_vol > 0 else 0
+    sharpe = float((ann_return - rf) / ann_vol) if ann_vol > 0 else 0
+    # Downside deviation over the FULL sample vs the risk-free MAR — dividing
+    # only by the count of down days (the old .std() over the negative subset)
+    # understates Sortino, increasingly so the fewer down days there are.
+    downside = np.minimum(port_returns - rf_daily, 0.0)
+    sortino_vol = float(np.sqrt((downside ** 2).mean()) * np.sqrt(ann_factor))
+    sortino = float((ann_return - rf) / sortino_vol) if sortino_vol > 0 else 0
 
     peak = cumulative.expanding().max()
     drawdown = (cumulative - peak) / peak
@@ -82,6 +108,8 @@ def compute_stats(symbols, weights, period="1y"):
     kurt = float(port_returns.kurtosis())
 
     return {
+        "risk_free_used": rf,
+        "dropped_symbols": dropped,
         "performance": {
             "total_return": total_return,
             "annualized_return": ann_return,
@@ -123,16 +151,21 @@ def main():
 
     params = json.loads(stdin_data)
     symbols = params.get("symbols", [])
-    weights = params.get("weights", [])
-
     if not symbols:
         print(json.dumps({"error": "No symbols provided"}))
         return
 
-    if not weights:
-        weights = [1.0 / len(symbols)] * len(symbols)
+    weights_by_symbol = params.get("weights_by_symbol") or {}
+    if not weights_by_symbol:
+        # Legacy positional list: meaningful only while every symbol downloads,
+        # kept for old callers; keyed weights are what the app sends.
+        legacy = params.get("weights", [])
+        if legacy and len(legacy) == len(symbols):
+            weights_by_symbol = dict(zip(symbols, legacy))
+        else:
+            weights_by_symbol = {s: 1.0 / len(symbols) for s in symbols}
 
-    result = compute_stats(symbols, weights)
+    result = compute_stats(symbols, weights_by_symbol, params.get("risk_free", 0.04))
     print(json.dumps(convert_numpy(result)))
 
 

@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
+#include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
 #include <QBarSeries>
@@ -982,15 +983,17 @@ void QuantStatsView::run_quantstats() {
     qs_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::AMBER()));
 
     QStringList symbols;
-    QList<double> weights;
+    QJsonObject weights_by_symbol;
     for (const auto& h : summary_.holdings) {
         symbols.append(h.symbol);
-        weights.append(h.weight / 100.0);
+        weights_by_symbol[h.symbol] = h.weight / 100.0;
     }
 
     QPointer<QuantStatsView> self = this;
     PortfolioAnalyticsService::instance().run_quantstats(
-        symbols, weights, [self](const AnalyticsResult& r) {
+        symbols, weights_by_symbol,
+        services::PortfolioService::instance().risk_free_rate(),
+        [self](const AnalyticsResult& r) {
             if (!self)
                 return;
             QMetaObject::invokeMethod(

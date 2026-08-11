@@ -17,6 +17,10 @@ class PerformanceRiskView : public QWidget {
 
     void set_data(const portfolio::PortfolioSummary& summary, const QString& currency);
     void set_snapshots(const QVector<portfolio::PortfolioSnapshot>& snapshots);
+    /// Metrics come from the single engine (PortfolioService::compute_metrics)
+    /// — this view used to compute its own "beta" as mean-return divided by a
+    /// hardcoded 0.032%/day market and its own "alpha" against a fixed 8%.
+    void set_metrics(const portfolio::ComputedMetrics& metrics);
 
   private:
     void build_ui();
@@ -51,6 +55,7 @@ class PerformanceRiskView : public QWidget {
     // Data
     portfolio::PortfolioSummary summary_;
     QVector<portfolio::PortfolioSnapshot> snapshots_;
+    portfolio::ComputedMetrics metrics_;
     QString currency_;
 };
 

@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
+#include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
 #include <QAreaSeries>
@@ -863,7 +864,8 @@ void PortfolioFFNView::run_ffn() {
 
     QPointer<PortfolioFFNView> self = this;
     PortfolioAnalyticsService::instance().run_ffn(
-        symbols, weights_obj, [self](const AnalyticsResult& r) {
+        symbols, weights_obj, services::PortfolioService::instance().risk_free_rate(),
+        [self](const AnalyticsResult& r) {
         if (!self)
             return;
         QMetaObject::invokeMethod(

@@ -101,15 +101,18 @@ void RiskManagementView::build_ui() {
     auto* contrib_layout = new QVBoxLayout(contrib_w);
     contrib_layout->setContentsMargins(12, 8, 12, 8);
 
-    auto* contrib_title = new QLabel("RISK CONTRIBUTION BY HOLDING");
+    auto* contrib_title = new QLabel("TODAY'S MOVE — CONTRIBUTION BY HOLDING");
     contrib_title->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     contrib_layout->addWidget(contrib_title);
 
     contrib_table_ = new QTableWidget;
     contrib_table_->setColumnCount(6);
+    // One-day attribution, labelled as such. The old headers dressed today's
+    // |day change| up as "VOL PROXY" and multiplied it by 1.645 to mint a
+    // "VAR CONTRIB" — a single day's move is neither volatility nor VaR.
     contrib_table_->setHorizontalHeaderLabels(
-        {"SYMBOL", "WEIGHT", "VOL PROXY", "RISK CONTRIB", "VAR CONTRIB", "CONCENTRATION"});
+        {"SYMBOL", "WEIGHT", "TODAY %", "SHARE OF MOVE", "DAY P&L", "CONCENTRATION"});
     contrib_table_->setSelectionMode(QAbstractItemView::NoSelection);
     contrib_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     contrib_table_->setShowGrid(false);
@@ -169,28 +172,14 @@ void RiskManagementView::update_overview() {
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     layout->addWidget(title);
 
-    // Compute basic risk metrics
+    // Series-based metrics come from the single engine or not at all. The
+    // old fallback annualised the mean ABSOLUTE day-change ACROSS HOLDINGS —
+    // cross-sectional dispersion, not volatility, and systematically far too
+    // large (diversification pushes real portfolio vol the other way). A
+    // dash with a reason beats a wrong number wearing the right label.
     double total_mv = summary_.total_market_value;
-
-    // Use 30-day realized volatility from ComputedMetrics when available;
-    // fall back to single-day cross-sectional proxy otherwise.
-    double ann_vol = 0;
-    if (metrics_.volatility.has_value()) {
-        ann_vol = *metrics_.volatility; // already annualised %
-    } else {
-        double avg_vol = 0;
-        int vol_count = 0;
-        for (const auto& h : summary_.holdings) {
-            if (std::abs(h.day_change_percent) > 0.001) {
-                avg_vol += std::abs(h.day_change_percent);
-                ++vol_count;
-            }
-        }
-        if (vol_count > 0)
-            avg_vol /= vol_count;
-        ann_vol = avg_vol * std::sqrt(252.0);
-    }
-    const double avg_vol = ann_vol / std::sqrt(252.0); // daily % for VaR formula
+    const bool have_series = metrics_.volatility.has_value();
+    const double ann_vol = metrics_.volatility.value_or(0.0);
 
     // Concentration
     auto sorted = summary_.holdings;
@@ -203,9 +192,11 @@ void RiskManagementView::update_overview() {
     for (qsizetype i = 0; i < std::min(qsizetype{5}, sorted.size()); ++i)
         conc_top5 += sorted[i].weight;
 
-    // VaR/CVaR — parametric normal: CVaR/VaR = phi(1.645)/0.05 ≈ 1.546
-    double var95 = total_mv * avg_vol * 1.645 / 100.0;
-    double cvar95 = var95 * 1.546;
+    // VaR/CVaR: historical simulation from the engine (or absent). The old
+    // formula here also dropped the drift term entirely.
+    const bool have_var = metrics_.var_95.has_value();
+    const double var95 = metrics_.var_95.value_or(0.0);
+    const double cvar95 = metrics_.cvar_95.value_or(0.0);
 
     // Metric cards grid
     auto* grid = new QGridLayout;
@@ -242,12 +233,18 @@ void RiskManagementView::update_overview() {
 
     add_card(0, 0, "PORTFOLIO VALUE", QString("%1 %2").arg(currency_, fmt(total_mv)), ui::colors::WARNING,
              "Total market value");
-    add_card(0, 1, "ANNUALIZED VOLATILITY", QString("%1%").arg(fmt(ann_vol, 1)), ui::colors::AMBER,
-             "Based on day-change proxy");
-    add_card(0, 2, "VALUE AT RISK (95%)", QString("%1 %2").arg(currency_, fmt(var95)), ui::colors::NEGATIVE,
-             "1-day parametric");
-    add_card(0, 3, "CONDITIONAL VaR", QString("%1 %2").arg(currency_, fmt(cvar95)), ui::colors::NEGATIVE,
-             "Expected shortfall");
+    add_card(0, 1, "ANNUALIZED VOLATILITY",
+             have_series ? QString("%1%").arg(fmt(ann_vol, 1)) : QStringLiteral("—"),
+             have_series ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY,
+             have_series ? "From daily NAV returns" : "Needs daily NAV history");
+    add_card(0, 2, "VALUE AT RISK (95%)",
+             have_var ? QString("%1 %2").arg(currency_, fmt(var95)) : QStringLiteral("—"),
+             have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
+             have_var ? "1-day historical" : "Needs daily NAV history");
+    add_card(0, 3, "CONDITIONAL VaR",
+             have_var ? QString("%1 %2").arg(currency_, fmt(cvar95)) : QStringLiteral("—"),
+             have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
+             have_var ? "Expected shortfall" : "Needs daily NAV history");
 
     add_card(1, 0, "TOP HOLDING CONC.", QString("%1%").arg(fmt(conc_top1, 1)),
              conc_top1 > 30 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, "Largest position");
@@ -361,18 +358,21 @@ void RiskManagementView::update_contribution() {
             contrib_table_->setItem(r, col, item);
         };
 
-        double vol_proxy = std::abs(h.day_change_percent);
-        double risk_contrib = vol_proxy * h.weight / 100.0;
-        double risk_pct = total_vol > 0 ? (risk_contrib / total_vol) * 100.0 : 0;
-        double var_contrib = summary_.total_market_value * vol_proxy * 1.645 / 100.0 * h.weight / 100.0;
+        const double abs_move = std::abs(h.day_change_percent);
+        const double move_contrib = abs_move * h.weight / 100.0;
+        const double move_pct = total_vol > 0 ? (move_contrib / total_vol) * 100.0 : 0;
+        const double day_pnl = h.day_change * h.quantity;
 
         set_cell(0, h.symbol, ui::colors::CYAN);
         set_cell(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));
-        set_cell(2, QString("%1%").arg(QString::number(vol_proxy, 'f', 2)),
-                 vol_proxy > 3 ? ui::colors::NEGATIVE : ui::colors::TEXT_PRIMARY);
-        set_cell(3, QString("%1%").arg(QString::number(risk_pct, 'f', 1)),
-                 risk_pct > 20 ? ui::colors::NEGATIVE : ui::colors::TEXT_PRIMARY);
-        set_cell(4, QString("%1 %2").arg(currency_, QString::number(var_contrib, 'f', 2)));
+        set_cell(2, QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "")
+                        .arg(QString::number(h.day_change_percent, 'f', 2)),
+                 h.day_change_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+        set_cell(3, QString("%1%").arg(QString::number(move_pct, 'f', 1)),
+                 move_pct > 20 ? ui::colors::NEGATIVE : ui::colors::TEXT_PRIMARY);
+        set_cell(4, QString("%1 %2%3").arg(currency_).arg(day_pnl >= 0 ? "+" : "")
+                        .arg(QString::number(day_pnl, 'f', 2)),
+                 day_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
         // Concentration rating
         const char* conc_color = h.weight > 20   ? ui::colors::NEGATIVE

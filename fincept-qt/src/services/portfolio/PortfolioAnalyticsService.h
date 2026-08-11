@@ -32,9 +32,10 @@ class PortfolioAnalyticsService : public QObject {
   public:
     static PortfolioAnalyticsService& instance();
 
-    /// Runs `quantstats_analysis` with `{symbols, weights}` args.
-    void run_quantstats(const QStringList& symbols, const QList<double>& weights,
-                        AnalyticsCallback cb);
+    /// Runs `quantstats_analysis` with symbol-keyed weights and the live
+    /// risk-free rate (annual decimal).
+    void run_quantstats(const QStringList& symbols, const QJsonObject& weights_by_symbol,
+                        double risk_free, AnalyticsCallback cb);
 
     /// Runs `quantstats_monte_carlo` with `{symbols, weights, num_simulations}`.
     void run_monte_carlo(const QStringList& symbols, const QList<double>& weights,
@@ -44,9 +45,10 @@ class PortfolioAnalyticsService : public QObject {
     /// (the view already constructs a method-specific payload).
     void optimize_weights(const QString& args_json, AnalyticsCallback cb);
 
-    /// Runs `ffn_analysis` with `{symbols, weights}` — weights is a symbol→frac map.
+    /// Runs `ffn_analysis` with `{symbols, weights, risk_free}` — weights is a
+    /// symbol→frac map, risk_free an annual decimal.
     void run_ffn(const QStringList& symbols, const QJsonObject& weights_by_symbol,
-                 AnalyticsCallback cb);
+                 double risk_free, AnalyticsCallback cb);
 
   private:
     PortfolioAnalyticsService() = default;

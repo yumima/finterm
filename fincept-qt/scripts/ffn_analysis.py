@@ -50,7 +50,7 @@ def portfolio_stats(close_df, weights_arr, symbols):
     n = len(port_returns)
     cagr = float((1 + total_ret) ** (252.0 / max(n, 1)) - 1)
     vol = float(port_returns.std() * np.sqrt(252))
-    sharpe = float((cagr - 0.04) / vol) if vol > 0 else 0.0
+    sharpe = float((cagr - _RF) / vol) if vol > 0 else 0.0
     cum = (1 + port_returns).cumprod()
     peak = cum.expanding().max()
     dd = (cum - peak) / peak
@@ -62,6 +62,11 @@ def portfolio_stats(close_df, weights_arr, symbols):
         "sharpe": sharpe,
         "max_drawdown": max_dd,
     }
+
+
+# Annual risk-free rate (decimal). Set from the caller's "risk_free" param —
+# the app passes its live 10-year yield; 4% is only the offline fallback.
+_RF = 0.04
 
 
 def compute_ffn(symbols, weights, period="1y"):
@@ -122,7 +127,7 @@ def compute_ffn(symbols, weights, period="1y"):
             "annualized_return":     ann_ret,
             "annualized_volatility": ann_vol,
             "max_drawdown":          max_dd,
-            "sharpe_ratio":          float((ann_ret - 0.04) / ann_vol) if ann_vol > 0 else 0.0,
+            "sharpe_ratio":          float((ann_ret - _RF) / ann_vol) if ann_vol > 0 else 0.0,
             "current_price":         float(prices.iloc[-1]),
             "start_price":           float(prices.iloc[0]),
             "best_day":              float(returns.max()),
@@ -332,6 +337,8 @@ def main():
         print(json.dumps({"error": f"JSON parse error: {exc}"}))
         return
 
+    global _RF
+    _RF = float(params.get("risk_free", 0.04))
     symbols = params.get("symbols", [])
     if not symbols:
         print(json.dumps({"error": "No symbols provided"}))

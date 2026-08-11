@@ -1406,7 +1406,12 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
     }
 }
 
-// ── Risk-free rate (FRED DGS10) ───────────────────────────────────────────────
+// ── Risk-free rate (^TNX — CBOE 10-year Treasury yield index) ────────────────
+//
+// Yahoo quotes ^TNX as the yield in percent (4.28 ⇒ 4.28%), so the existing
+// daemon quote path serves the number directly — no API key, no separate
+// provider. This replaced a FRED fetch whose API key was hardcoded in this
+// file as a string literal.
 
 void PortfolioService::fetch_risk_free_rate() {
     // Check 24h cache in SettingsRepository
@@ -1427,47 +1432,34 @@ void PortfolioService::fetch_risk_free_rate() {
         }
     }
 
-    // Fetch from FRED via inline Python (requests library)
-    const QString code = QString(R"python(
-import json, urllib.request
-api_key = "9da0d86e0cf58f4a4023e5e686226d69"
-url = (
-    "https://api.stlouisfed.org/fred/series/observations"
-    "?series_id=DGS10&api_key=" + api_key +
-    "&file_type=json&sort_order=desc&limit=5"
-)
-try:
-    with urllib.request.urlopen(url, timeout=10) as r:
-        data = json.loads(r.read().decode())
-    rate = None
-    for obs in data.get("observations", []):
-        v = obs.get("value", ".")
-        if v != ".":
-            rate = float(v) / 100.0  # convert percent to decimal
-            break
-    print(json.dumps({"rate": rate if rate is not None else 0.04}))
-except Exception as e:
-    print(json.dumps({"rate": 0.04, "error": str(e)}))
-)python");
+    QJsonObject payload;
+    payload["symbol"] = QStringLiteral("^TNX");
 
     QPointer<PortfolioService> self = this;
-    python::PythonRunner::instance().run_code(code, [self, now_secs](python::PythonResult result) {
-        if (!self)
-            return;
-        double rate = 0.04; // fallback
-        if (result.success && !result.output.trimmed().isEmpty()) {
-            QJsonParseError err;
-            const auto doc = QJsonDocument::fromJson(result.output.trimmed().toUtf8(), &err);
-            if (err.error == QJsonParseError::NoError && doc.object().contains("rate"))
-                rate = doc.object()["rate"].toDouble(0.04);
-        }
-        // Persist to 24h cache
-        auto& settings = SettingsRepository::instance();
-        settings.set("portfolio.rf_rate_timestamp", QString::number(now_secs));
-        settings.set("portfolio.rf_rate_value", QString::number(rate, 'f', 6));
-        self->rf_rate_ = rate;
-        emit self->risk_free_rate_loaded(rate);
-    });
+    python::PythonWorker::instance().submit(
+        "quote", payload,
+        [self, now_secs](bool ok, QJsonObject obj, QString err) {
+            if (!self)
+                return;
+            double rate = self->rf_rate_; // keep the last known value on failure
+            const double px = obj.value("current_price").toDouble(obj.value("price").toDouble(0.0));
+            // Sanity band: the 10y yield lives in low single digits. A parse
+            // artifact (0, or a mis-scaled 42.8) must not become the Sharpe
+            // hurdle for every portfolio.
+            if (ok && px > 0.1 && px < 25.0) {
+                rate = px / 100.0;
+                auto& settings = SettingsRepository::instance();
+                settings.set("portfolio.rf_rate_timestamp", QString::number(now_secs));
+                settings.set("portfolio.rf_rate_value", QString::number(rate, 'f', 6));
+            } else {
+                LOG_WARN("PortfolioSvc", QString("^TNX risk-free fetch unusable (px=%1): %2")
+                                             .arg(px)
+                                             .arg(err.left(120)));
+            }
+            self->rf_rate_ = rate;
+            emit self->risk_free_rate_loaded(rate);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Metrics computation (async, P8-safe) ─────────────────────────────────────
@@ -1509,31 +1501,12 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
                 if (self) self->backfill_history(pid, "1y");
             }, Qt::QueuedConnection);
         }
-        // Fallback: derive volatility from cross-sectional day changes only
-        double sum = 0, sum_sq = 0;
-        int n = 0;
-        for (const auto& h : summary.holdings) {
-            if (std::abs(h.day_change_percent) > 0.0001) {
-                sum += h.day_change_percent;
-                sum_sq += h.day_change_percent * h.day_change_percent;
-                ++n;
-            }
-        }
-        if (n >= 2) {
-            const double mean = sum / n;
-            const double var = (sum_sq / n) - (mean * mean);
-            const double daily_vol = std::sqrt(std::max(var, 0.0));
-            const double ann_vol = daily_vol * std::sqrt(252.0);
-            metrics.volatility = ann_vol * 100.0; // store as %
-            const double rf_daily = rf_rate_ / 252.0;
-            if (daily_vol > 1e-6)
-                metrics.sharpe = ((mean / 100.0 - rf_daily) / (daily_vol / 100.0)) * std::sqrt(252.0);
-            if (summary.total_market_value > 0)
-                metrics.var_95 = summary.total_market_value * std::abs(mean / 100.0 - 1.645 * daily_vol / 100.0);
-            const double vol_score = std::min(ann_vol / 40.0, 1.0) * 50.0;
-            const double conc_score = std::min(conc / 80.0, 1.0) * 50.0;
-            metrics.risk_score = vol_score + conc_score;
-        }
+        // No return series → no series metrics. The old fallback annualised
+        // the dispersion of the holdings' day-changes ACROSS the portfolio —
+        // cross-sectional spread, not volatility, double-scaled on top —
+        // and fed it into Sharpe, VaR and the risk score. The views promise
+        // "engine or dash"; the concentration figure is the only thing this
+        // situation can honestly state.
         emit metrics_computed(metrics);
         return;
     }
@@ -1549,8 +1522,16 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     // enough to dominate every statistic computed below. adj is index-aligned
     // with snapshot pairs (adj[i-1] pairs snaps[i-1], snaps[i]) so the beta
     // regression can keep its date alignment; NaN marks uncomputable segments.
-    const QVector<double> adj =
-        portfolio::flow_adjusted_returns(snaps, all_transactions(summary.portfolio.id));
+    // A FAILED transaction read is not "no transactions" — computing
+    // flow-blind statistics on a DB hiccup would silently reintroduce the
+    // deposit-as-return bug, so the series metrics sit this tick out.
+    bool txns_ok = false;
+    const QVector<portfolio::Transaction> txns = all_transactions(summary.portfolio.id, &txns_ok);
+    if (!txns_ok) {
+        emit metrics_computed(metrics);
+        return;
+    }
+    const QVector<double> adj = portfolio::flow_adjusted_returns(snaps, txns);
     QVector<double> port_returns; // daily flow-adjusted returns (%)
     port_returns.reserve(adj.size());
     for (const double r : adj) {
@@ -1564,6 +1545,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     }
 
     const int n = port_returns.size();
+    metrics.return_days = n;
 
     // ── Mean and std-dev ──────────────────────────────────────────────────────
     const double mean = std::accumulate(port_returns.begin(), port_returns.end(), 0.0) / n;
@@ -1575,24 +1557,42 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     metrics.volatility = ann_vol; // already in %
 
     // ── Sharpe ratio (annualised) ─────────────────────────────────────────────
-    // rf_rate_ = live DGS10 annual decimal (e.g. 0.043); convert to daily %
+    // rf_rate_ = live 10y yield, annual decimal (e.g. 0.043); daily %.
     const double rf_daily = rf_rate_ / 252.0 * 100.0;
     if (daily_vol > 1e-6)
         metrics.sharpe = ((mean - rf_daily) / daily_vol) * std::sqrt(252.0);
 
-    // ── Max drawdown ──────────────────────────────────────────────────────────
-    double peak = snaps.first().total_value;
-    double max_dd = 0.0;
-    for (const auto& s : snaps) {
-        if (s.total_value > peak)
-            peak = s.total_value;
-        if (peak > 1e-6) {
-            const double dd = (s.total_value - peak) / peak * 100.0;
-            if (dd < max_dd)
-                max_dd = dd;
+    // ── Sortino (annualised) ──────────────────────────────────────────────────
+    // Downside deviation over the FULL sample against the risk-free MAR.
+    // Dividing by the count of down days alone would understate the ratio,
+    // increasingly so the fewer down days there are.
+    {
+        double downside_sq = 0;
+        for (const double r : port_returns) {
+            const double d = std::min(r - rf_daily, 0.0);
+            downside_sq += d * d;
         }
+        const double downside_dev = std::sqrt(downside_sq / n);
+        if (downside_dev > 1e-6)
+            metrics.sortino = ((mean - rf_daily) / downside_dev) * std::sqrt(252.0);
     }
-    metrics.max_drawdown = max_dd; // negative %
+
+    // ── Max drawdown ──────────────────────────────────────────────────────────
+    // Measured on the growth index chained from flow-adjusted returns, not on
+    // raw NAV — a withdrawal is not a crash, and a deposit must not paper
+    // over a real one.
+    {
+        double index = 1.0;
+        double peak = 1.0;
+        double max_dd = 0.0;
+        for (const double r : port_returns) {
+            index *= 1.0 + r / 100.0;
+            peak = std::max(peak, index);
+            if (peak > 1e-12)
+                max_dd = std::min(max_dd, (index - peak) / peak * 100.0);
+        }
+        metrics.max_drawdown = max_dd; // negative %
+    }
 
     // ── Beta vs SPY (OLS regression on aligned date windows) ─────────────────
     // Build SPY daily return series from cached closes, aligned to snapshot dates.
@@ -1643,8 +1643,15 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
                 cov += (port_aligned[i] - port_mean) * (spy_aligned[i] - spy_mean);
                 var_spy += (spy_aligned[i] - spy_mean) * (spy_aligned[i] - spy_mean);
             }
-            if (var_spy > 1e-10)
+            if (var_spy > 1e-10) {
                 metrics.beta = cov / var_spy;
+                // Alpha is the OLS intercept, annualised: the average daily
+                // return not explained by the market exposure. It exists only
+                // together with the regression that defines it — the old
+                // screens showed an "alpha" computed against a hardcoded 8%.
+                const double alpha_daily = port_mean - *metrics.beta * spy_mean; // %/day
+                metrics.alpha = alpha_daily * 252.0;
+            }
         }
     }
 
@@ -1669,7 +1676,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     {
         const double vol_score = std::min(ann_vol / 40.0, 1.0) * 30.0;
         const double conc_score = std::min(conc / 80.0, 1.0) * 25.0;
-        const double dd_score = std::min(std::abs(max_dd) / 50.0, 1.0) * 25.0;
+        const double dd_score = std::min(std::abs(metrics.max_drawdown.value_or(0.0)) / 50.0, 1.0) * 25.0;
         const double beta_val = metrics.beta.value_or(1.0);
         const double beta_score = std::min(std::abs(beta_val) / 2.0, 1.0) * 20.0;
         metrics.risk_score = vol_score + conc_score + dd_score + beta_score;

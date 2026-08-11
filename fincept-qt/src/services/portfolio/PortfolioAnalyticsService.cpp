@@ -22,11 +22,15 @@ static QJsonArray to_json_array(const QList<double>& xs) {
 }
 
 void PortfolioAnalyticsService::run_quantstats(const QStringList& symbols,
-                                               const QList<double>& weights,
+                                               const QJsonObject& weights_by_symbol,
+                                               double risk_free,
                                                AnalyticsCallback cb) {
     QJsonObject args;
     args["symbols"] = QJsonArray::fromStringList(symbols);
-    args["weights"] = to_json_array(weights);
+    // Keyed by symbol: yf.download orders columns its own way, and a single
+    // failed ticker used to shift every positional weight onto the wrong one.
+    args["weights_by_symbol"] = weights_by_symbol;
+    args["risk_free"] = risk_free;
     run_script(QStringLiteral("quantstats_analysis"),
                QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
                std::move(cb));
@@ -52,10 +56,12 @@ void PortfolioAnalyticsService::optimize_weights(const QString& args_json,
 
 void PortfolioAnalyticsService::run_ffn(const QStringList& symbols,
                                         const QJsonObject& weights_by_symbol,
+                                        double risk_free,
                                         AnalyticsCallback cb) {
     QJsonObject args;
     args["symbols"] = QJsonArray::fromStringList(symbols);
     args["weights"] = weights_by_symbol;
+    args["risk_free"] = risk_free;
     run_script(QStringLiteral("ffn_analysis"),
                QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
                std::move(cb));

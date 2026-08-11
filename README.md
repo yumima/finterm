@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f1a31de35`](https://github.com/yumima/finterm/commit/f1a31de35) Portfolio: the period return is time-weighted — a deposit is not a gain
 - [`7332849d0`](https://github.com/yumima/finterm/commit/7332849d0) Portfolio: one cost-basis engine — the transaction log becomes the truth
 - [`96ec7be32`](https://github.com/yumima/finterm/commit/96ec7be32) Portfolio: NAV history gets provenance — backfill reconstructs, never destroys
 - [`3596ebe1b`](https://github.com/yumima/finterm/commit/3596ebe1b) ER: fix the review findings — interval identity, cache split, leaky correlation

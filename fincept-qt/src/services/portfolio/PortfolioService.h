@@ -137,9 +137,13 @@ class PortfolioService : public QObject {
                               const QVector<portfolio::PortfolioAsset>& assets);
 
     // ── Risk-free rate ────────────────────────────────────────────────────────
-    /// Fetch the current 10-year Treasury yield (DGS10) from FRED.
+    /// Fetch the current 10-year Treasury yield (^TNX via the quote daemon).
     /// Result is cached 24h in SettingsRepository. Emits risk_free_rate_loaded(rate).
     void fetch_risk_free_rate();
+    /// Last known annual risk-free rate as a decimal (default 4% until the
+    /// first fetch lands). The one hurdle every Sharpe/Sortino in the app
+    /// should use — five call sites used to hardcode 4%, 5% or 8% instead.
+    double risk_free_rate() const { return rf_rate_; }
 
     // ── Metrics (async computation) ──────────────────────────────────────────
     void compute_metrics(const portfolio::PortfolioSummary& summary);

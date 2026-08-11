@@ -117,6 +117,7 @@ void PortfolioDetailWrapper::update_data(const portfolio::PortfolioSummary& summ
     } else if (auto* perf_v = qobject_cast<PerformanceRiskView*>(current)) {
         perf_v->set_data(summary, currency);
         perf_v->set_snapshots(current_snapshots_);
+        perf_v->set_metrics(current_metrics_);
     } else if (auto* risk_v = qobject_cast<RiskManagementView*>(current)) {
         risk_v->set_data(summary, currency);
         risk_v->set_metrics(current_metrics_);
@@ -144,6 +145,8 @@ void PortfolioDetailWrapper::update_metrics(const portfolio::ComputedMetrics& me
         return;
     if (auto* v = qobject_cast<RiskManagementView*>(current))
         v->set_metrics(metrics);
+    if (auto* v = qobject_cast<PerformanceRiskView*>(current))
+        v->set_metrics(metrics);
 }
 
 QWidget* PortfolioDetailWrapper::get_or_create_view(portfolio::DetailView view) {
@@ -165,6 +168,7 @@ QWidget* PortfolioDetailWrapper::get_or_create_view(portfolio::DetailView view) 
             auto* prv = new PerformanceRiskView;
             if (!current_snapshots_.isEmpty())
                 prv->set_snapshots(current_snapshots_);
+            prv->set_metrics(current_metrics_);
             widget = prv;
             break;
         }
