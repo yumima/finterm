@@ -147,6 +147,25 @@ def get_quote(symbol):
     return _quote_via_full_info(symbol)
 
 
+def _price_dp(symbol):
+    """Decimal places for a quoted price.
+
+    Two decimals is right for equities and wrong for anything quoted below
+    ~1.00. FX pairs are the acute case: JPYUSD=X ~ 0.0064 rounds to 0.01, a
+    56% error, and KRWUSD=X ~ 0.00072 rounds to 0.0 — which reads as "no
+    rate" and silently drops the conversion entirely. Portfolio FX conversion
+    reads these quotes, so this precision is load-bearing, not cosmetic.
+    """
+    return 6 if str(symbol).upper().endswith("=X") else 2
+
+
+def _round_price(value, symbol):
+    try:
+        return round(float(value), _price_dp(symbol))
+    except (TypeError, ValueError):
+        return value
+
+
 def _quote_via_fast_info(symbol):
     """Quote via ticker.fast_info. Returns None if fast_info doesn't have a
     usable price (caller should fall back). Raises on yfinance errors."""
@@ -182,14 +201,14 @@ def _quote_via_fast_info(symbol):
 
     return {
         "symbol":          symbol,
-        "price":           round(current, 2),
-        "change":          round(change, 2),
+        "price":           _round_price(current, symbol),
+        "change":          _round_price(change, symbol),
         "change_percent":  round(pct, 2),
         "volume":          _i("last_volume"),
         "high":            _f("day_high"),
         "low":             _f("day_low"),
         "open":            _f("open"),
-        "previous_close":  round(prev_close, 2),
+        "previous_close":  _round_price(prev_close, symbol),
         "timestamp":       int(datetime.now().timestamp()),
         "exchange":        getattr(fi, "exchange", "") or "",
     }
@@ -397,7 +416,10 @@ def get_info(symbol):
             "description": info.get('longBusinessSummary', 'N/A'),
             "website": info.get('website', 'N/A'),
             "country": info.get('country', 'N/A'),
-            "currency": info.get('currency', 'USD'),
+            # NO default: an invented "USD" is indistinguishable from a real
+            # one, and the portfolio FX layer caches this for 30 days — a guess
+            # silently sums a CAD holding into a USD total. Empty = unknown.
+            "currency": info.get('currency') or '',
             "exchange": info.get('exchange', 'N/A'),
             "employees": info.get('fullTimeEmployees'),
             # Officer roster — CEO/CFO/etc. Each entry has {name, title, age,
@@ -947,14 +969,14 @@ def get_batch_quotes(symbols):
 
                 results.append({
                     "symbol": symbol,
-                    "price": round(current_price, 2),
-                    "change": round(change, 2),
+                    "price": _round_price(current_price, symbol),
+                    "change": _round_price(change, symbol),
                     "change_percent": round(change_percent, 2),
                     "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else 0,
                     "high": round(float(hist['High'].iloc[-1]), 2) if not pd.isna(hist['High'].iloc[-1]) else None,
                     "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
                     "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
-                    "previous_close": round(previous_close, 2),
+                    "previous_close": _round_price(previous_close, symbol),
                     "timestamp": int(datetime.now().timestamp()),
                     "exchange": ""
                 })

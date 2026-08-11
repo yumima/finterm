@@ -355,7 +355,7 @@ void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary
     for (const auto& h : summary.holdings) {
         if (h.symbol.isEmpty() || h.quantity <= 0)
             continue;
-        holdings.append(Holding{h.symbol, h.quantity, h.avg_buy_price});
+        holdings.append(Holding{h.symbol, h.quantity, h.avg_buy_price, h.fx_rate});
     }
 
     if (holdings.isEmpty()) {
@@ -602,10 +602,10 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
     for (const auto& h : holdings) {
         const services::QuoteData* q = qmap.value(h.symbol, nullptr);
         double price = q ? q->price : 0;
-        double value = price * h.shares;
-        double cost = h.avg_cost * h.shares;
+        double value = price * h.shares * h.fx_rate;
+        double cost = h.avg_cost * h.shares * h.fx_rate;
         double pnl = value - cost;
-        double day_chg = q ? (q->change * h.shares) : 0;
+        double day_chg = q ? (q->change * h.shares * h.fx_rate) : 0;
 
         total_value += value;
         total_cost += cost;
@@ -689,10 +689,10 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                           .arg(it->regular, 0, 'f', 2)
                           .arg(h.shares > 0
                                    ? QString("\n%1 on this position")
-                                         .arg((it->price - it->regular) * h.shares >= 0
-                                                  ? QString("+$%1").arg((it->price - it->regular) * h.shares,
+                                         .arg((it->price - it->regular) * h.shares * h.fx_rate >= 0
+                                                  ? QString("+$%1").arg((it->price - it->regular) * h.shares * h.fx_rate,
                                                                         0, 'f', 2)
-                                                  : QString("-$%1").arg(-(it->price - it->regular) * h.shares,
+                                                  : QString("-$%1").arg(-(it->price - it->regular) * h.shares * h.fx_rate,
                                                                         0, 'f', 2))
                                    : QString())
                           .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));

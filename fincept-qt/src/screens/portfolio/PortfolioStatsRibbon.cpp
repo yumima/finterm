@@ -32,8 +32,10 @@ PortfolioStatsRibbon::PortfolioStatsRibbon(QWidget* parent) : QWidget(parent) {
     primary_layout->setSpacing(0);
 
     total_value_ = add_hero(primary_layout, "TOTAL VALUE", ui::colors::WARNING);
-    total_value_.container->setToolTip("Current market value of all holdings.\n"
-                                       "Sum of (quantity × current price) for every position.");
+    // Replaced by set_summary once data arrives (it names the portfolio
+    // currency and flags an incomplete FX conversion); this is the pre-data text.
+    total_value_.container->setToolTip("Current market value of all holdings,\n"
+                                       "converted into the portfolio currency.");
 
     pnl_ = add_hero(primary_layout, "UNREALIZED P&L", ui::colors::TEXT_PRIMARY);
     pnl_.container->setToolTip("Unrealized profit or loss across all open positions.\n"
@@ -250,18 +252,33 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
         return QString("%1 <span style=\"color:%2; font-weight:500;\">&nbsp;\xc2\xb7&nbsp; %3</span>")
             .arg(value, sub_color, sub);
     };
-    total_value_.value->setText(compose(fmt(s.total_market_value), s.portfolio.currency));
+    // An "≈" marks totals containing a cross-currency holding that could not
+    // be converted (currency still being discovered, or no FX rate) — an
+    // approximate figure that says so beats an exact-looking wrong one.
+    // Every figure below is a sum over converted holdings, so they all carry
+    // the approximation when one holding could not be converted.
+    const QString approx = s.fx_incomplete ? QStringLiteral("≈") : QString();
+    total_value_.value->setText(compose(approx + fmt(s.total_market_value), s.portfolio.currency));
+    total_value_.container->setToolTip(
+        s.fx_incomplete
+            ? tr("Current market value of all holdings, converted into %1.\nAPPROXIMATE: at least one "
+                 "holding's trading currency or FX rate is not yet\navailable and entered at face value. "
+                 "This usually resolves within seconds\nonce currency discovery completes.")
+                  .arg(s.portfolio.currency)
+            : tr("Current market value of all holdings, converted into %1.\nSum of (quantity × price × FX "
+                 "rate) for every position.")
+                  .arg(s.portfolio.currency));
     apply_hero_styles(total_value_, ui::colors::WARNING);
 
     // P&L — value = absolute P&L, sub = percent
     pnl_.value->setText(compose(
-        QString("%1%2").arg(s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)),
+        QString("%1%2%3").arg(approx, s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)),
         QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent))));
     apply_hero_styles(pnl_, color_tok(s.total_unrealized_pnl));
 
     // Day change
     day_change_.value->setText(compose(
-        QString("%1%2").arg(s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
+        QString("%1%2%3").arg(approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
         QString("%1%2%").arg(s.total_day_change_percent >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent))));
     apply_hero_styles(day_change_, color_tok(s.total_day_change));
 
@@ -272,14 +289,14 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     apply_hero_styles(positions_, ui::colors::TEXT_PRIMARY);
 
     // Cost basis chip uses summary too
-    cost_basis_.value->setText(fmt(s.total_cost_basis));
+    cost_basis_.value->setText(approx + fmt(s.total_cost_basis));
     apply_chip_styles(cost_basis_, ui::colors::CYAN);
 
     realized_.value->setText(
-        QString("%1%2").arg(s.total_realized_pnl >= 0 ? "+" : "").arg(fmt(s.total_realized_pnl)));
+        QString("%1%2%3").arg(approx, s.total_realized_pnl >= 0 ? "+" : "").arg(fmt(s.total_realized_pnl)));
     apply_chip_styles(realized_, color_tok(s.total_realized_pnl));
 
-    dividends_.value->setText(fmt(s.total_dividend_income));
+    dividends_.value->setText(approx + fmt(s.total_dividend_income));
     apply_chip_styles(dividends_, ui::colors::CYAN);
 }
 

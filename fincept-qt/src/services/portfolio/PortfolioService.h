@@ -3,6 +3,7 @@
 #include "python/PythonRunner.h"
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
+#include "services/portfolio/PortfolioFx.h"
 #include "services/portfolio/PortfolioLedger.h"
 
 #include <QDateTime>
@@ -169,6 +170,20 @@ class PortfolioService : public QObject {
     /// Emits history_backfilled(portfolio_id, point_count) on success.
     void backfill_history(const QString& portfolio_id, const QString& period = "1y");
 
+    // ── FX ───────────────────────────────────────────────────────────────────
+    /// The instrument's trading currency from the durable per-symbol cache
+    /// (30-day CacheManager entries filled by ensure_symbol_currencies).
+    /// Empty when not yet known. "GBp"/"GBX" (London pence) normalise to GBP
+    /// via fx_price_factor().
+    static QString cached_symbol_currency(const QString& symbol);
+    /// Kick one daemon `info` fetch per symbol whose currency is unknown,
+    /// storing results into the durable cache. In-flight symbols are skipped;
+    /// results apply on the next summary rebuild (eventual consistency).
+    void ensure_symbol_currencies(const QStringList& symbols);
+    // Currency conventions (sub-unit normalisation, FX pair naming) are pure
+    // functions in portfolio/PortfolioFx.h — testable without a DB, a network
+    // or a widget. Call them as portfolio::fx_pair_for / fx_price_factor.
+
     // ── Cache control ────────────────────────────────────────────────────────
     void invalidate_cache(const QString& portfolio_id);
 
@@ -229,6 +244,12 @@ class PortfolioService : public QObject {
     /// MV-weighted analyst fundamentals for the whole portfolio.
     void portfolio_fundamentals_loaded(QString portfolio_id,
                                        portfolio::PortfolioFundamentals fundamentals);
+
+    /// Every in-flight currency lookup finished. The summary is rebuilt on
+    /// this so a face-value valuation converts as soon as the rates are known
+    /// (rather than waiting for the next 20 s tick, having possibly already
+    /// written an unconverted snapshot).
+    void symbol_currencies_resolved();
 
     /// Highest daily high since entry, keyed by symbol. Only carries symbols
     /// whose fetch actually produced a price — consumers keep their existing
@@ -319,6 +340,15 @@ class PortfolioService : public QObject {
     // Keys with a request in flight — stops the next refresh tick from
     // re-submitting the same symbol while the first call is still out.
     QSet<QString> peak_inflight_;
+
+    // Symbols with a currency-discovery `info` fetch in flight. Guarded by
+    // cache_mutex_; results land in CacheManager (symbol_currency:*).
+    QSet<QString> currency_inflight_;
+
+    // Portfolios whose backfill is deferred until currency discovery lands.
+    // One retry only — a second pass proceeds with whatever is known so a
+    // permanently undiscoverable symbol cannot block history forever.
+    QSet<QString> backfill_awaiting_fx_;
     static constexpr qint64 kPeakTtlSec = 6 * 3600; // 6h
 
     // Last successfully computed fundamentals, keyed by portfolio_id. When

@@ -931,6 +931,7 @@ set(SERVICE_SOURCES
     src/services/ai_quant_lab/AIQuantLabService.cpp
     src/services/backtesting/BacktestingService.cpp
     src/services/algo_trading/AlgoTradingService.cpp
+    src/services/portfolio/PortfolioFx.cpp
     src/services/portfolio/PortfolioLedger.cpp
     src/services/portfolio/PortfolioReturns.cpp
     src/services/portfolio/PortfolioService.cpp

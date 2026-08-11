@@ -30,6 +30,7 @@
 
 #include "screens/portfolio/PortfolioTypes.h"
 
+#include <QHash>
 #include <QString>
 #include <QVector>
 
@@ -52,8 +53,19 @@ struct PeriodReturn {
 /// date) extended with a synthetic final point (`live_nav`, `live_date`).
 /// `txns` is the portfolio's full transaction log; only BUY/SELL rows dated
 /// after the first snapshot and up to `live_date` become flows.
+/// `fx_by_symbol` converts each transaction's cash into the currency the NAV
+/// series is denominated in. A missing symbol means 1.0 — correct for a
+/// single-currency book, and why callers of a multi-currency portfolio must
+/// pass the full map: subtracting a CAD flow from a USD NAV delta fabricates
+/// a gain or loss on a day nothing moved.
+///
+/// Rates are CURRENT, while backfilled NAV history is converted at each
+/// date's rate. For a window with both large flows and a large FX move the
+/// flow strip is therefore approximate; the first-order unit error is gone,
+/// the residual is the currency drift between the trade date and now.
 PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double live_nav, const QString& live_date,
-                                   const QVector<Transaction>& txns);
+                                   const QVector<Transaction>& txns,
+                                   const QHash<QString, double>& fx_by_symbol = {});
 
 /// Flow-adjusted simple returns (%) between consecutive snapshots:
 /// r_i = (V_i − F_i − V_{i−1}) / V_{i−1}, with F_i the net BUY−SELL cash
@@ -64,6 +76,7 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
 /// This is the series every risk metric must consume: raw NAV differences
 /// contain the user's deposits, and one funding day read as a +100% "return"
 /// is enough to dominate volatility, Sharpe, VaR and the beta regression.
-QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns);
+QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
+                                      const QHash<QString, double>& fx_by_symbol = {});
 
 } // namespace fincept::portfolio

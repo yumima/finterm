@@ -378,3 +378,29 @@ set_target_properties(test_portfolio_returns PROPERTIES
 )
 
 add_test(NAME portfolio_returns COMMAND test_portfolio_returns)
+
+# ── Portfolio FX convention tests ────────────────────────────────────────────
+# London pence (GBp = 1/100 GBP) and the FX pair naming whose fetch key must
+# equal its lookup key — a drift there silently reverts every cross-currency
+# total to face value.
+
+add_executable(test_portfolio_fx
+    services/test_portfolio_fx.cpp
+    ../src/services/portfolio/PortfolioFx.cpp
+)
+
+target_include_directories(test_portfolio_fx PRIVATE
+    ../src
+)
+
+target_link_libraries(test_portfolio_fx PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_portfolio_fx PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME portfolio_fx COMMAND test_portfolio_fx)

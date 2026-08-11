@@ -100,6 +100,8 @@ QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
     o[QStringLiteral("peak_price")]          = h.peak_price;
     o[QStringLiteral("realized_pnl")]        = h.realized_pnl;
     o[QStringLiteral("dividend_income")]     = h.dividend_income;
+    o[QStringLiteral("currency")]            = h.currency;
+    o[QStringLiteral("fx_rate")]             = h.fx_rate;
     return o;
 }
 
@@ -137,6 +139,8 @@ portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     portfolio::refresh_drawdown(h);
     h.realized_pnl         = o[QStringLiteral("realized_pnl")].toDouble();
     h.dividend_income      = o[QStringLiteral("dividend_income")].toDouble();
+    h.currency             = o[QStringLiteral("currency")].toString();
+    h.fx_rate              = o[QStringLiteral("fx_rate")].toDouble(1.0);
     return h;
 }
 
@@ -153,6 +157,11 @@ QJsonObject summary_to_json(const portfolio::PortfolioSummary& s) {
     o[QStringLiteral("total_day_change")]    = s.total_day_change;
     o[QStringLiteral("total_day_change_percent")] = s.total_day_change_percent;
     o[QStringLiteral("total_realized_pnl")]  = s.total_realized_pnl;
+    o[QStringLiteral("fx_incomplete")]       = s.fx_incomplete;
+    QJsonObject rates;
+    for (auto it = s.fx_rates.cbegin(); it != s.fx_rates.cend(); ++it)
+        rates[it.key()] = it.value();
+    o[QStringLiteral("fx_rates")]            = rates;
     o[QStringLiteral("total_dividend_income")] = s.total_dividend_income;
     o[QStringLiteral("total_positions")]     = s.total_positions;
     o[QStringLiteral("gainers")]             = s.gainers;
@@ -173,6 +182,10 @@ portfolio::PortfolioSummary summary_from_json(const QJsonObject& o) {
     s.total_day_change           = o[QStringLiteral("total_day_change")].toDouble();
     s.total_day_change_percent   = o[QStringLiteral("total_day_change_percent")].toDouble();
     s.total_realized_pnl         = o[QStringLiteral("total_realized_pnl")].toDouble();
+    s.fx_incomplete              = o[QStringLiteral("fx_incomplete")].toBool();
+    const QJsonObject rates = o[QStringLiteral("fx_rates")].toObject();
+    for (auto it = rates.constBegin(); it != rates.constEnd(); ++it)
+        s.fx_rates.insert(it.key(), it.value().toDouble(1.0));
     s.total_dividend_income      = o[QStringLiteral("total_dividend_income")].toDouble();
     s.total_positions            = o[QStringLiteral("total_positions")].toInt();
     s.gainers                    = o[QStringLiteral("gainers")].toInt();
@@ -372,12 +385,26 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         return;
 
     // One SQLite SELECT for the whole cohort — much cheaper than N
-    // CacheManager::get() round-trips on a 50-holding portfolio.
+    // CacheManager::get() round-trips on a 50-holding portfolio. FX pairs ride
+    // the same query: refreshing prices while leaving a days-old rate in place
+    // would value fresh prices at a stale exchange rate.
+    const QString port_ccy = portfolio::fx_price_factor(summary.portfolio.currency).first;
     QStringList keys;
-    keys.reserve(summary.holdings.size());
-    for (const auto& h : summary.holdings)
+    keys.reserve(summary.holdings.size() * 2);
+    for (const auto& h : summary.holdings) {
         keys.append(QStringLiteral("market_last:") + h.symbol);
+        const QString pair = portfolio::fx_pair_for(h.currency, port_ccy).first;
+        if (!pair.isEmpty())
+            keys.append(QStringLiteral("market_last:") + pair);
+    }
     const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(keys);
+
+    const auto cached_price = [&hits](const QString& symbol) -> double {
+        const auto it = hits.constFind(QStringLiteral("market_last:") + symbol);
+        if (it == hits.constEnd())
+            return 0.0;
+        return QJsonDocument::fromJson(it.value().toUtf8()).object().value("price").toDouble();
+    };
 
     double total_mv   = 0;
     double total_cost = 0;
@@ -401,11 +428,27 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
             h.day_low            = o.value("low").toDouble(h.day_low);
             h.day_volume         = o.value("volume").toDouble(h.day_volume);
         }
+        // Refresh the conversion rate alongside the price. cost_basis was
+        // serialized already converted at the OLD rate, so it is re-derived
+        // here from the instrument-currency figures the asset row carries —
+        // otherwise a rate move would shift market value while cost stayed
+        // put, inventing P&L out of an FX tick.
+        {
+            const auto [pair, factor] = portfolio::fx_pair_for(h.currency, port_ccy);
+            if (pair.isEmpty()) {
+                h.fx_rate = factor; // same currency (or still unknown → 1.0)
+            } else if (const double rate = cached_price(pair); rate > 0) {
+                const double refreshed = factor * rate;
+                if (h.fx_rate > 0 && !qFuzzyCompare(refreshed, h.fx_rate))
+                    h.cost_basis *= refreshed / h.fx_rate;
+                h.fx_rate = refreshed;
+            }
+        }
         // Always recompute per-holding aggregates: quantity / cost_basis
         // come from disk cache (canonical for this asset row), price may
         // have been refreshed above, and we want the math consistent
         // regardless of whether the lookup hit.
-        h.market_value        = h.quantity * h.current_price;
+        h.market_value        = h.quantity * h.current_price * h.fx_rate;
         h.unrealized_pnl      = h.market_value - h.cost_basis;
         h.unrealized_pnl_percent =
             (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
@@ -415,7 +458,7 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
 
         total_mv   += h.market_value;
         total_cost += h.cost_basis;
-        total_day  += h.day_change * h.quantity;
+        total_day  += h.day_change * h.quantity * h.fx_rate;
         if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
     }
 
@@ -452,11 +495,26 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         symbols.append(a.symbol);
     }
 
+    // FX: discover trading currencies (async, cached 30 days) and ride the FX
+    // pair quotes on the same batch fetch as the holdings. AAPL + RY.TO used
+    // to be summed as bare numbers and labelled with the portfolio currency.
+    ensure_symbol_currencies(symbols);
+    const QString port_ccy = portfolio::fx_price_factor(portfolio.currency).first;
+    QSet<QString> fx_pairs;
+    for (const auto& a : assets) {
+        const QString pair = portfolio::fx_pair_for(cached_symbol_currency(a.symbol), port_ccy).first;
+        if (!pair.isEmpty())
+            fx_pairs.insert(pair);
+    }
+    QStringList fetch_symbols = symbols;
+    for (const QString& p : std::as_const(fx_pairs))
+        fetch_symbols.append(p);
+
     // Use QPointer for safe async callback (P8)
     QPointer<PortfolioService> self = this;
 
-    MarketDataService::instance().fetch_quotes(symbols, [self, portfolio_id, assets,
-                                                         portfolio](bool ok, QVector<QuoteData> quotes) {
+    MarketDataService::instance().fetch_quotes(fetch_symbols, [self, portfolio_id, assets, port_ccy,
+                                                               portfolio](bool ok, QVector<QuoteData> quotes) {
         if (!self)
             return;
 
@@ -525,6 +583,30 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         summary.portfolio = portfolio;
         summary.holdings.reserve(assets.size());
 
+        // Instrument → portfolio-currency multiplier. Unknown currency or a
+        // missing rate returns nullopt; the holding then enters the totals at
+        // face value and the summary is flagged approximate — a wrong-but-
+        // flagged total beats a silently wrong one.
+        const auto fx_rate_for = [&quote_map, &port_ccy](const QString& symbol) -> std::optional<double> {
+            const QString raw = cached_symbol_currency(symbol);
+            if (raw.isEmpty())
+                return std::nullopt; // currency still being discovered
+            const auto [pair, factor] = portfolio::fx_pair_for(raw, port_ccy);
+            if (pair.isEmpty())
+                return factor; // same currency (factor folds GBp → GBP)
+            if (const auto it = quote_map.constFind(pair); it != quote_map.constEnd() && it->price > 0)
+                return factor * it->price;
+            // Last known pair rate — FX closes barely move vs equity risk, and
+            // a slightly stale rate beats a face-value cross-currency sum.
+            const auto ml = fincept::CacheManager::instance().try_get(QStringLiteral("market_last:") + pair);
+            if (ml) {
+                const double px = QJsonDocument::fromJson(ml->toUtf8()).object().value("price").toDouble();
+                if (px > 0)
+                    return factor * px;
+            }
+            return std::nullopt;
+        };
+
         double total_mv = 0;
         double total_cost = 0;
         double total_day = 0;
@@ -583,7 +665,18 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 valuation_estimated = true;
             }
 
-            h.market_value = h.quantity * h.current_price;
+            // Fold the instrument's currency into the portfolio's. Per-share
+            // fields above stay in the instrument currency (see PortfolioTypes);
+            // everything summed below is portfolio-currency.
+            {
+                h.currency = cached_symbol_currency(asset.symbol);
+                const auto rate = fx_rate_for(asset.symbol);
+                h.fx_rate = rate.value_or(1.0);
+                if (!rate)
+                    summary.fx_incomplete = true;
+            }
+            h.cost_basis *= h.fx_rate;
+            h.market_value = h.quantity * h.current_price * h.fx_rate;
             h.unrealized_pnl = h.market_value - h.cost_basis;
             h.unrealized_pnl_percent = (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
             // Peak high since entry comes from the cache filled by
@@ -600,7 +693,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
 
             total_mv += h.market_value;
             total_cost += h.cost_basis;
-            total_day += h.day_change * h.quantity;
+            total_day += h.day_change * h.quantity * h.fx_rate;
 
             if (h.unrealized_pnl >= 0)
                 summary.gainers++;
@@ -621,23 +714,48 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         // cheap at refresh-tick cadence, and the only way "REALIZED" can
         // include the winners that were sold.
         {
-            auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, 1000000);
+            auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0);
             if (txns_r.is_ok()) {
                 QHash<QString, QVector<portfolio::Transaction>> by_symbol;
                 for (const auto& t : txns_r.value())
                     by_symbol[t.symbol.toUpper()].append(t);
+
+                // Closed positions have no asset row, so the pre-fetch loop
+                // never asked for their currency — yet their realized P&L and
+                // their cash flows both need converting. Without this, the
+                // "≈ approximate" flag would latch permanently for anyone who
+                // has ever closed a foreign position.
+                QStringList undiscovered;
+                for (auto it = by_symbol.cbegin(); it != by_symbol.cend(); ++it)
+                    if (cached_symbol_currency(it.key()).isEmpty())
+                        undiscovered.append(it.key());
+                if (!undiscovered.isEmpty())
+                    self->ensure_symbol_currencies(undiscovered);
                 QHash<QString, portfolio::LedgerPosition> replayed;
                 for (auto it = by_symbol.cbegin(); it != by_symbol.cend(); ++it) {
                     auto pos = portfolio::replay_transactions(it.value());
-                    summary.total_realized_pnl += pos.realized_pnl;
-                    summary.total_dividend_income += pos.dividend_income;
+                    // Instrument-currency figures converted at the CURRENT
+                    // rate — an approximation for long-closed positions (a
+                    // trade-dated conversion would need historical FX), and
+                    // stated as such here rather than silently mixed. Held
+                    // symbols resolve to the same rate the holdings loop used;
+                    // it is the same function over the same inputs.
+                    const auto r = fx_rate_for(it.key());
+                    if (!r && (pos.realized_pnl != 0.0 || pos.dividend_income != 0.0))
+                        summary.fx_incomplete = true;
+                    const double rate = r.value_or(1.0);
+                    // Every log symbol, so the return math can convert the
+                    // flows of positions that are no longer held.
+                    summary.fx_rates.insert(it.key(), rate);
+                    summary.total_realized_pnl += pos.realized_pnl * rate;
+                    summary.total_dividend_income += pos.dividend_income * rate;
                     replayed.insert(it.key(), std::move(pos));
                 }
                 for (auto& h : summary.holdings) {
                     const auto it = replayed.constFind(h.symbol.toUpper());
                     if (it != replayed.constEnd()) {
-                        h.realized_pnl = it->realized_pnl;
-                        h.dividend_income = it->dividend_income;
+                        h.realized_pnl = it->realized_pnl * h.fx_rate;
+                        h.dividend_income = it->dividend_income * h.fx_rate;
                     }
                 }
             }
@@ -672,7 +790,10 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         // and is written through the backfill path instead — still gap-free,
         // but correctable later, and never able to displace a real observation.
         QString today = QDate::currentDate().toString(Qt::ISODate);
-        if (valuation_estimated) {
+        // fx_incomplete counts as estimated: a face-value cross-currency sum
+        // written as 'live' could never be repaired, because the backfill
+        // guard refuses to overwrite live rows.
+        if (valuation_estimated || summary.fx_incomplete) {
             PortfolioRepository::instance().save_backfill_snapshot(
                 portfolio_id, summary.total_market_value, summary.total_cost_basis, summary.total_unrealized_pnl,
                 summary.total_unrealized_pnl_percent, today);
@@ -1531,7 +1652,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
         emit metrics_computed(metrics);
         return;
     }
-    const QVector<double> adj = portfolio::flow_adjusted_returns(snaps, txns);
+    const QVector<double> adj = portfolio::flow_adjusted_returns(snaps, txns, summary.fx_rates);
     QVector<double> port_returns; // daily flow-adjusted returns (%)
     port_returns.reserve(adj.size());
     for (const double r : adj) {
@@ -1991,16 +2112,70 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         return;
     }
 
+    // FX: reconstructed NAV must be in the portfolio currency at EACH date,
+    // so foreign holdings convert by that date's FX close — the pair series
+    // ride the same daemon request. Converting history at today's rate would
+    // paint FX moves into (or out of) every past NAV.
+    QString port_ccy = QStringLiteral("USD");
+    if (auto pr = repo.get_portfolio(portfolio_id); pr.is_ok())
+        port_ccy = portfolio::fx_price_factor(pr.value().currency).first;
+    // `unknown` is recorded HERE, where the fact is read. Deriving it later
+    // inside the async callback would re-read the cache across a network
+    // round-trip: a concurrent discovery filling that cache would silence the
+    // warning while this run still values the symbol at face value.
+    struct FxBinding {
+        QString pair;         // empty = no conversion needed
+        double factor = 1.0;  // sub-unit normalisation (GBp → GBP)
+        bool unknown = false; // trading currency not yet discovered
+    };
+    QHash<QString, FxBinding> fx_of_symbol;
+    QSet<QString> fx_pairs;
+    for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
+        const QString raw = cached_symbol_currency(it.key());
+        const auto [pair, factor] = portfolio::fx_pair_for(raw, port_ccy);
+        fx_of_symbol.insert(it.key(), {pair, factor, raw.isEmpty()});
+        if (!pair.isEmpty())
+            fx_pairs.insert(pair);
+    }
+
+    // Reconstructing a year of history at face value would persist the error;
+    // discovery is cheap and one-shot, so wait for it rather than bake it in.
+    // import_json calls backfill_history before any summary has ever run, so
+    // this is the ONLY thing that starts discovery on a fresh import.
+    QStringList unknown_ccy;
+    for (auto it = fx_of_symbol.cbegin(); it != fx_of_symbol.cend(); ++it)
+        if (it.value().unknown)
+            unknown_ccy.append(it.key());
+    if (!unknown_ccy.isEmpty() && !backfill_awaiting_fx_.contains(portfolio_id)) {
+        backfill_awaiting_fx_.insert(portfolio_id);
+        ensure_symbol_currencies(unknown_ccy);
+        QPointer<PortfolioService> self_retry = this;
+        const QString pid = portfolio_id;
+        const QString per = period;
+        QTimer::singleShot(4000, this, [self_retry, pid, per]() {
+            if (self_retry)
+                self_retry->backfill_history(pid, per);
+        });
+        LOG_INFO("PortfolioSvc",
+                 QString("backfill_history: waiting on currency discovery for %1 symbol(s) in %2")
+                     .arg(unknown_ccy.size())
+                     .arg(portfolio_id));
+        return;
+    }
+    backfill_awaiting_fx_.remove(portfolio_id);
+
     QJsonArray symbols_arr;
     for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it)
         symbols_arr.append(it.key());
+    for (const QString& p : std::as_const(fx_pairs))
+        symbols_arr.append(p);
     QJsonObject payload;
     payload["symbols"] = symbols_arr;
     payload["period"] = period;
 
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit("portfolio_closes_history", payload,
-        [self, portfolio_id, txns_by_symbol](bool ok, QJsonObject obj, QString err) {
+        [self, portfolio_id, txns_by_symbol, fx_of_symbol](bool ok, QJsonObject obj, QString err) {
         if (!self)
             return;
         if (!ok || obj.contains("error")) {
@@ -2015,25 +2190,11 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         // union calendar to walk. Symbols yfinance has no data for (money
         // market funds, delisted names) simply contribute nothing dated —
         // same behaviour the live valuation has for them.
-        struct SymbolState {
-            portfolio::LedgerCursor cursor;
-            QVector<QPair<QString, double>> closes; // sorted by date
-            int next = 0;
-            double last_close = 0;
-        };
-        std::vector<SymbolState> states;
-        QSet<QString> date_set;
         const QJsonObject closes_obj = obj["closes"].toObject();
-        for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
-            const QJsonArray series = closes_obj[it.key()].toArray();
-            if (series.isEmpty()) {
-                LOG_WARN("PortfolioSvc",
-                         QString("backfill_history: no close history for %1 — its value is "
-                                 "missing from backfilled NAV").arg(it.key()));
-                continue;
-            }
-            SymbolState st{portfolio::LedgerCursor(it.value()), {}, 0, 0};
-            st.closes.reserve(series.size());
+        const auto parse_series = [&closes_obj](const QString& key, QSet<QString>* dates_out) {
+            QVector<QPair<QString, double>> out;
+            const QJsonArray series = closes_obj[key].toArray();
+            out.reserve(series.size());
             for (const auto& v : series) {
                 const QJsonArray pair = v.toArray();
                 if (pair.size() != 2)
@@ -2041,12 +2202,62 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                 const QString d = pair[0].toString();
                 const double close = pair[1].toDouble();
                 if (d.size() == 10 && close > 0) {
-                    st.closes.append({d, close});
-                    date_set.insert(d);
+                    out.append({d, close});
+                    if (dates_out)
+                        dates_out->insert(d);
                 }
             }
-            std::sort(st.closes.begin(), st.closes.end(),
-                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            return out;
+        };
+
+        // FX pair calendars: cursor state shared by every symbol on the pair.
+        // Pair closes do NOT extend the union calendar — an FX-only date has
+        // no equity close to value.
+        struct PairState {
+            QVector<QPair<QString, double>> closes;
+            int next = 0;
+            double last = 0;
+        };
+        QHash<QString, PairState> pair_states;
+        for (auto it = fx_of_symbol.cbegin(); it != fx_of_symbol.cend(); ++it) {
+            const QString& pair = it.value().pair;
+            if (pair.isEmpty() || pair_states.contains(pair))
+                continue;
+            PairState ps{.closes = parse_series(pair, nullptr)};
+            if (ps.closes.isEmpty())
+                LOG_WARN("PortfolioSvc",
+                         QString("backfill_history: no FX history for %1 — holdings in that "
+                                 "currency are missing from backfilled NAV").arg(pair));
+            pair_states.insert(pair, std::move(ps));
+        }
+
+        struct SymbolState {
+            portfolio::LedgerCursor cursor;
+            QVector<QPair<QString, double>> closes; // sorted by date
+            int next = 0;
+            double last_close = 0;
+            QString fx_pair;    // empty = portfolio currency
+            double fx_factor = 1.0; // sub-unit normalisation (GBp → GBP)
+        };
+        std::vector<SymbolState> states;
+        QSet<QString> date_set;
+        for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
+            const FxBinding fx = fx_of_symbol.value(it.key());
+            SymbolState st{.cursor = portfolio::LedgerCursor(it.value()),
+                           .closes = parse_series(it.key(), &date_set),
+                           .fx_pair = fx.pair,
+                           .fx_factor = fx.factor};
+            if (st.closes.isEmpty()) {
+                LOG_WARN("PortfolioSvc",
+                         QString("backfill_history: no close history for %1 — its value is "
+                                 "missing from backfilled NAV").arg(it.key()));
+                continue;
+            }
+            if (fx.unknown)
+                LOG_WARN("PortfolioSvc",
+                         QString("backfill_history: trading currency of %1 unknown — valued at "
+                                 "face value in the portfolio currency").arg(it.key()));
             states.push_back(std::move(st));
         }
 
@@ -2057,14 +2268,25 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         auto& repo = PortfolioRepository::instance();
         int written = 0;
         int skipped_live = 0;
+        int skipped_partial = 0;
         for (const QString& d : dates) {
             // Today's row belongs to the live path — build_summary values it
             // from actual quotes and writes it as 'live'.
             if (d >= today)
                 continue;
+            // Advance FX pair cursors first so every symbol on a pair sees
+            // this date's (or the last known) rate.
+            for (auto pit = pair_states.begin(); pit != pair_states.end(); ++pit) {
+                auto& ps = pit.value();
+                while (ps.next < ps.closes.size() && ps.closes[ps.next].first <= d) {
+                    ps.last = ps.closes[ps.next].second;
+                    ++ps.next;
+                }
+            }
             double nav = 0;
             double cost = 0;
             bool any_open = false;
+            bool complete = true; // every open position priced AND converted
             for (auto& st : states) {
                 while (st.next < st.closes.size() && st.closes[st.next].first <= d) {
                     st.last_close = st.closes[st.next].second;
@@ -2073,13 +2295,29 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                 st.cursor.advance_to(d);
                 const auto& pos = st.cursor.position();
                 if (pos.quantity > 1e-9 && st.last_close > 0) {
-                    nav += pos.quantity * st.last_close;
-                    cost += pos.quantity * pos.avg_cost;
+                    double rate = st.fx_factor;
+                    if (!st.fx_pair.isEmpty()) {
+                        const double fx = pair_states.value(st.fx_pair).last;
+                        if (fx <= 0) {
+                            // No rate at this date. Writing the row anyway
+                            // would persist a NAV missing this holding —
+                            // half a portfolio recorded as history.
+                            complete = false;
+                            continue;
+                        }
+                        rate *= fx;
+                    }
+                    nav += pos.quantity * st.last_close * rate;
+                    cost += pos.quantity * pos.avg_cost * rate;
                     any_open = true;
                 }
             }
             if (!any_open)
                 continue; // before the first buy — a NAV of zero is not history
+            if (!complete) {
+                ++skipped_partial;
+                continue; // a partial valuation is not this portfolio's history
+            }
             const double pnl = nav - cost;
             const double pnl_pct = cost > 0 ? (pnl / cost) * 100.0 : 0.0;
             auto wr = repo.save_backfill_snapshot(portfolio_id, nav, cost, pnl, pnl_pct, d);
@@ -2091,10 +2329,13 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             }
         }
 
-        LOG_INFO("PortfolioSvc", QString("Backfilled %1 snapshots for %2 (%3 live rows preserved)")
-                                     .arg(written)
-                                     .arg(portfolio_id)
-                                     .arg(skipped_live));
+        LOG_INFO("PortfolioSvc",
+                 QString("Backfilled %1 snapshots for %2 (%3 live rows preserved, %4 dates skipped "
+                         "for an incomplete valuation)")
+                     .arg(written)
+                     .arg(portfolio_id)
+                     .arg(skipped_live)
+                     .arg(skipped_partial));
         self->invalidate_cache(portfolio_id);
         emit self->history_backfilled(portfolio_id, written);
     },
@@ -2433,6 +2674,79 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
                 }
 
                 emit self->position_peaks_loaded(portfolio_id, state->peaks);
+            },
+            python::PythonWorker::kNetworkActionTimeoutMs);
+    }
+}
+
+// ── FX ───────────────────────────────────────────────────────────────────────
+
+namespace {
+constexpr qint64 kSymbolCurrencyTtlSec = 30LL * 86400;    // listings don't change currency
+constexpr qint64 kCurrencyUnknownTtlSec = 6LL * 3600;     // retry a failed lookup in 6h, not 20s
+constexpr const char* kCurrencyUnknown = "?";
+QString symbol_currency_key(const QString& symbol) {
+    return QStringLiteral("symbol_currency:") + symbol.toUpper();
+}
+} // namespace
+
+// static
+QString PortfolioService::cached_symbol_currency(const QString& symbol) {
+    const QString v = fincept::CacheManager::instance().try_get(symbol_currency_key(symbol)).value_or(QString());
+    // kCurrencyUnknown is a NEGATIVE cache entry: "asked, got nothing". It
+    // reads as unknown to callers while still suppressing the re-request, so
+    // an ETF or delisted ticker with no info payload can't drive one full
+    // web scrape per symbol every 20 s forever.
+    return v == QLatin1String(kCurrencyUnknown) ? QString() : v;
+}
+
+void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
+    QStringList missing;
+    {
+        // Batch the cache probe: try_get is one SELECT per call, and this
+        // runs per holding on every refresh tick. Any hit — including the
+        // negative marker — means "don't ask again yet".
+        QStringList keys;
+        keys.reserve(symbols.size());
+        for (const QString& s : symbols)
+            keys.append(symbol_currency_key(s));
+        const QHash<QString, QString> known = fincept::CacheManager::instance().multi_get(keys);
+
+        QMutexLocker lock(&cache_mutex_);
+        for (const QString& s : symbols) {
+            const QString up = s.toUpper();
+            if (currency_inflight_.contains(up) || known.contains(symbol_currency_key(up)))
+                continue;
+            currency_inflight_.insert(up);
+            missing.append(up);
+        }
+    }
+    QPointer<PortfolioService> self = this;
+    auto pending = std::make_shared<int>(static_cast<int>(missing.size()));
+    for (const QString& sym : std::as_const(missing)) {
+        QJsonObject payload;
+        payload["symbol"] = sym;
+        python::PythonWorker::instance().submit(
+            "info", payload,
+            [self, sym, pending](bool ok, QJsonObject obj, QString /*err*/) {
+                if (!self)
+                    return;
+                {
+                    QMutexLocker lock(&self->cache_mutex_);
+                    self->currency_inflight_.remove(sym);
+                }
+                const QString ccy = obj.value("currency").toString();
+                if (ok && !ccy.isEmpty()) {
+                    fincept::CacheManager::instance().put(symbol_currency_key(sym), ccy,
+                                                          kSymbolCurrencyTtlSec);
+                } else {
+                    // Remember the failure, briefly, so the retry is paced.
+                    fincept::CacheManager::instance().put(symbol_currency_key(sym),
+                                                          QString::fromLatin1(kCurrencyUnknown),
+                                                          kCurrencyUnknownTtlSec);
+                }
+                if (--(*pending) == 0)
+                    emit self->symbol_currencies_resolved();
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
     }

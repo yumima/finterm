@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioTypes.h
 #pragma once
 #include <QDateTime>
+#include <QHash>
 #include <QString>
 #include <QVector>
 
@@ -89,6 +90,16 @@ struct HoldingWithQuote {
     // never had it.
     double realized_pnl = 0;
     double dividend_income = 0;
+
+    // FX: the instrument's trading currency and the rate applied to fold it
+    // into the portfolio currency. Per-share display fields (price, avg cost,
+    // day change, peak) stay in the INSTRUMENT currency — that is what the
+    // exchange prints and what keeps the trailing-stop math coherent — while
+    // market_value / cost_basis / P&L aggregates are converted. Before this,
+    // AAPL (USD) and RY.TO (CAD) were summed as bare numbers and the result
+    // labelled with the portfolio currency.
+    QString currency;      // empty = unknown (treated as the portfolio currency)
+    double fx_rate = 1.0;  // instrument → portfolio currency multiplier
 };
 
 // ── Trailing-stop maths ──────────────────────────────────────────────────────
@@ -138,6 +149,17 @@ struct PortfolioSummary {
     // "CACHED" badge so the user knows the numbers may be stale until
     // the in-flight quote refetch lands and emits a fresh summary.
     bool from_cache = false;
+    // True when a cross-currency holding could not be converted (its trading
+    // currency is still unknown, or no FX rate was available) and entered the
+    // totals at face value. The totals are then approximate and the UI must
+    // say so rather than present them as exact.
+    bool fx_incomplete = false;
+    // Instrument→portfolio-currency multiplier for EVERY symbol in the
+    // transaction log, not just open holdings — closed positions still
+    // contribute cash flows that the return math must convert. Absent means
+    // "no conversion known"; consumers treat that as 1.0 and should already
+    // have set fx_incomplete.
+    QHash<QString, double> fx_rates;
 };
 
 // ── Computed analytics ───────────────────────────────────────────────────────

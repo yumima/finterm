@@ -130,6 +130,12 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
         if (summary_loaded_)
             services::PortfolioService::instance().compute_metrics(current_summary_);
     });
+    // A face-value valuation must not sit on screen (or in a snapshot) until
+    // the next tick — rebuild the moment the rates are known.
+    connect(&svc, &services::PortfolioService::symbol_currencies_resolved, this, [this]() {
+        if (!selected_id_.isEmpty())
+            services::PortfolioService::instance().refresh_summary(selected_id_);
+    });
     // After yfinance backfill lands, refresh snapshots and metrics so Beta/MDD
     // populate without requiring a manual refresh.
     connect(&svc, &services::PortfolioService::history_backfilled, this,
@@ -873,7 +879,7 @@ void PortfolioScreen::on_snapshots_loaded(QString portfolio_id, QVector<portfoli
         bool txns_ok = false;
         const auto txns = services::PortfolioService::instance().all_transactions(portfolio_id, &txns_ok);
         if (txns_ok)
-            perf_chart_->set_history(snapshots, txns);
+            perf_chart_->set_history(snapshots, txns, current_summary_.fx_rates);
         else
             LOG_WARN("PortfolioScreen", "Keeping the previous chart history — transaction log read failed");
     }
@@ -1037,7 +1043,11 @@ void PortfolioScreen::hub_resubscribe_holdings() {
                 h.ask = q.ask;
                 h.bid_size = q.bid_size;
                 h.ask_size = q.ask_size;
-                h.market_value = h.quantity * h.current_price;
+                // fx_rate folds the instrument currency into the portfolio
+                // currency. cost_basis is already converted, so dropping the
+                // rate here would compare a raw CAD market value against a
+                // converted cost and invent P&L on an unchanged price.
+                h.market_value = h.quantity * h.current_price * h.fx_rate;
                 h.unrealized_pnl = h.market_value - h.cost_basis;
                 h.unrealized_pnl_percent = (h.cost_basis > 0)
                     ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
@@ -1075,7 +1085,7 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
     for (const auto& h : current_summary_.holdings) {
         total_mv += h.market_value;
         total_cost += h.cost_basis;
-        total_day += h.day_change * h.quantity;
+        total_day += h.day_change * h.quantity * h.fx_rate;
         if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
     }
     for (auto& h : current_summary_.holdings)

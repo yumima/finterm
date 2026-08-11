@@ -51,7 +51,8 @@ class PortfolioPerfChart : public QWidget {
     /// always change together — a snapshots-only update against a stale
     /// flow log would let deposits read as gains again.
     void set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
-                     const QVector<portfolio::Transaction>& txns);
+                     const QVector<portfolio::Transaction>& txns,
+                     const QHash<QString, double>& fx_by_symbol);
     void set_currency(const QString& currency);
     /// Feed real benchmark closes for the overlay. The symbol is shown on the
     /// toggle button and used to disambiguate currencies in indexed mode.
@@ -170,6 +171,7 @@ class PortfolioPerfChart : public QWidget {
     portfolio::PortfolioSummary summary_;
     QVector<portfolio::PortfolioSnapshot> snapshots_;
     QVector<portfolio::Transaction> transactions_;
+    QHash<QString, double> fx_by_symbol_;
     QString currency_ = "USD";
 
     // Benchmark history — symbol may differ from "SPY" depending on currency

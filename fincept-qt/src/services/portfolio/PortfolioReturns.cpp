@@ -37,7 +37,8 @@ bool is_fabricated_opening(const Transaction& t) {
 }
 
 QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, const QString& window_start,
-                                             const QString& window_end) {
+                                             const QString& window_end,
+                                             const QHash<QString, double>& fx_by_symbol) {
     QMap<QString, double> flows;
     for (const auto& t : txns) {
         const QString d = t.transaction_date.left(10);
@@ -45,10 +46,14 @@ QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, c
             continue;
         if (is_fabricated_opening(t))
             continue;
+        // Trade cash is in the INSTRUMENT currency; the NAV it is subtracted
+        // from is in the portfolio currency. Convert, or a CAD purchase
+        // strips more than it added and fabricates a loss.
+        const double rate = fx_by_symbol.value(t.symbol.toUpper(), 1.0);
         if (t.transaction_type == QLatin1String("BUY"))
-            flows[d] += t.quantity * t.price;
+            flows[d] += t.quantity * t.price * rate;
         else if (t.transaction_type == QLatin1String("SELL"))
-            flows[d] -= t.quantity * t.price;
+            flows[d] -= t.quantity * t.price * rate;
     }
     return flows;
 }
@@ -56,7 +61,8 @@ QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, c
 } // namespace
 
 PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double live_nav, const QString& live_date,
-                                   const QVector<Transaction>& txns) {
+                                   const QVector<Transaction>& txns,
+                                   const QHash<QString, double>& fx_by_symbol) {
     PeriodReturn out;
 
     std::sort(snapshots.begin(), snapshots.end(),
@@ -82,7 +88,7 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
     // Net external flow per date. Only trade cash counts (see header);
     // flows dated at or before the window start are embedded in the baseline.
     const QMap<QString, double> flow_by_date =
-        external_flows_by_date(txns, path.first().first, path.last().first);
+        external_flows_by_date(txns, path.first().first, path.last().first, fx_by_symbol);
 
     double growth = 1.0;
     bool any_segment = false;
@@ -122,7 +128,8 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
     return out;
 }
 
-QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns) {
+QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
+                                      const QHash<QString, double>& fx_by_symbol) {
     std::sort(snapshots.begin(), snapshots.end(),
               [](const PortfolioSnapshot& a, const PortfolioSnapshot& b) { return a.snapshot_date < b.snapshot_date; });
 
@@ -130,8 +137,9 @@ QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, cons
     if (snapshots.size() < 2)
         return out;
 
-    const QMap<QString, double> flow_by_date = external_flows_by_date(
-        txns, snapshots.first().snapshot_date.left(10), snapshots.last().snapshot_date.left(10));
+    const QMap<QString, double> flow_by_date =
+        external_flows_by_date(txns, snapshots.first().snapshot_date.left(10),
+                               snapshots.last().snapshot_date.left(10), fx_by_symbol);
 
     out.reserve(snapshots.size() - 1);
     auto flow_it = flow_by_date.constBegin();

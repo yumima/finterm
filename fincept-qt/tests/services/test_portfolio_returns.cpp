@@ -61,6 +61,8 @@ class TestPortfolioReturns : public QObject {
     void dust_base_is_not_a_return();
     void fabricated_opening_date_is_not_a_flow();
     void real_opening_date_remains_a_flow();
+    void foreign_flow_converts_to_the_nav_currency();
+    void unmapped_symbol_is_treated_as_same_currency();
 };
 
 void TestPortfolioReturns::plain_growth_no_flows() {
@@ -246,6 +248,41 @@ void TestPortfolioReturns::real_opening_date_remains_a_flow() {
     QVERIFY(r.valid);
     QVERIFY(std::abs(r.twr_pct) < 1e-9); // the 50k jump is the buy, not growth
     QCOMPARE(r.net_external_flow, 50000.0);
+}
+
+void TestPortfolioReturns::foreign_flow_converts_to_the_nav_currency() {
+    // NAV is in the PORTFOLIO currency; trade cash is in the INSTRUMENT
+    // currency. A 10,000 CAD purchase at 0.73 raises a USD NAV by 7,300 —
+    // stripping the unconverted 10,000 would fabricate a ~2,700 loss on a
+    // day nothing moved.
+    auto buy = txn("BUY", 100, 100.0, "2026-01-02"); // 10,000 CAD
+    buy.symbol = QStringLiteral("RY.TO");
+    const QHash<QString, double> fx{{QStringLiteral("RY.TO"), 0.73}};
+
+    const auto r = compute_period_return(
+        {snap("2026-01-01", 50000.0), snap("2026-01-03", 57300.0)},
+        57300.0, "2026-01-03", {buy}, fx);
+    QVERIFY(r.valid);
+    QVERIFY(std::abs(r.twr_pct) < 1e-9);          // flat market stays flat
+    QCOMPARE(r.net_external_flow, 7300.0);        // USD, not 10,000 CAD
+    QCOMPARE(r.gain_value, 0.0);
+
+    // The same series WITHOUT the map is the bug this pins: the flow is
+    // over-stripped and a loss appears out of nowhere.
+    const auto unconverted = compute_period_return(
+        {snap("2026-01-01", 50000.0), snap("2026-01-03", 57300.0)},
+        57300.0, "2026-01-03", {buy});
+    QVERIFY(unconverted.twr_pct < -5.0);
+}
+
+void TestPortfolioReturns::unmapped_symbol_is_treated_as_same_currency() {
+    // A single-currency book passes no map at all, and must be unaffected.
+    const auto r = compute_period_return(
+        {snap("2026-01-01", 100.0), snap("2026-01-02", 200.0)},
+        200.0, "2026-01-02", {txn("BUY", 10, 10.0, "2026-01-02")}, {});
+    QVERIFY(r.valid);
+    QVERIFY(std::abs(r.twr_pct) < 1e-9);
+    QCOMPARE(r.net_external_flow, 100.0);
 }
 
 QTEST_GUILESS_MAIN(TestPortfolioReturns)

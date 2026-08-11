@@ -2,16 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-10)
+## Today's commits (2026-08-11)
 
 Latest first.
 
-- [`f1a31de35`](https://github.com/yumima/finterm/commit/f1a31de35) Portfolio: the period return is time-weighted — a deposit is not a gain
-- [`7332849d0`](https://github.com/yumima/finterm/commit/7332849d0) Portfolio: one cost-basis engine — the transaction log becomes the truth
-- [`96ec7be32`](https://github.com/yumima/finterm/commit/96ec7be32) Portfolio: NAV history gets provenance — backfill reconstructs, never destroys
-- [`3596ebe1b`](https://github.com/yumima/finterm/commit/3596ebe1b) ER: fix the review findings — interval identity, cache split, leaky correlation
-- [`20acde9e0`](https://github.com/yumima/finterm/commit/20acde9e0) ER Earnings: surface the market-implied move, mark suspect surprises
-- [`d79d8d5b2`](https://github.com/yumima/finterm/commit/d79d8d5b2) ER Earnings: stop a GAAP one-off setting a company's track record
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

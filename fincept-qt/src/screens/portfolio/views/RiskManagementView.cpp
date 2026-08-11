@@ -361,7 +361,7 @@ void RiskManagementView::update_contribution() {
         const double abs_move = std::abs(h.day_change_percent);
         const double move_contrib = abs_move * h.weight / 100.0;
         const double move_pct = total_vol > 0 ? (move_contrib / total_vol) * 100.0 : 0;
-        const double day_pnl = h.day_change * h.quantity;
+        const double day_pnl = h.day_change * h.quantity * h.fx_rate; // column is portfolio-currency
 
         set_cell(0, h.symbol, ui::colors::CYAN);
         set_cell(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));

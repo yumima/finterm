@@ -40,7 +40,13 @@ class PortfolioSummaryWidget : public BaseWidget {
     struct Holding {
         QString symbol;
         double shares = 0;
-        double avg_cost = 0;
+        double avg_cost = 0;   // instrument currency, as the exchange prints it
+        // Instrument→portfolio-currency multiplier. This widget recomputes
+        // value/cost/day-P&L from live quotes rather than reusing the
+        // summary's totals, so it needs the same rate the portfolio screen
+        // used — otherwise the two screens show different totals for the
+        // same book.
+        double fx_rate = 1.0;
     };
 
   protected:
