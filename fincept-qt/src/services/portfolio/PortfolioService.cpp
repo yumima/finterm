@@ -24,6 +24,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <utility>
 
 namespace fincept::services {
 
@@ -97,6 +98,8 @@ QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
     o[QStringLiteral("ask_size")]            = h.ask_size;
     o[QStringLiteral("first_purchase_date")] = h.first_purchase_date;
     o[QStringLiteral("peak_price")]          = h.peak_price;
+    o[QStringLiteral("realized_pnl")]        = h.realized_pnl;
+    o[QStringLiteral("dividend_income")]     = h.dividend_income;
     return o;
 }
 
@@ -132,6 +135,8 @@ portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     // is derived, never stored — re-derive it against the cached price.
     h.peak_price           = o[QStringLiteral("peak_price")].toDouble();
     portfolio::refresh_drawdown(h);
+    h.realized_pnl         = o[QStringLiteral("realized_pnl")].toDouble();
+    h.dividend_income      = o[QStringLiteral("dividend_income")].toDouble();
     return h;
 }
 
@@ -147,6 +152,8 @@ QJsonObject summary_to_json(const portfolio::PortfolioSummary& s) {
     o[QStringLiteral("total_unrealized_pnl_percent")] = s.total_unrealized_pnl_percent;
     o[QStringLiteral("total_day_change")]    = s.total_day_change;
     o[QStringLiteral("total_day_change_percent")] = s.total_day_change_percent;
+    o[QStringLiteral("total_realized_pnl")]  = s.total_realized_pnl;
+    o[QStringLiteral("total_dividend_income")] = s.total_dividend_income;
     o[QStringLiteral("total_positions")]     = s.total_positions;
     o[QStringLiteral("gainers")]             = s.gainers;
     o[QStringLiteral("losers")]              = s.losers;
@@ -165,6 +172,8 @@ portfolio::PortfolioSummary summary_from_json(const QJsonObject& o) {
     s.total_unrealized_pnl_percent = o[QStringLiteral("total_unrealized_pnl_percent")].toDouble();
     s.total_day_change           = o[QStringLiteral("total_day_change")].toDouble();
     s.total_day_change_percent   = o[QStringLiteral("total_day_change_percent")].toDouble();
+    s.total_realized_pnl         = o[QStringLiteral("total_realized_pnl")].toDouble();
+    s.total_dividend_income      = o[QStringLiteral("total_dividend_income")].toDouble();
     s.total_positions            = o[QStringLiteral("total_positions")].toInt();
     s.gainers                    = o[QStringLiteral("gainers")].toInt();
     s.losers                     = o[QStringLiteral("losers")].toInt();
@@ -606,6 +615,34 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             h.weight = (total_mv > 0) ? (h.market_value / total_mv) * 100.0 : 0;
         }
 
+        // Realized P&L and dividend income from the transaction log —
+        // including symbols whose positions are fully closed and therefore
+        // have no holding row. One SQLite read + a pure replay per symbol;
+        // cheap at refresh-tick cadence, and the only way "REALIZED" can
+        // include the winners that were sold.
+        {
+            auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, 1000000);
+            if (txns_r.is_ok()) {
+                QHash<QString, QVector<portfolio::Transaction>> by_symbol;
+                for (const auto& t : txns_r.value())
+                    by_symbol[t.symbol.toUpper()].append(t);
+                QHash<QString, portfolio::LedgerPosition> replayed;
+                for (auto it = by_symbol.cbegin(); it != by_symbol.cend(); ++it) {
+                    auto pos = portfolio::replay_transactions(it.value());
+                    summary.total_realized_pnl += pos.realized_pnl;
+                    summary.total_dividend_income += pos.dividend_income;
+                    replayed.insert(it.key(), std::move(pos));
+                }
+                for (auto& h : summary.holdings) {
+                    const auto it = replayed.constFind(h.symbol.toUpper());
+                    if (it != replayed.constEnd()) {
+                        h.realized_pnl = it->realized_pnl;
+                        h.dividend_income = it->dividend_income;
+                    }
+                }
+            }
+        }
+
         summary.total_market_value = total_mv;
         summary.total_cost_basis = total_cost;
         summary.total_unrealized_pnl = total_mv - total_cost;
@@ -654,20 +691,56 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
 }
 
 // ── Asset operations ─────────────────────────────────────────────────────────
+//
+// One write model: record the transaction, then rebuild_position() replays
+// the symbol's full log through the single PortfolioLedger convention and
+// syncs the asset row to the result. The module previously kept two
+// incompatible average-cost computations (a running upsert here, an
+// all-BUYs-ignoring-SELLs recompute in edit_position), so the number shown
+// as AVG COST depended on which code path last touched the position.
+
+portfolio::LedgerPosition PortfolioService::rebuild_position(const QString& portfolio_id, const QString& symbol) {
+    auto& repo = PortfolioRepository::instance();
+    const QString up = symbol.toUpper();
+
+    auto txns = repo.get_symbol_transactions(portfolio_id, up);
+    if (txns.is_err()) {
+        // Do NOT touch the asset row on a read failure — deleting a position
+        // because SQLite hiccuped would be the destructive path this engine
+        // exists to remove.
+        LOG_ERROR("PortfolioSvc", QString("rebuild_position %1: %2").arg(up, QString::fromStdString(txns.error())));
+        return {};
+    }
+
+    // An empty log has exactly one meaning since v049 synthesized opening
+    // BUYs for every pre-ledger holding: the position does not exist (its
+    // last transaction was deleted). Leaving the cached row alive here would
+    // strand a phantom holding no ledger operation could ever remove.
+    auto pos = portfolio::replay_transactions(txns.value());
+    for (const auto& w : pos.warnings)
+        LOG_WARN("PortfolioSvc", QString("Ledger %1/%2: %3").arg(portfolio_id, up, w));
+
+    if (pos.is_open())
+        repo.set_position(portfolio_id, up, pos.quantity, pos.avg_cost, pos.first_buy_date);
+    else
+        repo.remove_asset(portfolio_id, up);
+    return pos;
+}
 
 void PortfolioService::add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                                  const QString& date) {
-    auto& repo = PortfolioRepository::instance();
-
-    auto r = repo.add_asset(portfolio_id, symbol, qty, price, date);
-    if (r.is_err()) {
-        LOG_ERROR("PortfolioSvc", "Failed to add asset: " + QString::fromStdString(r.error()));
+    if (qty <= 0) {
+        LOG_ERROR("PortfolioSvc", QString("Rejected BUY of %1 x%2 — quantity must be positive").arg(symbol).arg(qty));
         return;
     }
-
-    // Record transaction
+    auto& repo = PortfolioRepository::instance();
     QString txn_date = date.isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
-    repo.add_transaction(portfolio_id, symbol, "BUY", qty, price, txn_date);
+    auto r = repo.add_transaction(portfolio_id, symbol, "BUY", qty, price, txn_date);
+    if (r.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to record buy: " + QString::fromStdString(r.error()));
+        return;
+    }
+    rebuild_position(portfolio_id, symbol);
 
     invalidate_cache(portfolio_id);
     emit asset_added(portfolio_id);
@@ -677,39 +750,31 @@ void PortfolioService::sell_asset(const QString& portfolio_id, const QString& sy
                                   const QString& date) {
     auto& repo = PortfolioRepository::instance();
 
-    // Get current holdings to update quantity
-    auto assets_r = repo.get_assets(portfolio_id);
-    if (assets_r.is_err()) {
-        LOG_ERROR("PortfolioSvc", "Failed to get assets for sell: " + QString::fromStdString(assets_r.error()));
+    // Validate against the ledger, not the asset row — the row is a cache.
+    auto txns = repo.get_symbol_transactions(portfolio_id, symbol);
+    const double held = txns.is_ok() && !txns.value().isEmpty()
+                            ? portfolio::replay_transactions(txns.value()).quantity
+                            : 0.0;
+    if (qty <= 0 || qty > held + 1e-6) {
+        // Surface the rejection — a silently ignored sell looks like data loss.
+        const QString reason = tr("Cannot sell %1 %2 — the transaction log shows %3 held.")
+                                   .arg(qty)
+                                   .arg(symbol)
+                                   .arg(held);
+        LOG_ERROR("PortfolioSvc", reason);
+        emit position_edit_rejected(portfolio_id, symbol, reason);
         return;
     }
 
-    // Find the asset
-    const portfolio::PortfolioAsset* found = nullptr;
-    for (const auto& a : assets_r.value()) {
-        if (a.symbol == symbol.toUpper()) {
-            found = &a;
-            break;
-        }
-    }
-
-    if (!found) {
-        LOG_ERROR("PortfolioSvc", QString("Asset %1 not found in portfolio %2").arg(symbol, portfolio_id));
-        return;
-    }
-
-    double remaining = found->quantity - qty;
-    if (remaining <= 0.0001) {
-        // Full sell — remove asset
-        repo.remove_asset(portfolio_id, symbol);
-    } else {
-        // Partial sell — keep same avg price
-        repo.update_asset(portfolio_id, symbol, remaining, found->avg_buy_price);
-    }
-
-    // Record transaction
     QString txn_date = date.isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
-    repo.add_transaction(portfolio_id, symbol, "SELL", qty, price, txn_date);
+    auto r = repo.add_transaction(portfolio_id, symbol, "SELL", qty, price, txn_date);
+    if (r.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to record sell: " + QString::fromStdString(r.error()));
+        return;
+    }
+    // The replay keeps the realized gain; a fully closed position removes its
+    // asset row but its P&L stays in the log (and in the summary totals).
+    rebuild_position(portfolio_id, symbol);
 
     invalidate_cache(portfolio_id);
     emit asset_sold(portfolio_id);
@@ -741,65 +806,54 @@ void PortfolioService::edit_position(const QString& portfolio_id, const QString&
                                      double qty, double price, const QString& date, const QString& notes) {
     auto& repo = PortfolioRepository::instance();
 
-    // Re-derive the stored asset row from ALL of this symbol's transactions.
-    // The blotter shows the asset row (build_summary -> get_assets), not a
-    // transaction sum, so the edit only sticks if the asset is updated too —
-    // but overwriting it with just the edited lot would drop the other lots of
-    // a multi-buy position. Quantity-weighted average cost over BUY lots matches
-    // the convention add_asset uses; SELLs reduce quantity but leave avg intact.
+    // Validate BEFORE writing, by replaying the log with the proposed values
+    // substituted in. Shrinking a BUY below the SELLs already recorded against
+    // it makes the history impossible — a real case: a 425-share buy with a
+    // 424-share sell against it, edited down to 213, wrote -211 shares to the
+    // asset row. Nothing is written until the substituted replay is sane.
     //
-    // Crucially this runs BEFORE the transaction is rewritten, substituting the
-    // proposed values so the outcome can be checked first. Shrinking a BUY
-    // below the SELLs already recorded against it drives the position negative
-    // — a real case: a 425-share buy with a 424-share sell against it, edited
-    // down to 213, wrote -211 shares to the asset row and showed that in the
-    // blotter. Writing first and validating never would leave the transaction
-    // edited but the position wrong, so nothing is written until the result is
-    // known to be sane.
+    // Historical note: this path used to recompute average cost over BUY rows
+    // only, ignoring intervening SELLs — a different convention from the buy
+    // upsert, so editing a transaction's NOTE could move cost basis by double
+    // digits. Both paths now replay through the same ledger.
     auto txns = repo.get_symbol_transactions(portfolio_id, symbol);
     if (txns.is_ok()) {
-        double buy_qty = 0, buy_cost = 0, sell_qty = 0;
-        bool saw_edited = false;
-        for (const auto& t : txns.value()) {
-            const bool edited = (t.id == txn_id);
-            saw_edited = saw_edited || edited;
-            const double t_qty = edited ? qty : t.quantity;
-            const double t_price = edited ? price : t.price;
-            if (t.transaction_type == "BUY") {
-                buy_qty += t_qty;
-                buy_cost += t_qty * t_price;
-            } else if (t.transaction_type == "SELL") {
-                sell_qty += t_qty;
+        QVector<portfolio::Transaction> proposed = txns.value();
+        for (auto& t : proposed) {
+            if (t.id == txn_id) {
+                t.quantity = qty;
+                t.price = price;
+                t.transaction_date = date;
             }
         }
-
-        const double net_qty = buy_qty - sell_qty;
-        constexpr double kQtyEpsilon = 1e-6;
-        if (saw_edited && net_qty < -kQtyEpsilon) {
-            const QString reason =
-                tr("This portfolio records SELL transactions totalling %1 %2 shares, which is more than the "
-                   "%3 shares the edit would leave bought.\n\nApplying it would put the position at %4 "
-                   "shares. Adjust or remove the sell first.")
-                    .arg(sell_qty, 0, 'f', sell_qty == std::floor(sell_qty) ? 0 : 2)
-                    .arg(symbol)
-                    .arg(buy_qty, 0, 'f', buy_qty == std::floor(buy_qty) ? 0 : 2)
-                    .arg(net_qty, 0, 'f', net_qty == std::floor(net_qty) ? 0 : 2);
-            LOG_WARN("PortfolioSvc", QString("Rejected edit of %1 in %2: net would be %3")
-                                         .arg(symbol, portfolio_id)
-                                         .arg(net_qty));
+        const auto count_oversells = [](const portfolio::LedgerPosition& p) {
+            int n = 0;
+            for (const auto& w : p.warnings)
+                if (w.contains(QLatin1String("exceeds")))
+                    ++n;
+            return n;
+        };
+        // Compare against the CURRENT replay: an edit is rejected only for an
+        // inconsistency it introduces, never for one the history already had
+        // (otherwise a note edit on a long-imported symbol becomes impossible).
+        const auto proposed_replay = portfolio::replay_transactions(proposed);
+        const int before = count_oversells(portfolio::replay_transactions(txns.value()));
+        if (count_oversells(proposed_replay) > before) {
+            QString detail;
+            for (const auto& w : proposed_replay.warnings)
+                if (w.contains(QLatin1String("exceeds")))
+                    detail = w;
+            const QString reason = tr("This edit would make the history impossible for %1: %2\n\n"
+                                      "Adjust or remove the conflicting sell first.")
+                                       .arg(symbol, detail);
+            LOG_WARN("PortfolioSvc", QString("Rejected edit of %1 in %2: %3").arg(symbol, portfolio_id, detail));
             emit position_edit_rejected(portfolio_id, symbol, reason);
             return; // nothing written — transaction and asset both untouched
         }
-
-        repo.update_transaction(txn_id, qty, price, date, notes);
-        const double avg = buy_qty > 0 ? buy_cost / buy_qty : price;
-        repo.update_asset(portfolio_id, symbol, net_qty, avg);
-    } else {
-        // Couldn't re-read transactions — fall back to the edited lot's values
-        // so the edit still takes effect rather than silently doing nothing.
-        repo.update_transaction(txn_id, qty, price, date, notes);
-        repo.update_asset(portfolio_id, symbol, qty, price);
     }
+
+    repo.update_transaction(txn_id, qty, price, date, notes);
+    rebuild_position(portfolio_id, symbol);
 
     invalidate_cache(portfolio_id);
     load_transactions(portfolio_id, 50); // refresh the txn-history panel
@@ -807,8 +861,20 @@ void PortfolioService::edit_position(const QString& portfolio_id, const QString&
 }
 
 void PortfolioService::delete_transaction(const QString& id, const QString& portfolio_id) {
-    PortfolioRepository::instance().delete_transaction(id);
-    invalidate_cache(portfolio_id);
+    auto& repo = PortfolioRepository::instance();
+    // Fetch first: after the delete there is nothing left to say which
+    // position must be re-derived. Trust the transaction's own portfolio_id
+    // over the caller's — the delete is keyed globally by id, so a stale UI
+    // selection would otherwise rebuild the wrong portfolio and leave the
+    // affected one showing a position that includes the deleted row.
+    const auto txn = repo.get_transaction(id);
+    repo.delete_transaction(id);
+    if (txn.is_ok()) {
+        rebuild_position(txn.value().portfolio_id, txn.value().symbol);
+        invalidate_cache(txn.value().portfolio_id);
+    }
+    if (!txn.is_ok() || txn.value().portfolio_id != portfolio_id)
+        invalidate_cache(portfolio_id);
 }
 
 // ── Dividend ──────────────────────────────────────────────────────────────────
@@ -1783,54 +1849,48 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
     int replayed = 0;
     QStringList errors;
 
-    // Replay transactions chronologically
+    // Record every transaction, then derive positions by replaying each
+    // symbol's log through the ledger. DIVIDEND and SPLIT are first-class now
+    // — the old importer dropped them, which left split positions off by the
+    // split factor and dividend income out of every total. Order within the
+    // file doesn't matter: the replay sorts chronologically.
+    QSet<QString> touched;
     for (const auto& val : txn_arr) {
         auto obj = val.toObject();
-        QString type = obj["type"].toString();
-        if (type != "BUY" && type != "SELL")
-            continue; // Skip DIVIDEND/SPLIT for now
-
-        QString sym = obj["symbol"].toString();
-        double qty = obj["quantity"].toDouble();
-        double price = obj["price"].toDouble();
-        QString date = obj["date"].toString();
-
-        if (type == "BUY") {
-            QString hint_sector = sector_hints.value(sym.toUpper());
-            auto r = repo.add_asset(target_id, sym, qty, price, date, hint_sector);
-            if (r.is_err()) {
-                errors.append(QString("BUY %1: %2").arg(sym, QString::fromStdString(r.error())));
-                continue;
-            }
-        } else { // SELL
-            auto assets = repo.get_assets(target_id);
-            bool sell_ok = false;
-            if (assets.is_ok()) {
-                for (const auto& a : assets.value()) {
-                    if (a.symbol == sym.toUpper()) {
-                        if (qty > a.quantity + 0.0001) {
-                            errors.append(QString("SELL %1: qty %2 > held %3").arg(sym).arg(qty).arg(a.quantity));
-                        } else {
-                            double remaining = a.quantity - qty;
-                            if (remaining <= 0.0001)
-                                repo.remove_asset(target_id, sym);
-                            else
-                                repo.update_asset(target_id, sym, remaining, a.avg_buy_price);
-                            sell_ok = true;
-                        }
-                        break;
-                    }
-                }
-                if (!sell_ok && errors.isEmpty())
-                    errors.append(QString("SELL %1: asset not found").arg(sym));
-            }
-            if (!sell_ok)
-                continue; // Don't record failed sell as transaction
+        const QString type = obj["type"].toString();
+        if (type != "BUY" && type != "SELL" && type != "DIVIDEND" && type != "SPLIT") {
+            errors.append(QString("%1 %2: unsupported type").arg(type, obj["symbol"].toString()));
+            continue;
         }
-
-        // Record the transaction only on success
-        repo.add_transaction(target_id, sym, type, qty, price, date, obj["notes"].toString());
+        const QString sym = obj["symbol"].toString();
+        const double qty = obj["quantity"].toDouble();
+        const double price = obj["price"].toDouble();
+        // An empty date would string-sort before every dated row and replay
+        // first — an undated SELL would clamp against zero held. Default to
+        // now, matching what the recording paths do.
+        QString date = obj["date"].toString().trimmed();
+        if (date.isEmpty())
+            date = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+        if (sym.trimmed().isEmpty() || qty <= 0) {
+            errors.append(QString("%1 %2: missing symbol or non-positive quantity").arg(type, sym));
+            continue;
+        }
+        auto r = repo.add_transaction(target_id, sym, type, qty, price, date, obj["notes"].toString());
+        if (r.is_err()) {
+            errors.append(QString("%1 %2: %3").arg(type, sym, QString::fromStdString(r.error())));
+            continue;
+        }
+        touched.insert(sym.toUpper());
         ++replayed;
+    }
+    for (const QString& sym : std::as_const(touched)) {
+        const auto pos = rebuild_position(target_id, sym);
+        for (const auto& w : pos.warnings)
+            errors.append(sym + ": " + w);
+        // Sector hints apply to symbols that still hold a position.
+        const QString hint = sector_hints.value(sym);
+        if (!hint.isEmpty() && pos.is_open())
+            repo.set_asset_sector(target_id, sym, hint);
     }
 
     // Seed SectorResolver with authoritative mapping from the import file,
@@ -1891,23 +1951,16 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             txns_by_symbol[t.symbol.toUpper()].append(t);
     }
 
-    // Legacy support: an asset row with no transaction history (pre-v006 data
-    // or direct DB edits) replays as a single opening BUY at its stored
-    // average cost, dated at its first purchase.
+    // v049 synthesized opening BUYs for every pre-ledger holding, so a held
+    // position always has transactions. A row without any (direct DB edit)
+    // is skipped and logged rather than guessed at.
     auto assets_r = repo.get_assets(portfolio_id);
     if (assets_r.is_ok()) {
         for (const auto& a : assets_r.value()) {
-            const QString up = a.symbol.toUpper();
-            if (txns_by_symbol.contains(up) || a.quantity <= 0)
-                continue;
-            portfolio::Transaction t;
-            t.symbol = up;
-            t.transaction_type = QStringLiteral("BUY");
-            t.quantity = a.quantity;
-            t.price = a.avg_buy_price;
-            t.total_value = a.quantity * a.avg_buy_price;
-            t.transaction_date = entry_date_of(a.first_purchase_date);
-            txns_by_symbol[up].append(t);
+            if (a.quantity > 0 && !txns_by_symbol.contains(a.symbol.toUpper()))
+                LOG_WARN("PortfolioSvc", QString("backfill_history: %1 has a holdings row but no "
+                                                 "transactions — excluded from reconstructed NAV")
+                                             .arg(a.symbol));
         }
     }
     if (txns_by_symbol.isEmpty()) {

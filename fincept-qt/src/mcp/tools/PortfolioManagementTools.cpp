@@ -4,6 +4,7 @@
 #include "mcp/tools/PortfolioManagementTools.h"
 
 #include "core/logging/Logger.h"
+#include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 
 namespace fincept::mcp::tools {
@@ -180,15 +181,23 @@ std::vector<ToolDef> get_portfolio_management_tools() {
             if (portfolio_id.isEmpty() || symbol.isEmpty() || quantity <= 0 || price <= 0)
                 return ToolResult::fail("Missing or invalid: portfolio_id, symbol, quantity (>0), price (>0)");
 
-            auto r = PortfolioRepository::instance().add_asset(portfolio_id, symbol, quantity, price, date);
+            // Recorded as a BUY transaction: the transaction log is the source
+            // of truth, and the asset row is re-derived from its replay.
+            const QString txn_date =
+                date.trimmed().isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
+            auto r = PortfolioRepository::instance().add_transaction(portfolio_id, symbol, "BUY", quantity, price,
+                                                                     txn_date);
             if (r.is_err())
                 return ToolResult::fail("Failed to add asset: " + QString::fromStdString(r.error()));
+            const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added asset %1 x%2 to portfolio %3").arg(symbol).arg(quantity).arg(portfolio_id));
-            return ToolResult::ok("Asset added", QJsonObject{{"id", static_cast<int>(r.value())},
-                                                             {"symbol", symbol},
-                                                             {"quantity", quantity},
-                                                             {"price", price}});
+            return ToolResult::ok("Asset added (recorded as a BUY transaction)",
+                                  QJsonObject{{"transaction_id", r.value()},
+                                              {"symbol", symbol},
+                                              {"position_quantity", pos.quantity},
+                                              {"position_avg_cost", pos.avg_cost}});
         };
         tools.push_back(std::move(t));
     }

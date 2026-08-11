@@ -11,6 +11,7 @@
 #include "mcp/tools/PortfolioToolsExt.h"
 
 #include "core/logging/Logger.h"
+#include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 
 namespace fincept::mcp::tools {
@@ -119,18 +120,24 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
             if (portfolio_id.isEmpty())
                 return ToolResult::fail(err);
 
-            auto r = PortfolioRepository::instance().add_asset(portfolio_id, symbol, shares, avg_cost);
+            // Recorded as a BUY transaction — see PortfolioTools.cpp add_holding.
+            auto r = PortfolioRepository::instance().add_transaction(
+                portfolio_id, symbol, "BUY", shares, avg_cost,
+                QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
             if (r.is_err())
                 return ToolResult::fail("Failed to add holding: " + QString::fromStdString(r.error()));
+            const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3 (portfolio %4)")
                               .arg(symbol).arg(shares).arg(avg_cost).arg(portfolio_id));
 
-            return ToolResult::ok("Holding added", QJsonObject{{"id", static_cast<int>(r.value())},
-                                                               {"portfolio_id", portfolio_id},
-                                                               {"symbol", symbol},
-                                                               {"shares", shares},
-                                                               {"avg_cost", avg_cost}});
+            return ToolResult::ok("Holding added (recorded as a BUY transaction)",
+                                  QJsonObject{{"transaction_id", r.value()},
+                                              {"portfolio_id", portfolio_id},
+                                              {"symbol", symbol},
+                                              {"position_quantity", pos.quantity},
+                                              {"position_avg_cost", pos.avg_cost}});
         };
         tools.push_back(std::move(t));
     }
@@ -140,7 +147,10 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
         ToolDef t;
         t.name = "update_holding";
         t.description = "Set the absolute shares and average cost for an existing holding by ID "
-                        "(the id from get_holdings). Omit portfolio_id to use the first portfolio.";
+                        "(the id from get_holdings). Omit portfolio_id to use the first portfolio. "
+                        "WARNING: writes the cached asset row directly, bypassing the transaction "
+                        "log — the next transaction on this symbol re-derives the position from the "
+                        "log and overrides this value. Prefer add_transaction (BUY/SELL/SPLIT).";
         t.category = "portfolio";
         t.input_schema.properties =
             QJsonObject{{"portfolio_id",

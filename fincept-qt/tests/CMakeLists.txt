@@ -306,6 +306,7 @@ add_executable(test_portfolio_snapshots
     ../src/storage/sqlite/migrations/MigrationRunner.cpp
     ../src/storage/sqlite/migrations/v006_portfolio_multi.cpp
     ../src/storage/sqlite/migrations/v048_snapshot_source.cpp
+    ../src/storage/sqlite/migrations/v049_opening_balances.cpp
     ../src/storage/repositories/PortfolioRepository.cpp
     ../src/core/logging/Logger.cpp
 )

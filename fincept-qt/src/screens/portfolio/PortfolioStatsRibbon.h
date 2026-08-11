@@ -52,6 +52,8 @@ class PortfolioStatsRibbon : public QWidget {
 
     // Secondary (chip) cells
     ChipCell cost_basis_;
+    ChipCell realized_;
+    ChipCell dividends_;
     ChipCell concentration_;
     ChipCell sharpe_;
     ChipCell beta_;

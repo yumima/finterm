@@ -3,6 +3,7 @@
 #include "python/PythonRunner.h"
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
+#include "services/portfolio/PortfolioLedger.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -36,10 +37,22 @@ class PortfolioService : public QObject {
     void refresh_summary(const QString& portfolio_id); // invalidates cache first
 
     // ── Asset operations ─────────────────────────────────────────────────────
+    // Both record a transaction and then re-derive the asset row from the full
+    // transaction log (rebuild_position). The log is the source of truth; the
+    // asset row is a cache of its replay.
     void add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                    const QString& date = {});
     void sell_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                     const QString& date = {});
+
+    /// Re-derive one symbol's asset row (quantity, average cost, entry date)
+    /// by replaying its transactions through the single PortfolioLedger
+    /// convention. A closed or empty log removes the row — v049 guarantees
+    /// every real position has transactions, so "no transactions" means the
+    /// position no longer exists. Safe to call from any thread (DB access
+    /// only, no signals). Returns the replayed position so callers can
+    /// surface its warnings.
+    portfolio::LedgerPosition rebuild_position(const QString& portfolio_id, const QString& symbol);
 
     // ── Transactions ─────────────────────────────────────────────────────────
     void load_transactions(const QString& portfolio_id, int limit = 50);

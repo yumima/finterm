@@ -7,6 +7,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <atomic>
 
 namespace fincept {
 
@@ -162,6 +163,29 @@ Result<void> PortfolioRepository::update_asset(const QString& portfolio_id, cons
                       {qty, avg_price, portfolio_id, symbol.toUpper()});
 }
 
+Result<void> PortfolioRepository::set_position(const QString& portfolio_id, const QString& symbol, double qty,
+                                               double avg_price, const QString& first_purchase_date) {
+    // The asset row is a cache of the transaction-log replay, and this is the
+    // one writer that syncs it. Sector is deliberately untouched (import
+    // hints / SectorResolver own it); first_purchase_date follows the ledger's
+    // first BUY when known so the peak-high window tracks an edited opening
+    // date, and is preserved otherwise.
+    // The date parameter is bound twice: `excluded.*` reflects the value the
+    // INSERT would have written, so folding the empty→now() default into the
+    // VALUES expression would make every conflict see a non-empty "new" date
+    // and overwrite the one being preserved.
+    return exec_write("INSERT INTO portfolio_assets "
+                      "(portfolio_id, symbol, quantity, avg_buy_price, first_purchase_date) "
+                      "VALUES (?, ?, ?, ?, COALESCE(NULLIF(?, ''), datetime('now'))) "
+                      "ON CONFLICT(portfolio_id, symbol) DO UPDATE SET "
+                      "  quantity            = excluded.quantity, "
+                      "  avg_buy_price       = excluded.avg_buy_price, "
+                      "  first_purchase_date = COALESCE(NULLIF(?, ''), "
+                      "                                 portfolio_assets.first_purchase_date), "
+                      "  last_updated        = datetime('now')",
+                      {portfolio_id, symbol.toUpper(), qty, avg_price, first_purchase_date, first_purchase_date});
+}
+
 Result<void> PortfolioRepository::remove_asset(const QString& portfolio_id, const QString& symbol) {
     return exec_write("DELETE FROM portfolio_assets WHERE portfolio_id = ? AND symbol = ?",
                       {portfolio_id, symbol.toUpper()});
@@ -192,11 +216,21 @@ Result<QString> PortfolioRepository::add_transaction(const QString& portfolio_id
                                                      const QString& type, double qty, double price, const QString& date,
                                                      const QString& notes) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // created_at is the ledger's tie-break for same-dated transactions, and
+    // the column default (datetime('now'), 1-second resolution) makes two
+    // rows recorded in one import loop indistinguishable — the final UUID
+    // tie-break then replays a same-day BUY→SELL pair in random order, which
+    // clamps the sell against zero held about half the time. Milliseconds
+    // plus a process-monotonic sequence make "the order they were recorded"
+    // real.
+    static std::atomic<quint64> seq{0};
+    const QString created = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")) +
+                            QStringLiteral("#%1").arg(seq.fetch_add(1), 9, 10, QLatin1Char('0'));
     auto r = exec_write("INSERT INTO portfolio_transactions "
                         "(id, portfolio_id, symbol, transaction_type, quantity, price, total_value, "
-                        " transaction_date, notes) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        {id, portfolio_id, symbol.toUpper(), type, qty, price, qty * price, date, notes});
+                        " transaction_date, notes, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        {id, portfolio_id, symbol.toUpper(), type, qty, price, qty * price, date, notes, created});
     if (r.is_err())
         return Result<QString>::err(r.error());
     return Result<QString>::ok(id);
@@ -211,6 +245,19 @@ Result<void> PortfolioRepository::update_transaction(const QString& id, double q
 
 Result<void> PortfolioRepository::delete_transaction(const QString& id) {
     return exec_write("DELETE FROM portfolio_transactions WHERE id = ?", {id});
+}
+
+Result<portfolio::Transaction> PortfolioRepository::get_transaction(const QString& id) {
+    auto rows = query_list_as<portfolio::Transaction>(
+        "SELECT id, portfolio_id, symbol, transaction_type, quantity, price, total_value, "
+        "transaction_date, notes, created_at "
+        "FROM portfolio_transactions WHERE id = ?",
+        {id}, map_transaction);
+    if (rows.is_err())
+        return Result<portfolio::Transaction>::err(rows.error());
+    if (rows.value().isEmpty())
+        return Result<portfolio::Transaction>::err("Transaction not found");
+    return Result<portfolio::Transaction>::ok(rows.value().first());
 }
 
 // ── Snapshots ────────────────────────────────────────────────────────────────

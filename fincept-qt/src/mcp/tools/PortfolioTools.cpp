@@ -7,9 +7,11 @@
 #include "mcp/tools/PortfolioTools.h"
 
 #include "core/logging/Logger.h"
+#include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 
 #include <QDateTime>
+#include <QJsonArray>
 #include <QJsonDocument>
 
 namespace fincept::mcp::tools {
@@ -135,17 +137,25 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (portfolio_id.isEmpty())
                 return ToolResult::fail(err);
 
-            auto r = PortfolioRepository::instance().add_asset(portfolio_id, symbol, shares, avg_cost);
+            // Recorded as a BUY transaction: the transaction log is the source
+            // of truth, and the asset row is re-derived from its replay. The
+            // old direct-row upsert left no history behind the position.
+            auto r = PortfolioRepository::instance().add_transaction(
+                portfolio_id, symbol, "BUY", shares, avg_cost,
+                QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
             if (r.is_err())
                 return ToolResult::fail("Failed to add holding: " + QString::fromStdString(r.error()));
+            const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3 (portfolio %4)")
                               .arg(symbol).arg(shares).arg(avg_cost).arg(portfolio_id));
-            return ToolResult::ok("Holding added", QJsonObject{{"id", static_cast<int>(r.value())},
-                                                               {"portfolio_id", portfolio_id},
-                                                               {"symbol", symbol},
-                                                               {"shares", shares},
-                                                               {"avg_cost", avg_cost}});
+            return ToolResult::ok("Holding added (recorded as a BUY transaction)",
+                                  QJsonObject{{"transaction_id", r.value()},
+                                              {"portfolio_id", portfolio_id},
+                                              {"symbol", symbol},
+                                              {"position_quantity", pos.quantity},
+                                              {"position_avg_cost", pos.avg_cost}});
         };
         tools.push_back(std::move(t));
     }
@@ -155,7 +165,10 @@ std::vector<ToolDef> get_portfolio_tools() {
         ToolDef t;
         t.name = "update_holding";
         t.description = "Set the absolute shares and average cost for an existing holding by ID "
-                        "(the id from get_holdings). Omit portfolio_id to use the first portfolio.";
+                        "(the id from get_holdings). Omit portfolio_id to use the first portfolio. "
+                        "WARNING: writes the cached asset row directly, bypassing the transaction "
+                        "log — the next transaction on this symbol re-derives the position from the "
+                        "log and overrides this value. Prefer add_transaction (BUY/SELL/SPLIT).";
         t.category = "portfolio";
         t.input_schema.properties =
             QJsonObject{{"portfolio_id",
@@ -400,15 +413,23 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (portfolio_id.isEmpty() || symbol.isEmpty() || quantity <= 0 || price <= 0)
                 return ToolResult::fail("Missing or invalid: portfolio_id, symbol, quantity (>0), price (>0)");
 
-            auto r = PortfolioRepository::instance().add_asset(portfolio_id, symbol, quantity, price, date);
+            // Recorded as a BUY transaction: the transaction log is the source
+            // of truth, and the asset row is re-derived from its replay.
+            const QString txn_date =
+                date.trimmed().isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
+            auto r = PortfolioRepository::instance().add_transaction(portfolio_id, symbol, "BUY", quantity, price,
+                                                                     txn_date);
             if (r.is_err())
                 return ToolResult::fail("Failed to add asset: " + QString::fromStdString(r.error()));
+            const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added asset %1 x%2 to portfolio %3").arg(symbol).arg(quantity).arg(portfolio_id));
-            return ToolResult::ok("Asset added", QJsonObject{{"id", static_cast<int>(r.value())},
-                                                             {"symbol", symbol},
-                                                             {"quantity", quantity},
-                                                             {"price", price}});
+            return ToolResult::ok("Asset added (recorded as a BUY transaction)",
+                                  QJsonObject{{"transaction_id", r.value()},
+                                              {"symbol", symbol},
+                                              {"position_quantity", pos.quantity},
+                                              {"position_avg_cost", pos.avg_cost}});
         };
         tools.push_back(std::move(t));
     }
@@ -511,9 +532,18 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (r.is_err())
                 return ToolResult::fail("Failed to add transaction: " + QString::fromStdString(r.error()));
 
+            // The asset row is a cache of the transaction log's replay — a raw
+            // row insert without this left the displayed position (and P&L)
+            // untouched by the very transaction just recorded.
+            const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
+
             LOG_INFO(TAG, QString("Transaction %1 %2 x%3").arg(type, symbol).arg(quantity));
-            return ToolResult::ok("Transaction recorded",
-                                  QJsonObject{{"id", r.value()}, {"symbol", symbol}, {"type", type}});
+            QJsonObject data{{"id", r.value()}, {"symbol", symbol}, {"type", type},
+                             {"position_quantity", pos.quantity}, {"position_avg_cost", pos.avg_cost}};
+            if (!pos.warnings.isEmpty())
+                data["warnings"] = QJsonArray::fromStringList(pos.warnings);
+            return ToolResult::ok("Transaction recorded", data);
         };
         tools.push_back(std::move(t));
     }
@@ -532,10 +562,18 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (id.isEmpty())
                 return ToolResult::fail("Missing 'transaction_id'");
 
+            // Fetch before deleting — afterwards nothing says which position
+            // must be re-derived from the remaining log.
+            const auto txn = PortfolioRepository::instance().get_transaction(id);
+
             auto r = PortfolioRepository::instance().delete_transaction(id);
             if (r.is_err())
                 return ToolResult::fail("Failed to delete transaction: " + QString::fromStdString(r.error()));
 
+            if (txn.is_ok()) {
+                services::PortfolioService::instance().rebuild_position(txn.value().portfolio_id, txn.value().symbol);
+                services::PortfolioService::instance().invalidate_cache(txn.value().portfolio_id);
+            }
             return ToolResult::ok("Transaction deleted", QJsonObject{{"id", id}});
         };
         tools.push_back(std::move(t));

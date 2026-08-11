@@ -38,6 +38,7 @@ class TestPortfolioSnapshots : public QObject {
     void backfill_reports_suppressed_writes_as_zero();
     void live_supersedes_backfill();
     void check_constraint_rejects_unknown_source();
+    void set_position_syncs_the_asset_row();
     void migration_reapplies_cleanly();
     void migration_reclassifies_legacy_backfill_rows();
 
@@ -65,6 +66,7 @@ void TestPortfolioSnapshots::initTestCase() {
     QVERIFY(dir_.isValid());
     fincept::register_migration_v006();
     fincept::register_migration_v048();
+    fincept::register_migration_v049();
     auto opened = Database::instance().open(dir_.filePath(QStringLiteral("test.db")));
     QVERIFY2(opened.is_ok(), opened.is_err() ? opened.error().c_str() : "");
 
@@ -168,6 +170,28 @@ void TestPortfolioSnapshots::check_constraint_rejects_unknown_source() {
     QVERIFY(r.is_err());
 }
 
+void TestPortfolioSnapshots::set_position_syncs_the_asset_row() {
+    // set_position is the one writer that syncs the asset row to the ledger
+    // replay: insert when absent, overwrite quantity/avg on conflict, keep
+    // the entry date unless a new one is supplied.
+    auto& repo = PortfolioRepository::instance();
+    QVERIFY(repo.set_position(portfolio_id_, QStringLiteral("ldgr"), 10.0, 100.0,
+                              QStringLiteral("2026-01-05")).is_ok());
+    QVERIFY(repo.set_position(portfolio_id_, QStringLiteral("LDGR"), 25.0, 90.0, {}).is_ok());
+
+    // Raw SELECT: get_assets() reads the sector column, which a later
+    // migration (v019) adds — this suite registers only v006 + v048.
+    auto row = Database::instance().execute(
+        QStringLiteral("SELECT quantity, avg_buy_price, first_purchase_date "
+                       "FROM portfolio_assets WHERE portfolio_id = ? AND symbol = 'LDGR'"),
+        {portfolio_id_});
+    QVERIFY(row.is_ok());
+    QVERIFY(row.value().next());
+    QCOMPARE(row.value().value(0).toDouble(), 25.0);
+    QCOMPARE(row.value().value(1).toDouble(), 90.0);
+    QCOMPARE(row.value().value(2).toString(), QStringLiteral("2026-01-05")); // preserved
+}
+
 void TestPortfolioSnapshots::migration_reapplies_cleanly() {
     auto& repo = PortfolioRepository::instance();
     const QString d = date(70);
@@ -211,6 +235,18 @@ void TestPortfolioSnapshots::migration_reclassifies_legacy_backfill_rows() {
                        "snapshot_date TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), "
                        "UNIQUE(portfolio_id, snapshot_date))"));
         QVERIFY(q.exec("INSERT INTO portfolios (id, name) VALUES ('p1', 'Legacy')"));
+        // A pre-ledger holding with no transaction history: v049 must
+        // synthesize its opening BUY so the replay engine sees it.
+        QVERIFY(q.exec("CREATE TABLE portfolio_assets (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                       "portfolio_id TEXT NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE, "
+                       "symbol TEXT NOT NULL, quantity REAL NOT NULL DEFAULT 0, "
+                       "avg_buy_price REAL NOT NULL DEFAULT 0, "
+                       "first_purchase_date TEXT DEFAULT (datetime('now')), "
+                       "last_updated TEXT DEFAULT (datetime('now')), "
+                       "UNIQUE(portfolio_id, symbol))"));
+        QVERIFY(q.exec("INSERT INTO portfolio_assets "
+                       "(portfolio_id, symbol, quantity, avg_buy_price, first_purchase_date) "
+                       "VALUES ('p1', 'LGCY', 100, 50, '2025-11-20')"));
         // A real daily snapshot: written on the day it describes.
         QVERIFY(q.exec("INSERT INTO portfolio_snapshots "
                        "(portfolio_id, total_value, total_cost_basis, total_pnl, total_pnl_percent, "
@@ -251,6 +287,22 @@ void TestPortfolioSnapshots::migration_reclassifies_legacy_backfill_rows() {
     const auto edge_row = row_for(QStringLiteral("2026-05-03"), QStringLiteral("p1"));
     QVERIFY(edge_row.has_value());
     QCOMPARE(edge_row->source, QStringLiteral("live"));
+
+    // v049: the transaction-less legacy holding received a synthesized
+    // opening BUY at its stored quantity/cost, dated at its first purchase —
+    // so the ledger replay reproduces the position instead of clobbering it
+    // on the first recorded transaction.
+    auto opening = Database::instance().execute(
+        QStringLiteral("SELECT transaction_type, quantity, price, transaction_date "
+                       "FROM portfolio_transactions WHERE portfolio_id = 'p1' AND symbol = 'LGCY'"),
+        {});
+    QVERIFY(opening.is_ok());
+    QVERIFY(opening.value().next());
+    QCOMPARE(opening.value().value(0).toString(), QStringLiteral("BUY"));
+    QCOMPARE(opening.value().value(1).toDouble(), 100.0);
+    QCOMPARE(opening.value().value(2).toDouble(), 50.0);
+    QCOMPARE(opening.value().value(3).toString(), QStringLiteral("2025-11-20"));
+    QVERIFY(!opening.value().next()); // exactly one synthesized row
 }
 
 QTEST_GUILESS_MAIN(TestPortfolioSnapshots)

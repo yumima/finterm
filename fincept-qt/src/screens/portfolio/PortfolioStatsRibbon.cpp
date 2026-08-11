@@ -84,6 +84,17 @@ PortfolioStatsRibbon::PortfolioStatsRibbon(QWidget* parent) : QWidget(parent) {
     cost_basis_.container->setToolTip("Total amount invested — sum of (avg buy price × quantity)\n"
                                       "for all current positions. Used to compute P&L.");
 
+    realized_ = add_chip(chips_layout, "REALIZED", ui::colors::TEXT_PRIMARY);
+    realized_.container->setToolTip("Profit and loss locked in by sells, from the transaction log —\n"
+                                    "including positions that are fully closed. Average-cost basis:\n"
+                                    "realized = shares sold × (sell price − average cost at the sale).\n"
+                                    "Not part of UNREALIZED P&L above.");
+
+    dividends_ = add_chip(chips_layout, "DIV", ui::colors::CYAN);
+    dividends_.container->setToolTip("Cash dividends recorded in the transaction log.\n"
+                                     "Income, kept separate from price P&L — a dividend is not a\n"
+                                     "price move, and this NAV holds no cash balance.");
+
     concentration_ = add_chip(chips_layout, "CONC", ui::colors::AMBER);
     concentration_.container->setToolTip("Concentration risk: combined weight of the top 3 holdings.\n"
                                          "Values above 50% indicate a concentrated portfolio.\n"
@@ -263,6 +274,13 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     // Cost basis chip uses summary too
     cost_basis_.value->setText(fmt(s.total_cost_basis));
     apply_chip_styles(cost_basis_, ui::colors::CYAN);
+
+    realized_.value->setText(
+        QString("%1%2").arg(s.total_realized_pnl >= 0 ? "+" : "").arg(fmt(s.total_realized_pnl)));
+    apply_chip_styles(realized_, color_tok(s.total_realized_pnl));
+
+    dividends_.value->setText(fmt(s.total_dividend_income));
+    apply_chip_styles(dividends_, ui::colors::CYAN);
 }
 
 void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
@@ -317,6 +335,8 @@ void PortfolioStatsRibbon::refresh_theme() {
     apply_hero_styles(positions_, ui::colors::TEXT_PRIMARY);
 
     apply_chip_styles(cost_basis_, ui::colors::CYAN);
+    apply_chip_styles(realized_, ui::colors::TEXT_PRIMARY);
+    apply_chip_styles(dividends_, ui::colors::CYAN);
     apply_chip_styles(concentration_, ui::colors::AMBER);
     apply_chip_styles(sharpe_, ui::colors::CYAN);
     apply_chip_styles(beta_, ui::colors::WARNING);

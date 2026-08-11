@@ -82,6 +82,13 @@ struct HoldingWithQuote {
     // — the blotter's L% column. Always <= 0 by construction.
     double peak_price = 0;
     double drawdown_from_peak_percent = 0;
+
+    // From the transaction-log replay (PortfolioLedger): profit locked in by
+    // past sells of this symbol, and cash dividends received. Neither is in
+    // unrealized_pnl — a position that took profit is not a position that
+    // never had it.
+    double realized_pnl = 0;
+    double dividend_income = 0;
 };
 
 // ── Trailing-stop maths ──────────────────────────────────────────────────────
@@ -116,6 +123,12 @@ struct PortfolioSummary {
     double total_unrealized_pnl_percent = 0;
     double total_day_change = 0;
     double total_day_change_percent = 0;
+    // Portfolio-wide realized P&L and dividend income from the transaction
+    // log — INCLUDING fully closed positions, which have no holding row.
+    // Before the ledger existed, selling a winner deleted it and its entire
+    // gain vanished from every total.
+    double total_realized_pnl = 0;
+    double total_dividend_income = 0;
     int total_positions = 0;
     int gainers = 0;
     int losers = 0;

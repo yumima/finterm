@@ -23,6 +23,10 @@ class PortfolioRepository : public BaseRepository<portfolio::Portfolio> {
     Result<qint64> add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                              const QString& date = {}, const QString& sector = {});
     Result<void> update_asset(const QString& portfolio_id, const QString& symbol, double qty, double avg_price);
+    /// Sync the asset row to the transaction-log replay's output (upsert;
+    /// preserves sector, keeps first_purchase_date unless a new one is given).
+    Result<void> set_position(const QString& portfolio_id, const QString& symbol, double qty, double avg_price,
+                              const QString& first_purchase_date = {});
     Result<void> set_asset_sector(const QString& portfolio_id, const QString& symbol, const QString& sector);
     Result<void> remove_asset(const QString& portfolio_id, const QString& symbol);
 
@@ -34,6 +38,7 @@ class PortfolioRepository : public BaseRepository<portfolio::Portfolio> {
     Result<void> update_transaction(const QString& id, double qty, double price, const QString& date,
                                     const QString& notes = {});
     Result<void> delete_transaction(const QString& id);
+    Result<portfolio::Transaction> get_transaction(const QString& id);
 
     // ── Snapshots ────────────────────────────────────────────────────────────
     // save_snapshot writes a real (source='live') valuation and may overwrite

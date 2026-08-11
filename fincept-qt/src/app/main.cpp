@@ -430,6 +430,7 @@ int main(int argc, char* argv[]) {
     fincept::register_migration_v046();
     fincept::register_migration_v047();
     fincept::register_migration_v048();
+    fincept::register_migration_v049();
 
     // Open cache database (non-fatal if fails)
     QString cache_path = fincept::AppPaths::data() + "/cache.db";

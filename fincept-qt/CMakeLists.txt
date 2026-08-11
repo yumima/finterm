@@ -776,6 +776,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v046_earnings_signal_records.cpp
     src/storage/sqlite/migrations/v047_earnings_predicted_move.cpp
     src/storage/sqlite/migrations/v048_snapshot_source.cpp
+    src/storage/sqlite/migrations/v049_opening_balances.cpp
 )
 
 # Python runner
