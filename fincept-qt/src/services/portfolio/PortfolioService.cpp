@@ -2501,7 +2501,12 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                         tgt_high_sum += mv * sr.tgt_high / price;
                         covered_mv   += mv;
                     }
-                    if (sr.pe    > 0) { w_pe    += w * sr.pe;        cov_pe    += w; }
+                    // Portfolio P/E is Σ market value ÷ Σ earnings, i.e. the
+                    // MV-weighted HARMONIC mean — not the arithmetic mean of
+                    // the individual multiples, where one 300× name in a small
+                    // position drags the whole figure. Accumulate each
+                    // holding's earnings (mv / pe) and divide at the end.
+                    if (sr.pe    > 0) { w_pe    += mv / sr.pe;       cov_pe    += mv; }
                     if (sr.yield > 0) { w_yield += w * sr.yield;     cov_yield += w; }
                     if (sr.rec_score > 0) { w_rec += w * sr.rec_score; cov_rec   += w; }
                 }
@@ -2514,7 +2519,7 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                     f.tgt_high = tgt_high_sum + uncovered_mv;
                     f.has_analyst_data = true;
                 }
-                if (cov_pe    > 0) f.pe_ratio  = w_pe    / cov_pe;
+                if (cov_pe > 0 && w_pe > 0) f.pe_ratio = cov_pe / w_pe; // Σ MV / Σ earnings
                 if (cov_yield > 0) f.div_yield = w_yield / cov_yield;
                 if (cov_rec   > 0) {
                     const double s = w_rec / cov_rec;

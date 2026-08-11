@@ -70,7 +70,13 @@ void RiskManagementView::build_ui() {
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     stress_layout->addWidget(stress_title);
 
-    auto* stress_note = new QLabel("Estimated impact of historical and hypothetical market scenarios");
+    // Name the assumption. The shocks below are FIXED editorial numbers,
+    // not a model fitted to this portfolio: only the asset-class weights are
+    // yours. Presented bare, a "-33.0% LOSS" reads like a calculation.
+    auto* stress_note = new QLabel(
+        "Fixed historical/hypothetical shocks applied to your asset-class weights — "
+        "illustrative, not a fitted model");
+    stress_note->setWordWrap(true); // or its sizeHint pins the tab's minimum width
     stress_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     stress_layout->addWidget(stress_note);
 

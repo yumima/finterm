@@ -302,7 +302,13 @@ ApiResponse<QVector<BrokerPosition>> DhanBroker::get_positions(const BrokerCrede
         // refresh via /v2/marketfeed/ltp. Leave 0 here.
         pos.ltp = 0.0;
         pos.pnl = p.value("unrealizedProfit").toDouble();
-        pos.day_pnl = p.value("realizedProfit").toDouble();
+        // See IBKRBroker: realized P&L is not day P&L, and copying it into
+        // day_pnl double-counted it across two tiles.
+        // This API reports no day figure; say so rather than imply a flat day.
+        pos.day_pnl = 0.0;
+        pos.day_pnl_reported = false;
+        pos.realized_pnl = p.value("realizedProfit").toDouble();
+        pos.realized_pnl_reported = true;
         pos.side = qty > 0 ? "LONG" : "SHORT";
         if (pos.avg_price > 0 && pos.ltp > 0)
             pos.pnl_pct = (pos.ltp - pos.avg_price) / pos.avg_price * 100.0;

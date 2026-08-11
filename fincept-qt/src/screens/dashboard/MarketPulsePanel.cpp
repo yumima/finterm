@@ -401,7 +401,12 @@ QWidget* MarketPulsePanel::build_fear_greed_section() {
     auto* hrl = new QHBoxLayout(header_row);
     hrl->setContentsMargins(0, 0, 0, 0);
 
-    fg_header_label_ = new QLabel("FEAR & GREED INDEX");
+    // NOT CNN's Fear & Greed Index. This is finterm's own breadth-and-VIX
+    // gauge (advancing vs declining share, adjusted by VIX bands). It may
+    // well be a useful reading — but it is not the published index whose
+    // name it used to carry, and a user comparing the two would find they
+    // disagree with no explanation.
+    fg_header_label_ = new QLabel("MARKET MOOD (BREADTH + VIX)");
     hrl->addWidget(fg_header_label_);
     hrl->addStretch();
 

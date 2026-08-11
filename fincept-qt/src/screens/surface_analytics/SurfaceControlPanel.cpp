@@ -101,7 +101,9 @@ QColor tier_color(SurfaceTier t) {
         case SurfaceTier::EQUITIES:
             return QColor(217, 164, 6);
         case SurfaceTier::DEMO:
-            return QColor(140, 140, 140);
+            // Amber, not the same grey as every other secondary label: the
+            // numbers on screen are not market data.
+            return QColor(217, 164, 6);
     }
     return QColor(140, 140, 140);
 }
@@ -280,12 +282,10 @@ QGroupBox* SurfaceControlPanel::build_asset_section() {
     spot_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(colors::TEXT_SECONDARY()));
     l->addWidget(spot_label_);
 
-    tier_badge_ = new QLabel("DEMO", gb);
+    // Text/colour/tooltip are all set by set_capability(), which runs before
+    // the first paint and on every chart switch.
+    tier_badge_ = new QLabel(gb);
     tier_badge_->setAlignment(Qt::AlignCenter);
-    tier_badge_->setStyleSheet(
-        QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
-                "padding:2px 6px; border-radius:2px; max-width:80px;")
-            .arg(colors::TEXT_SECONDARY()));
     l->addWidget(tier_badge_, 0, Qt::AlignLeft);
 
     return gb;
@@ -507,8 +507,17 @@ void SurfaceControlPanel::set_capability(ChartType type) {
     tier_badge_->setText(tier_name(cap.tier));
     tier_badge_->setStyleSheet(
         QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
-                "padding:2px 6px; border-radius:2px; max-width:80px;")
+                "padding:2px 6px; border-radius:2px; max-width:140px;")
             .arg(bg.name()));
+    // set_capability runs on construction and on every chart switch, so the
+    // disclosure has to be re-applied here — setting it once in the
+    // constructor was silently overwritten before the first paint.
+    tier_badge_->setToolTip(
+        cap.tier == SurfaceTier::DEMO
+            ? QStringLiteral("These surfaces are generated analytically, not fetched from a\n"
+                             "market data source. The shapes are realistic; the numbers are\n"
+                             "not real quotes.")
+            : QString());
 
     // Default dataset for this surface
     if (!QString(cap.dataset).isEmpty()) {

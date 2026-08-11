@@ -147,17 +147,36 @@ void TodayPnLWidget::populate(const QVector<trading::BrokerPosition>& rows) {
     double total_pnl = 0.0;
     double day_pnl = 0.0;
     int open_positions = 0;
+    // Some brokers (IBKR, Dhan) report no day figure at all. Summing their
+    // zeros yields a confident green +$0.00 that looks like a flat day, so
+    // track whether ANY row actually reported one.
+    bool any_day_reported = false;
     for (const auto& p : rows) {
         total_pnl += p.pnl;
-        day_pnl += p.day_pnl;
+        if (p.day_pnl_reported) {
+            day_pnl += p.day_pnl;
+            any_day_reported = true;
+        }
         if (std::abs(p.quantity) > 0.0)
             ++open_positions;
     }
-    // Realized ≈ total P&L on zero-quantity rows (closed intraday)
+    // Realized: prefer the broker's own figure where it reports one. The
+    // zero-quantity heuristic below is a fallback for adapters that don't —
+    // and for Dhan/IBKR it was reading `pnl` (unrealized) on closed rows,
+    // so their real realized number reached no tile at all.
     double realized = 0.0;
+    bool any_realized_reported = false;
     for (const auto& p : rows) {
-        if (std::abs(p.quantity) < 1e-9)
-            realized += p.pnl;
+        if (p.realized_pnl_reported) {
+            realized += p.realized_pnl;
+            any_realized_reported = true;
+        }
+    }
+    if (!any_realized_reported) {
+        for (const auto& p : rows) {
+            if (std::abs(p.quantity) < 1e-9)
+                realized += p.pnl;
+        }
     }
 
     const QColor total_col =
@@ -167,10 +186,15 @@ void TodayPnLWidget::populate(const QVector<trading::BrokerPosition>& rows) {
         QString("color:%1;font-size:24px;font-weight:700;background:transparent;padding:4px 0;")
             .arg(total_col.name()));
 
-    day_pnl_value_->setText(fmt_pnl(day_pnl));
+    day_pnl_value_->setText(any_day_reported ? fmt_pnl(day_pnl) : QStringLiteral("—"));
+    day_pnl_value_->setToolTip(any_day_reported
+                                   ? QString()
+                                   : QStringLiteral("This broker's API does not report a day P&L."));
     day_pnl_value_->setStyleSheet(
         QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(day_pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+            .arg(!any_day_reported ? ui::colors::TEXT_SECONDARY()
+                 : day_pnl >= 0    ? ui::colors::POSITIVE()
+                                   : ui::colors::NEGATIVE()));
 
     realized_pnl_value_->setText(fmt_pnl(realized));
     realized_pnl_value_->setStyleSheet(

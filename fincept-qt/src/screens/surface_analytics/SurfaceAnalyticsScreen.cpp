@@ -80,6 +80,10 @@ static QString btn_inactive() {
 SurfaceAnalyticsScreen::SurfaceAnalyticsScreen(QWidget* parent) : QWidget(parent) {
     srand((unsigned)time(nullptr));
     setup_ui();
+    // NOTE: the surfaces below are SYNTHETIC until a real source is wired —
+    // load_demo_data() generates them analytically with rand() noise. The
+    // control panel disables FETCH for the DEMO tier and shows an amber
+    // "SYNTHETIC DATA" badge (see tier_name/tier_color).
     // Default to the seeded equity underlyings on first open so demo data fills.
     if (!control_panel_->state().basket.isEmpty())
         control_panel_->set_capability(active_chart_);

@@ -395,7 +395,16 @@ ApiResponse<QVector<BrokerPosition>> IBKRBroker::get_positions(const BrokerCrede
         pos.avg_price = o.value("avgCost").toDouble();
         pos.ltp = o.value("mktPrice").toDouble();
         pos.pnl = o.value("unrealizedPnl").toDouble();
-        pos.day_pnl = o.value("realizedPnl").toDouble();
+        // IBKR's position payload has no day-P&L field. Populating it from
+        // realizedPnl put the SAME figure in both the "Day" and "Realized"
+        // tiles of TodayPnLWidget, so the day number was simply wrong.
+        // Leave it at zero — an absent number the UI renders as such beats a
+        // confident one that means something else.
+        // This API reports no day figure; say so rather than imply a flat day.
+        pos.day_pnl = 0.0;
+        pos.day_pnl_reported = false;
+        pos.realized_pnl = o.value("realizedPnl").toDouble();
+        pos.realized_pnl_reported = true;
         pos.side = qty > 0 ? "LONG" : "SHORT";
         if (pos.avg_price > 0)
             pos.pnl_pct = (pos.ltp - pos.avg_price) / pos.avg_price * 100.0;

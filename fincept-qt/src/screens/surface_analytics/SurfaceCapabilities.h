@@ -29,7 +29,10 @@ inline const char* tier_name(SurfaceTier t) {
         case SurfaceTier::EQUITIES:
             return "EQUITIES";
         case SurfaceTier::DEMO:
-            return "DEMO";
+            // Not a tier name — a warning. These surfaces are generated
+            // analytically, and "DEMO" in a muted chip read as a product
+            // tier beside a realistic-looking vol smile.
+            return "SYNTHETIC DATA";
     }
     return "UNKNOWN";
 }

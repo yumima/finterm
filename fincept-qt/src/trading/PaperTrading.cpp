@@ -210,7 +210,6 @@ PtTrade pt_fill_order(const QString& order_id, double fill_price, std::optional<
     double qty = fill_qty.value_or(order.quantity - order.filled_qty);
     if (qty <= 0.0)
         throw std::runtime_error("Nothing left to fill");
-    double fee = qty * fill_price * portfolio.fee_rate;
     QString now = now_rfc3339();
 
     QString position_side = (order.side == "buy") ? "long" : "short";
@@ -225,11 +224,20 @@ PtTrade pt_fill_order(const QString& order_id, double fill_price, std::optional<
         // 4. Check opposite-side position (closing)
         auto opp = repo().find_position(order.portfolio_id, order.symbol, opposite_side);
         bool had_opposite = false;
+        // Notionals of the portion actually CLOSED by this fill — at entry
+        // price (for the deferred opening fee) and at fill price (for the
+        // exit fee). On a flip the remainder opens a new position, and
+        // charging its opening here as well as at its own close billed the
+        // same leg twice.
+        double closed_entry_notional = 0.0;
+        double closed_exit_notional = 0.0;
 
         if (opp) {
             had_opposite = true;
             PtPosition pos = *opp;
             double close_qty = std::min(qty, pos.quantity);
+            closed_entry_notional = std::abs(close_qty * pos.entry_price);
+            closed_exit_notional = std::abs(close_qty * fill_price);
             pnl = (pos.side == "long") ? (fill_price - pos.entry_price) * close_qty
                                        : (pos.entry_price - fill_price) * close_qty;
 
@@ -284,11 +292,21 @@ PtTrade pt_fill_order(const QString& order_id, double fill_price, std::optional<
         }
 
         // 7. Update balance
-        // Fee model: deduct fee only on closing fills (when realized PnL is produced).
-        // Entry fees are NOT deducted from balance at open — they are included in the
-        // exit fee when the position is closed. This matches how most exchanges present
-        // unrealized P&L (gross of entry fee) and only settle fees on close.
-        double balance_change = had_opposite ? (pnl - fee) : pnl;
+        // Fee model: a round trip costs TWO fees — one to open, one to close.
+        // The old comment claimed entry fees were "included in the exit fee",
+        // but only the closing fill's own fee was ever charged, so every
+        // simulated round trip understated costs by about half and flattered
+        // every strategy backtested through paper trading.
+        //
+        // Entry fees are still not deducted at open (that matches how most
+        // venues present unrealized P&L, gross of entry cost); they are
+        // settled here, on close. Both legs are computed on the CLOSED
+        // quantity only — on a flip, the newly opened remainder pays its own
+        // fees when it closes.
+        const double entry_fee = closed_entry_notional * portfolio.fee_rate;
+        const double exit_fee = closed_exit_notional * portfolio.fee_rate;
+        const double charged_fee = entry_fee + exit_fee;
+        double balance_change = had_opposite ? (pnl - charged_fee) : pnl;
         repo().update_balance(order.portfolio_id, portfolio.balance + balance_change);
 
         // 8. Update order
@@ -308,7 +326,10 @@ PtTrade pt_fill_order(const QString& order_id, double fill_price, std::optional<
         trade.side = order.side;
         trade.price = fill_price;
         trade.quantity = qty;
-        trade.fee = fee;
+        // Report the fee ACTUALLY debited, not just the exit leg — anything
+        // reconciling this column against the balance (or summing it for
+        // cost attribution) would otherwise see about half the real cost.
+        trade.fee = had_opposite ? charged_fee : 0.0;
         trade.pnl = pnl;
         trade.timestamp = now;
         repo().insert_trade(trade);

@@ -201,7 +201,17 @@ struct BrokerPosition {
     double ltp = 0;
     double pnl = 0;
     double pnl_pct = 0;
+    /// Today's P&L only. Two adapters used to fill this with REALIZED P&L,
+    /// which put the same figure in the Day and Realized tiles and made the
+    /// day number meaningless.
     double day_pnl = 0;
+    /// False when the broker's API does not report a day figure at all. The
+    /// UI must render "—" rather than a green +$0.00, which is
+    /// indistinguishable from a genuinely flat day.
+    bool day_pnl_reported = true;
+    /// Cumulative realized P&L on this position, when the broker reports it.
+    double realized_pnl = 0;
+    bool realized_pnl_reported = false;
     QString side;
 };
 

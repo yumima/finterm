@@ -73,7 +73,11 @@ void EconomicsView::build_ui() {
     sens_layout->setContentsMargins(12, 8, 12, 8);
     sens_layout->setSpacing(4);
 
-    auto* sens_title = new QLabel("PORTFOLIO FACTOR SENSITIVITY");
+    // These come from a hand-maintained sector→factor-beta table, not from
+    // a regression on this portfolio's returns; several rows are scalar
+    // rescalings of others. Useful as a directional sketch, misleading if
+    // read as a measured exposure — so the title says which it is.
+    auto* sens_title = new QLabel("PORTFOLIO FACTOR SENSITIVITY (SECTOR-BASED ESTIMATE)");
     sens_title->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px;").arg(ui::colors::AMBER()));
     sens_layout->addWidget(sens_title);
