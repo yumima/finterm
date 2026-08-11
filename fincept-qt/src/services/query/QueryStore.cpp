@@ -1,6 +1,8 @@
 // src/services/query/QueryStore.cpp
 #include "services/query/QueryStore.h"
 
+#include <algorithm>
+
 #include <QMetaObject>
 #include <QThread>
 
@@ -38,6 +40,13 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
             State current;
             current.data = entry.cached_value;
             current.loading = entry.inflight;
+            // Provenance travels with the replay too — an owner rebinding to
+            // the same key must not receive a populated value that claims to
+            // have no fetch time.
+            current.fetched_at = entry.fetched_at;
+            current.is_stale = !entry.cached_value.isNull() && entry.ttl_sec > 0 &&
+                               entry.fetched_at.isValid() &&
+                               entry.fetched_at.secsTo(QDateTime::currentDateTime()) >= entry.ttl_sec;
             sub.callback(current);
             return;
         }
@@ -74,6 +83,7 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
             State s;
             s.data = entry.cached_value;
             s.loading = entry.inflight;
+            s.fetched_at = entry.fetched_at;
             entry.subscribers.last().callback(s);
         } else if (acceptable_stale) {
             // Deliver stale-but-served, then kick revalidate. The consumer
@@ -84,6 +94,7 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
             s.data = entry.cached_value;
             s.is_stale = true;
             s.loading = true;  // background revalidate is in flight
+            s.fetched_at = entry.fetched_at;
             entry.subscribers.last().callback(s);
             if (!entry.inflight)
                 kick_fetch(key, fetcher);
@@ -125,6 +136,54 @@ void QueryStore::invalidate(const QString& key) {
     if (!it.value().inflight && it.value().pending_fetcher) {
         kick_fetch(key, it.value().pending_fetcher);
     }
+}
+
+void QueryStore::revalidate(const QString& key, bool force) {
+    auto it = entries_.find(key);
+    if (it == entries_.end() || it.value().inflight || !it.value().pending_fetcher)
+        return;
+    // Respect the key's own TTL. A caller ticking every 20s must not refetch
+    // 30-minute fundamentals 90 times an hour: each key refreshes on ITS
+    // schedule, so one periodic tick can safely cover a panel whose parts
+    // have wildly different refresh economics (quote 60s, candles 10min,
+    // fundamentals 30min).
+    const auto& e = it.value();
+    if (!force && !e.cached_value.isNull() &&
+        !revalidate_due(e.fetched_at, e.ttl_sec, QDateTime::currentDateTime())) {
+        return;
+    }
+    // Deliberately does NOT clear cached_value: subscribers keep rendering
+    // real numbers until the replacement arrives, and a failed refresh
+    // leaves them with the last good value instead of a blank panel.
+    kick_fetch(key, e.pending_fetcher);
+}
+
+bool QueryStore::revalidate_due(const QDateTime& fetched_at, int ttl_sec, const QDateTime& now) {
+    if (!fetched_at.isValid())
+        return true; // nothing has ever been fetched for this key
+    // ttl_sec <= 0 means "never expires" everywhere else in this class
+    // (subscribe, peek); it must mean the same here rather than "always due".
+    if (ttl_sec <= 0)
+        return false;
+    return fetched_at.secsTo(now) >= std::max(ttl_sec, kMinRevalidateSec);
+}
+
+void QueryStore::revalidate_owner(QObject* owner) {
+    if (!owner)
+        return;
+    QStringList keys;
+    for (auto it = entries_.cbegin(); it != entries_.cend(); ++it) {
+        for (const auto& sub : it.value().subscribers) {
+            if (sub.owner == owner) {
+                keys.append(it.key());
+                break;
+            }
+        }
+    }
+    // Collected first: kick_fetch can resolve synchronously and mutate
+    // entries_, which would invalidate the iterator above.
+    for (const QString& k : std::as_const(keys))
+        revalidate(k);
 }
 
 void QueryStore::prefetch(const QString& key, int ttl_sec, Fetcher fetcher) {
@@ -197,22 +256,26 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
 
     // Capture key by value — entries_[key] could rehash under us if the
     // fetcher synchronously triggers another subscribe to a different key.
-    auto resolver = [this, key](QVariant value) {
+    Resolver resolver{[this, key](QVariant value, QDateTime fetched_at) {
         // Marshal to the store's thread to keep entries_ access serialized.
         // Qt::QueuedConnection ensures execution happens on the store's
         // event-loop thread regardless of which thread invokes resolver.
-        QMetaObject::invokeMethod(this, [this, key, value]() {
+        QMetaObject::invokeMethod(this, [this, key, value, fetched_at]() {
             auto it = entries_.find(key);
             if (it == entries_.end()) return;
             it.value().inflight = false;
             it.value().cached_value = value;
-            it.value().fetched_at = QDateTime::currentDateTime();
+            it.value().fetched_at = fetched_at;
             State s;
             s.data = value;
             s.loading = false;
+            s.fetched_at = it.value().fetched_at;
+            // Data older than its own TTL was served from a cache; say so.
+            s.is_stale = it.value().ttl_sec > 0 &&
+                         fetched_at.secsTo(QDateTime::currentDateTime()) >= it.value().ttl_sec;
             deliver(key, s);
         }, Qt::QueuedConnection);
-    };
+    }};
 
     auto rejecter = [this, key](QString err) {
         QMetaObject::invokeMethod(this, [this, key, err]() {
@@ -226,6 +289,12 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
             s.data = it.value().cached_value;
             s.loading = false;
             s.error = err;
+            // The surviving value is as old as it ever was — the failed
+            // fetch must not make it look refreshed. is_stale means
+            // "showing cached data past its TTL", so it only applies when
+            // there IS data to show; a cold-start failure has none.
+            s.fetched_at = it.value().fetched_at;
+            s.is_stale = !it.value().cached_value.isNull();
             deliver(key, s);
         }, Qt::QueuedConnection);
     };

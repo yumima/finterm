@@ -3,6 +3,7 @@
 #include "storage/sqlite/CacheDatabase.h"
 
 #include <QSqlQuery>
+#include <QTimeZone>
 #include <utility>
 
 namespace fincept {
@@ -119,6 +120,34 @@ std::optional<QString> CacheManager::try_get(const QString& key) const {
     if (v.isNull())
         return std::nullopt;
     return v.toString();
+}
+
+std::optional<CacheManager::Aged> CacheManager::try_get_aged(const QString& key) const {
+    auto& cdb = CacheDatabase::instance();
+    if (!cdb.is_open())
+        return std::nullopt;
+    auto r = cdb.execute("SELECT value, expires_at, ttl_seconds FROM unified_cache "
+                         "WHERE key = ? AND expires_at > datetime('now')",
+                         {key});
+    if (r.is_err())
+        return std::nullopt;
+    auto& q = r.value();
+    if (!q.next())
+        return std::nullopt;
+
+    Aged out;
+    out.value = q.value(0).toString();
+    // written_at = expires_at − ttl. `created_at` is preserved across re-puts
+    // by design, so it would report the FIRST write, not the value in hand.
+    QDateTime expires = QDateTime::fromString(q.value(1).toString(), Qt::ISODateWithMs);
+    if (!expires.isValid())
+        expires = QDateTime::fromString(q.value(1).toString(), QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    const int ttl = q.value(2).toInt();
+    if (expires.isValid()) {
+        expires.setTimeZone(QTimeZone::UTC); // the table stores UTC (datetime('now'))
+        out.written_at = expires.addSecs(-ttl).toLocalTime();
+    }
+    return out;
 }
 
 QHash<QString, QString> CacheManager::get_prefix(const QString& prefix) const {

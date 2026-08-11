@@ -680,6 +680,14 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // otherwise it lingers for the duration of the historical+info fetch.
     cached_candles_.clear();
     cached_info_ = {};
+    // Provenance is cleared with the data it describes. Left set, data_as_of()
+    // kept aging the PREVIOUS symbol's timestamps, so the freshness chip
+    // reported an age for numbers that were no longer on screen — and kept
+    // reporting one even after the new symbol's data landed, because the
+    // oldest of the three was still the old ticker's.
+    quote_as_of_ = QDateTime();
+    info_as_of_ = QDateTime();
+    hist_as_of_ = QDateTime();
     // Reset the quote too. Otherwise the prior symbol's OHLC/volume lingers in
     // the TODAY'S TRADING panel, and — worse — apply_info_state() re-applies the
     // stale cached_quote_ when the new symbol's info arrives before (or instead
@@ -1104,6 +1112,7 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
     // until the new period's historical resolves. cached_info_ is
     // period-independent so we leave it alone.
     cached_candles_.clear();
+    hist_as_of_ = QDateTime(); // only the candles were dropped
     update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING CHART\xe2\x80\xa6");
@@ -1765,7 +1774,22 @@ QWidget* EquityOverviewTab::build_financial_health_panel() {
 
 // ── Slots ─────────────────────────────────────────────────────────────────────
 
+QDateTime EquityOverviewTab::data_as_of() const {
+    // The OLDEST of the three: the panel is only as current as its stalest
+    // component, and claiming otherwise is the lie this replaces.
+    QDateTime oldest;
+    for (const QDateTime& t : {quote_as_of_, info_as_of_, hist_as_of_}) {
+        if (!t.isValid())
+            continue;
+        if (!oldest.isValid() || t < oldest)
+            oldest = t;
+    }
+    return oldest;
+}
+
 void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::State& s) {
+    if (s.fetched_at.isValid())
+        quote_as_of_ = s.fetched_at;
     // Loading/error transitions: no panel update needed — the quote panel
     // already shows dashes from clear_quote_bar() / initial state. If a
     // future iteration wants a skeleton-pulse on loading, it slots in here.
@@ -1783,6 +1807,8 @@ void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::Sta
 }
 
 void EquityOverviewTab::apply_info_state(const services::query::QueryStore::State& s) {
+    if (s.fetched_at.isValid())
+        info_as_of_ = s.fetched_at;
     if (!s.data.isValid() || s.data.isNull())
         return;
     const auto info = s.data.value<services::equity::StockInfo>();
@@ -1879,6 +1905,8 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
 }
 
 void EquityOverviewTab::apply_historical_state(const services::query::QueryStore::State& s) {
+    if (s.fetched_at.isValid())
+        hist_as_of_ = s.fetched_at;
     // The historical subscription owns the overlay. Other categories
     // (quote/info) populate their panels asynchronously and don't gate the
     // chart-loading affordance.

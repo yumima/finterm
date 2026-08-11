@@ -145,10 +145,27 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     refresh_timer_->setInterval(20 * 1000); // 20s quote refresh
     connect(refresh_timer_, &QTimer::timeout, this, [this]() {
         if (current_symbol_.isEmpty()) return;
-        // Quote-only refresh. load_symbol() would also re-fire info+historical;
-        // info hits cache cheaply but historical periodically misses its 10min
-        // TTL, causing a visible chart hiccup every ~10min for no benefit.
-        services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
+        // The tab panels read through QueryStore, which nothing was
+        // re-kicking — so the Overview tab's OHLC, chart, financials, news
+        // and peers sat on their first-load values for as long as the symbol
+        // stayed open. revalidate_owner refreshes exactly the keys the
+        // visible tab subscribes to, keeping the displayed values in place
+        // until the replacements land.
+        //
+        // Ordering matters: the QueryStore quote fetcher and fetch_quote()
+        // dedupe through DIFFERENT in-flight guards, so running both against
+        // a lapsed TTL spawned two identical daemon RPCs every minute. The
+        // subscribed path covers the Overview tab; the broadcast fetch runs
+        // only for tabs that have no quote subscription of their own.
+        bool quote_covered = false;
+        if (tab_widget_) {
+            if (QWidget* visible = tab_widget_->currentWidget()) {
+                services::query::QueryStore::instance().revalidate_owner(visible);
+                quote_covered = (visible == overview_tab_);
+            }
+        }
+        if (!quote_covered)
+            services::equity::EquityResearchService::instance().fetch_quote(current_symbol_);
     });
 
     // Wire service signals
@@ -215,9 +232,10 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
                 const QString cs = EquityOverviewTab::currency_symbol(
                     current_currency_.isEmpty() ? "USD" : current_currency_);
                 price_label_->setText(QString("%1%2").arg(cs).arg(price, 0, 'f', 2));
-                // Update freshness — treat the live print as the latest data
-                // landing for whichever tab is showing the price.
-                mark_tab_loaded(overview_tab_);
+                // Deliberately does NOT touch the freshness chip: a live
+                // price tick updates this one label, not the panel's OHLC,
+                // fundamentals or chart. Stamping the chip here told the
+                // user the whole tab was current when only the price was.
             });
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────────
@@ -1151,14 +1169,25 @@ void EquityResearchScreen::mark_tab_loaded(QWidget* tab) {
 void EquityResearchScreen::update_freshness_chip() {
     if (!freshness_label_ || !tab_widget_) return;
     const int idx = tab_widget_->currentIndex();
-    const auto it = tab_loaded_at_.constFind(idx);
-    if (it == tab_loaded_at_.constEnd()) {
-        // No data has arrived for the active tab yet — keep chip blank
-        // rather than show a misleading age.
-        freshness_label_->setText("");
-        return;
+
+    // Prefer the tab's own record of when its data was FETCHED upstream.
+    // tab_loaded_at_ records when a signal reached the UI, which a cache hit
+    // satisfies instantly — so the chip used to read "just now" over numbers
+    // that were hours old. Fall back to it only for tabs that cannot yet
+    // report provenance.
+    QDateTime t;
+    if (overview_tab_ && tab_widget_->currentWidget() == overview_tab_)
+        t = overview_tab_->data_as_of();
+    if (!t.isValid()) {
+        const auto it = tab_loaded_at_.constFind(idx);
+        if (it == tab_loaded_at_.constEnd()) {
+            // No data has arrived for the active tab yet — keep chip blank
+            // rather than show a misleading age.
+            freshness_label_->setText("");
+            return;
+        }
+        t = it.value();
     }
-    const QDateTime& t = it.value();
     const qint64 secs = t.secsTo(QDateTime::currentDateTime());
     QString rel;
     if (secs < 5)        rel = "just now";

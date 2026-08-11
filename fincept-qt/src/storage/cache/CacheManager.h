@@ -1,4 +1,5 @@
 #pragma once
+#include <QDateTime>
 #include <QHash>
 #include <QObject>
 #include <QString>
@@ -27,6 +28,18 @@ class CacheManager : public QObject {
     /// Single-query variant of get(): std::nullopt on miss, value on hit. Prefer this over has()+get()
     /// — those two-round-trips duplicate work since get() already checks expiry.
     std::optional<QString> try_get(const QString& key) const;
+    /// try_get() plus the time the value was WRITTEN.
+    ///
+    /// Derived as expires_at − ttl_seconds, which tracks the most recent
+    /// put; `created_at` deliberately survives re-puts and so answers a
+    /// different question. Callers that resolve a request straight from
+    /// this cache need the write time, or every cache hit — including a
+    /// blob hydrated from disk at startup — presents itself as brand new.
+    struct Aged {
+        QString value;
+        QDateTime written_at;
+    };
+    std::optional<Aged> try_get_aged(const QString& key) const;
     /// Return every unexpired key/value pair whose key begins with `prefix`.
     /// Uses the same sargable range-query trick as remove_prefix() (no LIKE
     /// full-table scan). Intended for cold-start hydration where a service

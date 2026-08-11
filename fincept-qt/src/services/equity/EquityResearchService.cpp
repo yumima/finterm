@@ -270,12 +270,16 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
         // Cache check inside the fetcher so we participate in QueryStore's
         // in-flight dedup. If multiple subscribers attach concurrently, only
         // one daemon spawn happens; everyone else waits on the same fetch.
-        const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
+        const auto qcv_aged = fincept::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
+        const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
         if (!qcv.isNull()) {
             QuoteData parsed = parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object());
             // Mirror to legacy broadcast for non-migrated tabs.
             emit quote_loaded(parsed);
-            resolve(QVariant::fromValue(parsed));
+            // Resolve with the cache entry\'s WRITE time: a hit answers
+            // instantly, and stamping "now" would present a value hydrated
+            // from disk at startup as brand new.
+            resolve(QVariant::fromValue(parsed), qcv_aged->written_at);
             return;
         }
         QJsonObject payload;
@@ -314,11 +318,15 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
     const QString key = "equity:info:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const QVariant icv = fincept::CacheManager::instance().get("equity:info:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:" + symbol);
+        const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
             emit info_loaded(parsed);
-            resolve(QVariant::fromValue(parsed));
+            // Resolve with the cache entry\'s WRITE time: a hit answers
+            // instantly, and stamping "now" would present a value hydrated
+            // from disk at startup as brand new.
+            resolve(QVariant::fromValue(parsed), icv_aged->written_at);
             return;
         }
         QJsonObject payload;
@@ -359,12 +367,16 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
     auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
                                            query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             QVector<Candle> parsed = parse_candles(
                 QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
             emit historical_loaded(symbol, period, parsed);
-            resolve(QVariant::fromValue(parsed));
+            // Resolve with the cache entry\'s WRITE time: a hit answers
+            // instantly, and stamping "now" would present a value hydrated
+            // from disk at startup as brand new.
+            resolve(QVariant::fromValue(parsed), hcv_aged->written_at);
             return;
         }
         QJsonObject payload;
@@ -452,13 +464,17 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
         // broadcast synchronously without going through resolve, which would
         // skip the QueryStore delivery path. So we do an inline check that
         // calls resolve directly on hit.
-        const QVariant tcv = fincept::CacheManager::instance().get(key);
+        const auto tcv_aged = fincept::CacheManager::instance().try_get_aged(key);
+        const QVariant tcv = tcv_aged ? QVariant(tcv_aged->value) : QVariant();
         if (!tcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (doc.isArray()) {
                 TechnicalsData parsed = parse_technicals(symbol, period, interval, doc.array());
                 emit technicals_loaded(parsed);
-                resolve(QVariant::fromValue(parsed));
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                resolve(QVariant::fromValue(parsed), tcv_aged->written_at);
                 return;
             }
         }
@@ -507,13 +523,17 @@ void EquityResearchService::subscribe_financials(QObject* owner, const QString& 
     const QString key = "equity:financials:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const QVariant fcv = fincept::CacheManager::instance().get("equity:financials:" + symbol);
+        const auto fcv_aged = fincept::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
+        const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
         if (!fcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(fcv.toString().toUtf8());
             if (doc.isObject()) {
                 FinancialsData parsed = parse_financials(doc.object());
                 emit financials_loaded(parsed);
-                resolve(QVariant::fromValue(parsed));
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                resolve(QVariant::fromValue(parsed), fcv_aged->written_at);
                 return;
             }
         }
@@ -543,13 +563,17 @@ void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol
     const QString key = "equity:news:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const QVariant ncv = fincept::CacheManager::instance().get("equity:news:" + symbol);
+        const auto ncv_aged = fincept::CacheManager::instance().try_get_aged("equity:news:" + symbol);
+        const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
         if (!ncv.isNull()) {
             const auto doc = QJsonDocument::fromJson(ncv.toString().toUtf8());
             if (doc.isArray()) {
                 QVector<NewsArticle> parsed = parse_news(doc.array());
                 emit news_loaded(symbol, parsed);
-                resolve(QVariant::fromValue(parsed));
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                resolve(QVariant::fromValue(parsed), ncv_aged->written_at);
                 return;
             }
         }
@@ -614,11 +638,15 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
     const QString key = "equity:earnings:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const QVariant ecv = fincept::CacheManager::instance().get("equity:earnings:" + symbol);
+        const auto ecv_aged = fincept::CacheManager::instance().try_get_aged("equity:earnings:" + symbol);
+        const QVariant ecv = ecv_aged ? QVariant(ecv_aged->value) : QVariant();
         if (!ecv.isNull()) {
             const auto doc = QJsonDocument::fromJson(ecv.toString().toUtf8());
             if (doc.isArray()) {
-                resolve(QVariant::fromValue(parse_earnings(doc.array())));
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                resolve(QVariant::fromValue(parse_earnings(doc.array())), ecv_aged->written_at);
                 return;
             }
         }
@@ -654,7 +682,8 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
     auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
                                            query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             QVector<Candle> parsed = parse_candles(
                 QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
@@ -701,7 +730,8 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
 void EquityResearchService::fetch_quote(const QString& symbol) {
     if (symbol.isEmpty())
         return;
-    const QVariant qcv = fincept::CacheManager::instance().get("equity:quote:" + symbol);
+    const auto qcv_aged = fincept::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
+    const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
     if (!qcv.isNull()) {
         emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
         return;
@@ -746,7 +776,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {
-        const QVariant icv = fincept::CacheManager::instance().get("equity:info:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:" + symbol);
+        const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
         } else {
@@ -780,7 +811,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     // period and emits stale data, leaving the chart visually unchanged.
     {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             emit historical_loaded(symbol, period, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
@@ -835,7 +867,8 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
     // Tier 0: SWR cache — emit cached immediately and skip the network if
     // we have a fresh entry. Quarterly data; 1h TTL is plenty.
     {
-        const QVariant fcv = fincept::CacheManager::instance().get("equity:financials:" + symbol);
+        const auto fcv_aged = fincept::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
+        const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
         if (!fcv.isNull()) {
             const auto cached = QJsonDocument::fromJson(fcv.toString().toUtf8()).object();
             emit financials_loaded(parse_financials(cached));
@@ -885,7 +918,8 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
     // ── Tier 0: technicals cache ─────────────────────────────────────────────
     {
-        const QVariant tcv = fincept::CacheManager::instance().get(tech_key);
+        const auto tcv_aged = fincept::CacheManager::instance().try_get_aged(tech_key);
+        const QVariant tcv = tcv_aged ? QVariant(tcv_aged->value) : QVariant();
         if (!tcv.isNull()) {
             const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
             if (cached_doc.isArray()) {
@@ -952,7 +986,8 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         interval == QLatin1String("1d") ? period : interval + ":" + period;
     QJsonArray candles_from_cache;
     {
-        const QVariant hcv = fincept::CacheManager::instance().get(candles_key);
+        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
             if (doc.isArray()) candles_from_cache = doc.array();
@@ -1014,7 +1049,8 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
 
     // Tier 0: SWR cache — peer ratios are stable over hour-scale.
     {
-        const QVariant pcv = fincept::CacheManager::instance().get(cache_key);
+        const auto pcv_aged = fincept::CacheManager::instance().try_get_aged(cache_key);
+        const QVariant pcv = pcv_aged ? QVariant(pcv_aged->value) : QVariant();
         if (!pcv.isNull()) {
             const auto arr = QJsonDocument::fromJson(pcv.toString().toUtf8()).array();
             emit peers_loaded(symbol, parse_peers(arr));
@@ -1057,7 +1093,8 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
 void EquityResearchService::fetch_news(const QString& symbol, int count) {
     // Tier 0: SWR cache — emit cached immediately and skip the network.
     {
-        const QVariant ncv = fincept::CacheManager::instance().get("equity:news:" + symbol);
+        const auto ncv_aged = fincept::CacheManager::instance().try_get_aged("equity:news:" + symbol);
+        const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
         if (!ncv.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(ncv.toString().toUtf8()).array();
             emit news_loaded(symbol, parse_news(arr));
@@ -1116,7 +1153,8 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     // Use cached historical if available, else fetch. Cache key includes
     // period so different period selections don't reuse each other's data.
     const QString candles_key = "equity:candles:" + symbol + ":" + period;
-    const QVariant cached_candles = fincept::CacheManager::instance().get(candles_key);
+    const auto cached_candles_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+    const QVariant cached_candles = cached_candles_aged ? QVariant(cached_candles_aged->value) : QVariant();
     if (!cached_candles.isNull()) {
         run_talipp(cached_candles.toString());
     } else {
@@ -1629,11 +1667,23 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
     const QString key = "equity:earnings_analysis:" + symbol;
     auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve,
                                        query::QueryStore::Rejecter reject) {
-        const QVariant cached = fincept::CacheManager::instance().get(key);
+        const auto cached_aged = fincept::CacheManager::instance().try_get_aged(key);
+        const QVariant cached = cached_aged ? QVariant(cached_aged->value) : QVariant();
         if (!cached.isNull()) {
             const auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
             if (doc.isObject()) {
-                resolve(QVariant::fromValue(parse_earnings_analysis(doc.object())));
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // instantly, and stamping "now" would present a value hydrated
+                // from disk at startup as brand new.
+                // Freshly fetched from the daemon — resolves with "now".
+                // Cache hit: resolve with the entry's WRITE time, not now.
+                resolve(QVariant::fromValue(parse_earnings_analysis(doc.object())), cached_aged->written_at);
                 return;
             }
         }

@@ -60,16 +60,42 @@ class QueryStore : public QObject {
         ///   data set  + !loading     → "fresh"
         bool loading = false;
         /// True when `data` came from a cached value past its TTL but inside
-        /// the SWR window — caller may render with a 'stale' affordance.
-        /// Round 2 always sets this false; Round 3 wires SWR semantics.
+        /// the SWR window — the caller should render a 'stale' affordance.
         bool is_stale = false;
+        /// When `data` was actually fetched from upstream. Invalid when no
+        /// data has arrived yet.
+        ///
+        /// This is the ONLY honest basis for an age display. Panels used to
+        /// time their own signal arrivals, which meant a cache hit — or an
+        /// unrelated live tick — restamped the UI as "just now" while the
+        /// numbers on screen were hours old.
+        QDateTime fetched_at;
         /// Non-empty after a failed fetch. The store does not auto-clear
         /// this on subsequent subscribes — caller decides when an error is
         /// recoverable (e.g. by calling invalidate(key)).
         QString error;
     };
 
-    using Resolver = std::function<void(QVariant)>;
+    /// Resolves a fetch. Call with just the value for data fetched now, or
+    /// with an explicit timestamp when the value came from a cache — a
+    /// fetcher that short-circuits on a cache hit resolves instantly, and
+    /// stamping that moment would present a blob hydrated from disk at
+    /// startup as brand new. Both forms are call-compatible, so fetchers
+    /// that genuinely fetched need no change.
+    class Resolver {
+      public:
+        using Fn = std::function<void(QVariant, QDateTime)>;
+        Resolver() = default;
+        explicit Resolver(Fn fn) : fn_(std::move(fn)) {}
+        void operator()(QVariant value) const {
+            if (fn_) fn_(std::move(value), QDateTime::currentDateTime());
+        }
+        void operator()(QVariant value, QDateTime fetched_at) const {
+            if (fn_) fn_(std::move(value), fetched_at.isValid() ? fetched_at : QDateTime::currentDateTime());
+        }
+      private:
+        Fn fn_;
+    };
     using Rejecter = std::function<void(QString)>;
     /// Fetcher signature: do whatever async work is needed; eventually call
     /// either resolve(parsed) or reject(error_message). May call exactly
@@ -101,6 +127,41 @@ class QueryStore : public QObject {
     /// subscribers receive a {loading: true} transition first, then the
     /// resolved state.
     void invalidate(const QString& key);
+
+    /// Refresh `key` IF IT IS DUE, while KEEPING the cached value.
+    ///
+    /// This is what a periodic refresh wants, and what invalidate() is not:
+    /// invalidate() drops the cached value, so a refresh that then fails
+    /// delivers null and blanks a panel that was showing good data. Here the
+    /// value survives, and subscribers see the new one only once it lands.
+    ///
+    /// Honours the key's TTL, so a fast tick does not hammer slow-moving
+    /// data — each key refreshes on its own schedule. No-op if the value is
+    /// still fresh, a fetch is in flight, or the key was never subscribed.
+    /// `force` bypasses the due-check: an explicit user-initiated refresh
+    /// should not be told to wait for a TTL it never agreed to.
+    void revalidate(const QString& key, bool force = false);
+
+    /// revalidate() every key `owner` is subscribed to.
+    ///
+    /// The fix for the refresh gap: panels subscribe through QueryStore, but
+    /// the periodic timers refreshed a different cache namespace entirely, so
+    /// a subscribed panel could sit on its first-load values indefinitely
+    /// while a chip claimed it was current.
+    void revalidate_owner(QObject* owner);
+
+    /// Floor on how often a periodic revalidate will refetch, regardless of
+    /// how short a key's TTL is. A TTL answers "how long is a cached answer
+    /// acceptable", which a caller ticking every few seconds would otherwise
+    /// read as "how often to re-poll".
+    static constexpr int kMinRevalidateSec = 60;
+
+    /// Is `key` due for a periodic refresh? Pure and public so the policy can
+    /// be tested exhaustively without waiting real seconds.
+    ///   • never fetched            → due
+    ///   • ttl_sec <= 0             → never expires, so never due
+    ///   • age >= max(ttl, floor)   → due
+    static bool revalidate_due(const QDateTime& fetched_at, int ttl_sec, const QDateTime& now);
 
     /// Warm a key without binding a subscriber. The fetcher is invoked if
     /// nothing is cached and no fetch is in flight; otherwise no-op. Useful
@@ -155,6 +216,8 @@ class QueryStore : public QObject {
     /// live subscribers and no in-flight fetch, so eviction never disrupts
     /// the active view.
     static constexpr int kMaxEntries = 256;
+
+
 
     /// Deliver `state` to every live subscriber of `key`. Dead subscribers
     /// (owner destroyed) are pruned in the same pass.

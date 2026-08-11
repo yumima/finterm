@@ -133,6 +133,12 @@ class ResearchCandleCanvas : public QWidget {
 class EquityOverviewTab : public QWidget {
     Q_OBJECT
   public:
+    /// Oldest upstream fetch time across the data this tab is displaying
+    /// (quote, info, candles). This — not the moment a signal happened to
+    /// arrive — is the only honest basis for an age indicator, because a
+    /// cache hit satisfies a signal instantly. Invalid until data lands.
+    QDateTime data_as_of() const;
+
     explicit EquityOverviewTab(QWidget* parent = nullptr);
     /// @param force  Bypass the same-symbol early-return so the caller can
     ///               re-trigger a load on the currently-displayed symbol
@@ -386,6 +392,8 @@ class EquityOverviewTab : public QWidget {
     QLabel* free_cf_val_ = nullptr;
 
     // Cached data
+    QDateTime quote_as_of_, info_as_of_, hist_as_of_;
+
     services::equity::StockInfo cached_info_;
     services::equity::QuoteData cached_quote_;
     QVector<services::equity::Candle> cached_candles_;

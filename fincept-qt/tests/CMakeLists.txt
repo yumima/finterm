@@ -418,3 +418,31 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_equity_talipp.py
     )
 endif()
+
+# ── QueryStore provenance / revalidate tests ─────────────────────────────────
+# The contract every ER panel depends on: data carries its upstream fetch
+# time, and a periodic refresh (revalidate) never blanks a panel that is
+# showing good numbers — including when the refresh itself fails.
+
+add_executable(test_query_store
+    services/test_query_store.cpp
+    ../src/services/query/QueryStore.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_query_store PRIVATE
+    ../src
+)
+
+target_link_libraries(test_query_store PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Test
+)
+
+set_target_properties(test_query_store PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME query_store COMMAND test_query_store)
