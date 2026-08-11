@@ -2180,7 +2180,10 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
     // phantom NAV cliff at every date where the share count has since changed
     // — a -50%/+100% round trip in the return series at each preserved live
     // row, which exploded volatility, VaR and drawdown.
-    auto txns_r = repo.get_transactions(portfolio_id, 1000000);
+    // 0 = the whole log. A large finite limit still takes the truncating
+    // LIMIT branch, which drops the OLDEST rows — here, the opening BUYs the
+    // reconstruction is built from.
+    auto txns_r = repo.get_transactions(portfolio_id, /*limit=*/0);
     QHash<QString, QVector<portfolio::Transaction>> txns_by_symbol;
     if (txns_r.is_ok()) {
         for (const auto& t : txns_r.value())

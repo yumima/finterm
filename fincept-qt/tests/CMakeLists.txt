@@ -303,6 +303,7 @@ find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Sql)
 add_executable(test_portfolio_snapshots
     storage/test_portfolio_snapshots.cpp
     ../src/storage/sqlite/Database.cpp
+    ../src/services/portfolio/PortfolioLedger.cpp
     ../src/storage/sqlite/migrations/MigrationRunner.cpp
     ../src/storage/sqlite/migrations/v006_portfolio_multi.cpp
     ../src/storage/sqlite/migrations/v048_snapshot_source.cpp

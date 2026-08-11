@@ -8,10 +8,17 @@
 // These tests run against real temp SQLite files with the actual migrations
 // applied — the guard lives in SQL, so SQL is what gets tested.
 //
+// It also covers the repository operations the rest of the module is built
+// on — unlimited vs truncated reads, same-day ordering, entry dates surviving
+// an upsert, a closed position removing its row while keeping its history.
+// That seam between the pure engines (well covered) and the database is where
+// four consecutive reviews found their defects, and it had no tests.
+//
 // Each slot seeds its own rows on its own dates: QTest supports invoking a
 // single slot from the command line, and a slot that only works after its
 // siblings ran would silently test the wrong branch there.
 
+#include "services/portfolio/PortfolioLedger.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/sqlite/Database.h"
 #include "storage/sqlite/migrations/MigrationRunner.h"
@@ -39,6 +46,11 @@ class TestPortfolioSnapshots : public QObject {
     void live_supersedes_backfill();
     void check_constraint_rejects_unknown_source();
     void set_position_syncs_the_asset_row();
+    void unlimited_read_returns_the_whole_log();
+    void limited_read_drops_the_oldest_rows();
+    void same_day_transactions_replay_in_insertion_order();
+    void set_position_preserves_the_entry_date();
+    void closed_position_removes_the_row_and_keeps_the_history();
     void migration_reapplies_cleanly();
     void migration_reclassifies_legacy_backfill_rows();
 
@@ -190,6 +202,159 @@ void TestPortfolioSnapshots::set_position_syncs_the_asset_row() {
     QCOMPARE(row.value().value(0).toDouble(), 25.0);
     QCOMPARE(row.value().value(1).toDouble(), 90.0);
     QCOMPARE(row.value().value(2).toString(), QStringLiteral("2026-01-05")); // preserved
+}
+
+
+// ── Repository operations the rest of the module is built on ────────────────
+//
+// Each of these pins a defect a review actually found, in the seam between the
+// pure engines (well covered) and the database.
+
+void TestPortfolioSnapshots::unlimited_read_returns_the_whole_log() {
+    auto& repo = PortfolioRepository::instance();
+    auto pid = repo.create_portfolio(QStringLiteral("Whole"), QStringLiteral("t"), QStringLiteral("USD"));
+    QVERIFY(pid.is_ok());
+    // MORE than any plausible default. The declared default is 50, so a
+    // 25-row fixture would pass even if "unlimited" regressed straight back
+    // onto it — the exact regression this exists to catch.
+    constexpr int kRows = 120;
+    for (int i = 0; i < kRows; ++i) {
+        QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("AAPL"), QStringLiteral("BUY"), 1, 100.0,
+                                     QDate(2026, 1, 1).addDays(i).toString(Qt::ISODate))
+                    .is_ok());
+    }
+    auto all = repo.get_transactions(pid.value(), /*limit=*/0);
+    QVERIFY(all.is_ok());
+    QCOMPARE(all.value().size(), kRows);
+
+    // Rows come back DESC, so a truncating read drops the OLDEST — the
+    // opening BUYs that position reconstruction and a re-import depend on.
+    // Assert the oldest is present, not merely that the count looks right.
+    QString oldest;
+    for (const auto& t : all.value())
+        if (oldest.isEmpty() || t.transaction_date < oldest)
+            oldest = t.transaction_date;
+    QCOMPARE(oldest, QDate(2026, 1, 1).toString(Qt::ISODate));
+}
+
+void TestPortfolioSnapshots::limited_read_drops_the_oldest_rows() {
+    // Documents WHY whole-log callers must pass 0.
+    auto& repo = PortfolioRepository::instance();
+    auto pid = repo.create_portfolio(QStringLiteral("Limited"), QStringLiteral("t"), QStringLiteral("USD"));
+    QVERIFY(pid.is_ok());
+    for (int i = 0; i < 10; ++i) {
+        QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("AAPL"), QStringLiteral("BUY"), 1, 100.0,
+                                     QDate(2026, 2, 1).addDays(i).toString(Qt::ISODate))
+                    .is_ok());
+    }
+    auto few = repo.get_transactions(pid.value(), /*limit=*/3);
+    QVERIFY(few.is_ok());
+    QCOMPARE(few.value().size(), 3);
+    for (const auto& t : few.value())
+        QVERIFY2(t.transaction_date >= QStringLiteral("2026-02-08"),
+                 qPrintable("truncation kept an old row: " + t.transaction_date));
+}
+
+void TestPortfolioSnapshots::same_day_transactions_replay_in_insertion_order() {
+    // A day trade: buy then sell on one date. The column default has 1-second
+    // resolution, so a whole import batch shared a stamp and the final
+    // tie-break — a random UUID — replayed the sell first about half the time,
+    // clamping against a zero position and losing the realized gain.
+    //
+    // Asserting the REPLAY alone is a coin flip (a single pair is caught only
+    // ~50% of the time). Assert the ordering key directly, and use several
+    // pairs so a probabilistic regression cannot slip through either.
+    auto& repo = PortfolioRepository::instance();
+    auto pid = repo.create_portfolio(QStringLiteral("DayTrade"), QStringLiteral("t"), QStringLiteral("USD"));
+    QVERIFY(pid.is_ok());
+    const QString day = QStringLiteral("2026-03-05");
+
+    constexpr int kPairs = 8;
+    for (int i = 0; i < kPairs; ++i) {
+        QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("NVDA"), QStringLiteral("BUY"), 10, 100.0, day).is_ok());
+        QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("NVDA"), QStringLiteral("SELL"), 10, 110.0, day).is_ok());
+    }
+
+    auto txns = repo.get_symbol_transactions(pid.value(), QStringLiteral("NVDA"));
+    QVERIFY(txns.is_ok());
+    QCOMPARE(txns.value().size(), kPairs * 2);
+
+    // The ordering key itself must be strictly increasing in insertion order —
+    // this is the property, and it is deterministic.
+    QStringList stamps;
+    for (const auto& t : txns.value())
+        stamps << t.created_at;
+    std::sort(stamps.begin(), stamps.end());
+    for (int i = 1; i < stamps.size(); ++i)
+        QVERIFY2(stamps[i] > stamps[i - 1],
+                 qPrintable(QStringLiteral("created_at is not strictly increasing: %1 vs %2")
+                                .arg(stamps[i - 1], stamps[i])));
+
+    // And the replay it protects lands on the right answer.
+    const auto pos = fincept::portfolio::replay_transactions(txns.value());
+    QCOMPARE(pos.quantity, 0.0);
+    QCOMPARE(pos.realized_pnl, 100.0 * kPairs);
+    QVERIFY2(pos.warnings.isEmpty(), qPrintable(pos.warnings.join("; ")));
+}
+
+void TestPortfolioSnapshots::set_position_preserves_the_entry_date() {
+    auto& repo = PortfolioRepository::instance();
+    auto pid = repo.create_portfolio(QStringLiteral("Entry"), QStringLiteral("t"), QStringLiteral("USD"));
+    QVERIFY(pid.is_ok());
+    QVERIFY(repo.set_position(pid.value(), QStringLiteral("MSFT"), 10, 100.0, QStringLiteral("2025-01-15")).is_ok());
+    // A later sync carries no date: the original must survive, because it
+    // anchors the trailing-stop peak window.
+    QVERIFY(repo.set_position(pid.value(), QStringLiteral("MSFT"), 25, 90.0, {}).is_ok());
+    auto row = Database::instance().execute(
+        QStringLiteral("SELECT quantity, avg_buy_price, first_purchase_date FROM portfolio_assets "
+                       "WHERE portfolio_id = ? AND symbol = 'MSFT'"),
+        {pid.value()});
+    QVERIFY(row.is_ok());
+    QVERIFY(row.value().next());
+    QCOMPARE(row.value().value(0).toDouble(), 25.0);
+    QCOMPARE(row.value().value(1).toDouble(), 90.0);
+    QCOMPARE(row.value().value(2).toString(), QStringLiteral("2025-01-15"));
+
+    // An explicitly supplied date DOES move the anchor (editing the opening
+    // transaction's date must re-measure the peak window).
+    QVERIFY(repo.set_position(pid.value(), QStringLiteral("MSFT"), 25, 90.0, QStringLiteral("2024-03-01")).is_ok());
+    auto moved = Database::instance().execute(
+        QStringLiteral("SELECT first_purchase_date FROM portfolio_assets "
+                       "WHERE portfolio_id = ? AND symbol = 'MSFT'"),
+        {pid.value()});
+    QVERIFY(moved.is_ok());
+    QVERIFY(moved.value().next());
+    QCOMPARE(moved.value().value(0).toString(), QStringLiteral("2024-03-01"));
+}
+
+void TestPortfolioSnapshots::closed_position_removes_the_row_and_keeps_the_history() {
+    // Selling out must remove the holding row AND leave the log the realized
+    // gain is derived from. Before the ledger, a closed winner vanished from
+    // every total; a silently no-op removal would instead leave a phantom
+    // holding in them — so assert BOTH halves.
+    auto& repo = PortfolioRepository::instance();
+    auto pid = repo.create_portfolio(QStringLiteral("Closed"), QStringLiteral("t"), QStringLiteral("USD"));
+    QVERIFY(pid.is_ok());
+    QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("AMD"), QStringLiteral("BUY"), 10, 50.0,
+                                 QStringLiteral("2026-01-05")).is_ok());
+    QVERIFY(repo.add_transaction(pid.value(), QStringLiteral("AMD"), QStringLiteral("SELL"), 10, 80.0,
+                                 QStringLiteral("2026-02-05")).is_ok());
+    QVERIFY(repo.set_position(pid.value(), QStringLiteral("AMD"), 10, 50.0, QStringLiteral("2026-01-05")).is_ok());
+    QVERIFY(repo.remove_asset(pid.value(), QStringLiteral("AMD")).is_ok());
+
+    auto gone = Database::instance().execute(
+        QStringLiteral("SELECT COUNT(*) FROM portfolio_assets WHERE portfolio_id = ? AND symbol = 'AMD'"),
+        {pid.value()});
+    QVERIFY(gone.is_ok());
+    QVERIFY(gone.value().next());
+    QCOMPARE(gone.value().value(0).toInt(), 0);
+
+    auto txns = repo.get_symbol_transactions(pid.value(), QStringLiteral("AMD"));
+    QVERIFY(txns.is_ok());
+    QCOMPARE(txns.value().size(), 2);
+    const auto pos = fincept::portfolio::replay_transactions(txns.value());
+    QCOMPARE(pos.quantity, 0.0);
+    QCOMPARE(pos.realized_pnl, 300.0); // 10 x (80 - 50), still recoverable
 }
 
 void TestPortfolioSnapshots::migration_reapplies_cleanly() {

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`07cba58b6`](https://github.com/yumima/finterm/commit/07cba58b6) Portfolio: stop re-reading the same data several times a tick
 - [`49f2b7326`](https://github.com/yumima/finterm/commit/49f2b7326) Daemon: collapse identical concurrent calls, and stop one hang blocking all
 - [`a411b0529`](https://github.com/yumima/finterm/commit/a411b0529) Portfolio: cash flows convert at their own trade date
 - [`af74b1186`](https://github.com/yumima/finterm/commit/af74b1186) Honest labels: say what a number is, and what it isn't
