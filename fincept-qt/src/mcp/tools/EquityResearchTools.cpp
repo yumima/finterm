@@ -515,7 +515,11 @@ std::vector<ToolDef> get_equity_research_tools() {
     {
         ToolDef t;
         t.name = "get_equity_financials";
-        t.description = "Get income statement, balance sheet, and cash flow for a symbol (multi-period).";
+        t.description = "Get income statement, balance sheet, and cash flow for a symbol. "
+                        "Statements are ANNUAL (fiscal-year) periods, most recent first — not "
+                        "quarterly. Trailing-twelve-month revenue and net income are reported "
+                        "separately as ttm_revenue / ttm_net_income, summed from the last four "
+                        "reported quarters (zero when fewer than four are available).";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
@@ -534,9 +538,18 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           if (f.symbol.toUpper() != sym) return;
                                           resolve(ToolResult::ok_data(QJsonObject{
                                               {"symbol", f.symbol},
+                                              // Name the basis in the payload, not just the
+                                              // description: an agent reading these columns
+                                              // has no other way to tell years from quarters.
+                                              {"basis", "annual"},
                                               {"income_statement", financials_section_to_json(f.income_statement)},
                                               {"balance_sheet", financials_section_to_json(f.balance_sheet)},
                                               {"cash_flow", financials_section_to_json(f.cash_flow)},
+                                              {"ttm_revenue", f.ttm_revenue},
+                                              {"ttm_net_income", f.ttm_net_income},
+                                              {"ttm_operating_income", f.ttm_operating_income},
+                                              {"ttm_ebitda", f.ttm_ebitda},
+                                              {"ttm_period", f.ttm_period},
                                           }));
                                           holder->deleteLater();
                                       });

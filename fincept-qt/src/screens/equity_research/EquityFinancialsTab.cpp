@@ -318,7 +318,11 @@ QWidget* EquityFinancialsTab::build_income_view() {
 
     // ── Key Metrics ───────────────────────────────────────────────────────────
     {
-        auto* sec = section_frame("KEY FINANCIAL METRICS", kOrange);
+        // Say which basis these are. The underlying stream is annual
+        // (Ticker.financials), and it was documented — and read — as
+        // quarterly, so fiscal-year figures were presented as the latest
+        // quarter.
+        auto* sec = section_frame("KEY FINANCIAL METRICS — FISCAL YEAR", kOrange);
         auto* svl = static_cast<QVBoxLayout*>(sec->layout());
 
         // Row 1: 4 large cards
@@ -649,14 +653,25 @@ void EquityFinancialsTab::apply_financials_state(const services::query::QuerySto
 // ── Populate helpers ──────────────────────────────────────────────────────────
 
 double EquityFinancialsTab::get_val(const QJsonObject& o, const QStringList& keys) {
+    return find_val(o, keys).value_or(0.0);
+}
+
+// Presence-aware lookup. get_val() collapses "the filing does not report
+// this" and "the filing reports zero" onto the same 0.0, which is fine for
+// display and wrong for arithmetic: a missing tax provision must not read as
+// a 0% tax rate. Note it also skips a reported 0.0 while scanning aliases,
+// so an explicit zero is only returned when no alias carries a non-zero.
+std::optional<double> EquityFinancialsTab::find_val(const QJsonObject& o, const QStringList& keys) {
+    bool saw_key = false;
     for (const auto& k : keys) {
         if (o.contains(k) && !o[k].isNull()) {
+            saw_key = true;
             double v = o[k].toVariant().toDouble();
             if (v != 0.0)
                 return v;
         }
     }
-    return 0.0;
+    return saw_key ? std::optional<double>(0.0) : std::nullopt;
 }
 
 void EquityFinancialsTab::populate_income_view(const services::equity::FinancialsData& d) {
@@ -690,13 +705,22 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
     };
 
     set(inc_revenue_val_, fmt_large(revenue));
-    set(inc_revenue_sub_, rev_growth != 0.0 ? fmt_pct(rev_growth) + " YoY" : "");
+    // Prefer the TTM sub-line: mid-year, the fiscal-year figure can be nine
+    // months stale, and "TTM revenue" is what an analyst actually quotes.
+    // Falls back to YoY growth when fewer than four quarters were reported.
+    set(inc_revenue_sub_,
+        d.ttm_revenue > 0.0
+            ? QStringLiteral("TTM ") + fmt_large(d.ttm_revenue)
+            : (rev_growth != 0.0 ? fmt_pct(rev_growth) + " YoY" : QString()));
     set(inc_gross_val_, fmt_large(gross));
     set(inc_gross_sub_, fmt_pct(gross_margin) + " margin");
     set(inc_opincome_val_, fmt_large(op_income));
     set(inc_opincome_sub_, fmt_pct(op_margin) + " margin");
     set(inc_netincome_val_, fmt_large(net_income));
-    set(inc_netincome_sub_, net_growth != 0.0 ? fmt_pct(net_growth) + " YoY" : "");
+    set(inc_netincome_sub_,
+        d.ttm_net_income != 0.0
+            ? QStringLiteral("TTM ") + fmt_large(d.ttm_net_income)
+            : (net_growth != 0.0 ? fmt_pct(net_growth) + " YoY" : QString()));
     set(inc_ebitda_val_, fmt_large(ebitda));
     set(inc_ebitda_sub_, fmt_pct(ebitda_margin) + " margin");
     set(inc_gross_margin_, fmt_pct(gross_margin));
@@ -723,7 +747,25 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
         double total_debt = get_val(bal, {"Total Debt", "Long Term Debt"});
         double cash = get_val(bal, {"Cash And Cash Equivalents", "Cash"});
         double inv_cap = total_equity + total_debt - cash;
-        double roic = inv_cap > 0 ? (op_income * 0.75) / inv_cap : 0.0;
+        // Effective tax rate from the filing itself. A hardcoded 25% was
+        // applied to every company in every jurisdiction — wrong for a REIT,
+        // a loss-maker, and most non-US filers.
+        //
+        // Three distinct cases, which an earlier version conflated:
+        //   • the filing reports a provision → use it (a reported 0, as many
+        //     REITs file, really is a 0% effective rate);
+        //   • it reports a net BENEFIT (negative provision, e.g. PSA) → the
+        //     company paid no tax on operations, so 0%, not a synthetic
+        //     statutory rate;
+        //   • the field is absent, or pretax income is not positive (a
+        //     loss-maker's ratio is meaningless) → fall back to 21%.
+        const auto pretax = find_val(latest, {"Pretax Income", "Income Before Tax",
+                                              "Earnings Before Tax"});
+        const auto tax_exp = find_val(latest, {"Tax Provision", "Income Tax Expense"});
+        double tax_rate = 0.21; // US federal statutory, the honest default
+        if (tax_exp && pretax && *pretax > 0.0)
+            tax_rate = std::clamp(*tax_exp / *pretax, 0.0, 0.60);
+        double roic = inv_cap > 0 ? (op_income * (1.0 - tax_rate)) / inv_cap : 0.0;
         double cur_liab = get_val(bal, {"Current Liabilities", "Total Current Liabilities"});
         double roce = (total_assets - cur_liab) > 0 ? op_income / (total_assets - cur_liab) : 0.0;
 
@@ -749,9 +791,11 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     double inventory = get_val(b, {"Inventory"});
     double ebitda = 0.0;
     double interest = 0.0;
+    double ebit = 0.0;
     if (!d.income_statement.isEmpty()) {
         const auto& inc = d.income_statement[0].second;
         ebitda = get_val(inc, {"EBITDA", "Normalized EBITDA"});
+        ebit = get_val(inc, {"EBIT", "Operating Income", "Operating Profit"});
         interest = get_val(inc, {"Interest Expense", "Interest Expense Non Operating"});
         if (interest < 0)
             interest = -interest;
@@ -773,14 +817,34 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     double work_cap = cur_assets - cur_liab;
     double d_e = total_equity > 0 ? total_debt / total_equity : 0.0;
     double d_a = total_assets > 0 ? total_debt / total_assets : 0.0;
-    double int_cov = interest > 0 ? ebitda / interest : 0.0;
+    // "Interest Coverage" conventionally means EBIT / interest. Using
+    // EBITDA overstates it by the whole D&A charge — most for exactly the
+    // capital-intensive, heavily indebted names where the ratio matters.
+    // EBIT / interest is the conventional definition; EBITDA overstates it
+    // by the whole D&A charge. But some filers (banks, insurers — ITUB for
+    // one) report neither EBIT nor Operating Income, and dropping to "N/A"
+    // there loses a figure they previously had. Fall back to EBITDA and say
+    // which basis is on screen.
+    double int_cov = 0.0;
+    bool int_cov_is_ebitda = false;
+    if (interest > 0) {
+        if (ebit != 0.0) {
+            int_cov = ebit / interest;
+        } else if (ebitda != 0.0) {
+            int_cov = ebitda / interest;
+            int_cov_is_ebitda = true;
+        }
+    }
 
     set(bal_current_ratio_, fmt_ratio(cur_ratio));
     set(bal_quick_ratio_, fmt_ratio(quick_ratio));
     set(bal_working_cap_, fmt_large(work_cap));
     set(bal_debt_equity_, fmt_ratio(d_e));
     set(bal_debt_assets_, fmt_pct(d_a));
-    set(bal_int_coverage_, int_cov > 0 ? fmt_ratio(int_cov) + "x" : "N/A");
+    // Name the basis when it is the fallback, so "12.4x (EBITDA)" is never
+    // silently compared against another name's EBIT-based figure.
+    set(bal_int_coverage_,
+        int_cov > 0 ? fmt_ratio(int_cov) + (int_cov_is_ebitda ? "x (EBITDA)" : "x") : "N/A");
 }
 
 void EquityFinancialsTab::populate_cashflow_view(const services::equity::FinancialsData& d) {
@@ -910,8 +974,12 @@ void EquityFinancialsTab::rebuild_revenue_chart(const services::equity::Financia
 }
 
 void EquityFinancialsTab::rebuild_margin_chart(const services::equity::FinancialsData& d) {
-    if (d.income_statement.isEmpty() || !inc_margin_chart_)
+    if (!inc_margin_chart_)
         return;
+    if (d.income_statement.isEmpty()) {
+        inc_margin_chart_->setChart(new QChart);
+        return;
+    }
 
     int n = qMin(5, d.income_statement.size());
     QStringList cats;
@@ -919,14 +987,25 @@ void EquityFinancialsTab::rebuild_margin_chart(const services::equity::Financial
 
     for (int i = n - 1; i >= 0; --i) {
         const auto& stmt = d.income_statement[i].second;
+        const double rev = get_val(stmt, {"Total Revenue", "Revenue"});
+        // Substituting rev = 1.0 for a missing or zero revenue turned the
+        // margin into raw dollars × 100 and plotted it on a "%" axis — a
+        // pre-revenue biotech, or any year where the field is absent, drew
+        // margins in the billions of percent. A period with no revenue has
+        // no margin; skip it rather than invent one.
+        if (rev <= 0.0)
+            continue;
         cats << d.income_statement[i].first.left(4);
-        double rev = get_val(stmt, {"Total Revenue", "Revenue"});
-        if (rev == 0.0)
-            rev = 1.0;
         gross_v << get_val(stmt, {"Gross Profit"}) / rev * 100.0;
         op_v << get_val(stmt, {"Operating Income", "Operating Profit"}) / rev * 100.0;
         net_v << get_val(stmt, {"Net Income", "Net Income Common Stockholders"}) / rev * 100.0;
         ebitda_v << get_val(stmt, {"EBITDA", "Normalized EBITDA"}) / rev * 100.0;
+    }
+    if (cats.isEmpty()) {
+        // Every period had zero/absent revenue (a pre-revenue name). Blank it
+        // rather than leave the last symbol's margins on screen.
+        inc_margin_chart_->setChart(new QChart);
+        return;
     }
 
     auto make_line = [&](const QString& name, const QString& color, const QVector<double>& vals) {
@@ -1063,10 +1142,36 @@ void EquityFinancialsTab::rebuild_cashflow_chart(const services::equity::Financi
 }
 
 void EquityFinancialsTab::rebuild_return_chart(const services::equity::FinancialsData& d) {
-    if (d.income_statement.isEmpty() || d.balance_sheet.isEmpty() || !ret_chart_)
+    if (!ret_chart_)
         return;
+    // Any path that cannot draw must CLEAR the view. Returning early left the
+    // previous symbol's ROE/ROA curve on screen under the new ticker's
+    // header — a chart that is confidently about the wrong company, which is
+    // worse than the mismatched-year one this function was fixed for.
+    if (d.income_statement.isEmpty() || d.balance_sheet.isEmpty()) {
+        ret_chart_->setChart(new QChart);
+        return;
+    }
 
-    int n = qMin(5, qMin(d.income_statement.size(), d.balance_sheet.size()));
+    // Match the two statements BY PERIOD. yfinance routinely returns a
+    // different column count for financials vs balance_sheet, and pairing by
+    // array index then divided FY2024 net income by FY2023 equity — a ratio
+    // of two different years, plotted under the income statement's label.
+    QHash<QString, QJsonObject> bal_by_period;
+    for (const auto& b : d.balance_sheet)
+        bal_by_period.insert(b.first.left(10), b.second);
+
+    QVector<QPair<QString, QJsonObject>> matched; // income rows with a balance match
+    for (const auto& inc : d.income_statement) {
+        const auto it = bal_by_period.constFind(inc.first.left(10));
+        if (it != bal_by_period.constEnd())
+            matched.append({inc.first, inc.second});
+    }
+    if (matched.isEmpty()) {
+        ret_chart_->setChart(new QChart); // no shared period → nothing truthful to draw
+        return;
+    }
+    const int n = qMin(5, static_cast<int>(matched.size()));
     QStringList cats;
 
     auto* roe_series = new QLineSeries;
@@ -1080,10 +1185,12 @@ void EquityFinancialsTab::rebuild_return_chart(const services::equity::Financial
     roa_series->setPen(QPen(QColor(kGreen), 2));
 
     for (int i = n - 1; i >= 0; --i) {
-        cats << d.income_statement[i].first.left(4);
-        double net = get_val(d.income_statement[i].second, {"Net Income", "Net Income Common Stockholders"});
-        double assets = get_val(d.balance_sheet[i].second, {"Total Assets"});
-        double equity = get_val(d.balance_sheet[i].second, {"Stockholders Equity", "Total Equity"});
+        const QString period = matched[i].first.left(10);
+        cats << period.left(4);
+        const QJsonObject& bal = bal_by_period.value(period);
+        double net = get_val(matched[i].second, {"Net Income", "Net Income Common Stockholders"});
+        double assets = get_val(bal, {"Total Assets"});
+        double equity = get_val(bal, {"Stockholders Equity", "Total Equity"});
         roe_series->append(cats.size() - 1, equity > 0 ? (net / equity) * 100.0 : 0.0);
         roa_series->append(cats.size() - 1, assets > 0 ? (net / assets) * 100.0 : 0.0);
     }

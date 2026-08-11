@@ -120,10 +120,26 @@ struct Candle {
 // hundreds of heterogeneous line-item names that vary by company.
 struct FinancialsData {
     QString symbol;
-    // Each entry: (period_string, QJsonObject of line items)
+    // Each entry: (period_string, QJsonObject of line items).
+    //
+    // These are ANNUAL (fiscal-year) statements — Ticker.financials, not
+    // quarterly_financials. The stream was documented as quarterly for a
+    // long time and the UI labelled its columns to match, presenting fiscal
+    // years as the latest quarter.
     QVector<QPair<QString, QJsonObject>> income_statement;
     QVector<QPair<QString, QJsonObject>> balance_sheet;
     QVector<QPair<QString, QJsonObject>> cash_flow;
+
+    // Trailing twelve months, summed from the four most recent QUARTERS —
+    // what an analyst means by "TTM revenue", and what a fiscal-year figure
+    // cannot give you mid-year. Flow items only: summing four balance-sheet
+    // snapshots would be meaningless. Zero when fewer than four quarters
+    // were reported, so a 6- or 9-month total never wears the TTM label.
+    double ttm_revenue = 0;
+    double ttm_net_income = 0;
+    double ttm_operating_income = 0;
+    double ttm_ebitda = 0;
+    QString ttm_period; // e.g. "2025-09-30 … 2024-12-31", empty when absent
 };
 
 // ── Technical indicator signal ────────────────────────────────────────────────

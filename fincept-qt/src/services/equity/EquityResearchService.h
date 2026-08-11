@@ -91,8 +91,11 @@ class EquityResearchService : public QObject {
     void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period,
                               const QString& interval, query::QueryStore::Callback cb);
 
-    /// Subscribe to the quarterly financial-statements stream for `symbol`.
-    /// State carries FinancialsData.
+    /// Subscribe to the ANNUAL financial-statements stream for `symbol`.
+    /// State carries FinancialsData, whose statement vectors are fiscal
+    /// YEARS — `Ticker.financials`, not `quarterly_financials`. This was
+    /// documented as quarterly for a long time, and the tab labelled its
+    /// columns accordingly, presenting fiscal-year figures as quarters.
     void subscribe_financials(QObject* owner, const QString& symbol,
                               query::QueryStore::Callback cb);
     /// Subscribe to the news-articles stream for `symbol`.
@@ -200,7 +203,7 @@ class EquityResearchService : public QObject {
     /// to remove. Versioning the key retires the stale shape immediately.
     static constexpr const char* kTechnicalsSchemaTag = "v2";
     static constexpr int kNewsTtlSec = 180;
-    // Financials are quarterly — no need to refetch within a session.
+    // Annual statements change a few times a year — an hour is generous.
     static constexpr int kFinancialsTtlSec = 3600;
     // Peer fundamentals (P/E, P/B, ROE, …) move slowly — same hour-long TTL.
     static constexpr int kPeersTtlSec = 3600;

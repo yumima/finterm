@@ -1302,6 +1302,15 @@ FinancialsData EquityResearchService::parse_financials(const QJsonObject& obj) c
     fd.income_statement = parse_stmt(obj["income_statement"].toObject());
     fd.balance_sheet = parse_stmt(obj["balance_sheet"].toObject());
     fd.cash_flow = parse_stmt(obj["cash_flow"].toObject());
+
+    const QJsonObject ttm = obj["ttm"].toObject();
+    fd.ttm_revenue = ttm["revenue"].toDouble();
+    fd.ttm_net_income = ttm["net_income"].toDouble();
+    fd.ttm_operating_income = ttm["operating_income"].toDouble();
+    fd.ttm_ebitda = ttm["ebitda"].toDouble();
+    const QJsonArray qs = ttm["quarters"].toArray();
+    if (qs.size() >= 2)
+        fd.ttm_period = qs.last().toString() + QStringLiteral(" … ") + qs.first().toString();
     return fd;
 }
 

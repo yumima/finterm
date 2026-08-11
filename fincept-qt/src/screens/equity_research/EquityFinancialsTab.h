@@ -62,6 +62,9 @@ class EquityFinancialsTab : public QWidget {
                                     const QString& subtitle = {});
     static void set_metric(QLabel* lbl, const QString& val);
     static double get_val(const QJsonObject& o, const QStringList& keys);
+    /// get_val() but able to say "the filing does not report this" —
+    /// std::nullopt for absent, 0.0 for a reported zero.
+    static std::optional<double> find_val(const QJsonObject& o, const QStringList& keys);
     static QString fmt_large(double v);
     static QString fmt_pct(double v);
     static QString fmt_ratio(double v);

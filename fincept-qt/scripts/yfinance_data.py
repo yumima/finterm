@@ -534,14 +534,37 @@ def get_batch_info(symbols):
 
 
 def get_financials(symbol):
-    """Fetch financial statements for a symbol"""
+    """Financial statements for a symbol, on a STATED basis.
+
+    `Ticker.financials` is ANNUAL. The consumer documented this stream as
+    quarterly and set its cache TTL on that belief, so the app presented
+    fiscal-year figures as the latest quarter — a whole different number
+    with the same label.
+
+    Both are returned now, each named for what it is, plus `basis` so a
+    reader cannot mistake one for the other. The annual frames stay under
+    the original keys so existing consumers keep working unchanged.
+    """
     try:
         ticker = yf.Ticker(symbol)
 
-        # Get income statement, balance sheet, and cash flow
+        # ANNUAL frames (what this function has always returned).
         income_stmt = ticker.financials
         balance_sheet = ticker.balance_sheet
         cash_flow = ticker.cashflow
+
+        # QUARTERLY income statement — the basis for the TTM figures below,
+        # which is what an analyst actually quotes ("TTM revenue"), and what
+        # a fiscal-year number cannot give you mid-year.
+        #
+        # Each frame is wrapped separately: a shared except would discard two
+        # good frames because the third failed. Only the income statement is
+        # fetched — balance-sheet and cash-flow quarterlies had no consumer
+        # and cost ~0.7s per cache miss for data nothing read.
+        try:
+            q_income = ticker.quarterly_financials
+        except Exception:
+            q_income = None
 
         def dataframe_to_dict(df):
             """Convert pandas DataFrame to dict with cleaned values"""
@@ -556,11 +579,44 @@ def get_financials(symbol):
                         result[str(col)][str(idx)] = float(value) if isinstance(value, (int, float)) else str(value)
             return result
 
+        # TRAILING TWELVE MONTHS: sum the four most recent quarters.
+        #
+        # Only FLOW items (revenue, income) may be summed — a balance-sheet
+        # stock like Total Assets is a point-in-time value and summing four
+        # of them is meaningless, which is why nothing here touches them.
+        # Requires four full quarters; with fewer, a "TTM" would silently be
+        # a 6- or 9-month figure wearing an annual label.
+        ttm = {}
+        try:
+            if q_income is not None and not q_income.empty and len(q_income.columns) >= 4:
+                cols = list(q_income.columns)[:4]  # yfinance orders newest-first
+                for out_key, aliases in (
+                    ("revenue", ("Total Revenue", "Revenue")),
+                    ("net_income", ("Net Income", "Net Income Common Stockholders")),
+                    ("operating_income", ("Operating Income", "Operating Profit")),
+                    ("ebitda", ("EBITDA", "Normalized EBITDA")),
+                ):
+                    for alias in aliases:
+                        if alias in q_income.index:
+                            vals = [q_income.loc[alias, c] for c in cols]
+                            if all(pd.notna(v) for v in vals):
+                                ttm[out_key] = float(sum(float(v) for v in vals))
+                            break
+                if ttm:
+                    ttm["quarters"] = [str(c)[:10] for c in cols]
+        except Exception as e:
+            ttm = {"error": str(e)}
+
         financials_data = {
             "symbol": symbol,
+            # basis names what the primary keys are, so nothing downstream
+            # has to infer it (and get it wrong).
+            "basis": "annual",
             "income_statement": dataframe_to_dict(income_stmt),
             "balance_sheet": dataframe_to_dict(balance_sheet),
             "cash_flow": dataframe_to_dict(cash_flow),
+            "quarterly_income_statement": dataframe_to_dict(q_income),
+            "ttm": ttm,
             "timestamp": int(datetime.now().timestamp())
         }
 
