@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`af74b1186`](https://github.com/yumima/finterm/commit/af74b1186) Honest labels: say what a number is, and what it isn't
 - [`abea0711b`](https://github.com/yumima/finterm/commit/abea0711b) ER Financials: state the basis, match the periods, use the real tax rate
 - [`e4b310e6a`](https://github.com/yumima/finterm/commit/e4b310e6a) ER: wire the provenance layer — panels refresh, and the age shown is real
 - [`068b01909`](https://github.com/yumima/finterm/commit/068b01909) Data layer: stop the silent corruptions — inverted RSI, lost precision, cached failures

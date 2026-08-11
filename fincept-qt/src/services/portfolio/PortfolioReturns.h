@@ -29,6 +29,7 @@
 #pragma once
 
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/portfolio/PortfolioFx.h"
 
 #include <QHash>
 #include <QString>
@@ -59,13 +60,13 @@ struct PeriodReturn {
 /// pass the full map: subtracting a CAD flow from a USD NAV delta fabricates
 /// a gain or loss on a day nothing moved.
 ///
-/// Rates are CURRENT, while backfilled NAV history is converted at each
-/// date's rate. For a window with both large flows and a large FX move the
-/// flow strip is therefore approximate; the first-order unit error is gone,
-/// the residual is the currency drift between the trade date and now.
+/// Each flow converts at the rate for ITS OWN trade date when a historical
+/// series is available, matching the per-date conversion the reconstructed
+/// NAV already uses; it falls back to the current rate otherwise. A plain
+/// QHash of current rates converts implicitly, so single-currency callers
+/// need no map at all.
 PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double live_nav, const QString& live_date,
-                                   const QVector<Transaction>& txns,
-                                   const QHash<QString, double>& fx_by_symbol = {});
+                                   const QVector<Transaction>& txns, const FxRates& fx = {});
 
 /// Flow-adjusted simple returns (%) between consecutive snapshots:
 /// r_i = (V_i − F_i − V_{i−1}) / V_{i−1}, with F_i the net BUY−SELL cash
@@ -77,6 +78,6 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
 /// contain the user's deposits, and one funding day read as a +100% "return"
 /// is enough to dominate volatility, Sharpe, VaR and the beta regression.
 QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
-                                      const QHash<QString, double>& fx_by_symbol = {});
+                                      const FxRates& fx = {});
 
 } // namespace fincept::portfolio

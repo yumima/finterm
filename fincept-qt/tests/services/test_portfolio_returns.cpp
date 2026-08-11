@@ -63,6 +63,8 @@ class TestPortfolioReturns : public QObject {
     void real_opening_date_remains_a_flow();
     void foreign_flow_converts_to_the_nav_currency();
     void unmapped_symbol_is_treated_as_same_currency();
+    void flow_converts_at_its_own_trade_date_rate();
+    void trade_before_the_series_uses_the_earliest_rate();
 };
 
 void TestPortfolioReturns::plain_growth_no_flows() {
@@ -283,6 +285,51 @@ void TestPortfolioReturns::unmapped_symbol_is_treated_as_same_currency() {
     QVERIFY(r.valid);
     QVERIFY(std::abs(r.twr_pct) < 1e-9);
     QCOMPARE(r.net_external_flow, 100.0);
+}
+
+void TestPortfolioReturns::flow_converts_at_its_own_trade_date_rate() {
+    // Reconstructed NAV converts each date at THAT date's FX close, so a flow
+    // must too. Buy 10,000 CAD when CADUSD was 0.80 (= 8,000 USD of NAV); by
+    // today the rate is 0.70. Converting the flow at today's rate would strip
+    // only 7,000 from an 8,000 NAV rise and invent a +1,000 gain.
+    auto buy = txn("BUY", 100, 100.0, "2026-01-02");
+    buy.symbol = QStringLiteral("RY.TO");
+
+    FxRates fx;
+    fx.set_current(QStringLiteral("RY.TO"), 0.70);      // today
+    fx.set_series(QStringLiteral("RY.TO"), {{QStringLiteral("2026-01-02"), 0.80}});
+
+    const auto r = compute_period_return(
+        {snap("2026-01-01", 50000.0), snap("2026-01-03", 58000.0)},
+        58000.0, "2026-01-03", {buy}, fx);
+    QVERIFY(r.valid);
+    QCOMPARE(r.net_external_flow, 8000.0); // trade-date rate, not today's
+    QVERIFY(std::abs(r.twr_pct) < 1e-9);   // flat market stays flat
+    QCOMPARE(r.gain_value, 0.0);
+}
+
+void TestPortfolioReturns::trade_before_the_series_uses_the_earliest_rate() {
+    // A position opened before the reconstructed window has no rate of its
+    // own; the earliest known one is the closest honest answer, and is far
+    // better than silently falling back to today's.
+    auto buy = txn("BUY", 100, 100.0, "2025-06-01");
+    buy.symbol = QStringLiteral("RY.TO");
+
+    FxRates fx;
+    fx.set_current(QStringLiteral("RY.TO"), 0.70);
+    fx.set_series(QStringLiteral("RY.TO"), {{QStringLiteral("2026-01-02"), 0.80},
+                                            {QStringLiteral("2026-02-02"), 0.75}});
+    QCOMPARE(fx.rate_for(QStringLiteral("RY.TO"), QStringLiteral("2025-06-01")), 0.80);
+    // Inside the window, the latest point at or before the date.
+    QCOMPARE(fx.rate_for(QStringLiteral("RY.TO"), QStringLiteral("2026-01-15")), 0.80);
+    QCOMPARE(fx.rate_for(QStringLiteral("RY.TO"), QStringLiteral("2026-02-02")), 0.75);
+    // AFTER the window, the CURRENT rate — not the last close. Daily history
+    // ends at the prior session while the live NAV segment uses today's
+    // quote, so carrying 0.75 forward would misconvert a same-day trade and
+    // re-create the very mismatch this class removes.
+    QCOMPARE(fx.rate_for(QStringLiteral("RY.TO"), QStringLiteral("2026-06-01")), 0.70);
+    // An unknown symbol still falls back to 1:1.
+    QCOMPARE(fx.rate_for(QStringLiteral("NOPE"), QStringLiteral("2026-01-02")), 1.0);
 }
 
 QTEST_GUILESS_MAIN(TestPortfolioReturns)

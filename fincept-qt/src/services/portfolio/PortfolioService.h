@@ -176,6 +176,19 @@ class PortfolioService : public QObject {
     /// Empty when not yet known. "GBp"/"GBX" (London pence) normalise to GBP
     /// via fx_price_factor().
     static QString cached_symbol_currency(const QString& symbol);
+
+    /// Historical instrument→portfolio FX for `portfolio_id`, seeded with
+    /// `summary`'s current rates so a symbol without a captured series still
+    /// converts. The perf chart and the metrics engine share this, so a
+    /// period return and a volatility can never disagree about a rate.
+    portfolio::FxRates fx_rates_for(const QString& portfolio_id,
+                                    const portfolio::PortfolioSummary& summary) const;
+
+    /// Reload persisted FX pair series from the cache. Called once at
+    /// startup: an established user never re-runs a backfill, so without
+    /// this the trade-date correction would apply only to fresh imports and
+    /// every flow would silently revert to today's rate each session.
+    void hydrate_fx_pair_series();
     /// Kick one daemon `info` fetch per symbol whose currency is unknown,
     /// storing results into the durable cache. In-flight symbols are skipped;
     /// results apply on the next summary rebuild (eventual consistency).
@@ -344,6 +357,20 @@ class PortfolioService : public QObject {
     // Symbols with a currency-discovery `info` fetch in flight. Guarded by
     // cache_mutex_; results land in CacheManager (symbol_currency:*).
     QSet<QString> currency_inflight_;
+
+    // Daily FX closes keyed by PAIR ("CADUSD=X" → date → close), captured
+    // while backfill_history downloads the ones it already needs, and
+    // persisted so the correction survives a restart — an established user
+    // never re-backfills, so an in-memory-only cache would leave every flow
+    // on today's rate for the whole session.
+    //
+    // Keyed by pair, not by portfolio or symbol: sixty holdings sharing
+    // CADUSD=X share ONE series, and nothing here can go stale when a
+    // portfolio's base currency is edited — fx_rates_for() re-resolves each
+    // symbol's pair from the current currencies on every call.
+    QHash<QString, QMap<QString, double>> fx_pair_series_;
+    /// Write one pair's series through to the durable cache.
+    void persist_fx_pair_series(const QString& pair, const QMap<QString, double>& series) const;
 
     // Portfolios whose backfill is deferred until currency discovery lands.
     // One retry only — a second pass proceeds with whatever is known so a

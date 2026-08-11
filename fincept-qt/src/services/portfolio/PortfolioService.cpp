@@ -202,6 +202,7 @@ PortfolioService& PortfolioService::instance() {
 }
 
 PortfolioService::PortfolioService() : QObject(nullptr) {
+    hydrate_fx_pair_series();
     // When the SectorResolver lands a fresh sector for a symbol, persist it
     // onto whichever portfolios hold it and invalidate their summary caches
     // so the Sectors tab refreshes on next refresh.
@@ -260,6 +261,10 @@ void PortfolioService::create_portfolio(const QString& name, const QString& owne
 
 void PortfolioService::delete_portfolio(const QString& id) {
     invalidate_cache(id);
+    backfill_awaiting_fx_.remove(id);
+    // fx_pair_series_ is deliberately NOT cleared: it is keyed by currency
+    // pair, not by portfolio, so it is still correct for every other
+    // portfolio (and for this one's symbols if they reappear elsewhere).
     auto r = PortfolioRepository::instance().delete_portfolio(id);
     if (r.is_ok()) {
         emit portfolio_deleted(id);
@@ -1673,7 +1678,10 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
         emit metrics_computed(metrics);
         return;
     }
-    const QVector<double> adj = portfolio::flow_adjusted_returns(snaps, txns, summary.fx_rates);
+    // Historical rates when a backfill has captured them (each flow converts
+    // at its own trade date); today's rates are the seeded fallback.
+    const QVector<double> adj =
+        portfolio::flow_adjusted_returns(snaps, txns, fx_rates_for(summary.portfolio.id, summary));
     QVector<double> port_returns; // daily flow-adjusted returns (%)
     port_returns.reserve(adj.size());
     for (const double r : adj) {
@@ -2254,6 +2262,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         }
 
         struct SymbolState {
+            QString symbol;
             portfolio::LedgerCursor cursor;
             QVector<QPair<QString, double>> closes; // sorted by date
             int next = 0;
@@ -2265,7 +2274,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         QSet<QString> date_set;
         for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
             const FxBinding fx = fx_of_symbol.value(it.key());
-            SymbolState st{.cursor = portfolio::LedgerCursor(it.value()),
+            SymbolState st{.symbol = it.key(),
+                           .cursor = portfolio::LedgerCursor(it.value()),
                            .closes = parse_series(it.key(), &date_set),
                            .fx_pair = fx.pair,
                            .fx_factor = fx.factor};
@@ -2348,6 +2358,23 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                 else
                     ++skipped_live; // live row held its ground — by design
             }
+        }
+
+        // Keep the per-date closes we just used, so the return math can convert
+        // each cash flow at its own trade date rather than today's. Stored per
+        // PAIR and MERGED, never wholesale-replaced: a later, shorter backfill
+        // — or one where a single pair came back empty — must not discard
+        // series already known to be good. Sixty holdings on CADUSD=X also
+        // share one map instead of sixty copies of it.
+        for (auto ps = pair_states.cbegin(); ps != pair_states.cend(); ++ps) {
+            if (ps.value().closes.isEmpty())
+                continue;
+            QMap<QString, double>& series = self->fx_pair_series_[ps.key()];
+            for (const auto& c : ps.value().closes) {
+                if (c.second > 0.0)
+                    series.insert(c.first, c.second);
+            }
+            self->persist_fx_pair_series(ps.key(), series);
         }
 
         LOG_INFO("PortfolioSvc",
@@ -2729,6 +2756,71 @@ QString PortfolioService::cached_symbol_currency(const QString& symbol) {
     // an ETF or delisted ticker with no info payload can't drive one full
     // web scrape per symbol every 20 s forever.
     return v == QLatin1String(kCurrencyUnknown) ? QString() : v;
+}
+
+namespace {
+// Past daily closes do not change, so a long TTL is safe; the series is
+// re-persisted (merged) on every backfill that touches the pair.
+constexpr int kFxSeriesTtlSec = 30 * 86400;
+QString fx_series_key(const QString& pair) {
+    return QStringLiteral("portfolio_fx_series:") + pair;
+}
+} // namespace
+
+void PortfolioService::persist_fx_pair_series(const QString& pair, const QMap<QString, double>& series) const {
+    QJsonObject o;
+    for (auto it = series.cbegin(); it != series.cend(); ++it)
+        o.insert(it.key(), it.value());
+    fincept::CacheManager::instance().put(
+        fx_series_key(pair),
+        QVariant(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact))),
+        kFxSeriesTtlSec, "portfolio");
+}
+
+void PortfolioService::hydrate_fx_pair_series() {
+    const QHash<QString, QString> rows =
+        fincept::CacheManager::instance().get_prefix(QStringLiteral("portfolio_fx_series:"));
+    for (auto it = rows.cbegin(); it != rows.cend(); ++it) {
+        const QString pair = it.key().mid(sizeof("portfolio_fx_series:") - 1);
+        if (pair.isEmpty())
+            continue;
+        const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
+        QMap<QString, double>& series = fx_pair_series_[pair];
+        for (auto d = o.constBegin(); d != o.constEnd(); ++d) {
+            const double v = d.value().toDouble();
+            if (v > 0.0)
+                series.insert(d.key(), v);
+        }
+    }
+    if (!fx_pair_series_.isEmpty())
+        LOG_INFO("PortfolioSvc", QString("Hydrated %1 FX pair series").arg(fx_pair_series_.size()));
+}
+
+portfolio::FxRates PortfolioService::fx_rates_for(const QString& portfolio_id,
+                                                  const portfolio::PortfolioSummary& summary) const {
+    Q_UNUSED(portfolio_id)
+    // Today's rates cover every symbol and are the fallback; the per-date
+    // series is overlaid where one exists.
+    portfolio::FxRates out(summary.fx_rates);
+
+    // Each symbol's pair is resolved from the CURRENT currencies rather than
+    // from anything remembered: editing a portfolio's base currency changes
+    // which pair a holding uses, and a remembered mapping would go on scaling
+    // by the old one for the rest of the session.
+    const QString port_ccy = portfolio::fx_price_factor(summary.portfolio.currency).first;
+    for (auto it = summary.fx_rates.cbegin(); it != summary.fx_rates.cend(); ++it) {
+        const auto [pair, factor] = portfolio::fx_pair_for(cached_symbol_currency(it.key()), port_ccy);
+        if (pair.isEmpty())
+            continue; // same currency (or unknown) — no series applies
+        const auto series = fx_pair_series_.constFind(pair);
+        if (series == fx_pair_series_.constEnd() || series->isEmpty())
+            continue;
+        QMap<QString, double> by_date;
+        for (auto d = series->cbegin(); d != series->cend(); ++d)
+            by_date.insert(d.key(), d.value() * factor);
+        out.set_series(it.key(), by_date);
+    }
+    return out;
 }
 
 void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {

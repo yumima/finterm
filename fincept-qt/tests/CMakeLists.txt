@@ -361,6 +361,7 @@ add_test(NAME portfolio_ledger COMMAND test_portfolio_ledger)
 add_executable(test_portfolio_returns
     services/test_portfolio_returns.cpp
     ../src/services/portfolio/PortfolioReturns.cpp
+    ../src/services/portfolio/PortfolioFx.cpp
 )
 
 target_include_directories(test_portfolio_returns PRIVATE

@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioPerfChart.h
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/portfolio/PortfolioFx.h"
 
 #include <QChartView>
 #include <QGraphicsLineItem>
@@ -52,7 +53,7 @@ class PortfolioPerfChart : public QWidget {
     /// flow log would let deposits read as gains again.
     void set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
                      const QVector<portfolio::Transaction>& txns,
-                     const QHash<QString, double>& fx_by_symbol);
+                     const portfolio::FxRates& fx);
     void set_currency(const QString& currency);
     /// Feed real benchmark closes for the overlay. The symbol is shown on the
     /// toggle button and used to disambiguate currencies in indexed mode.
@@ -171,7 +172,7 @@ class PortfolioPerfChart : public QWidget {
     portfolio::PortfolioSummary summary_;
     QVector<portfolio::PortfolioSnapshot> snapshots_;
     QVector<portfolio::Transaction> transactions_;
-    QHash<QString, double> fx_by_symbol_;
+    portfolio::FxRates fx_;
     QString currency_ = "USD";
 
     // Benchmark history — symbol may differ from "SPY" depending on currency

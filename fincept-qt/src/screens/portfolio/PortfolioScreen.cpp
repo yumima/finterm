@@ -879,7 +879,9 @@ void PortfolioScreen::on_snapshots_loaded(QString portfolio_id, QVector<portfoli
         bool txns_ok = false;
         const auto txns = services::PortfolioService::instance().all_transactions(portfolio_id, &txns_ok);
         if (txns_ok)
-            perf_chart_->set_history(snapshots, txns, current_summary_.fx_rates);
+            perf_chart_->set_history(
+                snapshots, txns,
+                services::PortfolioService::instance().fx_rates_for(portfolio_id, current_summary_));
         else
             LOG_WARN("PortfolioScreen", "Keeping the previous chart history — transaction log read failed");
     }

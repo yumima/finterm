@@ -440,9 +440,9 @@ void PortfolioPerfChart::set_snapshots(const QVector<portfolio::PortfolioSnapsho
 
 void PortfolioPerfChart::set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
                                      const QVector<portfolio::Transaction>& txns,
-                                     const QHash<QString, double>& fx_by_symbol) {
+                                     const portfolio::FxRates& fx) {
     transactions_ = txns;
-    fx_by_symbol_ = fx_by_symbol;
+    fx_ = fx;
     set_snapshots(snapshots);
 }
 
@@ -1341,7 +1341,7 @@ void PortfolioPerfChart::update_chart() {
     // ratio only when the TWR is uncomputable (thin history) — the
     // baseline_unavailable branch below already dashes those cases out.
     const auto period_ret = portfolio::compute_period_return(
-        filtered, live_nav, QDate::currentDate().toString(Qt::ISODate), transactions_, fx_by_symbol_);
+        filtered, live_nav, QDate::currentDate().toString(Qt::ISODate), transactions_, fx_);
     const double period_pnl = period_ret.valid ? period_ret.gain_value : live_nav - period_baseline;
     const double period_pnl_pct =
         period_ret.valid ? period_ret.twr_pct

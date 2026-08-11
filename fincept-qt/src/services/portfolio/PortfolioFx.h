@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <QHash>
+#include <QMap>
 #include <QPair>
 #include <QString>
 
@@ -36,5 +38,51 @@ QPair<QString, double> fx_price_factor(const QString& currency);
 /// needed: the currencies match, or the instrument's currency is unknown
 /// (callers must treat unknown as "not converted", not as "1:1").
 QPair<QString, double> fx_pair_for(const QString& instrument_currency, const QString& portfolio_currency);
+
+/// Instrument→portfolio-currency rates, by symbol and by DATE.
+///
+/// A cash flow must be converted at the rate that applied when the trade
+/// happened, not today's. Reconstructed NAV history already converts each
+/// date at that date's FX close, so pairing it with a present-day flow rate
+/// leaves the difference — the currency drift between the trade and now —
+/// showing up as fabricated performance. It is second-order next to the
+/// unit error that preceded it, and it is still wrong.
+///
+/// Falls back gracefully: a symbol with no series uses its current rate, and
+/// a symbol with neither converts 1:1 (the caller should already have
+/// flagged that as an incomplete conversion).
+class FxRates {
+  public:
+    FxRates() = default;
+    /// Implicit so existing call sites that only know today's rates keep
+    /// working unchanged — they simply get the current-rate fallback.
+    FxRates(const QHash<QString, double>& current) {
+        for (auto it = current.cbegin(); it != current.cend(); ++it)
+            current_.insert(it.key().toUpper(), it.value());
+    }
+
+    void set_current(const QString& symbol, double rate) { current_.insert(symbol.toUpper(), rate); }
+    /// `by_date` maps YYYY-MM-DD → the full instrument→portfolio multiplier
+    /// for that date (pair close × any sub-unit factor).
+    void set_series(const QString& symbol, const QMap<QString, double>& by_date) {
+        series_.insert(symbol.toUpper(), by_date);
+    }
+
+    /// Rate for `symbol` on `date` (YYYY-MM-DD).
+    ///
+    /// Inside the series window: the latest point at or before `date`.
+    /// BEFORE it: the earliest known point (a position opened before the
+    /// reconstructed window still needs a rate, and that is the closest
+    /// honest one). AFTER it: the CURRENT rate, not the last close —
+    /// daily history ends at the prior close while the live NAV segment is
+    /// valued at today's quote, so carrying the stale close forward would
+    /// convert a same-day trade at yesterday's rate and re-create the exact
+    /// mismatch this class exists to remove.
+    double rate_for(const QString& symbol, const QString& date) const;
+
+  private:
+    QHash<QString, double> current_;
+    QHash<QString, QMap<QString, double>> series_;
+};
 
 } // namespace fincept::portfolio
