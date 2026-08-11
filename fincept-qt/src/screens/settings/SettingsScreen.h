@@ -55,6 +55,7 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     static QFrame* make_sep();
 
     // ── Credentials state ─────────────────────────────────────────────────────
+    QHash<QString, QWidget*> cred_cards_;    // key → card, for filtering
     QHash<QString, QLineEdit*> cred_fields_; // key → password field
     QHash<QString, QLabel*> cred_status_;    // key → status label
 

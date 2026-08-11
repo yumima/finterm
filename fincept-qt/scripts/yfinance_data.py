@@ -193,7 +193,19 @@ def _quote_via_fast_info(symbol):
         return None
 
     current = float(last_price)
-    prev_close_raw = getattr(fi, "previous_close", None)
+    # PREVIOUS CLOSE — one definition across the whole app: the official
+    # REGULAR-MARKET previous close, which is what every other terminal
+    # quotes and what a user cross-checking against Bloomberg or Yahoo will
+    # see.
+    #
+    # fast_info.previous_close is NOT that: yfinance derives it from a
+    # 1-week/1-hour PREPOST series grouped by date, so for any name with
+    # active extended-hours trading it is the prior day's last after-hours
+    # print. Change and change% computed from it silently disagree with
+    # every other source, and with this app's own dashboard.
+    prev_close_raw = getattr(fi, "regular_market_previous_close", None)
+    if prev_close_raw is None:
+        prev_close_raw = getattr(fi, "previous_close", None)
     prev_close = float(prev_close_raw) if prev_close_raw is not None else current
     change = current - prev_close
     pct = (change / prev_close * 100.0) if prev_close else 0.0
@@ -993,7 +1005,17 @@ def get_batch_quotes(symbols):
         _buf = io.StringIO()
         with contextlib.redirect_stdout(_buf):
             # Use 5d period to guarantee at least 2 trading days for futures/commodities
-            data = yf.download(symbols, period="5d", group_by='ticker', progress=False, threads=True, auto_adjust=True)
+            # auto_adjust=False: a QUOTE is what the instrument actually
+            # trades at, not a total-return series. With adjustment on, the
+            # prior close below is pushed DOWN by any dividend since, so on an
+            # ex-dividend morning the dashboard reported a change larger than
+            # the real price move by the dividend amount — and disagreed with
+            # the ER header on the same symbol.
+            #
+            # (Adjusted series remain correct for performance questions:
+            # charts, technicals and the 52-week band all use auto_adjust=True
+            # via get_historical_period.)
+            data = yf.download(symbols, period="5d", group_by='ticker', progress=False, threads=True, auto_adjust=False)
 
         if data is None or data.empty:
             return []
@@ -1025,7 +1047,9 @@ def get_batch_quotes(symbols):
                 if pd.isna(raw_price):
                     continue
                 current_price = float(raw_price)
-                # Use previous trading day close for accurate daily change.
+                # Previous trading day's RAW close — the same definition the
+                # ER header uses (regular-market previous close), so one
+                # symbol shows one change% wherever it appears.
                 # With period="5d" we always have >= 2 rows for normally-traded instruments.
                 raw_prev = hist['Close'].iloc[-2] if len(hist) >= 2 else raw_price
                 previous_close = float(raw_prev) if not pd.isna(raw_prev) else current_price

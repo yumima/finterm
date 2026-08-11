@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`899fb40d6`](https://github.com/yumima/finterm/commit/899fb40d6) ER: the market-status badge stops saying OPEN on Thanksgiving
 - [`a6ca7b460`](https://github.com/yumima/finterm/commit/a6ca7b460) Keys: one generated catalogue — and stop deleting the user's own API keys
 - [`8b432e3a9`](https://github.com/yumima/finterm/commit/8b432e3a9) Tests: cover the DB seam where four reviews found their defects
 - [`07cba58b6`](https://github.com/yumima/finterm/commit/07cba58b6) Portfolio: stop re-reading the same data several times a tick

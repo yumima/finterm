@@ -277,6 +277,10 @@ void MarketDataService::drain_refresh_chunk() {
         co_long.remove("ask");
         co_long.remove("bid_size");
         co_long.remove("ask_size");
+        // Stamp when this was true. Without it, cold-start hydration
+        // republishes the payload as a live quote and DataHub marks it
+        // Fresh — a price up to a week old presented as the market price.
+        co_long.insert("cached_at", static_cast<double>(QDateTime::currentSecsSinceEpoch()));
         const QString payload_long =
             QString::fromUtf8(QJsonDocument(co_long).toJson(QJsonDocument::Compact));
         fincept::CacheManager::instance().put(
@@ -412,6 +416,20 @@ void MarketDataService::hydrate_quotes_from_cache() {
         const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
         if (o.isEmpty())
             continue;
+        // The cache holds up to 7 days so a rate-limited session still has
+        // something to show. That is right for a fallback and wrong for a
+        // cold-start publish: past a couple of sessions the number is not a
+        // useful approximation of the market price, and an empty cell is
+        // more honest than a stale one. The live fetch fills it in seconds.
+        const qint64 cached_at = static_cast<qint64>(o.value("cached_at").toDouble());
+        if (cached_at > 0 &&
+            QDateTime::currentSecsSinceEpoch() - cached_at > kHydrateMaxAgeSec) {
+            continue;
+        }
+        // Deliberately no age field on QuoteData: DataHub skips re-publishing
+        // a byte-identical quote, and a per-fetch timestamp would make every
+        // tick look changed and defeat that. The age gate above is what keeps
+        // a stale price off the screen.
         QuoteData qd{};
         qd.symbol     = o.value("symbol").toString(sym);
         qd.name       = o.value("name").toString(qd.symbol);

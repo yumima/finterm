@@ -383,6 +383,10 @@ class MarketDataService : public QObject
     //                          instant the app launches while the live
     //                          quote refresh runs in the background.
     static constexpr int kQuoteCacheTtlSec     = 30;
+    /// Oldest a cached quote may be and still be published at cold start.
+    /// The 7-day fallback TTL is right for "better than nothing" during a
+    /// rate-limited session, and wrong for presenting a price as current.
+    static constexpr qint64 kHydrateMaxAgeSec = 2 * 24 * 3600;
     static constexpr int kQuoteLastKnownTtlSec = 7 * 24 * 60 * 60;
 
     // SEC EDGAR's submissions API is keyed by CIK (numeric, zero-padded to 10

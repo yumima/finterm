@@ -351,6 +351,38 @@ QWidget* SettingsScreen::build_credentials() {
     info->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(info);
     vl->addSpacing(16);
+
+    // The catalogue covers every provider the app can talk to (155 of them),
+    // so a flat list is unusable — you cannot scroll to "EIA" by eye. Filter
+    // by provider name or variable name.
+    auto* filter = new QLineEdit;
+    filter->setPlaceholderText(
+        tr("Filter providers — e.g. \"fred\", \"energy\", \"EIA_API_KEY\""));
+    filter->setClearButtonEnabled(true);
+    filter->setStyleSheet(QString("QLineEdit{background:%1;border:1px solid %2;border-radius:3px;"
+                                  "padding:6px 8px;color:%3;}")
+                              .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                                   ui::colors::TEXT_PRIMARY()));
+    vl->addWidget(filter);
+    connect(filter, &QLineEdit::textChanged, this, [this](const QString& q) {
+        const QString needle = q.trimmed();
+        for (auto it = cred_cards_.cbegin(); it != cred_cards_.cend(); ++it) {
+            QWidget* card = it.value();
+            if (!card)
+                continue;
+            if (needle.isEmpty()) {
+                card->setVisible(true);
+                continue;
+            }
+            // Match the variable name OR the human label, so both "EIA" and
+            // "energy" find the same provider.
+            const QString label = card->property("credLabel").toString();
+            card->setVisible(it.key().contains(needle, Qt::CaseInsensitive) ||
+                             label.contains(needle, Qt::CaseInsensitive));
+        }
+    });
+
+    vl->addSpacing(12);
     vl->addWidget(make_sep());
     vl->addSpacing(16);
 
@@ -434,6 +466,8 @@ QWidget* SettingsScreen::build_credentials() {
         });
 
         cvl->addWidget(body);
+        card->setProperty("credLabel", name);
+        cred_cards_.insert(key, card);
         vl->addWidget(card);
         vl->addSpacing(8);
     }
