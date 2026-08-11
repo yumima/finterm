@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/markets/MarketDataService.h"
+#include "services/portfolio/PortfolioReturns.h"
 #include "ui/theme/Theme.h"
 
 #include <QPointer>
@@ -435,6 +436,12 @@ void PortfolioPerfChart::set_snapshots(const QVector<portfolio::PortfolioSnapsho
               [](const auto& a, const auto& b) { return a.snapshot_date < b.snapshot_date; });
     update_period_buttons_enabled();
     update_chart();
+}
+
+void PortfolioPerfChart::set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
+                                     const QVector<portfolio::Transaction>& txns) {
+    transactions_ = txns;
+    set_snapshots(snapshots);
 }
 
 void PortfolioPerfChart::set_currency(const QString& currency) {
@@ -1323,9 +1330,20 @@ void PortfolioPerfChart::update_chart() {
         baseline_unavailable = true;
     }
 
-    // ── Period P&L is *always* relative to the period baseline ───────────────
-    const double period_pnl = live_nav - period_baseline;
-    const double period_pnl_pct = period_baseline > 0 ? (period_pnl / period_baseline) * 100.0 : 0.0;
+    // ── Period return is time-weighted ───────────────────────────────────────
+    // (NAV_now − NAV_start)/NAV_start reported a mid-window deposit as a
+    // gain. compute_period_return chains sub-period returns between the
+    // transaction log's external flows, so money moving in or out changes
+    // the portfolio's size but not its measured growth; the currency figure
+    // is likewise the market's gain net of flows. Falls back to the naive
+    // ratio only when the TWR is uncomputable (thin history) — the
+    // baseline_unavailable branch below already dashes those cases out.
+    const auto period_ret = portfolio::compute_period_return(
+        filtered, live_nav, QDate::currentDate().toString(Qt::ISODate), transactions_);
+    const double period_pnl = period_ret.valid ? period_ret.gain_value : live_nav - period_baseline;
+    const double period_pnl_pct =
+        period_ret.valid ? period_ret.twr_pct
+                         : (period_baseline > 0 ? (live_nav - period_baseline) / period_baseline * 100.0 : 0.0);
 
     // ── Convert series to display space (currency value vs. base-100 indexed) ─
     auto to_display = [&](double v) -> double {
@@ -1361,7 +1379,12 @@ void PortfolioPerfChart::update_chart() {
     y_min = std::min(y_min, area_baseline_disp);
     y_max = std::max(y_max, area_baseline_disp);
 
-    QColor lc = period_pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
+    // Color keys on the same number the label shows. When the label is the
+    // TWR, use its sign (a large withdrawal can make the currency gain and
+    // the growth rate disagree); when the label is dashed (thin history),
+    // follow the drawn line's slope so color never contradicts the picture.
+    const double color_basis = baseline_unavailable ? (live_nav - period_baseline) : period_pnl_pct;
+    QColor lc = color_basis >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
     nav_line->setPen(QPen(lc, 2));
 
     auto* area = new QAreaSeries(area_upper, area_lower);
@@ -1495,13 +1518,25 @@ void PortfolioPerfChart::update_chart() {
             QStringLiteral("Not enough snapshot history yet — backfill in progress."));
     } else {
         const char* pnl_color = period_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        period_change_label_->setText(QString("%1  %2%3%")
+        // A degraded window (zero/dust-valued segments were skipped) is an
+        // approximation and says so, instead of wearing the exact-TWR tooltip.
+        period_change_label_->setText(QString("%1  %2%3%4%")
                                           .arg(current_period_)
+                                          .arg(period_ret.degraded ? QStringLiteral("\u2248") : QString())
                                           .arg(period_pnl_pct >= 0 ? "+" : "")
                                           .arg(QString::number(period_pnl_pct, 'f', 2)));
         period_change_label_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
-        period_change_label_->setToolTip(QString());
+        period_change_label_->setToolTip(
+            period_ret.valid
+                ? tr("Time-weighted return over the period.\nDeposits and withdrawals change the "
+                     "portfolio's size, not this number%1")
+                      .arg(period_ret.net_external_flow != 0.0
+                               ? tr(" (net external flow this period: %1 %2).")
+                                     .arg(currency_)
+                                     .arg(QString::number(period_ret.net_external_flow, 'f', 2))
+                               : QStringLiteral("."))
+                : QString());
     }
 
     const double total_pnl_pct = summary_.total_unrealized_pnl_percent;

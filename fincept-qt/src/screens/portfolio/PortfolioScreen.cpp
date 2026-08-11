@@ -866,8 +866,17 @@ void PortfolioScreen::on_metrics_computed(portfolio::ComputedMetrics metrics) {
 void PortfolioScreen::on_snapshots_loaded(QString portfolio_id, QVector<portfolio::PortfolioSnapshot> snapshots) {
     if (portfolio_id != selected_id_)
         return;
-    if (perf_chart_)
-        perf_chart_->set_snapshots(snapshots);
+    // The transaction log rides along with the snapshots: the period return
+    // is time-weighted, and without the cash flows a deposit would read as
+    // performance. Read only when a chart is present to consume it.
+    if (perf_chart_) {
+        bool txns_ok = false;
+        const auto txns = services::PortfolioService::instance().all_transactions(portfolio_id, &txns_ok);
+        if (txns_ok)
+            perf_chart_->set_history(snapshots, txns);
+        else
+            LOG_WARN("PortfolioScreen", "Keeping the previous chart history — transaction log read failed");
+    }
     if (detail_wrapper_)
         detail_wrapper_->update_snapshots(snapshots);
 }

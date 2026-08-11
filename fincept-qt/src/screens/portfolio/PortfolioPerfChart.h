@@ -46,6 +46,12 @@ class PortfolioPerfChart : public QWidget {
 
     void set_summary(const portfolio::PortfolioSummary& summary);
     void set_snapshots(const QVector<portfolio::PortfolioSnapshot>& snapshots);
+    /// Snapshots plus the transaction log in one call: the period return is
+    /// time-weighted, so the NAV series and the external cash flows must
+    /// always change together — a snapshots-only update against a stale
+    /// flow log would let deposits read as gains again.
+    void set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
+                     const QVector<portfolio::Transaction>& txns);
     void set_currency(const QString& currency);
     /// Feed real benchmark closes for the overlay. The symbol is shown on the
     /// toggle button and used to disambiguate currencies in indexed mode.
@@ -163,6 +169,7 @@ class PortfolioPerfChart : public QWidget {
     // Data
     portfolio::PortfolioSummary summary_;
     QVector<portfolio::PortfolioSnapshot> snapshots_;
+    QVector<portfolio::Transaction> transactions_;
     QString currency_ = "USD";
 
     // Benchmark history — symbol may differ from "SPY" depending on currency

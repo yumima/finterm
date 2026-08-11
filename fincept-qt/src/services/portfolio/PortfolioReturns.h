@@ -40,7 +40,12 @@ struct PeriodReturn {
     double gain_value = 0;      // currency gain net of external flows
     double net_external_flow = 0; // Σ contributions − withdrawals inside the window
     bool valid = false;         // false when no return could be computed at all
-    bool degraded = false;      // true when ≥1 segment had to be skipped
+    // True when ≥1 segment had to be skipped (zero/dust base). twr_pct then
+    // covers only the computable segments, and gain_value — which spans the
+    // whole window — can misattribute day-one funding as gain when the very
+    // first snapshot was zero-valued with a same-day purchase. Consumers
+    // should treat a degraded window as approximate.
+    bool degraded = false;
 };
 
 /// Compute the period TWR over `snapshots` (any order; sorted internally by
@@ -49,5 +54,16 @@ struct PeriodReturn {
 /// after the first snapshot and up to `live_date` become flows.
 PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double live_nav, const QString& live_date,
                                    const QVector<Transaction>& txns);
+
+/// Flow-adjusted simple returns (%) between consecutive snapshots:
+/// r_i = (V_i − F_i − V_{i−1}) / V_{i−1}, with F_i the net BUY−SELL cash
+/// dated inside (date_{i−1}, date_i]. Element i of the result pairs
+/// snapshots i and i+1 after sorting; an uncomputable segment (V ≤ 0) is
+/// NaN so callers can keep date alignment and skip it explicitly.
+///
+/// This is the series every risk metric must consume: raw NAV differences
+/// contain the user's deposits, and one funding day read as a +100% "return"
+/// is enough to dominate volatility, Sharpe, VaR and the beta regression.
+QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns);
 
 } // namespace fincept::portfolio

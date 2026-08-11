@@ -69,6 +69,12 @@ class PortfolioService : public QObject {
     ///
     /// Returns an empty vector if the read fails.
     QVector<portfolio::Transaction> symbol_transactions(const QString& portfolio_id, const QString& symbol);
+    /// Synchronous read of the portfolio's full transaction log. Feeds the
+    /// time-weighted return computation (PortfolioReturns), which needs the
+    /// external cash flows alongside the NAV snapshots. `ok` (optional)
+    /// distinguishes "no transactions" from "the read failed" — a failed read
+    /// must not silently degrade the flow adjustment to a no-op.
+    QVector<portfolio::Transaction> all_transactions(const QString& portfolio_id, bool* ok = nullptr);
     /// Edit an existing holding in place. The blotter shows the stored asset
     /// row (build_summary reads get_assets, NOT a sum of transactions), so
     /// rewriting only the transaction left the displayed position unchanged.

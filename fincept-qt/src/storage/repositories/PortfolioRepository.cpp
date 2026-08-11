@@ -194,6 +194,18 @@ Result<void> PortfolioRepository::remove_asset(const QString& portfolio_id, cons
 // ── Transactions ─────────────────────────────────────────────────────────────
 
 Result<QVector<portfolio::Transaction>> PortfolioRepository::get_transactions(const QString& portfolio_id, int limit) {
+    // limit <= 0 reads the whole log. Rows are DESC-ordered, so a finite
+    // limit drops the OLDEST rows — for a full-log consumer that means the
+    // opening BUYs, which is how a 10k-row export could silently lose the
+    // very transactions position reconstruction depends on.
+    if (limit <= 0) {
+        return query_list_as<portfolio::Transaction>(
+            "SELECT id, portfolio_id, symbol, transaction_type, quantity, price, total_value, "
+            "transaction_date, notes, created_at "
+            "FROM portfolio_transactions WHERE portfolio_id = ? "
+            "ORDER BY transaction_date DESC, created_at DESC",
+            {portfolio_id}, map_transaction);
+    }
     return query_list_as<portfolio::Transaction>(
         "SELECT id, portfolio_id, symbol, transaction_type, quantity, price, total_value, "
         "transaction_date, notes, created_at "

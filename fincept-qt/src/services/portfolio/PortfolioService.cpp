@@ -791,6 +791,17 @@ void PortfolioService::load_transactions(const QString& portfolio_id, int limit)
     }
 }
 
+QVector<portfolio::Transaction> PortfolioService::all_transactions(const QString& portfolio_id, bool* ok) {
+    auto r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0); // 0 = no limit
+    if (ok)
+        *ok = r.is_ok();
+    if (r.is_err()) {
+        LOG_WARN("PortfolioSvc", "Failed to load transactions: " + QString::fromStdString(r.error()));
+        return {};
+    }
+    return r.value();
+}
+
 QVector<portfolio::Transaction> PortfolioService::symbol_transactions(const QString& portfolio_id,
                                                                      const QString& symbol) {
     auto r = PortfolioRepository::instance().get_symbol_transactions(portfolio_id, symbol);
@@ -1533,13 +1544,18 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     std::sort(snaps.begin(), snaps.end(),
               [](const auto& a, const auto& b) { return a.snapshot_date < b.snapshot_date; });
 
-    QVector<double> port_returns; // daily log returns (%)
-    port_returns.reserve(snaps.size() - 1);
-    for (int i = 1; i < snaps.size(); ++i) {
-        const double prev = snaps[i - 1].total_value;
-        const double curr = snaps[i].total_value;
-        if (prev > 1e-6)
-            port_returns.append((curr - prev) / prev * 100.0);
+    // Flow-adjusted: raw NAV differences contain the user's deposits and
+    // withdrawals, and a single funding day read as a +100% "return" is
+    // enough to dominate every statistic computed below. adj is index-aligned
+    // with snapshot pairs (adj[i-1] pairs snaps[i-1], snaps[i]) so the beta
+    // regression can keep its date alignment; NaN marks uncomputable segments.
+    const QVector<double> adj =
+        portfolio::flow_adjusted_returns(snaps, all_transactions(summary.portfolio.id));
+    QVector<double> port_returns; // daily flow-adjusted returns (%)
+    port_returns.reserve(adj.size());
+    for (const double r : adj) {
+        if (!std::isnan(r))
+            port_returns.append(r);
     }
 
     if (port_returns.size() < 2) {
@@ -1607,12 +1623,12 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
             if (spy_prev < 1e-6)
                 continue;
 
-            const double spy_ret = (spy_curr - spy_prev) / spy_prev * 100.0;
-            const double pv = snaps[i - 1].total_value;
-            const double cv = snaps[i].total_value;
-            if (pv < 1e-6)
+            // Same flow-adjusted series the other statistics use — a deposit
+            // day must not enter the regression as portfolio "return".
+            const double port_ret = adj.value(i - 1, std::numeric_limits<double>::quiet_NaN());
+            if (std::isnan(port_ret))
                 continue;
-            const double port_ret = (cv - pv) / pv * 100.0;
+            const double spy_ret = (spy_curr - spy_prev) / spy_prev * 100.0;
             spy_aligned.append(spy_ret);
             port_aligned.append(port_ret);
         }
@@ -1667,7 +1683,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
 void PortfolioService::export_csv(const QString& portfolio_id, const QString& file_path) {
     auto assets_r = PortfolioRepository::instance().get_assets(portfolio_id);
     auto portfolio_r = PortfolioRepository::instance().get_portfolio(portfolio_id);
-    auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, 10000);
+    auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0);
 
     if (assets_r.is_err() || portfolio_r.is_err()) {
         LOG_ERROR("PortfolioSvc", "Export CSV failed: cannot load data");
@@ -1712,7 +1728,7 @@ void PortfolioService::export_csv(const QString& portfolio_id, const QString& fi
 
 void PortfolioService::export_json(const QString& portfolio_id, const QString& file_path) {
     auto portfolio_r = PortfolioRepository::instance().get_portfolio(portfolio_id);
-    auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, 10000);
+    auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0);
 
     if (portfolio_r.is_err()) {
         LOG_ERROR("PortfolioSvc", "Export JSON failed: cannot load portfolio");

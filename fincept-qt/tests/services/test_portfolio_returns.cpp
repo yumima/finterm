@@ -56,6 +56,11 @@ class TestPortfolioReturns : public QObject {
     void live_point_on_snapshot_date_replaces_it();
     void zero_base_segment_degrades_not_invents();
     void too_little_data_is_invalid();
+    void flow_adjusted_series_strips_deposits();
+    void flow_adjusted_series_marks_bad_segments_nan();
+    void dust_base_is_not_a_return();
+    void fabricated_opening_date_is_not_a_flow();
+    void real_opening_date_remains_a_flow();
 };
 
 void TestPortfolioReturns::plain_growth_no_flows() {
@@ -178,6 +183,69 @@ void TestPortfolioReturns::too_little_data_is_invalid() {
     QVERIFY(!r.valid);
     const auto r2 = compute_period_return({snap("2026-01-03", 100.0)}, 100.0, "2026-01-03", {});
     QVERIFY(!r2.valid); // live point collapses onto the only snapshot
+}
+
+void TestPortfolioReturns::flow_adjusted_series_strips_deposits() {
+    // Day 1: +10% market. Day 2: flat market, $100 deposit. Raw differences
+    // would read the deposit day as +90.9% and hand volatility, Sharpe, VaR
+    // and beta a fictional shock.
+    const auto r = flow_adjusted_returns(
+        {snap("2026-01-01", 100.0), snap("2026-01-02", 110.0), snap("2026-01-03", 210.0)},
+        {txn("BUY", 10, 10.0, "2026-01-03")});
+    QCOMPARE(r.size(), 2);
+    QVERIFY(std::abs(r[0] - 10.0) < 1e-9);
+    QVERIFY(std::abs(r[1]) < 1e-9);
+}
+
+void TestPortfolioReturns::flow_adjusted_series_marks_bad_segments_nan() {
+    const auto r = flow_adjusted_returns(
+        {snap("2026-01-01", 0.0), snap("2026-01-02", 100.0), snap("2026-01-03", 110.0)}, {});
+    QCOMPARE(r.size(), 2);
+    QVERIFY(std::isnan(r[0]));
+    QVERIFY(std::abs(r[1] - 10.0) < 1e-9);
+}
+
+void TestPortfolioReturns::dust_base_is_not_a_return() {
+    // A liquidation can leave a float-residue NAV (1e-9). The next funding
+    // day must not compute (10050 − 10000 − 1e-9)/1e-9 ≈ 5e14 % and let it
+    // sail past the NaN filter into every risk statistic.
+    const auto r = flow_adjusted_returns(
+        {snap("2026-01-01", 1e-9), snap("2026-01-02", 10050.0)},
+        {txn("BUY", 100, 100.0, "2026-01-02")});
+    QCOMPARE(r.size(), 1);
+    QVERIFY(std::isnan(r[0]));
+}
+
+void TestPortfolioReturns::fabricated_opening_date_is_not_a_flow() {
+    // v049 dates a migrated position's opening BUY at migration time when
+    // first_purchase_date was empty. The live snapshots already contained the
+    // position's value, so counting that row as a flow fabricates a crash.
+    // Fabrication is detectable: the synthesis marker plus a transaction date
+    // on the same day the row was created.
+    auto opening = txn("BUY", 100, 500.0, "2026-01-02");
+    opening.notes = QStringLiteral("Opening balance — synthesized from the holdings row (v049)");
+    opening.created_at = QStringLiteral("2026-01-02 12:00:00");
+    const auto r = compute_period_return(
+        {snap("2026-01-01", 100000.0), snap("2026-01-03", 100000.0)},
+        100000.0, "2026-01-03", {opening});
+    QVERIFY(r.valid);
+    QVERIFY(std::abs(r.twr_pct) < 1e-9); // flat market stays flat
+    QCOMPARE(r.net_external_flow, 0.0);
+}
+
+void TestPortfolioReturns::real_opening_date_remains_a_flow() {
+    // A synthesized opening whose date is genuine (recorded long before the
+    // migration ran) strips like any real purchase: reconstructed NAV jumps
+    // at that date, and the flow must cancel the jump.
+    auto opening = txn("BUY", 100, 500.0, "2026-01-02");
+    opening.notes = QStringLiteral("Opening balance — synthesized from the holdings row (v049)");
+    opening.created_at = QStringLiteral("2026-08-01 12:00:00"); // months later
+    const auto r = compute_period_return(
+        {snap("2026-01-01", 100000.0), snap("2026-01-03", 150000.0)},
+        150000.0, "2026-01-03", {opening});
+    QVERIFY(r.valid);
+    QVERIFY(std::abs(r.twr_pct) < 1e-9); // the 50k jump is the buy, not growth
+    QCOMPARE(r.net_external_flow, 50000.0);
 }
 
 QTEST_GUILESS_MAIN(TestPortfolioReturns)
