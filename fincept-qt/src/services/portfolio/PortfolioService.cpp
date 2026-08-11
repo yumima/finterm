@@ -8,6 +8,7 @@
 #include "services/sectors/SectorResolver.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/StorageManager.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -203,6 +204,18 @@ PortfolioService& PortfolioService::instance() {
 
 PortfolioService::PortfolioService() : QObject(nullptr) {
     hydrate_fx_pair_series();
+
+    // The storage screen can delete portfolio_transactions wholesale, behind
+    // every write path this class knows about. The memo's TTL bounds that to
+    // a minute; this clears it at once, so a user who just wiped their
+    // transactions doesn't watch the deleted rows keep reporting.
+    connect(&StorageManager::instance(), &StorageManager::category_cleared, this,
+            [this](const QString& category) {
+                if (category.contains(QLatin1String("transaction"), Qt::CaseInsensitive) ||
+                    category.contains(QLatin1String("portfolio"), Qt::CaseInsensitive)) {
+                    invalidate_all_transactions();
+                }
+            });
     // When the SectorResolver lands a fresh sector for a symbol, persist it
     // onto whichever portfolios hold it and invalidate their summary caches
     // so the Sectors tab refreshes on next refresh.
@@ -261,6 +274,7 @@ void PortfolioService::create_portfolio(const QString& name, const QString& owne
 
 void PortfolioService::delete_portfolio(const QString& id) {
     invalidate_cache(id);
+    invalidate_transactions(id);
     backfill_awaiting_fx_.remove(id);
     // fx_pair_series_ is deliberately NOT cleared: it is keyed by currency
     // pair, not by portfolio, so it is still correct for every other
@@ -381,6 +395,11 @@ void PortfolioService::load_summary(const QString& portfolio_id) {
 
 void PortfolioService::refresh_summary(const QString& portfolio_id) {
     invalidate_cache(portfolio_id);
+    // User-initiated refresh (button, portfolio switch, post-write reload) —
+    // not the periodic tick, which calls load_summary directly. "Refresh"
+    // must be able to clear a log that changed outside this class, e.g. the
+    // storage screen deleting portfolio_transactions wholesale.
+    invalidate_transactions(portfolio_id);
     load_summary(portfolio_id);
 }
 
@@ -719,10 +738,13 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         // cheap at refresh-tick cadence, and the only way "REALIZED" can
         // include the winners that were sold.
         {
-            auto txns_r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0);
-            if (txns_r.is_ok()) {
+            // Through the memo: this is the third full read of the same log
+            // in one tick (summary, metrics, chart).
+            bool log_ok = false;
+            const QVector<portfolio::Transaction> all_txns = self->all_transactions(portfolio_id, &log_ok);
+            if (log_ok) {
                 QHash<QString, QVector<portfolio::Transaction>> by_symbol;
-                for (const auto& t : txns_r.value())
+                for (const auto& t : all_txns)
                     by_symbol[t.symbol.toUpper()].append(t);
 
                 // Closed positions have no asset row, so the pre-fetch loop
@@ -868,6 +890,7 @@ void PortfolioService::add_asset(const QString& portfolio_id, const QString& sym
     }
     rebuild_position(portfolio_id, symbol);
 
+    invalidate_transactions(portfolio_id);
     invalidate_cache(portfolio_id);
     emit asset_added(portfolio_id);
 }
@@ -902,6 +925,7 @@ void PortfolioService::sell_asset(const QString& portfolio_id, const QString& sy
     // asset row but its P&L stays in the log (and in the summary totals).
     rebuild_position(portfolio_id, symbol);
 
+    invalidate_transactions(portfolio_id);
     invalidate_cache(portfolio_id);
     emit asset_sold(portfolio_id);
 }
@@ -918,6 +942,18 @@ void PortfolioService::load_transactions(const QString& portfolio_id, int limit)
 }
 
 QVector<portfolio::Transaction> PortfolioService::all_transactions(const QString& portfolio_id, bool* ok) {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    quint64 gen_at_read = 0;
+    {
+        QMutexLocker lock(&cache_mutex_);
+        gen_at_read = txn_generation_;
+        const auto it = txn_memo_.constFind(portfolio_id);
+        if (it != txn_memo_.constEnd() && now - it->stamped_at < kTxnMemoTtlSec) {
+            if (ok)
+                *ok = true;
+            return it->rows;
+        }
+    }
     auto r = PortfolioRepository::instance().get_transactions(portfolio_id, /*limit=*/0); // 0 = no limit
     if (ok)
         *ok = r.is_ok();
@@ -925,7 +961,29 @@ QVector<portfolio::Transaction> PortfolioService::all_transactions(const QString
         LOG_WARN("PortfolioSvc", "Failed to load transactions: " + QString::fromStdString(r.error()));
         return {};
     }
+    {
+        QMutexLocker lock(&cache_mutex_);
+        // Only install if nothing invalidated while this read was in flight.
+        // MCP tool handlers write transactions from worker threads, so a
+        // naive insert would overwrite a fresh invalidation with the
+        // pre-write snapshot — losing it permanently, since the memo is not
+        // cleared by the ordinary refresh path.
+        if (txn_generation_ == gen_at_read)
+            txn_memo_.insert(portfolio_id, MemoisedLog{r.value(), now, gen_at_read});
+    }
     return r.value();
+}
+
+void PortfolioService::invalidate_transactions(const QString& portfolio_id) {
+    QMutexLocker lock(&cache_mutex_);
+    txn_memo_.remove(portfolio_id);
+    ++txn_generation_; // invalidates any read already in flight
+}
+
+void PortfolioService::invalidate_all_transactions() {
+    QMutexLocker lock(&cache_mutex_);
+    txn_memo_.clear();
+    ++txn_generation_;
 }
 
 QVector<portfolio::Transaction> PortfolioService::symbol_transactions(const QString& portfolio_id,
@@ -990,6 +1048,7 @@ void PortfolioService::edit_position(const QString& portfolio_id, const QString&
     }
 
     repo.update_transaction(txn_id, qty, price, date, notes);
+    invalidate_transactions(portfolio_id);
     rebuild_position(portfolio_id, symbol);
 
     invalidate_cache(portfolio_id);
@@ -1006,7 +1065,9 @@ void PortfolioService::delete_transaction(const QString& id, const QString& port
     // affected one showing a position that includes the deleted row.
     const auto txn = repo.get_transaction(id);
     repo.delete_transaction(id);
+    invalidate_transactions(portfolio_id);
     if (txn.is_ok()) {
+        invalidate_transactions(txn.value().portfolio_id);
         rebuild_position(txn.value().portfolio_id, txn.value().symbol);
         invalidate_cache(txn.value().portfolio_id);
     }
@@ -1027,6 +1088,7 @@ void PortfolioService::record_dividend(const QString& portfolio_id, const QStrin
         return;
     }
     Q_UNUSED(total)
+    invalidate_transactions(portfolio_id);
     invalidate_cache(portfolio_id);
     // Reload transactions so the txn panel updates
     load_transactions(portfolio_id, 50);
@@ -2080,6 +2142,7 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
     if (!unresolved.isEmpty())
         SectorResolver::instance().prefetch(unresolved);
 
+    invalidate_transactions(target_id);
     invalidate_cache(target_id);
     load_portfolios();
 
@@ -2750,12 +2813,28 @@ QString symbol_currency_key(const QString& symbol) {
 
 // static
 QString PortfolioService::cached_symbol_currency(const QString& symbol) {
+    const QString up = symbol.toUpper();
+    {
+        QMutexLocker lock(&instance().cache_mutex_);
+        const auto it = instance().currency_memo_.constFind(up);
+        if (it != instance().currency_memo_.constEnd())
+            return it.value();
+    }
     const QString v = fincept::CacheManager::instance().try_get(symbol_currency_key(symbol)).value_or(QString());
     // kCurrencyUnknown is a NEGATIVE cache entry: "asked, got nothing". It
     // reads as unknown to callers while still suppressing the re-request, so
     // an ETF or delisted ticker with no info payload can't drive one full
     // web scrape per symbol every 20 s forever.
-    return v == QLatin1String(kCurrencyUnknown) ? QString() : v;
+    const QString resolved = (v == QLatin1String(kCurrencyUnknown)) ? QString() : v;
+    // Memoise real answers only. A miss means discovery is still in flight,
+    // and the kCurrencyUnknown marker carries a deliberate 6h TTL in SQLite
+    // that this memo has no way to honour — memoising it would pin the
+    // symbol as unknown for the whole session.
+    if (!resolved.isEmpty()) {
+        QMutexLocker lock(&instance().cache_mutex_);
+        instance().currency_memo_.insert(up, resolved);
+    }
+    return resolved;
 }
 
 namespace {
@@ -2862,6 +2941,8 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                 if (ok && !ccy.isEmpty()) {
                     fincept::CacheManager::instance().put(symbol_currency_key(sym), ccy,
                                                           kSymbolCurrencyTtlSec);
+                    QMutexLocker lock(&self->cache_mutex_);
+                    self->currency_memo_.insert(sym, ccy);
                 } else {
                     // Remember the failure, briefly, so the retry is paced.
                     fincept::CacheManager::instance().put(symbol_currency_key(sym),

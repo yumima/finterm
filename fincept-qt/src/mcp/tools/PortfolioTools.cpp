@@ -146,6 +146,7 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (r.is_err())
                 return ToolResult::fail("Failed to add holding: " + QString::fromStdString(r.error()));
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_transactions(portfolio_id);
             services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3 (portfolio %4)")
@@ -422,6 +423,7 @@ std::vector<ToolDef> get_portfolio_tools() {
             if (r.is_err())
                 return ToolResult::fail("Failed to add asset: " + QString::fromStdString(r.error()));
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_transactions(portfolio_id);
             services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added asset %1 x%2 to portfolio %3").arg(symbol).arg(quantity).arg(portfolio_id));
@@ -536,6 +538,7 @@ std::vector<ToolDef> get_portfolio_tools() {
             // row insert without this left the displayed position (and P&L)
             // untouched by the very transaction just recorded.
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_transactions(portfolio_id);
             services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Transaction %1 %2 x%3").arg(type, symbol).arg(quantity));
@@ -572,7 +575,17 @@ std::vector<ToolDef> get_portfolio_tools() {
 
             if (txn.is_ok()) {
                 services::PortfolioService::instance().rebuild_position(txn.value().portfolio_id, txn.value().symbol);
+                services::PortfolioService::instance().invalidate_transactions(txn.value().portfolio_id);
                 services::PortfolioService::instance().invalidate_cache(txn.value().portfolio_id);
+            } else {
+                // The row is gone regardless of whether the pre-fetch read
+                // succeeded. Without knowing the portfolio we cannot rebuild
+                // the position, but we must still drop every memoised log —
+                // one of them now contains a transaction that no longer
+                // exists, with nothing else scheduled to notice.
+                LOG_WARN(TAG, QString("Deleted transaction %1 but could not read it first; "
+                                      "dropping all memoised logs").arg(id));
+                services::PortfolioService::instance().invalidate_all_transactions();
             }
             return ToolResult::ok("Transaction deleted", QJsonObject{{"id", id}});
         };

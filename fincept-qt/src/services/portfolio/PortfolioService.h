@@ -199,6 +199,13 @@ class PortfolioService : public QObject {
 
     // ── Cache control ────────────────────────────────────────────────────────
     void invalidate_cache(const QString& portfolio_id);
+    /// Drop the memoised transaction log for a portfolio. Called by every
+    /// path that writes a transaction; separate from invalidate_cache()
+    /// because that also fires on each refresh tick.
+    void invalidate_transactions(const QString& portfolio_id);
+    /// Drop every memoised log. For callers that mutated a transaction
+    /// without knowing which portfolio it belonged to.
+    void invalidate_all_transactions();
 
   signals:
     void portfolios_loaded(QVector<portfolio::Portfolio> portfolios);
@@ -357,6 +364,36 @@ class PortfolioService : public QObject {
     // Symbols with a currency-discovery `info` fetch in flight. Guarded by
     // cache_mutex_; results land in CacheManager (symbol_currency:*).
     QSet<QString> currency_inflight_;
+
+    // In-process memo of symbol → trading currency, in front of the SQLite
+    // cache. A listing's currency does not change, but the lookup happens
+    // ~4x per holding per 20s refresh (pre-fetch scan, per-holding rate,
+    // realized-P&L pass, chart rates) and CacheManager has no memory layer,
+    // so a 50-holding book was issuing ~200 SELECTs a tick on the UI thread.
+    // Guarded by cache_mutex_; kCurrencyUnknown is memoised as empty.
+    mutable QHash<QString, QString> currency_memo_;
+
+    // The portfolio's transaction log, which three separate consumers read in
+    // full on every tick (summary realized-P&L, metrics, chart). This exists
+    // to collapse THAT — reads milliseconds apart — not to be a long-lived
+    // cache, so it carries a short TTL as well as explicit invalidation.
+    //
+    // The TTL is the safety net for writes this class never sees: the storage
+    // screen can delete portfolio_transactions wholesale, and without a time
+    // bound the deleted rows would go on being reported until the app
+    // restarted, with REFRESH unable to clear them.
+    struct MemoisedLog {
+        QVector<portfolio::Transaction> rows;
+        qint64 stamped_at = 0;
+        quint64 generation = 0;
+    };
+    QHash<QString, MemoisedLog> txn_memo_;
+    /// Bumped by every invalidation. A read that started before an
+    /// invalidation must not install its pre-write snapshot afterwards —
+    /// the write paths run on worker threads (MCP tools), so without this
+    /// the invalidation is simply lost and the stale log is served forever.
+    quint64 txn_generation_ = 0;
+    static constexpr int kTxnMemoTtlSec = 60;
 
     // Daily FX closes keyed by PAIR ("CADUSD=X" → date → close), captured
     // while backfill_history downloads the ones it already needs, and

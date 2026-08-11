@@ -190,6 +190,7 @@ std::vector<ToolDef> get_portfolio_management_tools() {
             if (r.is_err())
                 return ToolResult::fail("Failed to add asset: " + QString::fromStdString(r.error()));
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
+            services::PortfolioService::instance().invalidate_transactions(portfolio_id);
             services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added asset %1 x%2 to portfolio %3").arg(symbol).arg(quantity).arg(portfolio_id));
@@ -299,6 +300,8 @@ std::vector<ToolDef> get_portfolio_management_tools() {
                                                                      notes);
             if (r.is_err())
                 return ToolResult::fail("Failed to add transaction: " + QString::fromStdString(r.error()));
+            services::PortfolioService::instance().invalidate_transactions(portfolio_id);
+            services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(
                 TAG,
@@ -326,6 +329,9 @@ std::vector<ToolDef> get_portfolio_management_tools() {
             auto r = PortfolioRepository::instance().delete_transaction(id);
             if (r.is_err())
                 return ToolResult::fail("Failed to delete transaction: " + QString::fromStdString(r.error()));
+            // This handler has no portfolio id to work with, so drop every
+            // memoised log rather than leave one holding a deleted row.
+            services::PortfolioService::instance().invalidate_all_transactions();
 
             return ToolResult::ok("Transaction deleted", QJsonObject{{"id", id}});
         };
