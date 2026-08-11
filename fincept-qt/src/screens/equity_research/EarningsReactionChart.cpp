@@ -4,6 +4,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QMouseEvent>
+#include <QTimeZone>
 #include <QToolTip>
 
 #include <QDateTime>
@@ -153,7 +154,8 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
     const QColor pred_col(kPredColor);
 
     QStringList rows;
-    const auto when = QDateTime::fromSecsSinceEpoch(c.timestamp);
+    // UTC — daily bars carry an exchange-midnight stamp (see EquityOverviewTab).
+    const auto when = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
     rows << QString("<b>%1</b>").arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
                                                  : when.toString("d MMM yyyy"));
 

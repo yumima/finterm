@@ -10,6 +10,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
+#include <QTimeZone>
 #include <QComboBox>
 #include <QDateTime>
 #include <QHBoxLayout>
@@ -1049,7 +1050,8 @@ void EquityAiTab::run_forecast(bool automatic) {
 
 void EquityAiTab::resolve_due() {
     if (candles_.isEmpty()) return;
-    const QString last_ymd = QDateTime::fromSecsSinceEpoch(candles_.last().timestamp).date().toString(Qt::ISODate);
+    // UTC — daily bars carry an exchange-midnight stamp (see EquityOverviewTab).
+    const QString last_ymd = QDateTime::fromSecsSinceEpoch(candles_.last().timestamp, QTimeZone::UTC).date().toString(Qt::ISODate);
     auto& repo = AiPredictionRepository::instance();
     for (const AiPrediction& p : repo.for_ticker(current_symbol_)) {
         if (p.resolved) continue;
@@ -1057,7 +1059,7 @@ void EquityAiTab::resolve_due() {
         // First real close on or after the resolve date.
         double close = 0.0;
         for (const Candle& c : candles_) {
-            const QString cymd = QDateTime::fromSecsSinceEpoch(c.timestamp).date().toString(Qt::ISODate);
+            const QString cymd = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC).date().toString(Qt::ISODate);
             if (cymd >= p.resolve_date) { close = c.close; break; }
         }
         if (close <= 0.0 || p.price_at_pred <= 0.0) continue;

@@ -1048,36 +1048,57 @@ import yfinance as yf
 import numpy as np
 
 symbols = %1
+
+# Returns keyed BY DATE. Aligning two series by position from the end (what
+# this did before) silently pairs mis-dated observations whenever one symbol
+# has a halt day, a different exchange calendar, or a shorter listing history
+# — reporting a confident correlation between Tuesday and Wednesday.
 data = {}
 for sym in symbols:
     try:
-        hist = yf.download(sym, period="30d", interval="1d", progress=False)
-        if hist is not None and not hist.empty:
-            closes = hist["Close"].dropna().tolist()
-            if hasattr(closes[0], 'item'):
-                closes = [v.item() for v in closes]
-            data[sym] = closes
+        # 60 calendar days so a usable window survives weekends and holidays;
+        # auto_adjust matches the basis used everywhere else for returns.
+        hist = yf.download(sym, period="60d", interval="1d",
+                           progress=False, auto_adjust=True)
+        if hist is None or hist.empty:
+            continue
+        closes = hist["Close"].dropna()
+        by_date = {}
+        for idx, val in closes.items():
+            try:
+                by_date[str(idx)[:10]] = float(val)
+            except (TypeError, ValueError):
+                continue
+        if len(by_date) >= 6:
+            data[sym] = by_date
     except Exception:
         pass
 
-# Compute daily returns
+# Per-symbol daily returns, still keyed by date (the later date of the pair).
 returns = {}
-for sym, prices in data.items():
-    if len(prices) >= 5:
-        r = [(prices[i] - prices[i-1]) / prices[i-1] for i in range(1, len(prices))]
+for sym, by_date in data.items():
+    dates = sorted(by_date)
+    r = {}
+    for i in range(1, len(dates)):
+        prev, cur = by_date[dates[i-1]], by_date[dates[i]]
+        if prev:
+            r[dates[i]] = (cur - prev) / prev
+    if len(r) >= 5:
         returns[sym] = r
 
 syms = list(returns.keys())
 matrix = {}
 for i in range(len(syms)):
     for j in range(len(syms)):
-        a = returns[syms[i]]
-        b = returns[syms[j]]
-        n = min(len(a), len(b))
-        if n < 2:
+        ra, rb = returns[syms[i]], returns[syms[j]]
+        shared = sorted(set(ra) & set(rb))   # inner join on the date index
+        n = len(shared)
+        if n < 5:
+            # Too little genuinely overlapping history to state a correlation.
             val = 1.0 if i == j else 0.0
         else:
-            a, b = a[-n:], b[-n:]
+            a = [ra[d] for d in shared]
+            b = [rb[d] for d in shared]
             ma, mb = sum(a)/n, sum(b)/n
             num = sum((a[k]-ma)*(b[k]-mb) for k in range(n))
             da  = sum((a[k]-ma)**2 for k in range(n))
@@ -2614,6 +2635,11 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
                                 ? QStringLiteral("1y")
                                 : QStringLiteral("range:") + req.entry + QLatin1Char(':') + end;
         payload["interval"] = QStringLiteral("1d");
+        // RAW prices: the peak is compared against a raw live price to give a
+        // trailing-stop distance. Adjusted highs are pushed DOWN by every
+        // dividend since, which understated the drawdown — increasingly so
+        // the longer the position was held and the higher its yield.
+        payload["auto_adjust"] = false;
 
         python::PythonWorker::instance().submit(
             "historical_period", payload,

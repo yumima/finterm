@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`7e0ba77a3`](https://github.com/yumima/finterm/commit/7e0ba77a3) Portfolio: multi-currency books convert into the portfolio currency
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

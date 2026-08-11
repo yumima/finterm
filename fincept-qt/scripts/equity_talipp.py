@@ -130,15 +130,15 @@ def t3(closes, period=5, vfactor=0.7):
     c3 = -6 * vfactor ** 2 - 3 * vfactor - 3 * vfactor ** 3
     c4 = 1 + 3 * vfactor + vfactor ** 3 + 3 * vfactor ** 2
     e1 = ema(closes, period)
-    e1_c = [v or 0.0 for v in e1]
+    e1_c = [0.0 if v is None else v for v in e1]
     e2 = ema(e1_c, period)
-    e2_c = [v or 0.0 for v in e2]
+    e2_c = [0.0 if v is None else v for v in e2]
     e3 = ema(e2_c, period)
-    e3_c = [v or 0.0 for v in e3]
+    e3_c = [0.0 if v is None else v for v in e3]
     e4 = ema(e3_c, period)
-    e4_c = [v or 0.0 for v in e4]
+    e4_c = [0.0 if v is None else v for v in e4]
     e5 = ema(e4_c, period)
-    e5_c = [v or 0.0 for v in e5]
+    e5_c = [0.0 if v is None else v for v in e5]
     e6 = ema(e5_c, period)
     return [
         (c1 * v6 + c2 * v5 + c3 * v4 + c4 * v3)
@@ -159,8 +159,16 @@ def rsi(closes, period=14):
     for i in range(period + 1, len(closes)):
         avg_gain = (avg_gain * (period - 1) + gains[i - 1]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i - 1]) / period
-        rs = avg_gain / avg_loss if avg_loss != 0 else 0
-        result[i] = 100 - (100 / (1 + rs))
+        if avg_loss == 0:
+            # No downside in the window: RSI is 100 (maximally overbought).
+            # Falling through with rs = 0 produced 100 - 100/(1+0) = 0, i.e.
+            # maximally OVERSOLD — the exact inverse — for the strongest
+            # possible uptrend. The seed above already gets this right; the
+            # recursion did not.
+            result[i] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            result[i] = 100 - (100 / (1 + rs))
     return result
 
 
@@ -171,7 +179,7 @@ def macd_calc(closes, fast=12, slow=26, signal=9):
         (f - s) if (f is not None and s is not None) else None
         for f, s in zip(e_fast, e_slow)
     ]
-    macd_clean = [v or 0.0 for v in macd_line]
+    macd_clean = [0.0 if v is None else v for v in macd_line]
     sig_line = ema(macd_clean, signal)
     hist = [
         (m - s) if (m is not None and s is not None) else None
@@ -192,7 +200,10 @@ def stoch(highs, lows, closes, k_period=14, d_period=3):
             lowest  = min(window_l)
             denom   = highest - lowest
             k_vals.append((closes[i] - lowest) / denom * 100 if denom != 0 else 50)
-    k_clean = [v or 50.0 for v in k_vals]
+    # `v or 50.0` fired on None (warm-up, intended) AND on a real 0.0 — a
+    # close exactly at the window low, the strongest oversold reading there
+    # is — rewriting it to neutral before the %D average ever saw it.
+    k_clean = [50.0 if v is None else v for v in k_vals]
     d_vals = sma(k_clean, d_period)
     return k_vals, d_vals
 
@@ -252,8 +263,13 @@ def mfi(highs, lows, closes, volumes, period=14):
             for j in range(i - period + 1, i + 1)
             if typical[j] < typical[j - 1]
         )
-        mfr = pos_flow / neg_flow if neg_flow != 0 else 0
-        result.append(100 - (100 / (1 + mfr)))
+        if neg_flow == 0:
+            # Every bar in the window was an up-bar: money flow is 100, not 0.
+            # Same inversion as RSI had.
+            result.append(100.0)
+        else:
+            mfr = pos_flow / neg_flow
+            result.append(100 - (100 / (1 + mfr)))
     return result
 
 
@@ -389,7 +405,7 @@ def adx_calc(highs, lows, closes, period=14):
             adx_vals.append(None)
         else:
             adx_vals.append(abs(p - n) / (p + n) * 100 if (p + n) != 0 else 0)
-    return smooth([v or 0.0 for v in adx_vals], period)
+    return smooth([0.0 if v is None else v for v in adx_vals], period)
 
 
 def sar(highs, lows, acceleration=0.02, maximum=0.2):
@@ -438,9 +454,9 @@ def bop_calc(opens, highs, lows, closes):
 
 def trix(closes, period=15):
     e1 = ema(closes, period)
-    e1_c = [v or 0.0 for v in e1]
+    e1_c = [0.0 if v is None else v for v in e1]
     e2 = ema(e1_c, period)
-    e2_c = [v or 0.0 for v in e2]
+    e2_c = [0.0 if v is None else v for v in e2]
     e3 = ema(e2_c, period)
     result = [None]
     for i in range(1, len(e3)):
@@ -454,12 +470,12 @@ def trix(closes, period=15):
 def tsi(closes, long_period=25, short_period=13):
     mom_1 = [None] + [closes[i] - closes[i - 1] for i in range(1, len(closes))]
     abs_mom = [None if v is None else abs(v) for v in mom_1]
-    mom_c   = [v or 0.0 for v in mom_1]
-    abs_c   = [v or 0.0 for v in abs_mom]
+    mom_c   = [0.0 if v is None else v for v in mom_1]
+    abs_c   = [0.0 if v is None else v for v in abs_mom]
     e1  = ema(mom_c, long_period)
     ea1 = ema(abs_c, long_period)
-    e1_c  = [v or 0.0 for v in e1]
-    ea1_c = [v or 0.0 for v in ea1]
+    e1_c  = [0.0 if v is None else v for v in e1]
+    ea1_c = [0.0 if v is None else v for v in ea1]
     e2  = ema(e1_c,  short_period)
     ea2 = ema(ea1_c, short_period)
     return [

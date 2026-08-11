@@ -20,6 +20,22 @@ namespace fincept::services::equity {
 
 namespace {
 
+// A daemon reply carrying an error — or no rows at all — is not data.
+//
+// The daemon deliberately refuses to cache those (see _is_cacheable_result
+// there); caching them on this side undoes that decision, and the companion
+// disk write makes one transient failure outlive a restart. The observed
+// result was an empty chart pinned for the full TTL and rehydrated on the
+// next launch, from a single rate-limit blip.
+//
+// ok == true is not sufficient on its own: get_historical_period returns []
+// for an empty history and {"error": ...} for an exception, and BOTH arrive
+// with ok == true.
+bool series_is_cacheable(const QJsonObject& result, const QJsonArray& rows) {
+    return !result.contains("error") && !rows.isEmpty();
+}
+
+
 // Persistent on-disk cache so the equity research panels can paint the
 // most-recently-viewed symbol immediately on next launch. One file per
 // symbol holds every category (quote, info, candles by period, financials,
@@ -367,11 +383,11 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                 const auto arr = result.contains("_value")
                                      ? result.value("_value").toArray()
                                      : result.value("history").toArray();
-                fincept::CacheManager::instance().put(
-                    candles_key,
-                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                    kHistoricalTtlSec, "equity");
-                {
+                if (series_is_cacheable(result, arr)) {
+                    fincept::CacheManager::instance().put(
+                        candles_key,
+                        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                        kHistoricalTtlSec, "equity");
                     const QString fname = symbol_filename(symbol);
                     QJsonObject root = disk_cache().load(fname).object();
                     root.insert("symbol", symbol);
@@ -379,6 +395,10 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                     by_period.insert(period, arr);
                     root.insert("candles", by_period);
                     disk_cache().save(fname, QJsonDocument(root));
+                } else {
+                    LOG_WARN("EquityResearch",
+                             QString("Not caching empty/failed history for %1 %2 — a transient "
+                                     "failure must not outlive the request").arg(symbol, period));
                 }
                 QVector<Candle> parsed = parse_candles(arr);
                 emit historical_loaded(symbol, period, parsed);
@@ -654,11 +674,11 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
                 const auto arr = result.contains("_value")
                                      ? result.value("_value").toArray()
                                      : result.value("history").toArray();
-                fincept::CacheManager::instance().put(
-                    candles_key,
-                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                    kHistoricalTtlSec, "equity");
-                {
+                if (series_is_cacheable(result, arr)) {
+                    fincept::CacheManager::instance().put(
+                        candles_key,
+                        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                        kHistoricalTtlSec, "equity");
                     const QString fname = symbol_filename(symbol);
                     QJsonObject root = disk_cache().load(fname).object();
                     root.insert("symbol", symbol);
@@ -666,6 +686,10 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
                     by_period.insert(period, arr);
                     root.insert("candles", by_period);
                     disk_cache().save(fname, QJsonDocument(root));
+                } else {
+                    LOG_WARN("EquityResearch",
+                             QString("Not caching empty/failed history for %1 %2 — a transient "
+                                     "failure must not outlive the request").arg(symbol, period));
                 }
                 resolve(QVariant::fromValue(parse_candles(arr)));
             });
@@ -779,14 +803,14 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                const auto arr = result.contains("_value")
                                                     ? result.value("_value").toArray()
                                                     : result.value("history").toArray();
-                               fincept::CacheManager::instance().put(
-                                   candles_key,
-                                   QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                                   kHistoricalTtlSec, "equity");
-                               // Per-symbol disk cache stores candles under a
-                               // nested period map so different period buttons
-                               // can each rehydrate independently.
-                               {
+                               if (series_is_cacheable(result, arr)) {
+                                   fincept::CacheManager::instance().put(
+                                       candles_key,
+                                       QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                                       kHistoricalTtlSec, "equity");
+                                   // Per-symbol disk cache stores candles under a
+                                   // nested period map so different period buttons
+                                   // can each rehydrate independently.
                                    const QString fname = symbol_filename(symbol);
                                    QJsonObject root = disk_cache().load(fname).object();
                                    root.insert("symbol", symbol);
@@ -794,6 +818,10 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                    by_period.insert(period, arr);
                                    root.insert("candles", by_period);
                                    disk_cache().save(fname, QJsonDocument(root));
+                               } else {
+                                   LOG_WARN("EquityResearch",
+                                            QString("Not caching empty/failed technicals history for %1 %2")
+                                                .arg(symbol, period));
                                }
                                emit historical_loaded(symbol, period, parse_candles(arr));
                            });

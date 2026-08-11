@@ -114,8 +114,8 @@ def get_orderbook(symbol):
         bid = ask = bid_size = ask_size = 0
     return {
         "symbol": symbol,
-        "bid": round(bid, 2) if bid > 0 else 0,
-        "ask": round(ask, 2) if ask > 0 else 0,
+        "bid": _round_price(bid) if bid > 0 else 0,
+        "ask": _round_price(ask) if ask > 0 else 0,
         "bid_size": bid_size,
         "ask_size": ask_size,
         "timestamp": int(datetime.now().timestamp()),
@@ -147,21 +147,35 @@ def get_quote(symbol):
     return _quote_via_full_info(symbol)
 
 
-def _price_dp(symbol):
-    """Decimal places for a quoted price.
+def _price_dp(value):
+    """Decimal places that preserve a price's information.
 
-    Two decimals is right for equities and wrong for anything quoted below
-    ~1.00. FX pairs are the acute case: JPYUSD=X ~ 0.0064 rounds to 0.01, a
-    56% error, and KRWUSD=X ~ 0.00072 rounds to 0.0 — which reads as "no
-    rate" and silently drops the conversion entirely. Portfolio FX conversion
-    reads these quotes, so this precision is load-bearing, not cosmetic.
+    Two decimals is right for equities and destroys anything quoted below
+    ~1.00 — and that is not a rare corner: FX pairs (JPYUSD=X ~ 0.0064 →
+    0.01, a 56% error; KRWUSD=X ~ 0.00072 → 0.0, which downstream reads as
+    "no rate" and silently drops the conversion), sub-cent crypto, penny
+    stocks, and every change and spread derived from them.
+
+    Scale precision to the magnitude rather than guessing from the ticker:
+    roughly six significant figures for sub-unit values, and the two
+    decimals everything already expects for normal prices.
     """
-    return 6 if str(symbol).upper().endswith("=X") else 2
-
-
-def _round_price(value, symbol):
     try:
-        return round(float(value), _price_dp(symbol))
+        v = abs(float(value))
+    except (TypeError, ValueError):
+        return 2
+    if v >= 1.0 or v == 0.0:
+        return 2
+    if v >= 0.01:
+        return 6
+    return 10
+
+
+def _round_price(value, symbol=None):
+    """Round a price without destroying it. `symbol` is accepted so call
+    sites read naturally; the precision follows the value, not the ticker."""
+    try:
+        return round(float(value), _price_dp(value))
     except (TypeError, ValueError):
         return value
 
@@ -189,7 +203,7 @@ def _quote_via_fast_info(symbol):
         if v is None: return None
         try:
             v = float(v)
-            return round(v, 2)
+            return _round_price(v)
         except (TypeError, ValueError):
             return None
 
@@ -234,14 +248,14 @@ def _quote_via_full_info(symbol):
 
         quote_data = {
             "symbol": symbol,
-            "price": round(float(current_price), 2),
-            "change": round(float(change), 2),
+            "price": _round_price(current_price),
+            "change": _round_price(change),
             "change_percent": round(float(change_percent), 2),
             "volume": int(hist['Volume'].iloc[-1]) if not hist['Volume'].empty else None,
-            "high": round(float(hist['High'].iloc[-1]), 2) if not hist['High'].empty else None,
-            "low": round(float(hist['Low'].iloc[-1]), 2) if not hist['Low'].empty else None,
-            "open": round(float(hist['Open'].iloc[-1]), 2) if not hist['Open'].empty else None,
-            "previous_close": round(float(previous_close), 2),
+            "high": _round_price(hist['High'].iloc[-1]) if not hist['High'].empty else None,
+            "low": _round_price(hist['Low'].iloc[-1]) if not hist['Low'].empty else None,
+            "open": _round_price(hist['Open'].iloc[-1]) if not hist['Open'].empty else None,
+            "previous_close": _round_price(previous_close),
             "timestamp": int(datetime.now().timestamp()),
             "exchange": info.get('exchange', '')
         }
@@ -275,12 +289,16 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
             historical_data.append({
                 "symbol": symbol,
                 "timestamp": int(index.timestamp()),
-                "open": round(float(row['Open']), 2),
-                "high": round(float(row['High']), 2),
-                "low": round(float(row['Low']), 2),
-                "close": round(float(row['Close']), 2),
+                "open": _round_price(row['Open']),
+                "high": _round_price(row['High']),
+                "low": _round_price(row['Low']),
+                "close": _round_price(row['Close']),
                 "volume": int(row['Volume']),
-                "adj_close": round(float(row['Close']), 2)
+                # Same value as "close" — kept for payload compatibility.
+                # yfinance already applied any adjustment upstream; there is
+                # no separate raw/adjusted pair here, and the name implying
+                # one has misled every reader of this payload.
+                "adj_close": _round_price(row['Close'])
             })
 
         return historical_data
@@ -375,13 +393,13 @@ def get_historical_price(symbol, target_date):
             idx_date = index.to_pydatetime().replace(tzinfo=None)
             if idx_date.date() <= target.date():
                 closest_date = idx_date
-                closest_price = round(float(row['Close']), 2)
+                closest_price = _round_price(row['Close'])
 
         if closest_price is None:
             # If no date before or on target, take the first available
             first_row = hist.iloc[0]
             closest_date = hist.index[0].to_pydatetime()
-            closest_price = round(float(first_row['Close']), 2)
+            closest_price = _round_price(first_row['Close'])
 
         return {
             "found": True,
@@ -973,9 +991,9 @@ def get_batch_quotes(symbols):
                     "change": _round_price(change, symbol),
                     "change_percent": round(change_percent, 2),
                     "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else 0,
-                    "high": round(float(hist['High'].iloc[-1]), 2) if not pd.isna(hist['High'].iloc[-1]) else None,
-                    "low": round(float(hist['Low'].iloc[-1]), 2) if not pd.isna(hist['Low'].iloc[-1]) else None,
-                    "open": round(float(hist['Open'].iloc[-1]), 2) if not pd.isna(hist['Open'].iloc[-1]) else None,
+                    "high": _round_price(hist['High'].iloc[-1]) if not pd.isna(hist['High'].iloc[-1]) else None,
+                    "low": _round_price(hist['Low'].iloc[-1]) if not pd.isna(hist['Low'].iloc[-1]) else None,
+                    "open": _round_price(hist['Open'].iloc[-1]) if not pd.isna(hist['Open'].iloc[-1]) else None,
                     "previous_close": _round_price(previous_close, symbol),
                     "timestamp": int(datetime.now().timestamp()),
                     "exchange": ""
@@ -1002,9 +1020,9 @@ def get_batch_quotes(symbols):
                     continue
                 current = r["price"]
                 chg = current - prior
-                r["change"] = round(chg, 2)
+                r["change"] = _round_price(chg)
                 r["change_percent"] = round((chg / prior) * 100, 2)
-                r["previous_close"] = round(prior, 2)
+                r["previous_close"] = _round_price(prior)
         except Exception as e:
             # Helper unavailable or failed — fall through with the
             # daily-bar values rather than break the whole batch. Log
@@ -1162,7 +1180,7 @@ def get_company_profile(symbol):
             "phone": info.get("phone", ""),
             "marketCap": info.get("marketCap", 0),
             "employees": info.get("fullTimeEmployees", 0),
-            "currency": info.get("currency", "USD"),
+            "currency": info.get("currency") or "",
             "beta": info.get("beta", 0),
             "price": info.get("currentPrice", info.get("regularMarketPrice", 0)),
             "changes": info.get("regularMarketChangePercent", 0),
@@ -1297,7 +1315,7 @@ def search_symbols(query, limit=20, asset_type=""):
                         "exchange": q.get("exchDisp") or q.get("exchange", ""),
                         "country": q.get("market", ""),
                         "type": result_type,
-                        "currency": q.get("currency", "USD"),
+                        "currency": q.get("currency") or "",
                         "sector": "",
                         "industry": q.get("industry", "")
                     })
@@ -1322,7 +1340,7 @@ def search_symbols(query, limit=20, asset_type=""):
                             "name": info.get("longName", info.get("shortName", "")),
                             "exchange": info.get("exchange", ""),
                             "type": ui_type or yahoo_type.lower(),
-                            "currency": info.get("currency", "USD"),
+                            "currency": info.get("currency") or "",
                             "sector": info.get("sector", ""),
                             "industry": info.get("industry", "")
                         })
@@ -2338,7 +2356,7 @@ def _yf_ticker_with_fallback(symbol):
     return yf.Ticker(alt), alt
 
 
-def get_historical_period(symbol, period='6mo', interval='1d'):
+def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True):
     """Fetch historical data using a period string ('1mo', '6mo', '1y', '5y')
     or a custom date range encoded as 'range:YYYY-MM-DD:YYYY-MM-DD'. The
     range form drives yfinance's start/end parameters so the C++ side can
@@ -2362,9 +2380,9 @@ def get_historical_period(symbol, period='6mo', interval='1d'):
 
         with contextlib.redirect_stdout(_buf):
             if is_range:
-                hist = ticker.history(start=range_start, end=range_end, interval=interval)
+                hist = ticker.history(start=range_start, end=range_end, interval=interval, auto_adjust=auto_adjust)
             else:
-                hist = ticker.history(period=period, interval=interval)
+                hist = ticker.history(period=period, interval=interval, auto_adjust=auto_adjust)
 
         # BRK.B-style dot notation returns empty history for periods > 1d
         # even though the 1d quote endpoint succeeds.  Retry with the
@@ -2374,21 +2392,35 @@ def get_historical_period(symbol, period='6mo', interval='1d'):
             if ticker_alt.ticker != symbol:
                 with contextlib.redirect_stdout(_buf):
                     if is_range:
-                        hist = ticker_alt.history(start=range_start, end=range_end, interval=interval)
+                        hist = ticker_alt.history(start=range_start, end=range_end,
+                                                  interval=interval, auto_adjust=auto_adjust)
                     else:
-                        hist = ticker_alt.history(period=period, interval=interval)
+                        hist = ticker_alt.history(period=period, interval=interval,
+                                                  auto_adjust=True)
 
         if hist.empty:
             return []
 
+        # PRICE BASIS is the CALLER's decision, defaulting to total-return
+        # (auto_adjust=True) and pinned rather than inherited from a library
+        # default that could change under us.
+        #
+        # Charts, technicals and the 52-week band want adjusted: they ask
+        # "how did this investment perform", and a dividend is performance.
+        # A trailing stop asks a different question — "how far below its
+        # actual high is it trading now" — and must compare like with like
+        # against a raw live price, so the portfolio's peak-high fetch passes
+        # auto_adjust=False. Mixing the two silently misstated every derived
+        # distance, and the direction of the error grew with holding period
+        # and yield.
         historical_data = []
         for index, row in hist.iterrows():
             historical_data.append({
                 "timestamp": int(index.timestamp()),
-                "open": round(float(row['Open']), 2),
-                "high": round(float(row['High']), 2),
-                "low": round(float(row['Low']), 2),
-                "close": round(float(row['Close']), 2),
+                "open": _round_price(row['Open']),
+                "high": _round_price(row['High']),
+                "low": _round_price(row['Low']),
+                "close": _round_price(row['Close']),
                 "volume": int(row['Volume'])
             })
 
@@ -2896,7 +2928,10 @@ def _daemon_dispatch_inner(action, payload):
     if action == "historical_period":
         p = payload or {}
         return get_historical_period(
-            p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"))
+            p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"),
+            # Callers that compare against a RAW live price (the portfolio's
+            # trailing-stop peak) pass auto_adjust=false explicitly.
+            bool(p.get("auto_adjust", True)))
     if action == "batch_closes":
         p = payload or {}
         return batch_closes(p.get("symbols") or [], p.get("start"), p.get("end"))

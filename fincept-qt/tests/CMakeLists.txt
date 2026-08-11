@@ -404,3 +404,17 @@ set_target_properties(test_portfolio_fx PROPERTIES
 )
 
 add_test(NAME portfolio_fx COMMAND test_portfolio_fx)
+
+# ── TALIpp indicator correctness ─────────────────────────────────────────────
+# Pure-Python indicator tests. RSI and MFI returned the INVERSE of the truth
+# for windows with no downside (0 = maximally oversold, for the strongest
+# possible uptrend), and Stochastic %D overwrote a genuine 0.0 %K with a
+# neutral 50. Self-contained; no pytest, no network.
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME equity_talipp
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_equity_talipp.py
+    )
+endif()

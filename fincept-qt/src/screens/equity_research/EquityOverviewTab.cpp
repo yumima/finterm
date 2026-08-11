@@ -7,6 +7,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QJsonDocument>
+#include <QTimeZone>
 #include <QJsonObject>
 
 #include <QDateEdit>
@@ -107,6 +108,28 @@ ResearchCandleCanvas::ResearchCandleCanvas(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(250);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setMouseTracking(true);  // receive mouseMoveEvent without a button held
+}
+
+// 52-week band from the candle series, so it shares the chart's price basis.
+//
+// `info`'s fiftyTwoWeekHigh is Yahoo's own figure on its own (unadjusted)
+// basis, while the chart and its crosshair are total-return adjusted. For a
+// dividend payer the two disagree by the cumulative yield over the window,
+// so "52w-hi −3.1%" was comparing two different definitions of price.
+// Returns {high, low}; {0,0} when the series is too short to cover a year,
+// in which case the caller falls back to the vendor figure.
+static QPair<double, double> week52_from_candles(const QVector<services::equity::Candle>& candles) {
+    if (candles.size() < 200) // ~1y of trading days; shorter can't span the window
+        return {0.0, 0.0};
+    const qint64 cutoff = candles.last().timestamp - 365LL * 24 * 3600;
+    double hi = 0.0, lo = 0.0;
+    for (const auto& c : candles) {
+        if (c.timestamp < cutoff || c.high <= 0.0 || c.low <= 0.0)
+            continue;
+        hi = std::max(hi, c.high);
+        lo = (lo == 0.0) ? c.low : std::min(lo, c.low);
+    }
+    return {hi, lo};
 }
 
 void ResearchCandleCanvas::set_candles(const QVector<services::equity::Candle>& candles, const QString& cs) {
@@ -547,7 +570,9 @@ void ResearchCandleCanvas::rebuild_cache() {
 
     for (int i = 0; i < count; i += label_step) {
         const auto& c = candles_[start + i];
-        QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp);
+        // UTC: a daily bar is stamped at exchange midnight, so rendering it
+        // in the viewer's zone moves the label a day for negative-UTC users.
+        QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
         QString label;
         if (span_sec > 365LL * 86400)
             label = dt.toString("MMM yy");
@@ -1416,7 +1441,7 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         lbl->setPalette(pal);
     };
 
-    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp);
+    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
     primary_date_lbl_->setText(dt.toString("ddd dd MMM yyyy"));
     primary_ohlc_lbl_->setText(QString("O %1  H %2  L %3  C %4")
                                    .arg(fmt_p(c.open), fmt_p(c.high),
@@ -1437,10 +1462,13 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
 
     primary_vol_lbl_->setText(QStringLiteral("Vol ") + fmt_v(c.volume));
 
-    // 52w-hi delta — only when we actually have the high from StockInfo.
-    if (cached_info_.week52_high > 0.0) {
-        const double off_high = (c.close - cached_info_.week52_high)
-                                / cached_info_.week52_high * 100.0;
+    // 52w-hi delta. Prefer the band derived from these very candles so the
+    // comparison is basis-consistent; fall back to the vendor figure only
+    // when the loaded window is too short to contain a year.
+    const double derived_hi = week52_from_candles(cached_candles_).first;
+    const double w52h = derived_hi > 0.0 ? derived_hi : cached_info_.week52_high;
+    if (w52h > 0.0) {
+        const double off_high = (c.close - w52h) / w52h * 100.0;
         primary_52w_lbl_->setText(QString("52w-hi %1%").arg(off_high, 0, 'f', 1));
         // Green when close to the high (within 5%), dim otherwise. Always
         // negative for normal data so we don't bother with a "+" prefix.
@@ -1801,9 +1829,11 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     institutions_val_->setText(fmt_pct(info.held_institutions_pct));
     short_pct_val_->setText(fmt_pct(info.short_pct_of_float));
 
-    // 52 Week Range
-    w52h_val_->setText(fmt_price(info.week52_high));
-    w52l_val_->setText(fmt_price(info.week52_low));
+    // 52 Week Range — same source as the crosshair readout, so the panel and
+    // the chart cannot disagree about what the band is.
+    const auto band = week52_from_candles(cached_candles_);
+    w52h_val_->setText(fmt_price(band.first  > 0.0 ? band.first  : info.week52_high));
+    w52l_val_->setText(fmt_price(band.second > 0.0 ? band.second : info.week52_low));
     avg_vol_val_->setText(fmt_large(info.avg_volume));
 
     // Analyst Targets
