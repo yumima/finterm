@@ -6,6 +6,7 @@ Returns JSON output for Qt/C++ integration
 
 import sys
 import json
+import math
 import os
 import threading
 import time
@@ -203,10 +204,36 @@ def _quote_via_fast_info(symbol):
     # active extended-hours trading it is the prior day's last after-hours
     # print. Change and change% computed from it silently disagree with
     # every other source, and with this app's own dashboard.
-    prev_close_raw = getattr(fi, "regular_market_previous_close", None)
-    if prev_close_raw is None:
-        prev_close_raw = getattr(fi, "previous_close", None)
-    prev_close = float(prev_close_raw) if prev_close_raw is not None else current
+    # NaN is a real return value here, not a defensive hypothetical:
+    # regular_market_previous_close is Close.iloc[-2] of a keepna=True history,
+    # so a retained null row (holiday, halt, thin listing) yields NaN — and
+    # `NaN is None` is False, so an `is None` check would sail past it and
+    # leave change/change% as NaN. Those serialize to null and arrive in C++ as
+    # 0.0, i.e. a real price beside a confidently flat "0.00 / 0.00%".
+    # (The old previous_close path came from a history() without keepna, which
+    # dropped null rows, so this failure mode is new with the switch.)
+    def _first_real(*names):
+        for n in names:
+            v = getattr(fi, n, None)
+            if v is None:
+                continue
+            try:
+                v = float(v)
+            except (TypeError, ValueError):
+                continue
+            # isfinite, not `> 0`. A previous close can legitimately be
+            # NEGATIVE: WTI (CL=F, quoted on the dashboard) settled at -$37.63
+            # on 2020-04-20. Rejecting it would fall through to prev_close =
+            # current and print a flat 0.00 / 0.00% beside a real price —
+            # reintroducing the exact bug this guard exists to prevent, on the
+            # one day of the decade anyone was staring at the tape. isfinite
+            # also rejects ±inf, which `> 0` happily accepts.
+            if math.isfinite(v) and v != 0:
+                return v
+        return None
+
+    prev_close_raw = _first_real("regular_market_previous_close", "previous_close")
+    prev_close = prev_close_raw if prev_close_raw is not None else current
     change = current - prev_close
     pct = (change / prev_close * 100.0) if prev_close else 0.0
 

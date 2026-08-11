@@ -329,6 +329,34 @@ set_target_properties(test_portfolio_snapshots PROPERTIES
 
 add_test(NAME portfolio_snapshots COMMAND test_portfolio_snapshots)
 
+# ── Cache age derivation ─────────────────────────────────────────────────────
+# "How old is this value" must come from the cache row, not from a field a
+# writer has to remember to stamp. A forgotten stamp silently disabled quote
+# staleness gating; these pin that a rewrite cannot un-age an entry.
+add_executable(test_cache_aged
+    storage/test_cache_aged.cpp
+    ../src/storage/cache/CacheManager.cpp
+    ../src/storage/sqlite/CacheDatabase.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_cache_aged PRIVATE
+    ../src
+)
+
+target_link_libraries(test_cache_aged PRIVATE
+    Qt6::Core
+    Qt6::Sql
+    Qt6::Test
+)
+
+set_target_properties(test_cache_aged PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME cache_aged COMMAND test_cache_aged)
+
 # ── Portfolio ledger (cost-basis engine) tests ───────────────────────────────
 # The single average-cost convention every position number derives from.
 # Pure replay function — struct in, position out — same shape as the

@@ -262,30 +262,7 @@ void MarketDataService::drain_refresh_chunk() {
         co["ask"]        = qd.ask;
         co["bid_size"]   = qd.bid_size;
         co["ask_size"]   = qd.ask_size;
-        const QString payload =
-            QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact));
-        // 30s key holds the live snapshot including bid/ask.
-        fincept::CacheManager::instance().put(
-            "market:" + qd.symbol, QVariant(payload),
-            kQuoteCacheTtlSec, "market_data");
-        // 7d "last-known" key is a cold-start fallback. Order-book fields
-        // (bid/ask/bid_size/ask_size) go stale within seconds, so we strip
-        // them from the long-TTL payload — the UI would otherwise show a
-        // week-old spread as if it were live.
-        QJsonObject co_long = co;
-        co_long.remove("bid");
-        co_long.remove("ask");
-        co_long.remove("bid_size");
-        co_long.remove("ask_size");
-        // Stamp when this was true. Without it, cold-start hydration
-        // republishes the payload as a live quote and DataHub marks it
-        // Fresh — a price up to a week old presented as the market price.
-        co_long.insert("cached_at", static_cast<double>(QDateTime::currentSecsSinceEpoch()));
-        const QString payload_long =
-            QString::fromUtf8(QJsonDocument(co_long).toJson(QJsonDocument::Compact));
-        fincept::CacheManager::instance().put(
-            "market_last:" + qd.symbol, QVariant(payload_long),
-            kQuoteLastKnownTtlSec, "market_data");
+        store_quote_entries(qd.symbol, co);
         publish_quote_to_hub(qd);
         --budget;
     }
@@ -401,19 +378,46 @@ void MarketDataService::ensure_registered_with_hub() {
     QTimer::singleShot(0, this, [this]() { hydrate_quotes_from_cache(); });
 }
 
+void MarketDataService::store_quote_entries(const QString& symbol, const QJsonObject& full) {
+    // 30s key holds the live snapshot including bid/ask.
+    fincept::CacheManager::instance().put(
+        "market:" + symbol,
+        QVariant(QString::fromUtf8(QJsonDocument(full).toJson(QJsonDocument::Compact))),
+        kQuoteCacheTtlSec, "market_data");
+
+    // 7d "last-known" key is a cold-start fallback. Order-book fields
+    // (bid/ask/bid_size/ask_size) go stale within seconds, so they are
+    // stripped from the long-TTL payload — the UI would otherwise show a
+    // week-old spread as if it were live.
+    QJsonObject lon = full;
+    lon.remove("bid");
+    lon.remove("ask");
+    lon.remove("bid_size");
+    lon.remove("ask_size");
+    // Deliberately NOT stamped into the payload: the write time comes from the
+    // cache row (expires_at − ttl_seconds, see CacheManager::multi_get_aged).
+    // A payload stamp is only as good as every writer remembering it, and the
+    // bug this whole path exists to fix was exactly one writer forgetting.
+    fincept::CacheManager::instance().put(
+        "market_last:" + symbol,
+        QVariant(QString::fromUtf8(QJsonDocument(lon).toJson(QJsonDocument::Compact))),
+        kQuoteLastKnownTtlSec, "market_data");
+}
+
 void MarketDataService::hydrate_quotes_from_cache() {
     // Decode every cached entry into the pending queue here — this is one
     // SQLite read (fast) plus N small QJsonDocument::fromJson calls. The
     // expensive part (publishing to the hub, which fans out to subscribers
     // and emits state-transition signals) is split off into chunks below.
-    const auto last_known = fincept::CacheManager::instance().get_prefix("market_last:");
+    const auto last_known = fincept::CacheManager::instance().get_prefix_aged("market_last:");
     hydrate_pending_.clear();
     hydrate_pending_.reserve(last_known.size());
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
     for (auto it = last_known.cbegin(); it != last_known.cend(); ++it) {
         const QString sym = it.key().mid(sizeof("market_last:") - 1);
         if (sym.isEmpty())
             continue;
-        const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
+        const QJsonObject o = QJsonDocument::fromJson(it.value().value.toUtf8()).object();
         if (o.isEmpty())
             continue;
         // The cache holds up to 7 days so a rate-limited session still has
@@ -421,11 +425,13 @@ void MarketDataService::hydrate_quotes_from_cache() {
         // cold-start publish: past a couple of sessions the number is not a
         // useful approximation of the market price, and an empty cell is
         // more honest than a stale one. The live fetch fills it in seconds.
-        const qint64 cached_at = static_cast<qint64>(o.value("cached_at").toDouble());
-        if (cached_at > 0 &&
-            QDateTime::currentSecsSinceEpoch() - cached_at > kHydrateMaxAgeSec) {
+        // An unparseable write time is treated as too old, matching
+        // PortfolioService's reader. The two used to disagree on this — one
+        // published on "age unknown" and the other suppressed — which showed
+        // the same holding at two different prices on two screens.
+        const QDateTime written = it.value().written_at;
+        if (!written.isValid() || now - written.toSecsSinceEpoch() > kHydrateMaxAgeSec)
             continue;
-        }
         // Deliberately no age field on QuoteData: DataHub skips re-publishing
         // a byte-identical quote, and a per-fetch timestamp would make every
         // tick look changed and defeat that. The age gate above is what keeps
@@ -610,23 +616,7 @@ void MarketDataService::flush_batch() {
                     o["ask"] = q.ask;
                     o["bid_size"] = q.bid_size;
                     o["ask_size"] = q.ask_size;
-                    const QString payload =
-                        QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
-                    fincept::CacheManager::instance().put(
-                        "market:" + q.symbol, QVariant(payload),
-                        kQuoteCacheTtlSec, "market_data");
-                    // 7d fallback: strip order-book fields (bid/ask go stale
-                    // within seconds — see comment in refresh() above).
-                    QJsonObject o_long = o;
-                    o_long.remove("bid");
-                    o_long.remove("ask");
-                    o_long.remove("bid_size");
-                    o_long.remove("ask_size");
-                    const QString payload_long =
-                        QString::fromUtf8(QJsonDocument(o_long).toJson(QJsonDocument::Compact));
-                    fincept::CacheManager::instance().put(
-                        "market_last:" + q.symbol, QVariant(payload_long),
-                        kQuoteLastKnownTtlSec, "market_data");
+                    store_quote_entries(q.symbol, o);
                 };
 
                 // Daemon's batch_quotes returns a flat list; PythonWorker

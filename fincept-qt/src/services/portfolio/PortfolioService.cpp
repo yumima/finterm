@@ -408,10 +408,22 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
     if (summary.holdings.isEmpty())
         return;
 
-    // One SQLite SELECT for the whole cohort — much cheaper than N
-    // CacheManager::get() round-trips on a 50-holding portfolio. FX pairs ride
-    // the same query: refreshing prices while leaving a days-old rate in place
-    // would value fresh prices at a stale exchange rate.
+    // This function's whole premise is "the quote cache is usually fresher
+    // than the portfolio's own disk snapshot" — which is true, but is an
+    // assumption, not a fact. Left unchecked it silently inverts: a symbol the
+    // user stopped watching keeps a week-old `market_last:` entry, and that
+    // entry then overwrites a snapshot written this morning. So compare the
+    // two ages and take the newer, rather than assuming.
+    //
+    // Deliberately NOT the cold-start age gate (kHydrateMaxAgeSec): that rule
+    // governs publishing a price to the ticker as current, where the honest
+    // alternative is an empty cell. Here the alternative is the snapshot's own
+    // (possibly older) price, so suppressing a merely-old entry can leave a
+    // MUCH older one on screen. Fresher-wins is the invariant that holds in
+    // both directions. The summary is badged CACHED throughout either way.
+    const qint64 snapshot_at =
+        QDateTime::fromString(summary.last_updated, Qt::ISODate).toSecsSinceEpoch();
+
     const QString port_ccy = portfolio::fx_price_factor(summary.portfolio.currency).first;
     QStringList keys;
     keys.reserve(summary.holdings.size() * 2);
@@ -421,13 +433,25 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         if (!pair.isEmpty())
             keys.append(QStringLiteral("market_last:") + pair);
     }
-    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(keys);
+    const auto hits = fincept::CacheManager::instance().multi_get_aged(keys);
 
-    const auto cached_price = [&hits](const QString& symbol) -> double {
+    // Returns the cached payload only when it post-dates the snapshot we are
+    // about to overwrite. The write time comes from the cache row itself, not
+    // from a field the writer had to remember to set.
+    const auto fresher_than_snapshot = [&hits, snapshot_at](const QString& symbol) -> QJsonObject {
         const auto it = hits.constFind(QStringLiteral("market_last:") + symbol);
         if (it == hits.constEnd())
-            return 0.0;
-        return QJsonDocument::fromJson(it.value().toUtf8()).object().value("price").toDouble();
+            return {};
+        if (snapshot_at > 0 &&
+            (!it.value().written_at.isValid() ||
+             it.value().written_at.toSecsSinceEpoch() <= snapshot_at)) {
+            return {};
+        }
+        return QJsonDocument::fromJson(it.value().value.toUtf8()).object();
+    };
+
+    const auto cached_price = [&fresher_than_snapshot](const QString& symbol) -> double {
+        return fresher_than_snapshot(symbol).value("price").toDouble();
     };
 
     double total_mv   = 0;
@@ -437,9 +461,8 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
     int    losers     = 0;
 
     for (auto& h : summary.holdings) {
-        const auto it = hits.constFind(QStringLiteral("market_last:") + h.symbol);
-        if (it != hits.constEnd()) {
-            const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
+        const QJsonObject o = fresher_than_snapshot(h.symbol);
+        if (!o.isEmpty()) {
             // Order-book fields aren't in the 7d market_last payload (they
             // go stale within seconds — see MarketDataService::refresh
             // comment). Read price-derived fields only; bid/ask/sizes

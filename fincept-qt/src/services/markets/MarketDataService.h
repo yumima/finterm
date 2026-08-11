@@ -325,6 +325,19 @@ class MarketDataService : public QObject
     /// interleave between chunks instead of waiting behind the whole
     /// hundreds-of-quotes burst.
     void hydrate_quotes_from_cache();
+
+    /// Writes BOTH quote cache entries for one symbol: the 30s "market:" hot
+    /// entry and the 7d "market_last:" cold-start fallback.
+    ///
+    /// This exists as one function because it was two. Both call sites built
+    /// the same payload independently, and when the `cached_at` stamp that
+    /// gates cold-start hydration was added to one of them, the other kept
+    /// writing the same key unstamped — and since a missing stamp reads as 0,
+    /// the gate treats it as "no age known" and publishes regardless. Opening
+    /// the portfolio screen (which goes through the on-demand batch path) was
+    /// enough to un-stamp a symbol and restore the stale-price bug the stamp
+    /// was added to fix. One writer, one format, one stamp.
+    static void store_quote_entries(const QString& symbol, const QJsonObject& full);
     void hydrate_next_chunk();
     static constexpr int kHydrateChunkSize = 25;
     // Decoded payload waiting to be published. Built once in
@@ -386,7 +399,26 @@ class MarketDataService : public QObject
     /// Oldest a cached quote may be and still be published at cold start.
     /// The 7-day fallback TTL is right for "better than nothing" during a
     /// rate-limited session, and wrong for presenting a price as current.
-    static constexpr qint64 kHydrateMaxAgeSec = 2 * 24 * 3600;
+    ///
+    /// Four days, not two: a market closed Friday 17:00 reopens Monday 09:00,
+    /// which is ~64h, so a 48h bound disabled hydration every Monday — and
+    /// Friday's close IS the market price on Monday morning, exactly the value
+    /// worth showing. Four days also covers the long weekends the US calendar
+    /// produces (Good Friday→Monday, Thanksgiving, Christmas/New Year abutting
+    /// a weekend).
+    ///
+    /// It does NOT cover every market this app quotes: Shanghai closes ~8-9
+    /// consecutive days for Chinese New Year, so 000001.SS hydrates blank at
+    /// cold start midway through that holiday even though its last close is
+    /// still the live price. That is deliberate rather than overlooked.
+    /// Hydration is a latency optimisation, not a data source — the live fetch
+    /// lands seconds later with the same close — so the two failure modes are
+    /// wildly asymmetric: a suppressed entry costs a briefly empty cell, while
+    /// a published one costs a stale price wearing a Fresh badge. Erring short
+    /// is the right side of that trade. Fixing it properly needs a per-symbol
+    /// market calendar (sessions elapsed, not hours elapsed), not a bigger
+    /// constant — a bigger constant just moves the US regression back in.
+    static constexpr qint64 kHydrateMaxAgeSec = 4 * 24 * 3600;
     static constexpr int kQuoteLastKnownTtlSec = 7 * 24 * 60 * 60;
 
     // SEC EDGAR's submissions API is keyed by CIK (numeric, zero-padded to 10

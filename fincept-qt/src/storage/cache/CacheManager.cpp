@@ -135,17 +135,80 @@ std::optional<CacheManager::Aged> CacheManager::try_get_aged(const QString& key)
     if (!q.next())
         return std::nullopt;
 
+    return aged_from_row(q.value(0).toString(), q.value(1).toString(), q.value(2).toInt());
+}
+
+CacheManager::Aged CacheManager::aged_from_row(const QString& value,
+                                               const QString& expires_at,
+                                               int ttl_seconds) {
     Aged out;
-    out.value = q.value(0).toString();
+    out.value = value;
     // written_at = expires_at − ttl. `created_at` is preserved across re-puts
     // by design, so it would report the FIRST write, not the value in hand.
-    QDateTime expires = QDateTime::fromString(q.value(1).toString(), Qt::ISODateWithMs);
+    QDateTime expires = QDateTime::fromString(expires_at, Qt::ISODateWithMs);
     if (!expires.isValid())
-        expires = QDateTime::fromString(q.value(1).toString(), QStringLiteral("yyyy-MM-dd HH:mm:ss"));
-    const int ttl = q.value(2).toInt();
+        expires = QDateTime::fromString(expires_at, QStringLiteral("yyyy-MM-dd HH:mm:ss"));
     if (expires.isValid()) {
         expires.setTimeZone(QTimeZone::UTC); // the table stores UTC (datetime('now'))
-        out.written_at = expires.addSecs(-ttl).toLocalTime();
+        out.written_at = expires.addSecs(-ttl_seconds).toLocalTime();
+    }
+    return out;
+}
+
+QHash<QString, CacheManager::Aged> CacheManager::multi_get_aged(const QStringList& keys) const {
+    QHash<QString, Aged> out;
+    if (keys.isEmpty())
+        return out;
+    auto& cdb = CacheDatabase::instance();
+    if (!cdb.is_open())
+        return out;
+
+    QStringList placeholders;
+    placeholders.reserve(keys.size());
+    QVariantList params;
+    params.reserve(keys.size());
+    for (const auto& k : keys) {
+        placeholders.append(QStringLiteral("?"));
+        params.append(k);
+    }
+    const QString sql = QStringLiteral(
+        "SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
+        "WHERE key IN (%1) AND expires_at > datetime('now')")
+        .arg(placeholders.join(QStringLiteral(",")));
+
+    auto r = cdb.execute(sql, params);
+    if (r.is_err())
+        return out;
+
+    QSqlQuery q = std::move(r.value());
+    out.reserve(keys.size());
+    while (q.next()) {
+        out.insert(q.value(0).toString(),
+                   aged_from_row(q.value(1).toString(), q.value(2).toString(), q.value(3).toInt()));
+    }
+    return out;
+}
+
+QHash<QString, CacheManager::Aged> CacheManager::get_prefix_aged(const QString& prefix) const {
+    QHash<QString, Aged> out;
+    if (prefix.isEmpty())
+        return out;
+    auto& cdb = CacheDatabase::instance();
+    if (!cdb.is_open())
+        return out;
+
+    const QString upper = prefix_upper_bound(prefix);
+    auto r = cdb.execute(
+        "SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
+        "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
+        {prefix, upper});
+    if (r.is_err())
+        return out;
+
+    QSqlQuery q = std::move(r.value());
+    while (q.next()) {
+        out.insert(q.value(0).toString(),
+                   aged_from_row(q.value(1).toString(), q.value(2).toString(), q.value(3).toInt()));
     }
     return out;
 }

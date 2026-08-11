@@ -40,6 +40,22 @@ class CacheManager : public QObject {
         QDateTime written_at;
     };
     std::optional<Aged> try_get_aged(const QString& key) const;
+    /// Batch/prefix forms of try_get_aged().
+    ///
+    /// Prefer these over the plain multi_get()/get_prefix() whenever the caller
+    /// cares HOW OLD a value is. The alternative — having writers stamp a
+    /// timestamp into the payload — puts the invariant in the writers' hands,
+    /// and a writer that forgets produces a value that silently reads as
+    /// "age unknown". That already happened once: two code paths wrote the
+    /// same quote key, only one stamped it, and the un-stamped one disabled a
+    /// staleness gate for every symbol it touched. `expires_at - ttl_seconds`
+    /// is set by put() itself, so no writer can omit it.
+    QHash<QString, Aged> multi_get_aged(const QStringList& keys) const;
+    QHash<QString, Aged> get_prefix_aged(const QString& prefix) const;
+
+    /// Derive an Aged from one `unified_cache` row. Shared by the three aged
+    /// getters so they cannot drift on how write time is computed.
+    static Aged aged_from_row(const QString& value, const QString& expires_at, int ttl_seconds);
     /// Return every unexpired key/value pair whose key begins with `prefix`.
     /// Uses the same sargable range-query trick as remove_prefix() (no LIKE
     /// full-table scan). Intended for cold-start hydration where a service
