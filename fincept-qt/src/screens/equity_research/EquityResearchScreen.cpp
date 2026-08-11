@@ -906,6 +906,62 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
 // surface elsewhere in the app (LSE, TSX, TYO, HKG, NSE/BSE, German /
 // Euronext). Unrecognised codes show the raw venue code in a muted
 // "no status" style — better than misleading the user with a guess.
+// US exchange holidays, computed rather than tabulated so the app does not
+// expire at the end of a hardcoded year.
+//
+// NYSE/NASDAQ observe: New Year's Day, MLK Day (3rd Mon Jan), Washington's
+// Birthday (3rd Mon Feb), Good Friday, Memorial Day (last Mon May),
+// Juneteenth, Independence Day, Labor Day (1st Mon Sep), Thanksgiving
+// (4th Thu Nov), Christmas. Fixed-date holidays falling on a weekend are
+// observed on the adjacent weekday.
+static bool us_market_holiday(const QDate& d) {
+    const int y = d.year();
+
+    // Fixed-date holidays, shifted to the observed weekday.
+    const auto observed = [](QDate fixed) {
+        if (fixed.dayOfWeek() == 6) return fixed.addDays(-1); // Sat → Fri
+        if (fixed.dayOfWeek() == 7) return fixed.addDays(1);  // Sun → Mon
+        return fixed;
+    };
+    for (const QDate& fixed : {QDate(y, 1, 1), QDate(y, 6, 19), QDate(y, 7, 4), QDate(y, 12, 25)}) {
+        if (d == observed(fixed))
+            return true;
+    }
+    // A 1 January falling on a Saturday is observed on the previous 31 Dec.
+    if (QDate(y + 1, 1, 1).dayOfWeek() == 6 && d == QDate(y, 12, 31))
+        return true;
+
+    // Nth weekday-of-month holidays.
+    const auto nth_dow = [](int year, int month, int dow, int n) {
+        QDate first(year, month, 1);
+        int delta = (dow - first.dayOfWeek() + 7) % 7;
+        return first.addDays(delta + 7 * (n - 1));
+    };
+    const auto last_dow = [](int year, int month, int dow) {
+        QDate last(year, month, QDate(year, month, 1).daysInMonth());
+        return last.addDays(-((last.dayOfWeek() - dow + 7) % 7));
+    };
+    if (d == nth_dow(y, 1, 1, 3))  return true;  // MLK Day
+    if (d == nth_dow(y, 2, 1, 3))  return true;  // Washington's Birthday
+    if (d == last_dow(y, 5, 1))    return true;  // Memorial Day
+    if (d == nth_dow(y, 9, 1, 1))  return true;  // Labor Day
+    if (d == nth_dow(y, 11, 4, 4)) return true;  // Thanksgiving
+
+    // Good Friday — two days before Easter (anonymous Gregorian algorithm).
+    const int a = y % 19, b = y / 100, c = y % 100;
+    const int dd = b / 4, e = b % 4, f = (b + 8) / 25, g = (b - f + 1) / 3;
+    const int h = (19 * a + b - dd - g + 15) % 30;
+    const int i = c / 4, k = c % 4;
+    const int l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const int m = (a + 11 * h + 22 * l) / 451;
+    const int month = (h + l - 7 * m + 114) / 31;
+    const int day = ((h + l - 7 * m + 114) % 31) + 1;
+    if (d == QDate(y, month, day).addDays(-2))
+        return true;
+
+    return false;
+}
+
 void EquityResearchScreen::update_market_status_badge() {
     if (!mkt_status_label_) return;
     if (current_exchange_.isEmpty()) {
@@ -987,13 +1043,14 @@ void EquityResearchScreen::update_market_status_badge() {
         return;
     }
 
-    // NB: we don't track per-exchange holidays here (NYSE 4 July, LSE
-    // bank holidays, etc.). On those days the badge will say OPEN during
-    // what is actually a closed session. Acceptable scope limit for a
-    // glance-readable hint; the trader's order book / live ticks would
-    // tell the truth.
+    // US exchange holidays ARE tracked (see us_market_holiday below) — the
+    // badge previously said OPEN on 4 July and Thanksgiving, which is not a
+    // scope limit so much as a wrong answer on the days it is most obviously
+    // wrong. Non-US venues still have no holiday data, so their badge says
+    // so rather than asserting a session it cannot verify.
 
     const Session& s = it.value();
+    const bool is_us = (s.tz == QLatin1String("America/New_York"));
     const QTimeZone tz(s.tz.toUtf8());
     if (!tz.isValid()) {
         mkt_status_label_->setVisible(false);
@@ -1001,6 +1058,7 @@ void EquityResearchScreen::update_market_status_badge() {
     }
     const QDateTime local = QDateTime::currentDateTime().toTimeZone(tz);
     const int dow = local.date().dayOfWeek();   // 1=Mon … 7=Sun
+    const bool holiday = is_us && us_market_holiday(local.date());
     const int mins_of_day = local.time().hour() * 60 + local.time().minute();
 
     auto in_window = [&](QPair<int, int> hours, int start_min, int end_min) {
@@ -1012,7 +1070,7 @@ void EquityResearchScreen::update_market_status_badge() {
 
     QString status;
     QString color;
-    if (dow >= 6) {
+    if (dow >= 6 || holiday) {
         status = "CLOSED";
         color  = ui::colors::TEXT_SECONDARY();
     } else if (in_window(s.regular, s.regular_start_min, s.regular_end_min)) {
