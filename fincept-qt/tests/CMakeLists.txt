@@ -447,3 +447,20 @@ set_target_properties(test_query_store PROPERTIES
 )
 
 add_test(NAME query_store COMMAND test_query_store)
+
+# ── Daemon dispatch: single-flight ───────────────────────────────────────────
+# N concurrent misses of the same key used to make N upstream calls, because
+# the cache is checked before the call and populated after it. That duplicate
+# load is what pushes the account into 429 rate limiting, which a user
+# experiences as missing data rather than as slowness.
+
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME daemon_singleflight
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_daemon_singleflight.py
+    )
+    # 77 = "the app venv (with yfinance) isn't present" — reported as
+    # skipped rather than passed, so a missing dependency can never mask a
+    # regression.
+    set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+endif()

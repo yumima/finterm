@@ -2933,32 +2933,120 @@ def _effective_ttl(action, result, default_ttl):
     return default_ttl
 
 
+# ── Single-flight ────────────────────────────────────────────────────────────
+# One in-flight upstream call per (action, payload). Without this, N concurrent
+# misses of the SAME key each hit Yahoo: the cache is checked before the call
+# and populated after, so every one of them sees a miss. Six network workers
+# asking for the same symbol at once is not hypothetical — a portfolio refresh,
+# a chart repaint and a technicals recompute routinely coincide on one ticker,
+# and the duplicate load is what pushes the account into 429 rate limiting,
+# which the user experiences as missing data rather than as slowness.
+#
+# Waiters block on an Event and then re-read the cache, so they get the
+# leader's result without issuing a call of their own.
+_inflight_lock = threading.Lock()
+_inflight = {}  # key -> _Flight
+
+# How long a follower waits on the leader before taking over. Deliberately
+# NOT generous: the C++ client abandons a network action at 10s, so a longer
+# wait just holds a worker for a request nobody is still listening for.
+_INFLIGHT_WAIT_SEC = 15
+
+
+class _Flight:
+    """One in-flight upstream call, and the outcome it will publish.
+
+    The result is handed to followers DIRECTLY rather than left for them to
+    re-read from the cache. That distinction is the whole point: errors are
+    deliberately never cached (a rate-limit blip must not stick), so a
+    cache-only handoff collapses nothing in exactly the situation this
+    exists for — every follower would find a miss and make its own call,
+    having first waited out the leader's latency.
+    """
+
+    __slots__ = ("event", "result", "error", "done")
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.result = None
+        self.error = None
+        self.done = False
+
+
 def _daemon_dispatch(action, payload):
     """Run one action and return the raw result object (not wrapped).
 
     Read-only actions are served from a short-TTL in-process cache (see
-    _CACHE_TTL) so duplicate requests don't re-hit Yahoo. The cache is checked
-    before, and populated after, the crumb-retry path below. The actual upstream
-    call happens OUTSIDE the cache lock, so concurrent misses run in parallel
-    (the lock only guards the dict).
+    _CACHE_TTL) so duplicate requests don't re-hit Yahoo, and identical
+    concurrent misses are collapsed to a single upstream call (single-flight).
+    The upstream call happens OUTSIDE the cache lock, so DIFFERENT keys still
+    run in parallel.
 
     On the first HTTP 401 / Invalid-Crumb error the yfinance session is reset
     and the action is retried once so callers don't see a cascade of failures
     every time Yahoo Finance rotates its auth crumb mid-session.
     """
     ttl = _CACHE_TTL.get(action)
-    key = None
-    if ttl:
-        key = _cache_key(action, payload)
-        hit = _cache_get(key)
-        if hit is not None:
-            return hit
+    if not ttl:
+        # Uncached actions are pass-through: no key, nothing to share.
+        return _daemon_dispatch_with_crumb_retry(action, payload)
 
-    result = _daemon_dispatch_with_crumb_retry(action, payload)
+    key = _cache_key(action, payload)
+    hit = _cache_get(key)
+    if hit is not None:
+        return hit
 
-    if ttl and _is_cacheable_result(result):
-        _cache_put(key, _effective_ttl(action, result, ttl), result)
-    return result
+    while True:
+        with _inflight_lock:
+            flight = _inflight.get(key)
+            if flight is None:
+                # Re-check under the lock before committing to a call: a
+                # leader can finish between the read above and this point,
+                # and a burst of workers dispatched from one recv loop hits
+                # that window routinely.
+                hit = _cache_get(key)
+                if hit is not None:
+                    return hit
+                flight = _Flight()
+                _inflight[key] = flight
+                is_leader = True
+            else:
+                is_leader = False
+
+        if is_leader:
+            try:
+                result = _daemon_dispatch_with_crumb_retry(action, payload)
+            except BaseException as exc:
+                flight.error = exc
+                flight.done = True
+                raise
+            else:
+                flight.result = result
+                flight.done = True
+                if _is_cacheable_result(result):
+                    _cache_put(key, _effective_ttl(action, result, ttl), result)
+                return result
+            finally:
+                # Release waiters on every path, including failure: the whole
+                # point is that a failed call is shared, not repeated.
+                with _inflight_lock:
+                    if _inflight.get(key) is flight:
+                        del _inflight[key]
+                flight.event.set()
+
+        # Follower: take the leader's outcome, success or failure.
+        if flight.event.wait(timeout=_INFLIGHT_WAIT_SEC) and flight.done:
+            if flight.error is not None:
+                raise flight.error
+            return flight.result
+
+        # The leader is hung (no timeout exists on yfinance's socket path).
+        # Evict it — identity-checked so a newer leader is never disturbed —
+        # and loop to take over. Leaving the entry would park every later
+        # request on this key for the full wait, forever.
+        with _inflight_lock:
+            if _inflight.get(key) is flight:
+                del _inflight[key]
 
 
 def _daemon_dispatch_with_crumb_retry(action, payload):
@@ -3380,17 +3468,33 @@ def get_extended_hours_quotes(symbols):
     # daemon's 8-second result cache absorbs for repeat callers.
     if missing:
         at = {r["symbol"]: i for i, r in enumerate(rows)}
-        for sym in missing[:_EXT_RETRY_MAX]:
+        targets = missing[:_EXT_RETRY_MAX]
+
+        def _retry_one(sym):
             try:
                 h = _yf.Ticker(sym).history(period="5d", interval="1m",
                                             prepost=True, auto_adjust=True)
             except Exception:
-                continue
+                return sym, None
             if h is None or getattr(h, "empty", True) or "Close" not in h.columns:
-                continue
-            row = _row(sym, h)
-            if row is not None:
-                rows[at[sym]] = row
+                return sym, None
+            return sym, _row(sym, h)
+
+        # Concurrently, not serially. Fifteen sequential single-ticker
+        # downloads held ONE network worker for the sum of their latencies —
+        # comfortably past the client's 10s deadline, so the whole
+        # extended-hours request timed out while still occupying a worker
+        # that other symbols were queued behind. Capped low: this runs
+        # inside a network worker, and the point is to stop being a
+        # head-of-line block, not to become a rate-limit generator.
+        # Small on purpose. This pool is PER REQUEST and different callers
+        # pass different symbol lists, so single-flight cannot collapse them:
+        # six network workers each servicing an extended_hours request would
+        # otherwise multiply out to 24 concurrent single-ticker downloads.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(2, len(targets))) as ex:
+            for sym, row in ex.map(_retry_one, targets):
+                if row is not None:
+                    rows[at[sym]] = row
     return rows
 
 
