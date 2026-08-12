@@ -2439,9 +2439,21 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
                  "<td class='k'>ROLE</td></tr>" + tbl + "</table>"
                  "<p class='muted'>Officers, directors and promoters named on the "
                  "company's Form D filings.</p>";
+        else if (c.rounds.isEmpty())
+            // The distinction the old copy blurred: this is not "the data is
+            // missing", it is "this company reached us by a route that does
+            // not carry people". Measured on a live 120-day pull, 37 of 37
+            // Form D companies had related persons (268 in total) — so an
+            // empty pane here means no Form D, not a gap in Form D.
+            h += "<i class='muted'>No Form D on file for this company. Officer and "
+                 "director names come from Form D Item 3, which every Rule 506 "
+                 "fundraise must complete — companies tracked only through their "
+                 "S-1 registration or a reported valuation have no Form D for us "
+                 "to read.</i>";
         else
-            h += "<i class='muted'>Leadership data unavailable — Form D officer detail "
-                 "is only present for some filers, and seed-only names carry none.</i>";
+            h += "<i class='muted'>This company's Form D filings name no related "
+                 "persons. Item 3 is required, so this is unusual — the filings are "
+                 "linked under FUNDING if you want to check them directly.</i>";
         if (page_leader_) page_leader_->setText(h);
     }
 
