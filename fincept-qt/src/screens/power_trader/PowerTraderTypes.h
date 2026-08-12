@@ -279,6 +279,12 @@ struct PartyStats {
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 struct PowerTraderSummary {
+    /// The SPY benchmark was actually fetched this run. Read from the script's
+    /// diagnostics block rather than inferred from the value: a benchmark of
+    /// ~0 is a real outcome (a flat window), and treating it as "absent"
+    /// silently suppressed alpha on exactly the days alpha equals the raw
+    /// return.
+    bool benchmark_available = false;
     QVector<CongressMember> members;
     QVector<PoliticalTrade> recent_trades;
     QDateTime last_updated;

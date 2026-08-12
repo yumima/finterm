@@ -357,6 +357,9 @@ QWidget* PicksView::make_signal_card(const Signal& s) const {
         case SignalKind::PremiumHigh:     icon = "$"; color = colors::POSITIVE(); break;
         case SignalKind::ReadinessJump:   icon = "★"; color = colors::AMBER(); break;
         case SignalKind::RoundFiled:      icon = "◆"; color = colors::CYAN(); break;
+        // A pulled deal is the one unambiguously bad signal in this feed and
+        // must not fall through to the neutral grey bullet.
+        case SignalKind::Withdrawn:       icon = "✕"; color = colors::NEGATIVE(); break;
     }
 
     auto* row = new QWidget;

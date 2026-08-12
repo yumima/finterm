@@ -400,7 +400,6 @@ void SectorPieChart::paintEvent(QPaintEvent*) {
     // Draw slices
     // We track cumulative angle in 1/16th-degree units (Qt's arc unit)
     const double gap_deg = 0.5; // 0.5-degree gap between slices
-    const double gap16 = gap_deg * 16.0;
 
     // Compute total pct so we can normalize
     double total_pct = 0.0;
@@ -418,7 +417,6 @@ void SectorPieChart::paintEvent(QPaintEvent*) {
 
         // Shorten by gap on each side
         const double half_gap = (slices_.size() > 1) ? gap_deg * 0.5 : 0.0;
-        const double start16  = qRound((angle_deg + half_gap) * 16.0);
         const double span16   = qRound((span_deg - gap_deg) * 16.0);
 
         if (span16 < 1) { angle_deg += span_deg; continue; }
@@ -1648,9 +1646,19 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
             "Congress could have earned.")
             .arg(fmt_pct(m.return_trade_basis), fmt_pct(m.disclosure_cost_pct)));
 
+        // Gated on the same facts as every other alpha surface. This tile was
+        // gated only on p.priced, so when the SPY fetch failed it printed a
+        // green "+0.0%" while the leaderboard, sidebar and rankings card all
+        // showed "—" for the same member — the contradiction moved between
+        // panels instead of being removed.
+        const bool has_alpha = m.return_priced &&
+                               power_trader::PowerTraderService::instance()
+                                   .summary().benchmark_available;
         const bool a_pos = m.alpha_ytd >= 0;
-        tile_alpha_->setText(fmt_pct(m.alpha_ytd));
-        tile_alpha_->setStyleSheet(tile_style(a_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
+        tile_alpha_->setText(has_alpha ? fmt_pct(m.alpha_ytd) : kNA);
+        tile_alpha_->setStyleSheet(tile_style(
+            !has_alpha ? ui::colors::TEXT_SECONDARY
+                       : (a_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE)));
     } else {
         tile_portfolio_val_->setText(kNA);
         tile_portfolio_val_->setStyleSheet(tile_style(ui::colors::TEXT_SECONDARY));
@@ -2237,7 +2245,6 @@ void MemberProfilePanel::populate_combined_analysis(
                 for (const auto& t : trades)
                     if (t.committee_relevance == cmte) ++tc;
                 const double pct = total_trades > 0 ? 100.0 * tc / total_trades : 0;
-                const double ovl = cmte_overlap_pct.value(cmte, 0.0);
 
                 auto* card = new QWidget(combined_analysis_);
                 card->setStyleSheet(card_ss);

@@ -13,14 +13,17 @@ namespace {
 // Keep these in sync. The Python is the source of truth — this helper exists
 // only so the tooltip can break the cooked score back down for the user.
 
-// Raw component caps: 30 + 15 + 10 = 55. The score itself is rescaled to a
-// real 0-100 (see compute_signal_score), so the breakdown must be scaled the
-// same way or the rows sum to 55 beneath a header reading 100 — which is the
-// contradiction the rescale was meant to remove, merely inverted.
+// Component caps, as scored: 30 + 15 + 10 = 55. The published score rescales
+// that total to a real 0-100 (see compute_signal_score).
+//
+// The breakdown is shown on the RAW scale against raw caps, with the raw total
+// stated beside the published one. Scaling each row individually looked
+// tidier and was wrong: rounding each component separately and summing cannot
+// match a score that rounds the TOTAL, and the badge additionally truncates.
+// Measured against 942 real trades, 23% showed rows that did not add up to
+// their header — the same contradiction the rescale set out to end, in a form
+// harder to notice.
 constexpr double kRawMax = 55.0;
-inline int to_scale(int raw_points) {
-    return qRound(raw_points / kRawMax * 100.0);
-}
 
 int committee_component(const power_trader::PoliticalTrade& t) {
     return t.committee_relevance.isEmpty() ? 0 : 30;
@@ -89,13 +92,15 @@ QString tooltip_for_trade_signal(const power_trader::PoliticalTrade& t) {
           "</div>"
         "</div>")
         .arg(QString::fromLatin1(ui::colors::AMBER()),
-             QString::number(static_cast<int>(t.signal_score)),
-             row(QStringLiteral("Committee overlap"), to_scale(cmte_pts),
-                 to_scale(30), cmte_detail),
-             row(QStringLiteral("Disclosure timing"), to_scale(timing_pts),
-                 to_scale(15), timing_detail),
-             row(QStringLiteral("Trade size"),        to_scale(size_pts),
-                 to_scale(10), size_detail),
+             // Header states both scales, so the rows below always reconcile
+             // against one of them exactly.
+             QStringLiteral("%1  <span style='font-weight:400;'>(%2 of %3 pts)</span>")
+                 .arg(QString::number(qRound(t.signal_score)))
+                 .arg(cmte_pts + timing_pts + size_pts)
+                 .arg(static_cast<int>(kRawMax)),
+             row(QStringLiteral("Committee overlap"), cmte_pts,   30, cmte_detail),
+             row(QStringLiteral("Disclosure timing"), timing_pts, 15, timing_detail),
+             row(QStringLiteral("Trade size"),        size_pts,   10, size_detail),
              QString::fromLatin1(ui::colors::TEXT_SECONDARY()));
 }
 
@@ -106,9 +111,10 @@ QString tooltip_for_peak_signal(int n_trades) {
                      "margin-bottom:4px;'>PEAK SIGNAL</div>"
           "<div style='color:%2;'>Highest per-trade score across this"
             " member's %3 committee-relevant trade%4."
-            "<br/>Per-trade weights, on a 0–100 scale: committee overlap"
-            " (≤55), disclosure timing (≤27), trade size (≤18). A hand-set"
-            " composite of three disclosed inputs, not a measurement.</div>"
+            "<br/>Per-trade points: committee overlap (≤30), disclosure"
+            " timing (≤15), trade size (≤10), rescaled from 55 to 0–100."
+            " A hand-set composite of three disclosed inputs, not a"
+            " measurement.</div>"
           "<div style='color:%2;margin-top:6px;font-size:11px;'>"
               "<i>Educational use only — not investment advice.</i>"
           "</div>"
@@ -132,8 +138,8 @@ QString tooltip_for_aggregate_signal(int n_trades) {
           "<div style='font-weight:700;color:%1;letter-spacing:0.5px;"
                      "margin-bottom:4px;'>AVERAGE SIGNAL</div>"
           "<div style='color:%2;'>Mean of per-trade scores (0–100)."
-            "<br/>Each trade weighs: committee overlap (≤55), disclosure"
-            " timing (≤27), trade size (≤18).</div>"
+            "<br/>Each trade scores: committee overlap (≤30), disclosure"
+            " timing (≤15), trade size (≤10), rescaled from 55 to 0–100.</div>"
           "%3"
           "<div style='color:%2;margin-top:6px;font-size:11px;'>"
               "<i>Educational use only — not investment advice.</i>"

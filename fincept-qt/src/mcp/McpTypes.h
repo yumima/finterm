@@ -377,7 +377,7 @@ inline const char* auth_level_str(AuthLevel a) {
 struct ToolDef {
     QString name;
     QString description;
-    QString category; // navigation, trading, portfolio, market-data, analytics, system, exchange
+    QString category = {}; // navigation, trading, portfolio, market-data, analytics, system, exchange
     ToolSchema input_schema;
 
     // Dual-shape handler. Exactly one of these should be set per tool. If

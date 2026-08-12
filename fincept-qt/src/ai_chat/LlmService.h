@@ -79,7 +79,7 @@ struct PersonaScope {
     // and does not cleanly honour think:false — a news brief on it ran past
     // the 120s request ceiling. Pointing those callers at a role like
     // fast_chat keeps them on a model that fits and stops.
-    QString model;
+    QString model = {};
 };
 
 struct LlmResponse {

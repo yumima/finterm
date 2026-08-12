@@ -1529,8 +1529,12 @@ void PortfolioPerfChart::update_chart() {
                                           .arg(QString::number(period_pnl_pct, 'f', 2)));
         period_change_label_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
+        // The dollar gain was computed and then dropped on the floor. A
+        // percentage alone doesn't tell you whether +12% is $400 or $40,000,
+        // and the figure is already exact here (TWR's gain_value, net of
+        // flows) — so it goes in the tooltip beside the return it explains.
         period_change_label_->setToolTip(
-            period_ret.valid
+            (period_ret.valid
                 ? tr("Time-weighted return over the period.\nDeposits and withdrawals change the "
                      "portfolio's size, not this number%1")
                       .arg(period_ret.net_external_flow != 0.0
@@ -1538,7 +1542,10 @@ void PortfolioPerfChart::update_chart() {
                                      .arg(currency_)
                                      .arg(QString::number(period_ret.net_external_flow, 'f', 2))
                                : QStringLiteral("."))
-                : QString());
+                : QString())
+            + tr("\n\nGain over the period: %1 %2")
+                  .arg(currency_)
+                  .arg(QString::number(period_pnl, 'f', 2)));
     }
 
     const double total_pnl_pct = summary_.total_unrealized_pnl_percent;

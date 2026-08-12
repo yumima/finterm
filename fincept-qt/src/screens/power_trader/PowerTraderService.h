@@ -74,6 +74,9 @@ class PowerTraderService : public QObject {
 
     /// Filter summary by body (Senate / House only).
     PowerTraderSummary filtered_summary(BodyFilter body) const;
+    /// The current summary, for consumers that need a run-level fact (e.g.
+    /// whether the SPY benchmark was fetched) rather than a member field.
+    const PowerTraderSummary& summary() const { return summary_; }
 
     /// The active ALL / SENATE / HOUSE selection.
     ///

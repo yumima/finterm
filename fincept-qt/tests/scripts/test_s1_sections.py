@@ -195,6 +195,67 @@ def test_heading_word_inside_a_longer_heading_is_rejected():
     check("the real UNDERWRITING body is returned", "Sponsor purchased" in got)
 
 
+def test_toc_page_number_on_its_own_line():
+    """EDGAR renders the contents as a two-column <table>, so get_text() puts
+    the page number on its OWN line — not trailing the heading. Checking only
+    for a trailing number missed every real filing: across 6 live S-1s the
+    UNDERWRITING ToC entry won on length in 6 of 6, because its ToC neighbours
+    (LEGAL MATTERS, EXPERTS) are not section boundaries, so its slice ran the
+    full 12,000-char cap against a real section of ~2,200.
+    """
+    doc = (
+        "TABLE OF CONTENTS\n"
+        "Prospectus Summary\n1\n"
+        "Underwriting\n168\n"
+        "Legal Matters\n171\n"
+        "Experts\n172\n"
+        + ("Cover page and summary prose. " * 400) + "\n"
+        "UNDERWRITING\n" + (BODY * 2) + "\n"
+        "Item 15. Recent Sales of Unregistered Securities.\n"
+    )
+    got = extract_section(doc, r"underwriting")
+    check("a ToC entry with its page number on the next line is rejected",
+          "Sponsor purchased" in got, f"got {got[:70]!r}")
+
+
+def test_item_heading_with_nonbreaking_spaces():
+    """"ITEM 15.\xa0\xa0RECENT SALES OF UNREGISTERED SECURITIES." — the single
+    most common Item-15 shape. Measuring `trailing` by subtracting lengths from
+    the whole line charged it for the two non-breaking spaces plus the
+    heading's own terminal period, scoring 3 with NOTHING after the heading, so
+    a <= 2 bound discarded it. The miss is then cached as "section not found",
+    i.e. permanent."""
+    doc = (
+        "TABLE OF CONTENTS\nRecent Sales of Unregistered Securities\n104\n"
+        + ("Filler. " * 200) + "\n"
+        "ITEM 15.\u00a0\u00a0RECENT SALES OF UNREGISTERED SECURITIES.\n"
+        + (BODY * 2) + "\n"
+        "ITEM 16.\u00a0\u00a0EXHIBITS\n"
+    )
+    got = extract_section(doc, r"recent\s+sales\s+of\s+unregistered\s+securities")
+    check("a heading padded with non-breaking spaces is still a heading",
+          "Sponsor purchased" in got, f"got {got[:70]!r}")
+
+
+def test_heading_period_in_its_own_node_is_not_a_continuation():
+    """EDGAR wraps the heading in <b>…</b> and frequently leaves the trailing
+    "." outside, so it flattens onto its own line. Treating any line opening
+    with punctuation as a cross-reference continuation lost the section on a
+    real filing — and cached the miss. A line that is ONLY punctuation is a
+    heading artefact."""
+    doc = (
+        "TABLE OF CONTENTS\nRecent Sales of Unregistered Securities\n104\n"
+        + ("Filler. " * 200) + "\n"
+        "Recent Sales of Unregistered Securities\n"
+        ".\n"
+        + (BODY * 2) + "\n"
+        "Item 16. Exhibits\n"
+    )
+    got = extract_section(doc, r"recent\s+sales\s+of\s+unregistered\s+securities")
+    check("a lone '.' after a heading is an artefact, not a continuation",
+          "Sponsor purchased" in got, f"got {got[:70]!r}")
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

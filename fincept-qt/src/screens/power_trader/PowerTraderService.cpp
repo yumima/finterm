@@ -248,6 +248,12 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
         m.return_priced        = false;
         s.members.append(m);
     }
+    // Whether the benchmark exists is a fact the script reports, not something
+    // to infer from the number. A flat SPY window legitimately yields ~0.
+    s.benchmark_available =
+        root.value(QStringLiteral("diagnostics")).toObject()
+            .value(QStringLiteral("spy_ytd_fetched")).toBool();
+
 
     const auto trades_arr = root.value(QStringLiteral("trades")).toArray();
     s.recent_trades.reserve(trades_arr.size());
@@ -337,17 +343,9 @@ void PowerTraderService::fetch_real_prices() {
             earliest = t.transaction_date;
     }
     if (ticker_set.isEmpty()) {
-        // No priceable tickers at all. Returns stay unpriced rather than
-        // keeping whatever was last computed — otherwise a filter change to a
-        // cohort with no stock trades leaves the previous cohort's numbers on
-        // screen.
-        for (auto& m : summary_.members) {
-            m.return_priced        = false;
-            m.portfolio_return_ytd = 0;
-            m.return_trade_basis   = 0;
-            m.disclosure_cost_pct  = 0;
-            m.alpha_ytd            = 0;
-        }
+        // parse_summary() already zeroed every member's return/alpha and set
+        // return_priced=false, and this branch returns without emitting, so
+        // there is nothing to clear and nobody to tell.
         return;
     }
 
@@ -412,7 +410,15 @@ void PowerTraderService::recompute_member_returns() {
         const auto disc = compute_portfolio(m.id, PriceBasis::DisclosureDate);
         bool any_lag = false;
         for (const auto& t : summary_.recent_trades) {
-            if (t.member_id == m.id && !t.placeholder && t.disclosure_lag_days > 0) {
+            // Key on the dates entry_date() ACTUALLY branches on, not on the
+            // payload's lag: that lag is computed once per FILING from its
+            // first transaction and stamped on every trade in it, so a filing
+            // whose first row is same-day stamps 0 onto rows filed 45 days
+            // late. Measured on a live snapshot, 533 of 942 trades carry a lag
+            // that disagrees with their own dates.
+            if (t.member_id == m.id && !t.placeholder &&
+                t.disclosure_date.isValid() &&
+                t.disclosure_date != t.transaction_date) {
                 any_lag = true;
                 break;
             }
@@ -430,7 +436,7 @@ void PowerTraderService::recompute_member_returns() {
             // way — same window, same total-return basis. spy_return_ytd is
             // absent (0) until that lands, and alpha stays absent with it
             // rather than silently reporting the raw return as alpha.
-            m.alpha_ytd = qAbs(m.spy_return_ytd) > 1e-9
+            m.alpha_ytd = summary_.benchmark_available
                               ? (m.portfolio_return_ytd - m.spy_return_ytd)
                               : 0;
         } else {
@@ -634,13 +640,21 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
 
     portfolio.est_total_value   = priced_value;
     portfolio.est_total_pnl     = priced_pnl;
-    // Realized P&L is summed over EVERY position, including ones closed out
-    // entirely — those have no holdings row, and dropping them is what made
-    // the leaderboard a ranking of trades that had not worked yet.
-    // Realized P&L AND the cost that produced it, over every position —
-    // including ones closed out entirely, which have no holdings row.
+    // Realized P&L and the cost that produced it, over every priceable
+    // position — including ones closed out entirely, which have no holdings
+    // row. Dropping those is what made the leaderboard a ranking of trades
+    // that had not worked yet.
     double realized = 0, realized_cost = 0;
     for (auto it = replayed.cbegin(); it != replayed.cend(); ++it) {
+        // Skip positions with a price gap, matching the unrealized side.
+        // Without this the two halves disagreed: a ticker whose earliest buy
+        // predates the fetched history contributes its DOLLARS but no shares,
+        // so the average cost it feeds into realized_pnl is inflated — and
+        // because realized was unfiltered, that produced priced == true with
+        // an empty holdings table, a $0 portfolio value, and a large
+        // fabricated return that ranked on the leaderboard.
+        if (it.value().priced_gap)
+            continue;
         realized      += it.value().realized_pnl;
         realized_cost += it.value().realized_cost;
     }

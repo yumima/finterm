@@ -186,7 +186,10 @@ QJsonObject futures_result_to_json(const DatabentoFuturesResult& /*r*/) {
 // listens for one of (vol_surface_ready, surface_ready, ohlcv_ready,
 // futures_ready, fetch_failed); the first match resolves the promise.
 template <typename SignalSig, typename KickFn, typename PayloadFn>
-void bridge_db_fetch(QPointer<QObject> holder_parent, ToolContext ctx,
+// No parent parameter: every call site passed {} and the listener is parented
+// to the service singleton below. Carrying an unused QPointer implied a
+// lifetime relationship that does not exist.
+void bridge_db_fetch(ToolContext ctx,
                      std::shared_ptr<QPromise<ToolResult>> promise,
                      KickFn&& kick, SignalSig signal_member, PayloadFn&& payload_fn) {
     auto* svc = &DatabentoService::instance();
@@ -302,7 +305,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString();
             const float spot = static_cast<float>(args["spot"].toDouble(0));
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [sym, spot]() { DatabentoService::instance().fetch_options_surface(sym, spot); },
                 &DatabentoService::vol_surface_ready,
                 [](const DatabentoVolSurfaceResult& r) { return vol_result_to_json(r); });
@@ -327,7 +330,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
             QStringList syms;
             for (const auto& v : args["symbols"].toArray()) syms.append(v.toString());
             const int days = args["days"].toInt(60);
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [syms, days]() { DatabentoService::instance().fetch_ohlcv(syms, days); },
                 &DatabentoService::ohlcv_ready,
                 [](const DatabentoOhlcvResult& r) { return ohlcv_result_to_json(r); });
@@ -351,7 +354,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             QStringList cs;
             for (const auto& v : args["commodities"].toArray()) cs.append(v.toString());
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [cs]() { DatabentoService::instance().fetch_futures_term_structure(cs); },
                 &DatabentoService::futures_ready,
                 [](const DatabentoFuturesResult& r) { return futures_result_to_json(r); });
@@ -383,7 +386,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString();
             const float spot = static_cast<float>(args["spot"].toDouble(0));
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [sym, spot]() { DatabentoService::instance().fetch_local_vol(sym, spot); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -403,7 +406,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString();
             const float spot = static_cast<float>(args["spot"].toDouble(0));
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [sym, spot]() { DatabentoService::instance().fetch_implied_dividend(sym, spot); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -423,7 +426,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString();
             const float spot = static_cast<float>(args["spot"].toDouble(0));
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [sym, spot]() { DatabentoService::instance().fetch_liquidity(sym, spot); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -441,7 +444,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
         t.async_handler = [](const QJsonObject& args, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString s = args["root_symbol"].toString();
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [s]() { DatabentoService::instance().fetch_commodity_vol(s); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -455,7 +458,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
             "Fetch crack-spread / crush-spread surface (energy/grains).", {});
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 []() { DatabentoService::instance().fetch_crack_spread(); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -474,7 +477,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             QStringList syms;
             for (const auto& v : args["symbols"].toArray()) syms.append(v.toString());
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 [syms]() { DatabentoService::instance().fetch_stress_test(syms); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });
@@ -488,7 +491,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
             "Fetch a yield-curve surface (Treasuries / sovereigns).", {});
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
-            bridge_db_fetch({}, std::move(ctx), promise,
+            bridge_db_fetch(std::move(ctx), promise,
                 []() { DatabentoService::instance().fetch_yield_curve(); },
                 &DatabentoService::surface_ready,
                 [](const DatabentoSurfaceResult& r) { return db_surface_to_json(r); });

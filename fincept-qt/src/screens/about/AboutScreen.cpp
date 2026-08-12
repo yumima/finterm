@@ -18,30 +18,10 @@ namespace fincept::screens {
 
 // ── Style constants ───────────────────────────────────────────────────────────
 
-static QString SECTION_LABEL() {
-    // Qt QSS does not support text-transform; callers pass uppercase strings.
-    return QString("color: %1; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; "
-                   "background: transparent; "
-                   "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_SECONDARY());
-}
-
-static QString BODY() {
-    return QString("color: %1; font-size: 13px; background: transparent; "
-                   "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::TEXT_PRIMARY());
-}
-
 static QString MUTED() {
     return QString("color: %1; font-size: 12px; background: transparent; "
                    "font-family: 'Consolas','Courier New',monospace;")
         .arg(ui::colors::TEXT_SECONDARY());
-}
-
-static QString LINK_STYLE() {
-    return QString("color: %1; font-size: 13px; background: transparent; "
-                   "font-family: 'Consolas','Courier New',monospace;")
-        .arg(ui::colors::CYAN());
 }
 
 static QString PANEL() {

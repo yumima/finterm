@@ -756,7 +756,7 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
     }
 
     auto sorted = members;
-    std::sort(sorted.begin(), sorted.end(),
+    std::stable_sort(sorted.begin(), sorted.end(),
               [](const CongressMember& a, const CongressMember& b) {
                   // Unpriced members sink rather than interleaving on a 0.
                   if (a.return_priced != b.return_priced) return a.return_priced;
@@ -776,7 +776,9 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         // Alpha is only meaningful once real prices produced it AND a
         // benchmark exists to subtract. Rendering it unconditionally printed
         // a confident "+0.0% alpha" for every member before prices landed.
-        const bool   has_alpha  = m.return_priced && qAbs(m.spy_return_ytd) > 1e-9;
+        const bool   has_alpha  = m.return_priced &&
+                                  PowerTraderService::instance()
+                                      .summary().benchmark_available;
         const QString sign      = m.alpha_ytd >= 0 ? "+" : "";
         // Signal-score indicator: a tiny block character whose colour reflects
         // the member's average per-trade signal score. ▌ green = low, amber =

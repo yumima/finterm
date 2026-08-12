@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e9d53141e`](https://github.com/yumima/finterm/commit/e9d53141e) Fix six blocking findings from the review, including one I introduced
 - [`669a35d6e`](https://github.com/yumima/finterm/commit/669a35d6e) Power Trader: price at the disclosure date, and stop discarding the winners
 - [`0cd2f26d0`](https://github.com/yumima/finterm/commit/0cd2f26d0) S-1 sections: quote the section, not the table of contents
 - [`c3c29c346`](https://github.com/yumima/finterm/commit/c3c29c346) IPO Watch: say which source is missing instead of showing a blank pane

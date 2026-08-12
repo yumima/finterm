@@ -890,14 +890,39 @@ def s1_extract_section(text, pattern, cap=12000, lookahead_skip=200):
             if e < 0:
                 break
             nl = e
-        if nxt_line[:1] in {".", ",", ";", ")", "\u201d", "\u2019", '"', "'"}:
+        # A cross-reference continues its sentence on the next line. But a
+        # heading's own terminal period frequently lands in its own text node
+        # (EDGAR wraps the heading in <b>…</b> and leaves the "." outside), so
+        # a next line of just "." is a heading ARTEFACT, not a continuation —
+        # rejecting it silently lost the Recent Sales section on a real filing,
+        # and the miss is cached permanently.
+        if len(nxt_line) > 1 and nxt_line[:1] in {".", ",", ";", ")", "\u201d",
+                                                  "\u2019", '"', "'"}:
             continue
+
+        # A ToC entry's page number is usually on its OWN line, because EDGAR
+        # renders the contents as a two-column <table> and get_text() emits
+        # each cell separately. Checking only for a trailing number on the
+        # heading line missed every real filing: measured across 6 live S-1s,
+        # UNDERWRITING's ToC entry won on length in 5 of 5 (its ToC neighbours
+        # — LEGAL MATTERS, EXPERTS — are not boundary tokens, so its slice ran
+        # the full 12,000-char cap and beat the real 2,238-char section).
+        if re.fullmatch(r"[A-Z]?-?\d{1,4}", nxt_line):
+            continue
+
 
         # The line must be essentially JUST the heading — at most a trailing
         # period or colon. A looser bound let "Underwriting Agreement" (a
         # financial-statement note in the F-pages) stand in for the
         # UNDERWRITING section.
-        trailing = len(line) - (mm.end() - mm.start()) - len(prefix)
+        # Only what FOLLOWS the heading counts. Subtracting lengths from the
+        # whole line also charged the candidate for whitespace BEFORE the match
+        # and for non-breaking spaces inside the prefix — so
+        # "ITEM 15.\xa0\xa0RECENT SALES OF UNREGISTERED SECURITIES." scored a
+        # phantom trailing of 3 with nothing after it at all, and a <= 2 bound
+        # discarded the single most common Item-15 shape. Those misses are
+        # cached as "section not found", i.e. permanent.
+        trailing = len(text[mm.end(): le if le >= 0 else len(text)].strip())
         heading_like = (
             len(line) <= 90
             and trailing <= 2

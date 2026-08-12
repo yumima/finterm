@@ -53,7 +53,12 @@ struct ContractDef {
     /// back to the cash-index proxy (^GDAXI, ^HSI, …) — explicitly *not*
     /// the futures contract itself. Term-structure / settlements panels
     /// will still need a Databento key to render the real curve for these.
-    QString yf_override;
+    ///
+    /// Default-initialised explicitly so the 195 contract definitions below
+    /// need not each spell out an empty override — without the initialiser
+    /// GCC reports -Wmissing-field-initializers once per definition, and 195
+    /// warnings is how a genuinely new one gets missed.
+    QString yf_override = {};
 };
 
 /// Compute the next expiry on or after `from` given a contract's rule.

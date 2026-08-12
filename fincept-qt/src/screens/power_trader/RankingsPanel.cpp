@@ -431,9 +431,12 @@ void RankingsPanel::populate_detail_card(const QString& member_id) {
         return (v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%";
     };
     // Absent, not zero: alpha needs both a priced return and a benchmark.
-    const bool has_alpha = member.return_priced && qAbs(member.spy_return_ytd) > 1e-9;
+    const bool has_alpha = member.return_priced && svc.summary().benchmark_available;
     card_alpha_ ->setText(has_alpha ? fmt_pct(member.alpha_ytd) : QStringLiteral("—"));
-    card_return_->setText(fmt_pct(member.portfolio_return_ytd));
+    // Return is absent for an unpriced member too — printing "+0.0%" beneath
+    // an "Alpha —" was the same claim in two different voices.
+    card_return_->setText(member.return_priced ? fmt_pct(member.portfolio_return_ytd)
+                                               : QStringLiteral("—"));
     card_return_->setToolTip(QStringLiteral(
         "Priced at each trade's DISCLOSURE date — the entry a follower could "
         "actually have taken.\n\n"

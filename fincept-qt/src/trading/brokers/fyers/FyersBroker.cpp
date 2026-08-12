@@ -84,7 +84,16 @@ QString FyersBroker::fyers_product(ProductType p) {
             return "CO";
         case ProductType::BracketOrder:
             return "BO";
+        case ProductType::MTF:
+            // Margin Trading Facility. Falling through to the default below
+            // submitted these as INTRADAY, which is not a labelling slip: an
+            // intraday position is auto-squared-off at the close, so a user
+            // who chose MTF to CARRY a leveraged position would have had it
+            // liquidated the same day.
+            return "MTF";
     }
+    // Unreachable while the switch is exhaustive — kept so a future
+    // enumerator is a compile warning here rather than a silent INTRADAY.
     return "INTRADAY";
 }
 

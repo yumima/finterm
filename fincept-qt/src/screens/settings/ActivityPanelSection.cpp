@@ -1,6 +1,7 @@
 #include "screens/settings/ActivityPanelSection.h"
 
 #include <QDateTime>
+#include <QTimeZone>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -53,7 +54,7 @@ QString ActivityPanelSection::elapsed(const QString& started_at_iso) {
     // SQLite datetime('now') gives "YYYY-MM-DD HH:MM:SS" in UTC.
     // QDateTime needs a TimeSpec hint to parse correctly.
     QDateTime started = QDateTime::fromString(started_at_iso, "yyyy-MM-dd HH:mm:ss");
-    started.setTimeSpec(Qt::UTC);
+    started.setTimeZone(QTimeZone::UTC);   // setTimeSpec is deprecated in Qt 6
     if (!started.isValid())
         return QStringLiteral("?");
     const qint64 secs = started.secsTo(QDateTime::currentDateTimeUtc());

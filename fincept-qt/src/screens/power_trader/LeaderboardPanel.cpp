@@ -1,5 +1,6 @@
 // src/screens/power_trader/LeaderboardPanel.cpp
 #include "screens/power_trader/LeaderboardPanel.h"
+#include "screens/power_trader/PowerTraderService.h"
 
 #include "ui/components/EstTooltip.h"
 #include "ui/components/LayoutHelpers.h"
@@ -172,18 +173,26 @@ void LeaderboardPanel::populate_table() {
                  ui::colors::TEXT_SECONDARY, Qt::AlignCenter);
 
         // Alpha YTD
-        const bool has_alpha = m.return_priced && qAbs(m.spy_return_ytd) > 1e-9;
+        const bool has_alpha = m.return_priced &&
+                               power_trader::PowerTraderService::instance()
+                                   .summary().benchmark_available;
         const bool alpha_pos = m.alpha_ytd >= 0;
+        // An absent value must not be COLOURED as a value — a green em-dash
+        // reads as a positive number the eye can't quite make out.
         set_item(4,
                  has_alpha ? QString("%1%2%").arg(alpha_pos ? "+" : "").arg(m.alpha_ytd, 0, 'f', 1)
                            : QStringLiteral("—"),
-                 alpha_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+                 !has_alpha ? ui::colors::TEXT_SECONDARY
+                            : (alpha_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
 
-        // Return YTD
+        // Return YTD — absent for an unpriced member, same as alpha.
         const bool ret_pos = m.portfolio_return_ytd >= 0;
         set_item(5,
-                 QString("%1%2%").arg(ret_pos ? "+" : "").arg(m.portfolio_return_ytd, 0, 'f', 1),
-                 ret_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+                 m.return_priced
+                     ? QString("%1%2%").arg(ret_pos ? "+" : "").arg(m.portfolio_return_ytd, 0, 'f', 1)
+                     : QStringLiteral("—"),
+                 !m.return_priced ? ui::colors::TEXT_SECONDARY
+                                  : (ret_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
 
         // Trades YTD
         set_item(6, QString::number(m.trade_count_ytd),
