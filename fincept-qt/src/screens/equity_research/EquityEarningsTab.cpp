@@ -237,6 +237,8 @@ void EquityEarningsTab::set_symbol(const QString& symbol) {
         loading_overlay_->show_loading("LOADING EARNINGS…");
         message_label_->hide();
         content_widget_->show();
+        // No stale provenance on the chip while the new symbol loads.
+        data_fetched_at_ = QDateTime();
     }
 
     auto& store = services::query::QueryStore::instance();
@@ -258,6 +260,7 @@ void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s)
         // set_symbol's same-symbol guard would leave the tab dead until the
         // user picked a different ticker.
         current_symbol_.clear();
+        data_fetched_at_ = QDateTime();
         return;
     }
     if (!have_data)
@@ -273,10 +276,14 @@ void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s)
             "No earnings data is published for this security.\n\n"
             "ETFs, index trackers and mutual funds don't report earnings — "
             "check the holdings' own tickers instead."));
+        // Nothing is displayed, so there is no "data as of" — stamping here
+        // would put a fetch time on an empty panel.
+        data_fetched_at_ = QDateTime();
         return;
     }
     message_label_->hide();
     content_widget_->show();
+    data_fetched_at_ = s.fetched_at;
     populate(analysis);
 }
 
@@ -535,6 +542,12 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
             if (!r.predicted_move_pct) continue;
             for (auto& q : run.points) {
                 if (et_date(q.timestamp) != et_date(r.report_ts)) continue;
+                // Rows arrive observed_on DESC, so the first record to reach
+                // a print is its LAST pre-print reading — the one to plot.
+                // Overwriting on every later (i.e. earlier-observed) record
+                // ended with the oldest, horizon-muted reading on the chart,
+                // and counted the same print once per observation day.
+                if (!q.reconstructed) break;   // newest observation already applied
                 q.predicted_move_pct = r.predicted_move_pct;
                 q.reconstructed = false;
                 ++recorded_pairs;
@@ -626,16 +639,20 @@ void EquityEarningsTab::apply_selected_predictor() {
     // here beat assuming no move — so when that is also true for the name on
     // screen, the panel says it outright instead of drawing a confident line
     // and letting the reader supply the optimism.
+    // Each predictor is compared against what NO MOVE scored over EXACTLY the
+    // quarters it answered (nomove_mae_same_quarters), not against NO MOVE's
+    // own all-quarters mean. Predictors that abstain until they have history
+    // answer a calmer subset, and comparing means over different quarter sets
+    // let one "beat" the baseline without being better on any shared quarter.
     double best_mae = -1, nomove_mae = -1;
     QString best_label;
     for (const auto& run : predictor_runs_) {
         if (run.graded == 0) continue;
-        if (run.predictor == services::equity::MovePredictor::NoMove) {
-            nomove_mae = run.mean_abs_error;
+        if (run.predictor == services::equity::MovePredictor::NoMove)
             continue;
-        }
         if (best_mae < 0 || run.mean_abs_error < best_mae) {
             best_mae = run.mean_abs_error;
+            nomove_mae = run.nomove_mae_same_quarters;
             best_label = run.label;
         }
     }
@@ -648,9 +665,9 @@ void EquityEarningsTab::apply_selected_predictor() {
     }
     if (best_mae >= 0 && nomove_mae >= 0) {
         text += best_mae < nomove_mae
-                    ? QString("%1 beats assuming no move on this name, by %2 pp. That is the only "
-                              "bar worth clearing, and it clears it on a few quarters — not "
-                              "enough to be sure of. ")
+                    ? QString("%1 beats assuming no move on this name, by %2 pp over the same "
+                              "quarters both answered. That is the only bar worth clearing, and "
+                              "it clears it on a few quarters — not enough to be sure of. ")
                           .arg(best_label)
                           .arg(QString::number(nomove_mae - best_mae, 'f', 2))
                     : QString("Nothing here beats assuming no move — the best of them, %1, misses "
@@ -668,8 +685,10 @@ void EquityEarningsTab::apply_selected_predictor() {
         if (selected_predictors_.contains(static_cast<int>(services::equity::MovePredictor::Scorecard))) {
             text += QStringLiteral(
                 "SCORECARD's past quarters are rebuilt from the backward legs alone, so they "
-                "predict smaller moves than a live reading will; the line turns solid between "
-                "prints whose estimate was genuinely recorded beforehand");
+                "predict smaller moves than a live reading will — and sit below the confidence "
+                "bar the live badge insists on before it will show a number, an exemption made "
+                "so the record can be graded at all; the line turns solid between prints whose "
+                "final pre-print estimate was genuinely recorded beforehand");
             text += recorded_pairs_ > 0 ? QString(" (%1 so far). ").arg(recorded_pairs_)
                                         : QStringLiteral(" (none yet). ");
         }
@@ -916,9 +935,18 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                               .toTimeZone(QTimeZone("America/New_York"));
         next_date_->setText(when.toString("ddd d MMM yyyy"));
         const int days = services::equity::days_to_next_earnings(a);
-        const QString slot = when.time().hour() >= 16   ? QStringLiteral("after close")
-                             : when.time().hour() <= 9  ? QStringLiteral("before open")
-                                                        : QStringLiteral("intraday");
+        // Same convention as the daemon's reaction windows
+        // (_earnings_price_reaction): 16:00+ ET is after close, and a
+        // date-only midnight stamp is TREATED as after close — labelling it
+        // "before open" here while the engine computed an after-close
+        // reaction had the two halves of the tab describing different
+        // sessions. The before-open cutoff is minute-aware: 9:30 ET is the
+        // open, so 9:45 is intraday, not before open.
+        const QTime t = when.time();
+        const bool date_only = t.hour() == 0 && t.minute() == 0;
+        const QString slot = (t.hour() >= 16 || date_only) ? QStringLiteral("after close")
+                             : t < QTime(9, 30)            ? QStringLiteral("before open")
+                                                           : QStringLiteral("intraday");
         next_countdown_->setText(days < 0    ? QStringLiteral("date has passed — awaiting update")
                                  : days == 0 ? QString("TODAY · %1 ET").arg(slot)
                                              : QString("IN %1 DAY%2 · %3 ET")
@@ -1073,17 +1101,38 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     auto et_date = [&et](qint64 ts) {
         return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
     };
+    // A ±5-day window, nearest print wins. Exact-date matching left rows
+    // unresolved forever whenever Yahoo's scheduled date firmed up more than
+    // a day away from the placeholder the reading was keyed under — those
+    // rows then silently thinned the hit-rate statistics. Five days spans a
+    // reporting week; quarters are ~90 days apart, so the window can never
+    // reach the wrong print.
     for (const auto& pending : ledger.unresolved(a.symbol)) {
         const QDate want = et_date(pending.report_ts);
+        const services::equity::EarningsPoint* best = nullptr;
+        int best_gap = 6;
         for (const auto& p : a.history) {
             if (p.is_estimate || !p.reaction_pct.has_value())
                 continue;   // no settled reaction yet — leave it open
-            if (et_date(p.timestamp) != want)
-                continue;
-            ledger.resolve(a.symbol, pending.report_ts, p.eps_actual, p.surprise_pct,
-                           *p.reaction_pct);
-            break;
+            const int gap = std::abs(static_cast<int>(want.daysTo(et_date(p.timestamp))));
+            if (gap < best_gap) {
+                best_gap = gap;
+                best = &p;
+            }
         }
+        if (!best)
+            continue;
+        // Only a reading taken strictly BEFORE the matched print's date is a
+        // prediction. When Yahoo's schedule lagged the real announcement, a
+        // reading written under the stale "upcoming" date may actually have
+        // been observed after the print — grading it would launder hindsight
+        // into the hit rate. Such rows stay unresolved (and out of the
+        // statistics) rather than being settled as calls they never were.
+        const QDate observed = QDate::fromString(pending.observed_on, Qt::ISODate);
+        if (observed.isValid() && observed >= et_date(best->timestamp))
+            continue;
+        ledger.resolve(a.symbol, pending.report_ts, best->eps_actual, best->surprise_pct,
+                       *best->reaction_pct);
     }
 
     // ── Write today's reading ────────────────────────────────────────────────
@@ -1205,7 +1254,13 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
     history_table_->setRowCount(a.history.size());
     int row = 0;
     for (const auto& p : a.history) {
-        const auto when = QDateTime::fromSecsSinceEpoch(p.timestamp);
+        // ET, like the NEXT REPORT card and the engine's date matching: a
+        // 16:00 ET announcement is already tomorrow in Tokyo, so rendering
+        // the viewer's local date showed every AMC quarter a day late for
+        // anyone east of roughly UTC+3 — disagreeing with the card above and
+        // with the filing date.
+        const auto when = QDateTime::fromSecsSinceEpoch(p.timestamp)
+                              .toTimeZone(QTimeZone("America/New_York"));
         // The projected row is amber end-to-end in its identity columns: this
         // quarter hasn't happened, and nothing about it should read like a
         // reported number sitting one row below a reported number.

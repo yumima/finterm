@@ -1048,6 +1048,66 @@ class TestEarningsSignal : public QObject {
         }
     }
 
+    /// The live EPS MODEL call must run the SAME staged model its displayed
+    /// walk-forward record was earned by. It used to pass i = -1 into
+    /// asked_growth(), which bailed, so the live number was always the crude
+    /// 0.1 x mean-surprise fallback while the button showed the staged
+    /// model's MAE. With a projected row carrying the consensus, the live
+    /// prediction must therefore DIFFER from what the same history produces
+    /// when no ask is visible (the fallback path).
+    void live_eps_model_uses_projected_consensus() {
+        auto settled = []() {
+            QVector<EarningsPoint> h;
+            for (int i = 0; i < 10; ++i) {
+                const double s = 2.0 + i;                       // varying surprise
+                h.append(quarter(1700000000LL - i * 7776000LL,
+                                 1.0, 1.0 + s / 100.0, s, 0.5 * s, 1.0));
+            }
+            return h;
+        };
+
+        EarningsAnalysis without;
+        without.valid = true;
+        without.history = settled();
+        without.next.timestamp = QDateTime::currentSecsSinceEpoch() + 7 * 86400;
+
+        EarningsAnalysis with = without;
+        EarningsPoint proj;
+        proj.timestamp = *with.next.timestamp;
+        proj.is_estimate = true;
+        proj.has_forward_estimate = true;
+        proj.eps_estimate = 1.05;              // the ask the live call must see
+        with.history.prepend(proj);
+
+        auto next_of = [](const QVector<PredictorRun>& runs) -> std::optional<double> {
+            for (const auto& r : runs)
+                if (r.predictor == MovePredictor::EpsModel) return r.next_move_pct;
+            return std::nullopt;
+        };
+        const auto n_with = next_of(compare_predictors(with, evaluate_earnings(with)));
+        const auto n_without = next_of(compare_predictors(without, evaluate_earnings(without)));
+
+        QVERIFY2(n_with.has_value(), "no live EPS-model estimate with a projected row present");
+        QVERIFY2(n_without.has_value(), "fallback path stopped producing an estimate");
+        QVERIFY2(std::abs(*n_with - *n_without) > 1e-6,
+                 "projected consensus did not reach the live EPS model — still on the fallback");
+    }
+
+    /// The "beats no move" comparison must be over the SAME quarters. Every
+    /// graded run carries what NO MOVE scored on exactly its quarters; for
+    /// the NO MOVE run itself the two numbers are one and the same.
+    void nomove_baseline_is_paired_per_predictor() {
+        EarningsAnalysis a;
+        a.valid = true;
+        a.history = strong_history();
+        for (const auto& r : compare_predictors(a, evaluate_earnings(a))) {
+            if (r.graded == 0) continue;
+            QVERIFY2(r.nomove_mae_same_quarters > 0, qPrintable(r.label));
+            if (r.predictor == MovePredictor::NoMove)
+                QCOMPARE(r.nomove_mae_same_quarters, r.mean_abs_error);
+        }
+    }
+
     // The caveats are the honest part of the panel — a big pre-print run-up
     // and an imminent date have to be called out whichever way the score leans.
     void imminent_report_and_runup_raise_caveats() {

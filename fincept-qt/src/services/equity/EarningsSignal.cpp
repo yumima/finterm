@@ -354,6 +354,11 @@ SignalComponent score_expectations(const EarningsAnalysis& a) {
         "Estimates rising faster than the price is the setup nobody is "
         "positioned for, and it is the one this leg rewards.");
 
+    // Both sides of the race are 90 CALENDAR days: eps_trend's d90 is a
+    // calendar-dated Yahoo field, and runup_90d_pct is computed over calendar
+    // days in the daemon (_pct_back_calendar) to match. It was briefly 90
+    // SESSIONS (~126 calendar days), which gave the price side ~40% more
+    // elapsed time and dragged this leg bearish on every steady riser.
     const auto* t = find_trend(a, QStringLiteral("0q"));
     if (!t) t = find_trend(a, QStringLiteral("+1q"));
     const auto est_90d = t ? revision_pct(t->current, t->d90) : std::nullopt;
@@ -766,7 +771,13 @@ QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a) {
         for (int j = i + 1; j < a.history.size(); ++j)
             prior.history.append(a.history[j]);
         prior.runup_5d_pct = p.runup_pct;
-        prior.runup_20d_pct = p.runup_pct;
+        // The genuine 20-session run-up into THIS print (the window the
+        // crowding leg is calibrated for). Older cached analyses may lack the
+        // field; leaving the slot empty then drops the crowding leg for that
+        // quarter, which is honest — stuffing the 5-session number in (as
+        // this used to) scored crowding against a threshold built for a
+        // window four times longer.
+        prior.runup_20d_pct = p.runup_20d_pct;
 
         EarningsVerdict pv;
         const auto record = score_track_record(prior, pv);
@@ -1078,6 +1089,14 @@ Fit weighted_fit(const QVector<double>& xs, const QVector<double>& ys,
 /// into that print against what the company last delivered. Knowable before
 /// the print, which is the whole reason it is usable.
 std::optional<double> asked_growth(const QVector<EarningsPoint>& history, int i) {
+    // i == -1 is the live call for the upcoming print. Its consensus rides on
+    // the projected row (newest, is_estimate) whenever Yahoo has a scheduled
+    // date. Without this mapping the live EPS MODEL could never see its
+    // "ask", so it always fell into the crude surprise-bias fallback — while
+    // the walk-forward MAE displayed beside it was earned by the full staged
+    // model that never actually ran for the number on screen.
+    if (i == -1 && !history.isEmpty() && history[0].is_estimate)
+        i = 0;
     if (i < 0 || i >= history.size()) return std::nullopt;
     const auto& p = history[i];
     if (!p.eps_estimate.has_value()) return std::nullopt;
@@ -1320,10 +1339,12 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
 
     for (auto& r : runs) {
         double err = 0;
+        double zero_err = 0;   // |actual| = NO MOVE's miss on the same quarter
         for (const auto& q : r.points) {
             if (!q.predicted_move_pct || !q.actual_move_pct) continue;
             ++r.graded;
             err += std::abs(*q.predicted_move_pct - *q.actual_move_pct);
+            zero_err += std::abs(*q.actual_move_pct);
             // A near-zero estimate is not a directional call. Grading it would
             // hand the NO MOVE baseline a hit rate it never claimed.
             if (std::abs(*q.predicted_move_pct) < 0.25) continue;
@@ -1331,8 +1352,10 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
             if ((*q.predicted_move_pct > 0) == (*q.actual_move_pct > 0))
                 ++r.direction_hits;
         }
-        if (r.graded > 0)
+        if (r.graded > 0) {
             r.mean_abs_error = err / r.graded;
+            r.nomove_mae_same_quarters = zero_err / r.graded;
+        }
     }
     return runs;
 }

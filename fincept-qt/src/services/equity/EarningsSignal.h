@@ -170,11 +170,18 @@ struct ReactionCorrelation {
 /// weight — cannot be recovered for a quarter that has already passed.
 ///
 /// The reconstruction therefore runs through the SAME formula as the live
-/// prediction, confidence included, rather than renormalising over the legs it
-/// happens to have. That keeps a reconstructed point and a recorded one
-/// meaning the same thing, at the cost of the reconstruction predicting
-/// visibly smaller moves — the honest consequence of knowing less, not a
-/// defect to be scaled away.
+/// prediction — the same weights and the same confidence multiplier — rather
+/// than renormalising over the legs it happens to have. That keeps a
+/// reconstructed point and a recorded one meaning the same thing, at the cost
+/// of the reconstruction predicting visibly smaller moves — the honest
+/// consequence of knowing less, not a defect to be scaled away.
+///
+/// One deliberate difference from the live path: the live verdict refuses to
+/// emit a prediction below kMinConfidence, and a three-leg reconstruction
+/// (confidence ≈ 0.28) sits below that bar every time. The gate is NOT
+/// applied here — applying it would blank the entire reconstructed series and
+/// with it the walk-forward evidence the scorecard is judged by. The chart
+/// note states this exemption to the reader.
 struct QuarterPrediction {
     qint64 timestamp = 0;
     std::optional<double> predicted_move_pct;  // reconstructed, backward legs only
@@ -291,6 +298,13 @@ struct PredictorRun {
     // a settled reaction.
     int    graded = 0;
     double mean_abs_error = 0.0;
+    /// What NO MOVE would have scored over EXACTLY the quarters this predictor
+    /// answered. The "beats assuming no move by X pp" comparison must use this
+    /// rather than NO MOVE's own all-quarters MAE: predictors that abstain
+    /// until they have history answer a calmer subset, and comparing means
+    /// over different quarter sets let a predictor "beat" the baseline without
+    /// being better on any quarter both answered.
+    double nomove_mae_same_quarters = 0.0;
     int    direction_hits = 0;
     int    direction_calls = 0;   // excludes near-zero estimates: not a call
 };

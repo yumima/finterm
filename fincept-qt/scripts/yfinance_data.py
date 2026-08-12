@@ -1754,11 +1754,12 @@ def _earnings_price_reaction(hist, event_ts):
     "after"; getting it wrong assigns the move to the wrong day and inverts
     roughly half the reactions.
 
-    Returns (reaction_pct, runup_pct, price_before, price_after) — any element
-    None when the surrounding sessions aren't in `hist`.
+    Returns (reaction_pct, runup_pct, runup_20d_pct, price_before,
+    price_after) — any element None when the surrounding sessions aren't in
+    `hist`.
     """
     if hist is None or getattr(hist, "empty", True):
-        return None, None, None, None
+        return None, None, None, None, None
     try:
         closes = hist["Close"]
         idx = hist.index
@@ -1773,13 +1774,15 @@ def _earnings_price_reaction(hist, event_ts):
         before_pos = [i for i, d in enumerate(days) if d < event_day]
         on_after_pos = [i for i, d in enumerate(days) if d >= event_day]
         if not before_pos or not on_after_pos:
-            return None, None, None, None
+            return None, None, None, None, None
 
         prev_i = before_pos[-1]
         same_i = on_after_pos[0] if days[on_after_pos[0]] == event_day else None
 
-        # After the close (or during the session) → the reaction is the next
-        # session. Before the open → the reaction is the event day itself.
+        # After the close (16:00+, or a date-only midnight stamp) → the
+        # reaction is the next session. Anything earlier — before the open,
+        # or the rare intraday print — → the reaction is the event day
+        # itself, since that session already trades on the news.
         after_close = ts.hour >= 16 or (ts.hour == 0 and ts.minute == 0)
         if after_close and same_i is not None:
             i_before, i_after = same_i, same_i + 1
@@ -1789,7 +1792,7 @@ def _earnings_price_reaction(hist, event_ts):
             i_before = prev_i
             i_after = same_i if same_i is not None else prev_i + 1
         if i_after >= len(closes) or i_before < 0:
-            return None, None, None, None
+            return None, None, None, None, None
 
         p_before = float(closes.iloc[i_before])
         p_after = float(closes.iloc[i_after])
@@ -1797,15 +1800,25 @@ def _earnings_price_reaction(hist, event_ts):
 
         # Five-session run-up into the print — the "is the move already priced
         # in" half of the question.
-        runup = None
-        i_runup = i_before - 5
-        if i_runup >= 0:
-            p_runup = float(closes.iloc[i_runup])
-            if p_runup:
-                runup = (p_before - p_runup) / p_runup * 100.0
-        return reaction, runup, p_before, p_after
+        # Run-ups into the print. 5 sessions is the headline "already moved?"
+        # number; 20 sessions feeds the crowding leg of the historical
+        # reconstruction (the live scorer measures crowding over 20 sessions —
+        # feeding it the 5-session number instead quietly rescaled that leg
+        # by ~2x). One implementation so the two can never diverge.
+        def _runup_from(n):
+            j = i_before - n
+            if j < 0:
+                return None
+            base = float(closes.iloc[j])
+            if not base:
+                return None
+            return (p_before - base) / base * 100.0
+
+        runup = _runup_from(5)
+        runup20 = _runup_from(20)
+        return reaction, runup, runup20, p_before, p_after
     except Exception:
-        return None, None, None, None
+        return None, None, None, None, None
 
 
 _INDEX_CLOSES = {"ts": 0.0, "closes": None}
@@ -1850,6 +1863,49 @@ def _pct_back(closes, back):
             return None
         last = float(closes.iloc[-1])
         ref = float(closes.iloc[-1 - back])
+        if not ref:
+            return None
+        return (last - ref) / ref * 100.0
+    except Exception:
+        return None
+
+
+def _announce_et(ts_epoch):
+    """ET timestamp for an announcement epoch, robust to date-only stamps.
+
+    Real Yahoo earnings rows carry genuine ET times of day. Calendar-fallback
+    rows are bare dates that arrive as MIDNIGHT UTC — converting those to ET
+    lands 19:00/20:00 the PREVIOUS day and shifts the calendar date back one,
+    which re-admitted the announcement-day expiry the implied-move AMC guard
+    exists to skip. A midnight-UTC stamp is a date, not a time: pin it to
+    midnight ET of the same calendar date (downstream treats midnight as AMC,
+    the convention for unknown times).
+    """
+    ts = pd.Timestamp(ts_epoch, unit="s", tz="UTC")
+    if ts.hour == 0 and ts.minute == 0:
+        return pd.Timestamp(ts.date(), tz="America/New_York")
+    return ts.tz_convert("America/New_York")
+
+
+def _pct_back_calendar(closes, days):
+    """Percent change over the last `days` CALENDAR days, or None.
+
+    For any window that is raced against a Yahoo "NdaysAgo" estimate field
+    (eps_trend d30/d60/d90 are calendar-dated). Using `_pct_back(closes, 90)`
+    there compared 90 SESSIONS (~126 calendar days) of price against 90
+    calendar days of estimate drift — the price side accrued ~40% more
+    elapsed time, which dragged the expectations gap negative on every
+    steadily-rising name.
+    """
+    try:
+        if closes is None or len(closes) < 2:
+            return None
+        cutoff = closes.index[-1] - pd.Timedelta(days=days)
+        older = closes[closes.index <= cutoff]
+        if getattr(older, "empty", True):
+            return None
+        ref = float(older.iloc[-1])
+        last = float(closes.iloc[-1])
         if not ref:
             return None
         return (last - ref) / ref * 100.0
@@ -1920,7 +1976,6 @@ def _implied_earnings_move(ticker, earnings_ts, hist):
     than none, because it is the number a reader would trust most.
     """
     import datetime as _dt
-    from datetime import datetime as _datetime, timezone as _tz
     if not earnings_ts:
         return None
     try:
@@ -1930,14 +1985,25 @@ def _implied_earnings_move(ticker, earnings_ts, hist):
     if not expiries:
         return None
 
-    earn_day = _datetime.fromtimestamp(earnings_ts, _tz.utc).date()
+    # The announcement date must be read in ET, not UTC: a 20:00+ ET print is
+    # already "tomorrow" in UTC, which shifted earn_day a day late and let the
+    # gap guard measure from the wrong side. _announce_et also pins date-only
+    # (midnight-UTC) stamps to the intended calendar date.
+    earn_dt = _announce_et(earnings_ts)
+    earn_day = earn_dt.date()
+    # An AMC print (16:00+ ET) lands AFTER that day's options have expired —
+    # an expiry ON the announcement date contains none of the event variance,
+    # and pricing the "implied move" off it reported ordinary drift as the
+    # market's earnings estimate. Date-only stamps (midnight) are treated as
+    # AMC, the same convention _earnings_price_reaction uses.
+    after_close = earn_dt.hour >= 16 or (earn_dt.hour == 0 and earn_dt.minute == 0)
     chosen = None
     for e in expiries:
         try:
             d = _dt.date.fromisoformat(e)
         except ValueError:
             continue
-        if d >= earn_day:
+        if (d > earn_day) if after_close else (d >= earn_day):
             chosen = (e, d)
             break
     if chosen is None:
@@ -2201,7 +2267,7 @@ def get_earnings_analysis(symbol, quarters=12):
                 # Past date with no reported figure: Yahoo sometimes lags a day
                 # or two. Keep it (the UI shows "pending") but don't score it.
                 pass
-            reaction, runup, p_before, p_after = _earnings_price_reaction(hist, ts)
+            reaction, runup, runup20, p_before, p_after = _earnings_price_reaction(hist, ts)
             history.append({
                 "timestamp":    int(ts.timestamp()),
                 "pre_vol_pct":  _pre_event_vol(hist, ts),
@@ -2211,6 +2277,7 @@ def get_earnings_analysis(symbol, quarters=12):
                 "surprise_suspect": _surprise_basis_suspect(est, act, sur),
                 "reaction_pct": reaction,
                 "runup_pct":    runup,
+                "runup_20d_pct": runup20,
                 "price_before": p_before,
                 "price_after":  p_after,
             })
@@ -2226,10 +2293,13 @@ def get_earnings_analysis(symbol, quarters=12):
         # reported figure and once still pending. Keep one row per calendar
         # date, preferring the one that carries an actual, or the sequential
         # chain below counts the quarter twice and computes a 0% QoQ against
-        # its own duplicate.
+        # its own duplicate. The date must be taken in ET, not UTC: a 20:00+
+        # ET print lands on the next UTC day, which let a 16:00 placeholder
+        # and its 20:05 reported duplicate land on "different" days and both
+        # survive.
         by_date = {}
         for row in history:
-            day = datetime.fromtimestamp(row["timestamp"], timezone.utc).date()
+            day = _announce_et(row["timestamp"]).date()
             keep = by_date.get(day)
             if keep is None or (keep.get("eps_actual") is None and row.get("eps_actual") is not None):
                 by_date[day] = row
@@ -2270,9 +2340,14 @@ def get_earnings_analysis(symbol, quarters=12):
     if hist is not None and not getattr(hist, "empty", True):
         try:
             closes = hist["Close"]
-            for key, back in (("runup_5d", 5), ("runup_20d", 20),
-                              ("runup_60d", 60), ("runup_90d", 90)):
+            # 5d/20d are SESSION windows (matched against the per-event runup
+            # and the crowding calibration, both session-based). 60d/90d are
+            # CALENDAR windows because they are raced against eps_trend's
+            # calendar-dated d60/d90 estimate fields — see _pct_back_calendar.
+            for key, back in (("runup_5d", 5), ("runup_20d", 20)):
                 recent[key] = _pct_back(closes, back)
+            for key, days in (("runup_60d", 60), ("runup_90d", 90)):
+                recent[key] = _pct_back_calendar(closes, days)
             # Distance from the 52-week high: 0 means sitting on it. A stock at
             # its high into a print carries a higher bar than the same stock
             # 30% off it, whatever the fundamentals say.
@@ -2292,10 +2367,13 @@ def get_earnings_analysis(symbol, quarters=12):
             pass
     idx_closes = _index_closes()
     if idx_closes is not None:
-        for key, back, own_key in (("rel_runup_20d", 20, "runup_20d"),
-                                   ("rel_runup_90d", 90, "runup_90d")):
+        # Each relative leg must strip the index over the SAME window basis as
+        # its own leg: 20d is sessions, 90d is calendar (see above).
+        for key, own_key, idx_fn in (
+                ("rel_runup_20d", "runup_20d", lambda c: _pct_back(c, 20)),
+                ("rel_runup_90d", "runup_90d", lambda c: _pct_back_calendar(c, 90))):
             own = recent.get(own_key)
-            idx = _pct_back(idx_closes, back)
+            idx = idx_fn(idx_closes)
             if own is not None and idx is not None:
                 recent[key] = own - idx
     out["recent"] = recent
@@ -2426,11 +2504,14 @@ def get_earnings_analysis(symbol, quarters=12):
             "has_forward_estimate": has_forward_estimate,
         }
         # The projection supersedes any still-pending row for the same date
-        # (report filed, figures not yet published by Yahoo).
-        proj_day = datetime.fromtimestamp(projected["timestamp"], timezone.utc).date()
+        # (report filed, figures not yet published by Yahoo). ET dates, like
+        # the history dedup above — comparing UTC dates here while the dedup
+        # compares ET let a 20:00+ ET pending row escape the filter and the
+        # upcoming quarter render twice.
+        proj_day = _announce_et(projected["timestamp"]).date()
         kept = [r for r in history
                 if r.get("eps_actual") is not None
-                or datetime.fromtimestamp(r["timestamp"], timezone.utc).date() != proj_day]
+                or _announce_et(r["timestamp"]).date() != proj_day]
         out["history"] = [projected] + kept
 
     return out

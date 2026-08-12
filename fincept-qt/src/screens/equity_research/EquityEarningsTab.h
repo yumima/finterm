@@ -36,6 +36,11 @@ class EquityEarningsTab : public QWidget {
   public:
     explicit EquityEarningsTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
+    /// When the displayed analysis was actually fetched upstream (QueryStore's
+    /// State::fetched_at). Invalid when nothing is displayed. Feeds the
+    /// screen's freshness chip, which had no provenance for this tab at all —
+    /// earnings_analysis has no broadcast signal, so the chip sat blank here.
+    QDateTime data_as_of() const { return data_fetched_at_; }
 
   private:
     void build_ui();
@@ -71,6 +76,8 @@ class EquityEarningsTab : public QWidget {
                             const services::equity::EarningsVerdict& v);
 
     QString current_symbol_;
+    /// Backing for data_as_of().
+    QDateTime data_fetched_at_;
     QString currency_ = QStringLiteral("USD");
 
     // Next-report card

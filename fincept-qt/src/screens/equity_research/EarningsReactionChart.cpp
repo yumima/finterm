@@ -154,8 +154,13 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
     const QColor pred_col(kPredColor);
 
     QStringList rows;
-    // UTC — daily bars carry an exchange-midnight stamp (see EquityOverviewTab).
-    const auto when = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
+    // These are ANNOUNCEMENT timestamps (they carry a real time of day), not
+    // exchange-midnight bar stamps — the date belongs to the exchange's
+    // calendar. Rendered in ET like every other announcement date on the tab;
+    // UTC put a 20:00+ ET print on the next day, viewer-local shifted with
+    // the reader.
+    const auto when =
+        QDateTime::fromSecsSinceEpoch(c.timestamp).toTimeZone(QTimeZone("America/New_York"));
     rows << QString("<b>%1</b>").arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
                                                  : when.toString("d MMM yyyy"));
 
@@ -364,6 +369,18 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         }
         dots.append(pt);
         dot_vals.append(v);
+        // Same off-scale honesty as the bars' chevron: a point pinned at the
+        // frame must not read as "this move was exactly axis-sized". A small
+        // chevron in the headroom marks the clip; the value label (when the
+        // columns are wide enough) carries the real number.
+        if (std::abs(v) > r_ext) {
+            const double dir = v >= 0 ? -1.0 : 1.0;   // screen-y: up is negative
+            QPainterPath chev;
+            chev.moveTo(pt.x() - 4.0, pt.y() + dir * 4.0);
+            chev.lineTo(pt.x(), pt.y() + dir * 9.0);
+            chev.lineTo(pt.x() + 4.0, pt.y() + dir * 4.0);
+            p.fillPath(chev, QColor(line_col));
+        }
     }
     p.setPen(QPen(line_col, 1.6));
     p.setBrush(Qt::NoBrush);
@@ -450,6 +467,16 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
             p.setBrush(q->reconstructed ? QBrush(QColor(ui::colors::BG_SURFACE())) : QBrush(col));
             p.setPen(QPen(col, 1.2));
             p.drawEllipse(pt, kDotR - 0.6, kDotR - 0.6);
+            // Off-scale marker, same convention as the bars and the reaction
+            // line: a clipped point must not read as an axis-sized estimate.
+            if (std::abs(*q->predicted_move_pct) > r_ext) {
+                const double dir = *q->predicted_move_pct >= 0 ? -1.0 : 1.0;
+                QPainterPath chev;
+                chev.moveTo(pt.x() - 3.0, pt.y() + dir * 4.0);
+                chev.lineTo(pt.x(), pt.y() + dir * 8.0);
+                chev.lineTo(pt.x() + 3.0, pt.y() + dir * 4.0);
+                p.fillPath(chev, col);
+            }
         }
     }
 
@@ -476,7 +503,9 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         // is standing in, and thinning it away would be the worst omission.
         if (i % tick_step != 0 && !cols[i].projected) continue;
         const double cx = cx_of(plot, col_w, i);
-        const auto when = QDateTime::fromSecsSinceEpoch(cols[i].timestamp);
+        // Announcement timestamps → ET, same rationale as the tooltip above.
+        const auto when =
+            QDateTime::fromSecsSinceEpoch(cols[i].timestamp).toTimeZone(QTimeZone("America/New_York"));
         const QString tick = cols[i].projected
                                  ? (cols[i].metric ? when.toString("MMM yy") + QStringLiteral(" est")
                                                    : QStringLiteral("now"))
