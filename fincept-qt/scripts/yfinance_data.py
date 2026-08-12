@@ -870,11 +870,38 @@ def s1_extract_section(text, pattern, cap=12000, lookahead_skip=200):
         # the one thing only a ToC line has.
         if re.search(r"\s\d{1,4}$", line):
             continue
+        # A cross-reference split by HTML flattening puts the heading word
+        # alone on a line and CONTINUES the sentence on the next one, which
+        # therefore opens with closing punctuation:
+        #     ...as described under
+        #     Risk Factors
+        #     ." Should one or more of these risks materialize...
+        # A real section never continues a quotation. Verified against a live
+        # 927k-char S-1/A where this exact shape was being returned as the
+        # RISK FACTORS body.
+        nl = text.find("\n", mm.end())
+        nxt_line = ""
+        while nl >= 0:
+            e = text.find("\n", nl + 1)
+            cand = text[nl + 1: e if e >= 0 else len(text)].strip()
+            if cand:
+                nxt_line = cand
+                break
+            if e < 0:
+                break
+            nl = e
+        if nxt_line[:1] in {".", ",", ";", ")", "\u201d", "\u2019", '"', "'"}:
+            continue
+
+        # The line must be essentially JUST the heading — at most a trailing
+        # period or colon. A looser bound let "Underwriting Agreement" (a
+        # financial-statement note in the F-pages) stand in for the
+        # UNDERWRITING section.
         trailing = len(line) - (mm.end() - mm.start()) - len(prefix)
         heading_like = (
             len(line) <= 90
-            and trailing <= 12
-            and (not prefix or re.fullmatch(r"(item|part)\s*[\dIVX]+\s*[.:\-]?",
+            and trailing <= 2
+            and (not prefix or re.fullmatch(r"(item|part)\s*[\dIVX]+[A-Z]?\s*[.:\-]?",
                                             prefix, re.IGNORECASE))
         )
         if not heading_like:
@@ -891,22 +918,15 @@ def s1_extract_section(text, pattern, cap=12000, lookahead_skip=200):
             continue
         candidates.append(chunk)
 
-    # Prefer the LAST substantial candidate, not the longest.
+    # Longest wins, now that the two shapes which used to beat the real section
+    # are excluded up front: ToC lines by their trailing page number, and
+    # cross-references by the punctuation that continues their sentence.
     #
-    # Longest-wins is wrong in a way that only shows up on real filings: a
-    # cross-reference near the front — see "Underwriting" for a description
-    # of... — slices all the way forward to the REAL heading (which is itself a
-    # section boundary), so its chunk is everything in between and comfortably
-    # beats the genuine section that follows. Document order settles it: a
-    # prospectus mentions a section in its summary and cross-references before
-    # it reaches the section itself, so the last occurrence is the body.
-    #
-    # "Substantial" guards the other direction: a trailing index or exhibit
-    # mention yields a stub, which must not displace a real earlier body.
-    SUBSTANTIAL = 400
-    for chunk in reversed(candidates):
-        if len(chunk) >= SUBSTANTIAL:
-            return chunk
+    # "Last substantial" was tried instead and is worse — on a real filing it
+    # picked a forward-looking-statements fragment over a 40,000-char RISK
+    # FACTORS body, and an "Underwriting Agreement" note in the F-pages over
+    # the UNDERWRITING section. A section body is simply far longer than
+    # anything that merely mentions it.
     return max(candidates, key=len) if candidates else ""
 
 

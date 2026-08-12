@@ -758,6 +758,8 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
     auto sorted = members;
     std::sort(sorted.begin(), sorted.end(),
               [](const CongressMember& a, const CongressMember& b) {
+                  // Unpriced members sink rather than interleaving on a 0.
+                  if (a.return_priced != b.return_priced) return a.return_priced;
                   return a.alpha_ytd > b.alpha_ytd;
               });
     const auto& svc = PowerTraderService::instance();
@@ -771,6 +773,10 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         const QString star_tag  = starred ? QStringLiteral("* ") : QString();
         const QString party_tag = m.party.isEmpty() ? "" : "[" + m.party + "] ";
         const QString chb_tag   = m.chamber == MemberChamber::Senate ? "SEN" : "HSE";
+        // Alpha is only meaningful once real prices produced it AND a
+        // benchmark exists to subtract. Rendering it unconditionally printed
+        // a confident "+0.0% alpha" for every member before prices landed.
+        const bool   has_alpha  = m.return_priced && qAbs(m.spy_return_ytd) > 1e-9;
         const QString sign      = m.alpha_ytd >= 0 ? "+" : "";
         // Signal-score indicator: a tiny block character whose colour reflects
         // the member's average per-trade signal score. ▌ green = low, amber =
@@ -781,7 +787,9 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         const QString sig_glyph = QStringLiteral("\xe2\x96\x8c");  // ▌
         item->setText(star_tag + party_tag + m.full_name + "  " + sig_glyph + "\n"
                       + chb_tag + "  " + m.state + "  "
-                      + sign + QString::number(m.alpha_ytd, 'f', 1) + "% alpha");
+                      + (has_alpha
+                             ? sign + QString::number(m.alpha_ytd, 'f', 1) + "% alpha"
+                             : QStringLiteral("alpha \xe2\x80\x94")));
         item->setData(Qt::UserRole, m.id);
         // We can't colorize a portion of a QListWidgetItem's plain text — but
         // we can attach a tooltip with the numeric score so hover discloses

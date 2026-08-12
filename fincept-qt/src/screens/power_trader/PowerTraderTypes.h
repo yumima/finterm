@@ -147,6 +147,10 @@ struct MemberPortfolio {
     /// Realized P&L across every position, including ones fully closed and so
     /// absent from `holdings`.
     double est_realized_pnl  = 0;
+    /// Cost basis of everything already sold. Pairs with est_realized_pnl as
+    /// the denominator: without it, a closed position's gain has no cost to
+    /// divide by, because closing a position zeroes its cost basis.
+    double est_realized_cost = 0;
     /// Which date the entry prices came from — every figure above depends on
     /// it, so consumers must label accordingly.
     PriceBasis basis = PriceBasis::DisclosureDate;

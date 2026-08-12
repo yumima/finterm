@@ -430,7 +430,9 @@ void RankingsPanel::populate_detail_card(const QString& member_id) {
     auto fmt_pct = [](double v) {
         return (v >= 0 ? "+" : "") + QString::number(v, 'f', 1) + "%";
     };
-    card_alpha_ ->setText(fmt_pct(member.alpha_ytd));
+    // Absent, not zero: alpha needs both a priced return and a benchmark.
+    const bool has_alpha = member.return_priced && qAbs(member.spy_return_ytd) > 1e-9;
+    card_alpha_ ->setText(has_alpha ? fmt_pct(member.alpha_ytd) : QStringLiteral("—"));
     card_return_->setText(fmt_pct(member.portfolio_return_ytd));
     card_return_->setToolTip(QStringLiteral(
         "Priced at each trade's DISCLOSURE date — the entry a follower could "

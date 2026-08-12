@@ -113,6 +113,7 @@ void LeaderboardPanel::set_members(const QVector<power_trader::CongressMember>& 
     // Sort by alpha descending
     std::stable_sort(members_.begin(), members_.end(),
                      [](const power_trader::CongressMember& a, const power_trader::CongressMember& b) {
+                         if (a.return_priced != b.return_priced) return a.return_priced;
                          return a.alpha_ytd > b.alpha_ytd;
                      });
     populate_table();
@@ -171,9 +172,11 @@ void LeaderboardPanel::populate_table() {
                  ui::colors::TEXT_SECONDARY, Qt::AlignCenter);
 
         // Alpha YTD
+        const bool has_alpha = m.return_priced && qAbs(m.spy_return_ytd) > 1e-9;
         const bool alpha_pos = m.alpha_ytd >= 0;
         set_item(4,
-                 QString("%1%2%").arg(alpha_pos ? "+" : "").arg(m.alpha_ytd, 0, 'f', 1),
+                 has_alpha ? QString("%1%2%").arg(alpha_pos ? "+" : "").arg(m.alpha_ytd, 0, 'f', 1)
+                           : QStringLiteral("—"),
                  alpha_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
         // Return YTD

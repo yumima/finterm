@@ -277,7 +277,7 @@ void OverviewPanel::build_ui() {
         c3l->setContentsMargins(0, 0, 0, 0);
         c3l->setSpacing(0);
         c3l->addWidget(fincept::ui::make_section_header(
-            QStringLiteral("COMMITTEE INSIDER CORRELATION"), col3));
+            QStringLiteral("COMMITTEE OVERLAP — SHARE OF TRADES IN OVERSEEN SECTORS"), col3));
 
         static const QStringList kSigCols = {
             "MEMBER", "PARTY", "COMMITTEE", "SECTOR", "OVERLAP", "SIGNAL"

@@ -32,7 +32,7 @@ QString tooltip_for_trade_signal(const power_trader::PoliticalTrade& t);
 QString tooltip_for_aggregate_signal(int n_trades = -1);
 
 /// Methodology blurb for a *peak* signal score — the maximum across a set of
-/// trades, used by the committee-insider correlation table in OverviewPanel.
+/// trades, used by the committee-insider overlap table in OverviewPanel.
 /// `n_trades` is the size of the set being maximised over (e.g. the number
 /// of committee-relevant trades).
 QString tooltip_for_peak_signal(int n_trades);

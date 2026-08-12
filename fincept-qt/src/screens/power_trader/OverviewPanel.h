@@ -14,7 +14,7 @@ namespace fincept::screens {
 /// Layout (vertical, scrollable):
 ///   Row 1 — 4 stat tiles: MEMBERS TRACKED, TOTAL DISCLOSED, BEAT SPY, MOST ACTIVE CMTE
 ///   Row 2 — Side-by-side: TOP TRADERS (alpha bar chart) | SECTOR EXPOSURE (bar chart)
-///   Row 3 — Full-width: COMMITTEE INSIDER CORRELATION table
+///   Row 3 — Full-width: COMMITTEE OVERLAP share table
 class OverviewPanel : public QWidget {
     Q_OBJECT
   public:

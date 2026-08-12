@@ -567,6 +567,13 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     splitter_->setStretchFactor(1, 4);
     splitter_->setStretchFactor(2, 2);
     splitter_->setSizes({420, 840, 420});
+    // A drag by the user is a decision; automatic weighting defers to it from
+    // then on. splitterMoved also fires for programmatic setSizes on some
+    // styles, so the flag is only set for a genuine interactive move.
+    connect(splitter_, &QSplitter::splitterMoved, this, [this](int, int) {
+        if (splitter_ && splitter_->isVisible())
+            splitter_user_sized_ = true;
+    });
 
     root->addWidget(splitter_, 1);
 }
@@ -2288,6 +2295,27 @@ void IpoWatchView::render_signals() {
     }
 }
 
+// Size the three panes for the kind of subject on screen — but only until the
+// user takes over.
+//
+// A private company has no price series, so its charts pane is a mark trend
+// (and only when two or more quarters exist) plus a timeline: often one chart
+// holding a quarter of the width while the dossier carrying the actual
+// research is squeezed beside it. A listed entry has up to six charts and
+// earns that space back.
+//
+// Once the user drags a divider, that is their layout and we stop touching it.
+// Re-applying weights on every selection would otherwise undo the drag the
+// moment they clicked the next row, which is worse than never sizing at all.
+void IpoWatchView::apply_pane_weights(bool chart_heavy) {
+    if (!splitter_ || splitter_->count() != 3 || splitter_user_sized_)
+        return;
+    const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
+    const int list_w  = total * 22 / 100;
+    const int chart_w = chart_heavy ? total * 26 / 100 : total * 14 / 100;
+    splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
+}
+
 void IpoWatchView::render_detail_private(const QString& company_id) {
     if (!header_lbl_) return;
     if (company_id.isEmpty()) { render_detail(nullptr); return; }
@@ -2810,12 +2838,7 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // a quarter of a 1920px screen while the dossier that carries the actual
     // research is squeezed beside it. When there is one chart or none, fold
     // that space into the facts pane.
-    if (splitter_ && splitter_->count() == 3) {
-        const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
-        const int list_w = total * 22 / 100;
-        const int chart_w = has_mark_chart ? total * 26 / 100 : total * 14 / 100;
-        splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
-    }
+    apply_pane_weights(/*chart_heavy*/ has_mark_chart);
     detail_symbol_ = c.id;
 }
 
@@ -3065,12 +3088,7 @@ void IpoWatchView::render_detail(const Entry* e) {
     // Restore the chart-weighted split. A listed entry has a real price series
     // and up to six charts, so it earns the width that a private company's
     // near-empty charts pane gives back (see render_detail_private).
-    if (splitter_ && splitter_->count() == 3) {
-        const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
-        const int list_w = total * 22 / 100;
-        const int chart_w = total * 26 / 100;
-        splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
-    }
+    apply_pane_weights(/*chart_heavy*/ true);
 
     // ── RIGHT PANE: sector heat + comps (top), research links (bottom) ─────
     right_top_   ->setText(css + build_sector_comps_html(*e));

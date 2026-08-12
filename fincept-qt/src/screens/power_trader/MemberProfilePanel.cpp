@@ -865,7 +865,7 @@ void MemberProfilePanel::build_holdings_table(QWidget* parent, QVBoxLayout* vl) 
     vl->addWidget(make_section_hdr(QStringLiteral("ESTIMATED HOLDINGS *"), parent));
 
     // CMTE OVERLAP removed — long committee names cluttered the table.
-    // Committee-ticker correlation lives in the SIGNAL ANALYSIS section (right pane).
+    // Committee-ticker overlap lives in the SIGNAL ANALYSIS section (right pane).
     // SIG column added: per-holding insider signal score (0–100).
     static const QStringList kCols = {
         "TICKER", "COMPANY", "SECTOR", "SIG", "EST. COST *", "EST. VALUE *",
@@ -1105,7 +1105,7 @@ void MemberProfilePanel::build_committees_section(QWidget* parent, QVBoxLayout* 
 }
 
 void MemberProfilePanel::build_sector_section(QWidget* parent, QVBoxLayout* vl) {
-    vl->addWidget(make_section_hdr(QStringLiteral("SECTOR ALLOCATION & INSIDER CORRELATION"), parent));
+    vl->addWidget(make_section_hdr(QStringLiteral("SECTOR ALLOCATION & COMMITTEE OVERLAP"), parent));
 
     auto* outer = new QWidget(parent);
     outer->setStyleSheet(QString("QWidget { background:%1; }").arg(ui::colors::BG_BASE()));
@@ -1617,6 +1617,19 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
     if (p.priced) {
         tile_portfolio_val_->setText(fmt_dollar(p.est_total_value));
         tile_portfolio_val_->setStyleSheet(tile_style(ui::colors::AMBER));
+        // Realized P&L is inside the return but appears in no other figure, so
+        // without this the user sees a return they cannot reconcile against
+        // the value and unrealized-P&L tiles beside it.
+        tile_portfolio_val_->setToolTip(QStringLiteral(
+            "Open positions:   %1\n"
+            "Unrealized P&L:   %2\n"
+            "Realized P&L:     %3   (on %4 of cost already sold)\n\n"
+            "Return is (unrealized + realized) over the cost actually put at "
+            "risk — held plus sold. Closing a position zeroes its cost basis, "
+            "so counting only what is still held would divide a realized gain "
+            "by a cost base that excludes the trade which produced it.")
+            .arg(fmt_dollar(p.est_total_value), fmt_dollar(p.est_total_pnl),
+                 fmt_dollar(p.est_realized_pnl), fmt_dollar(p.est_realized_cost)));
 
         // The headline return is the DISCLOSURE-date one: the entry a follower
         // could actually have taken. The tooltip carries the member's own
@@ -2262,7 +2275,7 @@ void MemberProfilePanel::populate_combined_analysis(
 
     // ── SECTION 2: Stock-committee matching ───────────────────────────────────
     {
-        auto* sec = new QLabel(QStringLiteral("HOLDING → COMMITTEE CORRELATION"), combined_analysis_);
+        auto* sec = new QLabel(QStringLiteral("HOLDING \xe2\x86\x92 COMMITTEE OVERLAP"), combined_analysis_);
         sec->setStyleSheet(section_ss);
         cal->addWidget(sec);
 
@@ -2508,7 +2521,7 @@ void MemberProfilePanel::populate_sector(
         sector_weight[sec] += h.est_weight;
     }
 
-    // ── Compute correlation score per sector ──────────────────────────────────
+    // ── Compute committee-overlap share per sector ───────────────────────────
     // Find the max overlap_pct from insider signals where committee overlaps sector
     QHash<QString, double> sector_corr;
     for (const auto& sig : insider_sigs) {

@@ -160,6 +160,9 @@ class IpoWatchView : public QWidget {
     /// version surfaces the full dossier (valuation, rounds, fund marks, SPV
     /// interest, S-1 pipeline) from PreIpoService::company(id) inside the rail.
     void render_detail_private(const QString& company_id);
+    /// Weight the three panes for the current subject type. No-op once the
+    /// user has dragged a divider — see the implementation comment.
+    void apply_pane_weights(bool chart_heavy);
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
     // Per-section detail rail builders — each populates one tab page or pane.
@@ -278,6 +281,9 @@ class IpoWatchView : public QWidget {
     /// PrivateCompany::id for a private dossier. Every path that blanks the
     /// rail clears it, which is what makes it safe to route asynchronous
     /// per-company updates through.
+    /// True once the user has dragged a splitter handle. Their layout wins
+    /// from then on; automatic weighting stops.
+    bool splitter_user_sized_ = false;
     QString detail_symbol_;
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or

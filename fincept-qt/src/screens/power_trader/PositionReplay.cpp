@@ -3,12 +3,25 @@
 
 namespace fincept::power_trader {
 
-QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trades) {
+QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trades,
+                                                QVector<double>* cost_after) {
     QHash<QString, ReplayPosition> out;
+    if (cost_after) {
+        cost_after->clear();
+        cost_after->reserve(trades.size());
+    }
+    const auto total_cost = [&out]() {
+        double t = 0;
+        for (const auto& p : out)
+            t += p.cost_basis;
+        return t;
+    };
 
     for (const auto& t : trades) {
-        if (t.ticker.isEmpty())
+        if (t.ticker.isEmpty()) {
+            if (cost_after) cost_after->append(total_cost());
             continue;
+        }
         auto& p = out[t.ticker];
 
         // No real close on the entry date: we cannot convert the disclosed
@@ -25,6 +38,7 @@ QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trad
                 p.cost_basis = qMax(0.0, p.cost_basis - t.amount_midpoint);
                 p.sell_count++;
             }
+            if (cost_after) cost_after->append(total_cost());
             continue;
         }
 
@@ -41,13 +55,16 @@ QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trad
             if (sold > p.shares)
                 sold = p.shares;
 
-            p.realized_pnl += sold * t.close - sold * avg;
-            p.cost_basis   -= sold * avg;
+            p.realized_pnl  += sold * t.close - sold * avg;
+            p.realized_cost += sold * avg;
+            p.cost_basis    -= sold * avg;
             p.shares       -= sold;
             if (p.cost_basis < 0.0)
                 p.cost_basis = 0.0;
             p.sell_count++;
         }
+        if (cost_after)
+            cost_after->append(total_cost());
     }
     return out;
 }

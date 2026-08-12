@@ -234,9 +234,18 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
         m.term_start         = QDate::fromString(o[QStringLiteral("term_start")].toString(), Qt::ISODate);
         m.estimated_net_worth= o[QStringLiteral("estimated_net_worth")].toDouble();
         m.trade_count_ytd    = o[QStringLiteral("trade_count_ytd")].toInt();
-        m.portfolio_return_ytd = o[QStringLiteral("portfolio_return_ytd")].toDouble();
         m.spy_return_ytd     = o[QStringLiteral("spy_return_ytd")].toDouble();
-        m.alpha_ytd          = m.portfolio_return_ytd - m.spy_return_ytd;
+        // Return and alpha are NOT read from the payload — the script emits a
+        // placeholder 0.0 for the return, and they are computed here from real
+        // prices in recompute_member_returns(). Deriving alpha at parse time
+        // would give every member 0 - spy_return: a fabricated NEGATIVE alpha
+        // equal to the benchmark, rendered and SORTED on by the leaderboard
+        // and the sidebar (neither gates on return_priced) until prices land —
+        // and permanently for a cohort with no priceable tickers, where the
+        // price fetch returns early and never recomputes.
+        m.portfolio_return_ytd = 0;
+        m.alpha_ytd            = 0;
+        m.return_priced        = false;
         s.members.append(m);
     }
 
@@ -327,8 +336,20 @@ void PowerTraderService::fetch_real_prices() {
         if (t.transaction_date.isValid() && (!earliest.isValid() || t.transaction_date < earliest))
             earliest = t.transaction_date;
     }
-    if (ticker_set.isEmpty())
+    if (ticker_set.isEmpty()) {
+        // No priceable tickers at all. Returns stay unpriced rather than
+        // keeping whatever was last computed — otherwise a filter change to a
+        // cohort with no stock trades leaves the previous cohort's numbers on
+        // screen.
+        for (auto& m : summary_.members) {
+            m.return_priced        = false;
+            m.portfolio_return_ytd = 0;
+            m.return_trade_basis   = 0;
+            m.disclosure_cost_pct  = 0;
+            m.alpha_ytd            = 0;
+        }
         return;
+    }
 
     QJsonArray syms;
     for (const auto& s : ticker_set) syms.append(s);
@@ -383,8 +404,22 @@ void PowerTraderService::recompute_member_returns() {
         // "return" because it is the only entry a follower could have taken;
         // the trade-date one is the member's own, and the gap between them is
         // what the STOCK Act's 45-day window is worth.
-        const auto disc  = compute_portfolio(m.id, PriceBasis::DisclosureDate);
-        const auto trade = compute_portfolio(m.id, PriceBasis::TradeDate);
+        // Two full replays per member, ~535 members, synchronously on the
+        // callback thread. The trade-date pass exists only for the spread, so
+        // it is skipped entirely when there is nothing to compare — a member
+        // whose filings are all same-day (no lag) has an identical result by
+        // construction, and one with no priceable book has neither.
+        const auto disc = compute_portfolio(m.id, PriceBasis::DisclosureDate);
+        bool any_lag = false;
+        for (const auto& t : summary_.recent_trades) {
+            if (t.member_id == m.id && !t.placeholder && t.disclosure_lag_days > 0) {
+                any_lag = true;
+                break;
+            }
+        }
+        const auto trade = (disc.priced && any_lag)
+                               ? compute_portfolio(m.id, PriceBasis::TradeDate)
+                               : disc;
         if (disc.priced) {
             m.portfolio_return_ytd = disc.est_total_pnl_pct;
             m.return_trade_basis   = trade.priced ? trade.est_total_pnl_pct
@@ -490,8 +525,7 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
                   return entry_date(a) < entry_date(b);
               });
 
-    QMap<QDate, double> cumulative_nav;  // date → running invested amount
-    double running_cost = 0;
+    QMap<QDate, double> cumulative_nav;  // date → total cost basis at that point
 
     // Real-price valuation accumulators (per ticker), built from the daemon's
     // trade-date closes. net_shares = Σ (buy $-midpoint / close) − Σ (sell …);
@@ -504,7 +538,9 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
     // average-cost engine (PositionReplay). Keeping the arithmetic out of the
     // service is what makes it testable — see tests/screens/test_position_replay.
     QVector<ReplayTrade> replay;
+    QVector<QDate>       entry_dates;   // parallel to `replay`, for the NAV series
     replay.reserve(sorted.size());
+    entry_dates.reserve(sorted.size());
     for (const auto& t : sorted) {
         if (t.asset_type != AssetType::Stock && t.asset_type != AssetType::ETF)
             continue;
@@ -525,14 +561,18 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
         replay.append({t.ticker, t.direction, midpoint,
                        close_on_or_before(t.ticker, on)});
 
-        if (t.direction == TradeDirection::Buy)
-            running_cost += midpoint;
-        else if (t.direction == TradeDirection::Sell)
-            running_cost = qMax(0.0, running_cost - midpoint);
-        cumulative_nav[on] = qMax(0.0, running_cost);
+        entry_dates.append(on);
     }
 
-    const auto replayed = replay_positions(replay);
+    // NAV comes from the replay's own cost total, not a parallel running sum.
+    // The two disagreed the moment a sell happened: subtracting raw proceeds
+    // portfolio-wide drove the series to zero while other tickers were still
+    // open, so the chart showed the portfolio collapsing beside a holdings
+    // table that still listed positions.
+    QVector<double> cost_after;
+    const auto replayed = replay_positions(replay, &cost_after);
+    for (int i = 0; i < entry_dates.size() && i < cost_after.size(); ++i)
+        cumulative_nav[entry_dates.at(i)] = qMax(0.0, cost_after.at(i));
     for (auto it = replayed.cbegin(); it != replayed.cend(); ++it) {
         auto& h = positions[it.key()];
         h.ticker          = it.key();
@@ -597,15 +637,30 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
     // Realized P&L is summed over EVERY position, including ones closed out
     // entirely — those have no holdings row, and dropping them is what made
     // the leaderboard a ranking of trades that had not worked yet.
-    double realized = 0;
-    for (const auto& h : positions)
-        realized += h.realized_pnl;
+    // Realized P&L AND the cost that produced it, over every position —
+    // including ones closed out entirely, which have no holdings row.
+    double realized = 0, realized_cost = 0;
+    for (auto it = replayed.cbegin(); it != replayed.cend(); ++it) {
+        realized      += it.value().realized_pnl;
+        realized_cost += it.value().realized_cost;
+    }
     portfolio.est_realized_pnl  = realized;
+    portfolio.est_realized_cost = realized_cost;
     // Return counts realized and unrealized together, over the cost actually
     // put at risk. Unrealized-only understates any member who takes profits.
+    // Denominator is the cost ACTUALLY PUT AT RISK: what is still held plus
+    // what has been sold. Dividing realized gains by surviving cost alone gave
+    // nonsense — a member who bought $10k, sold at $30k, and holds one $600
+    // position elsewhere scored (0 + 20000) / 600 = +3333%, rendered beside a
+    // $600 portfolio value. The correct figure is 20000 / 10600 = +188.7%.
+    const double invested_cost = priced_cost + realized_cost;
     portfolio.est_total_pnl_pct =
-        priced_cost > 0 ? ((priced_pnl + realized) / priced_cost) * 100.0 : 0;
-    portfolio.priced            = priced_cost > 0;  // any holding actually valued?
+        invested_cost > 0 ? ((priced_pnl + realized) / invested_cost) * 100.0 : 0;
+    // "Priced" must include a member whose book is entirely CLOSED: they have
+    // no surviving holdings, so gating on priced_cost alone dropped them off
+    // the leaderboard with a "—" — the exact behaviour the realized-P&L work
+    // exists to end.
+    portfolio.priced            = invested_cost > 0;
 
     // Derived stats
     portfolio.net_buyer_90d     = net_buyer_amount(member_id, 90);

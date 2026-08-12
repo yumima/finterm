@@ -34,6 +34,8 @@ class TestPositionReplay : public QObject {
     void missing_close_flags_the_position();
     void missing_close_still_counts_the_dollars();
     void sell_with_no_prior_buy_is_harmless();
+    void realized_cost_pairs_with_realized_pnl();
+    void cost_series_tracks_actual_cost_basis();
 };
 
 void TestPositionReplay::buy_sets_shares_and_cost() {
@@ -135,6 +137,46 @@ void TestPositionReplay::sell_with_no_prior_buy_is_harmless() {
     QCOMPARE(p.shares, 0.0);
     QCOMPARE(p.cost_basis, 0.0);
     QCOMPARE(p.realized_pnl, 0.0);   // nothing held ⇒ nothing realized
+}
+
+// realized_pnl needs a denominator, and a closed position has cost_basis 0 by
+// construction — so without realized_cost, a closed winner's gain divides by a
+// cost base that excludes the very trade that produced it. On a real member
+// that read as +3333% beside a $600 portfolio value.
+void TestPositionReplay::realized_cost_pairs_with_realized_pnl() {
+    const QVector<ReplayTrade> t{
+        {"AAPL", TradeDirection::Buy,  10'000.0, 100.0},
+        {"AAPL", TradeDirection::Sell, 30'000.0, 300.0},
+    };
+    const auto p = replay_positions(t).value("AAPL");
+    QCOMPARE(p.cost_basis, 0.0);                    // fully closed
+    QVERIFY2(qFuzzyCompare(p.realized_cost, 10'000.0),
+             qPrintable(QString("expected $10k cost sold, got %1").arg(p.realized_cost)));
+    // The return this implies is the correct one.
+    const double pct = (p.realized_pnl) / (p.cost_basis + p.realized_cost) * 100.0;
+    QVERIFY2(qFuzzyCompare(pct, 200.0), qPrintable(QString("got %1%").arg(pct)));
+}
+
+// The NAV series is drawn from this, and it used to be a parallel running sum
+// that subtracted raw proceeds portfolio-wide — so a sell in one ticker drove
+// the whole series to zero while other positions were still open.
+void TestPositionReplay::cost_series_tracks_actual_cost_basis() {
+    const QVector<ReplayTrade> t{
+        {"AAPL", TradeDirection::Buy,  10'000.0, 100.0},
+        {"MSFT", TradeDirection::Buy,  10'000.0, 100.0},
+        {"AAPL", TradeDirection::Sell, 30'000.0, 300.0},   // proceeds > total cost
+    };
+    QVector<double> cost_after;
+    const auto pos = replay_positions(t, &cost_after);
+    QCOMPARE(cost_after.size(), 3);
+    QCOMPARE(cost_after.at(0), 10'000.0);
+    QCOMPARE(cost_after.at(1), 20'000.0);
+    // AAPL closes out; MSFT is untouched. Subtracting the $30k proceeds
+    // portfolio-wide would have given 0 here.
+    QVERIFY2(qFuzzyCompare(cost_after.at(2), 10'000.0),
+             qPrintable(QString("expected MSFT's $10k to remain, got %1")
+                            .arg(cost_after.at(2))));
+    QCOMPARE(pos.value("MSFT").cost_basis, 10'000.0);
 }
 
 QTEST_APPLESS_MAIN(TestPositionReplay)

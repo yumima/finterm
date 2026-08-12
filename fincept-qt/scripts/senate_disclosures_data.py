@@ -308,7 +308,35 @@ def _fetch_spy_benchmark(days_back: int) -> Optional[float]:
     must handle the missing case rather than substitute a fake benchmark.
     """
     today_key = date.today().isoformat()
-    cache_file = os.path.join(_CACHE_DIR, f"spy_bench_{days_back}d_{today_key}.json")
+    # The key carries a VERSION, not just the window. Without it, changing how
+    # the benchmark is computed silently keeps serving the old number for the
+    # rest of the day: switching from period="90d" (which yfinance reads as 90
+    # TRADING sessions, ~126 calendar days) to an explicit 90-calendar-day
+    # window kept returning the cached +17.80% when the correct figure was
+    # +4.07% — a 13.7pp error that would have flowed straight into alpha.
+    _BENCH_VERSION = 2   # v2: explicit calendar dates, total-return basis
+    cache_file = os.path.join(
+        _CACHE_DIR, f"spy_bench_v{_BENCH_VERSION}_{days_back}d_{today_key}.json")
+
+    # Prune. The key is per-day by design (the benchmark moves daily), which
+    # means one file per day forever — this directory had accumulated every
+    # day since May, plus now-orphaned files under two older naming schemes.
+    # Cheap to sweep, and nothing here is worth keeping past today.
+    try:
+        for _f in os.listdir(_CACHE_DIR):
+            if not (_f.startswith("spy_bench") or _f.startswith("spy_ytd")):
+                continue
+            if _f == os.path.basename(cache_file):
+                continue
+            # Keep only today's files under the CURRENT version. Anything from
+            # an earlier day, or under a superseded naming/computation scheme,
+            # is not just useless — serving it is how a stale window's number
+            # gets reported as the benchmark.
+            if _f.startswith(f"spy_bench_v{_BENCH_VERSION}_") and today_key in _f:
+                continue          # another window fetched today, same version
+            os.remove(os.path.join(_CACHE_DIR, _f))
+    except OSError:
+        pass
     if os.path.exists(cache_file):
         try:
             with open(cache_file) as f:
@@ -331,8 +359,16 @@ def _fetch_spy_benchmark(days_back: int) -> Optional[float]:
         # portfolio is not a comparison at all, and a price-return benchmark
         # versus total-return holdings hands the members SPY's dividends —
         # roughly 1.3%/yr of free alpha.
-        hist = yf.Ticker("SPY").history(period=f"{max(2, int(days_back))}d",
-                                        auto_adjust=True)
+        # Explicit dates, NOT period="Nd". yfinance reads "90d" as 90 TRADING
+        # sessions (verified: it returns 90 rows, ~126 calendar days), while
+        # days_back is calendar days — so a period string silently benchmarked
+        # a 90-day portfolio against ~4 months of SPY.
+        _end = date.today()
+        _start = _end - timedelta(days=max(2, int(days_back)))
+        hist = yf.Ticker("SPY").history(
+            start=_start.isoformat(),
+            end=(_end + timedelta(days=1)).isoformat(),
+            auto_adjust=True)
         if hist is None or hist.empty or len(hist) < 2:
             return None
         first_close = float(hist["Close"].iloc[0])

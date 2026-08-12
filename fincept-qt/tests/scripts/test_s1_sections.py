@@ -153,6 +153,48 @@ def test_shareholders_spelling_is_covered():
           "Sponsor purchased" in got, f"got {got[:60]!r}")
 
 
+def test_cross_reference_continuation_is_rejected():
+    """The shape that beat a 40,000-char RISK FACTORS body on a real filing.
+
+    HTML flattening splits `as described under "Risk Factors." Should one or
+    more...` across lines, leaving the heading alone on its own short line —
+    indistinguishable from a real heading by the line itself. The giveaway is
+    the NEXT line, which opens with the punctuation that continues the
+    sentence. Taken from a live 927k-char S-1/A (Amanat Acquisition Corp).
+    """
+    doc = (
+        "TABLE OF CONTENTS\nRisk Factors 14\nUnderwriting 110\n\n"
+        + "You should carefully consider the matters described under\n"
+          "Risk Factors\n"
+          '.\u201d Should one or more of these risks or uncertainties materialize, '
+        + ("or should underlying assumptions prove incorrect, actual results may "
+           "vary materially. " * 40) + "\n"
+        "RISK FACTORS\n" + (BODY * 4) + "\n"
+        "UNDERWRITING\n"
+    )
+    got = extract_section(doc, r"risk\s+factors")
+    check("a cross-reference continuation is not the section",
+          not got.lstrip().startswith("Risk Factors\n."), f"got {got[:60]!r}")
+    check("the real RISK FACTORS body is returned", "Sponsor purchased" in got)
+
+
+def test_heading_word_inside_a_longer_heading_is_rejected():
+    """"Underwriting Agreement" is a financial-statement note, not the
+    UNDERWRITING section. On a real filing it sat near the end and won."""
+    doc = (
+        "TABLE OF CONTENTS\nUnderwriting 110\n\n"
+        "UNDERWRITING\n" + (BODY * 2) + "\n"
+        "Item 15. Recent Sales of Unregistered Securities.\n" + BODY + "\n"
+        "Underwriting Agreement\n"
+        + ("The Company will grant the underwriter a 45-day option to purchase "
+           "additional Public Shares to cover over-allotments. " * 60) + "\n"
+    )
+    got = extract_section(doc, r"underwriting")
+    check("a longer heading containing the word is not the section",
+          not got.startswith("Underwriting Agreement"), f"got {got[:50]!r}")
+    check("the real UNDERWRITING body is returned", "Sponsor purchased" in got)
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

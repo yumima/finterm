@@ -28,6 +28,12 @@ struct ReplayPosition {
     double shares       = 0;   ///< net shares still held
     double cost_basis   = 0;   ///< average-cost basis of those shares
     double realized_pnl = 0;   ///< booked on shares already sold
+    /// Cost basis of the shares already sold. Needed as the DENOMINATOR
+    /// partner of realized_pnl: a fully-closed position has cost_basis 0 by
+    /// construction, so a return computed over surviving cost only would
+    /// divide a realized gain by a cost base that excludes the very position
+    /// that produced it.
+    double realized_cost = 0;
     int    buy_count    = 0;
     int    sell_count   = 0;
     /// Some trade in this ticker had no real close, so the position cannot be
@@ -50,6 +56,14 @@ struct ReplayPosition {
 ///
 /// Trades must be passed in entry-date order; the caller sorts by whichever
 /// basis it is pricing on.
-QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trades);
+/// @param cost_after  Optional: total cost basis across ALL positions after
+///        each trade, in input order. The NAV series is built from this rather
+///        than from a parallel running total, because the two disagree the
+///        moment a sell happens — subtracting raw proceeds portfolio-wide can
+///        drive the series to zero while positions in other tickers are still
+///        open (buy AAPL $10k, buy MSFT $10k, sell AAPL for $30k → NAV 0, real
+///        cost $10k). One engine, one number.
+QHash<QString, ReplayPosition> replay_positions(const QVector<ReplayTrade>& trades,
+                                                QVector<double>* cost_after = nullptr);
 
 } // namespace fincept::power_trader
