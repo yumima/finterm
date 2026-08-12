@@ -5,6 +5,7 @@
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "screens/power_trader/DataSourceDialog.h"
+#include "screens/power_trader/PositionReplay.h"
 #include "services/util/DiskCache.h"
 
 #include <QDate>
@@ -378,18 +379,30 @@ void PowerTraderService::fetch_real_prices() {
 
 void PowerTraderService::recompute_member_returns() {
     for (auto& m : summary_.members) {
-        const auto p = compute_portfolio(m.id);
-        if (p.priced) {
-            m.portfolio_return_ytd = p.est_total_pnl_pct;
+        // Both bases. The disclosure-date one is what the screen reports as
+        // "return" because it is the only entry a follower could have taken;
+        // the trade-date one is the member's own, and the gap between them is
+        // what the STOCK Act's 45-day window is worth.
+        const auto disc  = compute_portfolio(m.id, PriceBasis::DisclosureDate);
+        const auto trade = compute_portfolio(m.id, PriceBasis::TradeDate);
+        if (disc.priced) {
+            m.portfolio_return_ytd = disc.est_total_pnl_pct;
+            m.return_trade_basis   = trade.priced ? trade.est_total_pnl_pct
+                                                  : disc.est_total_pnl_pct;
+            m.disclosure_cost_pct  = m.return_trade_basis - m.portfolio_return_ytd;
             m.return_priced        = true;
-            // m.spy_return_ytd is the real SPY YTD from the script (same for
-            // all members); alpha only when we have it.
+            // Alpha is only meaningful against a benchmark measured the same
+            // way — same window, same total-return basis. spy_return_ytd is
+            // absent (0) until that lands, and alpha stays absent with it
+            // rather than silently reporting the raw return as alpha.
             m.alpha_ytd = qAbs(m.spy_return_ytd) > 1e-9
                               ? (m.portfolio_return_ytd - m.spy_return_ytd)
                               : 0;
         } else {
             m.return_priced        = false;
             m.portfolio_return_ytd = 0;
+            m.return_trade_basis   = 0;
+            m.disclosure_cost_pct  = 0;
             m.alpha_ytd            = 0;
         }
     }
@@ -444,13 +457,27 @@ const QHash<QString, QString>& PowerTraderService::ticker_committee_map() {
 
 // ── Portfolio reconstruction ──────────────────────────────────────────────────
 
-MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) const {
+MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id,
+                                                      PriceBasis basis) const {
     const auto trades = trades_for_member(member_id);
     MemberPortfolio portfolio;
     portfolio.member_id = member_id;
+    portfolio.basis     = basis;
 
     if (trades.isEmpty())
         return portfolio;
+
+    // The entry date for every position below. DisclosureDate is the day the
+    // filing became public — the earliest a follower could have acted — while
+    // TradeDate is the member's own execution, up to 45 days earlier under the
+    // STOCK Act. Falling back to the transaction date when a disclosure date
+    // is missing keeps a row priceable; it is the same date in the worst case,
+    // not a fabricated one.
+    const auto entry_date = [basis](const PoliticalTrade& t) {
+        if (basis == PriceBasis::TradeDate)
+            return t.transaction_date;
+        return t.disclosure_date.isValid() ? t.disclosure_date : t.transaction_date;
+    };
 
     // Aggregate net position per ticker (using midpoints of STOCK/ETF trades only)
     QHash<QString, MemberHolding> positions;
@@ -459,8 +486,8 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
     // Work through trades chronologically for NAV series
     auto sorted = trades;
     std::sort(sorted.begin(), sorted.end(),
-              [](const PoliticalTrade& a, const PoliticalTrade& b) {
-                  return a.transaction_date < b.transaction_date;
+              [&entry_date](const PoliticalTrade& a, const PoliticalTrade& b) {
+                  return entry_date(a) < entry_date(b);
               });
 
     QMap<QDate, double> cumulative_nav;  // date → running invested amount
@@ -473,8 +500,15 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
     QHash<QString, double> net_shares;
     QHash<QString, bool>   priced_gap;
 
+    // Resolve each trade to its entry-date close, then replay with the pure
+    // average-cost engine (PositionReplay). Keeping the arithmetic out of the
+    // service is what makes it testable — see tests/screens/test_position_replay.
+    QVector<ReplayTrade> replay;
+    replay.reserve(sorted.size());
     for (const auto& t : sorted) {
         if (t.asset_type != AssetType::Stock && t.asset_type != AssetType::ETF)
+            continue;
+        if (t.placeholder || t.ticker.isEmpty())
             continue;
 
         const double midpoint = (t.amount_low + t.amount_high) / 2.0;
@@ -482,33 +516,32 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
         h.ticker     = t.ticker;
         h.asset_name = t.asset_name;
         h.sector     = sec_map.value(t.ticker, QStringLiteral("Other"));
-
-        // Estimate shares from the real close on the trade date (shares =
-        // $-midpoint / close). No real close for that date → mark the position
-        // unpriced; we never guess a price.
-        const double close = close_on_or_before(t.ticker, t.transaction_date);
-        if (close > 0.0)
-            net_shares[t.ticker] += (t.direction == TradeDirection::Buy ? 1.0 : -1.0) * (midpoint / close);
-        else
-            priced_gap[t.ticker] = true;
-
-        if (t.direction == TradeDirection::Buy) {
-            h.est_cost_basis += midpoint;
-            h.buy_count++;
-            running_cost += midpoint;
-        } else if (t.direction == TradeDirection::Sell) {
-            const double reduce = qMin(midpoint, h.est_cost_basis);
-            h.est_cost_basis   -= reduce;
-            h.sell_count++;
-            running_cost -= reduce;
-        }
-
         if (!t.committee_relevance.isEmpty()) {
             h.committee_overlap = true;
             h.committee_name    = t.committee_relevance;
         }
 
-        cumulative_nav[t.transaction_date] = qMax(0.0, running_cost);
+        const QDate on = entry_date(t);
+        replay.append({t.ticker, t.direction, midpoint,
+                       close_on_or_before(t.ticker, on)});
+
+        if (t.direction == TradeDirection::Buy)
+            running_cost += midpoint;
+        else if (t.direction == TradeDirection::Sell)
+            running_cost = qMax(0.0, running_cost - midpoint);
+        cumulative_nav[on] = qMax(0.0, running_cost);
+    }
+
+    const auto replayed = replay_positions(replay);
+    for (auto it = replayed.cbegin(); it != replayed.cend(); ++it) {
+        auto& h = positions[it.key()];
+        h.ticker          = it.key();
+        h.est_cost_basis  = it.value().cost_basis;
+        h.realized_pnl    = it.value().realized_pnl;
+        h.buy_count       = it.value().buy_count;
+        h.sell_count      = it.value().sell_count;
+        net_shares[it.key()] = it.value().shares;
+        priced_gap[it.key()] = it.value().priced_gap;
     }
 
     // Build NAV series (one point per trade date)
@@ -561,7 +594,17 @@ MemberPortfolio PowerTraderService::compute_portfolio(const QString& member_id) 
 
     portfolio.est_total_value   = priced_value;
     portfolio.est_total_pnl     = priced_pnl;
-    portfolio.est_total_pnl_pct = priced_cost > 0 ? (priced_pnl / priced_cost) * 100.0 : 0;
+    // Realized P&L is summed over EVERY position, including ones closed out
+    // entirely — those have no holdings row, and dropping them is what made
+    // the leaderboard a ranking of trades that had not worked yet.
+    double realized = 0;
+    for (const auto& h : positions)
+        realized += h.realized_pnl;
+    portfolio.est_realized_pnl  = realized;
+    // Return counts realized and unrealized together, over the cost actually
+    // put at risk. Unrealized-only understates any member who takes profits.
+    portfolio.est_total_pnl_pct =
+        priced_cost > 0 ? ((priced_pnl + realized) / priced_cost) * 100.0 : 0;
     portfolio.priced            = priced_cost > 0;  // any holding actually valued?
 
     // Derived stats
@@ -945,9 +988,11 @@ QVector<CommitteeGroup> PowerTraderService::committee_groups() const {
         if (g.top_sector.isEmpty()) g.top_sector = sector;
     }
 
-    // Compute correlation_pct (trades in cmte-relevant tickers / total trades for those members)
+    // Share of these members' trades that touch a ticker this committee
+    // oversees. A proportion — see the field comment for why it is not called
+    // a correlation.
     // Stubs excluded: they can never carry a committee_relevance, so counting
-    // them only deflates correlation_pct. Same fix as committee_insider_signals().
+    // them only deflates the share. Same fix as committee_insider_signals().
     QHash<QString, int> member_total;
     for (const auto& t : summary_.recent_trades)
         if (!t.placeholder && in_active_body(t.chamber)) member_total[t.member_id]++;
@@ -957,11 +1002,11 @@ QVector<CommitteeGroup> PowerTraderService::committee_groups() const {
         auto& g = it.value();
         if (g.trade_count > 0)
             g.avg_signal_score /= g.trade_count;
-        // correlation: trades-with-overlap / (total trades of members on this committee)
+        // share: trades-with-overlap / (total trades of members on this committee)
         int total_for_members = 0;
         for (const auto& mid : g.member_ids)
             total_for_members += member_total.value(mid, 0);
-        g.correlation_pct = total_for_members > 0
+        g.committee_share_pct = total_for_members > 0
                             ? (g.trade_count * 100.0) / total_for_members
                             : 0;
         if (g.member_count > 0 || g.trade_count > 0)

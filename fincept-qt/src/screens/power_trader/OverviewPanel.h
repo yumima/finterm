@@ -43,7 +43,7 @@ class OverviewPanel : public QWidget {
     // Sector bar chart container (Row 2 right)
     QWidget* sector_chart_    = nullptr;
 
-    // Committee correlation table (Row 3)
+    // Committee overlap-share table (Row 3)
     QTableWidget* signal_table_ = nullptr;
 
     // Scroll wrapper

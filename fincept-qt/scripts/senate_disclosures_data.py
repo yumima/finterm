@@ -300,7 +300,7 @@ os.makedirs(_CACHE_DIR, exist_ok=True)
 
 # ── SPY YTD benchmark (live, cached per trading day) ──────────────────────────
 
-def _fetch_spy_ytd() -> Optional[float]:
+def _fetch_spy_benchmark(days_back: int) -> Optional[float]:
     """Return SPY's year-to-date percent return (e.g. 12.4 for +12.4%).
 
     Fetched live via yfinance, cached on disk keyed by today's date so we hit
@@ -308,7 +308,7 @@ def _fetch_spy_ytd() -> Optional[float]:
     must handle the missing case rather than substitute a fake benchmark.
     """
     today_key = date.today().isoformat()
-    cache_file = os.path.join(_CACHE_DIR, f"spy_ytd_{today_key}.json")
+    cache_file = os.path.join(_CACHE_DIR, f"spy_bench_{days_back}d_{today_key}.json")
     if os.path.exists(cache_file):
         try:
             with open(cache_file) as f:
@@ -322,8 +322,17 @@ def _fetch_spy_ytd() -> Optional[float]:
         return None
 
     try:
-        # period="ytd" gives daily bars from Jan 1 of current year through latest
-        hist = yf.Ticker("SPY").history(period="ytd", auto_adjust=False)
+        # Match the member window and the member basis, or this is not a
+        # benchmark.
+        #
+        # It was period="ytd" with auto_adjust=False, against member returns
+        # computed over a rolling `days_back` window from ADJUSTED closes. Two
+        # mismatches at once: a calendar-YTD benchmark versus a 90-day
+        # portfolio is not a comparison at all, and a price-return benchmark
+        # versus total-return holdings hands the members SPY's dividends —
+        # roughly 1.3%/yr of free alpha.
+        hist = yf.Ticker("SPY").history(period=f"{max(2, int(days_back))}d",
+                                        auto_adjust=True)
         if hist is None or hist.empty or len(hist) < 2:
             return None
         first_close = float(hist["Close"].iloc[0])
@@ -1486,6 +1495,10 @@ def _parse_house_index_xml(xml_bytes: bytes, cutoff: date, year: int) -> list:
 
 # ── Signal scoring ────────────────────────────────────────────────────────────
 
+# Sum of the component caps below: committee 30 + lag 15 + size 10.
+_SIGNAL_SCORE_MAX = 55.0
+
+
 def compute_signal_score(trade: dict, member: dict) -> float:
     score       = 0.0
     ticker      = trade.get("ticker", "")
@@ -1514,7 +1527,15 @@ def compute_signal_score(trade: dict, member: dict) -> float:
     elif amount_high >= 250_000:   score += 5
     elif amount_high >= 50_000:    score += 2
 
-    return min(100.0, score)
+    # Rescale to a real 0-100. The components cap at 30 + 15 + 10 = 55, but the
+    # result was rendered as "X/100" and the UI's "HIGH" band starts at 70 — a
+    # state no trade could ever reach, while the methodology tooltip correctly
+    # described the 30/15/10 caps and so contradicted the badge beside it.
+    #
+    # This remains a hand-weighted composite of three disclosed inputs, not a
+    # measurement; the tooltip says so. What it no longer does is grade on a
+    # denominator that does not exist.
+    return round(min(100.0, score / _SIGNAL_SCORE_MAX * 100.0), 1)
 
 
 # ── Full summary builder ───────────────────────────────────────────────────────
@@ -1544,7 +1565,7 @@ def build_all_data(days_back: int = 90) -> dict:
 
     # Fetch real SPY YTD benchmark (used by C++ for alpha computation). Cached
     # per trading day. None on yfinance failure — caller must handle.
-    spy_ytd = _fetch_spy_ytd()
+    spy_ytd = _fetch_spy_benchmark(days_back)
 
     # Fetch annual-disclosure net-worth estimates for senators (Senate only —
     # House annual PDFs aren't machine-readable from the FDS ZIP). Returns
@@ -1602,7 +1623,12 @@ def build_all_data(days_back: int = 90) -> dict:
                 "net_worth_filed_date":     nw.get("filed_date", ""),
                 "trade_count_ytd":          0,
                 "portfolio_return_ytd":     0.0,
-                "spy_return_ytd":           0.0,
+                # The REAL benchmark, not a placeholder. This was hardcoded 0.0
+                # while the true value sat unused at the response root — and
+                # since the C++ reads the per-member field, every member's
+                # alpha was structurally zero, which made the "Alpha" ranking
+                # a sort on a constant, i.e. input order.
+                "spy_return_ytd":           spy_ytd if spy_ytd is not None else 0.0,
                 "bioguide_id":              roster_entry.get("bioguide_id", ""),
                 "image_url":                roster_entry.get("image_url", ""),
             }
@@ -1681,7 +1707,7 @@ def build_all_data(days_back: int = 90) -> dict:
             "net_worth_filed_date":     nw.get("filed_date", ""),
             "trade_count_ytd":          0,
             "portfolio_return_ytd":     0.0,
-            "spy_return_ytd":           0.0,
+            "spy_return_ytd":           spy_ytd if spy_ytd is not None else 0.0,
             "bioguide_id":              roster_match.get("bioguide_id", ""),
             "image_url":                roster_match.get("image_url", ""),
         }

@@ -494,6 +494,19 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── Power Trader position replay ─────────────────────────────────────────────
+# The average-cost arithmetic every return on the screen rests on. Previously
+# untestable (buried in a service singleton needing a populated price history),
+# and it discarded the gain on every fully-closed position.
+add_executable(test_position_replay
+    screens/test_position_replay.cpp
+    ../src/screens/power_trader/PositionReplay.cpp
+)
+target_include_directories(test_position_replay PRIVATE ../src)
+target_link_libraries(test_position_replay PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_position_replay PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME position_replay COMMAND test_position_replay)
+
 # ── IPO Watch pure parse/format ──────────────────────────────────────────────
 # Both helpers have shipped a wrong-but-plausible number: a half-parsed price
 # range reported as a confident low side, and a share count run through the

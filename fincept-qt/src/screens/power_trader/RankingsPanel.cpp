@@ -432,6 +432,12 @@ void RankingsPanel::populate_detail_card(const QString& member_id) {
     };
     card_alpha_ ->setText(fmt_pct(member.alpha_ytd));
     card_return_->setText(fmt_pct(member.portfolio_return_ytd));
+    card_return_->setToolTip(QStringLiteral(
+        "Priced at each trade's DISCLOSURE date — the entry a follower could "
+        "actually have taken.\n\n"
+        "Member's own entry (trade date):  %1\n"
+        "Cost of the disclosure lag:       %2")
+        .arg(fmt_pct(member.return_trade_basis), fmt_pct(member.disclosure_cost_pct)));
     card_signal_->setText(QString::number(svc.avg_signal_score(member_id), 'f', 0) + "/100");
     card_signal_->setToolTip(fincept::ui::tooltip_for_aggregate_signal(
         svc.trades_for_member(member_id).size()));

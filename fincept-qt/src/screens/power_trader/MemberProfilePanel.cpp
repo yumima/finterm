@@ -1618,9 +1618,22 @@ void MemberProfilePanel::populate_stat_tiles(const power_trader::CongressMember&
         tile_portfolio_val_->setText(fmt_dollar(p.est_total_value));
         tile_portfolio_val_->setStyleSheet(tile_style(ui::colors::AMBER));
 
+        // The headline return is the DISCLOSURE-date one: the entry a follower
+        // could actually have taken. The tooltip carries the member's own
+        // trade-date return and the gap between them, which is what the STOCK
+        // Act's 45-day filing window costs someone copying the trade.
         const bool ret_pos = m.portfolio_return_ytd >= 0;
         tile_ytd_return_->setText(fmt_pct(m.portfolio_return_ytd));
         tile_ytd_return_->setStyleSheet(tile_style(ret_pos ? ui::colors::POSITIVE : ui::colors::NEGATIVE));
+        tile_ytd_return_->setToolTip(QStringLiteral(
+            "Priced at each trade's DISCLOSURE date — the earliest a follower "
+            "could have acted.\n\n"
+            "Member's own entry (trade date):  %1\n"
+            "Cost of the disclosure lag:       %2\n\n"
+            "The STOCK Act allows up to 45 days between trading and filing, so "
+            "a return measured from the trade date is not one anyone outside "
+            "Congress could have earned.")
+            .arg(fmt_pct(m.return_trade_basis), fmt_pct(m.disclosure_cost_pct)));
 
         const bool a_pos = m.alpha_ytd >= 0;
         tile_alpha_->setText(fmt_pct(m.alpha_ytd));

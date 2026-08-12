@@ -174,7 +174,7 @@ void OverviewPanel::build_ui() {
     // ── Bloomberg 3-column layout ─────────────────────────────────────────────
     // COL 1 (left):  2×2 stat grid + sector exposure bars
     // COL 2 (center): top traders alpha chart
-    // COL 3 (right):  committee insider correlation table
+    // COL 3 (right):  committee overlap-share table
     auto* three_col = new QHBoxLayout();
     three_col->setContentsMargins(0, 0, 0, 0);
     three_col->setSpacing(0);
@@ -535,7 +535,7 @@ void OverviewPanel::populate_sector_chart() {
     }
 }
 
-// ── Row 3: committee insider correlation table ────────────────────────────────
+// ── Row 3: committee overlap-share table ──────────────────────────────────────
 
 void OverviewPanel::populate_signal_table() {
     signal_table_->setSortingEnabled(false);

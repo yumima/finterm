@@ -2769,12 +2769,22 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // ── Tab visibility for a private company ─────────────────────────────────
     // render_detail (public) sets per-selection visibility; without mirroring it
     // here, the tab set / current tab leaks across a public→private switch.
-    const bool has_fin = (c.fin.revenue_m != 0 || c.fin.net_income_m != 0 || c.fin.cash_m != 0);
+    // Show FUNDAMENTALS whenever there is an SEC filer to ask about, not only
+    // once data has arrived. Two reasons it can't be gated on having data:
+    // the pane is what TRIGGERS the on-demand fetch, so hiding it until the
+    // data exists hides the only thing that can produce it; and when SEC
+    // genuinely has nothing, "SEC has no XBRL facts for CIK X" is a useful
+    // answer that a missing tab cannot give. Hidden only when there is no
+    // filer at all, where there is nothing to say.
+    //
+    // Availability is as_of, not "some number is nonzero" — a filer we have
+    // not fetched yet must not read as one that files nothing.
+    const bool has_cik = !c.cik.isEmpty();
     if (tabs_facts_) {
         tabs_facts_->setTabVisible(FT_Deal,         true);
         tabs_facts_->setTabVisible(FT_Business,     true);
         tabs_facts_->setTabVisible(FT_Leadership,   true);
-        tabs_facts_->setTabVisible(FT_Fundamentals, has_fin);
+        tabs_facts_->setTabVisible(FT_Fundamentals, has_cik);
         tabs_facts_->setTabVisible(FT_News,         false);
         tabs_facts_->setTabVisible(FT_Holders,      false);
         tabs_facts_->setTabVisible(FT_Filings,      false);
@@ -2793,6 +2803,18 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         tabs_charts_->setTabVisible(CT_Lockup,    false);
         tabs_charts_->setTabVisible(CT_Timeline,  true);
         normalize_current_tab(tabs_charts_);
+    }
+    // Give the width to whichever pane has something in it. A private company
+    // has no price series, so its charts pane is a mark trend (only when two
+    // or more quarters exist) plus a timeline — often a single chart holding
+    // a quarter of a 1920px screen while the dossier that carries the actual
+    // research is squeezed beside it. When there is one chart or none, fold
+    // that space into the facts pane.
+    if (splitter_ && splitter_->count() == 3) {
+        const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
+        const int list_w = total * 22 / 100;
+        const int chart_w = has_mark_chart ? total * 26 / 100 : total * 14 / 100;
+        splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
     }
     detail_symbol_ = c.id;
 }
@@ -3039,6 +3061,16 @@ void IpoWatchView::render_detail(const Entry* e) {
     // If the currently-visible tab got hidden, jump to the first visible one.
     normalize_current_tab(tabs_charts_);
     normalize_current_tab(tabs_facts_);
+
+    // Restore the chart-weighted split. A listed entry has a real price series
+    // and up to six charts, so it earns the width that a private company's
+    // near-empty charts pane gives back (see render_detail_private).
+    if (splitter_ && splitter_->count() == 3) {
+        const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
+        const int list_w = total * 22 / 100;
+        const int chart_w = total * 26 / 100;
+        splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
+    }
 
     // ── RIGHT PANE: sector heat + comps (top), research links (bottom) ─────
     right_top_   ->setText(css + build_sector_comps_html(*e));

@@ -267,10 +267,10 @@ void CommitteePanel::populate_committee_list() {
         committee_list_->setItem(r, 1, cnt_item);
 
         auto* corr_item = new QTableWidgetItem(
-            QString::number(g.correlation_pct, 'f', 0) + "%");
+            QString::number(g.committee_share_pct, 'f', 0) + "%");
         corr_item->setTextAlignment(Qt::AlignCenter);
-        const char* corr_color = g.correlation_pct > 40 ? ui::colors::WARNING
-                               : g.correlation_pct > 20 ? ui::colors::AMBER
+        const char* corr_color = g.committee_share_pct > 40 ? ui::colors::WARNING
+                               : g.committee_share_pct > 20 ? ui::colors::AMBER
                                : ui::colors::TEXT_TERTIARY;
         corr_item->setForeground(QColor(corr_color));
         corr_item->setFlags(corr_item->flags() & ~Qt::ItemIsEditable);
@@ -290,14 +290,14 @@ void CommitteePanel::show_committee(const power_trader::CommitteeGroup& g) {
 
     detail_stats_->setText(
         QString("%1 members  ·  %2 committee-relevant trades  ·  "
-                "~$%3  ·  avg signal %4  ·  %5% insider correlation")
+                "~$%3  ·  avg signal %4  ·  %5% of trades in overseen sectors")
             .arg(g.member_count)
             .arg(g.trade_count)
             // Compact magnitude via the shared layer (B-rollover; was M-capped).
             // The "$" lives in the format string, so we emit only the magnitude.
             .arg(ui::formatting::format_compact(g.total_est_amount, 1))
             .arg(g.avg_signal_score, 0, 'f', 0)
-            .arg(g.correlation_pct,  0, 'f', 0));
+            .arg(g.committee_share_pct,  0, 'f', 0));
 
     detail_tickers_->setText("Top tickers: " +
         (g.top_tickers.isEmpty() ? "—" : g.top_tickers.join("  ")));

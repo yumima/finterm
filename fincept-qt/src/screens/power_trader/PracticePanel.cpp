@@ -417,7 +417,7 @@ QWidget* PracticePanel::build_sector_map_tab() {
     auto* il = new QVBoxLayout(intro_row);
     il->setContentsMargins(14, 8, 14, 8);
     auto* intro = new QLabel(
-        "Live committee→sector correlation map from current session data. "
+        "Live committee→sector overlap map from current session data. "
         "Shows which committees have members actively trading in their regulated sectors — "
         "the highest-signal overlap.");
     intro->setStyleSheet(body_ss(true));

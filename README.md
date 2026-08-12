@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`0cd2f26d0`](https://github.com/yumima/finterm/commit/0cd2f26d0) S-1 sections: quote the section, not the table of contents
 - [`c3c29c346`](https://github.com/yumima/finterm/commit/c3c29c346) IPO Watch: say which source is missing instead of showing a blank pane
 - [`cb6adbe27`](https://github.com/yumima/finterm/commit/cb6adbe27) Remove the Cabinet tab; fetch the SEC financials that were never fetched
 - [`0b1c4b4f6`](https://github.com/yumima/finterm/commit/0b1c4b4f6) Power Trader: one list, one detail — and fix three stylesheets that silently painted the wrong colours

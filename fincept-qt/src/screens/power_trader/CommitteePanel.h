@@ -13,7 +13,7 @@ namespace fincept::screens {
 /// "BY COMMITTEE" tab — groups members and trades by committee affiliation.
 ///
 /// Wide-screen layout (horizontal splitter):
-///   Left  (35%) — scrollable committee list with trade count + correlation bar
+///   Left  (35%) — scrollable committee list with trade count + overlap-share bar
 ///   Right (65%) — selected committee detail: members, top tickers, trade table
 class CommitteePanel : public QWidget {
     Q_OBJECT

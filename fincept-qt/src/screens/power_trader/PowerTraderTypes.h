@@ -15,6 +15,23 @@ enum class AssetType { Stock, Option, Bond, ETF, MutualFund, Crypto, Other };
 enum class MemberChamber { Senate, House };
 enum class BodyFilter    { All, Senate, House };
 
+/// Which date a reconstructed position is priced from.
+///
+/// This is the single most consequential choice on the screen. The STOCK Act
+/// allows up to 45 days between a trade and its disclosure, so a return
+/// measured from the TRADE date describes a strategy nobody outside Congress
+/// could have executed — the information was not public yet. It is the right
+/// number for "how did this member do"; it is the wrong number for "what
+/// would following them have paid", and the screen only ever showed the first
+/// while implying the second.
+///
+/// Both are computed. The gap between them is what the disclosure lag
+/// actually costs, and it is the most useful figure here.
+enum class PriceBasis {
+    TradeDate,       ///< entry at the member's own execution — not investable
+    DisclosureDate,  ///< entry on the day the filing became public
+};
+
 enum class RankingDimension {
     Alpha,         // alpha vs SPY YTD (portfolio_return - spy_return)
     Return,        // absolute YTD return %
@@ -39,7 +56,15 @@ struct CongressMember {
     QDate term_start;
     double estimated_net_worth    = 0;
     int    trade_count_ytd        = 0;
-    double portfolio_return_ytd   = 0; // as percent, e.g. 12.4 = +12.4%
+    /// Return on the DISCLOSURE-date basis — the investable one, and what the
+    /// screen reports as "return". Percent, e.g. 12.4 = +12.4%.
+    double portfolio_return_ytd   = 0;
+    /// Return on the TRADE-date basis: the member's own entry. Shown beside
+    /// the above so the difference is visible rather than implied.
+    double return_trade_basis     = 0;
+    /// return_trade_basis - portfolio_return_ytd. What the member captured
+    /// that a follower could not, because the trade was not yet public.
+    double disclosure_cost_pct    = 0;
     double spy_return_ytd         = 0;
     double alpha_ytd              = 0; // portfolio_return_ytd - spy_return_ytd
     bool   return_priced          = false; // true once return/alpha use real prices (else show "—")
@@ -92,6 +117,12 @@ struct MemberHolding {
     double  est_market_value  = 0;  // current_price × estimated_shares
     double  est_pnl           = 0;  // est_market_value – est_cost_basis
     double  est_pnl_pct       = 0;  // est_pnl / est_cost_basis * 100
+    /// Realized P&L on shares already sold, from an average-cost ledger.
+    /// Previously discarded entirely: a sell reduced cost basis by the SALE
+    /// proceeds, so a position bought at $10k and sold at $30k left a $0
+    /// residual and vanished from the leaderboard — systematically dropping
+    /// the trades that worked.
+    double  realized_pnl      = 0;
     double  est_weight        = 0;  // % of member's total estimated portfolio
     int     buy_count         = 0;
     int     sell_count        = 0;
@@ -113,6 +144,12 @@ struct MemberPortfolio {
     double est_total_cost    = 0;
     double est_total_pnl     = 0;
     double est_total_pnl_pct = 0;
+    /// Realized P&L across every position, including ones fully closed and so
+    /// absent from `holdings`.
+    double est_realized_pnl  = 0;
+    /// Which date the entry prices came from — every figure above depends on
+    /// it, so consumers must label accordingly.
+    PriceBasis basis = PriceBasis::DisclosureDate;
     bool   priced            = false;  // true once any holding was valued with real prices
     // Pre-computed rankings (set by service, 1 = best)
     int rank_alpha     = 0;
@@ -204,7 +241,15 @@ struct CommitteeGroup {
     int         trade_count      = 0;
     double      total_est_amount = 0;
     double      avg_signal_score = 0;
-    double      correlation_pct  = 0;  // % of trades touching committee-relevant tickers
+    /// Share of this committee's members' trades that touch a ticker the
+    /// committee oversees. A PROPORTION, not a correlation.
+    ///
+    /// It was named correlation_pct and labelled "insider correlation", which
+    /// claims a measured statistical relationship. There is no coefficient
+    /// here, no regression, no null model and no test — it is
+    /// committee-relevant trades over total trades. Naming it after a
+    /// statistic it never computed lent it authority it has not earned.
+    double      committee_share_pct = 0;
     QStringList member_ids;
     QStringList top_tickers;           // up to 5
     QString     top_sector;

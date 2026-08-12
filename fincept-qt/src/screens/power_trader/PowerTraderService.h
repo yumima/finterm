@@ -42,13 +42,22 @@ class PowerTraderService : public QObject {
     /// Reconstruct estimated portfolio from trade history.
     /// Amount ranges are approximated via their midpoints (standard industry
     /// practice — see Capitol Trades, Quiver Quant, Senate Stock Watcher).
-    MemberPortfolio compute_portfolio(const QString& member_id) const;
+    /// Reconstruct a member's positions and value them.
+    ///
+    /// `basis` chooses the entry date: DisclosureDate (default) prices each
+    /// trade at the close on the day the filing became public — the only entry
+    /// a follower could actually have got — while TradeDate prices it at the
+    /// member's own execution, up to 45 days earlier. Both are real; only the
+    /// first is investable, and the screen previously showed only the second.
+    MemberPortfolio compute_portfolio(
+        const QString& member_id,
+        PriceBasis basis = PriceBasis::DisclosureDate) const;
 
     // ── Big-picture analytics ─────────────────────────────────────────────────
     /// Sector exposure across ALL members (sorted by total_est_amount desc).
     QVector<SectorExposure> sector_breakdown() const;
 
-    /// Committee → sector insider correlation signals.
+    /// Committee → sector overlap signals (a share of trades, not a correlation).
     QVector<CommitteeInsiderSignal> committee_insider_signals() const;
 
     /// Grouped view: one CommitteeGroup per committee found in member data.
