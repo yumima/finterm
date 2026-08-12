@@ -740,10 +740,13 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
 
     // The cohort is a selectable subject, not a separate mode. Carries an
     // EMPTY UserRole id, which is what the selection handler keys on.
+    QListWidgetItem* all_item = nullptr;
     {
-        auto* all_item = new QListWidgetItem;
-        all_item->setText(QStringLiteral("ALL MEMBERS\n%1 in view")
-                              .arg(members.size()));
+        all_item = new QListWidgetItem;
+        // Text is filled in AFTER the loop — members.size() is the unfiltered
+        // cohort, so with a watchlist or search filter active this read
+        // "535 in view" above two rows.
+        all_item->setText(QStringLiteral("ALL MEMBERS"));
         all_item->setData(Qt::UserRole, QString());
         all_item->setForeground(QColor(ui::colors::AMBER()));
         all_item->setToolTip(QStringLiteral(
@@ -810,6 +813,15 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         }
     }
 
+    // Now that filtering is done, the cohort row can state how many rows the
+    // user is actually looking at.
+    if (all_item) {
+        int listed = 0;
+        for (int i = 1; i < member_list_->count(); ++i)
+            if (!member_list_->item(i)->isHidden()) ++listed;
+        all_item->setText(QStringLiteral("ALL MEMBERS\n%1 in view").arg(listed));
+    }
+
     // Restore the subject the user was on. If their member is gone (filtered
     // out by an ALL/SENATE/HOUSE switch, or dropped by a refresh) fall back to
     // the cohort rather than leaving a stale dossier on screen.
@@ -874,19 +886,21 @@ void PowerTraderScreen::on_data_loaded(PowerTraderSummary summary) {
     if (compare_view_)
         compare_view_->set_summary(filtered);
 
-    // Pre-select highest-alpha member on first load (from the filtered set,
-    // so a SENATE filter selects a senator rather than someone hidden from
-    // the sidebar).
-    if (selected_member_id_.isEmpty() && !filtered.members.isEmpty()) {
-        auto sorted = filtered.members;
-        std::sort(sorted.begin(), sorted.end(),
-                  [](const CongressMember& a, const CongressMember& b) {
-                      return a.alpha_ytd > b.alpha_ytd;
-                  });
-        selected_member_id_ = sorted.first().id;
-    }
-    if (!selected_member_id_.isEmpty())
+    // Open on the cohort. It is the honest default — a member dossier chosen
+    // for the user is a claim that this member is the interesting one — and it
+    // is also what makes the refresh behave: "user picked ALL MEMBERS" and
+    // "nothing picked yet" are the same empty selected_member_id_, so a
+    // pre-select on every data_loaded would replace the cohort with a member's
+    // dossier every time the 6-hour timer fired, while the user was reading it.
+    // subject_chosen_ distinguishes the two.
+    if (!subject_chosen_) {
+        subject_chosen_ = true;
+        show_cohort_detail();
+    } else if (!selected_member_id_.isEmpty()) {
         on_member_selected(selected_member_id_);
+    } else {
+        show_cohort_detail();
+    }
 
     show_content();
 }
@@ -1010,7 +1024,7 @@ void PowerTraderScreen::show_onboarding_overlay() {
         "(2012).<br/><br/>"
 
         "<b>How to use it</b><br/>"
-        "&nbsp;&bull; Pick a chamber via the <b>VIEW</b> filter (ALL / SENATE / HOUSE / CABINET).<br/>"
+        "&nbsp;&bull; Pick a chamber via the <b>VIEW</b> filter (ALL / SENATE / HOUSE).<br/>"
         "&nbsp;&bull; Pick a time window via <b>RANGE</b> (30d / 90d / 1y / 2y).<br/>"
         "&nbsp;&bull; Click a member in the sidebar to open their detail drawer.<br/>"
         "&nbsp;&bull; Right-click a member to add them to your <b>WATCHLIST</b>.<br/>"

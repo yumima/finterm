@@ -209,6 +209,20 @@ class PreIpoService : public QObject {
     /// genuinely files no financials is asked for once, not once per click.
     QSet<QString> fin_requested_;
     QSet<QString> fin_absent_;
+    /// A real answer came back for this company — whatever it said. Distinct
+    /// from fin_absent_ because a successful reply whose date fails to parse
+    /// leaves no other trace, and the FUNDAMENTALS pane re-requests every time
+    /// it renders without data: one SEC round-trip per repaint, forever.
+    QSet<QString> fin_answered_;
+
+  public:
+    /// True once SEC has confirmed this company tags no XBRL financials, so
+    /// the UI can say that instead of showing a fetch that will never finish.
+    bool financials_confirmed_absent(const QString& company_id) const {
+        return fin_absent_.contains(company_id);
+    }
+
+  private:
     /// Compact JSON payload for a Python action, injecting the stored prior
     /// cursor for `src` as "prev_cursor" (omitted when force_refresh_ is set).
     QString cursor_payload(QJsonObject base, const QString& src) const;

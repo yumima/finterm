@@ -58,13 +58,6 @@ QString portfolio_tooltip() {
             "outside the STOCK Act / OGE disclosure scope."));
 }
 
-QString conflict_score_tooltip() {
-    return wrap(QStringLiteral("CONFLICT SCORE"),
-        QStringLiteral("Holdings overlap with the official's regulatory "
-            "or budget domain, weighted by holding size. Inputs: OGE "
-            "Form 278 disclosed holdings + agency mandate map."));
-}
-
 QString disclosure_lag_tooltip() {
     return wrap(QStringLiteral("DISCLOSURE LAG"),
         QStringLiteral("Calendar days between the transaction date and "

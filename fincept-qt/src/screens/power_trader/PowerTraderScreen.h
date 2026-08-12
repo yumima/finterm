@@ -148,6 +148,12 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
     // ── State ─────────────────────────────────────────────────────────────────
     PowerTraderSummary current_summary_;
     QString            selected_member_id_;
+    /// True once the screen has settled on a subject at least once. Needed
+    /// because "user selected ALL MEMBERS" and "nothing selected yet" are the
+    /// same empty selected_member_id_, and without the distinction every
+    /// data_loaded (including the 6-hour auto-refresh) would treat the cohort
+    /// as "unselected" and replace it with a member dossier mid-read.
+    bool          subject_chosen_ = false;
 };
 
 } // namespace fincept::power_trader

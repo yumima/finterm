@@ -274,11 +274,11 @@ class IpoWatchView : public QWidget {
     // and writes to the cache atomically.
     QHash<QString, QVector<double>> history_cache_;
     QSet<QString>                   history_inflight_;
-    QString detail_symbol_; // currently shown in the detail rail
-    /// Currently shown PRIVATE company id (empty when the rail shows a listed
-    /// entry instead). Used to route asynchronous per-company updates to a
-    /// repaint only when they are for the dossier actually on screen.
-    QString detail_company_id_;
+    /// Currently shown in the detail rail: a ticker for a listed entry, or a
+    /// PrivateCompany::id for a private dossier. Every path that blanks the
+    /// rail clears it, which is what makes it safe to route asynchronous
+    /// per-company updates through.
+    QString detail_symbol_;
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
     // company name for upcoming deals with no ticker yet — see starred_key().

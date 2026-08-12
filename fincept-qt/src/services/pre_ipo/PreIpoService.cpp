@@ -208,7 +208,15 @@ void PreIpoService::load_data() {
     refresh_internal(/*force*/ false);
 }
 
-void PreIpoService::refresh() { refresh_internal(/*force*/ true); }
+void PreIpoService::refresh() {
+    // An explicit refresh forgets what we learned about XBRL availability, so
+    // a company that files its first S-1 mid-session becomes re-askable. NOT
+    // cleared on the daily timer — only when the user asks for fresh data.
+    fin_requested_.clear();
+    fin_absent_.clear();
+    fin_answered_.clear();
+    refresh_internal(/*force*/ true);
+}
 
 void PreIpoService::refresh_internal(bool force) {
     if (!python::PythonRunner::instance().is_available()) {
@@ -465,7 +473,8 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
     if (company_id.isEmpty())
         return;
     // Already have them, already asked, or already know there are none.
-    if (fin_requested_.contains(company_id) || fin_absent_.contains(company_id))
+    if (fin_requested_.contains(company_id) || fin_absent_.contains(company_id) ||
+        fin_answered_.contains(company_id))
         return;
 
     QString cik;
@@ -501,10 +510,34 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
             const QJsonDocument doc =
                 QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
             const QJsonObject o = doc.isObject() ? doc.object() : QJsonObject();
-            // The script omits keys it has no data for and returns an error
-            // object when the filer has no XBRL at all — absent, not zero.
-            if (o.isEmpty() || o.contains(QStringLiteral("error")) ||
-                !o.contains(QStringLiteral("revenue_m"))) {
+
+            // A failed REQUEST is not an answer. _get() in the script swallows
+            // timeouts, 429s and connection resets, so without this a routine
+            // SEC rate-limit would be cached as "this company files no
+            // financials" for the rest of the session.
+            if (!doc.isObject() || o.contains(QStringLiteral("error"))) {
+                LOG_WARN("PreIpo", "financials fetch errored for " + company_id +
+                                       " — will retry");
+                return;   // deliberately NOT recorded, so a retry can happen
+            }
+
+            // We now have a real answer, whatever it says. Record that BEFORE
+            // any early return: the FUNDAMENTALS pane re-requests whenever it
+            // renders without data, so a state that is neither "loaded" nor
+            // "answered" spins one SEC round-trip per repaint.
+            self->fin_answered_.insert(company_id);
+
+            // Availability is "any value concept present", not "revenue
+            // present". A pre-revenue biotech or a SPAC tags NetIncomeLoss and
+            // CashAndCashEquivalents but no Revenues concept — keying on
+            // revenue threw those real figures away.
+            static const QStringList kValueKeys{
+                QStringLiteral("revenue_m"), QStringLiteral("net_income_m"),
+                QStringLiteral("cash_m"),    QStringLiteral("gross_margin_pct")};
+            bool any_value = false;
+            for (const auto& k : kValueKeys)
+                if (o.contains(k)) { any_value = true; break; }
+            if (!any_value) {
                 self->fin_absent_.insert(company_id);
                 LOG_INFO("PreIpo", company_id + " files no XBRL financials");
                 emit self->company_updated(company_id);
@@ -525,10 +558,20 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
                     o.value(QStringLiteral("revenue_end")).toString(), Qt::ISODate);
                 break;
             }
-            // Readiness has a financial term that can now fire.
-            self->recompute_analytics();
-            emit self->company_updated(company_id);
+            // Order matters. recompute_analytics() zeroes last_valuation_usd
+            // for every company and emit_summary() re-overlays the curated
+            // valuation seed afterwards — so emitting company_updated between
+            // them ran the dossier repaint (a direct connection, i.e.
+            // synchronously) against the zeroed state. The Valuation row would
+            // blank out while the table row beside it still showed $350B, and
+            // stay blank, because the subsequent data_loaded repaints only the
+            // table and never the detail rail.
+            //
+            // So: rebuild everything first, THEN tell the view. The standalone
+            // recompute_analytics() call is gone with it — emit_summary()
+            // already does that, and doing it twice is what created the window.
             self->emit_summary();
+            emit self->company_updated(company_id);
         },
         /*stream*/ {}, /*timeout*/ 30'000);
 }

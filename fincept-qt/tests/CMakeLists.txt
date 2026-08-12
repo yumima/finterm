@@ -519,6 +519,16 @@ if(Python3_Interpreter_FOUND)
     )
 endif()
 
+# ── S-1 section slicing ──────────────────────────────────────────────────────
+# The slicer anchored on the FIRST heading occurrence, which in a real S-1 is
+# the table of contents — so "verbatim excerpts" could be a page-number list.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME s1_sections
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_s1_sections.py
+    )
+endif()
+
 # ── IPO pipeline: withdrawal detection + readiness clock ─────────────────────
 if(Python3_Interpreter_FOUND)
     add_test(

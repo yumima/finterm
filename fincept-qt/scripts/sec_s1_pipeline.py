@@ -360,14 +360,23 @@ def _annual_value(concept, prefer="USD"):
 
 
 def fetch_company_facts(cik):
+    """Annual XBRL facts for one filer.
+
+    Returns a dict of the concepts found, {} when the filer has no usable XBRL
+    facts, or {"error": "fetch_failed"} when the REQUEST failed. That last
+    distinction matters: _get() swallows every exception (timeout, 429, 503,
+    connection reset) and returns None, so without it a routine SEC rate-limit
+    was indistinguishable from "this company files no financials" — and the
+    caller cached that permanently.
+    """
     cik_pad = _cik_padded(cik)
     r = _get(FACTS_URL.format(cik=cik_pad), headers={**UA, "Host": "data.sec.gov"})
     if r is None:
-        return None
+        return {"error": "fetch_failed"}
     try:
         data = r.json()
     except Exception:
-        return None
+        return {"error": "fetch_failed"}
     facts = data.get("facts", {}).get("us-gaap", {})
 
     def latest(concept_names):
@@ -429,7 +438,7 @@ def fetch_company_facts(cik):
         out["revenue_growth_yoy_pct"] = (rev["val"] - prev["val"]) / prev["val"] * 100.0
 
     if not out:
-        return None   # no usable XBRL facts for this filer
+        return {}     # fetched fine; this filer simply tags no financials
     return out
 
 
@@ -490,7 +499,9 @@ def handle_action(action, payload):
         if not cik:
             return {"error": "cik required"}
         f = fetch_company_facts(cik)
-        return f or {}
+        # {} means "no XBRL facts for this filer" — a real, cacheable answer.
+        # {"error": ...} means the request failed and must be retried.
+        return f if f is not None else {"error": "fetch_failed"}
     if action == "pipeline_with_facts":
         # Pipeline + financials in one shot, capped to top N filers.
         cap = payload.get("max_facts", 30)

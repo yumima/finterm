@@ -199,7 +199,12 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     connect(&services::PreIpoService::instance(),
             &services::PreIpoService::company_updated, this,
             [this](const QString& id) {
-                if (!id.isEmpty() && id == detail_company_id_)
+                // detail_symbol_ carries the private company's id while its
+                // dossier is shown, and EVERY rail-blanking path clears it —
+                // including render_lockups()'s empty state, which a separate
+                // tracking field missed, letting a late fetch repaint a
+                // dossier over the lockups view.
+                if (!id.isEmpty() && id == detail_symbol_)
                     render_detail_private(id);
             });
 
@@ -2285,12 +2290,11 @@ void IpoWatchView::render_signals() {
 
 void IpoWatchView::render_detail_private(const QString& company_id) {
     if (!header_lbl_) return;
-    if (company_id.isEmpty()) { detail_company_id_.clear(); render_detail(nullptr); return; }
+    if (company_id.isEmpty()) { render_detail(nullptr); return; }
 
     const pre_ipo::PrivateCompany c =
         services::PreIpoService::instance().company(company_id);
-    if (c.id.isEmpty()) { detail_company_id_.clear(); render_detail(nullptr); return; }
-    detail_company_id_ = company_id;
+    if (c.id.isEmpty()) { render_detail(nullptr); return; }
 
     const QString css = build_detail_css();
     auto esc = [](const QString& s) { return s.toHtmlEscaped(); };
@@ -2489,7 +2493,15 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
             // made the pane look arbitrary rather than honest.
             auto& svc = services::PreIpoService::instance();
             const bool no_filer = c.cik.isEmpty();
-            if (no_filer) {
+            if (svc.financials_confirmed_absent(c.id)) {
+                // SEC answered: this filer tags nothing. Saying "fetching"
+                // here was worse than the blank it replaced — it promised
+                // data that was never coming, on every future open.
+                h += QString("<i class='muted'>SEC has no XBRL financial facts for "
+                             "CIK %1. The company has never tagged financial data in "
+                             "a filing, so there is nothing to show — SEC publishes "
+                             "none and no free source has them.</i>").arg(esc(c.cik));
+            } else if (no_filer) {
                 h += "<i class='muted'>No SEC filer on record for this company, so there "
                      "are no XBRL financials to fetch. Private companies do not file "
                      "10-Ks; figures appear here once an S-1 with tagged financials is "
@@ -2910,9 +2922,6 @@ static QString build_detail_css() {
 }
 
 void IpoWatchView::render_detail(const Entry* e) {
-    // The rail shows one subject at a time; a listed entry displaces any
-    // private dossier, so stale per-company updates must stop routing here.
-    detail_company_id_.clear();
     if (!header_lbl_) return;
     if (!e) {
         header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");

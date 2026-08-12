@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c3c29c346`](https://github.com/yumima/finterm/commit/c3c29c346) IPO Watch: say which source is missing instead of showing a blank pane
 - [`cb6adbe27`](https://github.com/yumima/finterm/commit/cb6adbe27) Remove the Cabinet tab; fetch the SEC financials that were never fetched
 - [`0b1c4b4f6`](https://github.com/yumima/finterm/commit/0b1c4b4f6) Power Trader: one list, one detail — and fix three stylesheets that silently painted the wrong colours
 - [`9718ad43e`](https://github.com/yumima/finterm/commit/9718ad43e) Power Trader: make the ALL/SENATE/HOUSE filter actually filter

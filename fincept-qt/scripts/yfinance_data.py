@@ -8,6 +8,7 @@ import sys
 import json
 import math
 import os
+import re
 import threading
 import time
 import heapq
@@ -796,6 +797,119 @@ def get_ipo_extras(symbol):
     return out
 
 
+# ── S-1 section slicing (module level so it is unit-testable) ────────────────
+# Kept out of parse_s1_funding's closure deliberately: every guard below was
+# added in response to a real filing defeating the previous version, and a
+# closure over a network fetch cannot be tested. See
+# tests/scripts/test_s1_sections.py.
+
+SECTION_BOUNDARY = re.compile(
+    r"\n\s*(item\s+\d+|exhibits\s+and\s+financial|signatures|"
+    r"undertakings|index\s+to\s+(?:financial|exhibits)|"
+    r"principal\s+(?:stock|share)holders|use\s+of\s+proceeds|underwriting|"
+    r"recent\s+sales\s+of\s+unregistered\s+securities|"
+    r"plan\s+of\s+distribution|risk\s+factors|"
+    r"description\s+of\s+capital\s+stock|"
+    r"selected\s+(?:consolidated\s+)?financial\s+data|"
+    r"summary\s+(?:consolidated\s+)?financial\s+data|"
+    r"management's\s+discussion)",
+    re.IGNORECASE,
+)
+def _s1_looks_like_toc(chunk):
+    """True when a chunk is a table-of-contents fragment, not prose.
+
+    A ToC is a run of short lines, most ending in a page number. Real
+    section prose is long sentences that rarely end in a bare integer.
+    """
+    lines = [ln.strip() for ln in chunk.split("\n") if ln.strip()]
+    if len(lines) < 3:
+        return False
+    page_numbered = sum(1 for ln in lines if re.search(r"\s\d{1,4}$", ln))
+    short = sum(1 for ln in lines if len(ln) < 80)
+    return page_numbered >= max(2, len(lines) // 3) and short > len(lines) * 0.7
+
+def s1_extract_section(text, pattern, cap=12000, lookahead_skip=200):
+    """Slice the BODY of a section, not its table-of-contents entry.
+
+    Every heading we search for appears at least twice in a real S-1:
+    once in the table of contents (with a page number) and once as the
+    actual section. re.search returns the FIRST match, which is almost
+    always the ToC line — and because SECTION_BOUNDARY also matches the
+    NEXT ToC line, the "section" came back as a two-line ToC fragment.
+    The UI then presented that fragment under the heading "Verbatim
+    excerpts below are authoritative".
+
+    So: consider every occurrence, discard the ones that look like a
+    ToC, and keep the longest remaining body. A ToC entry yields a few
+    hundred characters before it hits the next listed heading; the real
+    section yields thousands. Longest-wins therefore picks the body even
+    when the ToC filter misses, and the filter catches the case where a
+    document has only a ToC entry (no body) so we return nothing rather
+    than a page-number list.
+    """
+    candidates = []
+    for mm in re.finditer(pattern, text, re.IGNORECASE):
+        # The match must look like a HEADING, not a passing mention.
+        # Without this the slicer happily anchored on prose like "…the
+        # use of proceeds not held in the trust account…" and, because
+        # a long paragraph follows such a mention, longest-wins then
+        # PREFERRED it over the real section. A heading sits alone on
+        # its short line, optionally behind an "Item 15." marker.
+        ls = text.rfind("\n", 0, mm.start()) + 1
+        le = text.find("\n", mm.end())
+        line = text[ls: le if le >= 0 else len(text)].strip()
+        prefix = text[ls: mm.start()].strip()
+        # The line must be essentially JUST the heading. Allowing extra
+        # words lets a cross-reference — see "Underwriting" for a
+        # description of… — pass as a section start.
+        # A trailing page number is the signature of a ToC entry:
+        # "Recent Sales of Unregistered Securities 104". Such a line is
+        # otherwise indistinguishable from a heading — short, no
+        # prefix — and its slice runs on through the rest of the ToC
+        # into the following prose, so it WINS on length. Reject it by
+        # the one thing only a ToC line has.
+        if re.search(r"\s\d{1,4}$", line):
+            continue
+        trailing = len(line) - (mm.end() - mm.start()) - len(prefix)
+        heading_like = (
+            len(line) <= 90
+            and trailing <= 12
+            and (not prefix or re.fullmatch(r"(item|part)\s*[\dIVX]+\s*[.:\-]?",
+                                            prefix, re.IGNORECASE))
+        )
+        if not heading_like:
+            continue
+        chunk = text[mm.start(): mm.start() + cap]
+        # Find the NEXT boundary heading after the current one (skip the
+        # current heading itself by skipping the first `lookahead_skip`
+        # chars).
+        nxt = SECTION_BOUNDARY.search(chunk[lookahead_skip:])
+        if nxt:
+            chunk = chunk[: nxt.start() + lookahead_skip]
+        chunk = chunk.strip()
+        if _s1_looks_like_toc(chunk):
+            continue
+        candidates.append(chunk)
+
+    # Prefer the LAST substantial candidate, not the longest.
+    #
+    # Longest-wins is wrong in a way that only shows up on real filings: a
+    # cross-reference near the front — see "Underwriting" for a description
+    # of... — slices all the way forward to the REAL heading (which is itself a
+    # section boundary), so its chunk is everything in between and comfortably
+    # beats the genuine section that follows. Document order settles it: a
+    # prospectus mentions a section in its summary and cross-references before
+    # it reaches the section itself, so the last occurrence is the body.
+    #
+    # "Substantial" guards the other direction: a trailing index or exhibit
+    # mention yields a stub, which must not displace a real earlier body.
+    SUBSTANTIAL = 400
+    for chunk in reversed(candidates):
+        if len(chunk) >= SUBSTANTIAL:
+            return chunk
+    return max(candidates, key=len) if candidates else ""
+
+
 def parse_s1_funding(url):
     """Download an S-1 (or S-1/A) document from SEC EDGAR and extract the
     research-relevant sections — the free public surrogate for Crunchbase /
@@ -857,30 +971,8 @@ def parse_s1_funding(url):
         # alternative because the specific "recent sales of unregistered
         # securities" pattern already covers our use; the bare form would
         # have matched first if added back.
-        SECTION_BOUNDARY = re.compile(
-            r"\n\s*(item\s+\d+|exhibits\s+and\s+financial|signatures|"
-            r"undertakings|index\s+to\s+(?:financial|exhibits)|"
-            r"principal\s+stockholders|use\s+of\s+proceeds|underwriting|"
-            r"recent\s+sales\s+of\s+unregistered\s+securities|"
-            r"plan\s+of\s+distribution|risk\s+factors|"
-            r"description\s+of\s+capital\s+stock|"
-            r"selected\s+(?:consolidated\s+)?financial\s+data|"
-            r"summary\s+(?:consolidated\s+)?financial\s+data|"
-            r"management's\s+discussion)",
-            re.IGNORECASE,
-        )
-        def extract_section(pattern, cap=12000, lookahead_skip=200):
-            mm = re.search(pattern, text, re.IGNORECASE)
-            if not mm:
-                return ""
-            chunk = text[mm.start(): mm.start() + cap]
-            # Find the NEXT boundary heading after the current one (skip the
-            # current heading itself by skipping the first `lookahead_skip`
-            # chars).
-            nxt = SECTION_BOUNDARY.search(chunk[lookahead_skip:])
-            if nxt:
-                chunk = chunk[: nxt.start() + lookahead_skip]
-            return chunk.strip()
+        extract_section = lambda pattern, cap=12000, lookahead_skip=200: \
+            s1_extract_section(text, pattern, cap, lookahead_skip)
 
         # ── Recent Sales (the original section — primary output) ───────────
         section = extract_section(
@@ -894,7 +986,7 @@ def parse_s1_funding(url):
         # ── Principal Stockholders (5% holders — closest free analog to a
         #    cap table) ──
         principal = extract_section(
-            r"principal\s+(?:and\s+selling\s+)?stockholders?", cap=10000)
+            r"principal\s+(?:and\s+selling\s+)?(?:stock|share)holders?", cap=10000)
 
         # ── Use of Proceeds ──
         # Use a short lookahead_skip — "Use of Proceeds" sections can be a
@@ -957,6 +1049,17 @@ def parse_s1_funding(url):
             r"(?:January|February|March|April|May|June|July|August|"
             r"September|October|November|December)\s+\d{1,2},?\s+\d{4}|"
             r"(?:Q[1-4]\s+\d{4})|(?:in\s+\d{4})", re.IGNORECASE)
+        # Amounts that are definitionally NOT the size of a round. Par value and
+        # exercise/conversion prices sit in exactly the same sentences as real
+        # issuances ("...at a purchase price of $0.003 per share, par value
+        # $0.0001..."), so without this the extractor reported a company's par
+        # value as a funding round. Per-share prices are excluded the same way:
+        # a round is an aggregate, and "$X per share" is a unit price.
+        NOT_A_ROUND = re.compile(
+            r"par\s+value|exercise\s+price|conversion\s+price|"
+            r"per\s+share|per\s+unit|per\s+warrant|price\s+of\s*$",
+            re.IGNORECASE)
+        seen_rounds = set()
         for mm in money_re.finditer(section):
             if len(rounds) >= 20: break
             lo = max(0, mm.start() - 250)
@@ -964,6 +1067,25 @@ def parse_s1_funding(url):
             ctx = section[lo:hi].strip()
             dm = date_re.search(ctx)
             if not dm: continue
+            # Look immediately around THIS amount, and stop at the neighbouring
+            # amount in each direction. Without the stop, a real aggregate is
+            # vetoed by its own restatement: "for an aggregate of $25,000 or
+            # $0.003 per share" put "per share" inside $25,000's window, so the
+            # genuine round was dropped and only the unit price survived.
+            after = section[mm.end(): mm.end() + 24]
+            cut = after.find("$")
+            if cut >= 0:
+                after = after[:cut]
+            before = section[max(0, mm.start() - 45): mm.start()]
+            cut = before.rfind("$")
+            if cut >= 0:
+                before = before[cut + 1:]
+            if NOT_A_ROUND.search(before) or NOT_A_ROUND.search(after):
+                continue
+            key = (dm.group(0).strip().lower(), mm.group(0).strip().lower())
+            if key in seen_rounds:
+                continue   # the same issuance restated in the same section
+            seen_rounds.add(key)
             rounds.append({
                 "date":    dm.group(0).strip(),
                 "amount":  mm.group(0).strip(),
