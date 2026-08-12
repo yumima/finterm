@@ -227,6 +227,17 @@ def fetch_nport_xml(fund_cik, adsh):
         issuer = (inv.findtext("name", default="") or "").strip()
         if not issuer:
             continue
+        # `balance` is only a SHARE COUNT when units == "NS". N-PORT also uses
+        # PA (principal amount), NC (notional contract) and OU (other units)
+        # in the same element. A convertible note or SAFE reports principal,
+        # so valUSD/balance came out at roughly 1.00 — a bogus "$1.00/sh" row
+        # that then entered the SHARE-WEIGHTED consensus mean carrying the
+        # note's full principal as its weight, i.e. it dominated the average
+        # while being meaningless. Anything not denominated in shares has no
+        # per-share price and is skipped.
+        units = (inv.findtext("units", default="") or "").strip().upper()
+        if units and units != "NS":
+            continue
         try:
             shares = float(inv.findtext("balance", default="0") or 0)
         except (TypeError, ValueError):
@@ -274,7 +285,14 @@ def collect_all_marks(quarters_back=2, families_max=None):
                     "fund_name": label,
                     "fund_cik": cik,
                     "filed_date": a["filed_date"],
+                    # Falling back to the filing date is a last resort, not a
+                    # equivalent: N-PORT is filed up to ~60 days after the
+                    # period it describes, so substituting it silently
+                    # OVERSTATES the mark's freshness by up to two months.
+                    # Flag it so the UI can say "as of (filed)" rather than
+                    # present a filing date as a valuation date.
                     "as_of": m["as_of"] or a["filed_date"],
+                    "as_of_estimated": not bool(m["as_of"]),
                     "shares_held": m["shares_held"],
                     "fair_value_usd": m["fair_value_usd"],
                     "mark_pps": m["mark_pps"],
@@ -324,6 +342,13 @@ def handle_action(action, payload):
         families_max = payload.get("families_max")
         # Cheap cursor probe first: if every family's newest N-PORT accession
         # matches the prior cursor, nothing was filed → skip all the XML.
+        # The cursor is VERSIONED. Without this, a change to how marks are
+        # PARSED (as opposed to which filings exist) never reaches a client
+        # that already holds a cursor — and because families file N-PORT
+        # quarterly, "never" can mean up to a full quarter, with no self-heal
+        # short of deleting the cache directory by hand. Bump on any change to
+        # what collect_all_marks emits.
+        CURSOR_VERSION = 1  # units!=NS filtering, as_of_estimated flag
         cursor = family_cursor(families_max)
         prev = payload.get("prev_cursor")
         # any(cursor.values()): never trust a degenerate all-empty probe (every
@@ -331,13 +356,14 @@ def handle_action(action, payload):
         # "unchanged"; that would equal a prior failed cursor and suppress the
         # fetch forever. Require at least one real accession before short-circuiting.
         if (isinstance(prev, dict) and prev.get("accessions") == cursor
+                and prev.get("v") == CURSOR_VERSION
                 and any(cursor.values())):
-            return {"unchanged": True, "cursor": {"accessions": cursor}}
+            return {"unchanged": True, "cursor": {"accessions": cursor, "v": CURSOR_VERSION}}
         data = collect_all_marks(
             quarters_back=payload.get("quarters_back", 2),
             families_max=families_max,
         )
-        data["cursor"] = {"accessions": cursor}
+        data["cursor"] = {"accessions": cursor, "v": CURSOR_VERSION}
         return data
     if action == "marks_for":
         name = (payload.get("name") or "").strip()

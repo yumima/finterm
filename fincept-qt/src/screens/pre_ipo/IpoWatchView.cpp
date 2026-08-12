@@ -1,5 +1,7 @@
 #include "screens/pre_ipo/IpoWatchView.h"
 
+#include "screens/pre_ipo/IpoFormat.h"
+
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -49,6 +51,10 @@
 #include <cmath>
 
 namespace fincept::screens::widgets {
+
+// Pure parse/format helpers, extracted so they can be unit-tested.
+namespace fmt = fincept::pre_ipo::fmt;
+
 
 namespace {
 constexpr int kMonthsBack    = 3;   // pricedDate window for KPIs / RECENTLY PRICED
@@ -114,6 +120,9 @@ QString ipo_status_color(pre_ipo::IpoStatus s) {
         case pre_ipo::IpoStatus::Priced:
         case pre_ipo::IpoStatus::Listed:  return POSITIVE();
         case pre_ipo::IpoStatus::Rumored: return AMBER();
+        // A pulled deal must not read as merely "unknown" grey — it is the
+        // one status on this screen that is unambiguously bad news.
+        case pre_ipo::IpoStatus::Withdrawn: return NEGATIVE();
         default:                          return TEXT_SECONDARY();
     }
 }
@@ -1382,7 +1391,8 @@ void IpoWatchView::render_kpis() {
             // can't disagree with what a row's detail rail shows.
             if (c.s1.first_filed.isValid()) ++filed;
             if (!c.fund_marks.isEmpty()) ++marked;
-            if (c.analytics.ipo_readiness_score >= 70) ++ready;
+            if (c.analytics.ipo_readiness_available &&
+                c.analytics.ipo_readiness_score >= 70) ++ready;
             if (c.last_valuation_usd > 0) { ++valued; val_sum += c.last_valuation_usd; }
             raised_sum_m += c.cumulative_raised_m;
         }
@@ -1400,11 +1410,12 @@ void IpoWatchView::render_kpis() {
     // SIGNALS lens: count the derived-signal feed by kind.
     if (active_lens_ == LensSignals) {
         const auto sigs = services::PreIpoService::instance().signal_list();
-        int moves = 0, amend = 0, ready = 0;
+        int moves = 0, amend = 0, ready = 0, pulled = 0;
         QSet<QString> cos;
         for (const auto& s : sigs) {
             if (s.kind == pre_ipo::SignalKind::MarkUp || s.kind == pre_ipo::SignalKind::MarkDown) ++moves;
             else if (s.kind == pre_ipo::SignalKind::AmendmentBurst) ++amend;
+            else if (s.kind == pre_ipo::SignalKind::Withdrawn)      ++pulled;
             else if (s.kind == pre_ipo::SignalKind::ReadinessJump)  ++ready;
             if (!s.company_id.isEmpty()) cos.insert(s.company_id);
         }
@@ -1413,7 +1424,10 @@ void IpoWatchView::render_kpis() {
         if (kpi_week_)  kpi_week_->setText(QString("<b>SIGNALS</b><br>%1").arg(sigs.size()));
         if (kpi_month_) kpi_month_->setText(QString("<b>MARK MOVES</b><br>%1").arg(moves));
         if (kpi_pop_)   kpi_pop_->setText(QString("<b>AMENDMENTS</b><br>%1").arg(amend));
-        if (kpi_above_) kpi_above_->setText(QString("<b>IPO-READY</b><br>%1").arg(ready));
+        // WITHDRAWN earns a tile: a pulled deal is the most actionable
+        // thing in this feed, and it used to be invisible — counted as
+        // an amendment and coloured like one.
+        if (kpi_above_) kpi_above_->setText(QString("<b>WITHDRAWN</b><br>%1").arg(pulled));
         if (kpi_in_)    kpi_in_->setText(QString("<b>COMPANIES</b><br>%1").arg(cos.size()));
         if (kpi_below_) kpi_below_->setText(QString("<b>NEWEST</b><br>%1").arg(newest));
         return;
@@ -1873,8 +1887,13 @@ void IpoWatchView::render_lockups() {
         d_item->setForeground(QBrush(days_col));
         table_->setItem(r, 2, d_item);
 
+        // format_COUNT, not format_money. This column is a share count and
+        // was being run through the currency formatter, so 12,000,000
+        // unlocking shares rendered as "$12M" under a header reading SHARES —
+        // a reader sizing the supply overhang in dollars was off by the share
+        // price, i.e. 40x for a $40 stock.
         auto* sh = new NumSortItem(
-            l.shares > 0 ? format_money(double(l.shares)) : "—",
+            l.shares > 0 ? format_count(double(l.shares)) : "—",
             double(l.shares));
         table_->setItem(r, 3, sh);
         table_->setItem(r, 4, new QTableWidgetItem(
@@ -2008,8 +2027,12 @@ void IpoWatchView::render_private() {
         table_->setItem(r, 6, new NumSortItem(
             mark > 0 ? QString("$%1").arg(mark, 0, 'f', 2) : "—", mark));
 
-        const int ready = c.analytics.ipo_readiness_score;
-        table_->setItem(r, 7, new NumSortItem(ready > 0 ? QString::number(ready) : "—", ready));
+        // Sort key is -1 when unavailable so unscored rows sink rather than
+        // tying with a genuine zero.
+        const bool ready_ok = c.analytics.ipo_readiness_available;
+        const int  ready    = c.analytics.ipo_readiness_score;
+        table_->setItem(r, 7, new NumSortItem(ready_ok ? QString::number(ready) : "—",
+                                              ready_ok ? ready : -1));
 
         const int funds = c.analytics.smart_money_index;
         table_->setItem(r, 8, new NumSortItem(funds > 0 ? QString::number(funds) : "—", funds));
@@ -2041,6 +2064,7 @@ static QString signal_kind_label(pre_ipo::SignalKind k) {
         case pre_ipo::SignalKind::PremiumHigh:    return "PREMIUM";
         case pre_ipo::SignalKind::ReadinessJump:  return "IPO-READY";
         case pre_ipo::SignalKind::RoundFiled:     return "ROUND FILED";
+        case pre_ipo::SignalKind::Withdrawn:      return "WITHDRAWN";
         default:                                  return "SIGNAL";
     }
 }
@@ -2049,7 +2073,8 @@ static QString signal_kind_color(pre_ipo::SignalKind k) {
     switch (k) {
         case pre_ipo::SignalKind::MarkUp:
         case pre_ipo::SignalKind::ReadinessJump:  return POSITIVE();
-        case pre_ipo::SignalKind::MarkDown:       return NEGATIVE();
+        case pre_ipo::SignalKind::MarkDown:
+        case pre_ipo::SignalKind::Withdrawn:       return NEGATIVE();
         case pre_ipo::SignalKind::AmendmentBurst: return INFO();
         default:                                  return AMBER();
     }
@@ -2308,7 +2333,9 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
                 QString("<span class='%1'>%2%3%</span>")
                     .arg(d >= 0 ? "pos" : "neg").arg(d >= 0 ? "+" : "").arg(d, 0, 'f', 1));
         }
-        row("IPO readiness", QString("%1 / 100").arg(c.analytics.ipo_readiness_score));
+        row("IPO readiness", c.analytics.ipo_readiness_available
+                                ? QString("%1 / 100").arg(c.analytics.ipo_readiness_score)
+                                : QStringLiteral("— <span class='k'>(needs financials or Form D)</span>"));
         if (c.analytics.days_to_price_est > 0 && c.s1.first_filed.isValid())
             row("Est. days to price", QString("~%1").arg(c.analytics.days_to_price_est));
         if (c.analytics.smart_money_index > 0)
@@ -2456,20 +2483,77 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         }
         if (!c.fund_marks.isEmpty()) {
             h += "<div class='sec'>MUTUAL-FUND MARKS (N-PORT)</div>";
-            if (c.analytics.consensus_mark_pps > 0)
+            if (c.analytics.consensus_mark_pps > 0) {
+                // The headline carries its own as-of and filing lag. Without
+                // them a Q4 mark filed in late February read, in June, as an
+                // undated "$/sh" — indistinguishable from a live price. The
+                // newest contributing mark dates the number; the gap to its
+                // filing date is the lag the reader is actually exposed to.
+                // Date it from a mark that (a) actually contributed to the
+                // consensus and (b) carries a REAL reporting-period end.
+                //
+                // Naively taking the newest as_of picked the worst possible
+                // mark: a substituted as_of equals the FILING date, which is
+                // later than any genuine repPdEnd, so an estimated mark
+                // usually won — and because its lag is then 0 by construction
+                // the lag clause was suppressed, making the headline read MORE
+                // authoritative than a correctly-dated one, while the row
+                // below it said "~Feb 2026 (filed)". Prefer real dates; fall
+                // back to estimated only when there is nothing else, and say
+                // so when we do.
+                QDate newest_as_of, newest_filed;
+                bool  dateline_estimated = false;
+                for (int pass = 0; pass < 2 && !newest_as_of.isValid(); ++pass) {
+                    const bool allow_estimated = (pass == 1);
+                    for (const auto& m : c.fund_marks) {
+                        if (!m.as_of.isValid() || m.mark_pps <= 0)
+                            continue;   // contributed nothing to the consensus
+                        if (m.as_of_estimated && !allow_estimated)
+                            continue;
+                        if (!newest_as_of.isValid() || m.as_of > newest_as_of) {
+                            newest_as_of = m.as_of;
+                            newest_filed = m.filed_date;
+                            dateline_estimated = m.as_of_estimated;
+                        }
+                    }
+                }
+                QString dateline;
+                if (newest_as_of.isValid()) {
+                    dateline = QStringLiteral(" · as of ")
+                               + (dateline_estimated ? QStringLiteral("~") : QString())
+                               + newest_as_of.toString("MMM yyyy");
+                    if (dateline_estimated) {
+                        // No lag is knowable here: as_of IS the filing date.
+                        dateline += QStringLiteral(" (filing date; period end not disclosed)");
+                    } else if (newest_filed.isValid()) {
+                        const qint64 lag = newest_as_of.daysTo(newest_filed);
+                        if (lag > 0)
+                            dateline += QString(", filed %1d later").arg(lag);
+                    }
+                }
                 h += QString("<p>Consensus: <span class='big'>$%1</span> / sh "
-                             "<span class='k'>· %2 fund%3</span></p>")
+                             "<span class='k'>· %2 fund%3%4</span></p>")
                          .arg(c.analytics.consensus_mark_pps, 0, 'f', 2)
                          .arg(c.analytics.smart_money_index)
-                         .arg(c.analytics.smart_money_index == 1 ? "" : "s");
+                         .arg(c.analytics.smart_money_index == 1 ? "" : "s")
+                         .arg(esc(dateline));
+            }
             h += "<table class='grid'><tr><td class='k'>FUND</td><td class='k'>AS OF</td>"
                  "<td class='k'>MARK $/SH</td></tr>";
             int shown = 0;
             for (const auto& m : c.fund_marks) {
                 if (shown++ >= 12) break;  // cap the table; consensus summarizes the rest
+                // "~" marks an as-of that was substituted from the filing
+                // date because the filing omitted its reporting-period end.
+                QString as_of_cell = QStringLiteral("—");
+                if (m.as_of.isValid()) {
+                    as_of_cell = m.as_of.toString("MMM yyyy");
+                    if (m.as_of_estimated)
+                        as_of_cell = QStringLiteral("~") + as_of_cell + QStringLiteral(" (filed)");
+                }
                 h += QString("<tr><td>%1</td><td>%2</td><td>%3</td></tr>")
                          .arg(esc(m.fund_name.isEmpty() ? m.issuer_raw : m.fund_name))
-                         .arg(m.as_of.isValid() ? m.as_of.toString("MMM yyyy") : "—")
+                         .arg(esc(as_of_cell))
                          .arg(m.mark_pps > 0 ? QString("$%1").arg(m.mark_pps, 0, 'f', 2) : "—");
             }
             h += "</table>";
@@ -2559,7 +2643,9 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         row("Valuation", fmt_valuation(c.last_valuation_usd));
         row("Raised", fmt_raised_m(c.cumulative_raised_m));  // match DEAL/FUNDING precision
         row("Status", pre_ipo::ipo_status_label(c.ipo_status));
-        row("Readiness", QString("%1 / 100").arg(c.analytics.ipo_readiness_score));
+        row("Readiness", c.analytics.ipo_readiness_available
+                             ? QString("%1 / 100").arg(c.analytics.ipo_readiness_score)
+                             : QStringLiteral("—"));
         h += "</table>";
         right_top_->setText(h);
     }
@@ -3017,7 +3103,10 @@ QString IpoWatchView::build_fundamentals_html(const services::InfoData& info, bo
     if (info.price_to_book > 0)    h += kvg_row("Price / Book",   QString::number(info.price_to_book, 'f', 2) + "x");
     if (info.dividend_yield > 0)   h += kvg_row("Dividend yield", fmt_pct(info.dividend_yield, 2));
     if (info.beta > 0)             h += kvg_row("Beta",           fmt_num(info.beta));
-    if (info.avg_volume > 0)       h += kvg_row("Avg volume",     format_money(info.avg_volume));
+    // Share count, not dollars — format_money would print "$12M" for a
+    // 12,000,000-share average, the same class of error the lock-up
+    // SHARES column had.
+    if (info.avg_volume > 0)       h += kvg_row("Avg volume",     format_count(info.avg_volume));
     if (info.profit_margin != 0)
         h += kvg_row("Profit margin",
                      QString("<span class='%1'>%2</span>").arg(pct_cls(info.profit_margin), fmt_pct(info.profit_margin)));
@@ -3855,12 +3944,9 @@ QString IpoWatchView::build_links_html(const Entry& e, const services::InfoData&
 }
 // ── Parsing helpers ──────────────────────────────────────────────────────────
 
-QString IpoWatchView::format_money(double dollars) {
-    if (dollars <= 0)   return QStringLiteral("—");
-    if (dollars >= 1e9) return QString("$%1B").arg(dollars / 1e9, 0, 'f', 2);
-    if (dollars >= 1e6) return QString("$%1M").arg(dollars / 1e6, 0, 'f', 0);
-    return QString("$%1K").arg(dollars / 1e3, 0, 'f', 0);
-}
+QString IpoWatchView::format_count(double n) { return fmt::count(n); }
+
+QString IpoWatchView::format_money(double dollars) { return fmt::money(dollars); }
 
 QString IpoWatchView::format_deal_size(const QString& price_range, const QString& shares) {
     if (price_range.isEmpty() || shares.isEmpty()) return {};
@@ -3874,18 +3960,7 @@ QString IpoWatchView::format_deal_size(const QString& price_range, const QString
 
 // Parse "$15.00-$17.00" / "$17.00" / "$15.00 - $17.00" → midpoint.
 double IpoWatchView::parse_price_mid(const QString& price_range, bool* ok_out) {
-    if (ok_out) *ok_out = false;
-    if (price_range.isEmpty()) return 0;
-    QString pr = price_range;
-    pr.remove('$');
-    const QStringList parts = pr.split('-', Qt::SkipEmptyParts);
-    if (parts.isEmpty()) return 0;
-    bool ok_lo = false, ok_hi = false;
-    const double lo = parts.at(0).trimmed().toDouble(&ok_lo);
-    const double hi = parts.at(parts.size() > 1 ? 1 : 0).trimmed().toDouble(&ok_hi);
-    if (!ok_lo) return 0;
-    if (ok_out) *ok_out = true;
-    return (ok_hi && parts.size() > 1) ? (lo + hi) / 2.0 : lo;
+    return fmt::price_mid(price_range, ok_out);
 }
 
 double IpoWatchView::parse_shares(const QString& shares) {

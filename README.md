@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`32ab8c312`](https://github.com/yumima/finterm/commit/32ab8c312) ER Overview: name the custom-range button instead of drawing a pictogram
 - [`7547ac678`](https://github.com/yumima/finterm/commit/7547ac678) Cache age: derive it from the row, so a writer cannot forget to set it
 - [`acd967132`](https://github.com/yumima/finterm/commit/acd967132) Quotes: one symbol, one previous close — so the app agrees with itself
 - [`899fb40d6`](https://github.com/yumima/finterm/commit/899fb40d6) ER: the market-status badge stops saying OPEN on Thanksgiving

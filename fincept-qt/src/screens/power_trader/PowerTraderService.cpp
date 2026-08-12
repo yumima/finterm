@@ -19,6 +19,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <limits>
 
 namespace fincept::power_trader {
 
@@ -267,6 +268,7 @@ void PowerTraderService::parse_summary(const QJsonObject& root) {
         t.committee_relevance= o[QStringLiteral("committee_relevance")].toString();
         t.signal_score     = o[QStringLiteral("signal_score")].toDouble();
         t.source_url       = o[QStringLiteral("source_url")].toString();
+        t.placeholder      = o[QStringLiteral("placeholder")].toBool();
 
         const QString dir = o[QStringLiteral("direction")].toString();
         if (dir == QStringLiteral("Buy"))       t.direction = TradeDirection::Buy;
@@ -601,6 +603,9 @@ QVector<SectorExposure> PowerTraderService::sector_breakdown() const {
     QHash<QString, SectorExposure> sectors;
 
     for (const auto& t : summary_.recent_trades) {
+        // A filing stub has an empty ticker and $0, so it landed in "Other"
+        // and inflated that row's trade/member counts against no dollars.
+        if (t.placeholder) continue;
         if (t.direction == TradeDirection::Sell) continue;
         const QString sector = sec_map.value(t.ticker, QStringLiteral("Other"));
         auto& s = sectors[sector];
@@ -653,10 +658,11 @@ QVector<CommitteeInsiderSignal> PowerTraderService::committee_insider_signals() 
         sig.overlap_trades++;
     }
 
-    // Total trades per member
+    // Total trades per member. Filing stubs are excluded — they can never
+    // match a committee, so counting them only deflates the overlap share.
     QHash<QString, int> total_trades;
     for (const auto& t : summary_.recent_trades)
-        total_trades[t.member_id]++;
+        if (!t.placeholder) total_trades[t.member_id]++;
 
     auto result = committee_sigs.values().toVector();
     for (auto& sig : result) {
@@ -729,8 +735,15 @@ QVector<RankedMember> PowerTraderService::ranked_members(RankingDimension dim) c
         }
         case RankingDimension::DisclosureLag: {
             const double l = avg_disclosure_lag(m.id);
-            r.rank_value = -l;  // negate: higher lag = worse rank
-            r.rank_label = QString::number(l, 'f', 1) + QStringLiteral("d avg");
+            if (l < 0) {
+                // No measurable lag (filing stubs only). Sort to the BOTTOM
+                // and dash it — never to the top as a model filer.
+                r.rank_value = -std::numeric_limits<double>::max();
+                r.rank_label = QStringLiteral("—");
+            } else {
+                r.rank_value = -l;  // negate: higher lag = worse rank
+                r.rank_label = QString::number(l, 'f', 1) + QStringLiteral("d avg");
+            }
             break;
         }
         case RankingDimension::BestPick: {
@@ -771,17 +784,26 @@ double PowerTraderService::net_buyer_amount(const QString& mid, int days) const 
 }
 
 double PowerTraderService::avg_signal_score(const QString& mid) const {
+    // Placeholders are skipped here and in avg_disclosure_lag: a House filing
+    // stub carries a forced signal_score of 0 and a fabricated 0-day lag, so
+    // including them drags the average of a real Senate filer toward zero and
+    // hands House members a perfect disclosure-lag rank they did not earn.
     double sum = 0; int n = 0;
     for (const auto& t : summary_.recent_trades)
-        if (t.member_id == mid) { sum += t.signal_score; ++n; }
+        if (t.member_id == mid && !t.placeholder) { sum += t.signal_score; ++n; }
     return n > 0 ? sum / n : 0;
 }
 
+// Returns -1 when the member has no REAL trade to measure. That distinction is
+// load-bearing: every House row is a filing stub, so a House member has no
+// measurable lag at all — and returning 0.0 put them at the very top of the
+// "fastest discloser" ranking, presenting "no data" as "filed same day". Same
+// absent-not-zero rule the Return/Alpha columns already follow.
 double PowerTraderService::avg_disclosure_lag(const QString& mid) const {
     double sum = 0; int n = 0;
     for (const auto& t : summary_.recent_trades)
-        if (t.member_id == mid) { sum += t.disclosure_lag_days; ++n; }
-    return n > 0 ? sum / n : 0;
+        if (t.member_id == mid && !t.placeholder) { sum += t.disclosure_lag_days; ++n; }
+    return n > 0 ? sum / n : -1.0;
 }
 
 QPair<QString, double> PowerTraderService::best_pick(const QString& mid) const {
@@ -923,9 +945,13 @@ QVector<TradeFactorScores> PowerTraderService::compute_trade_base_scores() const
             herd_map[t.ticker].append({t.member_id, t.transaction_date});
 
     // Member avg signal (0-100) for history factor
+    // Placeholders excluded, matching avg_signal_score(). This is a second,
+    // parallel computation of the same quantity; fixing only the other one
+    // left the history factor still dragged toward 0 for House members.
     QHash<QString, double> member_avg_sig;
     QHash<QString, int>    member_trade_cnt;
     for (const auto& t : summary_.recent_trades) {
+        if (t.placeholder) continue;
         member_avg_sig[t.member_id] += t.signal_score;
         member_trade_cnt[t.member_id]++;
     }
@@ -936,6 +962,15 @@ QVector<TradeFactorScores> PowerTraderService::compute_trade_base_scores() const
     for (const auto& t : summary_.recent_trades) {
         TradeFactorScores s;
         s.trade_id = t.id;
+
+        // A filing stub carries no ticker, no amount and no real trade date,
+        // so every factor below would score it on fabricated inputs. Leave all
+        // factors at 0 and mark it unscoreable; the panel dashes it.
+        if (t.placeholder) {
+            s.unscoreable = true;
+            result.append(s);
+            continue;
+        }
 
         // ── Committee (0–100) ─────────────────────────────────────────────────
         s.committee = t.committee_relevance.isEmpty() ? 15.0 : 85.0;
@@ -1038,9 +1073,11 @@ QVector<CommitteeGroup> PowerTraderService::committee_groups() const {
     }
 
     // Compute correlation_pct (trades in cmte-relevant tickers / total trades for those members)
+    // Stubs excluded: they can never carry a committee_relevance, so counting
+    // them only deflates correlation_pct. Same fix as committee_insider_signals().
     QHash<QString, int> member_total;
     for (const auto& t : summary_.recent_trades)
-        member_total[t.member_id]++;
+        if (!t.placeholder) member_total[t.member_id]++;
 
     QVector<CommitteeGroup> result;
     for (auto it = groups.begin(); it != groups.end(); ++it) {
@@ -1086,6 +1123,11 @@ PartyStats PowerTraderService::party_stats(const QString& party) const {
         }
 
     for (const auto& t : summary_.recent_trades) {
+        // Stubs contribute a 0 signal score, a fabricated 0-day lag and $0,
+        // then divide into the averages below — dragging BOTH parties' figures
+        // toward zero in proportion to House filing volume. Their empty ticker
+        // also accumulated a blank key that could surface in top_tickers.
+        if (t.placeholder) continue;
         if (t.party != party) continue;
         if (t.disclosure_date < cutoff) continue;
         ps.trade_count_90d++;
@@ -1174,10 +1216,16 @@ QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
     const auto& sec_map = ticker_sector_map();
 
     // Peer-level benchmarks
+    // Peer average trade size, over REAL trades only: a filing stub reports a
+    // $0 amount, so including stubs dragged the peer mean down and inflated
+    // every member's size_score against it.
     double peer_avg_trade_size  = 0;
-    int    total_trades_all     = summary_.recent_trades.size();
-    for (const auto& t : summary_.recent_trades)
+    int    total_trades_all     = 0;
+    for (const auto& t : summary_.recent_trades) {
+        if (t.placeholder) continue;
         peer_avg_trade_size += (t.amount_low + t.amount_high) / 2.0;
+        ++total_trades_all;
+    }
     if (total_trades_all > 0) peer_avg_trade_size /= total_trades_all;
 
     // Cluster detection: ticker → list of (member_id, trade_date) within 14-day window
@@ -1202,6 +1250,12 @@ QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
     // Pass 1: per-trade scoring
     for (const auto& t : summary_.recent_trades) {
         if (!entries.contains(t.member_id)) continue;
+        // A House filing stub has no ticker, no amount and no real trade date.
+        // Counting it inflated total_trades — the denominator of
+        // cmte_overlap_pct — so a member's committee-overlap share was diluted
+        // by rows that could never match a committee, and its fabricated
+        // 0-day lag pulled avg_disclosure_lag toward "suspiciously fast".
+        if (t.placeholder) continue;
         auto& e = entries[t.member_id];
         e.total_trades++;
 

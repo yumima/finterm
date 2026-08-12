@@ -35,7 +35,22 @@ UA = {
 
 # Registration-statement form family. /A entries are amendments; DRS / DRS/A are
 # confidential draft submissions filed *before* the public S-1 (the EGC path).
-S1_FORMS = ("S-1", "S-1/A", "F-1", "F-1/A", "S-11", "S-11/A", "DRS", "DRS/A")
+S1_FORMS = ("S-1", "S-1/A", "F-1", "F-1/A", "S-11", "S-11/A", "DRS", "DRS/A",
+            "RW")
+# Withdrawal form. RW withdraws the registration statement outright — the deal
+# is off. Tracking it is not bookkeeping: without it a pulled deal ages in the
+# pipeline for the full window AND reads as bullish on the way out, because a
+# withdrawing company files an S-1/A first, which increments amendment_count,
+# which fires "N S-1 amendments — pricing imminent". Cancellation and imminent
+# pricing produced the identical signal.
+#
+# AW is deliberately NOT here. It withdraws an AMENDMENT, not the
+# registration, and in practice it is dominated by fund trusts pulling N-1A
+# amendments (Zacks, Tidal, Amplify, ETF Opportunities…), not by IPO
+# withdrawals. Treating it as "deal pulled" would kill live deals: the common
+# pattern is an AW filed the same day as a corrected S-1/A — withdraw the
+# defective pre-effective amendment, refile it immediately.
+_WITHDRAWAL_FORMS = ("RW",)
 # Draft-registration forms: listed in the timeline but excluded from the
 # first_filed "clock" so the readiness estimate counts from the public S-1, not
 # the months-earlier confidential draft.
@@ -132,7 +147,17 @@ def fetch_pipeline(days_back=180, max_hits=200):
     from_ = 0
     while True:
         params = {
-            "forms": "S-1,S-1/A,F-1,F-1/A,S-11,S-11/A",
+            # ROOT forms only — no "/A" entries. EDGAR full-text search
+            # treats any forms entry containing "/A" as a file_type
+            # refinement and then ELIMINATES every root form that has no
+            # matching file_type. Measured on 2026-08-01..08-11:
+            #   S-1,S-1/A,F-1,F-1/A,S-11,S-11/A  -> 52 hits, ALL amendments
+            #   S-1,F-1,S-11,RW                  -> 96 hits, S-1 30 / S-1/A 37 / RW 6
+            # So the old query silently returned NO original registration
+            # statements at all — first_filed was really the first AMENDMENT
+            # date, and the RW/AW added for withdrawal detection returned
+            # nothing. A root form already includes its own amendments.
+            "forms": "S-1,F-1,S-11,RW",
             "dateRange": "custom",
             "startdt": start,
             "enddt": end,
@@ -159,7 +184,17 @@ def fetch_pipeline(days_back=180, max_hits=200):
     for cik in KNOWN_PRIVATE_CIKS:
         raw.extend(_filings_for_cik(cik))
 
-    raw.sort(key=lambda h: (h.get("_source", {}).get("file_date") or
+    return build_pipeline_entries(raw, curated, max_hits)
+
+
+def build_pipeline_entries(raw, curated, max_hits=200):
+    """Group raw EDGAR hits into per-issuer pipeline entries.
+
+    Pure — no network — so the withdrawal semantics (same-day tie-break, the
+    non-registrant gate, which forms may start the readiness clock) can be
+    tested directly. Every one of those was got wrong on the first attempt.
+    """
+    raw = sorted(raw, key=lambda h: (h.get("_source", {}).get("file_date") or
                             h.get("_source", {}).get("filed_date") or ""))
 
     out_by_cik = {}
@@ -177,9 +212,12 @@ def fetch_pipeline(days_back=180, max_hits=200):
         form = src.get("form") or (src.get("forms", [""]) or [""])[0]
         filed = src.get("file_date") or ""
         is_draft = form in _DRAFT_FORMS
+        is_withdrawal = form in _WITHDRAWAL_FORMS
         # Only public amendments count toward the readiness/burst signal — a
-        # DRS/A is a confidential-draft revision, not an S-1 amendment.
-        is_amend = ("/A" in (form or "")) and not is_draft
+        # DRS/A is a confidential-draft revision, not an S-1 amendment. A
+        # withdrawal form carries "/A"-free names already, but guard anyway so
+        # an AW can never be counted as an amendment.
+        is_amend = ("/A" in (form or "")) and not is_draft and not is_withdrawal
         entry = out_by_cik.setdefault(cik, {
             "cik": cik,
             "company_name": name,
@@ -188,6 +226,9 @@ def fetch_pipeline(days_back=180, max_hits=200):
             "_seen": set(),      # accession dedup (efts ∩ curated overlap)
             "latest_amended": "",
             "amendment_count": 0,
+            "withdrawn": False,
+            "withdrawn_date": "",
+            "_latest_active": "",   # newest non-withdrawal filing
             "form_types": [],
             "days_since_first": 0,
             "edgar_url": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type=S-1",
@@ -206,18 +247,46 @@ def fetch_pipeline(days_back=180, max_hits=200):
         # recent display name (handles renames and stale early-filing names).
         if name: entry["company_name"] = name
         entry["filings"].append({"form": form, "filed_date": filed, "adsh": adsh})
-        if filed and (not entry["_first_any"] or filed < entry["_first_any"]):
+        # A withdrawal is not a registration and must never start the clock:
+        # a company that filed RW in March and a fresh S-1 in July would
+        # otherwise date from the WITHDRAWAL, so days_since_first ran ahead and
+        # days_to_price_est decayed toward "due any day now" on a deal that had
+        # only just been filed.
+        if filed and not is_withdrawal and (not entry["_first_any"] or filed < entry["_first_any"]):
             entry["_first_any"] = filed
         # The readiness clock starts at the first PUBLIC S-1/F-1, not the
         # months-earlier confidential DRS draft.
-        if filed and not is_draft and (not entry["first_filed"] or filed < entry["first_filed"]):
+        if filed and not is_draft and not is_withdrawal and \
+                (not entry["first_filed"] or filed < entry["first_filed"]):
             entry["first_filed"] = filed
         if is_amend:
             entry["amendment_count"] += 1
             if filed > (entry["latest_amended"] or ""):
                 entry["latest_amended"] = filed
+        if is_withdrawal:
+            if filed > (entry["withdrawn_date"] or ""):
+                entry["withdrawn_date"] = filed
+        elif filed > (entry["_latest_active"] or ""):
+            # Newest non-withdrawal filing. Withdrawing is not terminal —
+            # companies pull a deal and re-file months later — so "withdrawn"
+            # has to mean "the last thing that happened was a withdrawal",
+            # not "a withdrawal appears somewhere in the history".
+            entry["_latest_active"] = filed
         if form and form not in entry["form_types"]:
             entry["form_types"].append(form)
+
+    # An RW withdraws ANY Securities Act registration, not just an IPO. A live
+    # sample of 15 recent RW filers had exactly ONE with an S-1/F-1 on file;
+    # the rest were ETF/fund trusts, an S-3ASR shelf and an S-4. Without this
+    # gate each of those became a "company" in the IPO pipeline, described as
+    # "Tracked via SEC S-1 / F-1 filings", labelled Withdrawn, emitting a
+    # "deal pulled" signal, and consuming one of the distinct-filer slots.
+    # A withdrawal is only meaningful for a filer we actually saw register.
+    registration_forms = set(S1_FORMS) - set(_WITHDRAWAL_FORMS)
+    out_by_cik = {
+        cik: e for cik, e in out_by_cik.items()
+        if any(f in registration_forms for f in e["form_types"])
+    }
 
     today = date.today()
     out = []
@@ -226,8 +295,17 @@ def fetch_pipeline(days_back=180, max_hits=200):
         # draft date so the row still carries a timeline.
         if not entry["first_filed"]:
             entry["first_filed"] = entry["_first_any"]
+        # Withdrawn iff the withdrawal is the LATEST thing on file. A company
+        # that pulled a deal in March and re-filed in July is live, not dead.
+        # Strictly greater: on a same-day tie the ACTIVE filing wins. A
+        # corrected amendment refiled the same day it was withdrawn is a live
+        # deal, and marking it "pulled" would zero its readiness and emit a
+        # deal-pulled signal on a deal that is proceeding.
+        entry["withdrawn"] = bool(entry["withdrawn_date"]) and \
+            entry["withdrawn_date"] > (entry["_latest_active"] or "")
         entry.pop("_first_any", None)
         entry.pop("_seen", None)
+        entry.pop("_latest_active", None)
         try:
             d = date.fromisoformat(entry["first_filed"])
             entry["days_since_first"] = (today - d).days
@@ -348,7 +426,13 @@ def pipeline_newest(days_back=180):
     start = (date.today() - timedelta(days=days_back)).isoformat()
     end = date.today().isoformat()
     r = _get(EDGAR_SEARCH,
-             params={"forms": "S-1,S-1/A,F-1,F-1/A,S-11,S-11/A",
+             # Must match fetch_pipeline's form set exactly, and for the same
+             # reason: "/A" entries turn the query into an amendments-only
+             # filter. RW is included so a day whose only registration activity
+             # is a WITHDRAWAL still advances the cursor — otherwise a deal
+             # being pulled would never trigger a re-fetch and the pipeline
+             # would keep showing it as live.
+             params={"forms": "S-1,F-1,S-11,RW",
                      "dateRange": "custom", "startdt": start, "enddt": end, "from": 0},
              headers={**UA, "Host": "efts.sec.gov"})
     newest = ""
@@ -374,7 +458,8 @@ def handle_action(action, payload):
         # below), so a stale pre-change cursor forces one full re-fetch instead
         # of replaying an outdated cached result. `pipeline_newest` only probes
         # efts, which doesn't see force-fetched curated CIKs.
-        CURSOR_VERSION = 2  # bumped: curated KNOWN_PRIVATE_CIKS injection added
+        CURSOR_VERSION = 3  # bumped: root-form efts query (was amendments-only),
+                            # RW withdrawal tracking, non-registrant gate
         days = payload.get("days_back", 180)
         prev = payload.get("prev_cursor")
         newest = pipeline_newest(days)

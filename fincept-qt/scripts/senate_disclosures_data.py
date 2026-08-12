@@ -70,7 +70,13 @@ _EFD_PARALLEL_WORKERS = 8
 
 COMMITTEE_SECTOR_MAP: Dict[str, List[str]] = {
     "Armed Services":               ["Defense", "Aerospace"],
-    "Veterans Affairs":             ["Defense", "Healthcare"],
+    # Veterans Affairs oversees the VA department — veterans' healthcare and
+    # benefits — NOT defense procurement. Mapping it to Defense flagged every
+    # LMT/RTX trade by a VA member as a committee conflict. It was harmless
+    # while the reverse map kept only one committee per sector (Armed Services
+    # won Defense); once oversight became many-to-many the bad entry started
+    # firing, so it is corrected rather than amplified.
+    "Veterans Affairs":             ["Healthcare"],
     "Intelligence":                 ["Defense", "Cybersecurity", "Technology"],
     "Finance":                      ["Financials", "Banking"],
     "Banking":                      ["Financials", "Banking", "Insurance"],
@@ -90,10 +96,13 @@ COMMITTEE_SECTOR_MAP: Dict[str, List[str]] = {
     "Homeland Security":            ["Defense", "Cybersecurity"],
     "Ways and Means":               ["Financials", "Tax"],
     "Rules":                        [],
-    "Budget":                       ["Financials"],
+    # Budget sets spending levels; it has no financial-industry oversight.
+    "Budget":                       [],
     "Environment":                  ["Energy"],
     "Foreign Affairs":              ["Defense", "International"],
-    "Education":                    ["Consumer"],
+    # Education/Workforce has no oversight of consumer discretionary names
+    # (the Consumer sector list is DIS/NFLX/SBUX/COST/HD/…).
+    "Education":                    [],
     "Natural Resources":            ["Energy", "Mining"],
 }
 
@@ -150,21 +159,66 @@ def _state_to_abbrev(state_raw: str) -> str:
     return US_STATE_ABBREV.get(s, "")
 
 
-# Pre-computed: ticker → the committee most likely to have insider knowledge of it
-def _build_ticker_committee_map() -> Dict[str, str]:
-    """Reverse-map: ticker → committee with oversight of that sector."""
-    sector_to_cmte: Dict[str, str] = {}
+# Filler tokens that carry no identifying information in a committee name.
+_CMTE_STOPWORDS = frozenset({
+    "and", "the", "of", "on", "committee", "select", "special", "subcommittee",
+    "us", "u.s.", "united", "states", "house", "senate", "permanent",
+})
+
+
+def _cmte_tokens(name: str) -> frozenset:
+    """Distinctive lowercase tokens of a committee name, punctuation stripped."""
+    cleaned = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in name.lower())
+    return frozenset(t for t in cleaned.split() if t and t not in _CMTE_STOPWORDS)
+
+
+def _committees_match(a: str, b: str) -> bool:
+    """True when two committee names denote the same committee.
+
+    Replaces a bidirectional 8-character prefix substring test that produced
+    both false positives and false negatives. The prefix test matched
+    "Energy and Natural Resources" (Senate) against "Energy and Commerce"
+    (House) — "energy a" is a substring of both — so a senator's energy
+    committee seat flagged trades overseen by an entirely different House
+    committee.
+
+    Token containment is the right relation because the two sides are the same
+    committee written at different lengths: our key "Commerce" vs Congress.gov's
+    "Commerce, Science, and Transportation". {commerce} is a subset, so they
+    match; {energy, natural, resources} vs {energy, commerce} is a subset in
+    neither direction, so they do not.
+    """
+    ta, tb = _cmte_tokens(a), _cmte_tokens(b)
+    if not ta or not tb:
+        return False
+    return ta <= tb or tb <= ta
+
+
+# Pre-computed: ticker → EVERY committee with oversight of that ticker's sectors.
+def _build_ticker_committee_map() -> Dict[str, List[str]]:
+    """Reverse-map: ticker → all committees with oversight of that sector.
+
+    This used to keep only the FIRST committee per sector, which silently made
+    the map wrong for exactly the cases it exists to catch. Because dict order
+    decided the winner, Technology resolved to "Intelligence" (declared before
+    Commerce), Healthcare to "Veterans Affairs" (before Health), and Financials
+    to "Finance" (before Banking) — so an NVDA trade by a member of Commerce,
+    Science and Transportation, a PFE trade by a HELP member, and a JPM trade
+    by a Banking, Housing and Urban Affairs member were all scored as having no
+    committee overlap at all. Oversight is genuinely many-to-many; the map now
+    says so.
+    """
+    sector_to_cmtes: Dict[str, List[str]] = {}
     for cmte, sectors in COMMITTEE_SECTOR_MAP.items():
         for sec in sectors:
-            if sec not in sector_to_cmte:
-                sector_to_cmte[sec] = cmte
-    result: Dict[str, str] = {}
+            sector_to_cmtes.setdefault(sec, []).append(cmte)
+    result: Dict[str, List[str]] = {}
     for sec, tickers in SECTOR_TICKERS.items():
-        cmte = sector_to_cmte.get(sec, "")
-        if cmte:
+        for cmte in sector_to_cmtes.get(sec, []):
             for t in tickers:
-                if t not in result:
-                    result[t] = cmte
+                lst = result.setdefault(t, [])
+                if cmte not in lst:
+                    lst.append(cmte)
     return result
 
 TICKER_COMMITTEE_MAP = _build_ticker_committee_map()
@@ -352,13 +406,22 @@ def _make_member_id(name: str) -> str:
 
 
 def _compute_committee_relevance(ticker: str, committees: List[str]) -> str:
-    """Return the committee name if this ticker falls under any of the member's committees."""
-    cmte_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), "")
-    if not cmte_for_ticker:
+    """The member's own committee name if it has oversight of this ticker, else "".
+
+    Returns the member's spelling (not our map key) so the UI shows the
+    committee as Congress.gov names it.
+
+    NOTE for consumers: "" means "no overlap found", which includes "this
+    ticker is not in our ~84-ticker coverage list". It is NOT evidence of no
+    conflict.
+    """
+    cmtes_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), [])
+    if not cmtes_for_ticker:
         return ""
     for c in committees:
-        if cmte_for_ticker.lower()[:8] in c.lower() or c.lower()[:8] in cmte_for_ticker.lower():
-            return c
+        for mapped in cmtes_for_ticker:
+            if _committees_match(mapped, c):
+                return c
     return ""
 
 
@@ -1433,8 +1496,13 @@ def compute_signal_score(trade: dict, member: dict) -> float:
     if cmte_rel:
         score += 30
     else:
-        cmte_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), "")
-        if cmte_for_ticker and any(cmte_for_ticker[:8].lower() in c.lower() for c in committees):
+        # Dead branch, kept honest rather than deleted: this recomputes exactly
+        # what _compute_committee_relevance already did, so it can only fire
+        # when that returned "" — i.e. never. It now at least uses the same
+        # many-to-many map and matcher, so it cannot disagree with the primary
+        # path the way the old prefix test did.
+        cmtes_for_ticker = TICKER_COMMITTEE_MAP.get(ticker.upper(), [])
+        if any(_committees_match(m, c) for m in cmtes_for_ticker for c in committees):
             score += 20
 
     lag = trade.get("disclosure_lag_days", 0)
@@ -1547,8 +1615,14 @@ def build_all_data(days_back: int = 90) -> dict:
 
         for t in filing.get("trades", []):
             trade_idx += 1
-            mem["trade_count_ytd"] += 1
             is_placeholder = t.get("placeholder", False)
+            # Count TRADES, not filings. A House row is one placeholder stub per
+            # filing with no ticker and no amount, so counting it put House
+            # members at the top of the "most active trader" ranking on filing
+            # volume alone. The C++ placeholder flag cannot repair this — the
+            # count is emitted here and read as a scalar.
+            if not is_placeholder:
+                mem["trade_count_ytd"] += 1
             score = 0.0 if is_placeholder else compute_signal_score(
                 {**t, "disclosure_lag_days": lag or 0},
                 {"committees": committees}

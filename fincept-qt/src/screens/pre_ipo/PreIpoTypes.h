@@ -12,7 +12,7 @@ namespace fincept::pre_ipo {
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
-enum class IpoStatus { Unknown, Rumored, Filed, Priced, Listed, Acquired };
+enum class IpoStatus { Unknown, Rumored, Filed, Priced, Listed, Acquired, Withdrawn };
 
 inline QString ipo_status_label(IpoStatus s) {
     switch (s) {
@@ -21,6 +21,7 @@ inline QString ipo_status_label(IpoStatus s) {
         case IpoStatus::Priced:   return "Priced";
         case IpoStatus::Listed:   return "Listed";
         case IpoStatus::Acquired: return "Acquired";
+        case IpoStatus::Withdrawn: return "Withdrawn";
         default:                  return "Unknown";
     }
 }
@@ -56,6 +57,11 @@ struct FundMark {
     QString issuer_raw;       // raw issuer string in N-PORT (varies)
     QDate   as_of;            // reporting period end
     QDate   filed_date;
+    /// as_of was NOT disclosed (repPdEnd absent) and has been substituted with
+    /// filed_date. N-PORT is filed up to ~60 days after the period it covers,
+    /// so an unflagged substitution overstates the mark's freshness by up to
+    /// two months. Consumers must render it as an approximation.
+    bool    as_of_estimated = false;
     double  shares_held = 0;
     double  fair_value_usd = 0;
     double  mark_pps = 0;     // fair_value / shares
@@ -105,9 +111,19 @@ struct S1Status {
     double  est_price_high = 0;
     long long shares_outstanding = 0;
     QStringList underwriters;
-    QString status_label;     // "Filed", "Amended", "Priced", "Listed"
+    QString status_label;     // "Filed", "Amended", "Priced", "Withdrawn"
     QDate   priced_date;
     QString edgar_url;
+    /// True when an RW/AW is the most recent filing on the registration —
+    /// the deal was pulled. Not "an RW appears in the history": companies
+    /// withdraw and re-file, and a re-filed deal is live again.
+    ///
+    /// Load-bearing rather than cosmetic. A withdrawing company files an
+    /// S-1/A on the way out, so it GAINS amendment count as it dies — and
+    /// the amendment-burst signal reads that as "pricing imminent". Without
+    /// this flag, cancellation and imminent pricing are indistinguishable.
+    bool    withdrawn = false;
+    QDate   withdrawn_date;
 };
 
 /// XBRL-derived annual financials.
@@ -126,7 +142,21 @@ struct Analytics {
     double mark_dispersion_pct = 0;
     double mark_drift_vs_last_round_pct = 0;
     double hiive_premium_pct = 0;
-    int    ipo_readiness_score = 0;     // 0..100
+    int    ipo_readiness_score = 0;     // 0..100; only meaningful if available
+    /// False when readiness could not be computed from anything other than the
+    /// filing record, in which case the score carries NO information and
+    /// consumers must render a dash.
+    ///
+    /// Not defensive plumbing — without it the score is actively misleading.
+    /// Of its five terms, the financial one can never fire (nothing populates
+    /// Financials) and the maturity/raise terms come only from Form D, which
+    /// pipeline-only stubs lack. So for an S-1 stub the only evaluable terms
+    /// are "has an S-1" and "has an amendment" — both true — and any scheme
+    /// that scores over just those hands every such company an identical top
+    /// mark. The earlier absolute version silently capped at 80; rescaling
+    /// over available terms made it exactly 100. Both are noise dressed as a
+    /// ranking. Absent is the honest answer.
+    bool   ipo_readiness_available = false;
     int    days_to_price_est = 0;       // 0 if no S-1
     double comp_implied_valuation_b = 0;
     double valuation_gap_pct = 0;
@@ -220,7 +250,12 @@ struct S1Filing {
 };
 
 /// Computed market-level signal for the right-rail "Signals" pane.
-enum class SignalKind { MarkUp, MarkDown, NewFiling, AmendmentBurst, PremiumHigh, ReadinessJump, RoundFiled };
+// Withdrawn is its own kind, not an AmendmentBurst variant: the whole point
+// is that a pulled deal must not look like an imminent pricing, and sharing
+// a kind means sharing the chip label, the colour and the KPI counter — so
+// only the sentence would have differed.
+enum class SignalKind { MarkUp, MarkDown, NewFiling, AmendmentBurst, PremiumHigh,
+                        ReadinessJump, RoundFiled, Withdrawn };
 
 struct Signal {
     QString    company_id;

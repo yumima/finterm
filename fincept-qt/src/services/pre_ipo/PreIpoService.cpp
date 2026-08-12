@@ -121,9 +121,24 @@ void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
         primary.last_round_name = other.last_round_name;
     }
     primary.watched = primary.watched || other.watched;
-    // IpoStatus enum is ordered Unknown<Rumored<Filed<Priced<Listed<Acquired,
-    // so the larger value is the more-advanced status.
-    if (static_cast<int>(other.ipo_status) > static_cast<int>(primary.ipo_status))
+    // Merge by pipeline PROGRESS, not by enum ordinal. Withdrawn was appended
+    // to the enum and therefore has the largest integer value, so an ordinal
+    // comparison would let a stale withdrawn registration override a Listed or
+    // Acquired status. Rank explicitly so adding an enumerator can never again
+    // change merge behaviour as a side effect.
+    const auto progress = [](IpoStatus s) {
+        switch (s) {
+            case IpoStatus::Acquired:  return 6;
+            case IpoStatus::Listed:    return 5;
+            case IpoStatus::Priced:    return 4;
+            case IpoStatus::Withdrawn: return 3; // terminal, but behind any outcome
+            case IpoStatus::Filed:     return 2;
+            case IpoStatus::Rumored:   return 1;
+            case IpoStatus::Unknown:   break;
+        }
+        return 0;
+    };
+    if (progress(other.ipo_status) > progress(primary.ipo_status))
         primary.ipo_status = other.ipo_status;
     for (const auto& t : other.tags) if (!primary.tags.contains(t)) primary.tags << t;
     for (const auto& a : other.aliases) if (!primary.aliases.contains(a)) primary.aliases << a;
@@ -925,6 +940,7 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
             m.fund_cik       = mo[QStringLiteral("fund_cik")].toString();
             m.issuer_raw     = mo[QStringLiteral("issuer_raw")].toString();
             m.as_of          = QDate::fromString(mo[QStringLiteral("as_of")].toString(), Qt::ISODate);
+            m.as_of_estimated = mo[QStringLiteral("as_of_estimated")].toBool();
             m.filed_date     = QDate::fromString(mo[QStringLiteral("filed_date")].toString(), Qt::ISODate);
             m.shares_held    = mo[QStringLiteral("shares_held")].toDouble();
             m.fair_value_usd = mo[QStringLiteral("fair_value_usd")].toDouble();
@@ -996,11 +1012,24 @@ void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
             c.s1.latest_amended  = QDate::fromString(o[QStringLiteral("latest_amended")].toString(), Qt::ISODate);
             c.s1.days_since_first_filed = o[QStringLiteral("days_since_first")].toInt();
             c.s1.edgar_url       = s.edgar_url;
-            c.s1.status_label    = s.amendment_count > 0 ? "Amended" : "Filed";
+            c.s1.withdrawn       = o[QStringLiteral("withdrawn")].toBool();
+            c.s1.withdrawn_date  =
+                QDate::fromString(o[QStringLiteral("withdrawn_date")].toString(), Qt::ISODate);
+            const bool priced    = o[QStringLiteral("priced")].toBool();
+            c.s1.priced_date     =
+                QDate::fromString(o[QStringLiteral("priced_date")].toString(), Qt::ISODate);
+            // Order matters: withdrawn beats priced beats amended. A 424B
+            // followed by an RW is a pulled deal, not a priced one.
+            c.s1.status_label    = c.s1.withdrawn      ? QStringLiteral("Withdrawn")
+                                   : priced            ? QStringLiteral("Priced")
+                                   : s.amendment_count > 0 ? QStringLiteral("Amended")
+                                                           : QStringLiteral("Filed");
             c.s1.form_types.clear();
             for (const auto& ft : o[QStringLiteral("form_types")].toArray())
                 c.s1.form_types << ft.toString();
-            c.ipo_status   = IpoStatus::Filed;
+            c.ipo_status   = c.s1.withdrawn ? IpoStatus::Withdrawn
+                             : priced       ? IpoStatus::Priced
+                                            : IpoStatus::Filed;
             c.s1_filed_date = s.filed_date;
         }
     }
@@ -1071,24 +1100,70 @@ void PreIpoService::recompute_analytics() {
                 a.hiive_premium_pct = (last - a.consensus_mark_pps) / a.consensus_mark_pps * 100.0;
         }
 
-        // IPO readiness score (0-100).
-        int score = 0;
-        if (c.s1.first_filed.isValid()) score += 30;
-        if (c.s1.amendment_count >= 1)  score += 15;
-        if (c.fin.revenue_m >= 100)     score += 20;
-        if (c.founded.isValid() && c.founded.daysTo(QDate::currentDate()) >= 7 * 365) score += 10;
-        if (c.cumulative_raised_m >= 500) score += 10;
-        // sector multiple favorable proxy: tech / fintech / ai get +15
-        if (c.tags.contains("ai") || c.tags.contains("fintech") || c.sector == "Technology") score += 15;
-        a.ipo_readiness_score = std::min(100, score);
+        // IPO readiness (0-100), scored over terms whose inputs exist — and
+        // WITHHELD when the only inputs are the filing record itself.
+        //
+        // Three attempts, so the reasoning is worth stating. The original
+        // summed fixed points; because nothing populates Financials (the
+        // facts_for action has no C++ caller) its 20-point revenue term could
+        // never fire, so the score silently capped at 80 and no company could
+        // ever be "IPO-ready". Rescaling over available terms was worse: for a
+        // pipeline-only stub the ONLY evaluable terms are "has an S-1" and
+        // "has an amendment", both true, so every such company scored exactly
+        // 100/100 — the ReadinessJump signal fired for all of them and the
+        // Picks ranking filled with data-free stubs tied at the top.
+        //
+        // A score computed from two terms that are true for every row is not a
+        // measurement, it is a constant. So readiness is published only when at
+        // least one input BEYOND the filing record is available; otherwise it
+        // is marked unavailable and consumers dash it. Same rule the portfolio
+        // metrics follow: a metric that cannot be computed honestly is absent.
+        //
+        // Availability is "was this input loaded", not "is it nonzero" — a
+        // company with a disclosed $0 raise is known, and must not outrank a
+        // documented peer merely by being undocumented.
+        const bool have_financials = c.fin.as_of.isValid();
+        const bool have_form_d     = !c.rounds.isEmpty();
+
+        int earned = 0, possible = 0;
+        const auto term = [&](bool available, bool met, int weight) {
+            if (!available) return;
+            possible += weight;
+            if (met) earned += weight;
+        };
+        term(true, c.s1.first_filed.isValid(), 30);
+        term(true, c.s1.amendment_count >= 1, 15);
+        term(have_financials, c.fin.revenue_m >= 100, 20);
+        term(have_form_d, c.founded.isValid() &&
+                          c.founded.daysTo(QDate::currentDate()) >= 7 * 365, 10);
+        term(have_form_d, c.cumulative_raised_m >= 500, 10);
+
+        a.ipo_readiness_available = have_financials || have_form_d;
+        a.ipo_readiness_score =
+            a.ipo_readiness_available && possible > 0
+                ? std::min(100, qRound(100.0 * earned / possible))
+                : 0;
+        // A pulled registration is not "ready" however thick the file is.
+        if (c.s1.withdrawn) {
+            a.ipo_readiness_available = true;
+            a.ipo_readiness_score = 0;
+        }
 
         // Days-to-price estimate: median 90 days for tech S-1 historically.
-        if (c.s1.first_filed.isValid())
+        // A withdrawn registration is not counting down to anything, so it
+        // gets no estimate rather than a decaying one that hits 0 and reads
+        // as "due any day now".
+        if (c.s1.first_filed.isValid() && !c.s1.withdrawn)
             a.days_to_price_est = std::max(0, 90 - c.s1.days_since_first_filed);
+        else
+            a.days_to_price_est = 0;
 
         // Composite picks score: weighted blend (rough, sign-adjusted).
         double cp = 0;
-        cp += 0.4 * a.ipo_readiness_score;                 // up to 40
+        // Only a published readiness contributes. Crediting an
+        // unavailable one would rank stubs above documented companies.
+        if (a.ipo_readiness_available)
+            cp += 0.4 * a.ipo_readiness_score;             // up to 40
         cp += 0.15 * std::min(50.0, std::abs(a.mark_drift_vs_last_round_pct));
         cp += 0.10 * std::min(50.0, a.consensus_mark_pps > 0 ? 50.0 : 0.0);
         cp += 0.10 * std::min(40, a.smart_money_index * 8);
@@ -1122,7 +1197,22 @@ void PreIpoService::recompute_analytics() {
                 : QDateTime(c.fund_marks.first().as_of, QTime(16, 0));
             signals_.append(s);
         }
-        if (c.s1.amendment_count >= 3) {
+        // A withdrawn registration must never emit the burst signal. The
+        // amendment count is at its HIGHEST as a deal dies — the S-1/A that
+        // precedes an RW increments it — so without this guard withdrawal
+        // and imminent pricing produce the same bullish bullet.
+        if (c.s1.withdrawn) {
+            Signal s; s.company_id = c.id; s.company_name = c.name;
+            s.kind = SignalKind::Withdrawn;
+            s.description = c.s1.withdrawn_date.isValid()
+                ? QString("Registration withdrawn %1 — deal pulled")
+                      .arg(c.s1.withdrawn_date.toString(QStringLiteral("d MMM yyyy")))
+                : QStringLiteral("Registration withdrawn — deal pulled");
+            s.at = c.s1.withdrawn_date.isValid()
+                       ? QDateTime(c.s1.withdrawn_date, QTime(16, 0))
+                       : now;
+            signals_.append(s);
+        } else if (c.s1.amendment_count >= 3) {
             Signal s; s.company_id = c.id; s.company_name = c.name;
             s.kind = SignalKind::AmendmentBurst;
             s.description = QString("%1 S-1 amendments — pricing imminent").arg(c.s1.amendment_count);
@@ -1131,7 +1221,7 @@ void PreIpoService::recompute_analytics() {
                 : now;
             signals_.append(s);
         }
-        if (a.ipo_readiness_score >= 70) {
+        if (a.ipo_readiness_available && a.ipo_readiness_score >= 70) {
             Signal s; s.company_id = c.id; s.company_name = c.name;
             s.kind = SignalKind::ReadinessJump;
             s.description = QString("IPO readiness %1/100").arg(a.ipo_readiness_score);

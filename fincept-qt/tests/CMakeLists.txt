@@ -494,6 +494,39 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── IPO Watch pure parse/format ──────────────────────────────────────────────
+# Both helpers have shipped a wrong-but-plausible number: a half-parsed price
+# range reported as a confident low side, and a share count run through the
+# currency formatter.
+add_executable(test_ipo_format
+    screens/test_ipo_format.cpp
+)
+target_include_directories(test_ipo_format PRIVATE ../src)
+target_link_libraries(test_ipo_format PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_ipo_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME ipo_format COMMAND test_ipo_format)
+
+# ── Committee oversight matching (Power Trader) ──────────────────────────────
+# committee_relevance is the biggest single input to every conflict/insider
+# number on the screen, and it was wrong in both directions: the reverse map
+# kept only the first committee per sector (so a Commerce member trading NVDA
+# scored no overlap), and matching was an 8-char prefix substring test (so
+# Senate Energy matched House Energy & Commerce).
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME committee_relevance
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_committee_relevance.py
+    )
+endif()
+
+# ── IPO pipeline: withdrawal detection + readiness clock ─────────────────────
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME s1_pipeline
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_s1_pipeline.py
+    )
+endif()
+
 # ── Credential catalogue sync ────────────────────────────────────────────────
 # The catalogue is generated from the scripts that read the keys, and is also
 # the allow-list deciding which credentials survive into a child process. A

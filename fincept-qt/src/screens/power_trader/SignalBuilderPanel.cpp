@@ -495,8 +495,14 @@ void SignalBuilderPanel::refresh_preview() {
     // Build (score, trade_index) pairs and sort descending
     QVector<QPair<double, int>> scored;
     scored.reserve(base_scores_.size());
-    for (int i = 0; i < base_scores_.size() && i < summary_.recent_trades.size(); ++i)
+    for (int i = 0; i < base_scores_.size() && i < summary_.recent_trades.size(); ++i) {
+        // Unscoreable rows (House filing stubs) are excluded from the ranked
+        // preview entirely. The index pairing with recent_trades is preserved
+        // because we carry `i` in the pair rather than compacting the vector.
+        if (base_scores_[i].unscoreable)
+            continue;
         scored.append({preset.apply(base_scores_[i]), i});
+    }
     std::sort(scored.begin(), scored.end(),
               [](const auto& a, const auto& b) { return a.first > b.first; });
 

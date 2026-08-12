@@ -65,6 +65,19 @@ struct PoliticalTrade {
     QString committee_relevance;   // overlapping committee name, if any
     double signal_score           = 0;  // 0–100
     QString source_url;
+    /// This row is a FILING STUB, not a transaction. The House FD index is an
+    /// XML list of filings with no machine-readable transaction detail (the
+    /// detail is in a scanned PDF), so the scraper emits one placeholder per
+    /// filing with an empty ticker, zero amount, and transaction_date set to
+    /// the FILING date.
+    ///
+    /// That last substitution is why this flag has to be honoured rather than
+    /// merely stored: transaction_date == disclosure_date fabricates a 0-day
+    /// disclosure lag, so House filers swept the "fastest discloser" ranking
+    /// as model filers and earned the "suspiciously fast" band in the insider
+    /// composite — purely because their trade dates are unknown. Python has
+    /// always emitted this flag; nothing read it.
+    bool placeholder = false;
 };
 
 // ── Portfolio reconstruction ──────────────────────────────────────────────────
@@ -272,6 +285,16 @@ struct PowerTraderSummary {
 /// Timing/bill/lobbying/history are reserved for future data integration.
 struct TradeFactorScores {
     QString trade_id;
+    /// This row is a House filing stub, not a scoreable trade. The Signal
+    /// Builder must render it as unscored rather than ranking it: with no
+    /// real trade date its fabricated 0-day lag scored 95 ("filed immediately
+    /// — high conviction"), so under the Fast Filers preset the top of the
+    /// preview filled with blank-ticker, $0 stubs.
+    ///
+    /// Flagged rather than filtered out on purpose — the panel pairs
+    /// base_scores_[i] with recent_trades[i] positionally, so dropping
+    /// elements would desync every row.
+    bool    unscoreable = false;
     double  committee = 0;  // trade in committee-regulated sector
     double  size      = 0;  // dollar amount of the trade
     double  lag       = 0;  // disclosure timing (shorter or over-deadline = higher)

@@ -232,6 +232,9 @@ class IpoWatchView : public QWidget {
 
     // Helpers
     static QString format_money(double dollars);
+    /// Bare magnitude for quantities that are NOT money (share counts).
+    /// Passing a share count to format_money prefixes it with '$'.
+    static QString format_count(double n);
     static QString format_deal_size(const QString& price_range, const QString& shares);
     static double  parse_price_mid(const QString& price_range, bool* ok = nullptr);
     static double  parse_shares(const QString& shares);
