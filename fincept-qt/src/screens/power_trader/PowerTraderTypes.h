@@ -13,7 +13,7 @@ namespace fincept::power_trader {
 enum class TradeDirection { Buy, Sell, Exchange, Other };
 enum class AssetType { Stock, Option, Bond, ETF, MutualFund, Crypto, Other };
 enum class MemberChamber { Senate, House };
-enum class BodyFilter    { All, Senate, House, Cabinet };
+enum class BodyFilter    { All, Senate, House };
 
 enum class RankingDimension {
     Alpha,         // alpha vs SPY YTD (portfolio_return - spy_return)
@@ -226,48 +226,6 @@ struct PartyStats {
     QStringList top_tickers;
 };
 
-// ── Cabinet (Executive Branch OGE Form 278) ───────────────────────────────────
-
-struct CabinetHolding {
-    QString asset_name;
-    QString ticker;
-    QString asset_type;          // "Stock","Bond","ETF","Fund","Real Estate","Business Interest","Crypto","Other"
-    QString sector;
-    double  value_min          = 0;
-    double  value_max          = 0;
-    QString value_range_label;
-    bool    is_conflict        = false;  // overlaps regulatory domain
-    QString conflict_note;               // plain English e.g. "Treasury Sec oversees banks"
-};
-
-struct CabinetMember {
-    QString id;
-    QString full_name;
-    QString title;               // "Secretary of Defense"
-    QString department;
-    QString party;               // "R" or "D"
-    int     disclosure_year    = 0;
-    double  est_total_min      = 0;
-    double  est_total_max      = 0;
-    double  conflict_score     = 0;  // 0–100
-    int     conflict_count     = 0;
-    QStringList regulated_sectors;
-    QVector<CabinetHolding> holdings;
-    QStringList conflict_flags;
-    QVector<SectorExposure> sector_breakdown;
-    QString source_url;
-    QString data_source;
-};
-
-struct CabinetSummary {
-    QVector<CabinetMember> members;
-    QDateTime last_updated;
-    bool      loaded          = false;
-    int       disclosure_year = 0;
-    double    total_est_min   = 0;
-    double    total_est_max   = 0;
-    QString   data_note;
-};
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 

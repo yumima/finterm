@@ -32,7 +32,6 @@ fincept::services::util::DiskCache& disk_cache() {
     return c;
 }
 constexpr const char* kSummaryFile = "summary.json";
-constexpr const char* kCabinetFile = "cabinet.json";
 } // namespace
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
@@ -69,12 +68,6 @@ PowerTraderService::PowerTraderService(QObject* parent) : QObject(parent) {
                  QString("Hydrated %1 members, %2 trades from cache")
                      .arg(summary_.members.size())
                      .arg(summary_.recent_trades.size()));
-    }
-    const auto cab_doc = disk_cache().load(QString::fromLatin1(kCabinetFile));
-    if (cab_doc.isObject()) {
-        parse_cabinet(cab_doc.object());
-        QFileInfo fi(disk_cache().path(QString::fromLatin1(kCabinetFile)));
-        if (fi.exists()) cabinet_.last_updated = fi.lastModified().toUTC();
     }
 }
 
@@ -815,127 +808,6 @@ QPair<QString, double> PowerTraderService::best_pick(const QString& mid) const {
     return {p.best_pick_ticker, p.best_pick_pnl_pct};
 }
 
-// ── Cabinet data ──────────────────────────────────────────────────────────────
-
-void PowerTraderService::load_cabinet_data() {
-    if (cabinet_loading_) return;
-    cabinet_loading_ = true;
-    LOG_INFO("PowerTrader", "Loading cabinet financial disclosures (OGE Form 278)");
-
-    QPointer<PowerTraderService> self = this;
-    python::PythonRunner::instance().run(
-        QStringLiteral("oge_cabinet_data.py"),
-        {QStringLiteral("cabinet_data"), QStringLiteral("{}")},
-        [self](python::PythonResult result) {
-            if (!self) return;
-            self->cabinet_loading_ = false;
-            if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_ERROR("PowerTrader", "oge_cabinet_data.py failed: " + result.error.left(200));
-                return;
-            }
-            const QString json_str = python::extract_json(result.output);
-            const auto    doc      = QJsonDocument::fromJson(json_str.toUtf8());
-            if (!doc.isObject()) {
-                LOG_ERROR("PowerTrader", "oge_cabinet_data.py returned invalid JSON");
-                return;
-            }
-            disk_cache().save(QString::fromLatin1(kCabinetFile), doc);
-            self->parse_cabinet(doc.object());
-        });
-}
-
-void PowerTraderService::parse_cabinet(const QJsonObject& root) {
-    CabinetSummary cs;
-    cs.last_updated   = QDateTime::currentDateTimeUtc();
-    cs.loaded         = true;
-    cs.disclosure_year= root[QStringLiteral("disclosure_year")].toInt(2025);
-    cs.total_est_min  = root[QStringLiteral("total_est_min")].toDouble();
-    cs.total_est_max  = root[QStringLiteral("total_est_max")].toDouble();
-    cs.data_note      = root[QStringLiteral("data_note")].toString();
-
-    const auto members_arr = root[QStringLiteral("members")].toArray();
-    cs.members.reserve(members_arr.size());
-
-    for (const auto& v : members_arr) {
-        const auto obj = v.toObject();
-        CabinetMember m;
-        m.id              = obj[QStringLiteral("id")].toString();
-        m.full_name       = obj[QStringLiteral("full_name")].toString();
-        m.title           = obj[QStringLiteral("title")].toString();
-        m.department      = obj[QStringLiteral("department")].toString();
-        m.party           = obj[QStringLiteral("party")].toString();
-        m.disclosure_year = obj[QStringLiteral("disclosure_year")].toInt();
-        m.est_total_min   = obj[QStringLiteral("est_total_min")].toDouble();
-        m.est_total_max   = obj[QStringLiteral("est_total_max")].toDouble();
-        m.conflict_score  = obj[QStringLiteral("conflict_score")].toDouble();
-        m.conflict_count  = obj[QStringLiteral("conflict_count")].toInt();
-        m.source_url      = obj[QStringLiteral("source_url")].toString();
-        m.data_source     = obj[QStringLiteral("data_source")].toString();
-
-        for (const auto& c : obj[QStringLiteral("regulated_sectors")].toArray())
-            m.regulated_sectors.append(c.toString());
-        for (const auto& f : obj[QStringLiteral("conflict_flags")].toArray())
-            m.conflict_flags.append(f.toString());
-
-        for (const auto& hv : obj[QStringLiteral("holdings")].toArray()) {
-            const auto ho = hv.toObject();
-            CabinetHolding h;
-            h.asset_name         = ho[QStringLiteral("asset_name")].toString();
-            h.ticker             = ho[QStringLiteral("ticker")].toString();
-            h.asset_type         = ho[QStringLiteral("asset_type")].toString();
-            h.sector             = ho[QStringLiteral("sector")].toString();
-            h.value_min          = ho[QStringLiteral("value_min")].toDouble();
-            h.value_max          = ho[QStringLiteral("value_max")].toDouble();
-            h.value_range_label  = ho[QStringLiteral("value_range_label")].toString();
-            h.is_conflict        = ho[QStringLiteral("is_conflict")].toBool();
-            h.conflict_note      = ho[QStringLiteral("conflict_note")].toString();
-            m.holdings.append(h);
-        }
-
-        for (const auto& sv : obj[QStringLiteral("sector_breakdown")].toArray()) {
-            const auto so = sv.toObject();
-            SectorExposure se;
-            se.sector            = so[QStringLiteral("sector")].toString();
-            se.total_est_amount  = so[QStringLiteral("est_amount")].toDouble();
-            m.sector_breakdown.append(se);
-        }
-
-        cs.members.append(m);
-    }
-
-    cabinet_ = cs;
-    LOG_INFO("PowerTrader", QString("Cabinet data loaded: %1 members").arg(cs.members.size()));
-    emit cabinet_data_loaded(cs);
-}
-
-QVector<CabinetMember> PowerTraderService::cabinet_conflict_ranking() const {
-    auto result = cabinet_.members;
-    std::sort(result.begin(), result.end(),
-              [](const CabinetMember& a, const CabinetMember& b) {
-                  return a.conflict_score > b.conflict_score;
-              });
-    return result;
-}
-
-QVector<SectorExposure> PowerTraderService::cabinet_sector_exposure() const {
-    QHash<QString, SectorExposure> sectors;
-    for (const auto& m : cabinet_.members) {
-        for (const auto& se : m.sector_breakdown) {
-            auto& s = sectors[se.sector];
-            s.sector            = se.sector;
-            s.total_est_amount += se.total_est_amount;
-            s.member_count++;
-            if (!s.members.contains(m.id)) s.members.append(m.id);
-        }
-    }
-    auto result = sectors.values().toVector();
-    std::sort(result.begin(), result.end(),
-              [](const SectorExposure& a, const SectorExposure& b) {
-                  return a.total_est_amount > b.total_est_amount;
-              });
-    return result;
-}
-
 // ── Signal Builder ────────────────────────────────────────────────────────────
 
 QVector<TradeFactorScores> PowerTraderService::compute_trade_base_scores() const {
@@ -1206,17 +1078,14 @@ bool PowerTraderService::in_active_body(MemberChamber chamber) const {
     switch (body_filter_) {
         case BodyFilter::Senate: return chamber == MemberChamber::Senate;
         case BodyFilter::House:  return chamber == MemberChamber::House;
-        // Cabinet is its own full-width page and never reaches the congress
-        // aggregates; treating it as All keeps them well-defined.
         case BodyFilter::All:
-        case BodyFilter::Cabinet:
             break;
     }
     return true;
 }
 
 PowerTraderSummary PowerTraderService::filtered_summary(BodyFilter body) const {
-    if (body == BodyFilter::All || body == BodyFilter::Cabinet) return summary_;
+    if (body == BodyFilter::All) return summary_;
     PowerTraderSummary s = summary_;
     const MemberChamber want = (body == BodyFilter::Senate)
                                ? MemberChamber::Senate : MemberChamber::House;

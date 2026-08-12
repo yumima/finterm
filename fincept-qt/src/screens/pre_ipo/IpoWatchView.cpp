@@ -190,6 +190,19 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
             &services::PreIpoService::data_loaded, this,
             [this](fincept::pre_ipo::PreIpoSummary) { render(); });
 
+    // An on-demand per-company fetch (currently SEC XBRL financials, opened
+    // from the FUNDAMENTALS pane) lands asynchronously. Without this the data
+    // arrives and the pane keeps showing the "fetching…" text until the user
+    // navigates away and back — which reads exactly like the permanent blank
+    // it replaced. Re-render only when the update is for the company on
+    // screen, so a background fetch for another name doesn't reset scroll.
+    connect(&services::PreIpoService::instance(),
+            &services::PreIpoService::company_updated, this,
+            [this](const QString& id) {
+                if (!id.isEmpty() && id == detail_company_id_)
+                    render_detail_private(id);
+            });
+
     // Wake-on-resume — when the user returns to the app after a long idle
     // (overnight, long lunch), our per-Entry perf_fetched/profile_fetched
     // flags plus info_cache_/history_cache_ would otherwise serve up
@@ -2272,11 +2285,12 @@ void IpoWatchView::render_signals() {
 
 void IpoWatchView::render_detail_private(const QString& company_id) {
     if (!header_lbl_) return;
-    if (company_id.isEmpty()) { render_detail(nullptr); return; }
+    if (company_id.isEmpty()) { detail_company_id_.clear(); render_detail(nullptr); return; }
 
     const pre_ipo::PrivateCompany c =
         services::PreIpoService::instance().company(company_id);
-    if (c.id.isEmpty()) { render_detail(nullptr); return; }
+    if (c.id.isEmpty()) { detail_company_id_.clear(); render_detail(nullptr); return; }
+    detail_company_id_ = company_id;
 
     const QString css = build_detail_css();
     auto esc = [](const QString& s) { return s.toHtmlEscaped(); };
@@ -2434,7 +2448,11 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // ── FUNDAMENTALS: XBRL financials (present for S-1 filers) ────────────────
     {
         QString h = css;
-        if (c.fin.revenue_m != 0 || c.fin.net_income_m != 0 || c.fin.cash_m != 0) {
+        // Availability is c.fin.as_of, NOT "some number is nonzero". Those are
+        // different questions, and the difference is visible: a filer whose
+        // XBRL we simply never fetched used to look identical to one that
+        // genuinely files nothing.
+        if (c.fin.as_of.isValid()) {
             h += "<div class='sec'>ANNUAL FINANCIALS (XBRL)</div><table class='grid'>";
             auto row = [&](const QString& k, const QString& v) {
                 h += QString("<tr><td class='k'>%1</td><td>%2</td></tr>").arg(k).arg(v);
@@ -2454,9 +2472,25 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
             h += "</table><p class='muted'>From SEC XBRL company facts — populated once "
                  "the company files an S-1 with tagged financials.</p>";
         } else {
-            h += "<i class='muted'>Financial statements unavailable — private companies "
-                 "don't file 10-Ks. XBRL fundamentals appear here once an S-1 with tagged "
-                 "financials is filed.</i>";
+            // Say WHICH of the two reasons applies. "Unavailable" covering both
+            // "we haven't fetched it yet" and "this company files none" is what
+            // made the pane look arbitrary rather than honest.
+            auto& svc = services::PreIpoService::instance();
+            const bool no_filer = c.cik.isEmpty();
+            if (no_filer) {
+                h += "<i class='muted'>No SEC filer on record for this company, so there "
+                     "are no XBRL financials to fetch. Private companies do not file "
+                     "10-Ks; figures appear here once an S-1 with tagged financials is "
+                     "filed.</i>";
+            } else {
+                h += QString("<i class='muted'>Fetching SEC XBRL company facts for CIK "
+                             "%1\xe2\x80\xa6 If this company has never tagged financials "
+                             "in a filing, there is nothing to show — SEC publishes none "
+                             "and no free source has them.</i>").arg(esc(c.cik));
+                // On demand: one SEC round-trip when a dossier is opened, not
+                // 200 of them on every refresh.
+                svc.fetch_financials_for(c.id);
+            }
         }
         if (page_fund_) page_fund_->setText(h);
     }
@@ -2864,6 +2898,9 @@ static QString build_detail_css() {
 }
 
 void IpoWatchView::render_detail(const Entry* e) {
+    // The rail shows one subject at a time; a listed entry displaces any
+    // private dossier, so stale per-company updates must stop routing here.
+    detail_company_id_.clear();
     if (!header_lbl_) return;
     if (!e) {
         header_lbl_->setText("<i style='color:#7a7a7a;'>Select a deal to begin research.</i>");

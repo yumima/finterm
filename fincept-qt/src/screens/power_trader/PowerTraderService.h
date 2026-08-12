@@ -77,8 +77,7 @@ class PowerTraderService : public QObject {
     /// SENATE changed the member list and the feed while the sector
     /// breakdown, committee groups and insider watch kept showing everyone.
     ///
-    /// Every aggregate honours this. Cabinet is a separate full-width page and
-    /// never reaches these, so it is treated as All here.
+    /// Every aggregate honours this.
     void set_body_filter(BodyFilter body);
     BodyFilter body_filter() const { return body_filter_; }
 
@@ -109,14 +108,6 @@ class PowerTraderService : public QObject {
     /// Ticker + estimated gain% for the member's best single position.
     QPair<QString, double> best_pick(const QString& member_id) const;
 
-    // ── Cabinet (OGE Form 278) ────────────────────────────────────────────────
-    void load_cabinet_data();
-    bool is_cabinet_loaded() const { return cabinet_.loaded; }
-    CabinetSummary cabinet_summary() const { return cabinet_; }
-    /// Members sorted by conflict_score descending.
-    QVector<CabinetMember> cabinet_conflict_ranking() const;
-    /// Cabinet-wide sector exposure (sum of all member holdings by sector).
-    QVector<SectorExposure> cabinet_sector_exposure() const;
 
     /// Real close on or before @p date for @p ticker, or 0 if unavailable.
     /// Current price is just close_on_or_before(today) — the latest real close.
@@ -127,7 +118,6 @@ class PowerTraderService : public QObject {
 
   signals:
     void data_loaded(fincept::power_trader::PowerTraderSummary summary);
-    void cabinet_data_loaded(fincept::power_trader::CabinetSummary summary);
     void error_occurred(QString error);
 
   private:
@@ -136,7 +126,6 @@ class PowerTraderService : public QObject {
 
     void on_daemon_response(bool ok, const QJsonObject& result, const QString& error);
     void parse_summary(const QJsonObject& root);
-    void parse_cabinet(const QJsonObject& root);
 
     // ── Real pricing for member returns ───────────────────────────────────────
     // Disclosures report only dollar ranges + dates (no shares/prices), so real
@@ -153,9 +142,7 @@ class PowerTraderService : public QObject {
 
     PowerTraderSummary summary_;
     BodyFilter         body_filter_ = BodyFilter::All;
-    CabinetSummary     cabinet_;
     bool loading_         = false;
-    bool cabinet_loading_ = false;
     int  days_back_       = 90;
 
     QTimer* refresh_timer_ = nullptr;

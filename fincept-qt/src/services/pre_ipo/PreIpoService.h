@@ -74,6 +74,21 @@ class PreIpoService : public QObject {
 
     bool is_loaded() const { return loaded_; }
 
+    /// Fetch SEC XBRL financials for one company, on demand.
+    ///
+    /// These were never fetched at all: the script's `facts_for` action had
+    /// zero C++ callers, so Financials was empty for every company in the
+    /// universe — which is why the FUNDAMENTALS pane was always blank and why
+    /// the IPO-readiness score's revenue term could never fire.
+    ///
+    /// On demand rather than eagerly with the pipeline: SEC asks for a 0.4s
+    /// gap between requests, and the pipeline routinely carries 200 filers, so
+    /// prefetching everything would add ~80s to every refresh for data the
+    /// user looks at one company at a time. One request when a dossier is
+    /// opened, cached for the session, is the right shape — and a company with
+    /// no XBRL facts is remembered so it is asked for only once.
+    void fetch_financials_for(const QString& company_id);
+
   signals:
     void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
     void company_updated(QString id);
@@ -188,6 +203,12 @@ class PreIpoService : public QObject {
     // single 24h time-to-live gate.
     void   load_cursors();
     void   save_cursors();
+
+    /// company_id -> financials fetch already issued this session, and
+    /// company_id -> confirmed to have NO XBRL facts. Split so a company that
+    /// genuinely files no financials is asked for once, not once per click.
+    QSet<QString> fin_requested_;
+    QSet<QString> fin_absent_;
     /// Compact JSON payload for a Python action, injecting the stored prior
     /// cursor for `src` as "prev_cursor" (omitted when force_refresh_ is set).
     QString cursor_payload(QJsonObject base, const QString& src) const;

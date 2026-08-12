@@ -34,10 +34,6 @@ QString net_worth_tooltip();
 /// Reconstructed portfolio value at a point in time.
 QString portfolio_tooltip();
 
-/// Cabinet conflict score: weighted by holdings overlap with the official's
-/// regulatory/budget domain (OGE Form 278 data).
-QString conflict_score_tooltip();
-
 /// Disclosure lag — calendar days between transaction and the filed PTR's
 /// receipt date. Source data.
 QString disclosure_lag_tooltip();

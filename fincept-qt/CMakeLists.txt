@@ -1159,7 +1159,6 @@ set(SCREEN_SOURCES
     src/screens/power_trader/InsiderWatchPanel.cpp
     src/screens/power_trader/PracticePanel.cpp
     src/screens/power_trader/SignalBuilderPanel.cpp
-    src/screens/power_trader/CabinetPanel.cpp
     src/screens/power_trader/CompareView.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
@@ -1571,7 +1570,6 @@ set_source_files_properties(
     src/screens/power_trader/InsiderWatchPanel.cpp
     src/screens/power_trader/PracticePanel.cpp
     src/screens/power_trader/SignalBuilderPanel.cpp
-    src/screens/power_trader/CabinetPanel.cpp
     src/screens/power_trader/CompareView.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/ForgotPasswordScreen.cpp

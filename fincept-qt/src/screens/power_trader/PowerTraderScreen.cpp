@@ -1,7 +1,6 @@
 // src/screens/power_trader/PowerTraderScreen.cpp
 #include "screens/power_trader/PowerTraderScreen.h"
 
-#include "screens/power_trader/CabinetPanel.h"
 #include "screens/power_trader/CommitteePanel.h"
 #include "screens/power_trader/CompareView.h"
 #include "screens/power_trader/DataSourceDialog.h"
@@ -211,17 +210,17 @@ void PowerTraderScreen::build_ui() {
     }
     stack_->addWidget(error_page);
 
-    // Page 2 — content: view_stack_ switches between Congress and Cabinet views
+    // Page 2 — content. This was a QStackedWidget switching between a Congress
+    // page and a Cabinet page; the Cabinet page has been removed (its data was
+    // a hand-transcribed static literal, not a live source), so there is one
+    // page left and the stack is gone with it.
     content_area_ = new QWidget;
     {
         auto* hl = new QHBoxLayout(content_area_);
         hl->setContentsMargins(0, 0, 0, 0);
         hl->setSpacing(0);
 
-        view_stack_ = new QStackedWidget(content_area_);
-
-        // ── Page 0: Congress view (sidebar + tabs) ────────────────────────────
-        congress_view_ = new QWidget(view_stack_);
+        congress_view_ = new QWidget(content_area_);
         {
             auto* cl = new QHBoxLayout(congress_view_);
             cl->setContentsMargins(0, 0, 0, 0);
@@ -418,13 +417,7 @@ void PowerTraderScreen::build_ui() {
 
             cl->addWidget(md_split, 1);
         }
-        view_stack_->addWidget(congress_view_);  // index 0
-
-        // ── Page 1: Cabinet view (full-width, no congress sidebar) ────────────
-        cabinet_panel_ = new screens::CabinetPanel(view_stack_);
-        view_stack_->addWidget(cabinet_panel_);  // index 1
-
-        hl->addWidget(view_stack_, 1);
+        hl->addWidget(congress_view_, 1);
     }
     stack_->addWidget(content_area_);
 
@@ -544,7 +537,6 @@ QWidget* PowerTraderScreen::build_body_strip() {
         {"ALL",     BodyFilter::All},
         {"SENATE",  BodyFilter::Senate},
         {"HOUSE",   BodyFilter::House},
-        {"CABINET", BodyFilter::Cabinet},
     };
 
     body_btn_group_ = new QButtonGroup(this);
@@ -628,7 +620,7 @@ QWidget* PowerTraderScreen::build_body_strip() {
 
     hl->addStretch();
 
-    auto* info = new QLabel("Cabinet: annual OGE Form 278 (not real-time PTRs)");
+    auto* info = new QLabel("Senate eFD + House FD \xe2\x80\x94 periodic transaction reports");
     info->setStyleSheet(QString("color:%1; font-size:12px; font-style:italic;")
                             .arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(info);
@@ -941,14 +933,6 @@ void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     // receiving the pre-filtered summary from here.
     PowerTraderService::instance().set_body_filter(body);
 
-    if (body == BodyFilter::Cabinet) {
-        view_stack_->setCurrentIndex(1);   // full-width cabinet page
-        cabinet_panel_->activate();
-        return;
-    }
-
-    view_stack_->setCurrentIndex(0);   // congress view
-
     if (!PowerTraderService::instance().is_loaded()) return;
 
     const auto filtered  = PowerTraderService::instance().filtered_summary(body);
@@ -1023,7 +1007,7 @@ void PowerTraderScreen::show_onboarding_overlay() {
                             .arg(ui::colors::TEXT_PRIMARY()));
     body->setText(QStringLiteral(
         "Tracks U.S. Congressional stock disclosures filed under the STOCK Act "
-        "(2012) and Cabinet OGE Form 278 holdings.<br/><br/>"
+        "(2012).<br/><br/>"
 
         "<b>How to use it</b><br/>"
         "&nbsp;&bull; Pick a chamber via the <b>VIEW</b> filter (ALL / SENATE / HOUSE / CABINET).<br/>"
@@ -1139,9 +1123,9 @@ QVariantMap PowerTraderScreen::save_state() const {
 void PowerTraderScreen::restore_state(const QVariantMap& state) {
     if (state.contains("body_filter")) {
         const int raw = state.value("body_filter").toInt();
-        // BodyFilter is a closed enum (All/Senate/House/Cabinet). Bound-check
+        // BodyFilter is a closed enum (All/Senate/House). Bound-check
         // to avoid casting stored garbage to a nonexistent enum value.
-        if (raw >= 0 && raw <= static_cast<int>(BodyFilter::Cabinet)) {
+        if (raw >= 0 && raw <= static_cast<int>(BodyFilter::House)) {
             const auto bf = static_cast<BodyFilter>(raw);
             if (bf != active_body_)
                 on_body_filter_changed(bf);

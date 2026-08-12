@@ -461,6 +461,78 @@ void PreIpoService::run_nport_marks_fetch() {
         /*stream*/ {}, /*timeout*/ 240'000);
 }
 
+void PreIpoService::fetch_financials_for(const QString& company_id) {
+    if (company_id.isEmpty())
+        return;
+    // Already have them, already asked, or already know there are none.
+    if (fin_requested_.contains(company_id) || fin_absent_.contains(company_id))
+        return;
+
+    QString cik;
+    for (const auto& c : companies_) {
+        if (c.id == company_id) {
+            if (c.fin.as_of.isValid())
+                return;              // already loaded
+            cik = c.cik;
+            break;
+        }
+    }
+    // No CIK means no SEC filer to look up — not a miss worth retrying.
+    if (cik.isEmpty()) {
+        fin_absent_.insert(company_id);
+        return;
+    }
+    fin_requested_.insert(company_id);
+
+    QPointer<PreIpoService> self = this;
+    QJsonObject payload;
+    payload[QStringLiteral("cik")] = cik;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_s1_pipeline.py"),
+        {QStringLiteral("facts_for"),
+         QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+        [self, company_id](python::PythonResult result) {
+            if (!self) return;
+            self->fin_requested_.remove(company_id);
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                LOG_WARN("PreIpo", "financials fetch failed for " + company_id);
+                return;   // transient — do NOT mark absent, allow a retry
+            }
+            const QJsonDocument doc =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+            const QJsonObject o = doc.isObject() ? doc.object() : QJsonObject();
+            // The script omits keys it has no data for and returns an error
+            // object when the filer has no XBRL at all — absent, not zero.
+            if (o.isEmpty() || o.contains(QStringLiteral("error")) ||
+                !o.contains(QStringLiteral("revenue_m"))) {
+                self->fin_absent_.insert(company_id);
+                LOG_INFO("PreIpo", company_id + " files no XBRL financials");
+                emit self->company_updated(company_id);
+                return;
+            }
+            for (auto& c : self->companies_) {
+                if (c.id != company_id) continue;
+                c.fin.revenue_m    = o.value(QStringLiteral("revenue_m")).toDouble();
+                c.fin.net_income_m = o.value(QStringLiteral("net_income_m")).toDouble();
+                c.fin.cash_m       = o.value(QStringLiteral("cash_m")).toDouble();
+                c.fin.gross_margin_pct =
+                    o.value(QStringLiteral("gross_margin_pct")).toDouble();
+                c.fin.revenue_growth_yoy_pct =
+                    o.value(QStringLiteral("revenue_growth_yoy_pct")).toDouble();
+                // as_of is the availability flag every consumer keys on, so it
+                // is set LAST and only when a period end was actually reported.
+                c.fin.as_of = QDate::fromString(
+                    o.value(QStringLiteral("revenue_end")).toString(), Qt::ISODate);
+                break;
+            }
+            // Readiness has a financial term that can now fire.
+            self->recompute_analytics();
+            emit self->company_updated(company_id);
+            self->emit_summary();
+        },
+        /*stream*/ {}, /*timeout*/ 30'000);
+}
+
 void PreIpoService::run_s1_pipeline_fetch() {
     QPointer<PreIpoService> self = this;
     QJsonObject base;

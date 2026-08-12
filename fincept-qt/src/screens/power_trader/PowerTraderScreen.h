@@ -26,7 +26,6 @@ class PartyPanel;
 class InsiderWatchPanel;
 class PracticePanel;
 class SignalBuilderPanel;
-class CabinetPanel;
 class CompareView;
 }
 
@@ -129,7 +128,6 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
     screens::CommitteePanel*     committee_panel_  = nullptr;
     screens::PartyPanel*         party_panel_      = nullptr;
     screens::InsiderWatchPanel*  insider_panel_    = nullptr;
-    screens::CabinetPanel*       cabinet_panel_    = nullptr;
     screens::SignalBuilderPanel* signal_panel_     = nullptr;
     screens::PracticePanel*      practice_panel_   = nullptr;
     screens::CompareView*        compare_view_     = nullptr;
@@ -145,8 +143,6 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
     QLabel*         error_lbl_       = nullptr;
     QWidget*        content_area_    = nullptr;
 
-    // ── Congress vs Cabinet page switch ──────────────────────────────────────
-    QStackedWidget* view_stack_      = nullptr;  // 0=congress, 1=cabinet
     QWidget*        congress_view_   = nullptr;  // master-detail: [sidebar|tabs] | member_panel_
 
     // ── State ─────────────────────────────────────────────────────────────────
