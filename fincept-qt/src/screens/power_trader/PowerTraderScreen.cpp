@@ -870,6 +870,10 @@ void PowerTraderScreen::on_member_selected(const QString& member_id) {
 
 void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {
     active_body_ = body;
+    // Set it on the SERVICE before recomputing anything: the aggregates below
+    // read it, and so do the panels that call the service directly rather than
+    // receiving the pre-filtered summary from here.
+    PowerTraderService::instance().set_body_filter(body);
 
     if (body == BodyFilter::Cabinet) {
         view_stack_->setCurrentIndex(1);   // full-width cabinet page

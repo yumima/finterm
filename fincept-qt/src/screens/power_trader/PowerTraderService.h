@@ -66,6 +66,25 @@ class PowerTraderService : public QObject {
     /// Filter summary by body (Senate / House only).
     PowerTraderSummary filtered_summary(BodyFilter body) const;
 
+    /// The active ALL / SENATE / HOUSE selection.
+    ///
+    /// Held on the SERVICE, not threaded through each call, because the
+    /// aggregates below are reached two different ways: the screen passes a
+    /// pre-filtered summary to the panels, but MemberProfilePanel,
+    /// PracticePanel and PartyPanel call the service directly. With the filter
+    /// as a parameter those three would silently keep showing the unfiltered
+    /// universe — which is exactly the bug this fixes, where switching to
+    /// SENATE changed the member list and the feed while the sector
+    /// breakdown, committee groups and insider watch kept showing everyone.
+    ///
+    /// Every aggregate honours this. Cabinet is a separate full-width page and
+    /// never reaches these, so it is treated as All here.
+    void set_body_filter(BodyFilter body);
+    BodyFilter body_filter() const { return body_filter_; }
+
+    /// True when a member/trade belongs to the active body selection.
+    bool in_active_body(MemberChamber chamber) const;
+
     // ── Insider watch ─────────────────────────────────────────────────────────
     /// Compute multi-factor insider watch list, sorted by insider_score desc.
     QVector<InsiderWatchEntry> insider_watch_list() const;
@@ -133,6 +152,7 @@ class PowerTraderService : public QObject {
     qint64 price_epoch_ = 0;  // bumps each load so stale price callbacks drop
 
     PowerTraderSummary summary_;
+    BodyFilter         body_filter_ = BodyFilter::All;
     CabinetSummary     cabinet_;
     bool loading_         = false;
     bool cabinet_loading_ = false;

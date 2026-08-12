@@ -603,6 +603,7 @@ QVector<SectorExposure> PowerTraderService::sector_breakdown() const {
     QHash<QString, SectorExposure> sectors;
 
     for (const auto& t : summary_.recent_trades) {
+        if (!in_active_body(t.chamber)) continue;
         // A filing stub has an empty ticker and $0, so it landed in "Other"
         // and inflated that row's trade/member counts against no dollars.
         if (t.placeholder) continue;
@@ -662,7 +663,7 @@ QVector<CommitteeInsiderSignal> PowerTraderService::committee_insider_signals() 
     // match a committee, so counting them only deflates the overlap share.
     QHash<QString, int> total_trades;
     for (const auto& t : summary_.recent_trades)
-        if (!t.placeholder) total_trades[t.member_id]++;
+        if (!t.placeholder && in_active_body(t.chamber)) total_trades[t.member_id]++;
 
     auto result = committee_sigs.values().toVector();
     for (auto& sig : result) {
@@ -1077,7 +1078,7 @@ QVector<CommitteeGroup> PowerTraderService::committee_groups() const {
     // them only deflates correlation_pct. Same fix as committee_insider_signals().
     QHash<QString, int> member_total;
     for (const auto& t : summary_.recent_trades)
-        if (!t.placeholder) member_total[t.member_id]++;
+        if (!t.placeholder && in_active_body(t.chamber)) member_total[t.member_id]++;
 
     QVector<CommitteeGroup> result;
     for (auto it = groups.begin(); it != groups.end(); ++it) {
@@ -1128,6 +1129,7 @@ PartyStats PowerTraderService::party_stats(const QString& party) const {
         // toward zero in proportion to House filing volume. Their empty ticker
         // also accumulated a blank key that could surface in top_tickers.
         if (t.placeholder) continue;
+        if (!in_active_body(t.chamber)) continue;
         if (t.party != party) continue;
         if (t.disclosure_date < cutoff) continue;
         ps.trade_count_90d++;
@@ -1196,6 +1198,23 @@ QVector<PoliticalTrade> PowerTraderService::trades_by_committee(const QString& c
     return out;
 }
 
+void PowerTraderService::set_body_filter(BodyFilter body) {
+    body_filter_ = body;
+}
+
+bool PowerTraderService::in_active_body(MemberChamber chamber) const {
+    switch (body_filter_) {
+        case BodyFilter::Senate: return chamber == MemberChamber::Senate;
+        case BodyFilter::House:  return chamber == MemberChamber::House;
+        // Cabinet is its own full-width page and never reaches the congress
+        // aggregates; treating it as All keeps them well-defined.
+        case BodyFilter::All:
+        case BodyFilter::Cabinet:
+            break;
+    }
+    return true;
+}
+
 PowerTraderSummary PowerTraderService::filtered_summary(BodyFilter body) const {
     if (body == BodyFilter::All || body == BodyFilter::Cabinet) return summary_;
     PowerTraderSummary s = summary_;
@@ -1222,7 +1241,7 @@ QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
     double peer_avg_trade_size  = 0;
     int    total_trades_all     = 0;
     for (const auto& t : summary_.recent_trades) {
-        if (t.placeholder) continue;
+        if (t.placeholder || !in_active_body(t.chamber)) continue;
         peer_avg_trade_size += (t.amount_low + t.amount_high) / 2.0;
         ++total_trades_all;
     }
@@ -1237,6 +1256,7 @@ QVector<InsiderWatchEntry> PowerTraderService::insider_watch_list() const {
     // Build one entry per member
     QHash<QString, InsiderWatchEntry> entries;
     for (const auto& m : summary_.members) {
+        if (!in_active_body(m.chamber)) continue;
         InsiderWatchEntry e;
         e.member_id  = m.id;
         e.member_name= m.full_name;

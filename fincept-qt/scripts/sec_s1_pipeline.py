@@ -385,18 +385,32 @@ def fetch_company_facts(cik):
     gp = latest(_CONCEPT_PRIORITY["gross_profit"])
     cash = latest(_CONCEPT_PRIORITY["cash"])
 
-    out = {
-        "revenue_m": (rev["val"] / 1_000_000.0) if rev else 0.0,
-        "revenue_end": rev["end"] if rev else "",
-        "revenue_fy": rev.get("fy") if rev else "",
-        "net_income_m": (ni["val"] / 1_000_000.0) if ni else 0.0,
-        "gross_margin_pct": (
-            (gp["val"] / rev["val"] * 100.0) if (rev and gp and rev["val"]) else 0.0
-        ),
-        "cash_m": (cash["val"] / 1_000_000.0) if cash else 0.0,
-    }
+    # Absent is NOT zero. Returning 0.0 for a missing concept makes "this
+    # company files no XBRL financials" indistinguishable from "this company
+    # earned nothing" — and every pre-IPO name lacking XBRL then rendered as
+    # revenue $0M, margin 0%, cash $0M, presented with the same confidence as
+    # a real filing. Measured: NVIDIA returns full facts, Stripe returns no
+    # facts document at all, and SpaceX has a submissions record but no XBRL —
+    # which used to come back as an all-zero financial statement.
+    #
+    # Omitted keys, not None values: the C++ side reads with .toDouble() and a
+    # null would arrive as 0.0 anyway. A missing key leaves Financials::as_of
+    # invalid, which is the flag consumers already use for "not available".
+    out = {}
+    if rev:
+        out["revenue_m"]   = rev["val"] / 1_000_000.0
+        out["revenue_end"] = rev["end"]
+        out["revenue_fy"]  = rev.get("fy", "")
+    if ni:
+        out["net_income_m"] = ni["val"] / 1_000_000.0
+    if cash:
+        out["cash_m"] = cash["val"] / 1_000_000.0
+    if rev and gp and rev["val"]:
+        out["gross_margin_pct"] = gp["val"] / rev["val"] * 100.0
 
-    # Year-over-year growth from previous FY revenue
+    # Year-over-year growth from the previous FY revenue. Absent (not 0.0) when
+    # there is no prior full year to compare against — a first-time filer has
+    # no growth rate, and reporting 0% would read as "flat".
     prev = None
     if rev:
         for c in _CONCEPT_PRIORITY["revenue"]:
@@ -405,15 +419,17 @@ def fetch_company_facts(cik):
                 continue
             units = node.get("units", {})
             usd = units.get("USD") or []
-            fy_rows = [r for r in usd if r.get("fp") == "FY" and r.get("end", "") < rev.get("end", "")]
+            fy_rows = [r for r in usd
+                       if r.get("fp") == "FY" and r.get("end", "") < rev.get("end", "")]
             if fy_rows:
                 fy_rows.sort(key=lambda x: x.get("end", ""), reverse=True)
                 prev = fy_rows[0]
                 break
     if prev and rev and prev["val"] > 0:
         out["revenue_growth_yoy_pct"] = (rev["val"] - prev["val"]) / prev["val"] * 100.0
-    else:
-        out["revenue_growth_yoy_pct"] = 0.0
+
+    if not out:
+        return None   # no usable XBRL facts for this filer
     return out
 
 
