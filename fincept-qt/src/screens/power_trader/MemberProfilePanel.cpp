@@ -2660,8 +2660,12 @@ void MemberProfilePanel::populate_sector(
 
 // ── Section 9: populate_insights ─────────────────────────────────────────────
 
+// The member itself is not read here — every insight is derived from the
+// reconstructed portfolio and the trade list. Kept in the signature (unnamed)
+// because the three populate_* siblings share it, and a divergent one is
+// harder to follow than an unused parameter.
 void MemberProfilePanel::populate_insights(
-    const power_trader::CongressMember& m,
+    const power_trader::CongressMember& /*m*/,
     const power_trader::MemberPortfolio& portfolio,
     const QVector<power_trader::PoliticalTrade>& trades)
 {

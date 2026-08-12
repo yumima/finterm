@@ -49,7 +49,7 @@ QString start_of_local_day_utc() {
     //      ('T' = 0x54 > ' ' = 0x20), making the WHERE clause exclude
     //      every same-day trace and report $0 spent.
     const QDate today = QDate::currentDate();
-    const QDateTime local_midnight(today, QTime(0, 0), Qt::LocalTime);
+    const QDateTime local_midnight(today, QTime(0, 0));   // local by default in Qt 6
     return local_midnight.toUTC().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
 }
 

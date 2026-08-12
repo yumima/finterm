@@ -363,8 +363,12 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     }
 
     // Generic single-arg fetch builder for surface_ready endpoints.
+    // `kick` is accepted and deliberately not invoked here: this builder only
+    // assembles the ToolDef metadata, and the fetch is kicked by the handler
+    // registered separately below. Named without a binding so the signature
+    // still documents what callers pass.
     auto make_db_surface_tool = [](const QString& name, const QString& desc,
-                                    std::function<void(const QJsonObject&)> kick) {
+                                    std::function<void(const QJsonObject&)> /*kick*/) {
         ToolDef t;
         t.name = name;
         t.description = desc;
