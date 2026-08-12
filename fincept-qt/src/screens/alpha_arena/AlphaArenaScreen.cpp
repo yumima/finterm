@@ -23,6 +23,11 @@ namespace {
 using namespace fincept::ui;
 
 static const QString kStyle =
+    // Placeholder numbers must be CONTIGUOUS from %1: Qt assigns the Nth
+    // argument to the Nth-LOWEST placeholder present, not to %N. This block
+    // passed a BORDER_BRIGHT for a %9 the string never used, so every colour
+    // from %10 up was shifted down one and the final one was discarded
+    // ("QString::arg: Argument missing" at startup).
     QStringLiteral("#aaScreen { background: %1; }"
 
                    "#aaHeader { background: %2; border-bottom: 2px solid %3; }"
@@ -30,7 +35,7 @@ static const QString kStyle =
                    "#aaHeaderSub { color: %5; font-size: 9px; letter-spacing: 0.5px; background: transparent; }"
 
                    "#aaStatusBadge { font-size: 8px; font-weight: 700; padding: 2px 6px; }"
-                   "#aaCycleLabel { color: %13; font-size: 11px; font-weight: 700; background: transparent; }"
+                   "#aaCycleLabel { color: %12; font-size: 11px; font-weight: 700; background: transparent; }"
                    "#aaPriceLabel { color: %6; font-size: 11px; font-weight: 700; "
                    "  background: rgba(22,163,74,0.15); padding: 2px 8px; }"
 
@@ -55,16 +60,16 @@ static const QString kStyle =
                    "#aaCreateBtn { background: %3; color: %1; border: none; padding: 6px 16px; "
                    "  font-size: 10px; font-weight: 700; }"
                    "#aaCreateBtn:hover { background: #FF8800; }"
-                   "#aaCreateBtn:disabled { background: %10; color: %11; }"
+                   "#aaCreateBtn:disabled { background: %9; color: %10; }"
 
                    "#aaControlsBar { background: %2; border-bottom: 1px solid %8; }"
                    "#aaRunBtn { background: %3; color: %1; border: none; padding: 5px 14px; "
                    "  font-size: 9px; font-weight: 700; }"
                    "#aaRunBtn:hover { background: #FF8800; }"
-                   "#aaRunBtn:disabled { background: %10; color: %11; }"
+                   "#aaRunBtn:disabled { background: %9; color: %10; }"
                    "#aaAutoBtn { background: %7; color: %5; border: 1px solid %8; "
                    "  padding: 5px 14px; font-size: 9px; font-weight: 700; }"
-                   "#aaAutoBtn[running=\"true\"] { color: %14; border-color: %14; }"
+                   "#aaAutoBtn[running=\"true\"] { color: %13; border-color: %13; }"
                    "#aaResetBtn { background: %7; color: %5; border: 1px solid %8; "
                    "  padding: 5px 14px; font-size: 9px; font-weight: 700; }"
                    "#aaIntervalLabel { color: %5; font-size: 9px; background: transparent; }"
@@ -91,21 +96,21 @@ static const QString kStyle =
                    "#aaDecisionList::item { color: %5; padding: 6px 8px; border-bottom: 1px solid %8; }"
                    "#aaDecisionList::item:selected { color: %3; background: rgba(217,119,6,0.1); }"
 
-                   "QTextEdit { background: %1; color: %13; border: none; font-size: 11px; }"
+                   "QTextEdit { background: %1; color: %12; border: none; font-size: 11px; }"
 
                    "#aaModelList { background: %1; border: none; outline: none; font-size: 11px; }"
                    "#aaModelList::item { color: %5; padding: 4px 8px; border-bottom: 1px solid %8; }"
                    "#aaModelList::item:selected { color: %3; background: rgba(217,119,6,0.1); }"
-                   "#aaModelList::item:hover { color: %4; background: %12; }"
+                   "#aaModelList::item:hover { color: %4; background: %11; }"
 
                    "#aaPastPanel { background: %7; border: 1px solid %8; }"
                    "#aaPastList { background: %1; border: none; font-size: 11px; }"
                    "#aaPastList::item { color: %5; padding: 6px 8px; border-bottom: 1px solid %8; }"
-                   "#aaPastList::item:hover { color: %4; background: %12; }"
+                   "#aaPastList::item:hover { color: %4; background: %11; }"
 
                    "#aaStatusBar { background: %2; border-top: 1px solid %8; }"
                    "#aaStatusText { color: %5; font-size: 9px; background: transparent; }"
-                   "#aaStatusHighlight { color: %13; font-size: 9px; background: transparent; }"
+                   "#aaStatusHighlight { color: %12; font-size: 9px; background: transparent; }"
 
                    "QSplitter::handle { background: %8; }"
                    "QScrollBar:vertical { background: %1; width: 6px; }"
@@ -119,12 +124,11 @@ static const QString kStyle =
         .arg(colors::POSITIVE())       // %6
         .arg(colors::BG_SURFACE())     // %7
         .arg(colors::BORDER_DIM())     // %8
-        .arg(colors::BORDER_BRIGHT())  // %9
-        .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_SECONDARY())       // %11
-        .arg(colors::BG_HOVER())       // %12
-        .arg(colors::CYAN())           // %13
-        .arg(colors::NEGATIVE())       // %14
+        .arg(colors::AMBER_DIM())      // %9
+        .arg(colors::TEXT_SECONDARY())       // %10
+        .arg(colors::BG_HOVER())       // %11
+        .arg(colors::CYAN())           // %12
+        .arg(colors::NEGATIVE())       // %13
     ;
 
 // ── Trading symbols ─────────────────────────────────────────────────────────

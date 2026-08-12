@@ -387,25 +387,34 @@ void PowerTraderScreen::build_ui() {
             // side-by-side (it used to be a full-width slide-in overlay drawer
             // that hid the group context and wasted the wide screen). The user
             // can drag any divider to rebalance.
-            auto* group_split = new QSplitter(Qt::Horizontal);
-            group_split->addWidget(member_sidebar);
-            group_split->addWidget(tab_widget_);
-            group_split->setStretchFactor(0, 0);
-            group_split->setStretchFactor(1, 1);
-            group_split->setCollapsible(0, false);
-            group_split->setCollapsible(1, false);
+            // ONE list, ONE detail. Previously this was three columns —
+            // [members | 8 analytics tabs | member profile] — and the middle
+            // and right panes answered questions at DIFFERENT SCOPES: the
+            // tabs describe the whole cohort, the profile describes one
+            // person. Nothing on screen said so, so the panes read as
+            // unrelated, and the profile was squeezed into ~520px of a 1920px
+            // screen (27%) while cohort analytics it had nothing to do with
+            // took the middle.
+            //
+            // Now the list selects a SUBJECT and the detail shows that
+            // subject: "All members" (the cohort) or one member. One
+            // navigation rule instead of two competing ones, and whichever
+            // subject you pick gets the full remaining width (~80%).
+            detail_stack_ = new QStackedWidget;
+            detail_stack_->addWidget(tab_widget_);     // 0 = cohort
+            detail_stack_->addWidget(member_panel_);   // 1 = one member
+            detail_stack_->setCurrentIndex(0);
 
-            member_panel_->setMinimumWidth(380);
             member_panel_->clear(); // placeholder until a member is selected
 
             auto* md_split = new QSplitter(Qt::Horizontal);
-            md_split->addWidget(group_split);
-            md_split->addWidget(member_panel_);
-            md_split->setStretchFactor(0, 1);
-            md_split->setStretchFactor(1, 0);
+            md_split->addWidget(member_sidebar);
+            md_split->addWidget(detail_stack_);
+            md_split->setStretchFactor(0, 0);
+            md_split->setStretchFactor(1, 1);
             md_split->setCollapsible(0, false);
             md_split->setCollapsible(1, false);
-            md_split->setSizes({900, 520});
+            md_split->setSizes({280, 1400});
 
             cl->addWidget(md_split, 1);
         }
@@ -659,6 +668,11 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     connect(member_search_, &QLineEdit::textChanged, this, [this](const QString& t) {
         for (int i = 0; i < member_list_->count(); ++i) {
             auto* item = member_list_->item(i);
+            // The "All members" row is navigation, not a search result — it
+            // must stay reachable, or typing a name would strand the user in
+            // a member dossier with no way back to the cohort.
+            if (item->data(Qt::UserRole).toString().isEmpty())
+                continue;
             item->setHidden(!t.isEmpty() &&
                             !item->text().contains(t, Qt::CaseInsensitive));
         }
@@ -682,8 +696,11 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
     connect(member_list_, &QListWidget::currentItemChanged, this,
             [this](QListWidgetItem* cur, QListWidgetItem*) {
                 if (!cur) return;
+                // An empty id is the "All members" row — the cohort subject.
                 const QString mid = cur->data(Qt::UserRole).toString();
-                if (!mid.isEmpty())
+                if (mid.isEmpty())
+                    show_cohort_detail();
+                else
                     on_member_selected(mid);
             });
 
@@ -720,9 +737,28 @@ QWidget* PowerTraderScreen::build_member_sidebar() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& members) {
+    // Rebuilding the list fires currentItemChanged, which would otherwise
+    // swap the detail area out from under the user on every refresh and every
+    // filter change. Restore the selection explicitly at the end instead.
+    const QSignalBlocker block(member_list_);
+    const QString keep = selected_member_id_;
     member_list_->clear();
 
     const bool only_watched = watchlist_filter_ && watchlist_filter_->isChecked();
+
+    // The cohort is a selectable subject, not a separate mode. Carries an
+    // EMPTY UserRole id, which is what the selection handler keys on.
+    {
+        auto* all_item = new QListWidgetItem;
+        all_item->setText(QStringLiteral("ALL MEMBERS\n%1 in view")
+                              .arg(members.size()));
+        all_item->setData(Qt::UserRole, QString());
+        all_item->setForeground(QColor(ui::colors::AMBER()));
+        all_item->setToolTip(QStringLiteral(
+            "Cohort view — sector flows, rankings, the disclosure feed, "
+            "committee overlap and party comparison across everyone in view."));
+        member_list_->addItem(all_item);
+    }
 
     auto sorted = members;
     std::sort(sorted.begin(), sorted.end(),
@@ -775,9 +811,32 @@ void PowerTraderScreen::populate_member_list(const QVector<CongressMember>& memb
         if (!q.isEmpty()) {
             for (int i = 0; i < member_list_->count(); ++i) {
                 auto* item = member_list_->item(i);
+                if (item->data(Qt::UserRole).toString().isEmpty())
+                    continue;   // "All members" is navigation, never filtered
                 item->setHidden(!item->text().contains(q, Qt::CaseInsensitive));
             }
         }
+    }
+
+    // Restore the subject the user was on. If their member is gone (filtered
+    // out by an ALL/SENATE/HOUSE switch, or dropped by a refresh) fall back to
+    // the cohort rather than leaving a stale dossier on screen.
+    int restore_row = 0;
+    if (!keep.isEmpty()) {
+        for (int i = 0; i < member_list_->count(); ++i) {
+            if (member_list_->item(i)->data(Qt::UserRole).toString() == keep) {
+                restore_row = i;
+                break;
+            }
+        }
+    }
+    member_list_->setCurrentRow(restore_row);
+    if (restore_row == 0) {
+        // Signals are blocked here, so drive the detail area directly.
+        selected_member_id_.clear();
+        if (detail_stack_ && tab_widget_)
+            detail_stack_->setCurrentWidget(tab_widget_);
+        if (feed_panel_) feed_panel_->set_selected_member(QString());
     }
 }
 
@@ -864,8 +923,15 @@ void PowerTraderScreen::on_member_selected(const QString& member_id) {
 
     member_panel_->set_member(member);
     feed_panel_->set_selected_member(member_id);
-    // member_panel_ is a persistent right-pane in the master-detail splitter —
-    // set_member() populates it in place; no drawer to show/hide.
+    // The detail area is the one place a subject is displayed, so selecting a
+    // member swaps it to the dossier. Selecting "All members" swaps back.
+    if (detail_stack_) detail_stack_->setCurrentWidget(member_panel_);
+}
+
+void PowerTraderScreen::show_cohort_detail() {
+    selected_member_id_.clear();
+    if (detail_stack_) detail_stack_->setCurrentWidget(tab_widget_);
+    if (feed_panel_)   feed_panel_->set_selected_member(QString());
 }
 
 void PowerTraderScreen::on_body_filter_changed(BodyFilter body) {

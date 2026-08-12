@@ -68,6 +68,8 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
     void on_error(const QString& msg);
     void on_member_selected(const QString& member_id);
     void on_body_filter_changed(BodyFilter body);
+    /// Point the detail area back at the cohort (the "All members" subject).
+    void show_cohort_detail();
     void on_range_changed(int days);
     void on_watchlist_filter_toggled(bool only_watched);
     void toggle_watchlist(const QString& member_id);
@@ -118,6 +120,8 @@ class PowerTraderScreen : public QWidget, public fincept::screens::IStatefulScre
 
     // ── Main tabs ─────────────────────────────────────────────────────────────
     QTabWidget*                  tab_widget_       = nullptr;
+    /// Detail area: page 0 = cohort tabs, page 1 = member dossier.
+    QStackedWidget* detail_stack_ = nullptr;
     screens::OverviewPanel*      overview_panel_   = nullptr;
     screens::RankingsPanel*      rankings_panel_   = nullptr;
     screens::MemberProfilePanel* member_panel_     = nullptr;

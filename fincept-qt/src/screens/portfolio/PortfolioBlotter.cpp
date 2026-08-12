@@ -70,11 +70,16 @@ void PortfolioBlotter::build_ui() {
                                   "  font-size:12px; font-family:%3; gridline-color:transparent; }"
                                   "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %4; }"
                                   "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
-                                  "QTableWidget::item:hover { background:%7; }"
+                                  "QTableWidget::item:hover { background:%5; }"
                                   "QScrollBar:vertical { width:5px; background:%1; }"
                                   "QScrollBar::handle:vertical { background:%4; min-height:20px; }")
-                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
-                                   ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM(), ui::colors::AMBER(),
+                              // %5, not %7: Qt assigns the Nth argument to the
+                              // Nth-LOWEST placeholder present, not to %N. With
+                              // %5 and %6 unused, BG_HOVER never reached the
+                              // hover rule — AMBER_DIM did — and the last two
+                              // arguments were discarded.
+                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                                   ui::fonts::DATA_FAMILY, ui::colors::BORDER_DIM(),
                                    ui::colors::BG_HOVER()));
 
     // Apply the header rule directly on the header widget — the global qApp
@@ -502,11 +507,16 @@ void PortfolioBlotter::refresh_theme() {
                                   "px; font-family:%3; gridline-color:transparent; }"
                                   "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %4; }"
                                   "QTableWidget::item:selected { background:rgba(217,119,6,0.18); color:%2; }"
-                                  "QTableWidget::item:hover { background:%7; }"
+                                  "QTableWidget::item:hover { background:%5; }"
                                   "QScrollBar:vertical { width:5px; background:%1; }"
                                   "QScrollBar::handle:vertical { background:%4; min-height:20px; }")
-                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
-                                   ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM(), ui::colors::AMBER(),
+                              // %5, not %7: Qt assigns the Nth argument to the
+                              // Nth-LOWEST placeholder present, not to %N. With
+                              // %5 and %6 unused, BG_HOVER never reached the
+                              // hover rule — AMBER_DIM did — and the last two
+                              // arguments were discarded.
+                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                                   ui::fonts::DATA_FAMILY, ui::colors::BORDER_DIM(),
                                    ui::colors::BG_HOVER()));
     // See note in build constructor — header rule must live on the header
     // widget itself or the global qApp stylesheet wins.

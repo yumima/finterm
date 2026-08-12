@@ -22,97 +22,102 @@ namespace {
 using namespace fincept::ui;
 
 static const QString kStyle =
+    // NOTE: placeholder numbers must be CONTIGUOUS from %1. Qt assigns the
+    // Nth argument to the Nth-LOWEST placeholder present — not to %N — so a
+    // gap shifts every later argument by one and silently discards the tail.
+    // This block reserved a %6 it never used, which put POSITIVE() (green)
+    // into #asiaLeftPanel's background and dropped the final colour entirely
+    // ("QString::arg: Argument missing" at startup).
     QStringLiteral("#asiaScreen { background: %1; }"
 
                    "#asiaHeader { background: %2; border-bottom: 2px solid %3; }"
                    "#asiaHeaderTitle { color: %4; font-size: 12px; font-weight: 700; background: transparent; }"
                    "#asiaHeaderSub { color: %5; font-size: 9px; letter-spacing: 0.5px; background: transparent; }"
 
-                   "#asiaRegionBtn { background: transparent; color: %5; border: 1px solid %8; "
+                   "#asiaRegionBtn { background: transparent; color: %5; border: 1px solid %7; "
                    "  font-size: 9px; font-weight: 700; padding: 3px 10px; }"
-                   "#asiaRegionBtn:hover { color: %4; border-color: %9; }"
+                   "#asiaRegionBtn:hover { color: %4; border-color: %8; }"
                    "#asiaRegionBtn[active=\"true\"] { background: %3; color: %1; border-color: %3; }"
 
-                   "#asiaCatBar { background: %1; border-bottom: 1px solid %8; }"
+                   "#asiaCatBar { background: %1; border-bottom: 1px solid %7; }"
                    "#asiaCatBtn { background: transparent; color: %5; border: none; "
                    "  font-size: 9px; font-weight: 700; padding: 6px 14px; border-bottom: 2px solid transparent; }"
                    "#asiaCatBtn:hover { color: %4; }"
                    "#asiaCatBtn[active=\"true\"] { color: %4; border-bottom-color: %3; }"
 
-                   "#asiaLeftPanel { background: %7; border-right: 1px solid %8; }"
-                   "#asiaSearchInput { background: %1; color: %4; border: 1px solid %8; "
+                   "#asiaLeftPanel { background: %6; border-right: 1px solid %7; }"
+                   "#asiaSearchInput { background: %1; color: %4; border: 1px solid %7; "
                    "  padding: 4px 8px; font-size: 11px; }"
-                   "#asiaSearchInput:focus { border-color: %9; }"
-                   "#asiaSymbolInput { background: %1; color: %13; border: 1px solid %8; "
+                   "#asiaSearchInput:focus { border-color: %8; }"
+                   "#asiaSymbolInput { background: %1; color: %12; border: 1px solid %7; "
                    "  padding: 4px 8px; font-size: 11px; font-weight: 700; }"
-                   "#asiaSymbolInput:focus { border-color: %9; }"
+                   "#asiaSymbolInput:focus { border-color: %8; }"
                    "#asiaEndpointCount { color: %5; font-size: 9px; font-weight: 700; background: transparent; }"
 
                    "#asiaEndpointList { background: %1; border: none; outline: none; font-size: 11px; }"
-                   "#asiaEndpointList::item { color: %5; padding: 4px 8px; border-bottom: 1px solid %8; }"
-                   "#asiaEndpointList::item:hover { color: %4; background: %10; }"
+                   "#asiaEndpointList::item { color: %5; padding: 4px 8px; border-bottom: 1px solid %7; }"
+                   "#asiaEndpointList::item:hover { color: %4; background: %9; }"
                    "#asiaEndpointList::item:selected { color: %3; background: rgba(217,119,6,0.1); "
                    "  border-left: 2px solid %3; }"
 
                    "#asiaDataPanel { background: %1; }"
-                   "#asiaToolbar { background: %2; border-bottom: 1px solid %8; }"
+                   "#asiaToolbar { background: %2; border-bottom: 1px solid %7; }"
                    "#asiaDataStatus { color: %5; font-size: 11px; background: transparent; }"
-                   "#asiaRecordCount { color: %13; font-size: 9px; font-weight: 700; background: transparent; }"
+                   "#asiaRecordCount { color: %12; font-size: 9px; font-weight: 700; background: transparent; }"
 
                    "#asiaExecBtn { background: %3; color: %1; border: none; padding: 4px 14px; "
                    "  font-size: 9px; font-weight: 700; }"
                    "#asiaExecBtn:hover { background: #FF8800; }"
-                   "#asiaExecBtn:disabled { background: %11; color: %12; }"
+                   "#asiaExecBtn:disabled { background: %10; color: %11; }"
 
-                   "#asiaViewToggle { background: %7; color: %5; border: 1px solid %8; "
+                   "#asiaViewToggle { background: %6; color: %5; border: 1px solid %7; "
                    "  padding: 4px 10px; font-size: 9px; font-weight: 700; }"
                    "#asiaViewToggle:hover { color: %4; }"
 
-                   "#asiaRefreshBtn { background: %7; color: %5; border: 1px solid %8; "
+                   "#asiaRefreshBtn { background: %6; color: %5; border: 1px solid %7; "
                    "  padding: 4px 10px; font-size: 9px; font-weight: 700; }"
                    "#asiaRefreshBtn:hover { color: %4; }"
 
-                   "QTableWidget { background: %1; color: %4; border: none; gridline-color: %8; "
+                   "QTableWidget { background: %1; color: %4; border: none; gridline-color: %7; "
                    "  font-size: 11px; }"
-                   "QTableWidget::item { padding: 2px 6px; border-bottom: 1px solid %8; }"
+                   "QTableWidget::item { padding: 2px 6px; border-bottom: 1px solid %7; }"
                    "QTableWidget::item:selected { background: rgba(217,119,6,0.1); color: %3; }"
                    "QHeaderView::section { background: %2; color: %5; border: none; "
-                   "  border-bottom: 1px solid %8; border-right: 1px solid %8; "
+                   "  border-bottom: 1px solid %7; border-right: 1px solid %7; "
                    "  padding: 4px 6px; font-size: 10px; font-weight: 700; }"
 
-                   "#asiaJsonView { background: %1; color: %13; border: none; font-size: 11px; }"
+                   "#asiaJsonView { background: %1; color: %12; border: none; font-size: 11px; }"
 
-                   "#asiaErrorPanel { background: rgba(220,38,38,0.1); border: 1px solid %14; padding: 8px 12px; }"
-                   "#asiaErrorText { color: %14; font-size: 10px; background: transparent; }"
+                   "#asiaErrorPanel { background: rgba(220,38,38,0.1); border: 1px solid %13; padding: 8px 12px; }"
+                   "#asiaErrorText { color: %13; font-size: 10px; background: transparent; }"
 
-                   "#asiaStatusBar { background: %2; border-top: 1px solid %8; }"
+                   "#asiaStatusBar { background: %2; border-top: 1px solid %7; }"
                    "#asiaStatusText { color: %5; font-size: 9px; background: transparent; }"
-                   "#asiaStatusHighlight { color: %13; font-size: 9px; background: transparent; }"
+                   "#asiaStatusHighlight { color: %12; font-size: 9px; background: transparent; }"
 
-                   "#asiaEmptyState { color: %12; font-size: 13px; background: transparent; }"
+                   "#asiaEmptyState { color: %11; font-size: 13px; background: transparent; }"
                    "#asiaParamLabel { color: %5; font-size: 9px; font-weight: 700; background: transparent; }"
 
-                   "QSplitter::handle { background: %8; }"
+                   "QSplitter::handle { background: %7; }"
                    "QScrollBar:vertical { background: %1; width: 6px; }"
-                   "QScrollBar::handle:vertical { background: %8; min-height: 20px; }"
+                   "QScrollBar::handle:vertical { background: %7; min-height: 20px; }"
                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
                    "QScrollBar:horizontal { background: %1; height: 6px; }"
-                   "QScrollBar::handle:horizontal { background: %8; min-width: 20px; }"
+                   "QScrollBar::handle:horizontal { background: %7; min-width: 20px; }"
                    "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }")
         .arg(colors::BG_BASE())        // %1
         .arg(colors::BG_RAISED())      // %2
         .arg(colors::AMBER())          // %3
         .arg(colors::TEXT_PRIMARY())   // %4
         .arg(colors::TEXT_SECONDARY()) // %5
-        .arg(colors::POSITIVE())       // %6  (unused but reserved)
-        .arg(colors::BG_SURFACE())     // %7
-        .arg(colors::BORDER_DIM())     // %8
-        .arg(colors::BORDER_BRIGHT())  // %9
-        .arg(colors::BG_HOVER())       // %10
-        .arg(colors::AMBER_DIM())      // %11
-        .arg(colors::TEXT_SECONDARY())       // %12
-        .arg(colors::CYAN())           // %13
-        .arg(colors::NEGATIVE())       // %14
+        .arg(colors::BG_SURFACE())     // %6
+        .arg(colors::BORDER_DIM())     // %7
+        .arg(colors::BORDER_BRIGHT())  // %8
+        .arg(colors::BG_HOVER())       // %9
+        .arg(colors::AMBER_DIM())      // %10
+        .arg(colors::TEXT_SECONDARY())       // %11
+        .arg(colors::CYAN())           // %12
+        .arg(colors::NEGATIVE())       // %13
     ;
 } // namespace
 
