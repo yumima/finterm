@@ -316,8 +316,14 @@ def compute_indicator(name: str, df: pd.DataFrame, params: dict) -> dict:
         return {
             'conversion': result['ichimoku_conversion'],
             'base': result['ichimoku_base'],
-            'span_a': result['ichimoku_a'],
-            'span_b': result['ichimoku_b'],
+            # ta returns the spans UNSHIFTED (visual=False). The canonical
+            # cloud displaces them `w2` bars forward, so the cloud in force at
+            # bar t is the span computed at t - w2 — without the shift every
+            # price-vs-cloud condition read a cloud that doesn't exist yet.
+            # The first w2 bars have no cloud; NaN comparisons are False, so
+            # strategies simply cast no cloud signals there.
+            'span_a': result['ichimoku_a'].shift(w2),
+            'span_b': result['ichimoku_b'].shift(w2),
         }
 
     elif name == 'PSAR':

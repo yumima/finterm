@@ -34,7 +34,16 @@ def calculate_atr(df, window=14, fillna=False):
         window=window,
         fillna=fillna
     )
-    return indicator.average_true_range()
+    atr = indicator.average_true_range()
+    # ta emits 0.0 (not NaN) through the Wilder warm-up, so the C++ side's
+    # "NaN = not yet available" contract silently broke: a freshly listed
+    # stock displayed ATR 0.0000 as if it were a reading, and the
+    # sufficient-history gate that keys off ATR's presence never engaged.
+    # Only when the caller did NOT ask for filled values — algo_trading
+    # passes fillna=True and expects a dense series.
+    if not fillna:
+        atr.iloc[:max(0, min(window - 1, len(atr)))] = float('nan')
+    return atr
 
 
 def calculate_bollinger_bands(df, window=20, window_dev=2, fillna=False):

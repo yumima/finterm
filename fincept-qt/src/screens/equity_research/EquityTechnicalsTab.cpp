@@ -465,6 +465,9 @@ void EquityTechnicalsTab::rebind() {
     if (current_symbol_.isEmpty())
         return;
     loading_overlay_->show_loading("COMPUTING INDICATORS\xe2\x80\xa6");
+    // The chip must not report the previous view's fetch time while the new
+    // view loads; populate() will restamp when data lands.
+    data_fetched_at_ = QDateTime();
 
     auto& store = services::query::QueryStore::instance();
     if (!current_technicals_key_.isEmpty())
@@ -478,10 +481,14 @@ void EquityTechnicalsTab::rebind() {
 }
 
 void EquityTechnicalsTab::refresh() {
-    if (current_symbol_.isEmpty())
-        return;
-    services::equity::EquityResearchService::instance().fetch_technicals(
-        current_symbol_, current_period_, current_interval_);
+    // Through the QueryStore, NOT fetch_technicals(): the panel subscribes via
+    // the store, and a direct fetch updates CacheManager and the broadcast but
+    // never the store entry — so a fresh result repainted nothing until the
+    // entry's own TTL lapsed. revalidate_owner covers whatever this tab is
+    // subscribed to without key bookkeeping to keep in sync with rebind(),
+    // keeps the displayed value up while refetching, and honours the TTL
+    // floor. No-op when nothing is subscribed yet.
+    services::query::QueryStore::instance().revalidate_owner(this);
 }
 
 void EquityTechnicalsTab::set_symbol(const QString& symbol) {

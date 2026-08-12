@@ -154,6 +154,12 @@ def calculate_ichimoku(df, window1=9, window2=26, window3=52, visual=False, fill
 
     Returns:
         Dict with 'ichimoku_conversion', 'ichimoku_base', 'ichimoku_a', 'ichimoku_b' Series
+
+    CAVEAT: with visual=False, ta returns ichimoku_a/b WITHOUT the canonical
+    +26-bar forward displacement, and Chikou is not computed at all. The
+    shipped panel only reads ichimoku_base (Kijun — correct as-is); anyone
+    charting a "cloud" from ichimoku_a/b must shift them forward 26 bars
+    first, or the cloud will sit 26 bars early.
     """
     indicator = IchimokuIndicator(
         high=df['high'],
@@ -258,10 +264,27 @@ def calculate_adx(df, window=14, fillna=False):
         window=window,
         fillna=fillna
     )
+    # ta emits 0.0 (not NaN) through the Wilder warm-up — DI needs `window`
+    # bars, ADX another `window` of smoothed DX on top. Mask the warm-up to
+    # NaN so the C++ side's "NaN = not yet available" contract holds: without
+    # this a young listing showed ADX 0.00 ("no trend") as if measured, and
+    # the sufficient-history gate keyed off ADX presence never engaged.
+    # Only when the caller did NOT ask for filled values — algo_trading
+    # passes fillna=True and expects a dense series.
+    adx = indicator.adx()
+    adx_pos = indicator.adx_pos()
+    adx_neg = indicator.adx_neg()
+    if not fillna:
+        adx.iloc[:max(0, min(2 * window - 1, len(adx)))] = float('nan')
+        # window + 1, not window: ta's fill loop starts at window + 1, so the
+        # value AT index `window` is a structural 0.0 too (verified on ta
+        # 0.11.0 — first genuine DI lands at window + 1).
+        for s in (adx_pos, adx_neg):
+            s.iloc[:max(0, min(window + 1, len(s)))] = float('nan')
     return {
-        'adx': indicator.adx(),
-        'adx_pos': indicator.adx_pos(),
-        'adx_neg': indicator.adx_neg()
+        'adx': adx,
+        'adx_pos': adx_pos,
+        'adx_neg': adx_neg
     }
 
 

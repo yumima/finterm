@@ -201,7 +201,11 @@ class EquityResearchService : public QObject {
     /// window. It ages out inside the TTL, but a wrong verdict in the first
     /// ten minutes after upgrading is exactly the impression this work exists
     /// to remove. Versioning the key retires the stale shape immediately.
-    static constexpr const char* kTechnicalsSchemaTag = "v2";
+    ///
+    /// v3: OBV switched to the canonical flat-close-adds-zero definition and
+    /// ADX/DI/ATR now emit NaN through their Wilder warm-up instead of 0.0 —
+    /// both change cached values, not just columns.
+    static constexpr const char* kTechnicalsSchemaTag = "v3";
     static constexpr int kNewsTtlSec = 180;
     // Annual statements change a few times a year — an hour is generous.
     static constexpr int kFinancialsTtlSec = 3600;
@@ -210,9 +214,6 @@ class EquityResearchService : public QObject {
     // Earnings dates are only updated when a new quarter is announced —
     // session-long TTL is plenty.
     static constexpr int kEarningsTtlSec = 3600;
-    // Consensus and revision counts move on a daily cadence at best, but the
-    // countdown to the next report and the "estimates as of" stamp should not
-    // go stale over a long session — 15 min matches the daemon's own TTL.
     // Short on purpose. The daemon decides how often Yahoo is actually asked —
     // it keeps its own cache and shortens it to two minutes around a report —
     // so a revalidation here is usually an IPC round trip against a warm cache

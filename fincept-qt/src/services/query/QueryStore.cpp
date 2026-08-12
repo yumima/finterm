@@ -152,6 +152,16 @@ void QueryStore::revalidate(const QString& key, bool force) {
         !revalidate_due(e.fetched_at, e.ttl_sec, QDateTime::currentDateTime())) {
         return;
     }
+    // Failure backoff. The TTL gate above never engages for a key with no
+    // cached value (a failed cold fetch) and a failure advances fetched_at
+    // for nobody — so without this floor a periodic 20s tick retried the
+    // full RPC three times a minute for as long as the outage lasted. One
+    // attempt per kMinRevalidateSec; an explicit user refresh (force) still
+    // goes straight through.
+    if (!force && e.last_failed_at.isValid() &&
+        e.last_failed_at.secsTo(QDateTime::currentDateTime()) < kMinRevalidateSec) {
+        return;
+    }
     // Deliberately does NOT clear cached_value: subscribers keep rendering
     // real numbers until the replacement arrives, and a failed refresh
     // leaves them with the last good value instead of a blank panel.
@@ -166,6 +176,25 @@ bool QueryStore::revalidate_due(const QDateTime& fetched_at, int ttl_sec, const 
     if (ttl_sec <= 0)
         return false;
     return fetched_at.secsTo(now) >= std::max(ttl_sec, kMinRevalidateSec);
+}
+
+QDateTime QueryStore::oldest_fetched_at(QObject* owner) const {
+    QDateTime oldest;
+    if (!owner)
+        return oldest;
+    for (auto it = entries_.cbegin(); it != entries_.cend(); ++it) {
+        const Entry& e = it.value();
+        if (e.cached_value.isNull() || !e.fetched_at.isValid())
+            continue;
+        for (const auto& sub : e.subscribers) {
+            if (sub.owner == owner) {
+                if (!oldest.isValid() || e.fetched_at < oldest)
+                    oldest = e.fetched_at;
+                break;
+            }
+        }
+    }
+    return oldest;
 }
 
 void QueryStore::revalidate_owner(QObject* owner) {
@@ -266,6 +295,7 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
             it.value().inflight = false;
             it.value().cached_value = value;
             it.value().fetched_at = fetched_at;
+            it.value().last_failed_at = QDateTime();  // success clears the backoff
             State s;
             s.data = value;
             s.loading = false;
@@ -282,6 +312,7 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
             auto it = entries_.find(key);
             if (it == entries_.end()) return;
             it.value().inflight = false;
+            it.value().last_failed_at = QDateTime::currentDateTime();
             // Preserve any prior cached_value — the failed fetch shouldn't
             // erase a previously good cache. Subscribers get an error
             // alongside the (possibly null) data they had.

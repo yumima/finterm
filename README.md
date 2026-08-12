@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`48dc07417`](https://github.com/yumima/finterm/commit/48dc07417) ER Technicals: fix BB-width scale, stale-panel error paths, and data provenance
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

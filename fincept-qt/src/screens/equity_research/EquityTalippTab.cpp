@@ -185,6 +185,16 @@ EquityTalippTab::EquityTalippTab(QWidget* parent) : QWidget(parent) {
     build_ui();
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::talipp_result, this, &EquityTalippTab::on_talipp_result);
+    // Without this, a failed history fetch (network down, rate limit, empty
+    // series) left the COMPUTING overlay up until the next symbol change —
+    // the service reports it via error_occurred and nothing here listened.
+    connect(&svc, &services::equity::EquityResearchService::error_occurred, this,
+            [this](const QString& symbol, const QString& context, const QString& message) {
+                if (context != QLatin1String("TALIpp") || symbol != current_symbol_)
+                    return;
+                loading_overlay_->hide_loading();
+                status_label_->setText(QString("Calculation failed \xe2\x80\x94 %1").arg(message));
+            });
 }
 
 void EquityTalippTab::set_symbol(const QString& symbol) {

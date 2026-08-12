@@ -1262,6 +1262,17 @@ void EquityResearchScreen::update_freshness_chip() {
         t = overview_tab_->data_as_of();
     if (technicals_tab_ && tab_widget_->currentWidget() == technicals_tab_)
         t = technicals_tab_->data_as_of();
+    if (earnings_tab_ && tab_widget_->currentWidget() == earnings_tab_)
+        t = earnings_tab_->data_as_of();
+    // Every other subscribing tab is covered by construction: the oldest
+    // upstream fetch time across the visible tab's QueryStore keys. Without
+    // this, eight tabs fell to tab_loaded_at_ — signal-arrival time, which a
+    // cache hit satisfies instantly, so the chip read "just now" over
+    // hours-old financials or news.
+    if (!t.isValid()) {
+        if (QWidget* visible = tab_widget_->currentWidget())
+            t = services::query::QueryStore::instance().oldest_fetched_at(visible);
+    }
     if (!t.isValid()) {
         const auto it = tab_loaded_at_.constFind(idx);
         if (it == tab_loaded_at_.constEnd()) {

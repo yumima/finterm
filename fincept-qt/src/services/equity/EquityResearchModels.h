@@ -319,6 +319,10 @@ struct EarningsPoint {
     std::optional<double> eps_yoy_pct;
     std::optional<double> reaction_pct;   // close-to-close move over the print
     std::optional<double> runup_pct;      // 5 sessions into the print
+    // 20 sessions into the print — the window the crowding leg is calibrated
+    // for. The historical reconstruction needs it per-row; feeding runup_pct
+    // (5 sessions) into that slot quietly rescaled the leg by ~2x.
+    std::optional<double> runup_20d_pct;
     // Stdev of daily returns over the 20 sessions before this print, in
     // percent. The forecastable half of a reaction is its SIZE, and a name's
     // own earnings history offers only a dozen observations months apart;

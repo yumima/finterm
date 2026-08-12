@@ -35,6 +35,12 @@ bool series_is_cacheable(const QJsonObject& result, const QJsonArray& rows) {
     return !result.contains("error") && !rows.isEmpty();
 }
 
+/// The user-facing message for a history fetch that came back empty/failed.
+QString history_error_text(const QJsonObject& result) {
+    return QString("Historical fetch returned no data: %1")
+        .arg(result.value("error").toString(QStringLiteral("empty history")));
+}
+
 
 // Persistent on-disk cache so the equity research panels can paint the
 // most-recently-viewed symbol immediately on next launch. One file per
@@ -69,6 +75,35 @@ void update_symbol_cache(const QString& symbol, const QString& key,
     QJsonObject root = disk_cache().load(fname).object();
     root.insert(key, value);
     disk_cache().save(fname, QJsonDocument(root));
+}
+
+// The ONE implementation of "cache a fetched candle series": guard, memory
+// put, per-symbol disk write and the warn-log together. Returns whether the
+// series was cacheable — callers that must fan an error out on empty/failed
+// history check it; callers that continue with the (possibly empty) parse
+// ignore it. This used to be five hand copies that had already diverged in
+// logging and disk sub-key, and the sixth history path would have started
+// unguarded.
+bool cache_history_series(const QJsonObject& result, const QJsonArray& arr, const QString& symbol,
+                          const QString& candles_key, const QString& disk_sub, int ttl_sec) {
+    if (!series_is_cacheable(result, arr)) {
+        LOG_WARN("EquityResearch",
+                 QString("Not caching empty/failed history for %1 (%2) — a transient "
+                         "failure must not outlive the request").arg(symbol, disk_sub));
+        return false;
+    }
+    fincept::CacheManager::instance().put(
+        candles_key,
+        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+        ttl_sec, "equity");
+    const QString fname = symbol_filename(symbol);
+    QJsonObject root = disk_cache().load(fname).object();
+    root.insert("symbol", symbol);
+    QJsonObject by_period = root.value("candles").toObject();
+    by_period.insert(disk_sub, arr);
+    root.insert("candles", by_period);
+    disk_cache().save(fname, QJsonDocument(root));
+    return true;
 }
 
 } // namespace
@@ -398,23 +433,7 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
                 const auto arr = result.contains("_value")
                                      ? result.value("_value").toArray()
                                      : result.value("history").toArray();
-                if (series_is_cacheable(result, arr)) {
-                    fincept::CacheManager::instance().put(
-                        candles_key,
-                        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                        kHistoricalTtlSec, "equity");
-                    const QString fname = symbol_filename(symbol);
-                    QJsonObject root = disk_cache().load(fname).object();
-                    root.insert("symbol", symbol);
-                    QJsonObject by_period = root.value("candles").toObject();
-                    by_period.insert(period, arr);
-                    root.insert("candles", by_period);
-                    disk_cache().save(fname, QJsonDocument(root));
-                } else {
-                    LOG_WARN("EquityResearch",
-                             QString("Not caching empty/failed history for %1 %2 — a transient "
-                                     "failure must not outlive the request").arg(symbol, period));
-                }
+                cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
                 QVector<Candle> parsed = parse_candles(arr);
                 emit historical_loaded(symbol, period, parsed);
                 resolve(QVariant::fromValue(parsed));
@@ -706,23 +725,7 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
                 const auto arr = result.contains("_value")
                                      ? result.value("_value").toArray()
                                      : result.value("history").toArray();
-                if (series_is_cacheable(result, arr)) {
-                    fincept::CacheManager::instance().put(
-                        candles_key,
-                        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                        kHistoricalTtlSec, "equity");
-                    const QString fname = symbol_filename(symbol);
-                    QJsonObject root = disk_cache().load(fname).object();
-                    root.insert("symbol", symbol);
-                    QJsonObject by_period = root.value("candles").toObject();
-                    by_period.insert(period, arr);
-                    root.insert("candles", by_period);
-                    disk_cache().save(fname, QJsonDocument(root));
-                } else {
-                    LOG_WARN("EquityResearch",
-                             QString("Not caching empty/failed history for %1 %2 — a transient "
-                                     "failure must not outlive the request").arg(symbol, period));
-                }
+                cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
                 resolve(QVariant::fromValue(parse_candles(arr)));
             });
     };
@@ -838,26 +841,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                const auto arr = result.contains("_value")
                                                     ? result.value("_value").toArray()
                                                     : result.value("history").toArray();
-                               if (series_is_cacheable(result, arr)) {
-                                   fincept::CacheManager::instance().put(
-                                       candles_key,
-                                       QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                                       kHistoricalTtlSec, "equity");
-                                   // Per-symbol disk cache stores candles under a
-                                   // nested period map so different period buttons
-                                   // can each rehydrate independently.
-                                   const QString fname = symbol_filename(symbol);
-                                   QJsonObject root = disk_cache().load(fname).object();
-                                   root.insert("symbol", symbol);
-                                   QJsonObject by_period = root.value("candles").toObject();
-                                   by_period.insert(period, arr);
-                                   root.insert("candles", by_period);
-                                   disk_cache().save(fname, QJsonDocument(root));
-                               } else {
-                                   LOG_WARN("EquityResearch",
-                                            QString("Not caching empty/failed technicals history for %1 %2")
-                                                .arg(symbol, period));
-                               }
+                               cache_history_series(result, arr, symbol, candles_key, period,
+                                                    kHistoricalTtlSec);
                                emit historical_loaded(symbol, period, parse_candles(arr));
                            });
             }
@@ -957,6 +942,14 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                     return;
                 }
                 const QJsonArray data = result.value("data").toArray();
+                // Same poisoning class the stage-1 guard stops, one stage
+                // below it: a success-with-empty-rows result must not be
+                // pinned under the shared tech key nor written to disk.
+                if (data.isEmpty()) {
+                    emit self->error_occurred(symbol, "Technicals",
+                                              QStringLiteral("Indicator computation returned no rows"));
+                    return;
+                }
                 // Cache the computed series so re-opens are <100ms.
                 const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
                 fincept::CacheManager::instance().put(tech_key, QVariant(blob),
@@ -1020,21 +1013,17 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
             const QJsonArray candles = result.contains("_value")
                                             ? result.value("_value").toArray()
                                             : result.value("history").toArray();
-            const QString blob = QString::fromUtf8(QJsonDocument(candles).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put(candles_key, QVariant(blob),
-                                                   kHistoricalTtlSec, "equity");
-            {
-                const QString fname = symbol_filename(symbol);
-                QJsonObject root = disk_cache().load(fname).object();
-                root.insert("symbol", symbol);
-                QJsonObject by_period = root.value("candles").toObject();
-                // Daily sub-key is the bare period (shared with the chart
-                // path's writes); weekly carries its interval so 10y of weekly
-                // bars does not land on top of 10y of daily bars.
-                const QString p = candles_disk_sub;
-                by_period.insert(p, candles);
-                root.insert("candles", by_period);
-                disk_cache().save(fname, QJsonDocument(root));
+            // Same guard as every other history path: an {"error":…} result
+            // or empty series arrives with ok == true, and putting it under
+            // the SHARED daily candles key pinned a blank chart, technicals
+            // and TALIpp for the full TTL from one rate-limit blip. (The
+            // disk sub-key is interval-qualified for weekly so 10y of weekly
+            // bars does not land on top of 10y of daily bars.)
+            if (!cache_history_series(result, candles, symbol, candles_key, candles_disk_sub,
+                                      kHistoricalTtlSec)) {
+                self->release_inflight(inflight_key);
+                emit self->error_occurred(symbol, "Technicals", history_error_text(result));
+                return;
             }
             run_compute(candles);
         },
@@ -1161,12 +1150,19 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     if (!cached_candles.isNull()) {
         run_talipp(cached_candles.toString());
     } else {
+        // Dedup: with errors (correctly) never cached, every parameter tweak
+        // during an outage would otherwise fire its own full RPC for the
+        // same candles. The first request's outcome reaches the tab via the
+        // talipp_result / error_occurred broadcasts either way.
+        const QString inflight_key = "talipp-hist:" + symbol + ":" + period;
+        if (!acquire_inflight(inflight_key)) return;
         QJsonObject payload;
         payload["symbol"] = symbol;
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-                   [this, symbol, period, candles_key, run_talipp](bool ok, QJsonObject result, QString err) {
+                   [this, symbol, period, candles_key, run_talipp, inflight_key](bool ok, QJsonObject result, QString err) {
+                       release_inflight(inflight_key);
                        if (!ok) {
                            emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
                            return;
@@ -1174,19 +1170,14 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                        const auto arr = result.contains("_value")
                                             ? result.value("_value").toArray()
                                             : result.value("history").toArray();
-                       const QString raw = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-                       fincept::CacheManager::instance().put(candles_key, QVariant(raw),
-                                                             kHistoricalTtlSec, "equity");
-                       {
-                           const QString fname = symbol_filename(symbol);
-                           QJsonObject root = disk_cache().load(fname).object();
-                           root.insert("symbol", symbol);
-                           QJsonObject by_period = root.value("candles").toObject();
-                           by_period.insert(period, arr);
-                           root.insert("candles", by_period);
-                           disk_cache().save(fname, QJsonDocument(root));
+                       // Same shared-key poisoning guard as fetch_technicals
+                       // stage 1 — an error/empty series must not be pinned.
+                       if (!cache_history_series(result, arr, symbol, candles_key, period,
+                                                 kHistoricalTtlSec)) {
+                           emit error_occurred(symbol, "TALIpp", history_error_text(result));
+                           return;
                        }
-                       run_talipp(raw);
+                       run_talipp(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
                    });
     }
 }
@@ -1601,6 +1592,7 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         p.eps_yoy_pct  = opt_num(o, "eps_yoy_pct");
         p.reaction_pct = opt_num(o, "reaction_pct");
         p.runup_pct    = opt_num(o, "runup_pct");
+        p.runup_20d_pct = opt_num(o, "runup_20d_pct");
         p.pre_vol_pct  = opt_num(o, "pre_vol_pct");
         p.price_before = opt_num(o, "price_before");
         p.price_after  = opt_num(o, "price_after");
@@ -1677,7 +1669,12 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
 void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QString& symbol,
                                                         query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
-    const QString key = "equity:earnings_analysis:" + symbol;
+    // Version segment for the same reason as kTechnicalsSchemaTag: the payload
+    // shape changes with the engine (v2 added per-row runup_20d_pct and moved
+    // runup_90d to a calendar basis), and although the 180s TTL makes stale
+    // shapes self-heal in minutes, this project has been bitten by unversioned
+    // cache keys before — a version segment makes the window zero instead.
+    const QString key = "equity:earnings_analysis:v2:" + symbol;
     auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve,
                                        query::QueryStore::Rejecter reject) {
         const auto cached_aged = fincept::CacheManager::instance().try_get_aged(key);
@@ -1685,17 +1682,9 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
         if (!cached.isNull()) {
             const auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
             if (doc.isObject()) {
-                // Resolve with the cache entry\'s WRITE time: a hit answers
+                // Resolve with the cache entry's WRITE time: a hit answers
                 // instantly, and stamping "now" would present a value hydrated
                 // from disk at startup as brand new.
-                // Resolve with the cache entry\'s WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                // Resolve with the cache entry\'s WRITE time: a hit answers
-                // instantly, and stamping "now" would present a value hydrated
-                // from disk at startup as brand new.
-                // Freshly fetched from the daemon — resolves with "now".
-                // Cache hit: resolve with the entry's WRITE time, not now.
                 resolve(QVariant::fromValue(parse_earnings_analysis(doc.object())), cached_aged->written_at);
                 return;
             }

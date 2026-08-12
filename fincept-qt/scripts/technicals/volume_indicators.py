@@ -44,19 +44,28 @@ def calculate_obv(df, fillna=False):
     """
     Calculate On-Balance Volume (OBV)
 
+    Computed directly rather than via ta's OnBalanceVolumeIndicator, which
+    deviates from Granville's definition on UNCHANGED closes: ta counts a
+    flat day's full volume as accumulation (np.where(close < prev, -v, v)),
+    inflating the level by every flat-close day's volume and disagreeing
+    with what other terminals chart. Canonical OBV adds 0 on flat closes
+    (and the first bar has no sign).
+
     Args:
         df: DataFrame with 'close', 'volume' columns
-        fillna: Fill NaN values (default: False)
+        fillna: fill NaN values (a NaN volume bar leaves a NaN in the running
+                total) — algo_trading strategies pass True so a data gap can't
+                permanently blank a live condition
 
     Returns:
         Series with OBV values
     """
-    indicator = OnBalanceVolumeIndicator(
-        close=df['close'],
-        volume=df['volume'],
-        fillna=fillna
-    )
-    return indicator.on_balance_volume()
+    import numpy as np
+    sign = np.sign(df['close'].diff()).fillna(0.0)
+    obv = (sign * df['volume']).cumsum()
+    if fillna:
+        obv = obv.ffill().fillna(0.0)
+    return obv
 
 
 def calculate_cmf(df, window=20, fillna=False):

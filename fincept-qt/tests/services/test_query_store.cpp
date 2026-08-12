@@ -32,6 +32,7 @@ class TestQueryStore : public QObject {
     void revalidate_is_a_noop_while_fresh();
     void revalidate_is_a_noop_without_a_subscription();
     void failed_revalidate_keeps_the_last_good_value();
+    void failed_fetch_backs_off_periodic_revalidate();
     void revalidate_owner_covers_every_key_of_that_owner();
     void revalidate_owner_ignores_other_owners();
 
@@ -173,6 +174,32 @@ void TestQueryStore::failed_revalidate_keeps_the_last_good_value() {
     QVERIFY(!seen.error.isEmpty());
     QVERIFY(seen.is_stale);
     QCOMPARE(seen.fetched_at, good_at);
+}
+
+void TestQueryStore::failed_fetch_backs_off_periodic_revalidate() {
+    QObject owner;
+    int attempts = 0;
+    auto fetcher = [&](QueryStore::Resolver, QueryStore::Rejecter reject) {
+        ++attempts;
+        reject(QStringLiteral("rate limited"));
+    };
+    QueryStore::instance().subscribe(
+        &owner, k("a"), 600, 1200, [](const QueryStore::State&) {}, fetcher);
+    drain();
+    QCOMPARE(attempts, 1);
+
+    // A periodic tick right after the failure must NOT refetch: the entry has
+    // no cached value (so the TTL gate can't hold it back) and errors are
+    // never cached — without the failure backoff this looped a full RPC on
+    // every 20s tick for as long as an outage lasted.
+    QueryStore::instance().revalidate(k("a"));
+    drain();
+    QCOMPARE(attempts, 1);
+
+    // An explicit user refresh is not throttled.
+    QueryStore::instance().revalidate(k("a"), /*force=*/true);
+    drain();
+    QCOMPARE(attempts, 2);
 }
 
 void TestQueryStore::revalidate_owner_covers_every_key_of_that_owner() {

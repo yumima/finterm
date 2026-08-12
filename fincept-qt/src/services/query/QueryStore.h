@@ -142,6 +142,14 @@ class QueryStore : public QObject {
     /// should not be told to wait for a TTL it never agreed to.
     void revalidate(const QString& key, bool force = false);
 
+    /// Oldest upstream fetch time across every populated entry `owner` is
+    /// subscribed to; invalid if none. The honest single stamp for an "as of"
+    /// chip over a panel fed by several keys: no number on it is older than
+    /// this. Covers any subscribing view by construction — the alternative
+    /// (a hand-stamped member per tab) reverted to a signal-arrival fallback
+    /// whenever a tab forgot to stamp, which read "just now" over cache hits.
+    QDateTime oldest_fetched_at(QObject* owner) const;
+
     /// revalidate() every key `owner` is subscribed to.
     ///
     /// The fix for the refresh gap: panels subscribe through QueryStore, but
@@ -199,6 +207,13 @@ class QueryStore : public QObject {
     struct Entry {
         QVariant cached_value;        // null if no data
         QDateTime fetched_at;          // when cached_value was last set
+        /// When the last fetch FAILED; cleared by a successful resolve.
+        /// revalidate() holds a kMinRevalidateSec floor from this stamp, so a
+        /// failing key is retried once a minute instead of on every periodic
+        /// tick — errors are (correctly) never cached, which without this
+        /// floor turned the screen's 20s timer into a retry storm against an
+        /// endpoint that was likely rate-limiting already.
+        QDateTime last_failed_at;
         QDateTime last_accessed;       // bumped on subscribe / peek / deliver;
                                        // drives LRU eviction
         int ttl_sec = 0;
