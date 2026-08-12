@@ -275,6 +275,9 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_custom_ = nullptr;   // opens date-range picker
     QPushButton* active_period_btn_ = nullptr;
     void open_custom_range_picker();
+    /// Refresh the CUSTOM button's tooltip from current_period_. Must be
+    /// called from EVERY path that changes current_period_ — see its comment.
+    void sync_custom_tooltip();
 
     // Overlay toggle buttons. Held as members so saved chart views can
     // re-check them programmatically on symbol switch — without these the

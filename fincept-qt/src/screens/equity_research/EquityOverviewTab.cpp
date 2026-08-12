@@ -891,10 +891,28 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     // it back to yfinance .history(start=, end=) — same code path as the
     // fixed periods so QueryStore caching, late-arrival filtering, and
     // overlay rendering all just work.
-    btn_custom_ = new QPushButton(QStringLiteral("\xe2\x9c\x8e"));   // ✎ pencil glyph
+    // Label is plain ASCII, deliberately. This was a ✎ (U+270E), which the
+    // user saw render as a corrupt glyph. The row is styled
+    // font-family:'Consolas',monospace and Consolas does not exist on Linux,
+    // so the label's appearance depends on whatever the fontconfig fallback
+    // resolves to and whether THAT face covers Dingbats — which varies by
+    // machine and by the user's configured theme font. (On this build box
+    // the fallback is DejaVu Sans Mono, which does cover it, so the exact
+    // mechanism behind the report is unconfirmed.) ASCII sidesteps the whole
+    // question: "CUSTOM" renders in every face, and it names the control
+    // instead of asking the user to interpret a pictogram.
+    //
+    // No explicit width. QStyleSheetStyle::sizeFromContents already folds
+    // padding and border into the size hint, and QHBoxLayout sizes each child
+    // from its own hint — so the longer label widens this button on its own.
+    // An explicit setMinimumWidth would be actively worse: qSmartMinSize
+    // OVERRIDES the hint downward rather than taking a maximum, so a
+    // mismeasured minimum (e.g. taken before the stylesheet font is resolved)
+    // would clip the text it was meant to protect.
+    btn_custom_ = new QPushButton(QStringLiteral("CUSTOM"));
     btn_custom_->setCursor(Qt::PointingHandCursor);
-    btn_custom_->setToolTip("Custom date range");
     btn_custom_->setStyleSheet(btn_style_inactive);
+    sync_custom_tooltip();
     connect(btn_custom_, &QPushButton::clicked, this,
             [this]() { open_custom_range_picker(); });
     btn_row->addWidget(btn_custom_);
@@ -1073,14 +1091,45 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     return p;
 }
 
+// Keep the CUSTOM button's tooltip in step with current_period_.
+//
+// The button's label can't show the active window without resizing the row on
+// every pick, so the dates live in the tooltip — which means every path that
+// changes current_period_ has to refresh it. There are two: switch_period()
+// (user picks) and load_chart_view() (per-ticker view restore). Missing the
+// restore path left the tooltip advertising the PREVIOUS symbol's window:
+// pick a range on AAPL, switch to MSFT, and hovering CUSTOM still showed
+// AAPL's dates. Hence one helper, called from both.
+void EquityOverviewTab::sync_custom_tooltip() {
+    if (!btn_custom_)
+        return;
+    // "range:YYYY-MM-DD:YYYY-MM-DD" → "2026-05-13 → 2026-08-11". ISO dates
+    // contain no colons, so the split is exactly three parts.
+    if (current_period_.startsWith(QStringLiteral("range:"))) {
+        const QStringList parts = current_period_.split(QLatin1Char(':'));
+        if (parts.size() == 3) {
+            btn_custom_->setToolTip(parts.at(1) + QStringLiteral(" → ") + parts.at(2));
+            return;
+        }
+    }
+    btn_custom_->setToolTip(QStringLiteral("Custom date range"));
+}
+
 void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
     // Same period as current and we already have candles? Nothing to do.
     // (The cached_candles_ check replaces the old historical_loaded_ flag;
     // QueryStore owns the load state now, but we still want to avoid
     // re-binding the subscription when the user re-clicks the active button.)
-    if (period == current_period_ && !cached_candles_.isEmpty())
-        return;
+    // Capture the "nothing changed" test BEFORE assigning — comparing period
+    // against an already-updated current_period_ is trivially true and would
+    // make this early return unreachable.
+    const bool unchanged = (period == current_period_) && !cached_candles_.isEmpty();
     current_period_ = period;
+    // Refresh the tooltip even on the unchanged path: a re-click of the
+    // already-active range must still be able to repair a stale tooltip.
+    sync_custom_tooltip();
+    if (unchanged)
+        return;
 
     // Update button styles
     auto inactive =
@@ -1188,8 +1237,8 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
 
     // Reflect the saved period in the active-button highlight. The set of
     // fixed period buttons may not include the saved period (e.g. saved
-    // value was a "range:…" custom). In that case nothing gets the active
-    // style — the custom-range pencil glyph signals the state implicitly.
+    // value was a "range:…" custom). In that case the CUSTOM button takes the
+    // active style and its tooltip carries the restored window.
     QPushButton* match = nullptr;
     if      (period == "1mo") match = btn_1m_;
     else if (period == "3mo") match = btn_3m_;
@@ -1197,6 +1246,10 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
     else if (period == "1y")  match = btn_1y_;
     else if (period == "5y")  match = btn_5y_;
     else if (period.startsWith("range:")) match = btn_custom_;
+    // The restore path also changes current_period_, so the tooltip has to
+    // follow it here too — otherwise it keeps advertising the window from
+    // whichever ticker was open before.
+    sync_custom_tooltip();
 
     auto inactive_ss =
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
