@@ -17,7 +17,14 @@ class CacheManager : public QObject {
   public:
     static CacheManager& instance();
 
-    void put(const QString& key, const QVariant& value, int ttl_seconds = 300, const QString& category = "general");
+    /// `age_sec`: how old the value already is at write time. Shortens the
+    /// remaining lifetime (expires_at) while keeping ttl_seconds intact, so
+    /// the derived write time (expires_at − ttl_seconds, see try_get_aged)
+    /// stays honest for re-puts of aged data — startup hydration being the
+    /// case. Passing a pre-reduced TTL instead makes the entry claim it was
+    /// written "now".
+    void put(const QString& key, const QVariant& value, int ttl_seconds = 300, const QString& category = "general",
+             int age_sec = 0);
     /// Returns the cached value (as QString-convertible QVariant) or a null QVariant on miss/expiry.
     QVariant get(const QString& key) const;
     /// Batched get(): one SELECT for many keys. Returned map only contains entries that

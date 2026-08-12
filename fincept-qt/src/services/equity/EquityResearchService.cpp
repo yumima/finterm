@@ -121,8 +121,11 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                 : QJsonDocument(v.toObject());
             const QString blob = QString::fromUtf8(
                 doc_for_blob.toJson(QJsonDocument::Compact));
+            // Full TTL + explicit age: the entry expires on the original
+            // schedule and try_get_aged reports the original write time
+            // instead of claiming the blob was fetched at app launch.
             fincept::CacheManager::instance().put(
-                cache_prefix + symbol, QVariant(blob), ttl_sec - age_sec, "equity");
+                cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
         };
         // quote / info / financials / news live in the root, peers as array
         if (root.contains("quote"))
@@ -144,7 +147,7 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                     QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
                 fincept::CacheManager::instance().put(
                     root.value("peers_key").toString(),
-                    QVariant(blob), kPeersTtlSec - age_sec, "equity");
+                    QVariant(blob), kPeersTtlSec, "equity", age_sec);
             }
         }
         // candles + technicals are nested per-period objects
@@ -159,7 +162,7 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                         QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
                     fincept::CacheManager::instance().put(
                         cache_prefix + symbol + ":" + it.key(),
-                        QVariant(blob), ttl_sec - age_sec, "equity");
+                        QVariant(blob), ttl_sec, "equity", age_sec);
                 }
             };
         repopulate_periodic("candles", "equity:candles:", kHistoricalTtlSec);
@@ -1344,6 +1347,7 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
 
     // compute_technicals emits lowercase snake_case columns, one row per candle.
     const QJsonObject last = rows.last().toObject();
+    td.last_bar_ts = static_cast<qint64>(last.value("timestamp").toDouble(0));
 
     RatingInput input;
     input.bars = static_cast<int>(rows.size());

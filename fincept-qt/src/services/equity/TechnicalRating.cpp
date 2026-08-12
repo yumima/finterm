@@ -88,7 +88,7 @@ Regime regime_of(const RatingInput& in) {
     Regime r;
     if (!in.now.has("adx") || !in.now.has("adx_pos") || !in.now.has("adx_neg"))
         return r;
-    if (in.now.get("adx") < 25.0)
+    if (in.now.get("adx") < technical_rating::kAdxStrongTrend)
         return r;
     r.trending = true;
     r.up = in.now.get("adx_pos") > in.now.get("adx_neg");
@@ -284,15 +284,16 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
 
     // ── ADX — strength from ADX, direction from DI+/DI- ──────────────────────
     if (column == "adx") {
+        using namespace technical_rating;
         if (!in.now.has("adx_pos") || !in.now.has("adx_neg"))
             return display_only(S::Neutral);
-        if (value < 20.0)
+        if (value < kAdxTrend)
             return voting(S::Neutral, kBucketTrend); // no trend to be directional about
         const double dir = in.now.get("adx_pos") - in.now.get("adx_neg");
         if (dir > 0.0)
-            return voting(value >= 25.0 ? S::StrongBuy : S::Buy, kBucketTrend);
+            return voting(value >= kAdxStrongTrend ? S::StrongBuy : S::Buy, kBucketTrend);
         if (dir < 0.0)
-            return voting(value >= 25.0 ? S::StrongSell : S::Sell, kBucketTrend);
+            return voting(value >= kAdxStrongTrend ? S::StrongSell : S::Sell, kBucketTrend);
         return voting(S::Neutral, kBucketTrend);
     }
 
@@ -355,13 +356,14 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
 
     // ── Rate-of-change style momentum ────────────────────────────────────────
     if (column == "roc") {
-        if (value >= 10.0)
+        using namespace technical_rating;
+        if (value >= kRocStrong)
             return voting(S::StrongBuy, kBucketMomentum);
-        if (value > 2.0)
+        if (value > kRocDirectional)
             return voting(S::Buy, kBucketMomentum);
-        if (value <= -10.0)
+        if (value <= -kRocStrong)
             return voting(S::StrongSell, kBucketMomentum);
-        if (value < -2.0)
+        if (value < -kRocDirectional)
             return voting(S::Sell, kBucketMomentum);
         return voting(S::Neutral, kBucketMomentum);
     }
@@ -370,13 +372,14 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
 
     // ── Volume ───────────────────────────────────────────────────────────────
     if (column == "cmf") {
-        if (value >= 0.20)
+        using namespace technical_rating;
+        if (value >= kCmfStrong)
             return voting(S::StrongBuy, kBucketVolume);
-        if (value > 0.05)
+        if (value > kCmfDirectional)
             return voting(S::Buy, kBucketVolume);
-        if (value <= -0.20)
+        if (value <= -kCmfStrong)
             return voting(S::StrongSell, kBucketVolume);
-        if (value < -0.05)
+        if (value < -kCmfDirectional)
             return voting(S::Sell, kBucketVolume);
         return voting(S::Neutral, kBucketVolume);
     }

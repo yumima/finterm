@@ -20,11 +20,17 @@ class EquityAnalysisTab : public QWidget {
   private:
     void apply_info_state(const services::query::QueryStore::State& s);
     void build_ui();
+    /// Blank every value back to the placeholder dash. See apply_info_state.
+    void reset_values();
     static QString fmt(double v, int decimals = 2);
     static QString fmt_large(double v);
     static QString fmt_pct(double v);
 
     QString current_symbol_;
+    /// Symbol whose numbers the panels currently show — compared by the error
+    /// path so a failed fetch after a symbol switch blanks the panels instead
+    /// of leaving the previous symbol's values under the new header.
+    QString displayed_symbol_;
 
     // Financial Health
     QLabel* cash_val_ = nullptr;

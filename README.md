@@ -2,33 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-11)
+## Today's commits (2026-08-12)
 
 Latest first.
 
-- [`1edef24bd`](https://github.com/yumima/finterm/commit/1edef24bd) Fix the S-1 slicer properly, and finish the alpha gating
-- [`e9d53141e`](https://github.com/yumima/finterm/commit/e9d53141e) Fix six blocking findings from the review, including one I introduced
-- [`669a35d6e`](https://github.com/yumima/finterm/commit/669a35d6e) Power Trader: price at the disclosure date, and stop discarding the winners
-- [`0cd2f26d0`](https://github.com/yumima/finterm/commit/0cd2f26d0) S-1 sections: quote the section, not the table of contents
-- [`c3c29c346`](https://github.com/yumima/finterm/commit/c3c29c346) IPO Watch: say which source is missing instead of showing a blank pane
-- [`cb6adbe27`](https://github.com/yumima/finterm/commit/cb6adbe27) Remove the Cabinet tab; fetch the SEC financials that were never fetched
-- [`0b1c4b4f6`](https://github.com/yumima/finterm/commit/0b1c4b4f6) Power Trader: one list, one detail — and fix three stylesheets that silently painted the wrong colours
-- [`9718ad43e`](https://github.com/yumima/finterm/commit/9718ad43e) Power Trader: make the ALL/SENATE/HOUSE filter actually filter
-- [`3a5090abc`](https://github.com/yumima/finterm/commit/3a5090abc) IPO Watch + Power Trader: stop counting filing stubs as trades and pulled deals as imminent pricings
-- [`32ab8c312`](https://github.com/yumima/finterm/commit/32ab8c312) ER Overview: name the custom-range button instead of drawing a pictogram
-- [`7547ac678`](https://github.com/yumima/finterm/commit/7547ac678) Cache age: derive it from the row, so a writer cannot forget to set it
-- [`acd967132`](https://github.com/yumima/finterm/commit/acd967132) Quotes: one symbol, one previous close — so the app agrees with itself
-- [`899fb40d6`](https://github.com/yumima/finterm/commit/899fb40d6) ER: the market-status badge stops saying OPEN on Thanksgiving
-- [`a6ca7b460`](https://github.com/yumima/finterm/commit/a6ca7b460) Keys: one generated catalogue — and stop deleting the user's own API keys
-- [`8b432e3a9`](https://github.com/yumima/finterm/commit/8b432e3a9) Tests: cover the DB seam where four reviews found their defects
-- [`07cba58b6`](https://github.com/yumima/finterm/commit/07cba58b6) Portfolio: stop re-reading the same data several times a tick
-- [`49f2b7326`](https://github.com/yumima/finterm/commit/49f2b7326) Daemon: collapse identical concurrent calls, and stop one hang blocking all
-- [`a411b0529`](https://github.com/yumima/finterm/commit/a411b0529) Portfolio: cash flows convert at their own trade date
-- [`af74b1186`](https://github.com/yumima/finterm/commit/af74b1186) Honest labels: say what a number is, and what it isn't
-- [`abea0711b`](https://github.com/yumima/finterm/commit/abea0711b) ER Financials: state the basis, match the periods, use the real tax rate
-- [`e4b310e6a`](https://github.com/yumima/finterm/commit/e4b310e6a) ER: wire the provenance layer — panels refresh, and the age shown is real
-- [`068b01909`](https://github.com/yumima/finterm/commit/068b01909) Data layer: stop the silent corruptions — inverted RSI, lost precision, cached failures
-- [`7e0ba77a3`](https://github.com/yumima/finterm/commit/7e0ba77a3) Portfolio: multi-currency books convert into the portfolio currency
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

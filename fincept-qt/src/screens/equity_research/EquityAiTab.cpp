@@ -1050,8 +1050,10 @@ void EquityAiTab::run_forecast(bool automatic) {
 
 void EquityAiTab::resolve_due() {
     if (candles_.isEmpty()) return;
-    // UTC — daily bars carry an exchange-midnight stamp (see EquityOverviewTab).
-    const QString last_ymd = QDateTime::fromSecsSinceEpoch(candles_.last().timestamp, QTimeZone::UTC).date().toString(Qt::ISODate);
+    // Exchange-midnight stamp → calendar date (plain UTC resolved a day early
+    // for exchanges east of Greenwich); see ui::formatting::bar_date.
+    const QString last_ymd =
+        ui::formatting::bar_date(candles_.last().timestamp).toString(Qt::ISODate);
     auto& repo = AiPredictionRepository::instance();
     for (const AiPrediction& p : repo.for_ticker(current_symbol_)) {
         if (p.resolved) continue;

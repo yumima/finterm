@@ -4,6 +4,7 @@
 #include "services/query/QueryStore.h"
 #include "ui/widgets/LoadingOverlay.h"
 
+#include <QDateTime>
 #include <QFrame>
 #include <QLabel>
 #include <QProgressBar>
@@ -17,6 +18,11 @@ class EquityTechnicalsTab : public QWidget {
   public:
     explicit EquityTechnicalsTab(QWidget* parent = nullptr);
     void set_symbol(const QString& symbol);
+    /// When the displayed data was actually fetched upstream (QueryStore's
+    /// State::fetched_at). Invalid when nothing is displayed. The screen's
+    /// freshness chip prefers this over its signal-arrival fallback, which a
+    /// cache hit restamps as "just now".
+    QDateTime data_as_of() const { return data_fetched_at_; }
     /// Re-warm the entry this tab is actually displaying — its own (symbol,
     /// period, interval), not the daily default. The screen calls this on tab
     /// activation; calling fetch_technicals(symbol) there instead silently
@@ -30,6 +36,14 @@ class EquityTechnicalsTab : public QWidget {
     void build_ui();
     void populate(const services::equity::TechnicalsData& data);
     void clear_sections();
+    /// Blank every panel back to the empty state (rating dash, zero counts).
+    /// Used when an error would otherwise leave another symbol's rating on
+    /// screen under the current symbol's header.
+    void reset_panels();
+    /// Render the "which bar, fetched when, stale or not" line under the
+    /// rating — the only honest answer to "is this current?".
+    void update_as_of(const services::equity::TechnicalsData& data,
+                      const services::query::QueryStore::State& s);
     void switch_period(QPushButton* btn, const QString& period);
     /// Switch the bar interval the indicators are derived from ("1d" / "1wk").
     void switch_interval(QPushButton* btn, const QString& interval);
@@ -47,6 +61,19 @@ class EquityTechnicalsTab : public QWidget {
     static QString period_btn_style_inactive();
 
     QString current_symbol_;
+    /// QueryStore key of the data the panels currently render — stamped on
+    /// every successful delivery, compared by the error path.
+    /// current_technicals_key_ moves ahead of it on set_symbol() /
+    /// switch_period() / switch_interval(); if the fetch for the new key fails
+    /// while the panels still show the old one, keeping them up would present
+    /// another symbol's — or another interval's — rating under the newly
+    /// active header and buttons.
+    QString displayed_key_;
+    /// The as-of line without its STALE suffix, kept so the error path can
+    /// re-render "refresh failed" over a line that promised "refreshing…".
+    QString as_of_base_;
+    /// Backing for data_as_of().
+    QDateTime data_fetched_at_;
     QString current_period_ = "1y";
     // Bar interval the indicators are computed on. Unlike the period, this
     // genuinely changes the verdict — weekly bars describe the multi-month
@@ -84,6 +111,10 @@ class EquityTechnicalsTab : public QWidget {
     // States how well the panel does at describing the past and at predicting
     // the future. Both numbers, plainly, under the verdict. See signal_text().
     QLabel* accuracy_label_ = nullptr;
+    // Which bar the verdict describes and when the data was fetched — with a
+    // still-forming marker for today's bar / the current week, and a STALE
+    // marker when the store served past-TTL data. See update_as_of().
+    QLabel* as_of_label_ = nullptr;
     // Only visible when an indicator stage was lost on the Python side.
     QLabel* warning_label_ = nullptr;
 

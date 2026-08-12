@@ -1260,6 +1260,8 @@ void EquityResearchScreen::update_freshness_chip() {
     QDateTime t;
     if (overview_tab_ && tab_widget_->currentWidget() == overview_tab_)
         t = overview_tab_->data_as_of();
+    if (technicals_tab_ && tab_widget_->currentWidget() == technicals_tab_)
+        t = technicals_tab_->data_as_of();
     if (!t.isValid()) {
         const auto it = tab_loaded_at_.constFind(idx);
         if (it == tab_loaded_at_.constEnd()) {

@@ -92,6 +92,17 @@ void EquityAnalysisTab::set_symbol(const QString& symbol) {
         [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
 }
 
+void EquityAnalysisTab::reset_values() {
+    displayed_symbol_.clear();
+    static const QString dash = QStringLiteral("\xe2\x80\x94");
+    for (QLabel* l : {cash_val_, debt_val_, fcf_val_, ocf_val_, ev_val_, ev_rev_val_,
+                      ev_ebitda_val_, book_val_, rev_val_, rev_share_val_, gp_val_,
+                      ebitda_m_val_, pe_val_, peg_val_, roe_val_, roa_val_, beta_val_,
+                      short_rat_val_}) {
+        if (l) l->setText(dash);
+    }
+}
+
 void EquityAnalysisTab::build_ui() {
     setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
     loading_overlay_ = new ui::LoadingOverlay(this);
@@ -174,6 +185,12 @@ void EquityAnalysisTab::build_ui() {
 void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
         if (loading_overlay_) loading_overlay_->hide_loading();
+        // Deliveries are subscription-bound, so this error is for the current
+        // symbol. If the panels still show a DIFFERENT symbol's numbers,
+        // returning would leave them under the new symbol's header — blank
+        // them instead. (Same-symbol refresh failures keep the good data.)
+        if (displayed_symbol_ != current_symbol_)
+            reset_values();
         return;
     }
     if (!s.data.isValid() || s.data.isNull()) return;
@@ -183,6 +200,7 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
         return;
     }
     loading_overlay_->hide_loading();
+    displayed_symbol_ = current_symbol_;
 
     // Financial Health
     cash_val_->setText(fmt_large(info.total_cash));

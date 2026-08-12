@@ -629,12 +629,35 @@ QWidget* EquityFinancialsTab::build_cashflow_view() {
 void EquityFinancialsTab::apply_financials_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
         if (loading_overlay_) loading_overlay_->hide_loading();
+        // Deliveries are subscription-bound, so this error is for the current
+        // symbol. If the tables still show a DIFFERENT symbol's statements,
+        // returning would leave them under the new symbol's header — and
+        // cached_data_ would let EXPORT CSV export them. Repaint empty.
+        // (Same-symbol refresh failures keep the good data.)
+        if (displayed_symbol_ != current_symbol_) {
+            displayed_symbol_.clear();
+            cached_data_ = {};
+            loaded_ = false;
+            const services::equity::FinancialsData empty;
+            populate_income_view(empty);
+            populate_balance_view(empty);
+            populate_cashflow_view(empty);
+            populate_table(inc_table_, empty.income_statement);
+            populate_table(bal_table_, empty.balance_sheet);
+            populate_table(cf_table_, empty.cash_flow);
+            rebuild_revenue_chart(empty);
+            rebuild_margin_chart(empty);
+            rebuild_balance_chart(empty);
+            rebuild_cashflow_chart(empty);
+            rebuild_return_chart(empty);
+        }
         return;
     }
     if (!s.data.isValid() || s.data.isNull()) return;
     const auto payload = s.data.value<services::equity::FinancialsData>();
     cached_data_ = payload;
     loaded_ = true;
+    displayed_symbol_ = current_symbol_;
     loading_overlay_->hide_loading();
 
     populate_income_view(payload);

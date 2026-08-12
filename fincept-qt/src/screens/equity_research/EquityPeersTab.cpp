@@ -207,14 +207,27 @@ void EquityPeersTab::on_load_clicked() {
 
 void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        status_label_->hide();
         if (loading_overlay_) loading_overlay_->hide_loading();
+        // Deliveries are subscription-bound, so this error is for the current
+        // symbol's basket. If the table still shows a DIFFERENT symbol's
+        // peers, returning would leave that basket under the new symbol's
+        // header — clear it and say why instead. (Same-symbol refresh
+        // failures keep the good rows.)
+        if (displayed_symbol_ != current_symbol_) {
+            displayed_symbol_.clear();
+            if (peer_table_) peer_table_->setRowCount(0);
+            status_label_->setText(QString("Couldn't load peers \xe2\x80\x94 %1").arg(s.error));
+            status_label_->show();
+        } else {
+            status_label_->hide();
+        }
         return;
     }
     if (!s.data.isValid() || s.data.isNull()) return;
     const auto peers = s.data.value<QVector<services::equity::PeerData>>();
     status_label_->hide();
     loading_overlay_->hide_loading();
+    displayed_symbol_ = current_symbol_;
     populate_table(peers);
 }
 

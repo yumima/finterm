@@ -53,6 +53,10 @@ class EquityPeersTab : public QWidget {
     void refresh_check_column();
 
     QString current_symbol_;
+    /// Symbol whose peer basket the table currently shows — compared by the
+    /// error path so a failed fetch after a symbol switch clears the table
+    /// instead of presenting the previous symbol's comps under the new header.
+    QString displayed_symbol_;
     QLineEdit* peers_edit_ = nullptr;
     QLabel* status_label_ = nullptr;
     QTableWidget* peer_table_ = nullptr;

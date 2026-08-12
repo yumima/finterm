@@ -43,7 +43,8 @@ CacheManager& CacheManager::instance() {
 
 CacheManager::CacheManager(QObject* parent) : QObject(parent) {}
 
-void CacheManager::put(const QString& key, const QVariant& value, int ttl_seconds, const QString& category) {
+void CacheManager::put(const QString& key, const QVariant& value, int ttl_seconds, const QString& category,
+                       int age_sec) {
     if (key.isEmpty())
         return;
     auto& cdb = CacheDatabase::instance();
@@ -54,6 +55,15 @@ void CacheManager::put(const QString& key, const QVariant& value, int ttl_second
     const int size_bytes = data.toUtf8().size();
     // ON CONFLICT DO UPDATE preserves created_at and hit_count across re-puts of the same key.
     // (INSERT OR REPLACE would delete+insert, resetting those fields.)
+    //
+    // `age_sec` shortens the remaining lifetime WITHOUT changing the stored
+    // ttl_seconds. Since written_at is derived as expires_at − ttl_seconds
+    // (see aged_from_row), this is what keeps a re-put of already-aged data —
+    // startup hydration from the per-symbol disk files — honest: the entry
+    // expires on the original schedule AND reports the original write time.
+    // The old approach (put(ttl − age)) kept the expiry right but shifted the
+    // derived write time to the moment of hydration, so a freshness label
+    // showed app-launch time over hours-old data.
     cdb.execute("INSERT INTO unified_cache "
                 "(key, value, category, ttl_seconds, expires_at, size_bytes) "
                 "VALUES (?, ?, ?, ?, datetime('now', '+' || ? || ' seconds'), ?) "
@@ -63,7 +73,7 @@ void CacheManager::put(const QString& key, const QVariant& value, int ttl_second
                 "  ttl_seconds=excluded.ttl_seconds, "
                 "  expires_at=excluded.expires_at, "
                 "  size_bytes=excluded.size_bytes",
-                {key, data, category, ttl_seconds, ttl_seconds, size_bytes});
+                {key, data, category, ttl_seconds, ttl_seconds - age_sec, size_bytes});
 }
 
 QVariant CacheManager::get(const QString& key) const {

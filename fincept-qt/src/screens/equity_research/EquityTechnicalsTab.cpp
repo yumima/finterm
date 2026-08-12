@@ -2,13 +2,17 @@
 #include "screens/equity_research/EquityTechnicalsTab.h"
 
 #include "services/equity/EquityResearchService.h"
+#include "services/equity/TechnicalRating.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
+#include <QDateTime>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QProgressBar>
 #include <QScrollArea>
+#include <QTimeZone>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -169,12 +173,17 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
         return "Balanced money flow";
     }
     if (col_key == "adx") {
+        // Voting thresholds come from technical_rating so the badge and this
+        // text can't disagree: the 20–25 band already casts a directional vote
+        // (from DI+ vs DI-), 25+ upgrades it to strong. The 50 band is purely
+        // descriptive — the scorer has no separate rung there.
+        using namespace services::equity::technical_rating;
         if (value >= 50)
             return "Very strong trend — trade with the trend";
-        if (value >= 25)
+        if (value >= kAdxStrongTrend)
             return "Trending — directional move in play";
-        if (value >= 20)
-            return "Weak trend — possible consolidation";
+        if (value >= kAdxTrend)
+            return "Trend emerging — direction read from DI+ vs DI-";
         return "No trend — range-bound market";
     }
     if (col_key == "bb_pband") {
@@ -189,27 +198,46 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
         return "Within bands — normal range";
     }
     if (col_key == "bb_wband") {
-        if (value < 0.05)
-            return "Tight squeeze — breakout imminent";
-        if (value < 0.1)
+        // `ta` reports band width as a PERCENT of the midline — typical equity
+        // readings run ~2–20, and StockCharts quotes squeeze thresholds on the
+        // same percent scale. These bands briefly read the value as a fraction
+        // (0.05/0.1/0.3), which made every stock "high volatility" and made the
+        // squeeze text — the one condition this row exists to flag — unreachable.
+        if (value < 5)
+            return "Tight squeeze — bands under 5% of price, breakout watch";
+        if (value < 10)
             return "Narrowing bands — volatility contracting";
-        if (value > 0.3)
+        if (value > 30)
             return "Wide bands — high volatility";
         return "Normal bandwidth";
     }
     if (col_key == "atr")
         return "Average true range — use for stop-loss sizing";
+    // ROC and CMF bands are the voting thresholds from technical_rating.
+    // They used to be hand-copied literals sitting elsewhere (±5, ±0.1), which
+    // produced rows whose badge said BUY while this column said "flat" or
+    // "balanced" about the same number.
     if (col_key == "roc") {
-        if (value > 5)
+        using namespace services::equity::technical_rating;
+        if (value >= kRocStrong)
             return "Strong upward momentum";
-        if (value < -5)
+        if (value > kRocDirectional)
+            return "Upward momentum building";
+        if (value <= -kRocStrong)
             return "Strong downward momentum";
+        if (value < -kRocDirectional)
+            return "Downward momentum building";
         return "Flat momentum — sideways movement";
     }
     if (col_key == "cmf") {
-        if (value > 0.1)
+        using namespace services::equity::technical_rating;
+        if (value >= kCmfStrong)
+            return "Heavy buying pressure — strong accumulation";
+        if (value > kCmfDirectional)
             return "Buying pressure — accumulation";
-        if (value < -0.1)
+        if (value <= -kCmfStrong)
+            return "Heavy selling pressure — strong distribution";
+        if (value < -kCmfDirectional)
             return "Selling pressure — distribution";
         return "Balanced — no clear accumulation or distribution";
     }
@@ -371,9 +399,10 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "the bands \xe2\x80\x94 a statistically stretched move.";
     if (col_key == "bb_wband")
         return "Bollinger Band Width\n\n"
-               "The distance between the bands relative to the midline \xe2\x80\x94 a direct read of "
-               "volatility. A tight squeeze often precedes a sharp breakout; unusually wide "
-               "bands mark volatility that tends to fade.";
+               "The distance between the bands as a PERCENT of the midline \xe2\x80\x94 a direct read "
+               "of volatility (typical equity readings run about 2\xe2\x80\x93""20). A tight squeeze "
+               "(under ~5) often precedes a sharp breakout; unusually wide bands (over ~30) mark "
+               "volatility that tends to fade.";
     if (col_key == "obv")
         return "On-Balance Volume (OBV)\n\n"
                "Running total that adds the day's volume on up closes and subtracts it on down "
@@ -388,8 +417,8 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "cmf")
         return "Chaikin Money Flow (CMF)\n\n"
                "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92""1 to "
-               "+1. Above +0.1 indicates accumulation; below \xe2\x88\x92""0.1 distribution; near zero, "
-               "balance.";
+               "+1. Above +0.05 indicates accumulation (above +0.20, strong accumulation); below "
+               "\xe2\x88\x92""0.05 distribution (below \xe2\x88\x92""0.20, strong); near zero, balance.";
     if (col_key == "adi")
         return "Accumulation/Distribution Index (ADI)\n\n"
                "Cumulative volume weighted by where each close lands within its bar's range. "
@@ -718,6 +747,16 @@ void EquityTechnicalsTab::build_ui() {
         QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
             .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(accuracy_label_);
+
+    // Which bar, fetched when. Without this line a pre-open snapshot, a
+    // 10-minute-old cache hit and a live reading were indistinguishable.
+    as_of_label_ = new QLabel;
+    as_of_label_->setAlignment(Qt::AlignCenter);
+    as_of_label_->setWordWrap(true);
+    as_of_label_->setVisible(false);
+    as_of_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
+    rp_vl->addWidget(as_of_label_);
 
     warning_label_ = new QLabel;
     warning_label_->setAlignment(Qt::AlignCenter);
@@ -1076,10 +1115,31 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
 // ── apply_technicals_state ───────────────────────────────────────────────────
 
 void EquityTechnicalsTab::apply_technicals_state(const services::query::QueryStore::State& s) {
-    // Error: hide overlay so the user isn't stuck. No populate() on error —
-    // the previous panel contents stay until the next successful fetch.
     if (!s.error.isEmpty()) {
         if (loading_overlay_) loading_overlay_->hide_loading();
+        if (!displayed_key_.isEmpty() && displayed_key_ == current_technicals_key_) {
+            // The panels still belong to this exact (symbol, period, interval)
+            // — keep the data, but say the refresh failed instead of silently
+            // presenting old numbers, and stop the as-of line from promising
+            // "refreshing…" for a refetch that just failed.
+            warning_label_->setText(
+                QString("Refresh failed — showing previously loaded data. (%1)").arg(s.error));
+            warning_label_->setVisible(true);
+            if (!as_of_base_.isEmpty()) {
+                as_of_label_->setText(as_of_base_ +
+                                      QStringLiteral(" \xc2\xb7 STALE \xe2\x80\x94 refresh failed"));
+                as_of_label_->setVisible(true);
+            }
+        } else {
+            // The panels belong to another symbol, period or interval (or
+            // nothing loaded yet). This used to `return` and leave them up,
+            // which presented the previous symbol's STRONG BUY under the new
+            // symbol's header — or the daily verdict under an active 1W button.
+            reset_panels();
+            warning_label_->setText(
+                QString("Could not load technicals for %1: %2").arg(current_symbol_, s.error));
+            warning_label_->setVisible(true);
+        }
         return;
     }
     if (!s.data.isValid() || s.data.isNull()) {
@@ -1089,6 +1149,98 @@ void EquityTechnicalsTab::apply_technicals_state(const services::query::QuerySto
     const auto payload = s.data.value<services::equity::TechnicalsData>();
     if (loading_overlay_) loading_overlay_->hide_loading();
     populate(payload);
+    // Deliveries are subscription-bound (rebind() unsubscribes the old key
+    // first), so what just painted is exactly the current key's data.
+    displayed_key_ = current_technicals_key_;
+    data_fetched_at_ = s.fetched_at;
+    update_as_of(payload, s);
+}
+
+// ── reset_panels ─────────────────────────────────────────────────────────────
+
+void EquityTechnicalsTab::reset_panels() {
+    clear_sections();
+    displayed_key_.clear();
+    rating_label_->setText("\xe2\x80\x94");
+    rating_label_->setStyleSheet(
+        QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
+            .arg(GRAY));
+    gauge_bar_->setValue(50);
+    strong_buy_count_->setText("0");
+    buy_count_->setText("0");
+    neutral_count_->setText("0");
+    sell_count_->setText("0");
+    strong_sell_count_->setText("0");
+    total_label_->setText("0 INDICATORS");
+    basis_label_->clear();
+    as_of_label_->clear();
+    as_of_label_->setVisible(false);
+    as_of_base_.clear();
+    data_fetched_at_ = QDateTime();
+    warning_label_->clear();
+    warning_label_->setVisible(false);
+}
+
+// ── update_as_of ─────────────────────────────────────────────────────────────
+
+void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& payload,
+                                       const services::query::QueryStore::State& s) {
+    QStringList bits;
+
+    if (payload.last_bar_ts > 0) {
+        // Exchange-midnight stamp → calendar date; see ui::formatting::bar_date.
+        const QDate bar_date = ui::formatting::bar_date(payload.last_bar_ts);
+        // "Today" seen from the westernmost real exchange — errs toward
+        // flagging a completed bar as still forming (harmless) rather than a
+        // forming bar as complete (misleading).
+        const QDate today =
+            QDateTime::currentDateTimeUtc().addSecs(-9 * 3600).date();
+
+        if (payload.interval == QLatin1String("1wk")) {
+            // No lower bound: `today` is computed from the westernmost
+            // exchange, so a freshly opened week on an eastern exchange
+            // (Tokyo Monday) can have bar_date a day AHEAD of it — requiring
+            // bar_date <= today read exactly that live week as complete.
+            const bool forming = today < bar_date.addDays(7);
+            bits << QString("Latest bar: week of %1%2")
+                        .arg(bar_date.toString("MMM d"),
+                             forming ? QStringLiteral(" — still forming") : QString());
+        } else {
+            const bool forming = bar_date >= today;
+            bits << QString("Latest bar: %1%2")
+                        .arg(bar_date.toString("MMM d"),
+                             forming ? QStringLiteral(" (may still be forming)") : QString());
+        }
+    }
+
+    if (s.fetched_at.isValid()) {
+        // The store keeps serving (and keeps the fetch stamp of) data up to a
+        // day old, so a bare clock time would read yesterday's 14:03 as an
+        // hour ago. Name the day whenever it isn't today.
+        const QDateTime local = s.fetched_at.toLocalTime();
+        QString when = local.toString("HH:mm");
+        if (local.date() != QDate::currentDate()) {
+            when = local.date() == QDate::currentDate().addDays(-1)
+                       ? QStringLiteral("yesterday ") + when
+                       : local.toString("MMM d HH:mm");
+        }
+        bits << QString("fetched %1").arg(when);
+    }
+    // Remember the line without the STALE suffix: if the refetch this suffix
+    // promises then fails, the error path re-renders it as "refresh failed".
+    as_of_base_ = bits.join(QStringLiteral(" \xc2\xb7 "));
+    if (s.is_stale)
+        bits << QStringLiteral("STALE \xe2\x80\x94 refreshing\xe2\x80\xa6");
+
+    as_of_label_->setText(bits.join(QStringLiteral(" \xc2\xb7 ")));
+    as_of_label_->setToolTip(
+        "Which bar the verdict describes and when the data was fetched.\n\n"
+        "Indicators read the latest bar in the series. During market hours that "
+        "bar is still forming — its close, high and low can all change until the "
+        "session (or, for weekly bars, the week) ends, and the verdict can move "
+        "with them. STALE means the value came from cache past its refresh "
+        "window; a background refetch is already running.");
+    as_of_label_->setVisible(!bits.isEmpty());
 }
 
 } // namespace fincept::screens

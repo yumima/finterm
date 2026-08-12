@@ -71,6 +71,10 @@ class EquityFinancialsTab : public QWidget {
     static QColor growth_color(double v);
 
     QString current_symbol_;
+    /// Symbol whose statements the tables currently show — compared by the
+    /// error path so a failed fetch after a symbol switch repaints empty
+    /// instead of leaving (and exporting) the previous symbol's financials.
+    QString displayed_symbol_;
     bool loaded_ = false;
 
     // Statement selector buttons

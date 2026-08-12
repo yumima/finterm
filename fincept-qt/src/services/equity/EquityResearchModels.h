@@ -196,6 +196,12 @@ struct TechnicalsData {
     int neutral = 0;
     int sell = 0;
     int strong_sell = 0;
+    /// Unix seconds of the last bar the indicators were read from, straight
+    /// off the row's `timestamp` column (exchange-midnight stamp for daily
+    /// bars, week-start for weekly). 0 when the rows carried none. Lets the
+    /// tab say which bar the verdict describes — including that the bar may
+    /// still be forming.
+    qint64 last_bar_ts = 0;
 };
 
 // ── Peer comparison ───────────────────────────────────────────────────────────

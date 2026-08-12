@@ -4,6 +4,7 @@
 #include "screens/knowledge/HelpHint.h"
 #include "services/equity/EquityResearchService.h"
 #include "storage/repositories/SettingsRepository.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QJsonDocument>
@@ -570,16 +571,16 @@ void ResearchCandleCanvas::rebuild_cache() {
 
     for (int i = 0; i < count; i += label_step) {
         const auto& c = candles_[start + i];
-        // UTC: a daily bar is stamped at exchange midnight, so rendering it
-        // in the viewer's zone moves the label a day for negative-UTC users.
-        QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
+        // Exchange-midnight stamp → calendar date (plain UTC was a day early
+        // for exchanges east of Greenwich); see ui::formatting::bar_date.
+        const QDate d = ui::formatting::bar_date(c.timestamp);
         QString label;
         if (span_sec > 365LL * 86400)
-            label = dt.toString("MMM yy");
+            label = d.toString("MMM yy");
         else if (span_sec > 60LL * 86400)
-            label = dt.toString("dd MMM");
+            label = d.toString("dd MMM");
         else
-            label = dt.toString("dd MMM");
+            label = d.toString("dd MMM");
 
         int lx = static_cast<int>((i + 0.5) * slot_w);
         int tw = fm.horizontalAdvance(label);

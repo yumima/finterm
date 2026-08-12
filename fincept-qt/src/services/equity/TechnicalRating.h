@@ -119,6 +119,17 @@ inline constexpr int kMinTrendVoters = 3;
 /// Rows back to sample for cumulative-series slope.
 inline constexpr int kSlopeLookback = 5;
 
+/// Voting thresholds that the Technicals tab's interpretation text mirrors.
+/// One definition on purpose: these were once hand-copied literals on both
+/// sides, drifted (the text said "flat" about values the badge called BUY),
+/// and only an audit caught it.
+inline constexpr double kAdxTrend = 20.0;        // below: no trend to be directional about
+inline constexpr double kAdxStrongTrend = 25.0;  // at/above: directional vote upgrades to Strong
+inline constexpr double kRocDirectional = 2.0;   // |ROC| beyond this votes Buy/Sell
+inline constexpr double kRocStrong = 10.0;       // …and beyond this, Strong
+inline constexpr double kCmfDirectional = 0.05;  // |CMF| beyond this votes Buy/Sell
+inline constexpr double kCmfStrong = 0.20;       // …and beyond this, Strong
+
 /// Whether there is enough history for the trend evidence to mean anything.
 ///
 /// Counting voters is not enough. On a one-month daily window the 50- and

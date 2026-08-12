@@ -2,6 +2,7 @@
 #include <QDateTime>
 #include <QLocale>
 #include <QString>
+#include <QTimeZone>
 
 #include <cmath>
 
@@ -39,6 +40,25 @@ namespace fincept::ui::formatting {
 /// — zero is a valid value and must render as "0" / "0.00%" / "$0.00".
 inline QString placeholder() {
     return QStringLiteral("—");
+}
+
+/// Calendar date of an OHLC BAR timestamp (yfinance convention: daily bars are
+/// stamped midnight in the EXCHANGE's timezone; weekly bars at the week-start
+/// midnight). This is the ONE correct decode — use it at every bar-stamp site:
+///
+///   * viewer-local rendering shifts the date a day for anyone east of the
+///     exchange (16:00 ET stamp is next-day in Tokyo), and
+///   * plain UTC rendering shifts it a day the other way for exchanges east
+///     of Greenwich (midnight JST is 15:00 UTC the previous day).
+///
+/// Adding 14h and reading the date in UTC is exact for every real exchange
+/// offset (UTC−8 … UTC+14): stamp = D 00:00 at offset o ⇒ stamp + 14h lands
+/// inside D's UTC day whenever o ∈ (−10h, +14h].
+///
+/// NOT for announcement/event timestamps (earnings prints carry a real time of
+/// day) — those need a real timezone, not this midnight-stamp decode.
+inline QDate bar_date(qint64 unix_secs) {
+    return QDateTime::fromSecsSinceEpoch(unix_secs + 14 * 3600, QTimeZone::utc()).date();
 }
 
 /// Compact magnitude: K / M / B / T with a single decimal convention.
