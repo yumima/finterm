@@ -355,8 +355,19 @@ under test.
 
 ### 6.2 Settings sections
 
-- **LLM Config** — provider dropdown (anthropic + ollama only;
-  others as dormant adapters), per-profile model + base URL.
+- **LLM Config** — provider dropdown covering every adapter with a
+  live endpoint in `LlmService` (ollama/hearth, anthropic, gemini,
+  openai, openrouter, groq, deepseek, xai, kimi, minimax), plus
+  per-profile model + base URL. The user chooses where a model
+  runs: **local** via hearth (`ollama`, default base URL
+  `http://127.0.0.1:11435` — resolves role aliases, and the only
+  entry that keeps prompts on-box unless hearth itself binds a role
+  to a cloud backend) or **remote**, straight at the provider.
+  Scope: the remote entries are live for the **chat** surface only.
+  Agent dispatch still resolves through `runtime_for_provider()`,
+  where anything outside `{anthropic, ollama}` maps to the dormant
+  `external` runtime — so an agent that must run on Gemini reaches
+  it through hearth, not through direct provider config.
 - **MCP Servers** — marketplace list, per-server transport
   config, tool catalog browser.
 - **AI System** — copies of traces / spend / kill-switch (shares

@@ -104,8 +104,22 @@ Result<void> LlmProfileRepository::set_default(const QString& id) {
 
 Result<void> LlmProfileRepository::assign_profile(const QString& context_type, const QString& context_id,
                                                   const QString& profile_id) {
+    // Delete-then-insert, NOT "INSERT OR REPLACE".
+    //
+    // The table carries UNIQUE(context_type, context_id), which looks like it
+    // makes REPLACE an upsert — but type-level assignments store context_id as
+    // NULL, and SQLite treats NULLs as DISTINCT in a UNIQUE constraint. So
+    // ('news', NULL) never collided with itself and every re-bind appended a
+    // row. get_assignment() then returned the OLDEST of them, so changing a
+    // role's model silently did nothing: the binding was written correctly and
+    // permanently ignored.
+    //
+    // Deleting the slot first makes "one assignment per slot" true regardless
+    // of NULL semantics, and needs no schema migration.
+    if (auto r = remove_assignment(context_type, context_id); r.is_err())
+        return r;
     QVariant ctx_id = context_id.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(context_id);
-    return exec_write("INSERT OR REPLACE INTO llm_profile_assignments "
+    return exec_write("INSERT INTO llm_profile_assignments "
                       "  (context_type, context_id, profile_id, updated_at) "
                       "VALUES (?, ?, ?, datetime('now'))",
                       {context_type, ctx_id, profile_id});
@@ -124,10 +138,15 @@ Result<void> LlmProfileRepository::remove_assignment(const QString& context_type
 
 QString LlmProfileRepository::get_assignment(const QString& context_type, const QString& context_id) const {
     QVariant ctx_id = context_id.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(context_id);
+    // ORDER BY id DESC: with the duplicate rows older builds left behind, an
+    // unordered LIMIT 1 returns the OLDEST assignment — the user's most recent
+    // choice loses. Newest wins, so legacy data self-heals on read.
     QString sql = context_id.isEmpty() ? "SELECT profile_id FROM llm_profile_assignments "
-                                         "WHERE context_type = ? AND context_id IS NULL LIMIT 1"
+                                         "WHERE context_type = ? AND context_id IS NULL "
+                                         "ORDER BY id DESC LIMIT 1"
                                        : "SELECT profile_id FROM llm_profile_assignments "
-                                         "WHERE context_type = ? AND context_id = ? LIMIT 1";
+                                         "WHERE context_type = ? AND context_id = ? "
+                                         "ORDER BY id DESC LIMIT 1";
 
     QVariantList params = context_id.isEmpty() ? QVariantList{context_type} : QVariantList{context_type, context_id};
 

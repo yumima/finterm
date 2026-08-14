@@ -43,6 +43,7 @@ class ToolBar : public QWidget {
     QLabel* branding_label_ = nullptr;
     QLabel* live_dot_ = nullptr;
     QLabel* live_label_ = nullptr;
+    QPushButton* settings_btn_ = nullptr;
     QPushButton* plan_btn_ = nullptr;
     QPushButton* chat_mode_btn_ = nullptr;
     QPushButton* workbench_btn_ = nullptr;

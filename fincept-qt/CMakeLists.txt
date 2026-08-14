@@ -777,6 +777,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v047_earnings_predicted_move.cpp
     src/storage/sqlite/migrations/v048_snapshot_source.cpp
     src/storage/sqlite/migrations/v049_opening_balances.cpp
+    src/storage/sqlite/migrations/v050_llm_assignment_dedupe.cpp
 )
 
 # Python runner
@@ -1103,6 +1104,8 @@ set(SCREEN_SOURCES
     src/screens/profile/ProfileScreen.cpp
     src/screens/settings/SettingsScreen.cpp
     src/screens/settings/LlmConfigSection.cpp
+    src/screens/settings/AiRolesSection.cpp
+    src/screens/settings/AiConfigSection.cpp
     src/screens/settings/McpServersSection.cpp
     src/screens/settings/KeybindingsSection.cpp
     src/screens/settings/PythonEnvSection.cpp
@@ -1818,6 +1821,8 @@ set_source_files_properties(
     src/screens/settings/KeybindingsSection.cpp
     src/screens/settings/PythonEnvSection.cpp
     src/screens/settings/LlmConfigSection.cpp
+    src/screens/settings/AiRolesSection.cpp
+    src/screens/settings/AiConfigSection.cpp
     src/screens/settings/McpServersSection.cpp
     src/screens/settings/SettingsScreen.cpp
     src/screens/setup/SetupScreen.cpp

@@ -303,6 +303,42 @@ QString LlmService::active_model() const {
     return model_;
 }
 
+PersonaScope LlmService::scope_for_role(const QString& role, const QString& local_fallback) const {
+    QString cfg_provider;
+    {
+        QMutexLocker lock(&mutex_);
+        ensure_config();
+        cfg_provider = provider_;
+    }
+
+    PersonaScope scope;
+    const auto bound = LlmProfileRepository::instance().resolve_for_context(role);
+    // profile_id is EMPTY when resolve_for_context fell through to its legacy
+    // "active provider" fallback rather than finding a real binding. Testing
+    // only model_id would treat that fallback as an explicit binding and PIN
+    // the role to whatever provider happened to be default at the time — so
+    // changing the default would no longer move the roles that follow it.
+    // "Use default" has to mean "resolve the default at call time", which is
+    // what leaving the scope empty does.
+    if (!bound.profile_id.isEmpty() && !bound.model_id.isEmpty() && !bound.provider.isEmpty()) {
+        // Any provider, not just the default one. hearth on loopback and a
+        // cloud API are independently reachable, so a role bound elsewhere is
+        // routed there rather than quietly ignored.
+        scope.provider = bound.provider;
+        scope.model = bound.model_id;
+        scope.api_key = bound.api_key;
+        scope.base_url = bound.base_url;
+        return scope;
+    }
+
+    // Unbound. The fallback is a hearth role alias, so it only means anything
+    // when the configured provider IS hearth; elsewhere leave everything empty
+    // and let the call use the configured chat model.
+    if (!local_fallback.isEmpty() && !provider_requires_api_key(cfg_provider))
+        scope.model = local_fallback;
+    return scope;
+}
+
 QString LlmService::active_api_key() const {
     QMutexLocker lock(&mutex_);
     ensure_config();
@@ -388,9 +424,12 @@ int LlmService::resolved_max_tokens() const {
     return kFallback;
 }
 
-QString LlmService::get_endpoint_url() const {
+QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     // Called with mutex_ held
-    const QString& p = provider_;
+    const QString p = eff_provider(persona);
+    // Gemini puts the model in the PATH, not the body, so a per-role model
+    // override has to reach the URL builder or it silently does nothing.
+    const QString model = eff_model(persona);
 
     // Fincept cloud LLM: disabled in this local build (stub server removed).
     // Users should configure their own provider (Anthropic, OpenAI, Ollama, etc.)
@@ -399,8 +438,9 @@ QString LlmService::get_endpoint_url() const {
         return {};
 
     // Custom base_url takes priority for other providers
-    if (!base_url_.isEmpty()) {
-        const QString base = normalize_llm_base(base_url_);
+    const QString cfg_base = eff_base_url(persona);
+    if (!cfg_base.isEmpty()) {
+        const QString base = normalize_llm_base(cfg_base);
         if (p == "anthropic")
             return base + "/v1/messages";
         return base + "/v1/chat/completions";
@@ -411,7 +451,7 @@ QString LlmService::get_endpoint_url() const {
     if (p == "anthropic")
         return "https://api.anthropic.com/v1/messages";
     if (p == "gemini" || p == "google")
-        return "https://generativelanguage.googleapis.com/v1beta/models/" + model_ + ":generateContent";
+        return "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
     if (p == "groq")
         return "https://api.groq.com/openai/v1/chat/completions";
     if (p == "deepseek")
@@ -429,22 +469,23 @@ QString LlmService::get_endpoint_url() const {
     return {};
 }
 
-QMap<QString, QString> LlmService::get_headers() const {
+QMap<QString, QString> LlmService::get_headers(const PersonaScope& persona) const {
     // Called with mutex_ held
     QMap<QString, QString> h;
-    const QString& p = provider_;
+    const QString p = eff_provider(persona);
+    const QString api_key_eff = eff_api_key(persona);
 
     if (p == "anthropic") {
-        if (!api_key_.isEmpty())
-            h["x-api-key"] = api_key_;
+        if (!api_key_eff.isEmpty())
+            h["x-api-key"] = api_key_eff;
         h["anthropic-version"] = "2023-06-01";
     } else if (p == "gemini" || p == "google") {
-        if (!api_key_.isEmpty())
-            h["x-goog-api-key"] = api_key_;
+        if (!api_key_eff.isEmpty())
+            h["x-goog-api-key"] = api_key_eff;
     } else if (p == "fincept") {
-        // api_key_ already resolved from session by ensure_config()
-        if (!api_key_.isEmpty())
-            h["X-API-Key"] = api_key_;
+        // api_key_eff already resolved from session by ensure_config()
+        if (!api_key_eff.isEmpty())
+            h["X-API-Key"] = api_key_eff;
         auto tok = SettingsRepository::instance().get("session_token");
         if (tok.is_ok() && !tok.value().isEmpty())
             h["X-Session-Token"] = tok.value();
@@ -452,8 +493,8 @@ QMap<QString, QString> LlmService::get_headers() const {
         h["User-Agent"] = "finterm/4.0";
     } else {
         // OpenAI-compatible
-        if (!api_key_.isEmpty())
-            h["Authorization"] = "Bearer " + api_key_;
+        if (!api_key_eff.isEmpty())
+            h["Authorization"] = "Bearer " + api_key_eff;
         // OpenRouter optional attribution headers (HTTP-Referer/X-Title)
         // intentionally omitted — finterm is a localhost-only app and does not
         // self-identify on any third-party leaderboard.
@@ -542,14 +583,14 @@ QStringList LlmService::resolve_tool_globs(const PersonaScope& persona) const {
 QJsonObject LlmService::build_openai_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, bool stream,
                                              bool with_tools, const PersonaScope& persona) {
-    const QString model_lower = model_.toLower();
+    const QString model_lower = eff_model(persona).toLower();
 
     // deepseek-reasoner doesn't accept `tools`.
-    const bool is_ds_reasoner = (provider_ == "deepseek" && model_lower.contains("reasoner"));
+    const bool is_ds_reasoner = (eff_provider(persona) == "deepseek" && model_lower.contains("reasoner"));
 
     // Groq's whisper-* (audio) and llama-guard-* (safety classifier) do not accept tools.
     const bool groq_no_tools =
-        (provider_ == "groq" && (model_lower.startsWith("whisper-") || model_lower.contains("llama-guard")));
+        (eff_provider(persona) == "groq" && (model_lower.startsWith("whisper-") || model_lower.contains("llama-guard")));
 
     QJsonArray messages;
     if (!system_prompt_.isEmpty())
@@ -565,32 +606,34 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
 
     QJsonObject req;
-    // Per-call override wins over the configured model — but only for a local
-    // provider, matching how `think` below is gated. The override carries a
-    // hearth role name ("fast_chat"), which is meaningless to a cloud API and
-    // would come back as a 400. Cloud callers keep the configured model.
-    const bool local_provider = api_key_.isEmpty();
-    req["model"] = (local_provider && !persona.model.isEmpty()) ? persona.model : model_;
+    // Per-call override wins over the configured model, for ANY provider.
+    // This used to be gated to local providers because the override carried a
+    // hearth role name ("fast_chat") that a cloud API would 400 on. Roles now
+    // bind to a real model id chosen from the provider's own catalogue (see
+    // AiRoles.h + Settings -> AI Config -> Roles), so the gate would only stop
+    // a cloud role binding from ever taking effect.
+    req["model"] = eff_model(persona);
     req["messages"] = messages;
     // Local-only `think:false` (hearth → Ollama native think control). Gated on
-    // an empty api_key so cloud OpenAI-compatible providers never receive this
-    // non-standard field (they'd 400). Skips the model's chain-of-thought for a
+    // the EFFECTIVE key so a role bound to a cloud model never receives this
+    // non-standard field (they'd 400), even when the configured provider is
+    // local — and vice versa. Skips the model's chain-of-thought for a
     // big latency win on short structured one-shots that opt in via the persona.
-    if (!persona.think && api_key_.isEmpty())
+    if (!persona.think && eff_api_key(persona).isEmpty())
         req["think"] = false;
     // Temperature intentionally omitted — each provider uses its own default.
     // OpenAI deprecated max_tokens; gpt-5 / o-series require max_completion_tokens.
     // xAI also prefers max_completion_tokens. Other OpenAI-compatible providers
     // still expect max_tokens.
     const int mx = resolved_max_tokens();
-    if (provider_ == "openai" || provider_ == "xai")
+    if (eff_provider(persona) == "openai" || eff_provider(persona) == "xai")
         req["max_completion_tokens"] = mx;
     else
         req["max_tokens"] = mx;
     if (stream) {
         req["stream"] = true;
         // Streamed OpenAI / xAI responses omit usage unless we opt in
-        if (provider_ == "openai" || provider_ == "xai")
+        if (eff_provider(persona) == "openai" || eff_provider(persona) == "xai")
             req["stream_options"] = QJsonObject{{"include_usage", true}};
     }
 
@@ -606,13 +649,13 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
         if (!tools.isEmpty())
             req["tools"] = tools;
         LOG_INFO(TAG, QString("OpenAI request: stream=%1 provider=%2 tools=%3 (count=%4)")
-                          .arg(stream ? "true" : "false", provider_,
+                          .arg(stream ? "true" : "false", eff_provider(persona),
                                tools.isEmpty() ? "none" : "attached")
                           .arg(tools.size()));
     } else {
         LOG_WARN(TAG, QString("OpenAI request: stream=%1 provider=%2 NO TOOLS — "
                               "with_tools=%3 tools_enabled_=%4 ds_reasoner=%5 groq_no_tools=%6")
-                          .arg(stream ? "true" : "false", provider_)
+                          .arg(stream ? "true" : "false", eff_provider(persona))
                           .arg(with_tools ? "true" : "false")
                           .arg(tools_enabled_ ? "true" : "false")
                           .arg(is_ds_reasoner ? "true" : "false")
@@ -632,7 +675,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
 
     QJsonObject req;
-    req["model"] = model_;
+    req["model"] = eff_model(persona);
     req["messages"] = messages;
     req["max_tokens"] = resolved_max_tokens();
     // Temperature intentionally omitted — Anthropic defaults to 1.0.
@@ -769,8 +812,23 @@ LlmService::HttpResult LlmService::blocking_get(const QString& url, const QMap<Q
 // and HTTP redirects for some hosts (notably anything behind Cloudflare). The
 // waitForReadyRead() approach used by blocking_post() works for plain HTTP
 // servers but stalls against those.
+//
+// Retry policy (mirrors hearth's OpenAIBackend, so the direct and via-hearth
+// paths behave the same): hosted providers shed load with a 503 and expect the
+// caller to retry — measured against Gemini, roughly one call in three returns
+// 503 under normal use and the immediate retry succeeds. Without this a routine
+// blip surfaces to the user as "Error: HTTP 503".
+//
+// A 429 is deliberately NOT retried. That is a rate/quota limit, not a blip;
+// retrying on our own schedule spends more of the exact budget that just ran
+// out, turning one failed call into three. Google sends no Retry-After to
+// schedule against, so the honest move is to fail fast and say why.
 LlmService::HttpResult LlmService::eventloop_request(const QString& method, const QString& url, const QByteArray& body,
                                                      const QMap<QString, QString>& headers, int timeout_ms) {
+    constexpr int kRetries = 2;
+    constexpr int kBackoffMs = 600;
+
+    auto attempt_once = [&]() -> HttpResult {
     HttpResult result;
     QNetworkAccessManager nam;
     QNetworkRequest req{QUrl(url)};
@@ -826,6 +884,33 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
                                             : QString("HTTP %1: %2").arg(result.status).arg(server_msg);
     }
     reply->deleteLater();
+    return result;
+    };
+
+    HttpResult result;
+    for (int attempt = 0; attempt <= kRetries; ++attempt) {
+        result = attempt_once();
+        if (result.success)
+            return result;
+        const int s = result.status;
+        const bool transient = (s == 408 || s == 500 || s == 502 || s == 503 || s == 504);
+        if (!transient || attempt == kRetries)
+            break;
+        LOG_INFO(TAG, QString("HTTP %1 from %2 — retrying (attempt %3/%4)")
+                          .arg(s).arg(QUrl(url).host()).arg(attempt + 2).arg(kRetries + 1));
+        // Timer-driven wait, not a thread sleep: this runs on a thread whose
+        // event loop QNetworkAccessManager still needs to service.
+        QEventLoop backoff;
+        QTimer::singleShot(kBackoffMs << attempt, &backoff, &QEventLoop::quit);
+        backoff.exec();
+    }
+    if (result.status == 429) {
+        // Make the one error the user can actually act on say what to do.
+        result.error = QString("HTTP 429: rate/quota limit reached for this provider. "
+                               "On Gemini's free tier this resets within a minute (per-minute cap) "
+                               "or at midnight Pacific (daily cap). Original: %1")
+                           .arg(result.error);
+    }
     return result;
 }
 
@@ -986,7 +1071,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
                 QString followup_url = get_endpoint_url();
                 auto followup_hdr = get_headers();
                 auto tool_result =
-                    try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
+try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
                 if (tool_result.has_value()) {
                     LOG_INFO(TAG, "finterm: text tool calls detected and executed");
                     return tool_result.value();
@@ -1016,22 +1101,22 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                                   bool use_tools, const PersonaScope& persona) {
     LlmResponse resp;
 
-    QString url = get_endpoint_url();
+    QString url = get_endpoint_url(persona);
     if (url.isEmpty()) {
-        resp.error = "No endpoint URL for provider: " + provider_;
+        resp.error = "No endpoint URL for provider: " + eff_provider(persona);
         return resp;
     }
 
-    auto hdr = get_headers();
+    auto hdr = get_headers(persona);
     QJsonObject req_body;
 
-    if (provider_ == "anthropic") {
+    if (eff_provider(persona) == "anthropic") {
         req_body = build_anthropic_request(user_message, history, false, persona);
-    } else if (provider_ == "gemini" || provider_ == "google") {
+    } else if (eff_provider(persona) == "gemini" || eff_provider(persona) == "google") {
         req_body = build_gemini_request(user_message, history, persona);
-        // Auth goes via x-goog-api-key header (set by get_headers()).
+        // Auth goes via x-goog-api-key header (set by get_headers(persona)).
         // Do not append ?key= to URL — it leaks the key into access logs.
-    } else if (provider_ == "fincept") {
+    } else if (eff_provider(persona) == "fincept") {
         // Fincept hosted endpoint retired (R17). reload() should already
         // have rewritten the provider — this branch only fires if a caller
         // bypassed reload(). Surface a clear error rather than letting the
@@ -1044,7 +1129,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         req_body = build_openai_request(user_message, history, false, use_tools, persona);
     }
 
-    LOG_DEBUG(TAG, QString("POST %1 provider=%2 model=%3").arg(url, provider_, model_));
+    LOG_DEBUG(TAG, QString("POST %1 provider=%2 model=%3").arg(url, eff_provider(persona), eff_model(persona)));
 
     auto http = blocking_post(url, req_body, hdr);
 
@@ -1062,7 +1147,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 
     // ── Extract content by provider ──────────────────────────────────────
 
-    if (provider_ == "anthropic") {
+    if (eff_provider(persona) == "anthropic") {
         QJsonArray content = rj["content"].toArray();
         QString stop_reason = rj["stop_reason"].toString();
 
@@ -1104,7 +1189,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 
             // Build follow-up request (no tools to avoid infinite loop)
             QJsonObject fu;
-            fu["model"] = model_;
+            fu["model"] = eff_model(persona);
             fu["messages"] = loop_msgs;
             fu["max_tokens"] = resolved_max_tokens();
             // Temperature intentionally omitted — Anthropic default.
@@ -1127,7 +1212,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             resp.content = extract_anthropic_content_text(content);
         }
 
-    } else if (provider_ == "gemini" || provider_ == "google") {
+    } else if (eff_provider(persona) == "gemini" || eff_provider(persona) == "google") {
         QJsonArray cands = rj["candidates"].toArray();
         if (!cands.isEmpty()) {
             QJsonArray parts = cands[0].toObject()["content"].toObject()["parts"].toArray();
@@ -1238,7 +1323,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             }
         }
 
-    } else if (provider_ == "fincept") {
+    } else if (eff_provider(persona) == "fincept") {
         // /research/chat returns OpenAI-compatible choices array:
         // {"success":true,"data":{"choices":[{"message":{"role":"assistant","content":"..."}}],...}}
         QJsonObject data = rj.contains("data") ? rj["data"].toObject() : rj;
@@ -1293,7 +1378,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                 }
 
                 resp = do_tool_loop(loop_msgs, url, hdr, persona);
-                parse_usage(resp, rj, provider_);
+                parse_usage(resp, rj, eff_provider(persona));
                 return resp;
 
             } else {
@@ -1312,7 +1397,8 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     // execute the tools, then ask the LLM to summarize the results.
     if (!resp.content.isEmpty()) {
         LOG_INFO(TAG, "Checking response for text-based tool calls, content starts with: " + resp.content.left(120));
-        auto text_tool_result = try_extract_and_execute_text_tool_calls(resp.content, user_message, url, hdr);
+        auto text_tool_result =
+            try_extract_and_execute_text_tool_calls(resp.content, user_message, url, hdr, persona);
         if (text_tool_result.has_value()) {
             resp = text_tool_result.value();
             if (resp.success)
@@ -1320,7 +1406,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         }
     }
 
-    parse_usage(resp, rj, provider_);
+    parse_usage(resp, rj, eff_provider(persona));
     resp.success = true;
     return resp;
 }
@@ -1336,11 +1422,11 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
     // template → fill → polish). Each round can contain many parallel
     // tool calls so this isn't 15 tool calls — it's 15 reasoning steps.
     static constexpr int MAX_ROUNDS = 15;
-    LOG_INFO(TAG, QString("TOOL LOOP: starting (max %1 rounds, model=%2)").arg(MAX_ROUNDS).arg(model_));
+    LOG_INFO(TAG, QString("TOOL LOOP: starting (max %1 rounds, model=%2)").arg(MAX_ROUNDS).arg(eff_model(persona)));
 
     for (int round = 0; round < MAX_ROUNDS; ++round) {
         QJsonObject fu;
-        fu["model"] = model_;
+        fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
         // Temperature intentionally omitted — provider default.
         fu["max_tokens"] = resolved_max_tokens();
@@ -1397,7 +1483,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
 
         // Final text response
         resp.content = extract_openai_message_text(msg);
-        parse_usage(resp, rj, provider_);
+        parse_usage(resp, rj, eff_provider(persona));
         resp.success = !resp.content.isEmpty();
         LOG_INFO(TAG, QString("TOOL LOOP: finished after %1 round(s) — %2 chars of text")
                           .arg(round + 1).arg(resp.content.length()));
@@ -1417,7 +1503,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
                         "request any more tools."}});
 
         QJsonObject fu;
-        fu["model"] = model_;
+        fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
         fu["max_tokens"] = resolved_max_tokens();
         // Deliberately omit the tools field so the model is forced to produce text.
@@ -1431,7 +1517,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
                 if (!choices.isEmpty()) {
                     QJsonObject msg = choices[0].toObject()["message"].toObject();
                     resp.content = extract_openai_message_text(msg);
-                    parse_usage(resp, rj, provider_);
+                    parse_usage(resp, rj, eff_provider(persona));
                     resp.success = !resp.content.isEmpty();
                     LOG_INFO(TAG, QString("TOOL LOOP: summary fallback produced %1 chars")
                                       .arg(resp.content.length()));
@@ -1455,7 +1541,8 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
 std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(const QString& content,
                                                                                const QString& user_message,
                                                                                const QString& url,
-                                                                               const QMap<QString, QString>& headers) {
+                                                                               const QMap<QString, QString>& headers,
+                                                                               const PersonaScope& persona) {
 
     // ── Pattern 1: <tool_call>{"name":"...", "arguments":{...}}</tool_call>
     // ── Pattern 2: <invoke name="..." args='{"key":"val"}'>
@@ -1667,31 +1754,31 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
                             "Do NOT emit any tool calls or XML markup in your response.";
 
     QJsonObject follow_body;
-    if (provider_ == "anthropic") {
+    if (eff_provider(persona) == "anthropic") {
         QJsonArray msgs;
         msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
-        follow_body["model"] = model_;
+        follow_body["model"] = eff_model(persona);
         follow_body["messages"] = msgs;
         follow_body["max_tokens"] = resolved_max_tokens();
         // Temperature intentionally omitted — Anthropic default.
         if (!system_prompt_.isEmpty())
             follow_body["system"] = system_prompt_;
-    } else if (provider_ == "fincept") {
+    } else if (eff_provider(persona) == "fincept") {
         // /research/chat uses messages array
         QJsonArray msgs;
         if (!system_prompt_.isEmpty())
             msgs.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
         msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
         follow_body["messages"] = msgs;
-        if (!model_.isEmpty() && model_ != "fincept-llm")
-            follow_body["model"] = model_;
+        if (!eff_model(persona).isEmpty() && eff_model(persona) != "fincept-llm")
+            follow_body["model"] = eff_model(persona);
     } else {
         // OpenAI-compatible
         QJsonArray msgs;
         if (!system_prompt_.isEmpty())
             msgs.append(QJsonObject{{"role", "system"}, {"content", system_prompt_}});
         msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
-        follow_body["model"] = model_;
+        follow_body["model"] = eff_model(persona);
         follow_body["messages"] = msgs;
         // Temperature intentionally omitted — provider default.
         follow_body["max_tokens"] = resolved_max_tokens();
@@ -1716,9 +1803,9 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
     QJsonObject fu_rj = fu_doc.object();
 
     // Extract text from follow-up response (provider-aware)
-    if (provider_ == "anthropic") {
+    if (eff_provider(persona) == "anthropic") {
         resp.content = extract_anthropic_content_text(fu_rj["content"].toArray());
-    } else if (provider_ == "fincept") {
+    } else if (eff_provider(persona) == "fincept") {
         // /research/chat: {"success":true,"data":{"choices":[{"message":{"content":"..."}}]}}
         QJsonObject data = fu_rj.contains("data") ? fu_rj["data"].toObject() : fu_rj;
         QJsonArray fu_choices = data["choices"].toArray();
@@ -1734,7 +1821,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         resp.content = tool_results; // fallback to raw results
 
     resp.success = true;
-    parse_usage(resp, fu_rj, provider_);
+    parse_usage(resp, fu_rj, eff_provider(persona));
     return resp;
 }
 
@@ -1758,14 +1845,14 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
     }
 
     LlmResponse resp;
-    QString url = get_endpoint_url();
+    QString url = get_endpoint_url(persona);
     if (url.isEmpty()) {
         resp.error = "No endpoint URL for provider: " + provider_;
         on_chunk("", true);
         return resp;
     }
 
-    auto hdr = get_headers();
+    auto hdr = get_headers(persona);
     // Send tools for OpenAI-compatible streaming; Anthropic streaming doesn't
     // support tool_choice in the same SSE flow so we handle that separately.
     QJsonObject req_body = (provider_ == "anthropic") ? build_anthropic_request(user_message, history, true, persona)

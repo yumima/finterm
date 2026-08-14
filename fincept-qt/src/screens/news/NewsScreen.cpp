@@ -315,7 +315,15 @@ void NewsScreen::connect_signals() {
         // Same fast role as the TL;DR brief — see NewsService for the
         // measurements. The configured chat model on this box is too large for
         // the GPU and ignores think:false, which is what made digests time out.
-        digest_scope.model = QStringLiteral("fast_chat");
+        // Same "news" role as the TL;DR brief — see AiRoles.h.
+        {
+            const auto target = fincept::ai_chat::LlmService::instance().scope_for_role(
+                QStringLiteral("news"), QStringLiteral("fast_chat"));
+            digest_scope.provider = target.provider;
+            digest_scope.model = target.model;
+            digest_scope.api_key = target.api_key;
+            digest_scope.base_url = target.base_url;
+        }
         fincept::ai_chat::LlmService::instance().chat_streaming(
             prompt, history, [self, accumulated](const QString& chunk, bool is_done) {
                 if (!self)

@@ -117,6 +117,20 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     user_label_->setMaximumWidth(120);
     hl->addWidget(user_label_);
     sep();
+
+    // Settings sits next to the user name because that is what it now is: one
+    // screen for "my account and my setup". It replaces the two separate
+    // SETTINGS and PROFILE tabs in the F-key bar. navigate_to() is already
+    // handled by MainWindow, so this needs no new plumbing.
+    settings_btn_ = new QPushButton("SETTINGS");
+    settings_btn_->setFixedHeight(20);
+    settings_btn_->setCursor(Qt::PointingHandCursor);
+    settings_btn_->setToolTip("Settings & profile");
+    settings_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    connect(settings_btn_, &QPushButton::clicked, this,
+            [this]() { emit navigate_to(QStringLiteral("settings")); });
+    hl->addWidget(settings_btn_);
+    sep();
     credits_label_ = mk("---");
     credits_label_->setMaximumWidth(100);
     hl->addWidget(credits_label_);

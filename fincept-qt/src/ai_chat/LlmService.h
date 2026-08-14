@@ -69,17 +69,23 @@ struct PersonaScope {
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
     bool think = true;
-    // Per-call model override; empty means "use the configured model".
-    // Applied only when no API key is set, i.e. a local provider — this
-    // carries a hearth role name, which a cloud API would reject.
+    // ── Per-call target override (role binding) ──────────────────────────────
     //
-    // Exists for short structured one-shots that should not pay for the
-    // heavyweight chat model. On this box primary_chat resolves to
-    // qwen3:30b-a3b, which does not fit the GPU's VRAM (so it spills to CPU)
-    // and does not cleanly honour think:false — a news brief on it ran past
-    // the 120s request ceiling. Pointing those callers at a role like
-    // fast_chat keeps them on a model that fits and stops.
+    // Empty = use the service's configured provider/model. Non-empty = this
+    // call goes somewhere else entirely.
+    //
+    // Providers are NOT mutually exclusive: hearth on loopback and Gemini in
+    // the cloud are both reachable at the same time, so "news on a local model
+    // while chat is on Gemini" is a normal thing to want. These fields carry
+    // the whole target rather than just a model id, because a model name alone
+    // cannot say which endpoint or key to use.
+    //
+    // Fill via LlmService::scope_for_role(). Anything left empty falls back to
+    // the configured value, so a partial override is safe.
+    QString provider = {};
     QString model = {};
+    QString api_key = {};
+    QString base_url = {};
 };
 
 struct LlmResponse {
@@ -134,6 +140,22 @@ class LlmService : public QObject {
     int active_max_tokens() const;
     bool tools_enabled() const;
     bool is_configured() const;
+
+/// Build a PersonaScope target for a role, so the call goes wherever that
+    /// role is bound — provider, model, key and base URL together.
+    ///
+    /// Order:
+    ///   1. The role's bound profile (Settings → AI Config → Roles). Any
+    ///      provider: hearth and a cloud API are both reachable at once, so
+    ///      news can sit on a local model while chat is on Gemini.
+    ///   2. ``local_fallback`` as the model, applied only when the CONFIGURED
+    ///      provider is local — it carries a hearth role alias ("fast_chat")
+    ///      that a cloud API would reject.
+    ///   3. All-empty: the caller's configured provider and model.
+    ///
+    /// Roles are listed in AiRoles.h. An unbound role resolves to the chat
+    /// model, so binding one is always an override, never a prerequisite.
+    PersonaScope scope_for_role(const QString& role, const QString& local_fallback = {}) const;
 
     // ── Chat persona ──────────────────────────────────────────────────────────
     // Scope subsequent chat()/chat_streaming() calls to a persona (focused
@@ -218,8 +240,18 @@ class LlmService : public QObject {
     QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                       bool with_tools);
 
-    QString get_endpoint_url() const;
-    QMap<QString, QString> get_headers() const;
+    QString get_endpoint_url(const PersonaScope& persona = {}) const;
+
+    // Effective request target: the per-call override when the role binding set
+    // one, else the service's configured value. Every request-path member read
+    // goes through these so a bound role cannot half-apply (right model, wrong
+    // key) — the failure mode that makes a cross-provider binding look like an
+    // auth error.
+    QString eff_provider(const PersonaScope& p) const { return p.provider.isEmpty() ? provider_ : p.provider; }
+    QString eff_model(const PersonaScope& p) const { return p.model.isEmpty() ? model_ : p.model; }
+    QString eff_api_key(const PersonaScope& p) const { return p.provider.isEmpty() ? api_key_ : p.api_key; }
+    QString eff_base_url(const PersonaScope& p) const { return p.provider.isEmpty() ? base_url_ : p.base_url; }
+    QMap<QString, QString> get_headers(const PersonaScope& persona = {}) const;
 
     /// Resolve the max output tokens for a request. Order:
     ///   1. user-set max_tokens (max_tokens_ > 0) → use it, but clamp to
@@ -242,9 +274,13 @@ class LlmService : public QObject {
 
     // Detect and execute tool calls embedded as text/XML in the response content.
     // Returns std::nullopt if no text-based tool calls were found.
+    // Takes the persona so its follow-up request targets the SAME model this
+    // turn was sent to. Without it a role-bound call posts the configured
+    // model to the override's endpoint — a 404 that looks like a tool bug.
     std::optional<LlmResponse> try_extract_and_execute_text_tool_calls(const QString& content,
                                                                        const QString& user_message, const QString& url,
-                                                                       const QMap<QString, QString>& headers);
+                                                                       const QMap<QString, QString>& headers,
+                                                                       const PersonaScope& persona = {});
 
     // Models-list helpers
     static QString get_models_url(const QString& provider, const QString& api_key, const QString& base_url);

@@ -709,7 +709,19 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     // so the latency fix above only takes effect on a model that honours it.
     // Empty override falls back to the configured model, so a cloud provider
     // or a differently-named local role still works.
-    brief_scope.model = kBriefModelRole;
+    // Resolve the bound model for the "news" role, falling back to the hearth
+    // fast_chat alias only when we're actually on hearth. Before this the alias
+    // was assigned unconditionally, so on a cloud provider the role carried a
+    // name that provider had never heard of — and news had no way to ask for a
+    // cheaper model than chat. See AiRoles.h.
+    {
+        const auto target = ai_chat::LlmService::instance().scope_for_role(
+            QStringLiteral("news"), QString::fromLatin1(kBriefModelRole));
+        brief_scope.provider = target.provider;
+        brief_scope.model = target.model;
+        brief_scope.api_key = target.api_key;
+        brief_scope.base_url = target.base_url;
+    }
     watcher->setFuture(QtConcurrent::run([prompt, brief_scope]() {
         return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
     }));

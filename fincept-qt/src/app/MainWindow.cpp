@@ -1141,7 +1141,9 @@ void MainWindow::setup_dock_screens() {
 
     // Lazily constructed on first navigation — deferred to avoid startup cost.
     dock_router_->register_factory("report_builder", []() { return new screens::ReportBuilderScreen; });
-    dock_router_->register_factory("profile", []() { return new screens::ProfileScreen; });
+    // "profile" is now a section of the merged Settings screen; keep the id
+    // registered so existing deep links (CommandBar, Docs) still resolve.
+    dock_router_->register_factory("profile", []() { return new screens::SettingsScreen; });
     dock_router_->register_factory("settings", []() { return new screens::SettingsScreen; });
     dock_router_->register_factory("about", []() { return new screens::AboutScreen; });
     dock_router_->register_factory("support", []() { return new screens::SupportScreen; });

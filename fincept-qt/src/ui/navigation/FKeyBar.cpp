@@ -22,7 +22,10 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         {"power_trader", "POWER TRADER"}, {"pre_ipo", "IPO WATCH"},
         {"news", "NEWS"},           {"ai_chat", "AI CHAT"},   {"backtesting", "BACKTEST"},   {"algo_trading", "ALGO"},
         {"node_editor", "NODES"},   {"code_editor", "CODE"},  {"ai_quant_lab", "QUANT LAB"}, {"quantlib", "QUANTLIB"},
-        {"forum", "FORUM"},         {"knowledge", "KNOWLEDGE"}, {"settings", "SETTINGS"},   {"profile", "PROFILE"},
+        {"forum", "FORUM"},         {"knowledge", "KNOWLEDGE"},
+        // SETTINGS and PROFILE deliberately absent: they merged into one screen
+        // reached from the "Settings" button in the top bar, next to the user
+        // name. Two tabs for "my account and my setup" was the redundancy.
     };
     for (const auto& def : tabs)
         add_tab(def);

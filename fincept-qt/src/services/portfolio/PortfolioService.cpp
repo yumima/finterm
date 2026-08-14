@@ -1,5 +1,6 @@
 // src/services/portfolio/PortfolioService.cpp
 #include "services/portfolio/PortfolioService.h"
+#include "services/portfolio/PortfolioReturns.h"
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"

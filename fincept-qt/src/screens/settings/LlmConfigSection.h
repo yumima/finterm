@@ -5,6 +5,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QDoubleSpinBox>
 #include <QGroupBox>
 #include <QLabel>
@@ -68,6 +69,10 @@ class LlmConfigSection : public QWidget {
     QCheckBox* manage_engine_check_ = nullptr; // opt-in hearth supervision
     QLabel* status_lbl_ = nullptr;
     QLabel* engine_status_lbl_ = nullptr; // local-engine (hearth) discovery
+    QLabel* engine_row_lbl_ = nullptr;    // its form-row label, hidden for cloud providers
+    QFormLayout* form_ = nullptr;         // provider detail form (rows toggled per provider)
+    QLabel* default_badge_ = nullptr;     // "DEFAULT" marker for the selected provider
+    QPushButton* set_default_btn_ = nullptr;
 
     // Global settings (lives at bottom of provider tab)
     QDoubleSpinBox* temp_spin_ = nullptr;

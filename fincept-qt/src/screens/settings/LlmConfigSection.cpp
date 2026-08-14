@@ -29,15 +29,25 @@ namespace fincept::screens {
 
 static constexpr const char* TAG = "LlmConfigSection";
 
-// Per R1 / R2 the UI exposes the two first-class runtimes — Anthropic
-// (claude-agent-sdk path) and the local OpenAI-compatible runtime
-// (currently surfaced as "ollama").  The other adapters (openai,
-// gemini, groq, deepseek, openrouter, minimax, kimi, xai) remain in
-// LlmService.cpp as dormant code; legacy rows that still reference
-// them appear in the saved-providers list view but cannot be added
-// as new providers.  "fincept" was retired in R17.
-// ollama first: it's the default local provider; anthropic second (requires a key).
-const QStringList LlmConfigSection::KNOWN_PROVIDERS = {"ollama", "anthropic"};
+// The user picks where a model runs: local (through hearth) or straight at a
+// remote provider.  Every entry below has a working endpoint + auth path in
+// LlmService.cpp (see get_endpoint / get_headers), so exposing them here only
+// removes a dialog restriction — it does not activate untested code.
+//
+// Scope, so the list doesn't over-promise: these are live for the CHAT surface.
+// Agent dispatch still resolves through runtime_for_provider(), where anything
+// outside {anthropic, ollama} maps to the dormant "external" runtime (R1/R2).
+// An agent that must run on Gemini therefore goes through hearth ("ollama"),
+// which fronts it behind the local OpenAI-compatible runtime.
+//
+// ollama first: the default, and the only entry that keeps prompts on-box
+// unless hearth itself has a role bound to a cloud backend.
+// "fincept" was retired in R17.
+const QStringList LlmConfigSection::KNOWN_PROVIDERS = {
+    "ollama",     // local — hearth gateway on 127.0.0.1:11435 (role aliases)
+    "anthropic",  // claude-agent-sdk runtime
+    "gemini", "openai", "openrouter", "groq", "deepseek", "xai", "kimi", "minimax",
+};
 
 QString LlmConfigSection::default_base_url(const QString& provider) {
     const QString p = provider.toLower();
@@ -73,7 +83,15 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
         return {"claude-sonnet-4-5-20250514", "claude-opus-4-5", "claude-3-5-sonnet-20241022",
                 "claude-3-haiku-20240307"};
     if (p == "gemini")
-        return {"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"};
+        // Free-tier models. 3.5-flash leads deliberately, not 3.7: the free
+        // daily allowance is per-model, and 3.7 (Google's flagship Flash) has
+        // a far smaller one — measured here, 3.7 returned RESOURCE_EXHAUSTED
+        // while 3.5 on the same key kept answering. 3.7 is still listed for
+        // when its quota is available. Pro variants are preview/paid, and
+        // 2.5-flash now 404s ("no longer available"), so neither is listed.
+        // Offline fallbacks only — "Fetch models" lists what's live.
+        return {"gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash",
+                "gemini-3.7-flash"};
     if (p == "groq")
         return {"llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"};
     if (p == "deepseek")
@@ -180,6 +198,7 @@ QWidget* LlmConfigSection::build_providers_tab() {
     splitter->addWidget(build_form_panel());
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
+    splitter->setChildrenCollapsible(false);  // dragging to zero hides the list with no way back
     splitter->setSizes({220, 600});
     vl->addWidget(splitter, 1);
 
@@ -193,7 +212,9 @@ QWidget* LlmConfigSection::build_providers_tab() {
 
 QWidget* LlmConfigSection::build_provider_list_panel() {
     auto* panel = new QWidget(this);
-    panel->setFixedWidth(220);
+    // Minimum, not fixed: a QSplitter cannot resize a child whose width is
+    // pinned, which is why the drag handle looked alive but did nothing.
+    panel->setMinimumWidth(160);
     panel->setStyleSheet("background:" + QString(ui::colors::BG_BASE()) + ";border-right:1px solid " +
                          QString(ui::colors::BORDER_DIM()) + ";");
 
@@ -314,6 +335,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     vl->addWidget(sep);
 
     auto* form = new QFormLayout;
+    form_ = form;
     form->setSpacing(10);
     form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
 
@@ -407,6 +429,7 @@ QWidget* LlmConfigSection::build_form_panel() {
     // defaults chat + embeddings to hearth regardless; this just surfaces
     // whether it's actually up + its contract version. The probe is async.
     auto* eng_lbl = new QLabel("Local engine");
+    engine_row_lbl_ = eng_lbl;
     lbl_style(eng_lbl);
     engine_status_lbl_ = new QLabel("checking…");
     engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
@@ -481,9 +504,41 @@ QWidget* LlmConfigSection::build_form_panel() {
 
     vl->addLayout(form);
 
+    // Which provider is the default, and how to change it. This used to be an
+    // invisible side effect of Save.
+    auto* default_row = new QHBoxLayout;
+    default_badge_ = new QLabel;
+    default_row->addWidget(default_badge_);
+    set_default_btn_ = new QPushButton("Set as default");
+    set_default_btn_->setFixedHeight(24);
+    set_default_btn_->setCursor(Qt::PointingHandCursor);
+    set_default_btn_->setStyleSheet("QPushButton{background:" + QString(ui::colors::BG_RAISED()) +
+                                    ";color:" + QString(ui::colors::TEXT_PRIMARY()) + ";border:1px solid " +
+                                    QString(ui::colors::BORDER_BRIGHT()) +
+                                    ";border-radius:3px;padding:0 10px;}"
+                                    "QPushButton:hover{background:" +
+                                    QString(ui::colors::BG_HOVER()) + ";}");
+    connect(set_default_btn_, &QPushButton::clicked, this, [this]() {
+        const QString provider = provider_edit_->text().trimmed();
+        if (provider.isEmpty())
+            return;
+        if (auto r = LlmConfigRepository::instance().set_active(provider); r.is_err()) {
+            show_status("Could not set default: " + QString::fromStdString(r.error()), true);
+            return;
+        }
+        ai_chat::LlmService::instance().reload_config();
+        load_providers();
+        populate_form(provider);
+        show_status(provider + " is now the default provider");
+        emit config_changed();
+    });
+    default_row->addWidget(set_default_btn_);
+    default_row->addStretch();
+    vl->addLayout(default_row);
+
     // Buttons
     auto* btn_row = new QHBoxLayout;
-    save_btn_ = new QPushButton("Save & Set Active");
+    save_btn_ = new QPushButton("Save");
     save_btn_->setFixedHeight(34);
     save_btn_->setStyleSheet(
         "QPushButton{background:" + QString(ui::colors::AMBER()) + ";color:" + QString(ui::colors::BG_BASE()) +
@@ -628,13 +683,16 @@ void LlmConfigSection::load_providers() {
     auto result = LlmConfigRepository::instance().list_providers();
     if (result.is_ok()) {
         for (const auto& p : result.value()) {
+            // "gemini ✓ [model]" read as though the tick and the bracket were
+            // two different kinds of status. Spell out which one is the default
+            // and show the model as part of the identity, not as a badge.
             QString display = p.provider;
+            if (!p.model.isEmpty())
+                display += "  ·  " + p.model;
             if (p.is_active) {
-                display += "  ✓";
+                display += "     — DEFAULT";
                 active_provider = p.provider;
             }
-            if (!p.model.isEmpty())
-                display += "  [" + p.model + "]";
             auto* item = new QListWidgetItem(display);
             item->setData(Qt::UserRole, p.provider);
             // Only the active provider gets amber color
@@ -679,6 +737,40 @@ void LlmConfigSection::load_providers() {
 
 void LlmConfigSection::populate_form(const QString& provider) {
     provider_edit_->setText(provider);
+
+    // The local-engine rows describe hearth, which only exists on the loopback
+    // path. Showing "✓ hearth 0.1.0" under a direct Gemini config claimed the
+    // cloud provider was being served by the local engine — it isn't. They are
+    // rows of the shared form, so they were rendered for every provider; make
+    // them belong to the provider they actually describe.
+    const bool local = !ai_chat::provider_requires_api_key(provider);
+    if (form_ && engine_row_lbl_)
+        form_->setRowVisible(engine_row_lbl_, local);
+    if (manage_engine_check_)
+        manage_engine_check_->setVisible(local);
+
+    // Say which provider is the default, and offer to change it. Previously the
+    // only way to become default was a side effect of Save, so the answer was
+    // both invisible and easy to change by accident.
+    QString active;
+    auto provs = LlmConfigRepository::instance().list_providers();
+    if (provs.is_ok())
+        for (const auto& p : provs.value())
+            if (p.is_active)
+                active = p.provider;
+    const bool is_default = (!active.isEmpty() && active == provider);
+    if (default_badge_) {
+        default_badge_->setText(is_default ? "DEFAULT — used by roles set to “Use default”"
+                                           : "Not the default");
+        default_badge_->setStyleSheet(
+            QString("color:%1;font-size:11px;font-weight:%2;")
+                .arg(is_default ? ui::colors::AMBER() : ui::colors::TEXT_DIM())
+                .arg(is_default ? "700" : "400"));
+    }
+    if (set_default_btn_) {
+        set_default_btn_->setVisible(!is_default);
+        set_default_btn_->setEnabled(!is_default);
+    }
 
     // Populate model combo with fallback suggestions
     model_combo_->blockSignals(true);
@@ -772,11 +864,23 @@ void LlmConfigSection::on_save_provider() {
         LOG_ERROR(TAG, "save_provider failed for " + provider + ": " + QString::fromStdString(r2.error()));
         return;
     }
-    auto r3 = LlmConfigRepository::instance().set_active(provider);
-    if (r3.is_err()) {
-        show_status("Failed to activate: " + QString::fromStdString(r3.error()), true);
-        LOG_ERROR(TAG, "set_active failed for " + provider + ": " + QString::fromStdString(r3.error()));
-        return;
+    // Saving edits must NOT silently steal the default. It used to call
+    // set_active() unconditionally, so editing a provider's model quietly
+    // repointed every role set to "Use default" — invisible, and the reason
+    // the default was impossible to reason about. The first provider
+    // configured still becomes the default (otherwise there'd be none); after
+    // that it is an explicit choice via "Set as default".
+    bool any_active = false;
+    if (auto provs = LlmConfigRepository::instance().list_providers(); provs.is_ok())
+        for (const auto& p : provs.value())
+            if (p.is_active)
+                any_active = true;
+    if (!any_active) {
+        if (auto r3 = LlmConfigRepository::instance().set_active(provider); r3.is_err()) {
+            show_status("Failed to activate: " + QString::fromStdString(r3.error()), true);
+            LOG_ERROR(TAG, "set_active failed for " + provider + ": " + QString::fromStdString(r3.error()));
+            return;
+        }
     }
 
     // Read-after-write verification — catches silent failures where the INSERT

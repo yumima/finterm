@@ -519,10 +519,13 @@ QWidget* ProfileScreen::build_support() {
         wl->addWidget(em);
         cg->addWidget(w, r, c2);
     };
-    add_c("GENERAL SUPPORT", "admin@hanlexon.com", 0, 0);
-    add_c("COMMERCIAL", "admin@hanlexon.com", 0, 1);
-    add_c("SECURITY", "admin@hanlexon.com", 1, 0);
-    add_c("LEGAL", "admin@hanlexon.com", 1, 1);
+    // finterm is open source with no support desk behind it, so listing
+    // support/commercial/legal mailboxes promised a channel that does not
+    // exist. Everything routes to the repo, which is the real one.
+    add_c("QUESTIONS", "github.com/yumima/finterm/discussions", 0, 0);
+    add_c("BUGS", "github.com/yumima/finterm/issues", 0, 1);
+    add_c("SECURITY", "github.com/yumima/finterm/security/advisories", 1, 0);
+    add_c("LICENCE", "github.com/yumima/finterm/blob/main/LICENSE", 1, 1);
     cvl2->addLayout(cg);
     vl->addWidget(cp);
     auto* lp = make_panel("RESOURCES");

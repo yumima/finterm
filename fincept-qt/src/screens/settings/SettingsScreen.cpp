@@ -16,6 +16,8 @@
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
 #include "screens/devtools/DataHubInspector.h"
+#include "screens/profile/ProfileScreen.h"
+#include "screens/settings/AiConfigSection.h"
 #include "screens/settings/AiSystemSection.h"
 #include "screens/settings/ActivityPanelSection.h"
 #include "screens/settings/ArtefactsSection.h"
@@ -193,6 +195,10 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_->addWidget(new ForumConfigSection); // 17
     sections_->addWidget(new ActivityPanelSection); // 18
     sections_->addWidget(new SkillDiffsSection);  // 19
+    // Profile folded in (20): account identity and settings were two top-level
+    // destinations for one idea — "things about me and my setup". Appended
+    // rather than inserted so every existing section index keeps its meaning.
+    sections_->addWidget(new ProfileScreen);      // 20
 
     QList<QPushButton*> nav_btns;
     auto make_btn = [&](const QString& text, int idx) {
@@ -216,13 +222,13 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
         return btn;
     };
 
-    auto* first = make_btn("Credentials", 0);
+    auto* first = make_btn("Profile", 20);
+    make_btn("Credentials", 0);
     make_btn("Appearance", 1);
     make_btn("Notifications", 2);
     make_btn("Storage & Cache", 3);
     make_btn("Data Sources", 4);
-    make_btn("LLM Config", 5);
-    make_btn("MCP Servers", 6);
+    make_btn("AI Config", 5);   // Models / Roles / Tools / Activity
     make_btn("Logging", 7);
     make_btn("Security", 8);
     make_btn("Profiles", 9);
@@ -230,7 +236,6 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     make_btn("Python Env", 11);
     make_btn("Developer", 12);
     make_btn("Voice", 13);
-    make_btn("AI System", 14);
     make_btn("Scheduler", 15);
     make_btn("Artefacts", 16);
     make_btn("Forum", 17);
@@ -244,9 +249,11 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     root->addWidget(sections_, 1);
 
     // Wire LLM config changes → reload AI chat service
-    if (auto* llm = qobject_cast<LlmConfigSection*>(sections_->widget(5))) {
-        connect(llm, &LlmConfigSection::config_changed, this,
-                []() { ai_chat::LlmService::instance().reload_config(); });
+    if (auto* ai = qobject_cast<AiConfigSection*>(sections_->widget(5))) {
+        if (auto* llm = ai->models_tab()) {
+            connect(llm, &LlmConfigSection::config_changed, this,
+                    []() { ai_chat::LlmService::instance().reload_config(); });
+        }
     }
 
     // Wire Voice config changes → reload STT service (picks up provider / API key / model)
@@ -279,8 +286,9 @@ void SettingsScreen::showEvent(QShowEvent* e) {
     load_notifications();
     load_security();
     refresh_storage_stats();
-    if (auto* llm = qobject_cast<LlmConfigSection*>(sections_->widget(5)))
-        llm->reload();
+    if (auto* ai = qobject_cast<AiConfigSection*>(sections_->widget(5)))
+        if (auto* llm = ai->models_tab())
+            llm->reload();
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -2331,7 +2339,11 @@ QWidget* SettingsScreen::build_data_sources() {
 // ── LLM Config / MCP Servers ──────────────────────────────────────────────────
 
 QWidget* SettingsScreen::build_llm_config() {
-    return new LlmConfigSection;
+    // Index 5 is now the combined AI section: Models / Roles / Tools / Activity.
+    // Indices 6 (MCP Servers) and 14 (AI System) still exist in the stack so
+    // every later index keeps its meaning — they simply have no nav button of
+    // their own any more, because they're reachable as tabs in here.
+    return new AiConfigSection;
 }
 
 QWidget* SettingsScreen::build_mcp_servers() {

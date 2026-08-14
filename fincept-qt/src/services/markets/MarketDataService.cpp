@@ -1131,9 +1131,15 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
 }
 
 // ── SEC EDGAR ──────────────────────────────────────────────────────────────
-// SEC requires a `User-Agent: <organization> <email>` header. We send a
+// SEC requires a `User-Agent: <organization> <contact>` header. We send a
 // stable identifier so they can throttle us instead of blocking the IP.
-static const char* kSecUserAgent = "finterm admin@hanlexon.com";
+//
+// Unlike the support links this is NOT cosmetic: drop the contact entirely and
+// EDGAR starts returning 403. SEC's documented format asks for an email; a
+// project URL is what open-source clients generally send instead and is
+// accepted in practice. If EDGAR ever begins refusing requests, putting a real
+// reachable contact here is the fix.
+static const char* kSecUserAgent = "finterm https://github.com/yumima/finterm";
 
 void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallback cb) {
     if (ticker.isEmpty()) { cb(false, {}); return; }
