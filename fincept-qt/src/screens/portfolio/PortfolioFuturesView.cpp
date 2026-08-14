@@ -452,6 +452,19 @@ void PortfolioFuturesView::load_ext_cache() {
     f.close();
     const auto doc = QJsonDocument::fromJson(bytes);
     if (!doc.isObject()) return;
+
+    // The snapshot exists to avoid a blank table for the second it takes the
+    // fetch to return — not to answer the question when the fetch never runs.
+    // An extended-hours move is only meaningful next to the close it was
+    // measured against, so once a new session has opened these numbers are not
+    // stale, they are wrong. Twelve hours spans an overnight gap (a 16:30 ET
+    // save is still good at the next 04:00 ET pre-open) without ever reaching
+    // back past a regular session.
+    const auto saved_at = QDateTime::fromString(
+        doc.object().value("saved_at").toString(), Qt::ISODate);
+    if (!saved_at.isValid() || saved_at.secsTo(QDateTime::currentDateTime()) > 12 * 3600)
+        return;
+
     const auto arr = doc.object().value("quotes").toArray();
     for (const auto& v : arr) {
         const auto o = v.toObject();

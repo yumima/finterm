@@ -4,6 +4,7 @@
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
+#include "screens/dashboard/widgets/ExtendedHoursMath.h"
 #include "ui/theme/Theme.h"
 
 #include <QAction>
@@ -882,13 +883,21 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
                                         ? result.value(QStringLiteral("_value")).toArray()
                                         : result.value(QStringLiteral("data")).toArray();
             guard->aft_quotes_.clear();
+            // Same reduction the dashboard's AFT% column uses. Reading the
+            // daemon's ext_change_pct straight off the row skipped the session
+            // pairing and the timestamp check, so this column would happily
+            // colour a tile from a reference bar left over from an earlier day
+            // — a multi-day return painted as an after-hours move.
+            namespace exthours = fincept::screens::widgets::exthours;
+            const bool in_pre = exthours::before_the_close_et();
+            const qint64 now_secs = QDateTime::currentSecsSinceEpoch();
             for (const auto& v : rows) {
                 const auto o = v.toObject();
-                const auto pct_val = o.value(QStringLiteral("ext_change_pct"));
-                if (pct_val.isNull() || pct_val.isUndefined()) continue;
-                guard->aft_quotes_.insert(
-                    o.value(QStringLiteral("symbol")).toString(),
-                    pct_val.toDouble());
+                const QString sym = o.value(QStringLiteral("symbol")).toString();
+                if (sym.isEmpty()) continue;
+                const auto q = exthours::quote_from_row(o, in_pre);
+                if (!q || !exthours::pairing_is_sound(*q, now_secs)) continue;
+                guard->aft_quotes_.insert(sym, q->pct);
             }
             guard->set_aft_status(
                 guard->aft_quotes_.isEmpty()

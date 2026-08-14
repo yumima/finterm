@@ -494,6 +494,21 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(daemon_singleflight PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── Extended hours (AFT%) ────────────────────────────────────────────────────
+# yfinance.download() keeps its results in module globals, so two overlapping
+# downloads in the daemon returned mislabelled frames — one stock's bars under
+# another stock's ticker, which put a foreign after-hours move on the MSFT row.
+# Also pins the denominator (official close, not the 15:59 bar) and the refusal
+# to price an extended print against a reference bar from an earlier day.
+
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME extended_hours
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_extended_hours.py
+    )
+    set_tests_properties(extended_hours PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+endif()
+
 # ── Power Trader position replay ─────────────────────────────────────────────
 # The average-cost arithmetic every return on the screen rests on. Previously
 # untestable (buried in a service singleton needing a populated price history),

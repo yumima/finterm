@@ -159,6 +159,63 @@ class TestExtendedHoursMath : public QObject {
         QVERIFY(!pairing_is_sound(*q, kNow));
     }
 
+    // Mid-session, `regular` is still YESTERDAY's close — today's bell hasn't
+    // rung — so this morning's pre-market print is both correctly paired
+    // against it and the most recent extended move there is. Preferring
+    // yesterday's post-market instead left a day-old number in a column whose
+    // tooltip promises the last one.
+    void during_the_regular_session_this_mornings_pre_market_wins() {
+        QJsonObject o = row("AAPL", 334.16, 340.00, 312.33,
+                            QStringLiteral("REGULAR"));
+        // Mid-session the daemon's reference is the PREVIOUS close, so the
+        // timestamps have to say so too — otherwise this morning's pre-market
+        // print predates its own reference and the soundness check drops it.
+        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 86400));
+        o.insert("pre_market_ts", static_cast<qint64>(kClose30Jul - 8 * 3600));
+
+        const auto q = quote_from_row(o, /*in_pre_session=*/false);
+        QVERIFY(q.has_value());
+        QVERIFY2(q->from_pre, "fell back to yesterday's post-market mid-session");
+        QCOMPARE(q->price, 340.00);
+        QVERIFY(q->pct > 0);
+        QVERIFY2(pairing_is_sound(*q, kNow),
+                 "the mid-session pre-market pairing was rejected as unsound");
+    }
+
+    // …and with no pre-market print yet, yesterday's post-market is still a
+    // valid answer mid-session: it references the same close.
+    void the_regular_session_still_falls_back_to_the_prior_post_market() {
+        QJsonObject o = row("AAPL", 334.16, 0, 312.33, QStringLiteral("REGULAR"));
+        o.insert("pre_market", QJsonValue());
+        const auto q = quote_from_row(o, false);
+        QVERIFY(q.has_value());
+        QVERIFY(!q->from_pre);
+        QCOMPARE(q->price, 312.33);
+    }
+
+    // An explicit null ext_price is the daemon withholding a pairing it judged
+    // dishonest — a reference bar from an earlier day. This function rebuilds
+    // the percentage from the raw prints and never reads ext_price, so without
+    // this it reconstructed the exact number that was withheld, and
+    // pairing_is_sound waved it through: a two-day-old close is well inside
+    // the five-day tolerance.
+    void an_explicitly_withheld_extended_price_is_not_recomputed() {
+        QJsonObject o = row("FNILX", 30.00, 0, 27.90);
+        o.insert("pre_market", QJsonValue());
+        o.insert("regular_ts", static_cast<qint64>(kClose30Jul - 2 * 86400));
+        o.insert("ext_price", QJsonValue());   // daemon: no honest pairing here
+        QVERIFY(!quote_from_row(o, false).has_value());
+
+        // Sanity: the fixture really would have produced a number, and the
+        // timestamp guard really would not have stopped it.
+        QJsonObject without_the_field = o;
+        without_the_field.remove("ext_price");
+        const auto q = quote_from_row(without_the_field, false);
+        QVERIFY(q.has_value());
+        QVERIFY(std::abs(q->pct - (-7.0)) < 0.01);
+        QVERIFY(pairing_is_sound(*q, kNow));
+    }
+
     // Silence is not evidence of a bad pairing: a payload without times is
     // shown rather than dropped.
     void a_payload_without_timestamps_is_not_judged() {

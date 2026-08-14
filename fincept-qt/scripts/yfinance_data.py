@@ -62,6 +62,161 @@ def _install_inmemory_tz_cache():
 
 _install_inmemory_tz_cache()
 
+# ── yfinance download() serialisation ─────────────────────────────────────────
+# yfinance.download() is NOT thread-safe. It parks every ticker's frame in
+# MODULE-GLOBAL dicts (yfinance.shared._DFS / _ERRORS / _TRACEBACKS / _ISINS),
+# clears them at the top of each call, and at the bottom rebuilds the result
+# with `pd.concat(_DFS.values(), keys=_DFS.keys())`. This daemon dispatches
+# actions from a 6-thread pool, so two downloads overlap routinely — the
+# 20-second DataHub `batch_all` tick alone lands on top of anything else in
+# flight. Three things then go wrong, in increasing order of nastiness:
+#
+#   1. `for tkr in shared._DFS.keys()` blows up with "dictionary changed size
+#      during iteration" and the whole action fails. (Seen in production.)
+#   2. `while len(_DFS) < len(tickers)` is satisfied by the OTHER call's
+#      tickers, so a download returns before its own symbols have arrived.
+#   3. `.values()` and `.keys()` are two separate reads of a dict that is being
+#      mutated between them, so the concat can label one symbol's bars with
+#      another symbol's ticker. That one is SILENT: the portfolio AFT column
+#      renders a foreign stock's after-hours move on a row that says MSFT.
+#
+# Serialising download() against itself fixes all three — but it is not the
+# only writer. Ticker.history() sets shared._DFS / _ERRORS on its FAILURE paths
+# (scrapers/history.py: missing timezone, invalid period, dead symbol), and a
+# download polls `len(_DFS)` and iterates `_DFS.keys()` for its whole duration.
+# One unrelated history() call failing at the wrong moment is enough to break a
+# download that has nothing to do with it — and `_retry_one` in the
+# extended-hours path calls history() for precisely the symbols that just
+# failed, so those two collide by construction.
+#
+# A plain lock around history() would DEADLOCK: download() fetches by calling
+# Ticker.history() on its own worker threads (multi._download_one), which would
+# then block on the lock their parent is holding. So the gate is a
+# readers-writer one — any number of history() calls run together, a download()
+# excludes them all — and download's own workers are exempt, identified by
+# wrapping multi._download_one to record the thread it runs on.
+#
+# Every wait is bounded. If a future yfinance stops routing its fetches through
+# _download_one, the exemption stops working and the gate must degrade to
+# today's unsynchronised behaviour rather than hang the daemon.
+_DOWNLOAD_LOCK = threading.RLock()
+_GATE_WAIT_SEC = 15.0
+
+_gate_cv = threading.Condition()
+_gate_download_running = False
+_gate_history_inflight = 0
+_gate_download_threads = set()   # thread ids currently inside multi._download_one
+
+
+def _gate_enter_download():
+    """Wait for in-flight standalone history() calls to drain, then close the gate."""
+    global _gate_download_running
+    with _gate_cv:
+        _gate_download_running = True
+        deadline = time.monotonic() + _GATE_WAIT_SEC
+        while _gate_history_inflight:
+            if not _gate_cv.wait(timeout=max(0.0, deadline - time.monotonic())):
+                break   # bounded: proceed unsynchronised rather than stall
+
+
+def _gate_leave_download():
+    global _gate_download_running
+    with _gate_cv:
+        _gate_download_running = False
+        _gate_cv.notify_all()
+
+
+def _gate_enter_history():
+    """Yield to a download in progress, then register as in-flight."""
+    global _gate_history_inflight
+    with _gate_cv:
+        deadline = time.monotonic() + _GATE_WAIT_SEC
+        while _gate_download_running:
+            if not _gate_cv.wait(timeout=max(0.0, deadline - time.monotonic())):
+                break
+        _gate_history_inflight += 1
+
+
+def _gate_leave_history():
+    global _gate_history_inflight
+    with _gate_cv:
+        _gate_history_inflight -= 1
+        if not _gate_history_inflight:
+            _gate_cv.notify_all()
+
+
+def _install_download_serializer():
+    """Gate yfinance's shared-state writers, process-wide.
+
+    Patched at the modules yfinance re-exports from, so every caller is
+    covered — including helper modules (exchange_sessions) that import
+    yfinance themselves and would otherwise race the daemon's own downloads.
+
+    The history() wrapper is installed ONLY if _download_one could be wrapped
+    too: without the worker exemption it would make every download wait out the
+    gate timeout, which is worse than the race it prevents.
+    """
+    try:
+        import functools
+        import yfinance as _y
+        from yfinance import multi as _multi
+        # history() lives on TickerBase, not Ticker — patch it there so every
+        # subclass (Ticker, and whatever Tickers builds) goes through the gate.
+        from yfinance import base as _base
+
+        orig_one = _multi._download_one
+        if not getattr(orig_one, "_finterm_gated", False):
+            @functools.wraps(orig_one)
+            def _download_one_marked(*args, **kwargs):
+                tid = threading.get_ident()
+                _gate_download_threads.add(tid)
+                try:
+                    return orig_one(*args, **kwargs)
+                finally:
+                    _gate_download_threads.discard(tid)
+
+            _download_one_marked._finterm_gated = True
+            _multi._download_one = _download_one_marked
+
+        orig_hist = _base.TickerBase.history
+        if not getattr(orig_hist, "_finterm_gated", False):
+            @functools.wraps(orig_hist)
+            def _history_gated(self, *args, **kwargs):
+                if threading.get_ident() in _gate_download_threads:
+                    return orig_hist(self, *args, **kwargs)   # download's own worker
+                _gate_enter_history()
+                try:
+                    return orig_hist(self, *args, **kwargs)
+                finally:
+                    _gate_leave_history()
+
+            _history_gated._finterm_gated = True
+            _base.TickerBase.history = _history_gated
+
+        orig = _multi.download
+        if getattr(orig, "_finterm_serialized", False):
+            return
+
+        @functools.wraps(orig)
+        def _serialized(*args, **kwargs):
+            with _DOWNLOAD_LOCK:
+                _gate_enter_download()
+                try:
+                    return orig(*args, **kwargs)
+                finally:
+                    _gate_leave_download()
+
+        _serialized._finterm_serialized = True
+        _multi.download = _serialized
+        _y.download = _serialized
+    except Exception:
+        # Best-effort, same as the tz cache above: a yfinance layout change
+        # must not stop the daemon from starting.
+        pass
+
+
+_install_download_serializer()
+
 # ── yfinance crumb/session state ──────────────────────────────────────────────
 # Yahoo Finance periodically rotates its internal auth crumb.  When this
 # happens every outgoing request returns HTTP 401 "Invalid Crumb".  The daemon
@@ -82,6 +237,12 @@ def _reset_yfinance_session() -> None:
         importlib.reload(yf)
     except Exception:
         pass
+    # reload() re-executes yfinance/__init__.py, which rebinds the names we
+    # patched at import time. Both installers are idempotent, so just re-run
+    # them: without this a single crumb rotation would silently drop the
+    # download lock for the rest of the daemon's life.
+    _install_download_serializer()
+    _install_inmemory_tz_cache()
 
 def get_orderbook(symbol):
     """Best-effort live order-book snapshot (bid/ask + sizes) for a single symbol.
@@ -3569,16 +3730,26 @@ def get_extended_hours_quotes(symbols):
     _buf = io.StringIO()
     with contextlib.redirect_stdout(_buf):
         try:
+            # auto_adjust=False deliberately. These prices are compared against
+            # each other over a five-day window and are meant to be the prints
+            # that actually happened; back-adjusting the regular bars for a
+            # dividend that goes ex inside the window — while the post-market
+            # price is whatever Yahoo last quoted — manufactures a move that
+            # never traded.
             data = _yf.download(
                 symbols, period="5d", interval="1m",
                 prepost=True, group_by="ticker", progress=False,
-                threads=True, auto_adjust=True,
+                threads=True, auto_adjust=False,
             )
         except Exception as e:
-            import sys as _sys
-            print(f"[yfinance_data] extended-hours download failed: {e!r}",
-                  file=_sys.stderr)
-            return []
+            # Raise, don't return []. An empty list is indistinguishable from
+            # "market is quiet, nothing to report", so consumers took it as a
+            # successful answer: the heatmap wiped its tiles and the dashboard
+            # column silently kept whatever it had from the last good fetch,
+            # with the header still reading Idle. The daemon turns an exception
+            # into ok=false, which is what the retry/"unavailable" paths on the
+            # C++ side are already written for.
+            raise RuntimeError(f"extended-hours download failed: {e}") from e
 
     # Defer session label so we can short-circuit on empty data without
     # tripping the et zoneinfo lookup.
@@ -3604,6 +3775,84 @@ def get_extended_hours_quotes(symbols):
     except Exception:
         _prev_end = None
 
+    # Official daily closes, for the denominator.
+    #
+    # The last 1-minute regular bar is NOT the closing price: Yahoo's intraday
+    # series stops at 15:59 and never contains the closing auction print, which
+    # is where a large share of the day's volume trades. MSFT on 2026-08-07
+    # closed at 499.99 while its last 1m bar read 499.58 — 0.08%, against
+    # after-hours moves that are routinely 0.2%. Every AFT number carried that
+    # error. The daily bar is the official close, so use it whenever it lines
+    # up with the session we are measuring against, and keep the 1m bar as the
+    # fallback for symbols the daily frame doesn't cover.
+    #
+    # auto_adjust=False for the same reason as the intraday call: we want the
+    # price that printed, not one back-adjusted for a later dividend.
+    #
+    # Only equities have a closing auction to miss. A futures or crypto "daily
+    # close" is struck at a different moment than the settle `regular_end`
+    # refers to, so _official_close is consulted for 16:00-ET instruments only —
+    # and an all-futures book must not pay for a second full download, which now
+    # also holds the process-wide gate for its duration.
+    def _ends_at_the_bell(sym):
+        if _prev_end is None:
+            return True
+        try:
+            end_et = _pd.Timestamp(_prev_end(sym)).tz_convert(et)
+            return (end_et.hour, end_et.minute) == (16, 0)
+        except Exception:
+            return True
+
+    daily = None
+    if any(_ends_at_the_bell(s) for s in symbols):
+        with contextlib.redirect_stdout(io.StringIO()):
+            try:
+                daily = _yf.download(
+                    symbols, period="5d", interval="1d",
+                    prepost=False, group_by="ticker", progress=False,
+                    threads=True, auto_adjust=False,
+                )
+            except Exception:
+                # Non-fatal: the intraday frame alone still yields a usable (if
+                # very slightly off) reference, and one flaky call should not
+                # take the whole column down.
+                daily = None
+
+    def _official_close(sym, want_date):
+        """That symbol's official close on `want_date` (ET), or None."""
+        if daily is None or getattr(daily, "empty", True):
+            return None
+        try:
+            if isinstance(daily.columns, _pd.MultiIndex):
+                lvl0 = daily.columns.get_level_values(0)
+                if sym in lvl0:
+                    dhist = daily[sym]
+                elif sym in daily.columns.get_level_values(1):
+                    dhist = daily.xs(sym, axis=1, level=1)
+                else:
+                    return None
+            elif len(symbols) == 1:
+                dhist = daily
+            else:
+                return None
+            if "Close" not in dhist.columns:
+                return None
+            # A daily bar's label is a calendar date, not an instant. yfinance
+            # currently returns it naive; if it ever stamps midnight UTC
+            # instead, converting to ET would land on the PREVIOUS day and
+            # quietly hand back yesterday's close as today's denominator.
+            # Dropping the zone reads the date as written either way.
+            didx = dhist.index
+            if didx.tz is not None:
+                didx = didx.tz_localize(None)
+            match = (didx.date == want_date)
+            if not match.any():
+                return None
+            v = dhist["Close"][match].iloc[-1]
+            return None if _pd.isna(v) else float(v)
+        except Exception:
+            return None
+
     def _slice(sym):
         """The bulk frame's columns for one symbol, or None when it isn't there."""
         try:
@@ -3616,8 +3865,15 @@ def get_extended_hours_quotes(symbols):
                     hist = data.xs(sym, axis=1, level=1)
                 else:
                     return None
-            else:
+            elif len(symbols) == 1:
                 hist = data
+            else:
+                # Flat columns with several symbols requested means the frame
+                # carries ONE ticker and there is no way to tell which. Handing
+                # it to every symbol is how a single stock's after-hours move
+                # ends up printed against the whole book; the per-symbol retry
+                # below fetches the real thing instead.
+                return None
             hist = hist.dropna(how="all")
             if hist.empty or "Close" not in hist.columns:
                 return None
@@ -3672,6 +3928,18 @@ def get_extended_hours_quotes(symbols):
                     regular = float(v)
                     regular_ts = int(idx[mask_reg][-1].timestamp())
 
+            regular_end_et = regular_end_utc.tz_convert(et)
+            # Prefer the official close over the last 1m bar — but only for
+            # instruments whose session ends at the equity bell. A futures or
+            # crypto "daily close" is struck at a different moment than the
+            # settle that regular_end refers to, so for those the intraday bar
+            # at the settle time really is the right reference.
+            if (regular_end_et.hour, regular_end_et.minute) == (16, 0):
+                official = _official_close(sym, regular_end_et.date())
+                if official:
+                    regular = official
+                    regular_ts = int(regular_end_utc.timestamp())
+
             # post-market: bars strictly after regular_end whose ET date
             # equals regular_end's ET date (i.e. the same trading day —
             # we don't want tomorrow's pre-market to bleed in as "post").
@@ -3703,19 +3971,51 @@ def get_extended_hours_quotes(symbols):
                         pre = float(v)
                         pre_ts = int(idx[mask_pre][same_day][-1].timestamp())
 
-            # Pick the relevant extended-hours price for display:
-            # match current session; otherwise show most recently
-            # observed extended-hours print (post if both exist).
-            if session == "PRE" and pre is not None:
-                ext, ext_ts = pre, pre_ts
-            elif session == "POST" and post is not None:
-                ext, ext_ts = post, post_ts
-            elif post is not None:
-                ext, ext_ts = post, post_ts
-            elif pre is not None:
-                ext, ext_ts = pre, pre_ts
+            # Which extended print may be paired with `regular` depends on the
+            # session, and getting it wrong yields the OPPOSITE number rather
+            # than a stale one.
+            #
+            # `regular` is the last COMPLETED close. Before today's bell — PRE
+            # and REGULAR — that is yesterday's close, so today's pre-market
+            # print is measured against exactly the right reference, and it is
+            # also the most recent extended move there is. Once the bell has
+            # rung — POST, and the CLOSED stretch after 20:00 ET — `regular` is
+            # TODAY's close, and today's pre-market print belongs to the
+            # previous one; pairing them computes the day's move backwards. The
+            # old fallback did precisely that whenever the post-market window
+            # had opened but nothing had printed yet, which is how -7.82%
+            # appeared beside AMZN on a day it closed up 3.9%. So there is no
+            # fallback to `pre` after the close: no post-market print means no
+            # number. Same rule as ExtendedHoursMath.h's quote_from_row, which
+            # the dashboard column runs on the same payload.
+            if session in ("PRE", "REGULAR"):
+                ext, ext_ts = (pre, pre_ts) if pre is not None else (post, post_ts)
             else:
+                ext, ext_ts = (post, post_ts) if post is not None else (None, None)
+
+            # The reference has to be the close of the session the extended
+            # print belongs to. A symbol that didn't trade during regular hours
+            # — money-market and mutual funds, thin ETFs — leaves `regular`
+            # sitting on a bar from an earlier day, and pairing a fresh
+            # extended print against it reports a multi-day return as an
+            # after-hours move. Both windows above are already pinned to
+            # regular_end's date, so requiring the same of the denominator
+            # closes the loop; the C++ side's timestamp check is a backstop,
+            # not the rule.
+            # The prints go too, not just `ext`. quote_from_row on the C++ side
+            # re-derives the percentage from `post_market`/`pre_market` against
+            # `regular` and never looks at `ext_price`, so nulling `ext` alone
+            # left both the dashboard column and the heatmap free to compute
+            # the very number this guard exists to suppress — and
+            # pairing_is_sound wouldn't catch it either, since a two-day-old
+            # reference is well inside its five-day tolerance. `regular` stays:
+            # it is a real close and the futures table prints it.
+            reg_stale = (regular_ts is not None and
+                         datetime.fromtimestamp(regular_ts, et).date() != regular_end_et.date())
+            if reg_stale:
                 ext, ext_ts = None, None
+                pre, pre_ts = None, None
+                post, post_ts = None, None
 
             ext_chg = None
             ext_pct = None
@@ -3772,7 +4072,7 @@ def get_extended_hours_quotes(symbols):
         def _retry_one(sym):
             try:
                 h = _yf.Ticker(sym).history(period="5d", interval="1m",
-                                            prepost=True, auto_adjust=True)
+                                            prepost=True, auto_adjust=False)
             except Exception:
                 return sym, None
             if h is None or getattr(h, "empty", True) or "Close" not in h.columns:
