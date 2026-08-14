@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a1aadd5a3`](https://github.com/yumima/finterm/commit/a1aadd5a3) AI settings: bind roles to providers, and one place to configure them
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

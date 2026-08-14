@@ -73,6 +73,11 @@ class LlmConfigSection : public QWidget {
     QFormLayout* form_ = nullptr;         // provider detail form (rows toggled per provider)
     QLabel* default_badge_ = nullptr;     // "DEFAULT" marker for the selected provider
     QPushButton* set_default_btn_ = nullptr;
+    /// Set on save; checked when the provider's catalogue arrives. A model the
+    /// provider does not serve is otherwise accepted silently and only fails
+    /// later, at the point of use, as "the model returned nothing".
+    QString pending_verify_provider_;
+    QString pending_verify_model_;
 
     // Global settings (lives at bottom of provider tab)
     QDoubleSpinBox* temp_spin_ = nullptr;

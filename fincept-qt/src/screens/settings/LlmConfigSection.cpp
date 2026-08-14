@@ -883,6 +883,15 @@ void LlmConfigSection::on_save_provider() {
         }
     }
 
+    // Verify the MODEL exists, not just that the row saved. A provider row is
+    // free text, so "hearth" (the engine's name) or any typo saves cleanly and
+    // then fails at the point of use with "the local model returned nothing" —
+    // a message that points at the engine rather than at the wrong model name.
+    // Asking the provider for its catalogue is the only authoritative check.
+    pending_verify_provider_ = provider;
+    pending_verify_model_ = cfg.model;
+    ai_chat::LlmService::instance().fetch_models(provider, cfg.api_key, cfg.base_url);
+
     // Read-after-write verification — catches silent failures where the INSERT
     // reports success but the row never lands (e.g. autocommit off, FK rollback,
     // wrong DB path). Without this the old code would say "Saved" and the user
@@ -1015,6 +1024,24 @@ void LlmConfigSection::on_fetch_models() {
 
 void LlmConfigSection::on_models_fetched(const QString& provider, const QStringList& models, const QString& error) {
     fetch_btn_->setEnabled(true);
+
+    // Post-save model verification. Only fires when the fetch SUCCEEDED — if we
+    // could not reach the provider we cannot prove the model is wrong, and
+    // blocking on an unreachable provider would be worse than allowing it.
+    if (!pending_verify_provider_.isEmpty()
+        && pending_verify_provider_.compare(provider, Qt::CaseInsensitive) == 0) {
+        const QString want = pending_verify_model_;
+        pending_verify_provider_.clear();
+        pending_verify_model_.clear();
+        if (error.isEmpty() && !models.isEmpty() && !want.isEmpty() && !models.contains(want)) {
+            show_status(QString("Saved, but '%1' is not a model %2 serves — requests using it "
+                                "will fail. Available: %3")
+                            .arg(want, provider, models.mid(0, 6).join(", ")
+                                 + (models.size() > 6 ? ", …" : "")),
+                        true);
+            return;  // keep the warning on screen rather than overwriting it below
+        }
+    }
 
     // Only apply if still viewing this provider
     if (provider_edit_->text().trimmed().toLower() != provider.toLower())
