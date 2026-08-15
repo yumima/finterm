@@ -1,4 +1,5 @@
 #include "ai_chat/LlmService.h"
+#include "ui/SelectableText.h"
 #include "app/MainWindow.h"
 #include "auth/AuthManager.h"
 #include "auth/AuthService.h"
@@ -134,6 +135,11 @@ int main(int argc, char* argv[]) {
     const QString profile_key = QString("%1-%2").arg(fincept::AppIdentity::kApp).arg(fincept::ProfileManager::instance().active());
     SingleApplication app(argc, argv, /*allowSecondary=*/true, SingleApplication::Mode::User, 100,
                           profile_key.toUtf8());
+
+    // Every QLabel finterm renders becomes selectable/copyable. Qt's default is
+    // unselectable, so model output and article text could be read but not
+    // copied — see ui/SelectableText.h for what is deliberately skipped.
+    fincept::ui::install_selectable_text(app);
     app.setApplicationName(fincept::AppIdentity::kApp);
     app.setOrganizationName(fincept::AppIdentity::kOrg);
     // Visible brand — deliberately decoupled from the frozen storage identity

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`694c80783`](https://github.com/yumima/finterm/commit/694c80783) News brief: recover the category split without the sentinel; don't auto-forecast on view
 - [`2e1a13d2f`](https://github.com/yumima/finterm/commit/2e1a13d2f) Call the local provider "hearth", because that is what it is
 - [`12b7c9b31`](https://github.com/yumima/finterm/commit/12b7c9b31) Walk a quota chain instead of failing when one model runs dry
 - [`5b7f696f7`](https://github.com/yumima/finterm/commit/5b7f696f7) Equity research: report why a request failed instead of blaming the output
