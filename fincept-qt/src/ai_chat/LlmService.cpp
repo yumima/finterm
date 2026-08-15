@@ -625,7 +625,14 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // OpenAI deprecated max_tokens; gpt-5 / o-series require max_completion_tokens.
     // xAI also prefers max_completion_tokens. Other OpenAI-compatible providers
     // still expect max_tokens.
-    const int mx = resolved_max_tokens();
+    // Honour a per-call cap, exactly as build_anthropic_request and
+    // build_gemini_request already do. This builder ignored persona.max_tokens
+    // entirely, and it is the one every OpenAI-shaped provider goes through —
+    // hearth, ollama, openai, groq, everything the news role resolves to. So
+    // the news brief's deliberate 900-token bound had never taken effect on the
+    // local models it was written for, and a model that collapsed into
+    // repetition ran to the full 4096/8192 budget instead of being cut off.
+    const int mx = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
     if (eff_provider(persona) == "openai" || eff_provider(persona) == "xai")
         req["max_completion_tokens"] = mx;
     else

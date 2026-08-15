@@ -14,17 +14,20 @@
 // model). Capping output bounds the damage; this decides whether to show it.
 //
 // Deliberately conservative — a false positive throws away a good brief, so
-// both signals must be extreme before a response is rejected:
+// every signal must be extreme before a response is rejected:
 //
 //   * A very long line that is ALSO repetitive. Length alone is not evidence —
 //     the equity-research analysis is legitimately one 141-word paragraph.
 //   * Low vocabulary variety across a long response, which is what a repeating
 //     loop produces and ordinary prose does not.
+//   * A very long run of words with no punctuation at all — see below.
 
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+
+#include <algorithm>
 
 namespace fincept::ai_chat {
 
@@ -36,6 +39,10 @@ inline constexpr int kMaxSaneLineWords = 120;
 inline constexpr double kMinVocabRatio = 0.22;
 /// Short responses are exempt: the ratio is meaningless on a few dozen words.
 inline constexpr int kMinWordsToJudge = 250;
+/// Longest run of words carrying no punctuation that can still be prose.
+/// English breaks for a comma or a full stop every 15-25 words; 80 with no
+/// break of any kind is several times past the longest sentence anyone writes.
+inline constexpr int kMaxUnpunctuatedRun = 80;
 
 /// True when `text` looks like a repetition collapse rather than an answer.
 inline bool looks_degenerate(const QString& text) {
@@ -61,6 +68,49 @@ inline bool looks_degenerate(const QString& text) {
         if (line.split(QLatin1Char(' '), Qt::SkipEmptyParts).size() > kMaxSaneLineWords
             && vocab_ratio(line) < kMinVocabRatio)
             return true;
+    }
+
+    // The other collapse mode, and the one the vocabulary test cannot see: the
+    // model stops writing sentences and chains fresh noun phrases instead —
+    // "…compliance regulations adhered ethical considerations addressed
+    // transparency practices demonstrated accountability commitments upheld…".
+    // An observed brief ran 225 words to a single full stop with no comma
+    // anywhere, and scored 0.89 on vocabulary because almost every word was
+    // new. Punctuation, not word reuse, is what separates it from prose.
+    //
+    // A word counts as breaking the run if it contains punctuation ANYWHERE,
+    // not just at its end. That is the lenient reading on purpose: "U.S." and
+    // "3.5%" reset a run they arguably shouldn't, which can only ever make this
+    // miss a collapse — never reject a good answer, which is the failure that
+    // costs the user something.
+    //
+    // A bare bullet or column marker resets it too, so a breakdown that arrives
+    // as one line of "• item • item • item" with no full stops reads as the
+    // list it is rather than as one enormous sentence. Only the STANDALONE
+    // token counts: a hyphen inside a word is not a clause break, and treating
+    // it as one would defeat the check on the very output that motivated it —
+    // the observed salad contains "cross-sector".
+    {
+        static const QString kBreaks = QStringLiteral(".,;:!?…");
+        static const QStringList kMarkers = {QStringLiteral("-"),   QStringLiteral("*"),
+                                             QStringLiteral("|"),   QStringLiteral("•"),
+                                             QStringLiteral("–"), QStringLiteral("—")};
+        // Tabs separate columns, so treat them as word separators too — split on
+        // ' ' alone leaves a tab-joined row as a single unsplittable "word".
+        static const QRegularExpression kSpace(QStringLiteral("[ \\t]+"));
+        for (const QString& line : text.split(QLatin1Char('\n'))) {
+            int run = 0; // a line break ends any run
+            for (const QString& w : line.split(kSpace, Qt::SkipEmptyParts)) {
+                if (kMarkers.contains(w)
+                    || std::any_of(w.cbegin(), w.cend(),
+                                   [](QChar c) { return kBreaks.contains(c); })) {
+                    run = 0;
+                    continue;
+                }
+                if (++run > kMaxUnpunctuatedRun)
+                    return true;
+            }
+        }
     }
 
     const QStringList words = text.split(QRegularExpression(QStringLiteral("\\W+")),

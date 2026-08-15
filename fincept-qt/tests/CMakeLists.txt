@@ -534,6 +534,21 @@ target_link_libraries(test_ipo_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ipo_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ipo_format COMMAND test_ipo_format)
 
+# ── Model-collapse detection (news briefs) ───────────────────────────────────
+# looks_degenerate() is the only thing between a collapsed local model and the
+# reading pane, and it shipped blind to the collapse mode that has fresh
+# vocabulary but no punctuation — an observed 225-word noun-phrase chain scored
+# 0.89 on variety and rendered in full. Both modes are pinned here, along with
+# the false-positive cases, which cost more: rejecting a good brief discards it
+# silently and shows "AI brief unavailable" instead.
+add_executable(test_degeneracy
+    ai_chat/test_degeneracy.cpp
+)
+target_include_directories(test_degeneracy PRIVATE ../src)
+target_link_libraries(test_degeneracy PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_degeneracy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME degeneracy COMMAND test_degeneracy)
+
 # ── Committee oversight matching (Power Trader) ──────────────────────────────
 # committee_relevance is the biggest single input to every conflict/insider
 # number on the screen, and it was wrong in both directions: the reverse map

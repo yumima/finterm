@@ -12,6 +12,7 @@
 #include "storage/repositories/PortfolioRepository.h"
 
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QtConcurrent>
 
@@ -45,8 +46,14 @@ constexpr const char* kBriefModelRole = "fast_chat";
 
 // Bump when news_build_brief_prompt() changes in a way that alters output, so
 // entries cached under the previous prompt are not served for up to the
-// summary TTL. Currently: six categories over a 35-headline sample.
-constexpr int kBriefPromptVersion = 2;
+// summary TTL. Currently: six categories over a 35-headline sample, one
+// category per heading, bullets capped at one punctuated sentence.
+constexpr int kBriefPromptVersion = 3;
+// Only retry a collapsed brief when the first attempt came back inside this.
+// Slower than this and a second pass risks outliving the user's patience and
+// the caller's own timeout; the error is the better answer. See the retry in
+// summarize_headlines for why chat() is not a single bounded request.
+constexpr qint64 kBriefRetryBudgetMs = 45000;
 static constexpr int kWsReconnectDelayMs    = 10000;  // 10s before WebSocket reconnect
 static constexpr int kSummaryMaxChars       = 300;    // max chars for article summary
 
@@ -438,12 +445,18 @@ QString news_build_brief_prompt(const QString& headlines, const QString& portfol
          "Then output the marker <<<CATEGORIES>>> on its own line, followed by a "
          "per-category breakdown: at most SIX '### NAME' headings, at most TWO one-line "
          "bullets under each. Each category name may appear ONCE — put every bullet for a "
-         "category under its single heading, never repeat a heading. Only include categories "
+         "category under its single heading, never repeat a heading. One heading names exactly "
+         "ONE category: write '### DEFENSE' and '### CRYPTO' as separate sections, never "
+         "'### DEFENSE, CRYPTO' — a combined heading loses a category from the breakdown. "
+         "Only include categories "
          "the headlines actually cover, ordered by how much news there is. Draw from: "
          "MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS"
       + QString(portfolio.isEmpty() ? "" : ", PORTFOLIO")
       + ". Give each bullet the specific company/sector and the concrete detail from the "
-        "headline — this section is the detail the brief above compresses.\n"
+        "headline — this section is the detail the brief above compresses. Every bullet is "
+        "ONE ordinary sentence of at most 30 words, punctuated and ending in a full stop. "
+        "Never continue a bullet as an unpunctuated chain of noun phrases; stop at the "
+        "concrete detail the headline gives you.\n"
          // Grounding rules. Without these the model embellishes a headline into
          // a claim the headline never made — an observed failure was "SpaceX
          // stock dives", which cannot happen: SpaceX is private and has no
@@ -736,8 +749,35 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
         brief_scope.api_key = target.api_key;
         brief_scope.base_url = target.base_url;
     }
+    // One retry on a collapse. The failure is stochastic — same prompt, same
+    // model, and the next pass is normally clean — so rejecting on the first
+    // one spends a real request to show "AI brief unavailable", which is what
+    // the user actually saw. Retrying here rather than at the callback keeps it
+    // on the worker thread the first call already runs on.
+    //
+    // Time-gated, because chat() is not one request: it walks a quota-fallback
+    // chain of up to kMaxQuotaHops more on a 429, each with its own 120s
+    // ceiling, and a normal local brief already takes 80-110s. Retrying
+    // unconditionally would put the worst case near four minutes — and the MCP
+    // summarize_news path waits on it with no timeout at all
+    // (ThreadHelper's run_async_wait), pinning that thread for the duration.
+    // A first attempt that came back fast has room for a second; one that
+    // crawled does not, and the user is better served by the error.
     watcher->setFuture(QtConcurrent::run([prompt, brief_scope]() {
-        return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
+        QElapsedTimer clock;
+        clock.start();
+        auto resp = ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
+        if (resp.success && ai_chat::looks_degenerate(resp.content.trimmed())) {
+            if (clock.elapsed() > kBriefRetryBudgetMs) {
+                LOG_WARN("NewsService",
+                         QString("summarize_headlines: brief collapsed after %1ms — over the "
+                                 "retry budget, giving up").arg(clock.elapsed()));
+                return resp;
+            }
+            LOG_WARN("NewsService", "summarize_headlines: brief collapsed, retrying once");
+            resp = ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, brief_scope);
+        }
+        return resp;
     }));
 }
 

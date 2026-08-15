@@ -134,8 +134,15 @@ inline QPair<QString, QString> split(const QString& text) {
             bool tail_is_sections = true;
             for (int j = i + 1; j < lines.size(); ++j) {
                 const QString u = lines.at(j).trimmed();
+                // U+2022 as a code point, not QLatin1Char('•'). Latin-1 is a
+                // single byte and '•' is not in it: the multi-byte character
+                // literal truncated to -94, so the test compared against '¢'
+                // and no bullet ever matched. A brief written with • bullets
+                // therefore failed tail_is_sections, the fallback gave up, and
+                // the whole brief rendered as one blob with an empty BY
+                // CATEGORY pane — the symptom this fallback exists to prevent.
                 if (u.isEmpty() || u.startsWith(QLatin1Char('#')) || u.startsWith(QLatin1Char('-'))
-                    || u.startsWith(QLatin1Char('*')) || u.startsWith(QLatin1Char('•')))
+                    || u.startsWith(QLatin1Char('*')) || u.startsWith(QChar(0x2022)))
                     continue;
                 tail_is_sections = false;
                 break;

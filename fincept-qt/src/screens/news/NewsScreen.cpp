@@ -13,6 +13,7 @@
 #include "services/news/NewsNlpService.h"
 #include "services/notifications/NotificationService.h"
 #include "storage/repositories/NewsArticleRepository.h"
+#include "ai_chat/Degeneracy.h"
 #include "ai_chat/LlmService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -291,8 +292,12 @@ void NewsScreen::connect_signals() {
             "2. The marker <<<CATEGORIES>>> on its own line.\n"
             "3. At most FOUR categories, the ones the headlines actually cover, as "
             "'### NAME' headings with at most TWO one-line bullets each. Each category name "
-            "may appear ONCE — never repeat a heading. Choose from "
+            "may appear ONCE — never repeat a heading. One heading names exactly ONE "
+            "category: '### DEFENSE' and '### CRYPTO' as separate sections, never "
+            "'### DEFENSE, CRYPTO'. Choose from "
             "MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS.\n"
+            "Every bullet is ONE ordinary sentence of at most 30 words, punctuated and "
+            "ending in a full stop — never an unpunctuated chain of noun phrases.\n"
             "RULES: every claim must come from a headline — invent no company, ticker "
             "or number, and never say shares moved unless a headline says so (many of "
             "these companies are private). Rank for a US/China/Europe and global-macro "
@@ -312,6 +317,11 @@ void NewsScreen::connect_signals() {
         // request ceiling and fail as "Digest unavailable".
         fincept::ai_chat::PersonaScope digest_scope;
         digest_scope.think = false;
+        // Same cap as the TL;DR brief (see NewsService::summarize_headlines).
+        // Left on the chat default of 4096 a collapsed digest streams pages of
+        // filler into the drawer before anything stops it — and unlike the
+        // brief, the user watches it arrive.
+        digest_scope.max_tokens = 900;
         // Same fast role as the TL;DR brief — see NewsService for the
         // measurements. The configured chat model on this box is too large for
         // the GPU and ignores think:false, which is what made digests time out.
@@ -346,21 +356,45 @@ void NewsScreen::connect_signals() {
             [self, accumulated](const fincept::ai_chat::LlmResponse& resp) {
                 if (!self)
                     return;
-                const bool have_text = !accumulated->trimmed().isEmpty();
-                QMetaObject::invokeMethod(self.data(), [self, resp, have_text]() {
+                const QString final_text = accumulated->trimmed();
+                const bool have_text = !final_text.isEmpty();
+                // The streaming path had no equivalent of the brief's
+                // degeneracy check, so a digest that collapsed into filler was
+                // rendered in full and left on screen. It can only be judged
+                // once the stream ends — mid-stream any brief looks unfinished
+                // — so this replaces the pane rather than preventing the
+                // render. Showing the user why beats leaving a page of noise up.
+                const bool collapsed = have_text && fincept::ai_chat::looks_degenerate(final_text);
+                QMetaObject::invokeMethod(self.data(), [self, resp, have_text, collapsed]() {
                     if (!self)
                         return;
                     self->set_tldr_in_flight(false);
-                    if (resp.error.isEmpty())
+                    // A real error is reported first, and always logged. A
+                    // stream that dies partway leaves text ending mid-clause
+                    // with no terminal punctuation — the exact shape the
+                    // collapse check keys on — so testing `collapsed` first
+                    // would relabel every truncated network or auth failure as
+                    // a model collapse, tell the user to press DIGEST again
+                    // (it fails again), and throw away the only diagnostic.
+                    if (!resp.error.isEmpty()) {
+                        LOG_WARN("NewsScreen", "digest failed: " + resp.error);
+                        // Only replace the pane when there is nothing to replace
+                        // it with. A late error after the model already streamed
+                        // a usable digest would otherwise wipe good output off
+                        // the screen and show a failure for a request that
+                        // produced one — unless what it produced was a collapse,
+                        // which is not worth keeping.
+                        if (!have_text || collapsed) {
+                            self->side_panel_->show_digest(
+                                QStringLiteral("**Digest unavailable.** %1").arg(resp.error));
+                        }
                         return;
-                    LOG_WARN("NewsScreen", "digest failed: " + resp.error);
-                    // Only replace the pane when there is nothing to replace it
-                    // with. A late error after the model already streamed a
-                    // usable digest would otherwise wipe good output off the
-                    // screen and show a failure for a request that produced one.
-                    if (!have_text) {
-                        self->side_panel_->show_digest(
-                            QStringLiteral("**Digest unavailable.** %1").arg(resp.error));
+                    }
+                    if (collapsed) {
+                        LOG_WARN("NewsScreen", "digest collapsed into repetition — discarded");
+                        self->side_panel_->show_digest(QStringLiteral(
+                            "**Digest collapsed.** The model lost the thread partway through. "
+                            "Press DIGEST again."));
                     }
                 }, Qt::QueuedConnection);
             });
