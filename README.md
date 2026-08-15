@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`af0026d54`](https://github.com/yumima/finterm/commit/af0026d54) Make rendered text selectable and copyable
 - [`694c80783`](https://github.com/yumima/finterm/commit/694c80783) News brief: recover the category split without the sentinel; don't auto-forecast on view
 - [`2e1a13d2f`](https://github.com/yumima/finterm/commit/2e1a13d2f) Call the local provider "hearth", because that is what it is
 - [`12b7c9b31`](https://github.com/yumima/finterm/commit/12b7c9b31) Walk a quota chain instead of failing when one model runs dry

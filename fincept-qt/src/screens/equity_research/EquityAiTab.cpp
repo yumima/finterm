@@ -121,8 +121,27 @@ qint64 ymd_to_secs(const QString& ymd) {
 // PredictionChart
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Font and colour of the news wire, applied to a read-only text pane.
+//
+// QSS is unreliable here: for QTextEdit/QTextBrowser font-size falls through to
+// qApp's default and color falls through to the global `QWidget { color }` rule
+// (TEXT_PRIMARY #e5e5e5, a cool gray), so both must be pinned with the direct
+// Qt APIs. NewsDetailPanel hit the same wall and solved it the same way; the
+// literal #f0e8d0 is kNewsTextPrimary from NewsFeedDelegate.
+static void apply_wire_text_style(QTextEdit* view) {
+    QFont f(ui::fonts::DATA_FAMILY, ui::fonts::TINY);
+    view->setFont(f);
+    view->document()->setDefaultFont(f);
+    QPalette pal = view->palette();
+    pal.setColor(QPalette::Text, QColor(0xf0, 0xe8, 0xd0));
+    view->setPalette(pal);
+}
+
 PredictionChart::PredictionChart(QWidget* parent) : QWidget(parent) {
-    setMinimumHeight(220);
+    // The curve is a glanceable read, not the focus of the tab: 220 forced it
+    // to keep more height than it needs and squeezed the panes above.
+    setMinimumHeight(150);
+    setMaximumHeight(240);
     setMouseTracking(true);   // hover read-out without a pressed button
 }
 
@@ -426,9 +445,9 @@ void EquityAiTab::build_ui() {
     analysis_view_->setReadOnly(true);
     analysis_view_->setMinimumHeight(110);
     analysis_view_->setStyleSheet(
-        QString("QTextEdit{background:%1;color:%2;border:1px solid %3;border-radius:6px;"
-                "padding:10px;font-size:13px;}")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+        QString("QTextEdit{background:%1;border:1px solid %2;border-radius:6px;padding:10px;}")
+            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    apply_wire_text_style(analysis_view_);
     analysis_view_->setPlainText(QStringLiteral(
         "Click “Run AI Analysis” for a local-AI read on this stock — a position "
         "recommendation, the thesis and key risks, and a price forecast. Each "
@@ -476,11 +495,14 @@ void EquityAiTab::build_ui() {
 
     main_split->addWidget(top_split);
     main_split->addWidget(bottom);
-    main_split->setStretchFactor(0, 0);
-    main_split->setStretchFactor(1, 1);
+    // The reading panes grow, the chart does not. Reversed, the chart and its
+    // table absorbed every extra pixel while the AI analysis and the chat — the
+    // two things a user actually reads — stayed at their minimums.
+    main_split->setStretchFactor(0, 1);
+    main_split->setStretchFactor(1, 0);
     main_split->setCollapsible(0, false);
     main_split->setCollapsible(1, false);
-    main_split->setSizes({260, 380});
+    main_split->setSizes({420, 260});
     root->addWidget(main_split, 1);
 }
 
@@ -507,6 +529,7 @@ void EquityAiTab::set_symbol(const QString& symbol) {
     forecast_epoch_++;   // abandon any in-flight stream for the old symbol
     candles_.clear();
     reset_chat();         // re-scope the chat to the new ticker
+    apply_wire_text_style(analysis_view_);
     analysis_view_->setPlainText(QStringLiteral("Loading…"));
     status_lbl_->setText(QStringLiteral("Loading price history for %1…").arg(current_symbol_));
 
@@ -526,7 +549,8 @@ void EquityAiTab::set_symbol(const QString& symbol) {
                 data_unavailable_ = true;
                 analysis_populated_ = true;
                 status_lbl_->setText(QStringLiteral("No price history for %1.").arg(sym));
-                analysis_view_->setPlainText(QStringLiteral(
+                apply_wire_text_style(analysis_view_);
+    analysis_view_->setPlainText(QStringLiteral(
                     "No tradable price history for %1, so the AI has nothing to forecast "
                     "from — this is expected for pre-IPO or untradable tickers.").arg(sym));
             }
@@ -586,9 +610,9 @@ QWidget* EquityAiTab::build_chat_pane() {
     chat_view_ = new QTextEdit;
     chat_view_->setReadOnly(true);
     chat_view_->setStyleSheet(
-        QString("QTextEdit{background:%1;color:%2;border:1px solid %3;border-radius:6px;"
-                "padding:10px;font-size:13px;}")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+        QString("QTextEdit{background:%1;border:1px solid %2;border-radius:6px;padding:10px;}")
+            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    apply_wire_text_style(chat_view_);
     v->addWidget(chat_view_, 1);
 
     auto* row = new QHBoxLayout;
@@ -983,7 +1007,8 @@ void EquityAiTab::run_forecast(bool automatic) {
     if (candles_.size() < 5) { status_lbl_->setText(QStringLiteral("Waiting for price data…")); return; }
     if (!fincept::ai_chat::LlmService::instance().is_configured()) {
         analysis_populated_ = true;
-        analysis_view_->setPlainText(QStringLiteral(
+        apply_wire_text_style(analysis_view_);
+    analysis_view_->setPlainText(QStringLiteral(
             "Local AI is not configured. Open Settings → AI Chat to point the terminal "
             "at your local model (hearth), then try again."));
         return;
@@ -992,6 +1017,7 @@ void EquityAiTab::run_forecast(bool automatic) {
     forecasting_ = true;
     analysis_populated_ = true;
     run_btn_->setEnabled(false);
+    apply_wire_text_style(analysis_view_);
     analysis_view_->setPlainText(QStringLiteral("Thinking…"));
     // A local reasoning model can be silent for a while before it streams; an
     // elapsed-time tick keeps it from looking frozen.
