@@ -243,6 +243,19 @@ class LlmService : public QObject {
     /// provider was configured.
     static QJsonObject sanitize_tool_schema(QJsonObject schema);
 
+    /// True when a response failed because the provider's quota ran out, as
+    /// opposed to any other error. Only this warrants moving to another model:
+    /// a 400 or a bad key will fail identically on the next one.
+    static bool is_quota_exhausted(const LlmResponse& r);
+
+    /// The next target to try after `current` ran out of quota, or an empty
+    /// scope when there is nowhere left to go.
+    ///
+    /// Order: a smaller model on the SAME provider first (same key, same
+    /// endpoint, usually a separate allowance), then the first configured
+    /// LOCAL provider, which has no quota at all and is therefore the floor.
+    PersonaScope next_quota_fallback(const PersonaScope& current) const;
+
     QJsonObject build_gemini_request(bool use_tools, const QString& user_message, const std::vector<ConversationMessage>& history,
                                      const PersonaScope& persona = {});
     QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,

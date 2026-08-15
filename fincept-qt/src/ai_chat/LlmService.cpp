@@ -711,6 +711,63 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     return req;
 }
 
+// Enough to walk a provider's model ladder and then reach a local provider,
+// without letting a misconfigured chain spend the whole afternoon retrying.
+static constexpr int kMaxQuotaHops = 4;
+
+bool LlmService::is_quota_exhausted(const LlmResponse& r) {
+    // eventloop_request formats failures as "HTTP <code>: <message>". 429 is
+    // the only status worth re-trying elsewhere.
+    return !r.success && r.error.contains(QStringLiteral("HTTP 429"));
+}
+
+PersonaScope LlmService::next_quota_fallback(const PersonaScope& current) const {
+    const QString provider = eff_provider(current);
+    const QString model = eff_model(current);
+
+    // Free allowances are metered PER MODEL, so a smaller sibling on the same
+    // key usually still answers — measured: 3.7-flash exhausted while 3.5 on
+    // the same key kept working. Newest first; we take whatever follows the
+    // current entry, so a ladder position is never revisited.
+    static const QMap<QString, QStringList> kLadders = {
+        {QStringLiteral("gemini"),
+         {QStringLiteral("gemini-3.7-flash"), QStringLiteral("gemini-3.6-flash"),
+          QStringLiteral("gemini-3.5-flash"), QStringLiteral("gemini-3.5-flash-lite")}},
+    };
+    const QStringList ladder = kLadders.value(provider.toLower());
+    const int at = ladder.indexOf(model);
+    if (at >= 0 && at + 1 < ladder.size()) {
+        PersonaScope next = current;
+        next.provider = provider;
+        next.model = ladder.at(at + 1);
+        next.api_key = eff_api_key(current);
+        next.base_url = eff_base_url(current);
+        return next;
+    }
+
+    // Same-provider options exhausted. Fall to a local provider: it has no
+    // quota, so it is the floor rather than another thing that can run out.
+    auto provs = LlmConfigRepository::instance().list_providers();
+    if (provs.is_ok()) {
+        for (const auto& p : provs.value()) {
+            if (provider_requires_api_key(p.provider) || p.model.isEmpty())
+                continue;
+            if (p.provider.compare(provider, Qt::CaseInsensitive) == 0)
+                continue;  // already there
+            PersonaScope local;
+            local.think = current.think;
+            local.prompt = current.prompt;
+            local.tool_globs = current.tool_globs;
+            local.valid = current.valid;
+            local.provider = p.provider;
+            local.model = p.model;
+            local.base_url = p.base_url;
+            return local;
+        }
+    }
+    return {};
+}
+
 QJsonObject LlmService::sanitize_tool_schema(QJsonObject schema) {
     if (schema.isEmpty()) {
         schema["type"] = "object";
@@ -2425,7 +2482,29 @@ LlmResponse LlmService::chat(const QString& user_message, const std::vector<Conv
     // use_tools is threaded through do_request (per-request, no global
     // tools_enabled_ mutation), so concurrent calls don't race on tool state.
     // do_request reads config members unlocked — same as do_streaming_request.
-    return do_request(user_message, history, use_tools, persona);
+    // Quota fallback chain. A free allowance is metered per model, so running
+    // one dry does not mean the provider is unusable — a smaller sibling on the
+    // same key normally answers, and a local provider always does. Walking the
+    // chain turns "AI unavailable" into a slightly weaker answer, which is the
+    // better failure for every surface here.
+    //
+    // Only 429 advances the chain: a 400 or a bad key fails identically on the
+    // next model, and retrying would just spend more of someone else's budget.
+    // do_streaming_request routes through here too, so both paths inherit it.
+    PersonaScope target = persona;
+    LlmResponse resp = do_request(user_message, history, use_tools, target);
+    for (int hop = 0; hop < kMaxQuotaHops && is_quota_exhausted(resp); ++hop) {
+        const PersonaScope next = next_quota_fallback(target);
+        if (next.provider.isEmpty() && next.model.isEmpty()) {
+            LOG_WARN(TAG, "quota exhausted and no fallback target remains");
+            break;
+        }
+        LOG_INFO(TAG, QString("quota exhausted on %1/%2 — falling back to %3/%4")
+                          .arg(eff_provider(target), eff_model(target), next.provider, next.model));
+        target = next;
+        resp = do_request(user_message, history, use_tools, target);
+    }
+    return resp;
 }
 
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,

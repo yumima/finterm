@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`5b7f696f7`](https://github.com/yumima/finterm/commit/5b7f696f7) Equity research: report why a request failed instead of blaming the output
 - [`7f7eb0195`](https://github.com/yumima/finterm/commit/7f7eb0195) Roles: wire the surfaces that advertised a binding but ignored it
 - [`b6a67f9b6`](https://github.com/yumima/finterm/commit/b6a67f9b6) Gemini fallbacks: newest first, and correct the quota note
 - [`7b62f690d`](https://github.com/yumima/finterm/commit/7b62f690d) Gemini: honour per-request use_tools, and never ship an invalid schema
