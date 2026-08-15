@@ -197,6 +197,10 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // no clue why. The watchdog guarantees it clears even if a stream dies
     // without ever reporting done.
     bool tldr_in_flight_ = false;
+    /// One-shot: the opening brief is generated the first time a filtered feed
+    /// lands, not on every filter change. Otherwise typing in the search box or
+    /// switching category would fire an LLM request per keystroke.
+    bool auto_tldr_done_ = false;
     QTimer* tldr_watchdog_ = nullptr;
     void set_tldr_in_flight(bool in_flight);
     static constexpr int kBriefWatchdogMs = 180000;

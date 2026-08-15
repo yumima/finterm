@@ -1207,6 +1207,23 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     filtered_articles_ = filtered;
     clusters_ = clusters;
 
+    // Opening brief. The TL;DR is the point of the news screen, so make it the
+    // default state rather than something the user has to ask for — but only
+    // once, on the first feed that actually has articles.
+    //
+    // Fired here rather than at fetch-completion because the brief reads
+    // filtered_articles_, which only exists after this filter pass. Queued so
+    // the list paints first: the brief takes seconds and the feed should not
+    // wait behind it. NewsService caches by content hash, so re-opening the
+    // screen within the TTL costs nothing.
+    if (!auto_tldr_done_ && !filtered.isEmpty() && !tldr_in_flight_) {
+        auto_tldr_done_ = true;
+        QMetaObject::invokeMethod(this, [this]() {
+            if (!tldr_in_flight_ && !filtered_articles_.isEmpty())
+                QMetaObject::invokeMethod(command_bar_, "summarize_clicked", Qt::DirectConnection);
+        }, Qt::QueuedConnection);
+    }
+
     // Update feed model
     auto visible = filtered.mid(0, visible_article_count_);
     feed_panel_->model()->set_wire_articles(visible);
