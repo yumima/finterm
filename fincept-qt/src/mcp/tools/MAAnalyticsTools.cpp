@@ -98,8 +98,8 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
             {"base_params", QJsonObject{{"type", "object"}, {"description", "Base DCF parameters (same as ma_dcf)"}}},
-            {"wacc_range", QJsonObject{{"type", "array"}, {"description", "Array of WACC values to test"}}},
-            {"tgr_range", QJsonObject{{"type", "array"}, {"description", "Array of terminal growth rates to test"}}}};
+            {"wacc_range", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Array of WACC values to test"}}},
+            {"tgr_range", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Array of terminal growth rates to test"}}}};
         t.input_schema.required = {"base_params"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             return run_ma_sync("dcf_sensitivity", [&]() {
@@ -180,8 +180,8 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
             {"base_params", QJsonObject{{"type", "object"}, {"description", "Base LBO parameters"}}},
-            {"entry_multiples", QJsonObject{{"type", "array"}, {"description", "Entry EV/EBITDA multiples to test"}}},
-            {"exit_multiples", QJsonObject{{"type", "array"}, {"description", "Exit EV/EBITDA multiples to test"}}}};
+            {"entry_multiples", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Entry EV/EBITDA multiples to test"}}},
+            {"exit_multiples", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Exit EV/EBITDA multiples to test"}}}};
         t.input_schema.required = {"base_params"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             return run_ma_sync("lbo_sensitivity", [&]() {
@@ -964,13 +964,13 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.description = "Run OLS or multiple regression analysis on deal/financial data.";
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
-            {"y_values", QJsonObject{{"type", "array"}, {"description", "Dependent variable values"}}},
+            {"y_values", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Dependent variable values"}}},
             {"x_values",
-             QJsonObject{{"type", "array"},
+             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}},
                          {"description", "Independent variable(s) — array of arrays for multiple regression"}}},
             {"regression_type", QJsonObject{{"type", "string"}, {"description", "OLS or MULTIPLE (default: OLS)"}}},
             {"variable_names",
-             QJsonObject{{"type", "array"}, {"description", "Names for independent variables (optional)"}}}};
+             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"description", "Names for independent variables (optional)"}}}};
         t.input_schema.required = {"y_values", "x_values"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             return run_ma_sync("regression",
@@ -991,7 +991,7 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
             {"deals",
-             QJsonObject{{"type", "array"},
+             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}},
                          {"description",
                           "Array of deal objects with fields: name, ev, ebitda, revenue, premium, payment_type"}}}};
         t.input_schema.required = {"deals"};
@@ -1009,7 +1009,7 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.description = "Rank deals by a specified metric (deal_value, premium, ev_ebitda, etc.).";
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
-            {"deals", QJsonObject{{"type", "array"}, {"description", "Array of deal objects"}}},
+            {"deals", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}}, {"description", "Array of deal objects"}}},
             {"rank_by", QJsonObject{{"type", "string"},
                                     {"description", "Metric to rank by: deal_value, premium, ev_ebitda, ev_revenue"}}},
             {"ascending", QJsonObject{{"type", "boolean"}, {"description", "Sort ascending (default: false)"}}}};
@@ -1048,7 +1048,7 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.description = "Analyze payment structure trends across a set of comparable deals.";
         t.category = "ma-analytics";
         t.input_schema.properties = QJsonObject{
-            {"deals", QJsonObject{{"type", "array"},
+            {"deals", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}},
                                   {"description", "Array of deals with payment_type, cash_pct, stock_pct fields"}}}};
         t.input_schema.required = {"deals"};
         t.handler = [](const QJsonObject& args) -> ToolResult {

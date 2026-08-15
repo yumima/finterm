@@ -235,7 +235,15 @@ class LlmService : public QObject {
                                      bool stream, bool with_tools = true, const PersonaScope& persona = {});
     QJsonObject build_anthropic_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                         bool stream, const PersonaScope& persona = {});
-    QJsonObject build_gemini_request(const QString& user_message, const std::vector<ConversationMessage>& history,
+    /// Make a tool's JSON Schema safe to send. Gemini validates
+    /// function_declarations strictly and rejects the WHOLE request when any
+    /// one is malformed, so a single bad tool takes down every call — which is
+    /// how one array property with no "items" broke the news brief. OpenAI
+    /// tolerates the same schema, so the fault stayed invisible until a second
+    /// provider was configured.
+    static QJsonObject sanitize_tool_schema(QJsonObject schema);
+
+    QJsonObject build_gemini_request(bool use_tools, const QString& user_message, const std::vector<ConversationMessage>& history,
                                      const PersonaScope& persona = {});
     QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                       bool with_tools);

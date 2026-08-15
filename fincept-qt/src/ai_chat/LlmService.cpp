@@ -701,11 +701,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
         auto all_tools = mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona));
         for (const auto& tool : all_tools) {
             QString fn_name = tool.server_id + "__" + tool.name;
-            QJsonObject schema = tool.input_schema;
-            if (schema.isEmpty()) {
-                schema["type"] = "object";
-                schema["properties"] = QJsonObject();
-            }
+            QJsonObject schema = sanitize_tool_schema(tool.input_schema);
             ant_tools.append(
                 QJsonObject{{"name", fn_name}, {"description", tool.description}, {"input_schema", schema}});
         }
@@ -715,7 +711,32 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     return req;
 }
 
-QJsonObject LlmService::build_gemini_request(const QString& user_message,
+QJsonObject LlmService::sanitize_tool_schema(QJsonObject schema) {
+    if (schema.isEmpty()) {
+        schema["type"] = "object";
+        schema["properties"] = QJsonObject();
+        return schema;
+    }
+    // An array with no "items" is invalid JSON Schema. Repair rather than drop:
+    // the tool is still usable, and dropping it would silently remove a
+    // capability. "string" is the widest safe assumption — Gemini only needs
+    // the field present to accept the declaration.
+    auto props = schema.value("properties").toObject();
+    bool changed = false;
+    for (auto it = props.begin(); it != props.end(); ++it) {
+        QJsonObject p = it.value().toObject();
+        if (p.value("type").toString() == "array" && !p.contains("items")) {
+            p["items"] = QJsonObject{{"type", "string"}};
+            it.value() = p;
+            changed = true;
+        }
+    }
+    if (changed)
+        schema["properties"] = props;
+    return schema;
+}
+
+QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user_message,
                                              const std::vector<ConversationMessage>& history,
                                              const PersonaScope& persona) {
     QJsonArray contents;
@@ -739,17 +760,20 @@ QJsonObject LlmService::build_gemini_request(const QString& user_message,
     }
 
     // Gemini tool format: tools[{functionDeclarations:[{name, description, parameters}]}]
-    auto all_tools = tools_enabled_ ? mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona))
-                                    : std::vector<mcp::UnifiedTool>{};
+    // `use_tools &&`, not `tools_enabled_` alone. The OpenAI path threads
+    // use_tools per request; this builder predates that and still consulted only
+    // the global flag, so a caller that explicitly disabled tools — the news
+    // brief passes use_tools=false — still shipped every MCP declaration. That
+    // is what exposed the malformed schema below: 29 tool declarations on a
+    // one-shot summarisation, one of them invalid, and Gemini 400s the lot.
+    auto all_tools = (use_tools && tools_enabled_)
+                         ? mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona))
+                         : std::vector<mcp::UnifiedTool>{};
     if (!all_tools.empty()) {
         QJsonArray fn_decls;
         for (const auto& tool : all_tools) {
             QString fn_name = tool.server_id + "__" + tool.name;
-            QJsonObject schema = tool.input_schema;
-            if (schema.isEmpty()) {
-                schema["type"] = "object";
-                schema["properties"] = QJsonObject();
-            }
+            QJsonObject schema = sanitize_tool_schema(tool.input_schema);
             fn_decls.append(QJsonObject{{"name", fn_name}, {"description", tool.description}, {"parameters", schema}});
         }
         if (!fn_decls.isEmpty())
@@ -1113,7 +1137,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     if (eff_provider(persona) == "anthropic") {
         req_body = build_anthropic_request(user_message, history, false, persona);
     } else if (eff_provider(persona) == "gemini" || eff_provider(persona) == "google") {
-        req_body = build_gemini_request(user_message, history, persona);
+        req_body = build_gemini_request(use_tools, user_message, history, persona);
         // Auth goes via x-goog-api-key header (set by get_headers(persona)).
         // Do not append ?key= to URL — it leaks the key into access logs.
     } else if (eff_provider(persona) == "fincept") {

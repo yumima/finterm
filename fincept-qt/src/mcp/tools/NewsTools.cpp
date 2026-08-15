@@ -341,7 +341,7 @@ std::vector<ToolDef> get_news_tools() {
         t.category = "news";
         t.input_schema.properties =
             QJsonObject{{"label", QJsonObject{{"type", "string"}, {"description", "Monitor name"}}},
-                        {"keywords", QJsonObject{{"type", "array"}, {"description", "Keywords to track"}}},
+                        {"keywords", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"description", "Keywords to track"}}},
                         {"color", QJsonObject{{"type", "string"}, {"description", "Highlight color hex (optional)"}}}};
         t.input_schema.required = {"label", "keywords"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
