@@ -107,6 +107,13 @@ struct PersonaScope {
     QString model = {};
     QString api_key = {};
     QString base_url = {};
+    /// Per-call output cap, 0 = the configured max_tokens.
+    ///
+    /// A short structured one-shot does not need the chat budget. Left at 4096
+    /// a model that starts repeating has licence to do it for pages — an
+    /// observed news brief collapsed into a multi-thousand-token run of country
+    /// and bird names. The cap does not prevent the collapse; it bounds it.
+    int max_tokens = 0;
 };
 
 struct LlmResponse {

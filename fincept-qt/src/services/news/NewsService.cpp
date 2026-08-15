@@ -2,6 +2,7 @@
 
 #include "services/news/NewsBriefCacheKey.h"
 
+#include "ai_chat/Degeneracy.h"
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -684,6 +685,16 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                          const ai_chat::LlmResponse resp = watcher->result();
                          watcher->deleteLater();
                          const QString summary = resp.content.trimmed();
+                         // A collapsed response is worse than none: it is
+                         // cached, rendered in full, and reads as though the
+                         // feed itself is broken. Catch it before either.
+                         if (resp.success && ai_chat::looks_degenerate(summary)) {
+                             LOG_WARN("NewsService", QString("summarize_headlines: discarded a "
+                                                             "degenerate brief (%1 chars)")
+                                                         .arg(summary.size()));
+                             cb(false, {});
+                             return;
+                         }
                          if (!resp.success || summary.isEmpty()) {
                              LOG_WARN("NewsService", "summarize_headlines: local brief failed: " + resp.error);
                              cb(false, {});
@@ -701,6 +712,9 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     // prompt with thinking off returns in well under 30s.
     ai_chat::PersonaScope brief_scope;
     brief_scope.think = false;
+    // A brief is ~400-600 tokens. The chat budget (4096) only gives a
+    // repetition loop room to run for pages before anything stops it.
+    brief_scope.max_tokens = 900;
     // Run briefs on the fast role rather than the configured chat model.
     // Measured against hearth with this exact prompt: fast_chat (qwen3:14b)
     // returns 495 completion tokens in 30s, primary_chat (qwen3:30b-a3b)

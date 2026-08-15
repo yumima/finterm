@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`89329038c`](https://github.com/yumima/finterm/commit/89329038c) News: generate the opening brief on first load
 - [`b9b506aa1`](https://github.com/yumima/finterm/commit/b9b506aa1) Fix the selectable-text filter: QLabel's default is not NoTextInteraction
 - [`541341c1a`](https://github.com/yumima/finterm/commit/541341c1a) Equity AI: wire-feed text style, and give the height to the reading panes
 - [`af0026d54`](https://github.com/yumima/finterm/commit/af0026d54) Make rendered text selectable and copyable

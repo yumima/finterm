@@ -677,7 +677,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     QJsonObject req;
     req["model"] = eff_model(persona);
     req["messages"] = messages;
-    req["max_tokens"] = resolved_max_tokens();
+    req["max_tokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
     // Temperature intentionally omitted — Anthropic defaults to 1.0.
     QString sys = system_prompt_;
     // Only the agentic chat (tools on) gets persona + ambient context — not a
@@ -807,7 +807,7 @@ QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user
 
     QJsonObject gen_cfg;
     // Temperature intentionally omitted — Gemini defaults to 1.0.
-    gen_cfg["maxOutputTokens"] = resolved_max_tokens();
+    gen_cfg["maxOutputTokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
 
     QJsonObject req;
     req["contents"] = contents;
@@ -1369,7 +1369,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                     fu_body["contents"] = fu_contents;
                     QJsonObject gen_cfg;
                     // Temperature intentionally omitted — Gemini default.
-                    gen_cfg["maxOutputTokens"] = resolved_max_tokens();
+                    gen_cfg["maxOutputTokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
                     fu_body["generationConfig"] = gen_cfg;
                     if (!system_prompt_.isEmpty())
                         fu_body["systemInstruction"] =
