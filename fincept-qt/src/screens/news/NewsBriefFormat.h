@@ -22,9 +22,10 @@
 namespace fincept::screens::brief {
 
 /// Separates the top summary from the per-category detail in a model brief.
-/// Both prompts are told to emit this on its own line. When it is absent —
-/// an older cached brief, or a model that ignored the instruction — the whole
-/// text is treated as the summary and the detail section stays empty.
+/// Both prompts are told to emit this on its own line. When it is absent — an
+/// older cached brief, or a model that ignored the instruction — split() falls
+/// back to the first "### NAME" section, because the category half identifies
+/// itself and does not actually need the sentinel.
 inline constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
 
 /// Collapses repeated "### NAME" sections in the per-category half of a brief.
@@ -109,6 +110,47 @@ inline QPair<QString, QString> split(const QString& text) {
     if (marker >= 0) {
         return {text.left(marker).trimmed(),
                 merge_duplicate_sections(text.mid(marker + kCategoryMarker.size()).trimmed())};
+    }
+
+    // No marker, but the category half is self-identifying: it is the run of
+    // "### NAME" sections at the end. Split there instead of giving up.
+    //
+    // Depending on a model to echo an exact sentinel is the fragile part of
+    // this design. qwen3.5 writes the category sections correctly and simply
+    // omits the marker, and the all-or-nothing split then rendered the whole
+    // brief as one blob in the summary pane with an empty category pane —
+    // exactly the "single paragraph, two categories" regression. The structure
+    // is recoverable without the sentinel, so recover it.
+    //
+    // Anchored on the FIRST heading that is followed only by heading/bullet/
+    // blank lines, so a "### " inside the summary body cannot split it early.
+    {
+        const QStringList lines = text.split(QLatin1Char('\n'));
+        int first_heading = -1;
+        for (int i = 0; i < lines.size(); ++i) {
+            const QString t = lines.at(i).trimmed();
+            if (!t.startsWith(QLatin1String("###")) || t.mid(3).trimmed().isEmpty())
+                continue;
+            bool tail_is_sections = true;
+            for (int j = i + 1; j < lines.size(); ++j) {
+                const QString u = lines.at(j).trimmed();
+                if (u.isEmpty() || u.startsWith(QLatin1Char('#')) || u.startsWith(QLatin1Char('-'))
+                    || u.startsWith(QLatin1Char('*')) || u.startsWith(QLatin1Char('•')))
+                    continue;
+                tail_is_sections = false;
+                break;
+            }
+            if (tail_is_sections) {
+                first_heading = i;
+                break;
+            }
+        }
+        if (first_heading > 0) {
+            const QString head = lines.mid(0, first_heading).join(QLatin1Char('\n')).trimmed();
+            const QString tail = lines.mid(first_heading).join(QLatin1Char('\n')).trimmed();
+            if (!head.isEmpty() && !tail.isEmpty())
+                return {head, merge_duplicate_sections(tail)};
+        }
     }
 
     // No complete marker. If the text ends with a prefix of one, trim it.

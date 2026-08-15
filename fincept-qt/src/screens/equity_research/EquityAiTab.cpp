@@ -391,9 +391,14 @@ void EquityAiTab::build_ui() {
     ctl->addWidget(run_btn_);
 
     auto_chk_ = new QCheckBox(QStringLiteral("Auto-forecast daily"));
-    auto_chk_->setChecked(QSettings().value(QStringLiteral("equity_ai/auto_forecast"), true).toBool());
-    auto_chk_->setToolTip(QStringLiteral("Record one forecast per day for the stock you're viewing, "
-                                         "so the track record builds over time."));
+    // OFF by default. On, merely opening a symbol spent a model call without
+    // the user asking for one — invisible on a local engine, but a metered
+    // provider pays per stock viewed, and the forecast is a deliberate action
+    // rather than a side effect of browsing. Run is one click away.
+    auto_chk_->setChecked(QSettings().value(QStringLiteral("equity_ai/auto_forecast"), false).toBool());
+    auto_chk_->setToolTip(QStringLiteral("Automatically record one forecast per day for each stock "
+                                         "you view. Off by default — viewing a stock otherwise costs "
+                                         "a model call you did not ask for."));
     connect(auto_chk_, &QCheckBox::toggled, this, [this](bool on) {
         QSettings().setValue(QStringLiteral("equity_ai/auto_forecast"), on);
         if (on) maybe_auto_forecast();
