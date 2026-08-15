@@ -211,6 +211,14 @@ void AITutorPanel::send_user_message(const QString& text) {
     // so a destroyed panel (e.g. user closes the tab mid-response) doesn't
     // dereference dead memory.
     QPointer<AITutorPanel> guard(this);
+    fincept::ai_chat::PersonaScope persona;
+    {
+        const auto target = fincept::ai_chat::LlmService::instance().scope_for_role(QStringLiteral("knowledge"));
+        persona.provider = target.provider;
+        persona.model = target.model;
+        persona.api_key = target.api_key;
+        persona.base_url = target.base_url;
+    }
     svc.chat_streaming(
         text, hist,
         [guard](const QString& chunk, bool done) {

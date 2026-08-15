@@ -43,8 +43,9 @@ inline const QVector<AiRole>& ai_roles() {
         {QStringLiteral("equity_research"), QStringLiteral("Equity research"),
          QStringLiteral("Company analysis in the Equity Research screen. "
                         "Favours reasoning quality over latency.")},
-        {QStringLiteral("portfolio"), QStringLiteral("Portfolio insights"),
-         QStringLiteral("Commentary on holdings and performance.")},
+        // "portfolio" deliberately absent: PortfolioInsightsPanel makes no LLM
+        // call, so the row would be a control that changes nothing. Add it back
+        // together with a consumer, not before.
         {QStringLiteral("knowledge"), QStringLiteral("AI tutor"),
          QStringLiteral("Explanations in the Knowledge screen.")},
         {QStringLiteral("ai_quant_lab"), QStringLiteral("Quant lab"),

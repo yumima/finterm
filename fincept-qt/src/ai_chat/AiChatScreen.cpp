@@ -1114,7 +1114,22 @@ void AiChatScreen::on_send() {
     ai_chat::PersonaScope persona;
     if (const auto* p = ai_chat::find_persona(active_persona_id_))
         persona = {p->system_prompt, p->tool_globs, true};
-    const QString provider = ai_chat::LlmService::instance().active_provider();
+    // The "Chat" role. Unbound it yields an empty target and this pane keeps
+    // using the configured default exactly as before — but bound, it now
+    // actually takes effect. Previously the row existed in Settings and
+    // changing it did nothing, because this pane only ever read the default.
+    {
+        const auto target = ai_chat::LlmService::instance().scope_for_role(QStringLiteral("ai_chat"));
+        persona.provider = target.provider;
+        persona.model = target.model;
+        persona.api_key = target.api_key;
+        persona.base_url = target.base_url;
+    }
+    // Streaming support follows the EFFECTIVE provider: a role bound elsewhere
+    // may stream when the default does not, and vice versa.
+    const QString provider = persona.provider.isEmpty()
+                                 ? ai_chat::LlmService::instance().active_provider()
+                                 : persona.provider;
     if (ai_chat::provider_supports_streaming(provider)) {
         QPointer<AiChatScreen> self = this;
         auto first_chunk = std::make_shared<bool>(true);

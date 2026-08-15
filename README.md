@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b6a67f9b6`](https://github.com/yumima/finterm/commit/b6a67f9b6) Gemini fallbacks: newest first, and correct the quota note
 - [`7b62f690d`](https://github.com/yumima/finterm/commit/7b62f690d) Gemini: honour per-request use_tools, and never ship an invalid schema
 - [`f2ab5b72a`](https://github.com/yumima/finterm/commit/f2ab5b72a) Verify a provider actually serves the model before trusting it
 - [`a1aadd5a3`](https://github.com/yumima/finterm/commit/a1aadd5a3) AI settings: bind roles to providers, and one place to configure them

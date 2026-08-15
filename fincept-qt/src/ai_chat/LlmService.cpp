@@ -930,9 +930,14 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
     }
     if (result.status == 429) {
         // Make the one error the user can actually act on say what to do.
-        result.error = QString("HTTP 429: rate/quota limit reached for this provider. "
-                               "On Gemini's free tier this resets within a minute (per-minute cap) "
-                               "or at midnight Pacific (daily cap). Original: %1")
+        // Measured, not assumed: 3.7-flash returned RESOURCE_EXHAUSTED in the
+        // morning and answered again the same evening, so the free allowance
+        // is a ROLLING window metered per model — an earlier version of this
+        // message promised a midnight-Pacific reset that does not happen.
+        result.error = QString("HTTP 429: quota exhausted for this model. Gemini's free tier "
+                               "meters each model separately on a rolling window, so a smaller "
+                               "model on the same key usually still works — or bind this role to "
+                               "a local provider in Settings -> AI Config -> Roles. Original: %1")
                            .arg(result.error);
     }
     return result;

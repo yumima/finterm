@@ -142,8 +142,17 @@ void InlineCompletionController::on_idle_timeout() {
             "Stop at the end of a sentence or %1 characters.\n\n%2")
                                    .arg(kMaxCompletionChars)
                                    .arg(context_tail);
+        // Fires as the user types, so this is the role most worth pointing at a
+        // cheap local model — it was the one paying the default provider's
+        // per-request cost on every keystroke pause.
+        ai_chat::PersonaScope persona;
+        const auto target = ai_chat::LlmService::instance().scope_for_role(QStringLiteral("completion"));
+        persona.provider = target.provider;
+        persona.model = target.model;
+        persona.api_key = target.api_key;
+        persona.base_url = target.base_url;
         return ai_chat::LlmService::instance().chat(
-            prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false);
+            prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false, persona);
     });
     watcher_->setFuture(future);
 }

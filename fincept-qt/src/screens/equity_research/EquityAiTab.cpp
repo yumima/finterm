@@ -749,6 +749,13 @@ void EquityAiTab::send_chat() {
 
     fincept::ai_chat::PersonaScope persona;
     persona.think = false;  // snappy answers; the chat is conversational, not a reasoning task
+    {
+        const auto target = fincept::ai_chat::LlmService::instance().scope_for_role(QStringLiteral("equity_research"));
+        persona.provider = target.provider;
+        persona.model = target.model;
+        persona.api_key = target.api_key;
+        persona.base_url = target.base_url;
+    }
 
     const quint64 epoch = ++chat_epoch_;
     auto acc = std::make_shared<QString>();
