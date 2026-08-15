@@ -23,19 +23,40 @@ namespace fincept::ai_chat {
 
 // ── Provider helpers ──────────────────────────────────────────────────────────
 
+/// True for the local gateway, under either name.
+///
+/// "ollama" was the original id and is wrong: hearth is the provider — the
+/// OpenAI-compatible gateway on 127.0.0.1:11435 — and Ollama is one engine it
+/// drives behind that. Calling the provider "ollama" made the Models tab read
+/// as though finterm talked to Ollama directly, and cost a real bug when a
+/// model field was filled in with "hearth" because that is what the provider
+/// actually is.
+///
+/// "hearth" is canonical from here; "ollama" stays accepted so existing config
+/// rows, saved profiles and any path still using the old name keep resolving.
+inline bool is_hearth_provider(const QString& provider) {
+    const QString p = provider.toLower();
+    return p == QStringLiteral("hearth") || p == QStringLiteral("ollama");
+}
+
+/// Canonical id for storage and display.
+inline QString canonical_provider(const QString& provider) {
+    return is_hearth_provider(provider) ? QStringLiteral("hearth") : provider.toLower();
+}
+
 inline bool provider_supports_streaming(const QString& provider) {
     return provider == "openai" || provider == "anthropic" || provider == "gemini" || provider == "google" ||
            provider == "groq" || provider == "deepseek" || provider == "openrouter" || provider == "minimax" ||
-           provider == "kimi" || provider == "ollama" || provider == "xai" || provider == "fincept";
+           provider == "kimi" || is_hearth_provider(provider) || provider == "xai" || provider == "fincept";
 }
 
 inline bool provider_requires_api_key(const QString& provider) {
-    return provider != "ollama" && provider != "fincept";
+    return !is_hearth_provider(provider) && provider != "fincept";
 }
 
 /// Map a provider string to its target agent runtime (R1, R3).
 ///   "anthropic" → "anthropic"     (Claude Agent SDK path)
-///   "ollama"    → "local"         (minimal OpenAI-compatible loop)
+///   "hearth"/"ollama" → "local"         (minimal OpenAI-compatible loop)
 ///   anything else → "external"    (dormant adapters per R2; legacy
 ///                                  config rows continue to load but
 ///                                  no agent dispatch is wired)
@@ -43,7 +64,7 @@ inline QString runtime_for_provider(const QString& provider) {
     const QString p = provider.toLower();
     if (p == "anthropic")
         return QStringLiteral("anthropic");
-    if (p == "ollama")
+    if (is_hearth_provider(p))
         return QStringLiteral("local");
     return QStringLiteral("external");
 }

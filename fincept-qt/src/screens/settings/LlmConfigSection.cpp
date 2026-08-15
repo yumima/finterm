@@ -44,7 +44,7 @@ static constexpr const char* TAG = "LlmConfigSection";
 // unless hearth itself has a role bound to a cloud backend.
 // "fincept" was retired in R17.
 const QStringList LlmConfigSection::KNOWN_PROVIDERS = {
-    "ollama",     // local — hearth gateway on 127.0.0.1:11435 (role aliases)
+    "hearth",     // local — the gateway on 127.0.0.1:11435 (role aliases)
     "anthropic",  // claude-agent-sdk runtime
     "gemini", "openai", "openrouter", "groq", "deepseek", "xai", "kimi", "minimax",
 };
@@ -67,7 +67,7 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
         return "https://api.minimax.io"; // root; LlmService appends /v1/...
     if (p == "kimi")
         return {}; // defaults to https://api.moonshot.ai
-    if (p == "ollama")
+    if (ai_chat::is_hearth_provider(p))
         return "http://127.0.0.1:11435"; // hearth's default loopback (no /v1 — LlmService appends it)
     if (p == "xai")
         return {};
@@ -115,7 +115,7 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
                 "moonshot-v1-8k-vision-preview",
                 "moonshot-v1-32k-vision-preview",
                 "moonshot-v1-128k-vision-preview"};
-    if (p == "ollama")
+    if (ai_chat::is_hearth_provider(p))
         // Role aliases (hearth resolves these) first, then concrete model ids.
         return {"primary_chat", "fast_chat", "coding", "embedding",
                 "qwen2.5:14b-instruct-q4_K_M", "qwen2.5:7b-instruct-q4_K_M",
@@ -848,7 +848,7 @@ void LlmConfigSection::on_save_provider() {
     cfg.tools_enabled = tools_check_->isChecked();
 
     // Basic validation
-    if (provider != "ollama" && cfg.api_key.isEmpty()) {
+    if (!ai_chat::is_hearth_provider(provider) && cfg.api_key.isEmpty()) {
         show_status("API key is required for " + provider, true);
         return;
     }
@@ -965,7 +965,7 @@ void LlmConfigSection::on_test_connection() {
         return;
     }
 
-    if (provider != "ollama") {
+    if (!ai_chat::is_hearth_provider(provider)) {
         if (api_key_edit_->text().trimmed().isEmpty()) {
             show_status("API key required for test", true);
             return;
@@ -1008,7 +1008,7 @@ void LlmConfigSection::on_fetch_models() {
         return;
     }
 
-    if (provider != "ollama") {
+    if (!ai_chat::is_hearth_provider(provider)) {
         if (api_key_edit_->text().trimmed().isEmpty()) {
             show_status("Enter API key first, then fetch models", true);
             return;

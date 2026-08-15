@@ -215,7 +215,7 @@ void LlmService::ensure_config() const {
         // config (loaded above) overrides. resolve() is deterministic and
         // I/O-free, so it's safe to call under this lock / on the GUI thread.
         const auto engine = HearthService::instance().resolve();
-        provider_ = "ollama";
+        provider_ = "hearth";
         base_url_ = engine.base_url;
         // With hearth, address the role alias and let the engine pick the
         // concrete model; otherwise a sensible default model name.
@@ -462,7 +462,7 @@ QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
         return "https://api.minimax.io/v1/chat/completions";
     if (p == "kimi")
         return "https://api.moonshot.ai/v1/chat/completions";
-    if (p == "ollama")
+    if (is_hearth_provider(p))
         return "http://localhost:11434/v1/chat/completions";
     if (p == "xai")
         return "https://api.x.ai/v1/chat/completions";
@@ -2239,7 +2239,7 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return "https://api.deepseek.com/models";
     if (p == "openrouter")
         return "https://openrouter.ai/api/v1/models";
-    if (p == "ollama") {
+    if (is_hearth_provider(p)) {
         QString base = base_url.isEmpty() ? "http://localhost:11434" : base_url;
         if (base.endsWith('/'))
             base.chop(1);
@@ -2267,7 +2267,7 @@ QMap<QString, QString> LlmService::get_models_headers(const QString& provider, c
         // Key is in URL query param
         if (!api_key.isEmpty())
             h["x-goog-api-key"] = api_key;
-    } else if (p == "ollama") {
+    } else if (is_hearth_provider(p)) {
         // No auth needed
     } else if (p == "fincept") {
         // Resolve API key from session (same logic as ensure_config)
@@ -2319,7 +2319,7 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
             if (!name.isEmpty())
                 models.append(name);
         }
-    } else if (p == "ollama") {
+    } else if (is_hearth_provider(p)) {
         // We fetch /v1/models, which returns the OpenAI shape
         // {"data":[{"id":"..."}]} (hearth and Ollama's own /v1 endpoint both
         // serve this). Parse that first; fall back to Ollama's native

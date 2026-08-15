@@ -144,6 +144,8 @@ const CatalogEntry kCatalog[] = {
     // which defaults to 4096 unless overridden. We send max_tokens via the
     // OpenAI-compat shim; pick a value that won't overflow num_ctx for a
     // typical local setup.
+    // Both names: "hearth" is canonical, "ollama" still appears in older rows.
+    {"hearth", "*", 4096},
     {"ollama", "*", 4096},
 
     // ── Fincept (proxies upstream) ──────────────────────────────────────
