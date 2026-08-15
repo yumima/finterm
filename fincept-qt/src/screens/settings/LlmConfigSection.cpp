@@ -83,15 +83,15 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
         return {"claude-sonnet-4-5-20250514", "claude-opus-4-5", "claude-3-5-sonnet-20241022",
                 "claude-3-haiku-20240307"};
     if (p == "gemini")
-        // Free-tier models. 3.5-flash leads deliberately, not 3.7: the free
-        // daily allowance is per-model, and 3.7 (Google's flagship Flash) has
-        // a far smaller one — measured here, 3.7 returned RESOURCE_EXHAUSTED
-        // while 3.5 on the same key kept answering. 3.7 is still listed for
-        // when its quota is available. Pro variants are preview/paid, and
-        // 2.5-flash now 404s ("no longer available"), so neither is listed.
-        // Offline fallbacks only — "Fetch models" lists what's live.
-        return {"gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash",
-                "gemini-3.7-flash"};
+        // Newest first. The free allowance is metered PER MODEL, and 3.7
+        // (Google's flagship Flash) has a smaller one — it returned
+        // RESOURCE_EXHAUSTED here while 3.5 on the same key kept answering,
+        // then recovered the same day, so the window is rolling rather than a
+        // calendar-day reset. 3.5 is the fallback when 3.7 runs dry. Pro
+        // variants are preview/paid and 2.5-flash now 404s, so neither is
+        // listed. Offline fallbacks only — "Fetch models" lists what's live.
+        return {"gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
+                "gemini-3.5-flash-lite"};
     if (p == "groq")
         return {"llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"};
     if (p == "deepseek")
