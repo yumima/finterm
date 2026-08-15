@@ -801,7 +801,24 @@ void EquityAiTab::send_chat() {
                 }
             }, Qt::QueuedConnection);
         },
-        /*use_tools=*/false, persona);
+        /*use_tools=*/false, persona,
+        // Streaming delivers CHUNKS; a failed request produces none, so relying
+        // on emptiness alone rendered "(No answer came back)" and discarded the
+        // reason. on_done carries the LlmResponse — a 429 or a 400 now reaches
+        // the user and the log instead of dying here.
+        [self, epoch, reply_idx](fincept::ai_chat::LlmResponse resp) {
+            if (!self || resp.success || resp.error.isEmpty())
+                return;
+            const QString err = resp.error;
+            QMetaObject::invokeMethod(self.data(), [self, err, epoch, reply_idx]() {
+                if (!self || epoch != self->chat_epoch_) return;
+                LOG_WARN("EquityAiTab", "AI chat failed: " + err);
+                if (reply_idx < self->chat_turns_.size()) {
+                    self->chat_turns_[reply_idx].second = QStringLiteral("(Request failed — %1)").arg(err);
+                    self->render_chat();
+                }
+            }, Qt::QueuedConnection);
+        });
 }
 
 void EquityAiTab::wire_audio() {
@@ -1052,7 +1069,23 @@ void EquityAiTab::run_forecast(bool automatic) {
                 self->refresh_track_record();
             }, Qt::QueuedConnection);
         },
-        /*use_tools=*/false, persona);
+        /*use_tools=*/false, persona,
+        // Same reason as the chat path: without on_done a failed forecast shows
+        // "No structured forecast returned", blaming the model's output shape
+        // for what is actually a transport or quota error.
+        [self, epoch](fincept::ai_chat::LlmResponse resp) {
+            if (!self || resp.success || resp.error.isEmpty())
+                return;
+            const QString err = resp.error;
+            QMetaObject::invokeMethod(self.data(), [self, err, epoch]() {
+                if (!self || epoch != self->forecast_epoch_) return;
+                LOG_WARN("EquityAiTab", "AI forecast failed: " + err);
+                self->forecasting_ = false;
+                if (self->think_timer_) self->think_timer_->stop();
+                self->run_btn_->setEnabled(true);
+                self->status_lbl_->setText(QStringLiteral("Forecast failed — %1").arg(err));
+            }, Qt::QueuedConnection);
+        });
 }
 
 void EquityAiTab::resolve_due() {
