@@ -1,7 +1,7 @@
 # PRE-IPO / Private Equity Tab — Implementation Plan
 
 **Status:** Planning
-**Priority:** 3 (after KNOWLEDGE and POWER TRADER)
+**Priority:** 3 (after KNOWLEDGE)
 **Estimated effort:** 6–9 weeks
 **Screen ID:** `pre_ipo`
 
@@ -380,7 +380,6 @@ Categories:
 ### Phase 3 — Intelligence Layer (Weeks 7–9)
 
 - [ ] Investor graph — cross-reference VCs with 13F data (public fund holdings)
-- [ ] Congressional cross-reference — link to POWER TRADER data (which members hold PE positions)
 - [ ] AI valuation narrative — "Based on comps and last round, implied range is $X–$Y at listing"
 - [ ] Alerts — notify on new Form D, S-1, secondary price move >10%
 - [ ] Mirror/track investor — "Show me all Sequoia portfolio companies"
@@ -409,7 +408,6 @@ dock_router_->register_factory("pre_ipo", [this]() {
 **FKeyBar addition:** Add `PRE-IPO` tab with screen ID `pre_ipo` at position after MARKETS or before PORTFOLIO.
 
 **Cross-screen links:**
-- From POWER TRADER: "This senator holds private equity in [company] → Open in PRE-IPO"
 - From MARKETS: When a recent IPO is viewed, "Was tracked in PRE-IPO pipeline →"
 - From KNOWLEDGE: `analyze-a-spac` playbook links to PRE-IPO screen
 

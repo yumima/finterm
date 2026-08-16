@@ -99,7 +99,7 @@ filings, add the **financial-datasets** key:
 → enter key**.  Quant Lab + quant_critic automatically pick it
 up via the `int__fd_*` tools.
 
-For real-time ticks (Power Trader), add **Finnhub** —
+For real-time ticks (Equity Research live quotes, Pre-IPO lockups), add **Finnhub** —
 **Settings → Credentials → Finnhub**.
 
 ## 6. Schedule a quant review

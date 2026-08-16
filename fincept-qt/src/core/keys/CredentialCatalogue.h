@@ -58,7 +58,7 @@ inline const QVector<CredentialDef>& catalogue() {
         {"COINGECKO_API_KEY", "Coingecko"},
         {"COINGLASS_API_KEY", "Coinglass"},
         {"COMTRADE_API_KEY", "Comtrade"},
-        {"CONGRESS_GOV_API_KEY", "Congress.gov (Power Trader)"},
+        {"CONGRESS_GOV_API_KEY", "Congress.gov (Gov Data)"},
         {"COPERNICUS_API_KEY", "Copernicus"},
         {"CROSSREF_API_KEY", "Crossref"},
         {"CROSSREF_EMAIL", "Crossref"},

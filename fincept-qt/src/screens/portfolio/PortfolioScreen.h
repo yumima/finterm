@@ -50,10 +50,15 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     void on_group_symbol_changed(const SymbolRef& ref) override;
     SymbolRef current_symbol() const override;
 
-    /// Open the BUY order ticket pre-filled with @p symbol. Used by external
-    /// callers (e.g. power-trader's "paper-buy the same") to drop the user
-    /// straight into the buy flow for a ticker; they still confirm portfolio,
-    /// quantity, and price — nothing is written until they accept.
+    /// Open the BUY order ticket pre-filled with @p symbol, dropping the user
+    /// straight into the buy flow for a ticker. They still confirm portfolio,
+    /// quantity and price — nothing is written until they accept.
+    ///
+    /// NO CALLERS at present. Its only one was Power Trader's "paper-buy the
+    /// same", removed with that screen. Kept because it is generic Portfolio
+    /// API rather than anything the deleted screen owned — any screen that
+    /// surfaces a ticker worth acting on wants exactly this — but it is
+    /// untested and unexercised until something calls it again.
     void open_buy_for(const QString& symbol);
 
   protected:

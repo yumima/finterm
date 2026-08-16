@@ -1064,8 +1064,6 @@ set(UI_SOURCES
     src/ui/components/ComponentBrowserDialog.cpp
     src/ui/components/LayoutHelpers.cpp
     src/ui/components/SectionHeader.cpp
-    src/ui/components/SignalTooltip.cpp
-    src/ui/components/EstTooltip.cpp
     src/ui/widgets/SearchBar.cpp
     src/ui/widgets/GeometricBackground.cpp
     src/ui/widgets/WorldMapWidget.cpp
@@ -1149,22 +1147,6 @@ set(SCREEN_SOURCES
     src/screens/knowledge/LiveDataPanel.cpp
     src/screens/knowledge/PeerChartPanel.cpp
     src/screens/knowledge/RailWidget.cpp
-    src/screens/power_trader/PowerTraderScreen.cpp
-    src/screens/power_trader/PowerTraderService.cpp
-    src/screens/power_trader/PositionReplay.cpp
-    src/screens/power_trader/DataSourceDialog.cpp
-    src/screens/power_trader/LeaderboardPanel.cpp
-    src/screens/power_trader/TradesFeedPanel.cpp
-    src/screens/power_trader/OverviewPanel.cpp
-    src/screens/power_trader/RankingsPanel.cpp
-    src/screens/power_trader/MemberProfilePanel.cpp
-    src/screens/power_trader/TradeActionCard.cpp
-    src/screens/power_trader/CommitteePanel.cpp
-    src/screens/power_trader/PartyPanel.cpp
-    src/screens/power_trader/InsiderWatchPanel.cpp
-    src/screens/power_trader/PracticePanel.cpp
-    src/screens/power_trader/SignalBuilderPanel.cpp
-    src/screens/power_trader/CompareView.cpp
     src/screens/file_manager/FileManagerScreen.cpp
     src/screens/relationship_map/RelationshipMapScreen.cpp
     src/screens/relationship_map/RelationshipGraphScene.cpp
@@ -1561,22 +1543,6 @@ set_source_files_properties(
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
     src/services/pre_ipo/PreIpoService.cpp
-    src/screens/power_trader/PowerTraderScreen.cpp
-    src/screens/power_trader/PowerTraderService.cpp
-    src/screens/power_trader/PositionReplay.cpp
-    src/screens/power_trader/DataSourceDialog.cpp
-    src/screens/power_trader/LeaderboardPanel.cpp
-    src/screens/power_trader/TradesFeedPanel.cpp
-    src/screens/power_trader/OverviewPanel.cpp
-    src/screens/power_trader/RankingsPanel.cpp
-    src/screens/power_trader/MemberProfilePanel.cpp
-    src/screens/power_trader/TradeActionCard.cpp
-    src/screens/power_trader/CommitteePanel.cpp
-    src/screens/power_trader/PartyPanel.cpp
-    src/screens/power_trader/InsiderWatchPanel.cpp
-    src/screens/power_trader/PracticePanel.cpp
-    src/screens/power_trader/SignalBuilderPanel.cpp
-    src/screens/power_trader/CompareView.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/ForgotPasswordScreen.cpp
     src/screens/auth/LockScreen.cpp

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`11366ace2`](https://github.com/yumima/finterm/commit/11366ace2) Put the category list in one place, and split the headings the model merges
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
@@ -64,7 +65,6 @@ can't promise:
 - **Portfolio** — multi-account holdings, performance chart, heatmap, blotter, extended-hours sub-view, and CSV/JSON export + JSON import from the selector dropdown.
 - **Equity Research** — per-ticker dashboard: financials, analyst targets, technicals, peers, news, sentiment. Chart adds log scale, volume, SMA, earnings markers, custom date ranges, saved per-ticker views, keyboard shortcuts, and a multi-symbol comparison overlay with hover prices. Live tick push via Finnhub WebSocket when configured.
 - **Futures** — multi-asset-class watchlist with heatmap, term structure, spreads, settlements, and continuous charts. CHINA commodities via akshare with pre-warm + 60 s cache.
-- **Power Trader** — STOCK Act congressional trading analytics with member drawers, signal scores, and side-by-side compare.
 - **Pre-IPO** — private-market cockpit fed by public SEC EDGAR sources (Form D, S-1, mutual-fund N-PORT marks): picks, screener, company dossiers, IPO pipeline, and a LOCKUPS lens for post-IPO supply-surge signals (Finnhub).
 - **Knowledge** — markets and quant curriculum with practice tools, formula calculators, and an embedded AI tutor. The quant catalogue ships 47 strategy entries (FX, factor, FI, vol, dispersion, macro, …) with intuition, math, and citations.
 - **Live video** — embedded Bloomberg / CNBC HLS streams with pause/play, auto-pause on terminal lock, and user-pickable max resolution (480/720/1080).
@@ -212,4 +212,4 @@ Use the PowerShell sibling **`finterm.ps1`** — same commands as `finterm.sh`, 
 
 finterm is free, open-source software released under **AGPL-3.0** (see [`LICENSE`](LICENSE)) — free to download, use, modify, and redistribute under that license. It is a community project, not a company product.
 
-finterm is a fully-local financial terminal: no email signup, no OTP, no paywall, no SaaS round-trip. It uses a local username + PIN multi-user picker and ships the FUTURES / POWER TRADER / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed with PTF / TL;DR, a 47-entry quant strategy catalogue, and the various local-first conveniences described above.
+finterm is a fully-local financial terminal: no email signup, no OTP, no paywall, no SaaS round-trip. It uses a local username + PIN multi-user picker and ships the FUTURES / KNOWLEDGE (with QUANT) tabs, the after-hours Portfolio heatmap mode, the 2-column News feed with PTF / TL;DR, a 47-entry quant strategy catalogue, and the various local-first conveniences described above.

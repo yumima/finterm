@@ -319,7 +319,7 @@ AddAssetDialog::AddAssetDialog(QWidget* parent, const QString& prefill_symbol) :
         schedule_search(q);
     });
 
-    // Optional prefill (e.g. power-trader "paper-buy the same"). The selecting_
+    // Optional prefill from PortfolioScreen::open_buy_for(). The selecting_
     // guard suppresses the search dropdown so the dialog opens clean; focus
     // moves to quantity since the ticker is already chosen.
     if (!prefill_symbol.isEmpty()) {

@@ -62,7 +62,6 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"quantlib", "QuantLib"},
         {"ai_quant_lab", "AI Quant Lab"},
         {"alpha_arena", "Alpha Arena"},
-        {"power_trader", "Power Trader"},
         {"agent_config", "Agent Config"},
         {"mcp_servers", "MCP Servers"},
         {"node_editor", "Node Editor"},

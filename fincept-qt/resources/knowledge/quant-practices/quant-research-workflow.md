@@ -112,7 +112,6 @@ Productive practices share these habits:
 - **Backtesting** — historical simulation with IS/OOS, walk-forward, regime breakdowns.
 - **Algo Trading** — strategy builder, paper-trade deployment, performance attribution.
 - **Notes** — durable research log; keep hypotheses + decisions here.
-- **Power Trader** — congressional disclosure dataset, useful for backtests of signal-from-disclosure strategies.
 
 ## See also
 

@@ -509,19 +509,6 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(extended_hours PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
-# ── Power Trader position replay ─────────────────────────────────────────────
-# The average-cost arithmetic every return on the screen rests on. Previously
-# untestable (buried in a service singleton needing a populated price history),
-# and it discarded the gain on every fully-closed position.
-add_executable(test_position_replay
-    screens/test_position_replay.cpp
-    ../src/screens/power_trader/PositionReplay.cpp
-)
-target_include_directories(test_position_replay PRIVATE ../src)
-target_link_libraries(test_position_replay PRIVATE Qt6::Core Qt6::Test)
-set_target_properties(test_position_replay PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
-add_test(NAME position_replay COMMAND test_position_replay)
-
 # ── IPO Watch pure parse/format ──────────────────────────────────────────────
 # Both helpers have shipped a wrong-but-plausible number: a half-parsed price
 # range reported as a confident low side, and a share count run through the
@@ -561,19 +548,6 @@ target_include_directories(test_news_brief_format PRIVATE ../src)
 target_link_libraries(test_news_brief_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_news_brief_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME news_brief_format COMMAND test_news_brief_format)
-
-# ── Committee oversight matching (Power Trader) ──────────────────────────────
-# committee_relevance is the biggest single input to every conflict/insider
-# number on the screen, and it was wrong in both directions: the reverse map
-# kept only the first committee per sector (so a Commerce member trading NVDA
-# scored no overlap), and matching was an 8-char prefix substring test (so
-# Senate Energy matched House Energy & Commerce).
-if(Python3_Interpreter_FOUND)
-    add_test(
-        NAME committee_relevance
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_committee_relevance.py
-    )
-endif()
 
 # ── S-1 section slicing ──────────────────────────────────────────────────────
 # The slicer anchored on the FIRST heading occurrence, which in a real S-1 is

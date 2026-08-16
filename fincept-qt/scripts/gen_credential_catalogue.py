@@ -46,7 +46,7 @@ LABELS = {
     "BENZINGA_API_KEY": "Benzinga",
     "BLS_API_KEY": "BLS (Bureau of Labor Statistics)",
     "CENSUS_API_KEY": "US Census Bureau",
-    "CONGRESS_GOV_API_KEY": "Congress.gov (Power Trader)",
+    "CONGRESS_GOV_API_KEY": "Congress.gov (Gov Data)",
     "DATABENTO_API_KEY": "Databento",
     "EIA_API_KEY": "EIA (Energy Information Administration)",
     "FINNHUB_API_KEY": "Finnhub",

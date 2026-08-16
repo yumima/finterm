@@ -3275,8 +3275,9 @@ _CACHE_TTL = {
     "earnings_analysis": 900,
     # historical / news / search — medium
     "historical_period": 120, "news": 120, "search": 300,
-    # batched trade-date close history (power-trader real returns) — long: past
-    # daily closes don't change, so a 1h TTL avoids re-downloading wide ranges.
+    # batched close history over a date range — long: past daily closes don't
+    # change, so a 1h TTL avoids re-downloading wide ranges. No C++ caller
+    # since Power Trader was removed; kept as generic multi-symbol history.
     "batch_closes": 3600,
     # per-symbol raw closes for portfolio NAV backfill — same rationale.
     "portfolio_closes_history": 3600,

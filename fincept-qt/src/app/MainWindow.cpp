@@ -57,7 +57,6 @@
 #include "core/symbol/SymbolGroup.h"
 #include "core/symbol/SymbolRef.h"
 #include "screens/knowledge/KnowledgeScreen.h"
-#include "screens/power_trader/PowerTraderScreen.h"
 #include "screens/info/PrivacyScreen.h"
 #include "screens/info/TermsScreen.h"
 #include "screens/info/TrademarksScreen.h"
@@ -817,7 +816,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // conflicts with restoreState's layout.
     // Layout version: bump this whenever the dock layout format changes to
     // automatically discard stale/corrupt saved state from previous versions.
-    static constexpr int kDockLayoutVersion = 4;
+    // 5: Power Trader removed. A saved layout naming a screen that no longer
+    //    has a factory restores as an empty layout (ADS skips unknown dock
+    //    widgets and drops the area that ends up empty), and restoreState
+    //    still reports success — so without the bump, anyone whose last
+    //    session was Power Trader alone restarts into a blank window.
+    static constexpr int kDockLayoutVersion = 5;
     bool dock_restored = false;
 
     if (dock_manager_) {
@@ -832,11 +836,20 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 dock_router_->ensure_all_registered();
                 dock_restored = dock_manager_->restoreState(saved_dock);
 
-                // Sanity check: if restoreState produced an unreasonable number
-                // of visible dock areas (>6), the layout is likely corrupt.
-                if (dock_restored && dock_manager_->openedDockAreas().size() > 6) {
-                    LOG_WARN("MainWindow", QString("Dock layout corrupt: %1 open areas — resetting")
-                                               .arg(dock_manager_->openedDockAreas().size()));
+                // Sanity check: an unreasonable number of visible dock areas
+                // (>6) means the layout is likely corrupt.
+                //
+                // ZERO is the more important case and it is not corruption:
+                // ADS skips dock widgets it cannot resolve and drops any area
+                // left empty, then still returns true. So a layout naming only
+                // screens that have since been removed restores "successfully"
+                // as nothing at all, the !dock_restored fallback never fires,
+                // and the user gets a blank window. Version bumps handle the
+                // removals we know about; this handles the ones we forget.
+                const int areas = dock_manager_->openedDockAreas().size();
+                if (dock_restored && (areas > 6 || areas == 0)) {
+                    LOG_WARN("MainWindow", QString("Dock layout unusable: %1 open areas — resetting")
+                                               .arg(areas));
                     dock_restored = false;
                 }
             }
@@ -902,8 +915,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 if (dw && !dw->isClosed()) {
                     dw->raise();
                     dw->setAsCurrentTab();
+                    // Only sync the tab bar to a screen that actually came
+                    // back. Pointing it at a removed screen parks the
+                    // highlight on a tab that no longer exists, and
+                    // set_active early-returns on an unchanged id, so nothing
+                    // looks selected until the user navigates away.
+                    tab_bar_->set_active(last);
                 }
-                tab_bar_->set_active(last);
             }
         }
     } else {
@@ -1201,45 +1219,6 @@ void MainWindow::setup_dock_screens() {
                             SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     }
                     dock_router_->navigate(id);
-                });
-        return screen;
-    });
-
-    dock_router_->register_factory("power_trader", [this]() {
-        auto* screen = new power_trader::PowerTraderScreen;
-        connect(screen, &power_trader::PowerTraderScreen::navigate_to_screen, this,
-                [this](const QString& id, const QString& ticker) {
-                    if (!ticker.isEmpty())
-                        SymbolContext::instance().set_group_symbol(
-                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
-                    dock_router_->navigate(id);
-                    // Equity Research loads via the EventBus "load_symbol" event
-                    // (it ignores group-A broadcasts when its tab isn't linked).
-                    // Publish AFTER navigate() so the now-materialized screen's
-                    // subscription receives it — matching every other caller
-                    // (PortfolioBlotter, IpoWatchView, CommandBar, …).
-                    if (id == QLatin1String("equity_research") && !ticker.isEmpty())
-                        EventBus::instance().publish("equity_research.load_symbol",
-                                                     QVariantMap{{"symbol", ticker}});
-                });
-        // "Paper-buy the same": land on Portfolio with the symbol in context
-        // and pop its BUY ticket pre-filled with the ticker.
-        connect(screen, &power_trader::PowerTraderScreen::request_paper_buy, this,
-                [this](const QString& ticker) {
-                    if (ticker.isEmpty())
-                        return;
-                    SymbolContext::instance().set_group_symbol(
-                        SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
-                    dock_router_->navigate(QStringLiteral("portfolio"));
-                    if (auto* dw = dock_router_->find_dock_widget(QStringLiteral("portfolio"))) {
-                        if (QWidget* w = dw->widget()) {
-                            auto* ps = qobject_cast<screens::PortfolioScreen*>(w);
-                            if (!ps)
-                                ps = w->findChild<screens::PortfolioScreen*>();
-                            if (ps)
-                                ps->open_buy_for(ticker);
-                        }
-                    }
                 });
         return screen;
     });
