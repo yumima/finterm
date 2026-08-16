@@ -404,24 +404,41 @@ QJsonObject LlmService::profile_to_json(const ResolvedLlmProfile& p) {
 // Endpoint + headers
 // ============================================================================
 
-int LlmService::resolved_max_tokens() const {
+int LlmService::resolved_max_tokens(const PersonaScope& persona) const {
     // Called with mutex_ held by the caller (build_*_request paths).
     constexpr int kFallback = 8192;
-    const int catalog_cap = ModelCatalog::output_cap(provider_, model_);
+    // The cap belongs to the model this request targets, not to whatever the
+    // profile happens to be set to. A role bound across providers (news on a
+    // local 8k model while the profile points at a 64k hosted one) was being
+    // measured against the wrong entry, so its output was either clamped to a
+    // number the endpoint never agreed to or allowed past one it enforces.
+    const int catalog_cap = ModelCatalog::output_cap(eff_provider(persona), eff_model(persona));
 
-    // User-set value (loaded from llm_global_settings or per-profile).
-    // Treat <=0 as "unset — use model default".
-    if (max_tokens_ > 0) {
-        // User asked for a specific number — honour it but clamp to the
-        // model's published cap so we don't get a 400 from the API.
-        if (catalog_cap > 0 && max_tokens_ > catalog_cap)
+    // Per-call ceiling first, then the user's global setting (loaded from
+    // llm_global_settings or per-profile). <=0 means "unset — use the model
+    // default" for both. A role that asks for a 900-token brief means 900 even
+    // when the profile allows 8192; it is a ceiling the caller chose, not a
+    // preference to be overridden.
+    const int requested = persona.max_tokens > 0 ? persona.max_tokens : max_tokens_;
+    if (requested > 0) {
+        // Honour it, but clamp to the published cap so we don't get a 400.
+        if (catalog_cap > 0 && requested > catalog_cap)
             return catalog_cap;
-        return max_tokens_;
+        return requested;
     }
 
     if (catalog_cap > 0)
         return catalog_cap;
     return kFallback;
+}
+
+void LlmService::set_openai_max_tokens(QJsonObject& body, const PersonaScope& persona) const {
+    const QString p = eff_provider(persona);
+    const int mx = resolved_max_tokens(persona);
+    if (p == "openai" || p == "xai")
+        body["max_completion_tokens"] = mx;
+    else
+        body["max_tokens"] = mx;
 }
 
 QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
@@ -632,11 +649,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // the news brief's deliberate 900-token bound had never taken effect on the
     // local models it was written for, and a model that collapsed into
     // repetition ran to the full 4096/8192 budget instead of being cut off.
-    const int mx = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
-    if (eff_provider(persona) == "openai" || eff_provider(persona) == "xai")
-        req["max_completion_tokens"] = mx;
-    else
-        req["max_tokens"] = mx;
+    set_openai_max_tokens(req, persona);
     if (stream) {
         req["stream"] = true;
         // Streamed OpenAI / xAI responses omit usage unless we opt in
@@ -684,7 +697,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     QJsonObject req;
     req["model"] = eff_model(persona);
     req["messages"] = messages;
-    req["max_tokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
+    req["max_tokens"] = resolved_max_tokens(persona);
     // Temperature intentionally omitted — Anthropic defaults to 1.0.
     QString sys = system_prompt_;
     // Only the agentic chat (tools on) gets persona + ambient context — not a
@@ -814,7 +827,7 @@ QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user
 
     QJsonObject gen_cfg;
     // Temperature intentionally omitted — Gemini defaults to 1.0.
-    gen_cfg["maxOutputTokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
+    gen_cfg["maxOutputTokens"] = resolved_max_tokens(persona);
 
     QJsonObject req;
     req["contents"] = contents;
@@ -1284,7 +1297,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             QJsonObject fu;
             fu["model"] = eff_model(persona);
             fu["messages"] = loop_msgs;
-            fu["max_tokens"] = resolved_max_tokens();
+            fu["max_tokens"] = resolved_max_tokens(persona);
             // Temperature intentionally omitted — Anthropic default.
             if (!system_prompt_.isEmpty())
                 fu["system"] = system_prompt_;
@@ -1376,7 +1389,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                     fu_body["contents"] = fu_contents;
                     QJsonObject gen_cfg;
                     // Temperature intentionally omitted — Gemini default.
-                    gen_cfg["maxOutputTokens"] = persona.max_tokens > 0 ? persona.max_tokens : resolved_max_tokens();
+                    gen_cfg["maxOutputTokens"] = resolved_max_tokens(persona);
                     fu_body["generationConfig"] = gen_cfg;
                     if (!system_prompt_.isEmpty())
                         fu_body["systemInstruction"] =
@@ -1522,7 +1535,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
         // Temperature intentionally omitted — provider default.
-        fu["max_tokens"] = resolved_max_tokens();
+        set_openai_max_tokens(fu, persona);
 
         QJsonArray tools = mcp::McpService::instance().format_tools_for_openai(resolve_tool_globs(persona));
         if (!tools.isEmpty())
@@ -1598,7 +1611,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         QJsonObject fu;
         fu["model"] = eff_model(persona);
         fu["messages"] = loop_messages;
-        fu["max_tokens"] = resolved_max_tokens();
+        set_openai_max_tokens(fu, persona);
         // Deliberately omit the tools field so the model is forced to produce text.
 
         auto http = blocking_post(url, fu, headers);
@@ -1852,7 +1865,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
         follow_body["model"] = eff_model(persona);
         follow_body["messages"] = msgs;
-        follow_body["max_tokens"] = resolved_max_tokens();
+        follow_body["max_tokens"] = resolved_max_tokens(persona);
         // Temperature intentionally omitted — Anthropic default.
         if (!system_prompt_.isEmpty())
             follow_body["system"] = system_prompt_;
@@ -1874,7 +1887,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         follow_body["model"] = eff_model(persona);
         follow_body["messages"] = msgs;
         // Temperature intentionally omitted — provider default.
-        follow_body["max_tokens"] = resolved_max_tokens();
+        set_openai_max_tokens(follow_body, persona);
     }
 
     // No tools in follow-up to prevent infinite loop

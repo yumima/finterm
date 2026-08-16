@@ -549,6 +549,19 @@ target_link_libraries(test_degeneracy PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_degeneracy PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME degeneracy COMMAND test_degeneracy)
 
+# ── News brief formatting (TL;DR + DIGEST panes) ─────────────────────────────
+# Everything this covers failed silently: a '•'-bulleted brief lost its whole
+# BY CATEGORY pane because the fallback compared against a truncated character
+# literal, and a "### DEFENSE, CRYPTO" heading cost the breakdown a category
+# outright. Nothing logged; the pane simply held less than the model wrote.
+add_executable(test_news_brief_format
+    screens/test_news_brief_format.cpp
+)
+target_include_directories(test_news_brief_format PRIVATE ../src)
+target_link_libraries(test_news_brief_format PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_news_brief_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME news_brief_format COMMAND test_news_brief_format)
+
 # ── Committee oversight matching (Power Trader) ──────────────────────────────
 # committee_relevance is the biggest single input to every conflict/insider
 # number on the screen, and it was wrong in both directions: the reverse map

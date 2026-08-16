@@ -303,12 +303,29 @@ class LlmService : public QObject {
     QMap<QString, QString> get_headers(const PersonaScope& persona = {}) const;
 
     /// Resolve the max output tokens for a request. Order:
-    ///   1. user-set max_tokens (max_tokens_ > 0) → use it, but clamp to
-    ///      the model's published cap so we don't get a 400 from the API.
+    ///   1. the per-call ceiling from the role binding (persona.max_tokens),
+    ///      else the user-set global max_tokens_ → use it, but clamp to the
+    ///      model's published cap so we don't get a 400 from the API.
     ///   2. model's published cap from ModelCatalog.
     ///   3. conservative fallback (8192).
-    /// Called with mutex_ held.
-    int resolved_max_tokens() const;
+    ///
+    /// The cap is looked up for the model the request actually targets, which
+    /// is the persona's when a role binding overrode it. Called with mutex_
+    /// held. The default-constructed scope resolves to the global settings, so
+    /// persona-less callers (config logging, the legacy fincept endpoint) keep
+    /// their previous behaviour.
+    int resolved_max_tokens(const PersonaScope& persona = {}) const;
+
+    /// Write the output-token cap into an OpenAI-shaped request body under the
+    /// key that provider accepts.
+    ///
+    /// OpenAI and xAI deprecated `max_tokens`; gpt-5 and the o-series reject a
+    /// body that uses it. build_openai_request() knew that, but the three
+    /// tool-loop follow-up bodies wrote `max_tokens` unconditionally — so an
+    /// agentic chat on a gpt-5 profile 400'd on its first tool round while the
+    /// no-tools path worked. One helper so the next follow-up body cannot
+    /// reintroduce it. Called with mutex_ held.
+    void set_openai_max_tokens(QJsonObject& body, const PersonaScope& persona) const;
 
     // Synchronous HTTP helpers (use QNetworkAccessManager + QEventLoop)
     // Must be called from a background thread.

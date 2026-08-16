@@ -9,6 +9,7 @@
 #include "screens/news/NewsFeedPanel.h"
 #include "screens/news/NewsSidePanel.h"
 #include "screens/news/NewsTickerStrip.h"
+#include "services/news/NewsCategories.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
 #include "services/notifications/NotificationService.h"
@@ -294,8 +295,13 @@ void NewsScreen::connect_signals() {
             "'### NAME' headings with at most TWO one-line bullets each. Each category name "
             "may appear ONCE — never repeat a heading. One heading names exactly ONE "
             "category: '### DEFENSE' and '### CRYPTO' as separate sections, never "
-            "'### DEFENSE, CRYPTO'. Choose from "
-            "MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS.\n"
+            "'### DEFENSE, CRYPTO'. Choose from ")
+            // Shared with the TL;DR prompt and with the renderer that has to
+            // take a merged heading apart. This prompt carried its own copy and
+            // had already drifted out of step; a name the renderer does not
+            // recognise is one it cannot split, and nothing would have caught
+            // the next edit to one list but not the other.
+            + news::prompt_menu().join(QStringLiteral(", ")) + QStringLiteral(".\n"
             "Every bullet is ONE ordinary sentence of at most 30 words, punctuated and "
             "ending in a full stop — never an unpunctuated chain of noun phrases.\n"
             "RULES: every claim must come from a headline — invent no company, ticker "

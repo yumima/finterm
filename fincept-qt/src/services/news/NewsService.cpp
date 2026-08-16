@@ -1,6 +1,7 @@
 #include "services/news/NewsService.h"
 
 #include "services/news/NewsBriefCacheKey.h"
+#include "services/news/NewsCategories.h"
 
 #include "ai_chat/Degeneracy.h"
 #include "ai_chat/LlmService.h"
@@ -47,7 +48,10 @@ constexpr const char* kBriefModelRole = "fast_chat";
 // Bump when news_build_brief_prompt() changes in a way that alters output, so
 // entries cached under the previous prompt are not served for up to the
 // summary TTL. Currently: six categories over a 35-headline sample, one
-// category per heading, bullets capped at one punctuated sentence.
+// category per heading, bullets capped at one punctuated sentence. Still 3
+// after the move to NewsCategories.h: prompt_menu() holds the same names in the
+// same editorial order, so the generated prompt is byte-identical and bumping
+// would throw away every cached brief for a TTL in exchange for nothing.
 constexpr int kBriefPromptVersion = 3;
 // Only retry a collapsed brief when the first attempt came back inside this.
 // Slower than this and a second pass risks outliving the user's patience and
@@ -450,8 +454,12 @@ QString news_build_brief_prompt(const QString& headlines, const QString& portfol
          "'### DEFENSE, CRYPTO' — a combined heading loses a category from the breakdown. "
          "Only include categories "
          "the headlines actually cover, ordered by how much news there is. Draw from: "
-         "MARKETS, TECH, GEOPOLITICS, ENERGY, ECONOMIC, CRYPTO, DEFENSE, EARNINGS"
-      + QString(portfolio.isEmpty() ? "" : ", PORTFOLIO")
+         // Same vocabulary the renderer recognises. Asking the model for a name
+         // the renderer does not know means it cannot take a merged heading
+         // apart, so the two have to come from one place — but in editorial
+         // order, not the classifier's keyword-precedence order.
+      + news::prompt_menu().join(QStringLiteral(", "))
+      + QString(portfolio.isEmpty() ? "" : ", " + QString(news::kPortfolioCategory))
       + ". Give each bullet the specific company/sector and the concrete detail from the "
         "headline — this section is the detail the brief above compresses. Every bullet is "
         "ONE ordinary sentence of at most 30 words, punctuated and ending in a full stop. "
@@ -1091,31 +1099,14 @@ void NewsService::enrich_article(NewsArticle& article) {
     else if (article.priority == Priority::BREAKING || strength >= 3)
         article.impact = Impact::MEDIUM;
 
-    // Category refinement
-    if (text.contains("earnings") || text.contains("quarterly results") || text.contains("eps") ||
-        text.contains("guidance"))
-        article.category = "EARNINGS";
-    else if (text.contains("crypto") || text.contains("bitcoin") || text.contains("ethereum") ||
-             text.contains("blockchain"))
-        article.category = "CRYPTO";
-    else if (text.contains("missile") || text.contains("troops") || text.contains("pentagon") ||
-             text.contains("military"))
-        article.category = "DEFENSE";
-    else if (text.contains("fed ") || text.contains("federal reserve") || text.contains("inflation") ||
-             text.contains("gdp") || text.contains("interest rate") || text.contains("central bank"))
-        article.category = "ECONOMIC";
-    else if (text.contains("s&p 500") || text.contains("nasdaq") || text.contains("dow jones") ||
-             text.contains("stock market"))
-        article.category = "MARKETS";
-    else if (text.contains("energy") || text.contains("crude") || text.contains("opec") ||
-             text.contains("natural gas") || text.contains("oil price"))
-        article.category = "ENERGY";
-    else if (text.contains("tech") || text.contains(" ai ") || text.contains("artificial intelligence") ||
-             text.contains("semiconductor") || text.contains("startup"))
-        article.category = "TECH";
-    else if (text.contains("nato") || text.contains("ukraine") || text.contains("russia") || text.contains("china") ||
-             text.contains("gaza") || text.contains("sanctions") || text.contains("geopolit"))
-        article.category = "GEOPOLITICS";
+    // Category refinement. The keyword table lives in NewsCategories.h so the
+    // brief prompt and the brief renderer classify by the same rules this does
+    // — the renderer has to decide which category a bullet belongs to when the
+    // model merges two headings, and it would be guessing differently from the
+    // classifier if it carried its own copy. No match leaves the feed's own
+    // category in place, which is the behaviour the if-chain here had.
+    if (const QString cat = news::classify(text); !cat.isEmpty())
+        article.category = cat;
 
     // Extract tickers: uppercase 2-5 letter words
     static QRegularExpression ticker_re("\\b[A-Z]{2,5}\\b");

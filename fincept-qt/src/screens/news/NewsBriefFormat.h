@@ -10,9 +10,12 @@
 // Header-only and free of Qt widget headers, so a test can exercise it without
 // standing up either panel.
 
+#include "services/news/NewsCategories.h"
+
 #include <QHash>
 #include <QLatin1StringView>
 #include <QPair>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QStringView>
@@ -28,14 +31,34 @@ namespace fincept::screens::brief {
 /// itself and does not actually need the sentinel.
 inline constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
 
-/// Collapses repeated "### NAME" sections in the per-category half of a brief.
+/// Collapses repeated "### NAME" sections in the per-category half of a brief,
+/// and takes apart headings that name more than one category.
 ///
 /// The model is asked for one section per category, but it routinely emits the
 /// same heading two or three times — an observed brief had GEOPOLITICS, ENERGY
-/// and ECONOMIC each listed twice. A prompt cannot guarantee this; the render
-/// can. Bullets are merged under the FIRST occurrence of each heading,
-/// first-seen order is preserved, and byte-identical bullets are dropped (the
-/// model sometimes restates a line verbatim under its duplicate heading).
+/// and ECONOMIC each listed twice. It also merges two categories into one
+/// heading ("### DEFENSE, CRYPTO"), which costs the reader a whole section: the
+/// breakdown showed five names where the model had covered six. A prompt cannot
+/// guarantee either; the render can.
+///
+/// Bullets are merged under the FIRST occurrence of each heading, first-seen
+/// order is preserved, and byte-identical bullets are dropped (the model
+/// sometimes restates a line verbatim under its duplicate heading).
+///
+/// A merged heading is split into its named categories and each bullet is
+/// classified among just those names by the same keyword table that classified
+/// the headline it came from. Bullets no keyword claims go under the first
+/// name — a guess, but a bounded one.
+///
+/// The split only happens when it LOSES NOTHING. A name that ends up with no
+/// bullets could only be rendered as an empty section, which reads as "we
+/// looked and there was nothing" and is a claim the model never made — so
+/// rather than drop the name (which would make the split cost a category, the
+/// very failure it exists to fix) the heading is left exactly as the model
+/// wrote it. A name may go bullet-less only when it already has a section of
+/// its own elsewhere in the brief, because then nothing has disappeared. That
+/// case is the real prize: "### DEFENSE, CRYPTO" and a later "### CRYPTO" used
+/// to be two unrelated keys.
 ///
 /// Text before the first heading is passed through untouched, and input with
 /// no headings at all is returned unchanged.
@@ -44,30 +67,136 @@ inline QString merge_duplicate_sections(const QString& detail) {
         return detail;
 
     const QStringList lines = detail.split(QLatin1Char('\n'));
+
+    // "## " through "#### ", but never a lone '#': "#1 story" is ordinary
+    // bullet text and reading it as a heading would swallow the rest of the
+    // section. Tolerating the deeper levels means a model that varies the
+    // heading depth still gets deduplicated instead of silently splitting.
+    auto is_heading = [](const QString& trimmed) {
+        return trimmed.startsWith(QLatin1String("##")) && !trimmed.mid(2).trimmed().isEmpty();
+    };
+    auto heading_name = [](const QString& trimmed, int* hashes = nullptr) {
+        QString name = trimmed;
+        int n = 0;
+        while (name.startsWith(QLatin1Char('#'))) {
+            name.remove(0, 1);
+            ++n;
+        }
+        if (hashes)
+            *hashes = n;
+        return name.trimmed();
+    };
+
+    // Which of `named` would receive at least one bullet if this heading split.
+    // Reads the heading's own body without consuming it, so the decision can be
+    // made before any filing starts. The first name absorbs bullets no keyword
+    // claims, so it only counts when there is such a bullet to absorb.
+    auto claims_of = [&](int heading_index, const QStringList& named) {
+        const QSet<QString> allowed(named.cbegin(), named.cend());
+        QSet<QString> claimed;
+        for (int j = heading_index + 1; j < lines.size(); ++j) {
+            const QString t = lines.at(j).trimmed();
+            if (is_heading(t))
+                break;
+            if (t.isEmpty())
+                continue;
+            const QString c = news::classify(t.toLower(), allowed);
+            claimed.insert(c.isEmpty() ? named.first() : c);
+        }
+        return claimed;
+    };
+
+    // Every name that ends up owning a section somewhere in this brief. A
+    // merged heading may hand one of its own names no bullets only if the name
+    // is in here, because then nothing has disappeared from the breakdown.
+    //
+    // Computed as a fixpoint, not a single pass. Whether a merged heading gives
+    // its names sections depends on whether it splits, which depends on this
+    // set — so seeding it from single-name headings alone gets it wrong: two
+    // identical "### DEFENSE, CRYPTO" headings would see the first split and
+    // the second vetoed, rendering DEFENSE and CRYPTO *and* a third literal
+    // "### DEFENSE, CRYPTO", which is worse than the merged heading it was
+    // trying to repair. The set only grows, so this settles; a brief has a
+    // handful of headings and it settles in one or two rounds.
+    QList<QPair<int, QStringList>> merged; // heading index -> its names
+    QSet<QString> will_have_section;
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString t = lines.at(i).trimmed();
+        if (!is_heading(t))
+            continue;
+        const QStringList named = news::categories_in_heading(heading_name(t));
+        if (named.size() == 1)
+            will_have_section.insert(named.first());
+        else if (named.size() >= 2)
+            merged.append({i, named});
+    }
+    auto would_split = [&](int heading_index, const QStringList& named) {
+        const QSet<QString> claimed = claims_of(heading_index, named);
+        for (const QString& n : named) {
+            if (!claimed.contains(n) && !will_have_section.contains(n))
+                return false;
+        }
+        return true;
+    };
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const auto& [index, named] : merged) {
+            if (!would_split(index, named))
+                continue;
+            for (const QString& n : claims_of(index, named)) {
+                if (!will_have_section.contains(n)) {
+                    will_have_section.insert(n);
+                    grew = true;
+                }
+            }
+        }
+    }
+
     QString preamble;
     QStringList order;                 // heading keys, first-seen order
     QHash<QString, QString> display;   // key -> heading line as first written
     QHash<QString, QStringList> body;  // key -> accumulated body lines
 
-    QString current; // empty => still in the preamble
-    for (const QString& line : lines) {
+    QString current;         // empty => still in the preamble
+    QStringList split_names; // non-empty => `current` heading merged categories
+    QSet<QString> split_set; // same names, for classify()'s allow-list
+    QString split_hashes;    // the heading's own '#' run, reused for the parts
+
+    // Registers a section on first use. A split part comes through here only
+    // when a bullet actually lands in it; a part that gets none was already
+    // cleared by the fixpoint above as owning a section elsewhere, and that
+    // heading registers it.
+    auto ensure_section = [&](const QString& key, const QString& heading_line) {
+        if (display.contains(key))
+            return;
+        order.append(key);
+        display.insert(key, heading_line);
+        body.insert(key, {});
+    };
+
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString& line = lines.at(i);
         const QString trimmed = line.trimmed();
-        // Tolerate ##..#### so a model that varies the heading level still
-        // gets deduplicated rather than silently splitting into two sections.
-        // Deliberately NOT a single '#': "#1 story" is ordinary bullet text and
-        // would be misread as a heading, swallowing the rest of the section.
-        const bool is_heading = trimmed.startsWith(QLatin1String("##")) &&
-                                !trimmed.mid(2).trimmed().isEmpty();
-        if (is_heading) {
-            QString name = trimmed;
-            while (name.startsWith(QLatin1Char('#')))
-                name.remove(0, 1);
-            name = name.trimmed();
-            current = name.toUpper();
-            if (!display.contains(current)) {
-                order.append(current);
-                display.insert(current, trimmed);
-                body.insert(current, {});
+        if (is_heading(trimmed)) {
+            int hashes = 0;
+            const QString name = heading_name(trimmed, &hashes);
+            split_hashes = QString(hashes, QLatin1Char('#'));
+
+            // Two or more names means the model merged categories. Fewer covers
+            // the ordinary "### TECH" and anything reaching outside the
+            // vocabulary — categories_in_heading is all-or-nothing, so
+            // "### ENERGY & COMMODITIES" yields nothing rather than silently
+            // deleting the word COMMODITIES from the brief.
+            const QStringList named = news::categories_in_heading(name);
+            split_names.clear();
+            split_set.clear();
+            if (named.size() >= 2 && would_split(i, named)) {
+                split_names = named;
+                split_set = QSet<QString>(named.cbegin(), named.cend());
+                current = named.first(); // fallback owner for the unclaimed
+            } else {
+                current = name.toUpper();
+                ensure_section(current, trimmed);
             }
             continue;
         }
@@ -81,8 +210,18 @@ inline QString merge_duplicate_sections(const QString& detail) {
         // the separation BETWEEN sections is re-established by the rebuild.
         if (trimmed.isEmpty())
             continue;
-        if (!body[current].contains(line))
-            body[current].append(line);
+
+        QString key = current;
+        if (!split_names.isEmpty()) {
+            const QString claimed = news::classify(trimmed.toLower(), split_set);
+            key = claimed.isEmpty() ? split_names.first() : claimed;
+            // Only the split parts need registering here — an ordinary heading
+            // registered itself above, and reaching this for one would mean
+            // inventing a heading line for a section that already has one.
+            ensure_section(key, split_hashes + QLatin1Char(' ') + key);
+        }
+        if (!body[key].contains(line))
+            body[key].append(line);
     }
 
     if (order.isEmpty())

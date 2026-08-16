@@ -2,24 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-14)
+## Today's commits (2026-08-16)
 
 Latest first.
 
-- [`6bf41a1cb`](https://github.com/yumima/finterm/commit/6bf41a1cb) Bound and detect repetition collapse, so a good model stays usable
-- [`89329038c`](https://github.com/yumima/finterm/commit/89329038c) News: generate the opening brief on first load
-- [`b9b506aa1`](https://github.com/yumima/finterm/commit/b9b506aa1) Fix the selectable-text filter: QLabel's default is not NoTextInteraction
-- [`541341c1a`](https://github.com/yumima/finterm/commit/541341c1a) Equity AI: wire-feed text style, and give the height to the reading panes
-- [`af0026d54`](https://github.com/yumima/finterm/commit/af0026d54) Make rendered text selectable and copyable
-- [`694c80783`](https://github.com/yumima/finterm/commit/694c80783) News brief: recover the category split without the sentinel; don't auto-forecast on view
-- [`2e1a13d2f`](https://github.com/yumima/finterm/commit/2e1a13d2f) Call the local provider "hearth", because that is what it is
-- [`12b7c9b31`](https://github.com/yumima/finterm/commit/12b7c9b31) Walk a quota chain instead of failing when one model runs dry
-- [`5b7f696f7`](https://github.com/yumima/finterm/commit/5b7f696f7) Equity research: report why a request failed instead of blaming the output
-- [`7f7eb0195`](https://github.com/yumima/finterm/commit/7f7eb0195) Roles: wire the surfaces that advertised a binding but ignored it
-- [`b6a67f9b6`](https://github.com/yumima/finterm/commit/b6a67f9b6) Gemini fallbacks: newest first, and correct the quota note
-- [`7b62f690d`](https://github.com/yumima/finterm/commit/7b62f690d) Gemini: honour per-request use_tools, and never ship an invalid schema
-- [`f2ab5b72a`](https://github.com/yumima/finterm/commit/f2ab5b72a) Verify a provider actually serves the model before trusting it
-- [`a1aadd5a3`](https://github.com/yumima/finterm/commit/a1aadd5a3) AI settings: bind roles to providers, and one place to configure them
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
