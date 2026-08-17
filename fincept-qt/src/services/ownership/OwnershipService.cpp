@@ -623,6 +623,7 @@ void OwnershipService::pull_current_quarter(int top) {
                 return;
             }
             const QString q = o.value(QStringLiteral("quarter")).toString();
+            self->index_probed_ = false;   // a quarter was written; re-read it
             emit self->index_changed(
                 q.isEmpty()
                     ? QStringLiteral("No 13F filings newer than the indexed quarter on EDGAR yet.")
@@ -696,6 +697,10 @@ void OwnershipService::build_index() {
                         qs.isEmpty() ? QStringLiteral("13F index built")
                                      : QStringLiteral("Indexed: ") + qs.join(QStringLiteral(", "));
                     msg = self->index_status_;
+                    // Re-read from disk rather than trusting what we just
+                    // composed: the database is the truth, and a status
+                    // assembled from a response can drift from it.
+                    self->index_probed_ = false;
                     // Chain straight into symbol mapping. An index nobody can
                     // search by ticker is not finished, and asking the user to
                     // discover a second button for it is a puzzle.
@@ -732,6 +737,7 @@ void OwnershipService::resolve_symbols(int /*limit*/) {
                 ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
                 : QJsonObject{};
             const int left = o.value(QStringLiteral("remaining")).toInt();
+            self->index_probed_ = false;   // the symbol map changed
             self->index_status_ =
                 left > 0 ? QStringLiteral("Mapped %1 symbols · %2 still unmapped")
                                .arg(o.value(QStringLiteral("resolved")).toInt()).arg(left)

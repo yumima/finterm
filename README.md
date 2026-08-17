@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`65ed30588`](https://github.com/yumima/finterm/commit/65ed30588) Fix the index probe latching on attempt instead of on success
 - [`b7e440542`](https://github.com/yumima/finterm/commit/b7e440542) Make the empty OWNERSHIP screen say one thing instead of five
 - [`992b354b1`](https://github.com/yumima/finterm/commit/992b354b1) Review fixes: a fabricated exit count, and an index that forgot itself
 - [`ff41ffbe0`](https://github.com/yumima/finterm/commit/ff41ffbe0) Close the quarter-long gap: read the current quarter straight from EDGAR
