@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a2b9b3db5`](https://github.com/yumima/finterm/commit/a2b9b3db5) Index the whole 13F universe; tile the screen; fix restart state
 - [`1f0b9609f`](https://github.com/yumima/finterm/commit/1f0b9609f) Add BY FIRM, the manager-list editor, and fix two blocking bugs
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

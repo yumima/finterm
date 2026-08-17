@@ -193,7 +193,53 @@ private slots:
         QCOMPARE(r.lens, Lens::Flows);
         QVERIFY(r.detail.contains(QStringLiteral("70.0%")));
         // The honesty caveat must travel with it.
-        QVERIFY(r.basis.contains(QStringLiteral("active mandates")));
+        QVERIFY2(r.basis.contains(QStringLiteral("active mandates")),
+                 "the name-list fallback must admit those houses run active mandates too");
+    }
+
+    void index_weight_is_measured_from_book_breadth_when_available() {
+        // The name list cannot see an index arm under an unfamiliar name, and
+        // can mislabel a concentrated manager sharing a word with one. Breadth
+        // is measurable from the filings: nobody holds a view on 40,000 names.
+        QVERIFY(is_broad_book(49751));
+        QVERIFY(is_broad_book(kBroadBookPositions));
+        QVERIFY(!is_broad_book(kBroadBookPositions - 1));
+        QVERIFY(!is_broad_book(29));   // Berkshire files about this many
+
+        OwnershipSnapshot s = blank();
+        auto pos = [](const QString& name, double value, int count) {
+            ManagerPosition p;
+            p.manager = name;
+            p.value = value;
+            p.position_count = count;
+            return p;
+        };
+        // A firm the name list has never heard of, running a 12,000-name book.
+        s.smart_money = {pos("Obscure Model Portfolios LLC", 70.0, 12000),
+                         pos("Baupost Group LLC", 30.0, 40)};
+        const Read r = find(derive_reads(s), QStringLiteral("index flow"));
+        QVERIFY2(!r.headline.isEmpty(), "breadth must catch what the name list cannot");
+        QVERIFY(r.detail.contains(QStringLiteral("70.0%")));
+        QVERIFY2(r.basis.contains(QStringLiteral("not matched against a list")),
+                 "the basis must say the signal is measured");
+    }
+
+    void option_only_holders_do_not_count_toward_index_weight() {
+        // A put is a bearish position and is not a holding.
+        OwnershipSnapshot s = blank();
+        ManagerPosition broad;
+        broad.manager = "Wide Index Book";
+        broad.value = 90.0;
+        broad.position_count = 9000;
+        broad.is_derivative = true;      // options only
+        broad.put_call = "PUT";
+        ManagerPosition picker;
+        picker.manager = "Concentrated LP";
+        picker.value = 10.0;
+        picker.position_count = 25;
+        s.smart_money = {broad, picker};
+        QVERIFY2(!has_headline(derive_reads(s), QStringLiteral("index flow")),
+                 "an option line must not be counted as index-money weight");
     }
 
     void a_stock_picker_register_is_not_called_flow_driven() {

@@ -66,14 +66,28 @@ inline constexpr double kTop5Concentrated    = 0.50;  // of reported 13F value
 inline constexpr double kIndexComplexHeavy   = 0.40;  // of reported 13F value
 inline constexpr double kShortInterestJump   = 0.15;  // 15% month over month
 
-/// The large index complexes. Named explicitly because the read that uses them
-/// is only as honest as this list is visible.
+/// A book this wide is not expressing a view on each name.
 ///
-/// Deliberately NOT called "passive": BlackRock and Fidelity run active
-/// mandates alongside their index funds, and a 13F does not separate them. The
-/// claim made is the weaker, true one — these houses are where index money
-/// sits, so their weight on the register tells you how much of it moves on
-/// index flows rather than on a view about the company.
+/// This replaces guessing from firm NAMES. With the full 13F universe indexed,
+/// breadth is measurable: BlackRock files 49,751 positions and Morgan Stanley
+/// 45,667, and nobody holds an opinion on forty thousand companies. A book past
+/// this many names is running index, model or advisory mandates, and its
+/// presence on a register says nothing about the company.
+///
+/// Measured rather than matched, so it catches the index arm of a house nobody
+/// thought to put on a list, and does not mislabel a concentrated manager who
+/// happens to share a word with one.
+inline constexpr int kBroadBookPositions = 1000;
+
+inline bool is_broad_book(int position_count) {
+    return position_count >= kBroadBookPositions;
+}
+
+/// Name-based fallback, used ONLY when no 13F index has been built and position
+/// counts are therefore unavailable. Kept narrow and visible because it is a
+/// heuristic: it cannot see an index arm under an unfamiliar name, and it is
+/// deliberately not called "passive" — these houses run active mandates too and
+/// a 13F does not separate them.
 inline QStringList index_complexes() {
     return {QStringLiteral("blackrock"), QStringLiteral("vanguard"),
             QStringLiteral("state street"), QStringLiteral("geode"),
@@ -189,23 +203,62 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                         .arg(pct(kTop5Concentrated, 0))});
             }
         }
-        if (total > 0.0) {
-            const double idx = index_value / total;
-            if (idx >= kIndexComplexHeavy) {
-                out.push_back({Lens::Flows, Weight::Notable,
-                    QStringLiteral("Trades on index flow"),
-                    QStringLiteral("%1 of reported institutional value sits with the large index "
-                                   "complexes. A large part of the register does not hold a view "
-                                   "on the company, so the stock moves with index and ETF flows "
-                                   "and is less responsive to company-specific news than its "
-                                   "fundamentals alone would suggest.")
-                        .arg(pct(idx)),
-                    QStringLiteral("Flagged above %1 of reported 13F value held by BlackRock, "
-                                   "Vanguard, State Street or Geode. Those houses run active "
-                                   "mandates too — a 13F does not separate them — so read this "
-                                   "as index-money weight, not a passive percentage.")
-                        .arg(pct(kIndexComplexHeavy, 0))});
+    }
+
+    // ── Index-money weight on the register ──────────────────────────────────
+    // Computed independently of the provider's holder table: with a 13F index
+    // built, this is answerable from the filings alone, and gating it on a
+    // separate feed meant it silently never fired.
+    {
+        double idx = -1.0;
+        bool measured = false;
+        if (!s.smart_money.isEmpty()) {
+            double broad = 0.0, all = 0.0;
+            for (const auto& p : s.smart_money) {
+                if (p.is_derivative || !p.value)
+                    continue;
+                all += *p.value;
+                if (is_broad_book(p.position_count))
+                    broad += *p.value;
             }
+            if (all > 0.0) {
+                idx = broad / all;
+                measured = true;
+            }
+        }
+        if (!measured && !s.holders.isEmpty()) {
+            double total = 0.0, index_value = 0.0;
+            for (const auto& h : s.holders) {
+                if (!h.value) continue;
+                total += *h.value;
+                if (is_index_complex(h.holder)) index_value += *h.value;
+            }
+            if (total > 0.0)
+                idx = index_value / total;
+        }
+
+        if (idx >= kIndexComplexHeavy) {
+            out.push_back({Lens::Flows, Weight::Notable,
+                QStringLiteral("Trades on index flow"),
+                QStringLiteral("%1 of institutional value sits in books that are not expressing "
+                               "a view on this company. A large part of the register moves with "
+                               "index and ETF flows, so the stock is less responsive to "
+                               "company-specific news than its fundamentals alone suggest.")
+                    .arg(pct(idx)),
+                measured
+                    ? QStringLiteral("Flagged above %1 of institutional value held in books of "
+                                     "%2 or more positions. Breadth is measured from the filings, "
+                                     "not matched against a list of firm names — a book of that "
+                                     "width is running index or model mandates whatever it is "
+                                     "called. Read it as index-money weight, not as a passive "
+                                     "percentage.")
+                          .arg(pct(kIndexComplexHeavy, 0)).arg(kBroadBookPositions)
+                    : QStringLiteral("Flagged above %1 of reported value held by BlackRock, "
+                                     "Vanguard, State Street or Geode. This is the fallback used "
+                                     "when no 13F index has been built: it matches firm NAMES, so "
+                                     "it cannot see an index arm under a name it does not know, "
+                                     "and those houses run active mandates too. Build the index "
+                                     "for the measured version.").arg(pct(kIndexComplexHeavy, 0))});
         }
     }
 
