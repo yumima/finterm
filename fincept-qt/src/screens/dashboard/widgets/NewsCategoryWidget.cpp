@@ -3,6 +3,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "services/news/NewsService.h"
+#include "ui/components/ExternalLink.h"
 #include "ui/theme/Theme.h"
 
 #include <QDialog>
@@ -36,6 +37,16 @@ NewsCategoryWidget::NewsCategoryWidget(const QJsonObject& cfg, QWidget* parent)
     list_->setWordWrap(true);
     list_->setSelectionMode(QAbstractItemView::NoSelection);
     list_->setFocusPolicy(Qt::NoFocus);
+    // Single click opens the story, matching the MARKET NEWS widget's
+    // hyperlinked headlines — two news widgets on one dashboard behaving
+    // differently is worse than either choice on its own. Rows carry a
+    // pointing-hand cursor so the affordance is visible; rows with no URL
+    // simply do nothing rather than pretending.
+    list_->setCursor(Qt::PointingHandCursor);
+    connect(list_, &QListWidget::itemClicked, this, [](QListWidgetItem* item) {
+        if (item)
+            ui::open_external_link(item->data(Qt::UserRole).toString());
+    });
     vl->addWidget(list_, 1);
 
     set_configurable(true);
@@ -119,7 +130,15 @@ void NewsCategoryWidget::on_articles(const QVariant& v) {
                 : a.time;
         const QString line = QString("[%1]  %2").arg(time, a.headline);
         auto* item = new QListWidgetItem(line, list_);
-        item->setToolTip(a.summary.isEmpty() ? a.headline : a.summary);
+        // Carry the article URL on the row so a click can open it. Stored
+        // rather than looked up by index later: the list is rebuilt on every
+        // feed update, and an index into a stale articles vector would open
+        // the wrong story.
+        item->setData(Qt::UserRole, a.link);
+        QString tip = a.summary.isEmpty() ? a.headline : a.summary;
+        if (!a.link.trimmed().isEmpty())
+            tip += QStringLiteral("\n\nClick to open in browser");
+        item->setToolTip(tip);
     }
     set_loading(false);
 }

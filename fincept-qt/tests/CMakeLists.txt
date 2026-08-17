@@ -549,6 +549,21 @@ target_link_libraries(test_news_brief_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_news_brief_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME news_brief_format COMMAND test_news_brief_format)
 
+# ── External-link scheme guard ───────────────────────────────────────────────
+# open_external_link() sits in front of QDesktopServices::openUrl, which hands
+# a URL to the desktop's scheme handler rather than to a browser. Dashboard
+# headlines are now clickable and their URLs come from third-party news feeds,
+# so the http/https allow-list is a security boundary and is pinned in both
+# directions. The accept cases assert on a mirrored predicate rather than
+# calling through — a suite that opens ten browser tabs is one nobody runs.
+add_executable(test_external_link
+    ui/test_external_link.cpp
+)
+target_include_directories(test_external_link PRIVATE ../src)
+target_link_libraries(test_external_link PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+set_target_properties(test_external_link PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME external_link COMMAND test_external_link)
+
 # ── S-1 section slicing ──────────────────────────────────────────────────────
 # The slicer anchored on the FIRST heading occurrence, which in a real S-1 is
 # the table of contents — so "verbatim excerpts" could be a page-number list.

@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/markets/MarketDataService.h"
+#include "ui/components/ExternalLink.h"
 #include "ui/theme/Theme.h"
 
 #include <QDateTime>
@@ -185,8 +186,37 @@ void NewsWidget::populate(const QJsonArray& articles) {
             rl->addWidget(time_lbl);
         }
 
-        auto* headline = new QLabel(title);
+        // Clickable headline. The URL comes from the feed, so an article
+        // without one renders as plain text rather than a dead link — an
+        // affordance that does nothing is worse than no affordance.
+        //
+        // Rich text means the title must be escaped: headlines routinely
+        // contain & and quotes, and one containing a < would otherwise be
+        // parsed as markup and swallow the rest of the line.
+        const QString url = obj["url"].toString().trimmed();
+        auto* headline = new QLabel;
         headline->setWordWrap(true);
+        headline->setTextInteractionFlags(Qt::TextBrowserInteraction);
+        if (url.isEmpty()) {
+            headline->setText(title);
+        } else {
+            headline->setText(QStringLiteral("<a href=\"%1\">%2</a>")
+                                  .arg(url.toHtmlEscaped(), title.toHtmlEscaped()));
+            headline->setToolTip(url);
+            headline->setCursor(Qt::PointingHandCursor);
+            // openExternalLinks would bypass the scheme check — route it
+            // through open_external_link instead. Matches NewsDetailPanel.
+            connect(headline, &QLabel::linkActivated, this,
+                    [](const QString& href) { ui::open_external_link(href); });
+        }
+        // Anchors otherwise render in the palette's link colour, which is not
+        // a terminal colour and reads as a blue misprint against the feed.
+        {
+            QPalette pal = headline->palette();
+            pal.setColor(QPalette::Link, QColor(ui::colors::TEXT_PRIMARY()));
+            pal.setColor(QPalette::LinkVisited, QColor(ui::colors::TEXT_SECONDARY()));
+            headline->setPalette(pal);
+        }
         headline->setStyleSheet(
             QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_PRIMARY(), fs));
         rl->addWidget(headline, 1);

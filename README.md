@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3803791b0`](https://github.com/yumima/finterm/commit/3803791b0) Remove Power Trader
 - [`11366ace2`](https://github.com/yumima/finterm/commit/11366ace2) Put the category list in one place, and split the headings the model merges
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
