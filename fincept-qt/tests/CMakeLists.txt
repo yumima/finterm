@@ -564,6 +564,34 @@ target_link_libraries(test_external_link PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 set_target_properties(test_external_link PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME external_link COMMAND test_external_link)
 
+# ── OWNERSHIP read-throughs ──────────────────────────────────────────────────
+# derive_reads() turns a holder table into sentences, and a sentence is much
+# easier to believe than a number. The negative cases carry most of the weight:
+# a read that fires when its input is missing is a fabricated claim about a
+# real company. Each test starts from a blank snapshot and adds only the field
+# it exercises, so any read that appears is provably caused by that field.
+add_executable(test_ownership_signals
+    screens/test_ownership_signals.cpp
+)
+target_include_directories(test_ownership_signals PRIVATE ../src)
+target_link_libraries(test_ownership_signals PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_ownership_signals PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME ownership_signals COMMAND test_ownership_signals)
+
+# ── Form 4 parsing + insider classification (OWNERSHIP) ──────────────────────
+# The screen's whole claim is that its numbers come off the filing. Three of
+# these pin bugs found by running against live EDGAR rather than by reading the
+# code: the two spellings of SCHEDULE 13D in one index, the filing cap
+# colliding with the multi-year classification, and the XSL-wrapped document
+# path. The rest pin the rule that a field absent from the filing stays absent
+# from the output instead of defaulting to a confident zero.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME ownership_parse
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ownership_parse.py
+    )
+endif()
+
 # ── S-1 section slicing ──────────────────────────────────────────────────────
 # The slicer anchored on the FIRST heading occurrence, which in a real S-1 is
 # the table of contents — so "verbatim excerpts" could be a page-number list.

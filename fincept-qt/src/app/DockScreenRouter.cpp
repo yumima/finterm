@@ -57,6 +57,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"derivatives", "Derivatives"},
         {"alt_investments", "Alt Investments"},
         {"pre_ipo", "IPO WATCH"},
+        {"ownership", "Ownership"},
         {"ma_analytics", "M&A Analytics"},
         {"surface_analytics", "Surface Analytics"},
         {"quantlib", "QuantLib"},

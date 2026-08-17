@@ -1405,6 +1405,8 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/views/PicksView.cpp
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
+    src/screens/ownership/OwnershipScreen.cpp
+    src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
 
     # Alternative Investments
@@ -1542,6 +1544,8 @@ set_source_files_properties(
     src/screens/pre_ipo/views/PicksView.cpp
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
+    src/screens/ownership/OwnershipScreen.cpp
+    src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
     src/screens/auth/ForgotPasswordScreen.cpp

@@ -554,33 +554,39 @@ class SECDataWrapper:
             if not filings_result.get("success"):
                 return filings_result
 
-            # Process Form 4 filings to extract insider trading data
-            filings_data = filings_result["data"]
-            insider_trades = []
-
-            for filing in filings_data:
-                # This would parse Form 4 content to extract insider trading details
-                # For now, return basic filing info
-                insider_trade = {
-                    "filing_date": filing.get("filingDate"),
-                    "accession_number": filing.get("accessionNumber"),
-                    "company_name": "Extracted from filing",
-                    "insider_name": "Extracted from filing",
-                    "transaction_type": "P",
-                    "securities_transacted": 0,
-                    "price": 0,
-                    "amount": 0,
-                    "ownership_type": "Direct",
-                    "note": "Form 4 parsing would be implemented here"
-                }
-                insider_trades.append(insider_trade)
-
+            # Real Form 4 parse. This used to synthesise a row per filing with
+            # a hardcoded transaction_type of "P", zeroed price and amount, and
+            # the literal "Extracted from filing" for every name — and returned
+            # success: True, so callers (including the AI chat, which can run
+            # any script via run_python_script) could not tell invented data
+            # from real. sec_ownership_data does the XML parse properly.
+            del filings_result  # only used above to validate symbol/CIK
+            from sec_ownership_data import fetch_insiders
+            months = 12
+            if start_date:
+                try:
+                    d0 = datetime.strptime(start_date[:10], "%Y-%m-%d").date()
+                    months = max(1, int((datetime.now().date() - d0).days / 30.44))
+                except Exception:
+                    months = 12
+            parsed = fetch_insiders(symbol or "", months=months,
+                                    max_filings=int(limit or 100),
+                                    cik=cik)  # CIK-only calls are supported
+            if parsed.get("error"):
+                return {"error": SECError("insider_trading", parsed["error"]).to_dict()}
             return {
                 "success": True,
-                "data": insider_trades,
+                "data": parsed.get("transactions", []),
+                "insiders": parsed.get("insiders", []),
+                "clusters": parsed.get("clusters", []),
+                "coverage": {
+                    "filings_found": parsed.get("filings_found"),
+                    "filings_parsed": parsed.get("filings_parsed"),
+                    "filings_truncated": parsed.get("filings_truncated"),
+                },
                 "parameters": {
                     "symbol": symbol,
-                    "cik": str(cik) if cik else None,
+                    "cik": parsed.get("cik") or (str(cik) if cik else None),
                     "start_date": start_date,
                     "end_date": end_date,
                     "limit": limit
@@ -613,36 +619,25 @@ class SECDataWrapper:
             if not filings_result.get("success"):
                 return filings_result
 
-            # Process Form 13F filings to extract institutional ownership data
-            filings_data = filings_result["data"]
-            institutional_holdings = []
-
-            for filing in filings_data:
-                # This would parse Form 13F content to extract institutional holdings
-                # For now, return basic filing info
-                holding = {
-                    "filing_date": filing.get("filingDate", ""),
-                    "accession_number": filing.get("accessionNumber", ""),
-                    "institution_name": "Extracted from filing",
-                    "cusip": "Extracted from filing",
-                    "security_name": "Extracted from filing",
-                    "shares": 0,
-                    "market_value": 0,
-                    "note": "Form 13F parsing would be implemented here"
-                }
-                institutional_holdings.append(holding)
-
-            return {
-                "success": True,
-                "data": institutional_holdings,
-                "parameters": {
-                    "symbol": symbol,
-                    "cik": str(cik) if cik else None,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "limit": limit
-                }
-            }
+            # Deliberately NOT answered here, and deliberately not faked.
+            #
+            # 13F is filed by the MANAGER, not the issuer, so "who holds AAPL"
+            # cannot be read off AAPL's own filing index — it needs either the
+            # SEC's quarterly structured 13F data sets or a provider that has
+            # already inverted them. This function used to paper over that by
+            # emitting a row per filing with "Extracted from filing" as the
+            # institution name and zero shares, reported as success.
+            #
+            # The working per-issuer answer is yfinance_data.py's
+            # ownership_extras action, which the OWNERSHIP screen uses.
+            del filings_result
+            return {"error": SECError(
+                "institutional_ownership",
+                "Per-issuer institutional holdings cannot be derived from the "
+                "issuer's own filing index: 13F is filed by the manager. Use "
+                "yfinance_data.py ownership_extras for holders, or the SEC "
+                "quarterly 13F data sets to build a reverse index."
+            ).to_dict()}
 
         except Exception as e:
             return {"error": SECError("institutional_ownership", str(e)).to_dict()}

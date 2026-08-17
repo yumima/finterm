@@ -2721,6 +2721,97 @@ def get_news(symbol, count=20):
     except Exception as e:
         return {"error": str(e), "symbol": symbol, "articles": []}
 
+def get_ownership_extras(symbol):
+    """Institutional ownership and short interest for the OWNERSHIP screen.
+
+    The EDGAR half of that screen (Form 4, 13D/G) comes from
+    sec_ownership_data.py; this supplies the two things EDGAR cannot give a
+    per-ticker view of cheaply: who the large institutional holders are (13F is
+    filed by the manager, not the issuer, so a per-issuer answer would mean
+    scanning every manager's filing) and the exchange short-interest figures.
+
+    Every field is omitted when yfinance does not report it. Nothing is
+    defaulted to zero — "no short interest reported" and "short interest is
+    zero" are different facts and the UI has to be able to tell them apart.
+    """
+    out = {"symbol": symbol}
+    try:
+        t = yf.Ticker(symbol)
+    except Exception as e:
+        return {"symbol": symbol, "error": f"ticker init failed: {e}"}
+
+    # ── Institutional holders ──────────────────────────────────────────────
+    try:
+        ih = t.institutional_holders
+        if ih is not None and not ih.empty:
+            rows = []
+            for _, r in ih.head(15).iterrows():
+                row = {"holder": str(r.get("Holder", ""))}
+                for key, field in (("pctHeld", "pct"), ("Shares", "shares"),
+                                   ("Value", "value")):
+                    v = r.get(key)
+                    if v is not None and v == v:  # not NaN
+                        row[field] = float(v)
+                d = str(r.get("Date Reported", ""))[:10]
+                if d:
+                    row["date"] = d
+                rows.append(row)
+            out["institutional_holders"] = rows
+    except Exception as e:
+        out["holders_error"] = str(e)
+
+    # ── Major-holder breakdown ─────────────────────────────────────────────
+    try:
+        mh = t.major_holders
+        if mh is not None and not mh.empty:
+            rows = []
+            for label, val in zip(mh.index, mh.iloc[:, 0].tolist()):
+                try:
+                    rows.append({"label": str(label), "value": float(val)})
+                except Exception:
+                    pass
+            if rows:
+                out["major_holders"] = rows
+    except Exception as e:
+        out["major_error"] = str(e)
+
+    # ── Short interest + float ─────────────────────────────────────────────
+    try:
+        info = t.info or {}
+        fields = {
+            "shares_short": "sharesShort",
+            "shares_short_prior": "sharesShortPriorMonth",
+            "short_ratio": "shortRatio",
+            "short_pct_float": "shortPercentOfFloat",
+            "short_pct_out": "sharesPercentSharesOut",
+            "float_shares": "floatShares",
+            "shares_outstanding": "sharesOutstanding",
+            "held_pct_insiders": "heldPercentInsiders",
+            "held_pct_institutions": "heldPercentInstitutions",
+        }
+        short = {}
+        for out_key, info_key in fields.items():
+            v = info.get(info_key)
+            if v is not None:
+                try:
+                    short[out_key] = float(v)
+                except (TypeError, ValueError):
+                    pass
+        # The as-of date matters: short interest is a twice-monthly settlement
+        # snapshot, so a figure with no date attached cannot be aged by the UI.
+        for out_key, info_key in (("date_short_interest", "dateShortInterest"),
+                                  ("date_short_prior", "sharesShortPreviousMonthDate")):
+            v = info.get(info_key)
+            if v:
+                short[out_key] = v
+        if short:
+            out["short_interest"] = short
+    except Exception as e:
+        out["short_error"] = str(e)
+
+    return out
+
+
 def _candidate_yf_symbols(symbol):
     """Generate yfinance ticker candidates for a portfolio symbol.
 
@@ -3282,6 +3373,9 @@ _CACHE_TTL = {
     # per-symbol raw closes for portfolio NAV backfill — same rationale.
     "portfolio_closes_history": 3600,
     # static SEC filing — very long
+    # institutional holders move quarterly and short interest twice monthly —
+    # the slowest-changing data on any screen, so a long TTL is free accuracy.
+    "ownership_extras": 3600,
     "parse_s1": 3600,
 }
 _CACHE_MAX = 512  # hard cap on entries; evict soonest-to-expire beyond this
@@ -3550,6 +3644,8 @@ def _daemon_dispatch_inner(action, payload):
         # Used by IPO Watch to enrich priced tickers with sector / industry /
         # market cap in one round-trip. ThreadPoolExecutor parallelism inside.
         return get_batch_info((payload or {}).get("symbols") or [])
+    if action == "ownership_extras":
+        return get_ownership_extras((payload or {}).get("symbol", ""))
     if action == "ipo_extras":
         # IPO Watch detail-rail aggregator: quarterly financials, holders,
         # news. One daemon round-trip on row click.

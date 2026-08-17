@@ -1,0 +1,324 @@
+#pragma once
+// Turning an ownership register into a read-through.
+//
+// A table of holders answers "who owns this". It does not answer the question
+// anyone actually has, which is "so what does that mean for the stock, and
+// what does it mean for how it trades". This module derives that second answer.
+//
+// THREE RULES, because interpretation is where a research tool starts lying:
+//
+//  1. Every read states the number that produced it. "Tight float" on its own
+//     is an opinion; "insiders and institutions hold 84% of shares out" is a
+//     fact the user can check against the table above it.
+//  2. Every read names its own threshold in `basis`. A user who disagrees with
+//     "above 5 days to cover is elevated" can see that is the rule and discount
+//     it. A number with a hidden cutoff is unfalsifiable.
+//  3. A read whose inputs are missing is NOT emitted. Nothing is inferred from
+//     absence — no default float, no assumed short interest. The screen shows
+//     fewer reads rather than invented ones.
+//
+// Header-only and Qt-Core only, so the whole derivation is testable without
+// standing up a widget or touching the network.
+
+#include "screens/ownership/OwnershipTypes.h"
+
+#include <QDate>
+#include <QString>
+#include <QStringList>
+#include <QVector>
+
+#include <algorithm>
+#include <cmath>
+#include <functional>
+
+namespace fincept::ownership {
+
+/// How much attention a read deserves. Semantic, and deliberately separate
+/// from any accent colour: Elevated means "this changes how the stock trades",
+/// not "this is bad".
+enum class Weight { Context, Notable, Elevated };
+
+/// What the read is about, so the screen can group them the way a user asks
+/// the question: about this stock, or about how it trades.
+enum class Lens {
+    Stock,   ///< what it means for this security
+    Flows,   ///< what it means for how the security trades and with what
+};
+
+struct Read {
+    Lens    lens = Lens::Stock;
+    Weight  weight = Weight::Context;
+    QString headline;  ///< four or five words
+    QString detail;    ///< one sentence, carrying the driving number
+    QString basis;     ///< the rule and threshold applied
+};
+
+// ── Thresholds ──────────────────────────────────────────────────────────────
+// Conventional desk levels, named here rather than buried in the branches so
+// they can be argued with. None of them are the author's invention.
+inline constexpr double kDaysToCoverElevated = 5.0;   // a week of volume to exit
+inline constexpr double kDaysToCoverHigh     = 10.0;
+inline constexpr double kShortFloatElevated  = 0.10;  // 10% of float
+inline constexpr double kShortFloatHigh      = 0.20;
+inline constexpr double kInstitutionalHeavy  = 0.70;  // 70% of shares out
+inline constexpr double kCloselyHeld         = 0.85;  // insiders + institutions
+inline constexpr double kTop5Concentrated    = 0.50;  // of reported 13F value
+inline constexpr double kIndexComplexHeavy   = 0.40;  // of reported 13F value
+inline constexpr double kShortInterestJump   = 0.15;  // 15% month over month
+
+/// The large index complexes. Named explicitly because the read that uses them
+/// is only as honest as this list is visible.
+///
+/// Deliberately NOT called "passive": BlackRock and Fidelity run active
+/// mandates alongside their index funds, and a 13F does not separate them. The
+/// claim made is the weaker, true one — these houses are where index money
+/// sits, so their weight on the register tells you how much of it moves on
+/// index flows rather than on a view about the company.
+inline QStringList index_complexes() {
+    return {QStringLiteral("blackrock"), QStringLiteral("vanguard"),
+            QStringLiteral("state street"), QStringLiteral("geode"),
+            QStringLiteral("ssga"),         QStringLiteral("street global")};
+}
+
+inline bool is_index_complex(const QString& holder) {
+    const QString h = holder.toLower();
+    const QStringList names = index_complexes();
+    return std::any_of(names.cbegin(), names.cend(),
+                       [&h](const QString& n) { return h.contains(n); });
+}
+
+namespace detail {
+
+inline QString pct(double fraction, int dp = 1) {
+    return QString::number(fraction * 100.0, 'f', dp) + QStringLiteral("%");
+}
+
+inline QString compact(double v) {
+    const double a = std::fabs(v);
+    if (a >= 1e12) return QString::number(v / 1e12, 'f', 2) + QStringLiteral("T");
+    if (a >= 1e9)  return QString::number(v / 1e9,  'f', 2) + QStringLiteral("B");
+    if (a >= 1e6)  return QString::number(v / 1e6,  'f', 1) + QStringLiteral("M");
+    if (a >= 1e3)  return QString::number(v / 1e3,  'f', 1) + QStringLiteral("K");
+    return QString::number(v, 'f', 0);
+}
+
+} // namespace detail
+
+/// Derive the read-throughs for one snapshot.
+///
+/// Order is by weight then by lens, so the thing that changes how the stock
+/// trades sits above the thing that merely describes it.
+inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
+    using detail::compact;
+    using detail::pct;
+    QVector<Read> out;
+
+    // ── Float and who is sitting on it ──────────────────────────────────────
+    const auto& si = s.shorts;
+    if (si.held_pct_institutions && si.held_pct_insiders) {
+        const double closely = *si.held_pct_institutions + *si.held_pct_insiders;
+        // Yahoo's heldPercentInstitutions is institutions/FLOAT in practice, not
+        // institutions/shares-outstanding, so on a closely-held small cap it
+        // exceeds 1.0 on its own. Summing it with the insider figure then yields
+        // "118% of shares outstanding", which is impossible — and printing an
+        // impossible number as an Elevated finding destroys trust in every
+        // other read on the screen. When the inputs contradict each other, say
+        // nothing.
+        const bool coherent = *si.held_pct_institutions <= 1.0 &&
+                              *si.held_pct_insiders <= 1.0 && closely <= 1.0;
+        if (coherent && closely >= kCloselyHeld) {
+            out.push_back({Lens::Stock, Weight::Elevated,
+                QStringLiteral("Thin tradeable float"),
+                QStringLiteral("Insiders and institutions together hold %1 of shares outstanding "
+                               "(%2 institutional, %3 insider), so a small share of the company "
+                               "is actually available to trade.")
+                    .arg(pct(closely), pct(*si.held_pct_institutions), pct(*si.held_pct_insiders)),
+                QStringLiteral("Flagged above %1 combined. A thin float means each dollar of "
+                               "buying or selling moves the price further.").arg(pct(kCloselyHeld, 0))});
+        }
+    }
+    if (si.held_pct_institutions && *si.held_pct_institutions <= 1.0 &&
+        *si.held_pct_institutions >= kInstitutionalHeavy) {
+        out.push_back({Lens::Flows, Weight::Notable,
+            QStringLiteral("Institutionally owned"),
+            QStringLiteral("Institutions hold %1 of shares outstanding. Price is set by a small "
+                           "number of professional desks rather than by retail flow, and the "
+                           "stock will react to quarter-end rebalancing.")
+                .arg(pct(*si.held_pct_institutions)),
+            QStringLiteral("Flagged above %1 of shares outstanding.").arg(pct(kInstitutionalHeavy, 0))});
+    }
+
+    // ── Concentration on the register ───────────────────────────────────────
+    if (!s.holders.isEmpty()) {
+        // The provider returns a truncated, unordered top-N. Two consequences,
+        // both of which produced a wrong number before:
+        //   - The denominator is the REPORTED holders, not the register, so the
+        //     read must be worded as a share of what was reported.
+        //   - Nothing guarantees descending order, so "the five largest" has to
+        //     be established here rather than assumed from row position.
+        QVector<double> values;
+        double total = 0.0, index_value = 0.0;
+        for (const auto& h : s.holders) {
+            if (!h.value) continue;
+            values.push_back(*h.value);
+            total += *h.value;
+            if (is_index_complex(h.holder)) index_value += *h.value;
+        }
+        std::sort(values.begin(), values.end(), std::greater<double>());
+        const int counted = values.size();
+        double top5 = 0.0;
+        for (int i = 0; i < counted && i < 5; ++i) top5 += values[i];
+
+        // With exactly five reported holders the ratio is 100% by construction
+        // and says nothing about concentration. Require enough rows for the
+        // comparison to carry information.
+        if (total > 0.0 && counted >= 8) {
+            const double share = top5 / total;
+            if (share >= kTop5Concentrated) {
+                out.push_back({Lens::Stock, Weight::Elevated,
+                    QStringLiteral("Concentrated register"),
+                    QStringLiteral("The five largest of the %1 reported holders account for %2 "
+                                   "of the institutional value on file. Concentrated ownership is "
+                                   "a documented predictor of volatility: correlated selling by a "
+                                   "few holders is what makes a position unwind violently.")
+                        .arg(counted).arg(pct(share)),
+                    QStringLiteral("Flagged above %1 of the value across the holders the data "
+                                   "provider reports — a top-N list, not the whole register, so "
+                                   "this is a floor on concentration rather than a measure of it. "
+                                   "Needs at least eight reported holders to mean anything.")
+                        .arg(pct(kTop5Concentrated, 0))});
+            }
+        }
+        if (total > 0.0) {
+            const double idx = index_value / total;
+            if (idx >= kIndexComplexHeavy) {
+                out.push_back({Lens::Flows, Weight::Notable,
+                    QStringLiteral("Trades on index flow"),
+                    QStringLiteral("%1 of reported institutional value sits with the large index "
+                                   "complexes. A large part of the register does not hold a view "
+                                   "on the company, so the stock moves with index and ETF flows "
+                                   "and is less responsive to company-specific news than its "
+                                   "fundamentals alone would suggest.")
+                        .arg(pct(idx)),
+                    QStringLiteral("Flagged above %1 of reported 13F value held by BlackRock, "
+                                   "Vanguard, State Street or Geode. Those houses run active "
+                                   "mandates too — a 13F does not separate them — so read this "
+                                   "as index-money weight, not a passive percentage.")
+                        .arg(pct(kIndexComplexHeavy, 0))});
+            }
+        }
+    }
+
+    // ── The short side ──────────────────────────────────────────────────────
+    if (si.short_ratio) {
+        const double d = *si.short_ratio;
+        if (d >= kDaysToCoverElevated) {
+            const bool high = d >= kDaysToCoverHigh;
+            out.push_back({Lens::Stock, high ? Weight::Elevated : Weight::Notable,
+                QStringLiteral("Crowded short"),
+                QStringLiteral("It would take %1 days of average volume for short sellers to "
+                               "close out. Shorts cannot exit quickly, so good news forces "
+                               "buying into a book that is already short.")
+                    .arg(QString::number(d, 'f', 1)),
+                QStringLiteral("Flagged above %1 days to cover, %2 above %3.")
+                    .arg(QString::number(kDaysToCoverElevated, 'f', 0),
+                         QStringLiteral("elevated"),
+                         QString::number(kDaysToCoverHigh, 'f', 0))});
+        }
+    }
+    if (si.pct_float && *si.pct_float >= kShortFloatElevated) {
+        const bool high = *si.pct_float >= kShortFloatHigh;
+        out.push_back({Lens::Stock, high ? Weight::Elevated : Weight::Notable,
+            QStringLiteral("Heavily shorted"),
+            QStringLiteral("%1 of the float is sold short. That is a standing bid under the "
+                           "stock on any positive surprise, and a standing supply of sellers "
+                           "on any disappointment.").arg(pct(*si.pct_float)),
+            QStringLiteral("Flagged above %1 of float, %2 above %3.")
+                .arg(pct(kShortFloatElevated, 0), QStringLiteral("elevated"),
+                     pct(kShortFloatHigh, 0))});
+    }
+    if (si.shares_short && si.shares_short_prior && *si.shares_short_prior > 0.0) {
+        const double chg = (*si.shares_short - *si.shares_short_prior) / *si.shares_short_prior;
+        if (std::fabs(chg) >= kShortInterestJump) {
+            const bool up = chg > 0.0;
+            out.push_back({Lens::Flows, Weight::Notable,
+                up ? QStringLiteral("Shorts building") : QStringLiteral("Shorts covering"),
+                QStringLiteral("Short interest %1 %2 since the prior settlement, from %3 to %4 "
+                               "shares. Someone is changing their mind in size.")
+                    .arg(up ? QStringLiteral("rose") : QStringLiteral("fell"),
+                         pct(std::fabs(chg), 0), compact(*si.shares_short_prior),
+                         compact(*si.shares_short)),
+                QStringLiteral("Flagged at a %1 move between the two reported settlement dates.")
+                    .arg(pct(kShortInterestJump, 0))});
+        }
+    }
+
+    // ── The insiders ────────────────────────────────────────────────────────
+    if (!s.clusters.isEmpty()) {
+        const auto& c = s.clusters.first();
+        out.push_back({Lens::Stock, Weight::Elevated,
+            QStringLiteral("Insider cluster buy"),
+            QStringLiteral("%1 insiders bought on the open market within a month around %2%3. "
+                           "Several people with the same private information acting the same "
+                           "way is the insider signal with the strongest evidence behind it.")
+                .arg(c.insiders.size())
+                .arg(c.start.toString(QStringLiteral("d MMM yyyy")),
+                     c.total_value > 0.0 ? QStringLiteral(", totalling $") + compact(c.total_value)
+                                         : QString()),
+            QStringLiteral("Two or more distinct insiders with open-market purchases (code P) "
+                           "inside 30 days. Grants and option exercises are excluded — those "
+                           "vest on a calendar, they are not decisions.")});
+    }
+    int opportunistic_buyers = 0;
+    for (const auto& p : s.insiders)
+        if (p.pattern == Pattern::Opportunistic) ++opportunistic_buyers;
+    if (opportunistic_buyers > 0) {
+        out.push_back({Lens::Stock, Weight::Context,
+            QStringLiteral("Opportunistic filers present"),
+            QStringLiteral("%1 of %2 insiders trade on no annual schedule. The predictive content "
+                           "in insider trading concentrates in these filers rather than in the "
+                           "ones who sell the same month every year.")
+                .arg(opportunistic_buyers).arg(s.insiders.size()),
+            QStringLiteral("Routine means a trade in the same calendar month in three or more "
+                           "years of that insider's own filing history (Cohen, Malloy and "
+                           "Pomorski). Insiders without enough history are left unclassified.")});
+    }
+
+    // ── Activists ───────────────────────────────────────────────────────────
+    int activist_filings = 0;
+    QDate latest_activist;
+    for (const auto& st : s.stakes) {
+        if (!st.activist) continue;
+        ++activist_filings;
+        if (!latest_activist.isValid() || st.filed_date > latest_activist)
+            latest_activist = st.filed_date;
+    }
+    if (activist_filings > 0) {
+        out.push_back({Lens::Stock, Weight::Elevated,
+            QStringLiteral("Activist on the register"),
+            QStringLiteral("%1 Schedule 13D filing%2 in the window, most recently %3. A 13D is a "
+                           "holder above 5%4 declaring an intent to influence the company — a "
+                           "dated catalyst, not a snapshot.")
+                .arg(activist_filings)
+                .arg(activist_filings == 1 ? QString() : QStringLiteral("s"),
+                     latest_activist.toString(QStringLiteral("d MMM yyyy")),
+                     QStringLiteral("%")),
+            QStringLiteral("13D means activist intent and is due within five business days; 13G "
+                           "is the passive equivalent and is not counted here.")});
+    }
+
+    std::stable_sort(out.begin(), out.end(), [](const Read& a, const Read& b) {
+        return static_cast<int>(a.weight) > static_cast<int>(b.weight);
+    });
+    return out;
+}
+
+/// Reads for one lens, preserving derive_reads' ordering.
+inline QVector<Read> reads_for(const QVector<Read>& all, Lens lens) {
+    QVector<Read> out;
+    for (const auto& r : all)
+        if (r.lens == lens) out.push_back(r);
+    return out;
+}
+
+} // namespace fincept::ownership

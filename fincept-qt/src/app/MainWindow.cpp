@@ -68,6 +68,7 @@
 #include "screens/node_editor/NodeEditorScreen.h"
 #include "screens/notes/NotesScreen.h"
 #include "screens/polymarket/PolymarketScreen.h"
+#include "screens/ownership/OwnershipScreen.h"
 #include "screens/portfolio/PortfolioScreen.h"
 #include "screens/profile/ProfileScreen.h"
 #include "screens/quantlib/QuantLibScreen.h"
@@ -1219,6 +1220,24 @@ void MainWindow::setup_dock_screens() {
                             SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     }
                     dock_router_->navigate(id);
+                });
+        return screen;
+    });
+
+    dock_router_->register_factory("ownership", [this]() {
+        auto* screen = new screens::OwnershipScreen;
+        connect(screen, &screens::OwnershipScreen::navigate_to_screen, this,
+                [this](const QString& id, const QString& ticker) {
+                    if (!ticker.isEmpty())
+                        SymbolContext::instance().set_group_symbol(
+                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+                    dock_router_->navigate(id);
+                    // Equity Research listens on the EventBus rather than for
+                    // group-A broadcasts when its tab is unlinked, and only
+                    // once materialised — so publish AFTER navigate().
+                    if (id == QLatin1String("equity_research") && !ticker.isEmpty())
+                        EventBus::instance().publish("equity_research.load_symbol",
+                                                     QVariantMap{{"symbol", ticker}});
                 });
         return screen;
     });
