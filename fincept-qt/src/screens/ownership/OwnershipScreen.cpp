@@ -2,6 +2,7 @@
 
 #include "core/symbol/SymbolContext.h"
 #include "screens/ownership/OwnershipSignals.h"
+#include "screens/ownership/SmartMoneyPanel.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/ExternalLink.h"
 #include "ui/formatting/NumberFormat.h"
@@ -191,6 +192,14 @@ void OwnershipScreen::build_ui() {
     });
     bl->addWidget(stakes_tbl_);
 
+    // The stock-perspective view of the 13F index: which tracked managers hold
+    // this and at what weight in THEIR book. Sits above the flat holder table
+    // because "22% of Berkshire's book" is a decision and "8% of shares
+    // outstanding held by BlackRock" mostly is not.
+    bl->addWidget(section_label(QStringLiteral("TRACKED MANAGERS — POSITION IN THEIR BOOK")));
+    smart_money_ = new SmartMoneyPanel;
+    bl->addWidget(smart_money_);
+
     bl->addWidget(section_label(QStringLiteral("INSTITUTIONAL HOLDERS — 13F")));
     holders_tbl_ = make_table({QStringLiteral("Holder"), QStringLiteral("% out"),
                                QStringLiteral("Shares"), QStringLiteral("Value"),
@@ -238,6 +247,11 @@ void OwnershipScreen::load(const QString& symbol) {
     if (search_->text().toUpper() != sym)
         search_->setText(sym);
     services::OwnershipService::instance().load(sym);
+    // Point the panel at the symbol but do not auto-fetch: reading every
+    // tracked manager's 13F is minutes of EDGAR round-trips and must be the
+    // user's choice, not a side effect of typing a ticker.
+    if (smart_money_)
+        smart_money_->set_symbol(sym);
     render();
 }
 

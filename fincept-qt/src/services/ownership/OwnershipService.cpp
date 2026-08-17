@@ -8,7 +8,12 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
 #include <QPointer>
+#include <QStandardPaths>
 
 namespace fincept::services {
 
@@ -34,6 +39,12 @@ constexpr int kWindowMonths = 12;
 /// Filing cap. Reported to the user when it bites — a silently truncated
 /// window reads as a quiet period when it may be a busy one.
 constexpr int kMaxFilings = 60;
+
+/// Every tracked manager costs a submissions fetch, a directory listing and an
+/// information table per quarter, all at EDGAR's 0.4s floor. Twenty managers is
+/// therefore minutes, not seconds — hence the separate call and the long
+/// ceiling.
+constexpr int kSmartMoneyTimeoutMs = 600'000;
 
 std::optional<double> opt_num(const QJsonObject& o, const char* key) {
     const auto v = o.value(QLatin1String(key));
@@ -197,6 +208,47 @@ void parse_market_into(const QJsonObject& o, OwnershipSnapshot& snap) {
     snap.shorts = si;
 }
 
+
+/// Attach manager names and styles to the positions the script returned.
+///
+/// The script works in CIKs because that is what EDGAR keys on; the display
+/// name and the style live in the curated list. Joining here rather than in the
+/// script keeps the user's editable list as the single source of both.
+void parse_smart_money_into(const QJsonObject& root, OwnershipSnapshot& snap,
+                            const QVector<Manager>& managers) {
+    QHash<QString, Manager> by_cik;
+    for (const auto& m : managers) {
+        if (!m.cik.isEmpty())
+            by_cik.insert(m.cik, m);
+    }
+
+    snap.smart_money.clear();
+    for (const auto& v : root.value(QStringLiteral("holders")).toArray()) {
+        const QJsonObject o = v.toObject();
+        ManagerPosition p;
+        p.cik = o.value(QStringLiteral("cik")).toString();
+        const Manager m = by_cik.value(p.cik);
+        // Fall back to the CIK rather than inventing a name. An unnamed row is
+        // still a true row; a wrong name attached to a real position is not.
+        p.manager = m.name.isEmpty() ? QStringLiteral("CIK ") + p.cik : m.name;
+        p.style = m.style;
+        p.issuer = o.value(QStringLiteral("issuer")).toString();
+        p.cusip = o.value(QStringLiteral("cusip")).toString();
+        p.period = iso_date(o, "period");
+        p.filed_date = iso_date(o, "filed_date");
+        p.shares = opt_num(o, "shares");
+        p.value = opt_num(o, "value");
+        p.weight = opt_num(o, "weight");
+        p.book_total = opt_num(o, "book_total");
+        p.position_count = o.value(QStringLiteral("position_count")).toInt();
+        p.action = o.value(QStringLiteral("action")).toString();
+        p.shares_delta = opt_num(o, "shares_delta");
+        p.pct_change = opt_num(o, "pct_change");
+        if (!p.cik.isEmpty())
+            snap.smart_money.push_back(p);
+    }
+}
+
 } // namespace
 
 OwnershipService& OwnershipService::instance() {
@@ -349,6 +401,136 @@ void OwnershipService::fetch_market(const QString& sym) {
         // separate yfinance calls — institutional holders, major holders and
         // .info — and .info alone regularly takes longer than that.
         python::PythonWorker::kComputeActionTimeoutMs);
+}
+
+
+// ── Tracked 13F managers ────────────────────────────────────────────────────
+
+QString OwnershipService::managers_file_path() {
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    return QDir(dir).filePath(QStringLiteral("managers_13f.json"));
+}
+
+QVector<ownership::Manager> OwnershipService::managers() const {
+    if (!managers_cache_.isEmpty())
+        return managers_cache_;
+
+    // The user's list wins when present. Written as plain JSON in the app data
+    // directory rather than hidden in QSettings so it can be edited by hand —
+    // "which managers do I care about" is exactly the kind of preference
+    // someone wants to keep in a file they can diff and back up.
+    QFile f(managers_file_path());
+    if (f.exists() && f.open(QIODevice::ReadOnly)) {
+        const auto doc = QJsonDocument::fromJson(f.readAll());
+        for (const auto& v : doc.array()) {
+            const auto o = v.toObject();
+            ownership::Manager m;
+            m.name = o.value(QStringLiteral("name")).toString();
+            m.cik = o.value(QStringLiteral("cik")).toString();
+            m.style = o.value(QStringLiteral("style")).toString();
+            m.user_added = true;
+            if (!m.name.isEmpty())
+                managers_cache_.push_back(m);
+        }
+        if (!managers_cache_.isEmpty())
+            return managers_cache_;
+        LOG_WARN(TAG, "managers_13f.json present but empty or unreadable — using defaults");
+    }
+    return {};  // caller falls back to the script's curated defaults
+}
+
+bool OwnershipService::set_managers(const QVector<ownership::Manager>& list) {
+    const QString path = managers_file_path();
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    if (list.isEmpty()) {
+        managers_cache_.clear();
+        return QFile::exists(path) ? QFile::remove(path) : true;
+    }
+    QJsonArray arr;
+    for (const auto& m : list) {
+        arr.append(QJsonObject{{"name", m.name}, {"cik", m.cik}, {"style", m.style}});
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_WARN(TAG, "cannot write manager list to " + path);
+        return false;
+    }
+    f.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+    managers_cache_ = list;
+    return true;
+}
+
+void OwnershipService::load_smart_money(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty())
+        return;
+    auto snap = cache_.value(sym);
+    if (snap.smart_money_ok && !snap.smart_money.isEmpty())
+        return;  // already have it for this symbol
+
+    QJsonObject payload{{"symbol", sym}};
+    QJsonArray ciks;
+    for (const auto& m : managers()) {
+        if (!m.cik.isEmpty())
+            ciks.append(m.cik);
+    }
+    if (!ciks.isEmpty())
+        payload.insert(QStringLiteral("ciks"), ciks);
+    payload.insert(QStringLiteral("company"),
+                   snap.company.isEmpty() ? sym : snap.company);
+
+    pending_.insert(sym, pending_.value(sym, 0) + 1);
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_data.py"),
+        {QStringLiteral("holders"),
+         QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+        [self, sym](python::PythonResult result) {
+            if (!self)
+                return;
+            auto snap = self->cache_.value(sym);
+            if (!result.success) {
+                snap.smart_money_error = result.error.isEmpty()
+                                             ? QStringLiteral("13F fetch failed")
+                                             : result.error.left(200);
+            } else {
+                const auto root =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = root.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    snap.smart_money_error = err;
+                } else {
+                    // The script resolves any manager CIKs it had to look up and
+                    // hands them back. Persisting them turns a per-call cost of
+                    // ~22 EDGAR company searches into a one-off.
+                    const auto resolved = root.value(QStringLiteral("resolved_managers")).toArray();
+                    if (!resolved.isEmpty() && self->managers().isEmpty()) {
+                        QVector<Manager> list;
+                        for (const auto& v : resolved) {
+                            const auto o = v.toObject();
+                            Manager m;
+                            m.name = o.value(QStringLiteral("name")).toString();
+                            m.cik = o.value(QStringLiteral("cik")).toString();
+                            m.style = o.value(QStringLiteral("style")).toString();
+                            if (!m.name.isEmpty())
+                                list.push_back(m);
+                        }
+                        if (!list.isEmpty()) {
+                            self->set_managers(list);
+                            LOG_INFO(TAG, QString("Seeded %1 tracked 13F managers into %2")
+                                              .arg(list.size())
+                                              .arg(OwnershipService::managers_file_path()));
+                        }
+                    }
+                    parse_smart_money_into(root, snap, self->managers());
+                    snap.smart_money_ok = true;
+                }
+            }
+            self->cache_.insert(sym, snap);
+            self->note_source_done(sym);
+        },
+        /*on_line=*/{}, kSmartMoneyTimeoutMs);
 }
 
 } // namespace fincept::services

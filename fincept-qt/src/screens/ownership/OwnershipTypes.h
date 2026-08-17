@@ -106,6 +106,77 @@ struct ShortInterest {
     QDate prior_as_of;
 };
 
+/// A tracked 13F manager.
+///
+/// `style` is not decoration. A position weight in a concentrated long-only
+/// book is a conviction statement; the same weight in a hedged multi-strategy
+/// book is one leg of a position and means almost nothing on its own. The UI
+/// shows the style next to the weight so the reader can tell which they are
+/// looking at, rather than the screen implying a confidence the filing cannot
+/// support.
+struct Manager {
+    QString name;
+    QString cik;
+    QString style;      ///< "concentrated long", "activist", "index complex", …
+    bool    user_added = false;
+};
+
+/// What one tracked manager did with one security, from their own 13F.
+///
+/// `weight` is the position as a share of the manager's DISCLOSED EQUITY BOOK
+/// — not of their fund. 13F covers long US equities only: no shorts, no bonds,
+/// no cash, no leverage. That is the number a flat holder table cannot give,
+/// and the caveat that has to travel with it.
+struct ManagerPosition {
+    QString manager;
+    QString cik;
+    QString style;
+    QString issuer;         ///< issuer name as the manager filed it
+    QString cusip;
+    QDate   period;         ///< quarter end the position was reported for
+    QDate   filed_date;
+
+    std::optional<double> shares;
+    std::optional<double> value;
+    std::optional<double> weight;       ///< of the manager's disclosed book
+    std::optional<double> book_total;
+    int position_count = 0;             ///< how many names in their book
+
+    /// "new", "added", "trimmed", "exited", "held", or empty when only one
+    /// quarter was available and no comparison could be made.
+    QString action;
+    std::optional<double> shares_delta;
+    std::optional<double> pct_change;
+};
+
+/// One position line inside a single manager's book (the BY FIRM view).
+struct BookPosition {
+    QString issuer;
+    QString cusip;
+    QString security_class;
+    std::optional<double> shares;
+    std::optional<double> value;
+    std::optional<double> weight;
+};
+
+/// A manager's disclosed equity book for one quarter, with the moves that got
+/// them there.
+struct ManagerBook {
+    QString manager;
+    QString cik;
+    QString style;
+    QDate   period;
+    QDate   filed_date;
+    double  total_value = 0.0;
+    int     position_count = 0;
+    /// How the filing's values were interpreted — SEC moved 13F from thousands
+    /// to whole dollars in 2023 and a silent misread is a 1000x error.
+    QString value_basis;
+    QVector<BookPosition> positions;
+    QVector<ManagerPosition> moves;   ///< quarter-over-quarter, newest period
+    QString error;
+};
+
 /// Everything the screen shows for one symbol, plus what it could not show.
 struct OwnershipSnapshot {
     QString symbol;
@@ -118,6 +189,11 @@ struct OwnershipSnapshot {
     QVector<BeneficialStake>    stakes;
     QVector<InstitutionalHolder> holders;
     ShortInterest               shorts;
+    /// Which of the tracked discretionary managers hold this, at what weight in
+    /// their own book. Sorted by weight — conviction first, not size first.
+    QVector<ManagerPosition>     smart_money;
+    bool    smart_money_ok = false;
+    QString smart_money_error;
 
     /// Coverage, so a truncated fetch can say so. A capped window that renders
     /// silently reads as a quiet period when it may be a busy one.

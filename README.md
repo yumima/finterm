@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`ea995b987`](https://github.com/yumima/finterm/commit/ea995b987) Add OWNERSHIP: who owns a stock, and what that implies
 - [`705589fec`](https://github.com/yumima/finterm/commit/705589fec) Make dashboard headlines open the story
 - [`3803791b0`](https://github.com/yumima/finterm/commit/3803791b0) Remove Power Trader
 - [`11366ace2`](https://github.com/yumima/finterm/commit/11366ace2) Put the category list in one place, and split the headings the model merges

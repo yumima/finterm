@@ -592,6 +592,20 @@ if(Python3_Interpreter_FOUND)
     )
 endif()
 
+# ── 13F information-table parsing ────────────────────────────────────────────
+# Every case here pins something that produced a wrong number when written
+# against real filings rather than against the schema: the default XML
+# namespace that silently returns an empty book, the same CUSIP filed on
+# several rows (Berkshire reports Ally three times) which understates every
+# weight, the 2023 move from thousands to whole dollars that is a silent 1000x
+# error, and share classes sharing an issuer name.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME thirteen_f_parse
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_13f_parse.py
+    )
+endif()
+
 # ── S-1 section slicing ──────────────────────────────────────────────────────
 # The slicer anchored on the FIRST heading occurrence, which in a real S-1 is
 # the table of contents — so "verbatim excerpts" could be a page-number list.

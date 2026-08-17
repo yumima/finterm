@@ -12,6 +12,8 @@ class QPushButton;
 class QTableWidget;
 class QVBoxLayout;
 
+namespace fincept::screens { class SmartMoneyPanel; }
+
 namespace fincept::screens {
 
 /// OWNERSHIP — who owns a security, who is trading it, and what that implies.
@@ -72,6 +74,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QTableWidget* stakes_tbl_   = nullptr;
     QTableWidget* holders_tbl_  = nullptr;
     QLabel*       short_lbl_    = nullptr;
+    SmartMoneyPanel* smart_money_ = nullptr;
 };
 
 } // namespace fincept::screens

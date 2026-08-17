@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityResearchScreen.cpp
 #include "screens/equity_research/EquityResearchScreen.h"
 
+#include "screens/ownership/SmartMoneyPanel.h"
+
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
@@ -384,6 +386,13 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(sentiment_tab_, "Sentiment");
     tab_widget_->addTab(relationships_tab_, "Relationships");
 
+    // Ownership: who among the tracked managers holds this and what they did.
+    // Deliberately a tab rather than a strip on Overview — the fetch is minutes
+    // of EDGAR round-trips, so it should only be reachable when the user has
+    // gone looking for it.
+    ownership_tab_ = new SmartMoneyPanel;
+    tab_widget_->addTab(ownership_tab_, "Ownership");
+
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
 
     // Peers ✓ checkbox ↔ comparison overlay (two-way binding). The Peers
@@ -760,6 +769,11 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     // the user is "viewing" a symbol they never opened (ambient context).
     if (isVisible())
         services::AppContextService::instance().set_current_symbol(symbol);
+
+    // Point the ownership tab at the new symbol. No auto-fetch: reading every
+    // tracked manager's 13F takes minutes, and ER changes symbol constantly.
+    if (ownership_tab_)
+        ownership_tab_->set_symbol(symbol);
 
     // Update title bar to the new symbol immediately.
     symbol_label_->setText(symbol);

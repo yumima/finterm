@@ -43,8 +43,32 @@ class OwnershipService : public QObject {
     /// The current snapshot for @p symbol, or a default-constructed one.
     ownership::OwnershipSnapshot snapshot(const QString& symbol) const;
 
-    /// True while either half of @p symbol's fetch is still outstanding.
+    /// True while any source for @p symbol is still outstanding.
     bool is_loading(const QString& symbol) const;
+
+    // ── Tracked 13F managers ────────────────────────────────────────────────
+    //
+    // Curated rather than "top N by 13F AUM". That ranking fills up with
+    // multi-strategy and index books where a position weight is one leg of a
+    // hedge or a benchmark artifact, and presenting it as conviction would be
+    // the screen inventing confidence the filing cannot support.
+
+    /// The tracked managers. Reads the user's list from the app data directory
+    /// when present, otherwise the curated defaults shipped with the script.
+    QVector<ownership::Manager> managers() const;
+
+    /// Overwrite the user's manager list and persist it. An empty list deletes
+    /// the override so the shipped defaults apply again.
+    bool set_managers(const QVector<ownership::Manager>& list);
+
+    /// Path of the editable list, so the UI can point the user at it.
+    static QString managers_file_path();
+
+    /// Fetch which tracked managers hold @p symbol, at what weight in their own
+    /// book. Slow — every manager is several EDGAR round-trips — so it is a
+    /// separate call from load(), and the rest of the screen renders without
+    /// waiting on it.
+    void load_smart_money(const QString& symbol);
 
   signals:
     /// A source returned and the snapshot changed. Carries the symbol so a
@@ -60,6 +84,8 @@ class OwnershipService : public QObject {
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
     void note_source_done(const QString& symbol);
+
+    mutable QVector<ownership::Manager> managers_cache_;
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;   ///< ms since epoch, per symbol
