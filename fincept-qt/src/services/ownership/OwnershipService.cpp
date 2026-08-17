@@ -537,8 +537,13 @@ bool OwnershipService::index_ready() const {
     // a build in THIS session, so after a restart with a fully built index the
     // button read "BUILD 13F INDEX" and pressing it re-downloaded ~200 MB —
     // while pull_current_quarter, which guards on this, could never run at all.
-    if (!index_probed_) {
-        index_probed_ = true;
+    // Latched on SUCCESS, not on attempt. Setting the flag before the answer
+    // was known meant one failed probe — the Python worker not yet warm, a
+    // transient — left index_ready() false for the whole session: the screen
+    // showed "no index" over a fully built database, and PULL CURRENT QUARTER,
+    // which guards on this, was permanently unreachable until a restart.
+    if (!index_probed_ && !index_probing_) {
+        index_probing_ = true;
         const_cast<OwnershipService*>(this)->probe_index();
     }
     return !index_status_.isEmpty();
@@ -549,8 +554,16 @@ void OwnershipService::probe_index() {
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("status"), QStringLiteral("{}")},
         [self](python::PythonResult result) {
-            if (!self || !result.success)
+            if (!self)
                 return;
+            self->index_probing_ = false;
+            if (!result.success) {
+                // Deliberately NOT latched: the next caller retries. A probe
+                // that failed tells us nothing about whether an index exists.
+                LOG_WARN(TAG, "13F index probe failed, will retry: " + result.error.left(160));
+                return;
+            }
+            self->index_probed_ = true;
             const auto o =
                 QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
             QStringList parts;

@@ -141,7 +141,10 @@ class OwnershipService : public QObject {
     QHash<QString, ownership::ManagerBook> books_;
     QSet<QString> books_in_flight_;
     bool    index_busy_ = false;
+    /// The on-disk index has been read successfully at least once.
     mutable bool index_probed_ = false;
+    /// A probe is in flight — stops every render() from queueing another.
+    mutable bool index_probing_ = false;
     mutable QString index_status_;
 };
 
