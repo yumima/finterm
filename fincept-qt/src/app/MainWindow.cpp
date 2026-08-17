@@ -403,7 +403,15 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             return;
         SessionManager::instance().save_dock_layout(window_id_, dock_manager_->saveState());
         if (WorkspaceManager::instance().has_current_workspace())
-            WorkspaceManager::instance().save_workspace();
+            // Every stateful screen, not just the hidden ones. save_screen_state is
+    // otherwise driven by visibilityChanged(false), which does not fire for the
+    // screen on top at quit — so the ticker in Equity Research, the portfolio
+    // view, and the active tab were all lost for exactly the screen the user
+    // had open.
+    if (dock_router_)
+        dock_router_->save_all_screen_state();
+
+    WorkspaceManager::instance().save_workspace();
     });
 
     connect(toolbar, &ui::ToolBar::dock_command, this,

@@ -147,6 +147,12 @@ struct ManagerPosition {
     QString action;
     std::optional<double> shares_delta;
     std::optional<double> pct_change;
+
+    /// "" for stock, "PUT" or "CALL" for an option line. 13F reports options in
+    /// the same table, and a put is a BEARISH position — it must never be
+    /// folded into a share count or a weight.
+    QString put_call;
+    bool    is_derivative = false;
 };
 
 /// One position line inside a single manager's book (the BY FIRM view).
@@ -194,6 +200,11 @@ struct OwnershipSnapshot {
     QVector<ManagerPosition>     smart_money;
     bool    smart_money_ok = false;
     QString smart_money_error;
+    /// Total filers holding this, before the display limit — so the panel can
+    /// say "showing 40 of 7,979" instead of implying 40 is all of them.
+    int     holder_universe = 0;
+    int     option_holders = 0;
+    QDate   index_quarter;
 
     /// Coverage, so a truncated fetch can say so. A capped window that renders
     /// silently reads as a quiet period when it may be a busy one.

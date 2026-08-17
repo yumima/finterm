@@ -51,6 +51,10 @@ const QString kSrcEdgar  = QStringLiteral("edgar");
 const QString kSrcMarket = QStringLiteral("market");
 const QString kSrcSmart  = QStringLiteral("smart");
 
+/// A quarterly data set is ~100 MB and indexes 3.3m rows; symbol
+/// resolution is rate-limited by OpenFIGI to 25 requests a minute.
+constexpr int kIndexBuildTimeoutMs = 1'800'000;
+
 std::optional<double> opt_num(const QJsonObject& o, const char* key) {
     const auto v = o.value(QLatin1String(key));
     // Absent stays absent. A grant reports no price and a defaulted 0.0 would
@@ -526,6 +530,14 @@ bool OwnershipService::set_managers(const QVector<ownership::Manager>& list) {
 }
 
 void OwnershipService::load_smart_money(const QString& symbol) {
+    // Served from the local 13F index when one exists: the whole universe,
+    // ~20ms, no network. The per-manager EDGAR path below is the fallback for
+    // an un-indexed install and is kept only for that.
+    if (index_ready()) {
+        load_index_holders(symbol);
+        return;
+    }
+
     const QString sym = symbol.trimmed().toUpper();
     if (sym.isEmpty())
         return;
@@ -697,6 +709,139 @@ void OwnershipService::seed_default_managers() {
             emit self->managers_changed();
         },
         /*on_line=*/{}, kSmartMoneyTimeoutMs);
+}
+
+
+// ── Local 13F index ─────────────────────────────────────────────────────────
+
+bool OwnershipService::index_ready() const {
+    return !index_status_.isEmpty();
+}
+
+QString OwnershipService::index_status_text() const {
+    return index_status_.isEmpty()
+               ? QStringLiteral("No 13F index built yet — the holder list is empty until "
+                                "one quarter is downloaded.")
+               : index_status_;
+}
+
+void OwnershipService::build_index() {
+    if (index_busy_)
+        return;
+    index_busy_ = true;
+    emit index_changed(QStringLiteral("Downloading SEC 13F data set…"));
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest"), QStringLiteral("{}")},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->index_busy_ = false;
+            QString msg;
+            if (!result.success) {
+                msg = QStringLiteral("Index build failed: ") + result.error.left(200);
+            } else {
+                const auto o =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = o.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    msg = err;
+                } else {
+                    self->index_status_ =
+                        QStringLiteral("Quarter %1 · %2 filers · %3 positions")
+                            .arg(o.value(QStringLiteral("quarter")).toString())
+                            .arg(o.value(QStringLiteral("filers")).toInt())
+                            .arg(o.value(QStringLiteral("rows")).toInt());
+                    msg = self->index_status_;
+                }
+            }
+            emit self->index_changed(msg);
+        },
+        /*on_line=*/{}, kIndexBuildTimeoutMs);
+}
+
+void OwnershipService::resolve_symbols(int limit) {
+    if (index_busy_)
+        return;
+    index_busy_ = true;
+    emit index_changed(QStringLiteral("Resolving ticker symbols…"));
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("resolve_symbols"),
+         QString::fromUtf8(QJsonDocument(QJsonObject{{"limit", limit}})
+                               .toJson(QJsonDocument::Compact))},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->index_busy_ = false;
+            const auto o = result.success
+                ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
+                : QJsonObject{};
+            emit self->index_changed(
+                QStringLiteral("Mapped %1 more symbols · %2 still unmapped")
+                    .arg(o.value(QStringLiteral("resolved")).toInt())
+                    .arg(o.value(QStringLiteral("remaining")).toInt()));
+        },
+        /*on_line=*/{}, kIndexBuildTimeoutMs);
+}
+
+
+void OwnershipService::load_index_holders(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty() || pending_.value(sym).contains(kSrcSmart))
+        return;
+    pending_[sym].insert(kSrcSmart);
+
+    QPointer<OwnershipService> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"ticker", sym}, {"limit", 80}}).toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("holders"), payload},
+        [self, sym](python::PythonResult result) {
+            if (!self)
+                return;
+            auto snap = self->cache_.value(sym);
+            snap.smart_money.clear();
+            if (!result.success) {
+                snap.smart_money_error = result.error.isEmpty()
+                                             ? QStringLiteral("13F index query failed")
+                                             : result.error.left(200);
+            } else {
+                const auto root =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = root.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    snap.smart_money_error = err;
+                } else {
+                    snap.smart_money_error.clear();
+                    snap.holder_universe = root.value(QStringLiteral("holder_count")).toInt();
+                    snap.option_holders = root.value(QStringLiteral("option_holder_count")).toInt();
+                    snap.index_quarter = QDate::fromString(
+                        root.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
+                    for (const auto& v : root.value(QStringLiteral("holders")).toArray()) {
+                        const auto o = v.toObject();
+                        ManagerPosition p;
+                        p.manager = o.value(QStringLiteral("manager")).toString();
+                        p.issuer = o.value(QStringLiteral("issuer")).toString();
+                        p.cusip = o.value(QStringLiteral("cusip")).toString();
+                        p.shares = opt_num(o, "shares");
+                        p.value = opt_num(o, "value");
+                        p.weight = opt_num(o, "weight");
+                        p.book_total = opt_num(o, "book_total");
+                        p.position_count = o.value(QStringLiteral("position_count")).toInt();
+                        p.put_call = o.value(QStringLiteral("put_call")).toString();
+                        p.is_derivative = o.value(QStringLiteral("is_derivative")).toBool();
+                        if (!p.manager.isEmpty())
+                            snap.smart_money.push_back(p);
+                    }
+                    snap.smart_money_ok = true;
+                }
+            }
+            self->cache_.insert(sym, snap);
+            self->note_source_done(sym, kSrcSmart);
+        },
+        /*on_line=*/{}, 60'000);
 }
 
 } // namespace fincept::services

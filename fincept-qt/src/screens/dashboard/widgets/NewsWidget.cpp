@@ -200,8 +200,13 @@ void NewsWidget::populate(const QJsonArray& articles) {
         if (url.isEmpty()) {
             headline->setText(title);
         } else {
-            headline->setText(QStringLiteral("<a href=\"%1\">%2</a>")
-                                  .arg(url.toHtmlEscaped(), title.toHtmlEscaped()));
+            // text-decoration:none on the anchor itself — a QLabel link is
+            // underlined by default, and a feed of underlined headlines reads
+            // as a wall of links rather than as news. The pointing-hand cursor
+            // and the hover tooltip carry the affordance instead.
+            headline->setText(
+                QStringLiteral("<a href=\"%1\" style=\"text-decoration:none;color:%2;\">%3</a>")
+                    .arg(url.toHtmlEscaped(), ui::colors::TEXT_PRIMARY(), title.toHtmlEscaped()));
             headline->setToolTip(url);
             headline->setCursor(Qt::PointingHandCursor);
             // openExternalLinks would bypass the scheme check — route it

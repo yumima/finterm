@@ -1,96 +1,57 @@
 #include "screens/ownership/SmartMoneyPanel.h"
 
+#include "screens/ownership/HoldersChart.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#include <QHeaderView>
+#include <QComboBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QTableWidget>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
+
+#include <algorithm>
 
 namespace fincept::screens {
 
 using namespace fincept::ownership;
 namespace fmt = fincept::ui::formatting;
 
-namespace {
-
-/// Colour by what the manager did, not by whether it is "good". An exit is not
-/// a bad thing, it is a fact.
-QString action_colour(const QString& action) {
-    if (action == QLatin1String("new") || action == QLatin1String("added"))
-        return ui::colors::GREEN();
-    if (action == QLatin1String("trimmed") || action == QLatin1String("exited"))
-        return ui::colors::RED();
-    return ui::colors::TEXT_SECONDARY();
-}
-
-/// A style that makes the weight a conviction reading, versus one that does
-/// not. The distinction is the difference between a useful screen and a
-/// misleading one, so it drives the row's emphasis.
-bool weight_reads_as_conviction(const QString& style) {
-    return style.contains(QStringLiteral("concentrated"), Qt::CaseInsensitive) ||
-           style.contains(QStringLiteral("activist"), Qt::CaseInsensitive);
-}
-
-QTableWidgetItem* cell(const QString& text, const QString& colour = {}) {
-    auto* it = new QTableWidgetItem(text);
-    if (!colour.isEmpty())
-        it->setForeground(QColor(colour));
-    return it;
-}
-
-} // namespace
-
 SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(6);
+    root->setSpacing(4);
 
     auto* bar = new QHBoxLayout;
-    bar->setSpacing(8);
-    load_btn_ = new QPushButton(QStringLiteral("LOAD 13F POSITIONS"));
-    load_btn_->setToolTip(
-        QStringLiteral("Reads each tracked manager's own 13F from EDGAR. Several "
-                       "round-trips per manager, so this takes a while."));
-    connect(load_btn_, &QPushButton::clicked, this, [this]() {
-        if (symbol_.isEmpty())
-            return;
-        services::OwnershipService::instance().load_smart_money(symbol_);
-        render();
-    });
-    bar->addWidget(load_btn_);
+    bar->setSpacing(6);
+
+    // Ranking is the one control here, and it is a two-item combo rather than a
+    // hidden default: "largest holders" is what Bloomberg's HDS shows, and
+    // "highest conviction" is the question a weight actually answers. Both are
+    // legitimate and the reader should not have to guess which they are seeing.
+    sort_ = new QComboBox;
+    sort_->addItem(QStringLiteral("Highest conviction (% of their book)"),
+                   static_cast<int>(Sort::Weight));
+    sort_->addItem(QStringLiteral("Largest position ($)"), static_cast<int>(Sort::Value));
+    sort_->setToolTip(QStringLiteral(
+        "Conviction ranks by how much of the manager's own book this is. Largest ranks by "
+        "dollars held, which surfaces the index complexes."));
+    connect(sort_, &QComboBox::currentIndexChanged, this, [this](int) { render(); });
+    bar->addWidget(sort_);
+
     status_ = new QLabel;
+    status_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     bar->addWidget(status_, 1);
     root->addLayout(bar);
 
-    table_ = new QTableWidget;
-    table_->setColumnCount(7);
-    table_->setHorizontalHeaderLabels({QStringLiteral("Manager"), QStringLiteral("Style"),
-                                       QStringLiteral("% of their book"),
-                                       QStringLiteral("Shares"), QStringLiteral("Value"),
-                                       QStringLiteral("Last move"), QStringLiteral("As of")});
-    table_->verticalHeader()->setVisible(false);
-    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table_->setAlternatingRowColors(true);
-    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
-    table_->horizontalHeader()->setStretchLastSection(true);
-    table_->setMinimumHeight(160);
-    root->addWidget(table_, 1);
+    chart_ = new RankedBarChart;
+    chart_->set_empty_text(QStringLiteral("No 13F index built yet."));
+    root->addWidget(chart_, 1);
 
-    // Stated once, here, rather than repeated on every row — and stated at all,
-    // because a weight column with no context invites being read as a share of
-    // the manager's fund.
     caveat_ = new QLabel(QStringLiteral(
-        "13F covers long US equities only — no shorts, no bonds, no cash, no leverage — so a "
-        "weight is a share of the manager's disclosed equity book, not of their fund. For a "
-        "hedged multi-strategy book it is one leg of a position and does not read as conviction. "
-        "Filed 45 days after quarter end, so a position opened early in the quarter is up to 135 "
-        "days old here."));
+        "13F: long US equities only, filed 45 days after quarter end. A weight is a share of "
+        "the manager's disclosed equity book, not of their fund."));
     caveat_->setWordWrap(true);
     caveat_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
     root->addWidget(caveat_);
@@ -100,15 +61,24 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
                 if (sym.compare(symbol_, Qt::CaseInsensitive) == 0)
                     render();
             });
+    connect(&services::OwnershipService::instance(),
+            &services::OwnershipService::index_changed, this, [this](const QString&) {
+                if (!symbol_.isEmpty())
+                    services::OwnershipService::instance().load_smart_money(symbol_);
+                render();
+            });
     render();
 }
 
-void SmartMoneyPanel::set_symbol(const QString& symbol, bool auto_fetch) {
+void SmartMoneyPanel::set_symbol(const QString& symbol, bool /*auto_fetch*/) {
     const QString sym = symbol.trimmed().toUpper();
     if (sym == symbol_)
         return;
     symbol_ = sym;
-    if (auto_fetch && !sym.isEmpty())
+    // Always fetch. Against the local index this is a ~20ms SQLite query, so
+    // there is nothing to defer and no reason to make the user press a button —
+    // which is what previously left this reading "Not loaded for AAPL".
+    if (!sym.isEmpty())
         services::OwnershipService::instance().load_smart_money(sym);
     render();
 }
@@ -117,85 +87,95 @@ void SmartMoneyPanel::render() {
     auto& svc = services::OwnershipService::instance();
     if (symbol_.isEmpty()) {
         status_->setText(QStringLiteral("No symbol selected."));
-        table_->setRowCount(0);
-        load_btn_->setEnabled(false);
+        chart_->set_bars({});
         return;
     }
-    load_btn_->setEnabled(true);
 
     const auto snap = svc.snapshot(symbol_);
     const auto& rows = snap.smart_money;
 
     if (!snap.smart_money_error.isEmpty()) {
-        status_->setText(QStringLiteral("13F lookup failed: ") + snap.smart_money_error);
-        status_->setStyleSheet(QString("color:%1;").arg(ui::colors::RED()));
-    } else if (svc.is_loading(symbol_) && !snap.smart_money_ok) {
-        status_->setText(QStringLiteral("Reading manager filings from EDGAR — this takes a "
-                                        "minute or two."));
+        status_->setText(snap.smart_money_error);
+        status_->setStyleSheet(QString("color:%1;").arg(ui::colors::AMBER()));
+        chart_->set_bars({});
+        chart_->set_empty_text(
+            svc.index_ready()
+                ? snap.smart_money_error
+                : QStringLiteral("Build the 13F index once to see every institutional holder."));
+        return;
+    }
+    if (svc.is_loading(symbol_) && !snap.smart_money_ok) {
+        status_->setText(QStringLiteral("Reading the 13F index…"));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
-    } else if (snap.smart_money_ok && rows.isEmpty()) {
-        // A real answer, and a different one from "we did not look".
-        status_->setText(QStringLiteral("None of the tracked managers reported a position in %1 "
-                                        "in their latest 13F.").arg(symbol_));
+        return;
+    }
+    if (!snap.smart_money_ok) {
+        status_->setText(svc.index_status_text());
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
-    } else if (!snap.smart_money_ok) {
-        status_->setText(QStringLiteral("Not loaded for %1.").arg(symbol_));
-        status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
-    } else {
-        status_->setText(QStringLiteral("%1 of the tracked managers hold %2.")
-                             .arg(rows.size()).arg(symbol_));
-        status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
+        chart_->set_bars({});
+        return;
     }
 
-    table_->setRowCount(rows.size());
-    for (int i = 0; i < rows.size(); ++i) {
-        const auto& p = rows[i];
-        const bool conviction = weight_reads_as_conviction(p.style);
+    // Stock lines only. An option line is a different instrument and a put is a
+    // bearish position; mixing them into a holder ranking would report a short
+    // as a long.
+    QVector<ManagerPosition> stock;
+    for (const auto& p : rows)
+        if (!p.is_derivative)
+            stock.push_back(p);
 
-        table_->setItem(i, 0, cell(p.manager));
-        auto* style_item = cell(p.style, conviction ? QString() : ui::colors::TEXT_DIM());
-        style_item->setToolTip(
-            conviction
-                ? QStringLiteral("A long, concentrated or activist book — the weight reads as a "
-                                 "deliberate position size.")
-                : QStringLiteral("A hedged or index book — 13F shows only the long equity leg, "
-                                 "so this weight is not a conviction reading."));
-        table_->setItem(i, 1, style_item);
+    const auto mode = static_cast<Sort>(sort_->currentData().toInt());
+    std::stable_sort(stock.begin(), stock.end(),
+                     [mode](const ManagerPosition& a, const ManagerPosition& b) {
+                         return mode == Sort::Weight ? (a.weight.value_or(0) > b.weight.value_or(0))
+                                                     : (a.value.value_or(0) > b.value.value_or(0));
+                     });
 
-        // The weight is emphasised only where it means something. Everywhere
-        // else it is still shown — it is a real number — just not highlighted
-        // as though it were a signal.
-        auto* w = cell(p.weight ? fmt::format_percent(*p.weight * 100.0) : fmt::placeholder(),
-                       conviction ? ui::colors::AMBER() : QString());
-        if (p.book_total && p.position_count > 0) {
-            w->setToolTip(QStringLiteral("Of a %1 disclosed equity book across %2 positions.")
-                              .arg(fmt::format_compact(*p.book_total))
-                              .arg(p.position_count));
-        }
-        table_->setItem(i, 2, w);
+    QString head = QStringLiteral("%1 institutional holders")
+                       .arg(snap.holder_universe ? snap.holder_universe : stock.size());
+    if (snap.index_quarter.isValid())
+        head += QStringLiteral(" · as of ") + snap.index_quarter.toString(QStringLiteral("MMM yyyy"));
+    if (snap.option_holders > 0)
+        head += QStringLiteral(" · %1 hold options only").arg(snap.option_holders);
+    status_->setText(head);
+    status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
 
-        table_->setItem(i, 3, cell(p.shares ? fmt::format_compact(*p.shares)
-                                            : fmt::placeholder()));
-        table_->setItem(i, 4, cell(p.value ? fmt::format_money(*p.value) : fmt::placeholder()));
+    // Bars are scaled to the largest in view so the ranking is legible even
+    // when every weight is small — an absolute 0..1 scale would render a set of
+    // 1% positions as a column of empty tracks.
+    double top = 0.0;
+    for (const auto& p : stock)
+        top = std::max(top, mode == Sort::Weight ? p.weight.value_or(0) : p.value.value_or(0));
 
-        QString move = p.action.isEmpty() ? fmt::placeholder() : p.action;
-        if (p.shares_delta && *p.shares_delta != 0.0) {
-            move += QStringLiteral("  %1%2")
-                        .arg(*p.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("-"),
-                             fmt::format_compact(std::abs(*p.shares_delta)));
-        }
-        auto* move_item = cell(move, action_colour(p.action));
-        if (p.action == QLatin1String("held")) {
-            move_item->setToolTip(QStringLiteral("Present in both quarters with no material "
-                                                 "change — which is itself an answer, and a "
-                                                 "different one from 'we could not tell'."));
-        }
-        table_->setItem(i, 5, move_item);
-
-        table_->setItem(i, 6, cell(p.period.isValid()
-                                       ? p.period.toString(QStringLiteral("yyyy-MM-dd"))
-                                       : fmt::placeholder()));
+    QVector<RankedBar> bars;
+    for (const auto& p : stock) {
+        const double metric = mode == Sort::Weight ? p.weight.value_or(0) : p.value.value_or(0);
+        RankedBar b;
+        b.label = p.manager;
+        b.value_text = mode == Sort::Weight
+                           ? (p.weight ? fmt::format_percent(*p.weight * 100.0, 1)
+                                       : fmt::placeholder())
+                           : (p.value ? fmt::format_compact(*p.value) : fmt::placeholder());
+        b.fraction = top > 0 ? metric / top : 0.0;
+        // A large weight is the thing worth looking at, so it carries the
+        // attention colour; everything else stays neutral rather than every row
+        // shouting.
+        b.colour = (p.weight.value_or(0) >= 0.05) ? QColor(ui::colors::AMBER())
+                                                  : QColor(ui::colors::CYAN());
+        b.tooltip = QStringLiteral("%1\n%2 shares · %3\n%4 of a %5 book across %6 positions")
+                        .arg(p.manager,
+                             p.shares ? fmt::format_compact(*p.shares) : fmt::placeholder(),
+                             p.value ? fmt::format_money(*p.value) : fmt::placeholder(),
+                             p.weight ? fmt::format_percent(*p.weight * 100.0, 2)
+                                      : fmt::placeholder(),
+                             p.book_total ? fmt::format_compact(*p.book_total)
+                                          : fmt::placeholder())
+                        .arg(p.position_count);
+        bars.push_back(b);
     }
+    chart_->set_bars(bars);
+    chart_->set_empty_text(
+        QStringLiteral("No institutional holder of %1 in the indexed quarter.").arg(symbol_));
 }
 
 } // namespace fincept::screens

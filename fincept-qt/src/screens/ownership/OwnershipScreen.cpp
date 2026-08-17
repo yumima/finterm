@@ -3,12 +3,15 @@
 #include "core/symbol/SymbolContext.h"
 #include "screens/ownership/OwnershipSignals.h"
 #include "screens/ownership/FirmBookPanel.h"
+#include "screens/ownership/HoldersChart.h"
 #include "screens/ownership/SmartMoneyPanel.h"
 #include "services/ownership/OwnershipService.h"
+#include "storage/repositories/PortfolioRepository.h"
 #include "ui/components/ExternalLink.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -16,10 +19,14 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QGridLayout>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -28,13 +35,29 @@ namespace fmt = fincept::ui::formatting;
 
 namespace {
 
-/// A section heading with a rule under it, matching the other research screens.
-QLabel* section_label(const QString& text) {
-    auto* l = new QLabel(text);
-    l->setStyleSheet(QString("color:%1;font-weight:700;letter-spacing:1px;"
-                             "padding:6px 2px 4px 2px;border-bottom:1px solid %2;")
-                         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
-    return l;
+/// A titled tile. The screen is a grid of these rather than one long scroll:
+/// every number is on screen at once, and each tile owns its own overflow so a
+/// long table scrolls inside its box instead of pushing everything else down.
+QWidget* tile(const QString& title, QWidget* content, const QString& hint = {}) {
+    auto* box = new QFrame;
+    box->setFrameShape(QFrame::StyledPanel);
+    box->setStyleSheet(QString("QFrame{background:%1;border:1px solid %2;border-radius:4px;}")
+                           .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    auto* v = new QVBoxLayout(box);
+    v->setContentsMargins(8, 6, 8, 8);
+    v->setSpacing(4);
+
+    auto* head = new QLabel(title);
+    // 12px and a real weight: the old 11px dim captions were the hardest thing
+    // on the screen to read, and a tile title has to be findable at a glance.
+    head->setStyleSheet(QString("color:%1;font-weight:700;font-size:12px;letter-spacing:1px;"
+                                "border:none;background:transparent;")
+                            .arg(ui::colors::AMBER()));
+    head->setToolTip(hint);
+    v->addWidget(head);
+    content->setStyleSheet(content->styleSheet() + QStringLiteral("border:none;"));
+    v->addWidget(content, 1);
+    return box;
 }
 
 QTableWidget* make_table(const QStringList& headers) {
@@ -99,6 +122,12 @@ OwnershipScreen::OwnershipScreen(QWidget* parent) : QWidget(parent) {
 
     // Follow the shared symbol so arriving from another screen lands on the
     // same company rather than on whatever was last typed here.
+    connect(&services::OwnershipService::instance(),
+            &services::OwnershipService::index_changed, this,
+            [this](const QString& msg) { refresh_index_ui(msg); });
+    refresh_index_ui({});
+    reload_portfolio();
+
     connect(&SymbolContext::instance(), &SymbolContext::group_symbol_changed, this,
             [this](SymbolGroup group, const SymbolRef& ref) {
                 if (group == SymbolGroup::A && !ref.symbol.isEmpty() && isVisible())
@@ -121,10 +150,23 @@ void OwnershipScreen::build_ui() {
 
     search_ = new QLineEdit;
     search_->setPlaceholderText(QStringLiteral("Ticker — e.g. AAPL"));
-    search_->setMaximumWidth(220);
+    search_->setMaximumWidth(180);
     connect(search_, &QLineEdit::returnPressed, this,
             [this]() { load(search_->text()); });
     bar->addWidget(search_);
+
+    // Your own holdings as a dropdown. The overwhelmingly common question is
+    // "who else owns what I own", and making that require typing a ticker you
+    // already told the app about is a pointless keystroke tax.
+    portfolio_ = new QComboBox;
+    portfolio_->setMinimumWidth(150);
+    portfolio_->setToolTip(QStringLiteral("Jump to one of your portfolio holdings."));
+    connect(portfolio_, &QComboBox::activated, this, [this](int i) {
+        const QString sym = portfolio_->itemData(i).toString();
+        if (!sym.isEmpty())
+            load(sym);
+    });
+    bar->addWidget(portfolio_);
 
     // Drill-through to the deep per-ticker screen. Without this the
     // navigate_to_screen signal — and MainWindow's handler for it — was dead
@@ -148,91 +190,120 @@ void OwnershipScreen::build_ui() {
 
     status_ = new QLabel;
     bar->addWidget(status_, 1);
+
+    // The index controls live on the top bar, not inside a panel: without an
+    // index every holder view is empty, so "how do I fix that" must be the most
+    // findable thing on the screen rather than something to hunt for.
+    index_btn_ = new QPushButton;
+    connect(index_btn_, &QPushButton::clicked, this, [this]() {
+        auto& svc = services::OwnershipService::instance();
+        if (!svc.index_ready())
+            svc.build_index();
+        else
+            svc.resolve_symbols(2000);
+    });
+    bar->addWidget(index_btn_);
     root->addLayout(bar);
 
-    // ── Scrollable body ─────────────────────────────────────────────────────
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    auto* body = new QWidget;
-    auto* bl = new QVBoxLayout(body);
-    bl->setContentsMargins(0, 0, 0, 0);
-    bl->setSpacing(10);
+    index_lbl_ = new QLabel;
+    index_lbl_->setWordWrap(true);
+    index_lbl_->setStyleSheet(QString("color:%1;font-size:11px;")
+                                  .arg(ui::colors::TEXT_SECONDARY()));
+    root->addWidget(index_lbl_);
 
-    // The interpretation leads. Everything below it is the evidence.
-    bl->addWidget(section_label(QStringLiteral("READ-THROUGH")));
+    // ── Tiled body ──────────────────────────────────────────────────────────
+    // A grid, not a scroll. Every tile is visible at once at a normal window
+    // size; each one scrolls internally if its own content is long.
+    auto* grid = new QGridLayout;
+    grid->setContentsMargins(0, 0, 0, 0);
+    grid->setHorizontalSpacing(8);
+    grid->setVerticalSpacing(8);
+
+    // Row 0 — what it means, and who is buying. The two things a reader wants
+    // first, side by side.
     reads_host_ = new QWidget;
     reads_layout_ = new QVBoxLayout(reads_host_);
     reads_layout_->setContentsMargins(0, 0, 0, 0);
     reads_layout_->setSpacing(6);
-    bl->addWidget(reads_host_);
+    auto* reads_scroll = new QScrollArea;
+    reads_scroll->setWidgetResizable(true);
+    reads_scroll->setFrameShape(QFrame::NoFrame);
+    reads_scroll->setWidget(reads_host_);
+    grid->addWidget(tile(QStringLiteral("READ-THROUGH"), reads_scroll,
+                         QStringLiteral("What the register implies, with the number and the "
+                                        "rule behind each line.")), 0, 0);
 
-    coverage_ = new QLabel;
-    coverage_->setWordWrap(true);
-    bl->addWidget(coverage_);
-
-    bl->addWidget(section_label(QStringLiteral("INSIDER TRANSACTIONS — FORM 4")));
+    insider_timeline_ = new EventTimeline;
+    insider_timeline_->set_empty_text(QStringLiteral("No Form 4 activity in the window."));
+    auto* ins_box = new QWidget;
+    auto* ins_v = new QVBoxLayout(ins_box);
+    ins_v->setContentsMargins(0, 0, 0, 0);
+    ins_v->setSpacing(4);
+    ins_v->addWidget(insider_timeline_, 1);
     insiders_tbl_ = make_table({QStringLiteral("Date"), QStringLiteral("Insider"),
-                                QStringLiteral("Role"), QStringLiteral("Action"),
-                                QStringLiteral("Shares"), QStringLiteral("Price"),
+                                QStringLiteral("Action"), QStringLiteral("Shares"),
                                 QStringLiteral("Value"), QStringLiteral("Pattern")});
-    insiders_tbl_->setMinimumHeight(220);
     connect(insiders_tbl_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         if (auto* it = insiders_tbl_->item(row, 0))
             ui::open_external_link(it->data(Qt::UserRole).toString());
     });
-    bl->addWidget(insiders_tbl_);
+    ins_v->addWidget(insiders_tbl_, 2);
+    coverage_ = new QLabel;
+    coverage_->setWordWrap(true);
+    ins_v->addWidget(coverage_);
+    grid->addWidget(tile(QStringLiteral("INSIDERS — FORM 4"), ins_box,
+                         QStringLiteral("Open-market buys above the line, sells below, sized "
+                                        "by value. Double-click a row to open the filing.")),
+                    0, 1);
 
-    bl->addWidget(section_label(QStringLiteral("5% STAKES — SCHEDULE 13D / 13G")));
+    // Row 1 — the institutional register and the short side.
+    smart_money_ = new SmartMoneyPanel;
+    grid->addWidget(tile(QStringLiteral("INSTITUTIONAL HOLDERS"), smart_money_,
+                         QStringLiteral("Every 13F filer holding this, ranked by how much of "
+                                        "their own book it is.")), 1, 0);
+
+    auto* right = new QWidget;
+    auto* rv = new QVBoxLayout(right);
+    rv->setContentsMargins(0, 0, 0, 0);
+    rv->setSpacing(4);
+    ownership_mix_ = new RankedBarChart;
+    ownership_mix_->set_empty_text(QStringLiteral("No ownership breakdown reported."));
+    rv->addWidget(ownership_mix_, 1);
+    short_lbl_ = new QLabel;
+    short_lbl_->setWordWrap(true);
+    short_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    rv->addWidget(short_lbl_);
+    grid->addWidget(tile(QStringLiteral("FLOAT & SHORT INTEREST"), right,
+                         QStringLiteral("Who is sitting on the shares, and how much of the "
+                                        "float is sold short.")), 1, 1);
+
+    // Row 2 — 5% stakes and the firm-level browser.
     stakes_tbl_ = make_table({QStringLiteral("Filed"), QStringLiteral("Form"),
                               QStringLiteral("Intent"), QStringLiteral("Document")});
-    stakes_tbl_->setMinimumHeight(120);
     connect(stakes_tbl_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         if (auto* it = stakes_tbl_->item(row, 0))
             ui::open_external_link(it->data(Qt::UserRole).toString());
     });
-    bl->addWidget(stakes_tbl_);
+    grid->addWidget(tile(QStringLiteral("5% STAKES — 13D / 13G"), stakes_tbl_,
+                         QStringLiteral("13D declares intent to influence; 13G is passive. "
+                                        "Double-click to open the filing.")), 2, 0);
 
-    // The stock-perspective view of the 13F index: which tracked managers hold
-    // this and at what weight in THEIR book. Sits above the flat holder table
-    // because "22% of Berkshire's book" is a decision and "8% of shares
-    // outstanding held by BlackRock" mostly is not.
-    bl->addWidget(section_label(QStringLiteral("TRACKED MANAGERS — POSITION IN THEIR BOOK")));
-    smart_money_ = new SmartMoneyPanel;
-    bl->addWidget(smart_money_);
-
-    bl->addWidget(section_label(QStringLiteral("INSTITUTIONAL HOLDERS — 13F")));
-    holders_tbl_ = make_table({QStringLiteral("Holder"), QStringLiteral("% out"),
-                               QStringLiteral("Shares"), QStringLiteral("Value"),
-                               QStringLiteral("As of")});
-    holders_tbl_->setMinimumHeight(180);
-    bl->addWidget(holders_tbl_);
-
-    bl->addWidget(section_label(QStringLiteral("SHORT INTEREST")));
-    short_lbl_ = new QLabel;
-    short_lbl_->setWordWrap(true);
-    short_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    bl->addWidget(short_lbl_);
-
-    // The other traversal of the same index: pick a firm, see its whole book.
-    // Sits last because the screen is keyed on a security — this is the
-    // manager-keyed view of the same filings, and it is where the tracked-firm
-    // list is edited.
-    bl->addWidget(section_label(QStringLiteral("BY FIRM — A MANAGER'S WHOLE BOOK")));
     firm_book_ = new FirmBookPanel;
     connect(firm_book_, &FirmBookPanel::navigate_to_symbol, this,
             [this](const QString& issuer) {
-                // The book reports issuer NAMES, not tickers — 13F carries
-                // CUSIPs and the CUSIP-to-ticker map is licensed. Put the name
-                // in the search box rather than guessing a symbol from it.
                 if (!issuer.isEmpty())
                     search_->setText(issuer);
             });
-    bl->addWidget(firm_book_);
+    grid->addWidget(tile(QStringLiteral("BY FIRM — A MANAGER'S BOOK"), firm_book_,
+                         QStringLiteral("The same filings keyed by manager instead of by "
+                                        "security.")), 2, 1);
 
-    bl->addStretch(1);
-    scroll->setWidget(body);
-    root->addWidget(scroll, 1);
+    grid->setColumnStretch(0, 1);
+    grid->setColumnStretch(1, 1);
+    grid->setRowStretch(0, 3);
+    grid->setRowStretch(1, 3);
+    grid->setRowStretch(2, 2);
+    root->addLayout(grid, 1);
 }
 
 void OwnershipScreen::apply_theme() {
@@ -351,51 +422,76 @@ void OwnershipScreen::render_reads(const OwnershipSnapshot& s) {
 }
 
 void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
-    // Pattern is per-insider, so index it once rather than scanning per row.
     QHash<QString, InsiderProfile> by_name;
     for (const auto& p : s.insiders)
         by_name.insert(p.insider, p);
 
+    // ── Timeline: open-market decisions only ────────────────────────────────
+    // Grants, option exercises and tax withholding vest on a calendar. Plotting
+    // them alongside purchases is what makes a naive insider chart look like
+    // constant activity, so only P and S reach the timeline.
+    double biggest = 0.0;
+    for (const auto& t : s.transactions)
+        if (t.open_market && t.value)
+            biggest = std::max(biggest, std::abs(*t.value));
+
+    QVector<TimelineEvent> events;
+    for (const auto& t : s.transactions) {
+        if (!t.open_market || !t.date.isValid())
+            continue;
+        TimelineEvent e;
+        e.date = t.date;
+        e.positive = t.acquired;
+        e.magnitude = (biggest > 0 && t.value) ? std::abs(*t.value) / biggest : 0.3;
+        e.tooltip = QStringLiteral("%1\n%2 — %3\n%4 shares at %5")
+                        .arg(t.date.toString(QStringLiteral("d MMM yyyy")), t.insider,
+                             t.acquired ? QStringLiteral("bought") : QStringLiteral("sold"),
+                             t.shares ? fmt::format_compact(*t.shares) : fmt::placeholder(),
+                             t.price ? fmt::format_money(*t.price) : fmt::placeholder());
+        events.push_back(e);
+    }
+    insider_timeline_->set_events(events);
+    insider_timeline_->set_empty_text(
+        s.transactions.isEmpty()
+            ? QStringLiteral("No Form 4 filings in the window.")
+            : QStringLiteral("Form 4 filings exist, but none are open-market buys or sells — "
+                             "all of it is grants, option exercises or tax withholding."));
+
+    // ── Table ───────────────────────────────────────────────────────────────
     insiders_tbl_->setRowCount(s.transactions.size());
     for (int i = 0; i < s.transactions.size(); ++i) {
         const auto& t = s.transactions[i];
-        // Only open-market decisions get a directional colour. Grants and tax
-        // withholding are neutral events and colouring them green/red is what
-        // makes a naive insider screen read as constant buying.
+        // Only real decisions carry a direction colour. Colouring a grant green
+        // is what makes every insider screen look like relentless buying.
         QString colour;
         if (t.open_market)
             colour = t.acquired ? ui::colors::GREEN() : ui::colors::RED();
 
-        auto* date_item = cell(t.date.toString(QStringLiteral("yyyy-MM-dd")));
+        auto* date_item = cell(t.date.toString(QStringLiteral("yyyy-MM-dd")), colour);
         date_item->setData(Qt::UserRole, t.source_url);
         date_item->setToolTip(QStringLiteral("Double-click to open the filing on EDGAR"));
         insiders_tbl_->setItem(i, 0, date_item);
-        insiders_tbl_->setItem(i, 1, cell(t.insider));
-        insiders_tbl_->setItem(i, 2, cell(t.roles.join(QStringLiteral(", "))));
+
+        auto* who = cell(t.insider);
+        if (!t.roles.isEmpty())
+            who->setToolTip(t.roles.join(QStringLiteral(", ")));
+        insiders_tbl_->setItem(i, 1, who);
+
         insiders_tbl_->setItem(
-            i, 3, cell(t.derivative ? t.code_label + QStringLiteral(" (deriv)") : t.code_label,
+            i, 2, cell(t.derivative ? t.code_label + QStringLiteral(" (deriv)") : t.code_label,
                        colour));
-        insiders_tbl_->setItem(i, 4, cell(compact_or_placeholder(t.shares)));
-        insiders_tbl_->setItem(i, 5, cell(money_or_placeholder(t.price)));
-        insiders_tbl_->setItem(i, 6, cell(money_or_placeholder(t.value)));
+        insiders_tbl_->setItem(i, 3, cell(compact_or_placeholder(t.shares), colour));
+        insiders_tbl_->setItem(i, 4, cell(money_or_placeholder(t.value), colour));
 
         const bool have_profile = by_name.contains(t.insider);
         const auto p = by_name.value(t.insider);
-        QString pat = QStringLiteral("—");
-        switch (p.pattern) {
-            case Pattern::Routine:
-                pat = QStringLiteral("routine");
-                break;
-            case Pattern::Opportunistic:
-                pat = QStringLiteral("opportunistic");
-                break;
-            case Pattern::Unclassified:
-                break;
-        }
+        QString pat = fmt::placeholder();
+        if (p.pattern == Pattern::Routine)
+            pat = QStringLiteral("routine");
+        else if (p.pattern == Pattern::Opportunistic)
+            pat = QStringLiteral("opportunistic");
         auto* pat_item = cell(pat, p.pattern == Pattern::Opportunistic ? ui::colors::AMBER()
-                                                                       : QString());
-        // A default-constructed profile would otherwise claim "0 trades over 0
-        // year(s)" for a row that is itself proof of at least one trade.
+                                                                      : QString());
         if (!have_profile)
             pat_item->setToolTip(QStringLiteral("No filing history matched to this name"));
         else if (p.pattern == Pattern::Unclassified && !p.reason.isEmpty())
@@ -404,17 +500,16 @@ void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
             pat_item->setToolTip(QStringLiteral("%1 trades over %2 year(s) of this insider's "
                                                 "own filing history")
                                      .arg(p.trades).arg(p.years_observed));
-        insiders_tbl_->setItem(i, 7, pat_item);
+        insiders_tbl_->setItem(i, 5, pat_item);
     }
 
     QStringList notes;
     if (s.filings_found > 0) {
-        notes << QStringLiteral("%1 Form 4 filings in the last %2 months; %3 parsed")
+        notes << QStringLiteral("%1 filings in %2 months, %3 parsed")
                      .arg(s.filings_found).arg(s.window_months).arg(s.filings_parsed);
         if (s.filings_truncated > 0)
-            notes << QStringLiteral("%1 older filings not fetched — the table is the most "
-                                    "recent slice, not the whole window")
-                         .arg(s.filings_truncated);
+            notes << QStringLiteral("%1 older filings not fetched — this is the most recent "
+                                    "slice, not the whole window").arg(s.filings_truncated);
     }
     coverage_->setText(notes.join(QStringLiteral(" · ")));
     coverage_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
@@ -443,19 +538,30 @@ void OwnershipScreen::render_stakes(const OwnershipSnapshot& s) {
 }
 
 void OwnershipScreen::render_holders(const OwnershipSnapshot& s) {
-    holders_tbl_->setRowCount(s.holders.size());
-    for (int i = 0; i < s.holders.size(); ++i) {
-        const auto& h = s.holders[i];
-        holders_tbl_->setItem(i, 0, cell(h.holder, is_index_complex(h.holder)
-                                                       ? ui::colors::CYAN()
-                                                       : QString()));
-        holders_tbl_->setItem(i, 1, cell(pct_or_placeholder(h.pct)));
-        holders_tbl_->setItem(i, 2, cell(compact_or_placeholder(h.shares)));
-        holders_tbl_->setItem(i, 3, cell(money_or_placeholder(h.value)));
-        holders_tbl_->setItem(i, 4, cell(h.as_of.isValid()
-                                             ? h.as_of.toString(QStringLiteral("yyyy-MM-dd"))
-                                             : fmt::placeholder()));
-    }
+    // Who is sitting on the shares, as bars rather than a numbers column —
+    // the comparison between insider, institutional and free float is the
+    // point, and a bar makes it in one glance.
+    QVector<RankedBar> bars;
+    const auto& si = s.shorts;
+    auto add = [&bars](const QString& label, const std::optional<double>& frac,
+                       const QString& colour, const QString& tip) {
+        if (!frac || *frac < 0.0 || *frac > 1.0)
+            return;  // absent or incoherent: show nothing rather than a guess
+        RankedBar b;
+        b.label = label;
+        b.value_text = fmt::format_percent(*frac * 100.0, 1);
+        b.fraction = *frac;
+        b.colour = QColor(colour);
+        b.tooltip = tip;
+        bars.push_back(b);
+    };
+    add(QStringLiteral("Institutions"), si.held_pct_institutions, ui::colors::CYAN(),
+        QStringLiteral("Share of shares outstanding held by 13F filers."));
+    add(QStringLiteral("Insiders"), si.held_pct_insiders, ui::colors::AMBER(),
+        QStringLiteral("Officers, directors and 10% owners."));
+    add(QStringLiteral("Short interest"), si.pct_float, ui::colors::RED(),
+        QStringLiteral("Percent of the float sold short."));
+    ownership_mix_->set_bars(bars);
 }
 
 void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
@@ -492,6 +598,46 @@ void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
     }
     short_lbl_->setText(rows.join(QStringLiteral(" &nbsp;·&nbsp; ")) + as_of);
     short_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
+}
+
+
+void OwnershipScreen::reload_portfolio() {
+    portfolio_->clear();
+    portfolio_->addItem(QStringLiteral("My holdings…"), QString());
+    auto& repo = fincept::PortfolioRepository::instance();
+    const auto pf = repo.list_portfolios();
+    if (!pf.is_ok())
+        return;
+    QSet<QString> seen;
+    for (const auto& p : pf.value()) {
+        const auto assets = repo.get_assets(p.id);
+        if (!assets.is_ok())
+            continue;
+        for (const auto& a : assets.value()) {
+            const QString sym = a.symbol.trimmed().toUpper();
+            if (sym.isEmpty() || seen.contains(sym))
+                continue;
+            seen.insert(sym);
+            portfolio_->addItem(sym, sym);
+        }
+    }
+    portfolio_->setEnabled(portfolio_->count() > 1);
+}
+
+void OwnershipScreen::refresh_index_ui(const QString& msg) {
+    auto& svc = services::OwnershipService::instance();
+    const bool ready = svc.index_ready();
+    index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS")
+                              : QStringLiteral("BUILD 13F INDEX"));
+    index_btn_->setToolTip(
+        ready ? QStringLiteral("Resolve more CUSIPs to tickers via OpenFIGI so more securities "
+                               "are searchable by symbol.")
+              : QStringLiteral("Download one quarterly SEC 13F data set — every filer, every "
+                               "position — and index it locally. About 100 MB, runs once."));
+    index_btn_->setEnabled(!svc.index_busy());
+    index_lbl_->setText(msg.isEmpty() ? svc.index_status_text() : msg);
+    if (!symbol_.isEmpty() && ready)
+        svc.load_smart_money(symbol_);
 }
 
 void OwnershipScreen::restore_state(const QVariantMap& state) {

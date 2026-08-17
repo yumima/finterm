@@ -81,6 +81,25 @@ class OwnershipService : public QObject {
     /// waiting on it.
     void load_smart_money(const QString& symbol);
 
+    // ── Local 13F index ─────────────────────────────────────────────────────
+    //
+    // SEC publishes every 13F as a bulk quarterly data set: 10,647 filers and
+    // 3.3m positions for one quarter. Ingested into SQLite once, a holder
+    // lookup is a local query in ~20ms with no network, which is what makes it
+    // affordable to load on a symbol change rather than behind a button. It is
+    // also what removes the curated list: Bloomberg's HDS does not curate
+    // because it has the whole universe, and so does this.
+
+    /// True when at least one quarter has been ingested locally.
+    bool index_ready() const;
+    /// Human-readable state of the local index (quarter, filers, rows).
+    QString index_status_text() const;
+    /// Download and index the newest quarterly data set. Emits index_changed.
+    void build_index();
+    /// Resolve CUSIP -> ticker for the largest @p limit unmapped securities.
+    void resolve_symbols(int limit = 2000);
+    bool index_busy() const { return index_busy_; }
+
     // ── BY FIRM: one manager's whole book ───────────────────────────────────
 
     /// Fetch @p cik's disclosed equity book and its quarter-over-quarter moves.
@@ -103,9 +122,13 @@ class OwnershipService : public QObject {
     void book_updated(QString cik);
     /// The tracked-manager list changed (seeded or edited).
     void managers_changed();
+    /// The local 13F index changed state (ingest or symbol resolution).
+    void index_changed(QString summary);
 
   private:
     OwnershipService() = default;
+
+    void load_index_holders(const QString& symbol);
 
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
@@ -127,6 +150,8 @@ class OwnershipService : public QObject {
 
     QHash<QString, ownership::ManagerBook> books_;
     QSet<QString> books_in_flight_;
+    bool    index_busy_ = false;
+    mutable QString index_status_;
 };
 
 } // namespace fincept::services

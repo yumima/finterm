@@ -28,6 +28,14 @@ struct SymbolRef;
 class DockScreenRouter : public QObject {
     Q_OBJECT
   public:
+    /// Persist state for EVERY materialised stateful screen.
+    ///
+    /// Per-screen saving is driven by visibilityChanged(false), which never
+    /// fires for the screen that is on top when the app quits — so the view the
+    /// user was actually looking at was the one view that never came back.
+    /// Called from MainWindow::closeEvent.
+    void save_all_screen_state();
+
     using ScreenFactory = std::function<QWidget*()>;
 
     explicit DockScreenRouter(ads::CDockManager* manager, QObject* parent = nullptr);

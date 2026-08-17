@@ -1,9 +1,8 @@
 #pragma once
 #include <QWidget>
 
+class QComboBox;
 class QLabel;
-class QPushButton;
-class QTableWidget;
 
 namespace fincept::screens {
 
@@ -33,13 +32,19 @@ class SmartMoneyPanel : public QWidget {
     void set_symbol(const QString& symbol, bool auto_fetch = false);
 
   private:
+    /// Two legitimate rankings of the same rows. Bloomberg's HDS defaults to
+    /// position size; a weight answers a different question. Exposed as a
+    /// control rather than baked in, because the reader needs to know which one
+    /// they are looking at.
+    enum class Sort { Weight, Value };
+
     void render();
 
-    QString       symbol_;
-    QLabel*       status_ = nullptr;
-    QLabel*       caveat_ = nullptr;
-    QPushButton*  load_btn_ = nullptr;
-    QTableWidget* table_ = nullptr;
+    QString          symbol_;
+    QComboBox*       sort_ = nullptr;
+    QLabel*          status_ = nullptr;
+    QLabel*          caveat_ = nullptr;
+    class RankedBarChart* chart_ = nullptr;
 };
 
 } // namespace fincept::screens

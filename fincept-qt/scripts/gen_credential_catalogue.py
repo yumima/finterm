@@ -36,6 +36,9 @@ NOT_CREDENTIALS = {
     "SYSTEMROOT", "COMSPEC", "SHELL", "TERM", "DISPLAY", "PWD",
     "VIRTUAL_ENV", "CONDA_PREFIX", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
     "NO_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "CI",
+    # finterm's own data directory, used by scripts that keep a local index
+    # (the 13F SQLite store). A path, not a secret.
+    "FINCEPT_DATA_DIR",
 }
 
 # Human labels for the providers users are most likely to configure. Anything

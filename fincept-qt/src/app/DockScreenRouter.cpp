@@ -1230,6 +1230,13 @@ void DockScreenRouter::save_screen_state(const QString& id) {
     ScreenStateManager::instance().save_now(stateful);
 }
 
+void DockScreenRouter::save_all_screen_state() {
+    for (auto it = screens_.cbegin(); it != screens_.cend(); ++it) {
+        if (auto* stateful = dynamic_cast<screens::IStatefulScreen*>(it.value()))
+            ScreenStateManager::instance().save_now(stateful);
+    }
+}
+
 void DockScreenRouter::restore_screen_state(const QString& id) {
     auto* screen = screens_.value(id, nullptr);
     if (!screen)

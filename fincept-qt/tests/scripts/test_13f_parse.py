@@ -69,6 +69,12 @@ TABLE = b"""<?xml version="1.0"?>
     <shrsOrPrnAmt><sshPrnamt>20</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
   </infoTable>
   <infoTable>
+    <nameOfIssuer>ALLY FINL INC</nameOfIssuer><titleOfClass>COM</titleOfClass>
+    <cusip>02005N100</cusip><value>9999</value>
+    <shrsOrPrnAmt><sshPrnamt>777</sshPrnamt><sshPrnamtType>SH</sshPrnamtType></shrsOrPrnAmt>
+    <putCall>Put</putCall>
+  </infoTable>
+  <infoTable>
     <nameOfIssuer>SOME BOND ISSUER</nameOfIssuer><titleOfClass>NOTE 5.00 2030</titleOfClass>
     <cusip>99999X999</cusip><value>1000</value>
     <shrsOrPrnAmt><sshPrnamt>1000000</sshPrnamt><sshPrnamtType>PRN</sshPrnamtType></shrsOrPrnAmt>
@@ -78,7 +84,8 @@ TABLE = b"""<?xml version="1.0"?>
 
 
 def by_cusip(rows):
-    return {r["cusip"]: r for r in rows}
+    """Stock lines only — options share the CUSIP of their underlying."""
+    return {r["cusip"]: r for r in rows if not r["is_derivative"]}
 
 
 def test_namespaced_xml_is_parsed_at_all():
@@ -109,6 +116,29 @@ def test_principal_amounts_are_excluded():
     rows = by_cusip(t13.parse_information_table(TABLE))
     check("bonds: PRN row dropped — a principal amount cannot be added to a share count",
           "99999X999" not in rows, str(sorted(rows.keys())))
+
+
+def test_options_are_not_counted_as_stock():
+    """13F reports options in the SAME table, distinguished only by putCall.
+
+    A put is a BEARISH position. Folding it into the share count reports a
+    manager as long a name they may be short — the SEC data set for one quarter
+    carries a 1,000,000-share PUT on Moderna, which a putCall-blind parser
+    presents as a long holding.
+    """
+    rows = t13.parse_information_table(TABLE)
+    ally_stock = [r for r in rows if r["cusip"] == "02005N100" and not r["is_derivative"]]
+    ally_puts = [r for r in rows if r["cusip"] == "02005N100" and r["put_call"] == "PUT"]
+    check("options: the put is kept as its own row", len(ally_puts) == 1, str(len(ally_puts)))
+    check("options: the put is flagged derivative", ally_puts and ally_puts[0]["is_derivative"])
+    check("options: exactly one stock row for the issuer",
+          len(ally_stock) == 1, str(len(ally_stock)))
+    check("options: put shares did NOT inflate the stock position",
+          ally_stock and ally_stock[0]["shares"] == 100.0,
+          str(ally_stock[0]["shares"]) if ally_stock else "none")
+    check("options: put value did NOT inflate the stock position",
+          ally_stock and ally_stock[0]["value"] == 1000.0,
+          str(ally_stock[0]["value"]) if ally_stock else "none")
 
 
 def test_value_units_follow_the_implied_price_not_just_the_date():

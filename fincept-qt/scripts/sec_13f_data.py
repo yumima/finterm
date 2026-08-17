@@ -243,22 +243,36 @@ def parse_information_table(xml_bytes):
         # added to a share count.
         if (row.get("sshPrnamtType") or "SH").upper() != "SH":
             continue
+        # 13F reports option positions in the SAME table, distinguished only by
+        # putCall. A put is a BEARISH position and a call is not stock — folding
+        # either into the share count reports a manager as long a name they may
+        # be short. Real example from the SEC data set: a 1,000,000-share PUT on
+        # Moderna, which a putCall-blind parser reports as a long holding.
+        #
+        # They are separated rather than dropped: "this manager holds puts" is
+        # information, and silently discarding it would be its own distortion.
+        put_call = (row.get("putCall") or "").strip().upper()
         try:
             value = float(row.get("value") or 0)
             shares = float(row.get("sshPrnamt") or 0)
         except ValueError:
             continue
 
-        if cusip not in agg:
-            agg[cusip] = {
+        # Key on CUSIP *and* instrument, so a stock line and a put on the same
+        # issuer never merge into one position.
+        key = (cusip, put_call)
+        if key not in agg:
+            agg[key] = {
                 "cusip": cusip,
                 "issuer": row.get("nameOfIssuer") or "",
                 "class": row.get("titleOfClass") or "",
+                "put_call": put_call,          # "", "PUT" or "CALL"
+                "is_derivative": bool(put_call),
                 "value": 0.0,
                 "shares": 0.0,
             }
-        agg[cusip]["value"] += value
-        agg[cusip]["shares"] += shares
+        agg[key]["value"] += value
+        agg[key]["shares"] += shares
     return list(agg.values())
 
 
@@ -306,9 +320,12 @@ def fetch_book(cik, quarters=2):
             continue
         positions = parse_information_table(r.content)
         positions, basis = _normalise_values(positions, f.get("period", ""))
-        total = sum(p["value"] for p in positions)
+        # The denominator is the STOCK book. Including option notionals would
+        # make every equity weight smaller by an amount that has nothing to do
+        # with the manager's equity conviction.
+        total = sum(p["value"] for p in positions if not p["is_derivative"])
         for p in positions:
-            p["weight"] = (p["value"] / total) if total > 0 else None
+            p["weight"] = (p["value"] / total) if total > 0 and not p["is_derivative"] else None
         positions.sort(key=lambda p: p["value"], reverse=True)
         books.append({
             "period": f.get("period", ""),

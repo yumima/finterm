@@ -7,12 +7,18 @@
 #include <QWidget>
 
 class QLabel;
+class QComboBox;
 class QLineEdit;
 class QPushButton;
 class QTableWidget;
 class QVBoxLayout;
 
-namespace fincept::screens { class SmartMoneyPanel; class FirmBookPanel; }
+namespace fincept::screens {
+class SmartMoneyPanel;
+class FirmBookPanel;
+class RankedBarChart;
+class EventTimeline;
+}
 
 namespace fincept::screens {
 
@@ -58,10 +64,15 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     void render_stakes(const ownership::OwnershipSnapshot& s);
     void render_holders(const ownership::OwnershipSnapshot& s);
     void render_short(const ownership::OwnershipSnapshot& s);
+    void reload_portfolio();
+    void refresh_index_ui(const QString& msg);
 
     QString symbol_;
 
     QLineEdit*   search_       = nullptr;
+    QComboBox*   portfolio_    = nullptr;
+    QPushButton* index_btn_    = nullptr;
+    QLabel*      index_lbl_    = nullptr;
     QPushButton* refresh_btn_  = nullptr;
     QLabel*      title_        = nullptr;
     QLabel*      status_       = nullptr;
@@ -72,10 +83,11 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
 
     QTableWidget* insiders_tbl_ = nullptr;
     QTableWidget* stakes_tbl_   = nullptr;
-    QTableWidget* holders_tbl_  = nullptr;
     QLabel*       short_lbl_    = nullptr;
     SmartMoneyPanel* smart_money_ = nullptr;
     FirmBookPanel*   firm_book_   = nullptr;
+    RankedBarChart*  ownership_mix_ = nullptr;
+    EventTimeline*   insider_timeline_ = nullptr;
 };
 
 } // namespace fincept::screens
