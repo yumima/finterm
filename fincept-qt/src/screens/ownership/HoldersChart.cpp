@@ -97,7 +97,7 @@ void RankedBarChart::paintEvent(QPaintEvent*) {
     }
 
     if (bars_.size() > rows) {
-        p.setPen(QColor(ui::colors::TEXT_DIM()));
+        p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
         p.drawText(rect().adjusted(kPadX, 0, -kPadX, -2), Qt::AlignBottom | Qt::AlignRight,
                    QStringLiteral("+%1 more").arg(bars_.size() - rows));
     }
@@ -183,7 +183,7 @@ void EventTimeline::paintEvent(QPaintEvent*) {
         p.fillRect(QRect(x, e.positive ? mid - h : mid, bar_w, h), fill);
     }
 
-    p.setPen(QColor(ui::colors::TEXT_DIM()));
+    p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
     const QRect labels(plot.left(), plot.bottom() + 2, plot.width(), label_h);
     p.drawText(labels, Qt::AlignLeft | Qt::AlignVCenter,
                first_.toString(QStringLiteral("MMM yyyy")));

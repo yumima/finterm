@@ -163,6 +163,10 @@ void OwnershipScreen::build_ui() {
     portfolio_->setToolTip(QStringLiteral("Jump to one of your portfolio holdings."));
     connect(portfolio_, &QComboBox::activated, this, [this](int i) {
         const QString sym = portfolio_->itemData(i).toString();
+        // Snap back to the label. Picking a holding is an ACTION, not a state:
+        // leaving the ticker showing made this look like a second search box
+        // sitting next to the first one with the same value in it.
+        portfolio_->setCurrentIndex(0);
         if (!sym.isEmpty())
             load(sym);
     });
@@ -207,7 +211,7 @@ void OwnershipScreen::build_ui() {
 
     index_lbl_ = new QLabel;
     index_lbl_->setWordWrap(true);
-    index_lbl_->setStyleSheet(QString("color:%1;font-size:11px;")
+    index_lbl_->setStyleSheet(QString("color:%1;font-size:12px;")
                                   .arg(ui::colors::TEXT_SECONDARY()));
     root->addWidget(index_lbl_);
 
@@ -408,10 +412,10 @@ void OwnershipScreen::render_reads(const OwnershipSnapshot& s) {
                               "<div style='margin:2px 0 2px 0;'>"
                               "<span style='color:%1;font-weight:700;'>%2</span><br>"
                               "<span style='color:%3;'>%4</span><br>"
-                              "<span style='color:%5;font-size:11px;'>%6</span></div>")
+                              "<span style='color:%5;font-size:12px;'>%6</span></div>")
                               .arg(weight_colour(r.weight), r.headline.toHtmlEscaped(),
                                    ui::colors::TEXT_PRIMARY(), r.detail.toHtmlEscaped(),
-                                   ui::colors::TEXT_DIM(), r.basis.toHtmlEscaped()));
+                                   ui::colors::TEXT_SECONDARY(), r.basis.toHtmlEscaped()));
             card->setStyleSheet(QString("border-left:2px solid %1;padding-left:8px;")
                                     .arg(weight_colour(r.weight)));
             reads_layout_->addWidget(card);
@@ -512,7 +516,7 @@ void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
                                     "slice, not the whole window").arg(s.filings_truncated);
     }
     coverage_->setText(notes.join(QStringLiteral(" · ")));
-    coverage_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
+    coverage_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void OwnershipScreen::render_stakes(const OwnershipSnapshot& s) {
@@ -589,11 +593,11 @@ void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
     if (si.as_of.isValid()) {
         // Short interest is a twice-monthly settlement snapshot published a few
         // days later, so the reading date matters as much as the number.
-        as_of = QStringLiteral("<br><span style='color:%1;font-size:11px;'>"
+        as_of = QStringLiteral("<br><span style='color:%1;font-size:12px;'>"
                                "Settlement date %2. Exchanges report twice a month and publish a "
                                "few days later, so this is a fortnightly reading, not a live "
                                "figure.</span>")
-                    .arg(ui::colors::TEXT_DIM(),
+                    .arg(ui::colors::TEXT_SECONDARY(),
                          si.as_of.toString(QStringLiteral("d MMM yyyy")));
     }
     short_lbl_->setText(rows.join(QStringLiteral(" &nbsp;·&nbsp; ")) + as_of);

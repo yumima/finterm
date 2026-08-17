@@ -771,6 +771,12 @@ void OwnershipService::build_index() {
                         qs.isEmpty() ? QStringLiteral("13F index built")
                                      : QStringLiteral("Indexed: ") + qs.join(QStringLiteral(", "));
                     msg = self->index_status_;
+                    // Chain straight into symbol mapping. An index nobody can
+                    // search by ticker is not finished, and asking the user to
+                    // discover a second button for it is a puzzle.
+                    self->index_busy_ = false;
+                    self->resolve_symbols();
+                    return;
                 }
             }
             emit self->index_changed(msg);
@@ -778,17 +784,21 @@ void OwnershipService::build_index() {
         /*on_line=*/{}, kIndexBuildTimeoutMs);
 }
 
-void OwnershipService::resolve_symbols(int limit) {
+void OwnershipService::resolve_symbols(int /*limit*/) {
     if (index_busy_)
         return;
     index_busy_ = true;
-    emit index_changed(QStringLiteral("Resolving ticker symbols…"));
+    // Runs to completion rather than a fixed slice. The top 2,000 CUSIPs by
+    // value already cover 96% of all institutional value, so the map is usable
+    // within minutes; the ~22,800-symbol tail takes about 95 minutes behind it.
+    // Making the user press a button a dozen times to get there was the only
+    // thing wrong with this.
+    emit index_changed(QStringLiteral("Mapping CUSIPs to tickers — usable within a few "
+                                      "minutes, finishes in the background."));
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("resolve_symbols"),
-         QString::fromUtf8(QJsonDocument(QJsonObject{{"limit", limit}})
-                               .toJson(QJsonDocument::Compact))},
+        {QStringLiteral("resolve_all"), QStringLiteral("{\"chunk\":500}")},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -796,10 +806,13 @@ void OwnershipService::resolve_symbols(int limit) {
             const auto o = result.success
                 ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
                 : QJsonObject{};
-            emit self->index_changed(
-                QStringLiteral("Mapped %1 more symbols · %2 still unmapped")
-                    .arg(o.value(QStringLiteral("resolved")).toInt())
-                    .arg(o.value(QStringLiteral("remaining")).toInt()));
+            const int left = o.value(QStringLiteral("remaining")).toInt();
+            self->index_status_ =
+                left > 0 ? QStringLiteral("Mapped %1 symbols · %2 still unmapped")
+                               .arg(o.value(QStringLiteral("resolved")).toInt()).arg(left)
+                         : QStringLiteral("Symbol map complete · %1 mapped")
+                               .arg(o.value(QStringLiteral("resolved")).toInt());
+            emit self->index_changed(self->index_status_);
         },
         /*on_line=*/{}, kIndexBuildTimeoutMs);
 }

@@ -3,6 +3,7 @@
 
 class QComboBox;
 class QLabel;
+class QPushButton;
 
 namespace fincept::screens {
 
@@ -44,6 +45,7 @@ class SmartMoneyPanel : public QWidget {
     QComboBox*       sort_ = nullptr;
     QLabel*          status_ = nullptr;
     QLabel*          caveat_ = nullptr;
+    QPushButton*     build_btn_ = nullptr;
     class RankedBarChart* chart_ = nullptr;
 };
 

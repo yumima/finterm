@@ -64,7 +64,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     firm_->setMinimumWidth(260);
     bar->addWidget(firm_);
 
-    load_btn_ = new QPushButton(QStringLiteral("LOAD BOOK"));
+    load_btn_ = new QPushButton(QStringLiteral("LOAD"));
     load_btn_->setToolTip(QStringLiteral("Reads this manager's latest two 13F filings "
                                          "from EDGAR."));
     connect(load_btn_, &QPushButton::clicked, this, [this]() {
@@ -76,7 +76,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     });
     bar->addWidget(load_btn_);
 
-    edit_btn_ = new QPushButton(QStringLiteral("EDIT LIST"));
+    edit_btn_ = new QPushButton(QStringLiteral("EDIT"));
     edit_btn_->setToolTip(QStringLiteral("Choose which firms are tracked."));
     connect(edit_btn_, &QPushButton::clicked, this, [this]() {
         auto& svc = services::OwnershipService::instance();
@@ -142,7 +142,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     });
     bar->addWidget(edit_btn_);
 
-    seed_btn_ = new QPushButton(QStringLiteral("LOAD DEFAULT FIRMS"));
+    seed_btn_ = new QPushButton(QStringLiteral("LOAD FIRMS"));
     seed_btn_->setToolTip(QStringLiteral("Fetch the curated manager list and resolve each "
                                          "firm's CIK from EDGAR. Runs once."));
     connect(seed_btn_, &QPushButton::clicked, this, [this]() {
@@ -161,7 +161,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
         "weights are shares of the manager's disclosed equity book, not of their fund. Filed 45 "
         "days after quarter end."));
     caveat_->setWordWrap(true);
-    caveat_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
+    caveat_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     root->addWidget(caveat_);
 
     auto* pos_lbl = new QLabel(QStringLiteral("POSITIONS"));
@@ -195,7 +195,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     connect(&services::OwnershipService::instance(),
             &services::OwnershipService::managers_changed, this, [this]() {
                 seed_btn_->setEnabled(true);
-                seed_btn_->setText(QStringLiteral("LOAD DEFAULT FIRMS"));
+                seed_btn_->setText(QStringLiteral("LOAD FIRMS"));
                 reload_managers();
                 render();
             });
@@ -212,7 +212,7 @@ void FirmBookPanel::reload_managers() {
         // The user list is only written once a smart-money fetch has resolved
         // the shipped defaults. Say so rather than showing an empty dropdown
         // that looks broken.
-        firm_->addItem(QStringLiteral("(no firms resolved yet — load 13F positions once)"),
+        firm_->addItem(QStringLiteral("No firms yet — press LOAD DEFAULT FIRMS"),
                        QString());
         firm_->setEnabled(false);
         seed_btn_->setVisible(true);

@@ -41,8 +41,23 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
     connect(sort_, &QComboBox::currentIndexChanged, this, [this](int) { render(); });
     bar->addWidget(sort_);
 
+    // The index button lives here too, not only on the OWNERSHIP screen. This
+    // panel is embedded in Equity Research, where a reader who hits "no 13F
+    // index built" previously had no way to act on it from where they were
+    // standing — they had to know the control existed on another screen.
+    build_btn_ = new QPushButton(QStringLiteral("BUILD 13F INDEX"));
+    build_btn_->setToolTip(QStringLiteral(
+        "Download two quarterly SEC 13F data sets — every filer, every position — and index "
+        "them locally. About 200 MB and a couple of minutes; runs once."));
+    connect(build_btn_, &QPushButton::clicked, this, [this]() {
+        services::OwnershipService::instance().build_index();
+        render();
+    });
+    bar->addWidget(build_btn_);
+
     status_ = new QLabel;
     status_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    status_->setWordWrap(true);
     bar->addWidget(status_, 1);
     root->addLayout(bar);
 
@@ -54,7 +69,7 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
         "13F: long US equities only, filed 45 days after quarter end. A weight is a share of "
         "the manager's disclosed equity book, not of their fund."));
     caveat_->setWordWrap(true);
-    caveat_->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
+    caveat_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     root->addWidget(caveat_);
 
     connect(&services::OwnershipService::instance(),
@@ -86,6 +101,11 @@ void SmartMoneyPanel::set_symbol(const QString& symbol, bool /*auto_fetch*/) {
 
 void SmartMoneyPanel::render() {
     auto& svc = services::OwnershipService::instance();
+    // Only offered when it is the thing to do; once an index exists it is
+    // clutter, and OWNERSHIP owns the incremental controls.
+    build_btn_->setVisible(!svc.index_ready());
+    build_btn_->setEnabled(!svc.index_busy());
+    sort_->setVisible(svc.index_ready());
     if (symbol_.isEmpty()) {
         status_->setText(QStringLiteral("No symbol selected."));
         chart_->set_bars({});
@@ -102,7 +122,10 @@ void SmartMoneyPanel::render() {
         chart_->set_empty_text(
             svc.index_ready()
                 ? snap.smart_money_error
-                : QStringLiteral("Build the 13F index once to see every institutional holder."));
+                : QStringLiteral("No 13F index yet.\n\nPress BUILD 13F INDEX above: it downloads "
+                                 "two quarters of SEC filings — around 10,600 filers and 2.4m "
+                                 "positions each — so every ticker gets its complete holder "
+                                 "list and its quarter-over-quarter changes."));
         return;
     }
     if (svc.is_loading(symbol_) && !snap.smart_money_ok) {
@@ -111,7 +134,11 @@ void SmartMoneyPanel::render() {
         return;
     }
     if (!snap.smart_money_ok) {
-        status_->setText(svc.index_status_text());
+        status_->setText(svc.index_ready()
+                             ? svc.index_status_text()
+                             : QStringLiteral("No institutional holder data yet. Build the 13F "
+                                              "index once — every filer, every position — and "
+                                              "this fills in for every ticker."));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
         chart_->set_bars({});
         return;

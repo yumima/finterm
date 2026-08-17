@@ -759,6 +759,23 @@ def handle_action(action, payload):
         return resolve_ticker(payload.get("ticker") or "")
     if action == "resolve_symbols":
         return resolve_cusips(int(payload.get("limit") or 2000), payload.get("quarter"))
+    if action == "resolve_all":
+        # Run to completion. 22,820 CUSIPs at OpenFIGI's keyless rate is about
+        # 95 minutes, and the top 2,000 by value already cover 96% of all
+        # institutional value — so the caller sees a usable map within minutes
+        # and the tail fills in behind it. Resumable: every batch commits, so an
+        # interrupted run picks up where it stopped.
+        total = {"resolved": 0, "unrecognised": 0}
+        while True:
+            r = resolve_cusips(int(payload.get("chunk") or 500), payload.get("quarter"))
+            if r.get("error"):
+                return {**total, "error": r["error"]}
+            total["resolved"] += r.get("resolved", 0)
+            total["unrecognised"] += r.get("unrecognised", 0)
+            total["remaining"] = r.get("remaining", 0)
+            if not r.get("remaining") or r.get("resolved", 0) + r.get("unrecognised", 0) == 0:
+                break
+        return total
     if action == "holders":
         return holders(payload.get("ticker"), payload.get("cusip"),
                        payload.get("limit") or 60, payload.get("quarter"),
