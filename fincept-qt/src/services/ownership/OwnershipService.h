@@ -118,6 +118,7 @@ class OwnershipService : public QObject {
     OwnershipService() = default;
 
     void load_index_holders(const QString& symbol);
+    void probe_index();
 
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
@@ -140,6 +141,7 @@ class OwnershipService : public QObject {
     QHash<QString, ownership::ManagerBook> books_;
     QSet<QString> books_in_flight_;
     bool    index_busy_ = false;
+    mutable bool index_probed_ = false;
     mutable QString index_status_;
 };
 

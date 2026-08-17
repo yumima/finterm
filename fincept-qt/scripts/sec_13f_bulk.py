@@ -509,9 +509,13 @@ def newer_available():
     Without this the index silently ages: it was built once, it still answers,
     and nothing says the answers are a quarter behind.
     """
-    have = {q["quarter"] for q in status().get("quarters", [])}
+    qs = status().get("quarters", [])
+    # Only COMPLETE quarters count as ingested. A partial one was pulled from
+    # EDGAR ahead of its data set, so the data set is still unseen.
+    have = {q["quarter"] for q in qs if not q.get("partial")}
     urls = available_datasets()
     return {"indexed": sorted(have, reverse=True),
+            "partial": sorted((q["quarter"] for q in qs if q.get("partial")), reverse=True),
             "newest_dataset": urls[0].rsplit("/", 1)[-1] if urls else "",
             "datasets_available": len(urls),
             # The data set is named by filing window, not by reported quarter,
@@ -524,11 +528,15 @@ def status():
     con = connect()
     try:
         rows = con.execute(
-            "SELECT quarter, filers, rows, ingested_at FROM quarters ORDER BY quarter DESC"
-        ).fetchall()
+            "SELECT quarter, filers, rows, ingested_at, COALESCE(partial,0) "
+            "FROM quarters ORDER BY quarter DESC").fetchall()
+        # `partial` travels with every quarter. The whole point of the column is
+        # that a partial quarter must not look like a bulk one, and a status
+        # listing that omits it presents "20 filers" the same way it presents
+        # "10,647".
         return {"db": db_path(),
                 "quarters": [{"quarter": r[0], "filers": r[1], "rows": r[2],
-                              "ingested_at": r[3]} for r in rows]}
+                              "ingested_at": r[3], "partial": bool(r[4])} for r in rows]}
     finally:
         con.close()
 
@@ -638,9 +646,15 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
         # who stopped filing has not sold, we simply cannot see them.
         exited = 0
         if prior_q:
+            # pb.cik <> '' and COUNT(DISTINCT) are both load-bearing, for the
+            # same reason the main query above carries the guard: thousands of
+            # filers are missing from SUBMISSION.tsv, an empty CIK matches every
+            # other empty CIK, and COUNT(*) then counts prior-filing x
+            # current-book PAIRS rather than filers. A four-filer fixture
+            # returned 70 without this.
             exited = con.execute("""
-                SELECT COUNT(*) FROM holdings ph
-                  JOIN books pb ON pb.accession = ph.accession
+                SELECT COUNT(DISTINCT pb.cik) FROM holdings ph
+                  JOIN books pb ON pb.accession = ph.accession AND pb.cik <> ''
                   JOIN books cb ON cb.cik = pb.cik AND cb.quarter = ?
                  WHERE ph.cusip = ? AND ph.quarter = ? AND ph.put_call = ''
                    AND pb.stock_value >= ? AND pb.stock_count >= ?
@@ -944,6 +958,8 @@ def ingest_current(top=400, progress=None):
 
         added = skipped = failed = 0
         new_quarter = ""
+        touched = set()      # every period written, not only the newest
+        per_quarter = {}     # period -> filers added, so counts are not mixed
         for idx, (cik, manager) in enumerate(rows):
             f = _newest_13f(cik, latest)
             if not f:
@@ -963,7 +979,17 @@ def ingest_current(top=400, progress=None):
                 continue
             q = f["period"]
             new_quarter = max(new_quarter, q)
-            con.execute("DELETE FROM holdings WHERE accession=?", (f["accession"],))
+            touched.add(q)
+            # Replace the filer's whole quarter, not just this accession. The
+            # bulk path picks one filing per filer-quarter and deletes the
+            # quarter first; deleting by accession alone leaves a second
+            # original for the same period in place and counts the filer twice
+            # in every holder total.
+            con.execute("DELETE FROM holdings WHERE cusip IS NOT NULL AND accession IN "
+                        "(SELECT accession FROM filings WHERE cik=? AND quarter=?)",
+                        (_pad_cik(cik), q))
+            con.execute("DELETE FROM books WHERE cik=? AND quarter=?", (_pad_cik(cik), q))
+            con.execute("DELETE FROM filings WHERE cik=? AND quarter=?", (_pad_cik(cik), q))
             con.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)",
                         (f["accession"], q, _pad_cik(cik), manager, 0))
             con.executemany(
@@ -975,22 +1001,30 @@ def ingest_current(top=400, progress=None):
                         (f["accession"], q, _pad_cik(cik), manager,
                          sum(p["value"] for p in stock), len(stock)))
             added += 1
+            per_quarter[q] = per_quarter.get(q, 0) + 1
             if added % 25 == 0:
                 con.commit()
                 if progress:
                     progress(idx + 1, len(rows))
         con.commit()
 
-        if new_quarter:
-            # Recorded as PARTIAL. A quarter row that looks like the bulk ones
-            # would imply the whole universe is present, and it is the top few
-            # hundred filers by book size.
+        # Register EVERY period written, not just the newest. A stale index can
+        # be two quarters behind, and a filer whose newest filing is for the
+        # intermediate one would otherwise land in holdings under a quarter with
+        # no `quarters` row — invisible to holders, quarter_pair and status, and
+        # never cleaned up.
+        for q in sorted(touched):
+            # PARTIAL: a row that looks like a bulk one would imply the whole
+            # universe is present, and this is the largest filers only.
             con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'),1)",
-                        (new_quarter, f"EDGAR direct (top {int(top)} filers)", added,
+                        (q, f"EDGAR direct (top {int(top)} filers)", per_quarter.get(q, 0),
                          con.execute("SELECT COUNT(*) FROM holdings WHERE quarter=?",
-                                     (new_quarter,)).fetchone()[0]))
-            con.commit()
-        return {"quarter": new_quarter, "filers_added": added,
+                                     (q,)).fetchone()[0]))
+        con.commit()
+        return {"quarter": new_quarter,
+                "filers_added": per_quarter.get(new_quarter, 0),
+                "filers_added_total": added,
+                "quarters_written": sorted(touched),
                 "no_newer_filing": skipped, "failed": failed,
                 "requested": len(rows), "partial": True,
                 "note": "current quarter for the largest filers only — the bulk data set "

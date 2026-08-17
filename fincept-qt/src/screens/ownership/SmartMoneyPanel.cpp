@@ -131,6 +131,13 @@ void SmartMoneyPanel::render() {
         return;
     }
 
+    // Cleared up front, then repopulated only on the success path. It used to
+    // be hidden at the BOTTOM of this function, which four early returns never
+    // reach — so switching symbols left the previous ticker's buy/trim/exit
+    // counts sitting under the new ticker's status line.
+    flow_->clear();
+    flow_->hide();
+
     const auto snap = svc.snapshot(symbol_);
     const auto& rows = snap.smart_money;
 
@@ -206,8 +213,6 @@ void SmartMoneyPanel::render() {
                            .arg(ui::colors::GREEN()).arg(snap.buyers)
                            .arg(ui::colors::RED()).arg(snap.sellers).arg(snap.exited));
         flow_->show();
-    } else {
-        flow_->hide();
     }
     status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
 

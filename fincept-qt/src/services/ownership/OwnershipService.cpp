@@ -533,7 +533,41 @@ void OwnershipService::load_book(const QString& cik) {
 
 
 bool OwnershipService::index_ready() const {
+    // Seeded from the database on first ask. index_status_ was only ever set by
+    // a build in THIS session, so after a restart with a fully built index the
+    // button read "BUILD 13F INDEX" and pressing it re-downloaded ~200 MB —
+    // while pull_current_quarter, which guards on this, could never run at all.
+    if (!index_probed_) {
+        index_probed_ = true;
+        const_cast<OwnershipService*>(this)->probe_index();
+    }
     return !index_status_.isEmpty();
+}
+
+void OwnershipService::probe_index() {
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("status"), QStringLiteral("{}")},
+        [self](python::PythonResult result) {
+            if (!self || !result.success)
+                return;
+            const auto o =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+            QStringList parts;
+            for (const auto& v : o.value(QStringLiteral("quarters")).toArray()) {
+                const auto q = v.toObject();
+                parts << QStringLiteral("%1 (%2 filers%3)")
+                             .arg(q.value(QStringLiteral("quarter")).toString())
+                             .arg(q.value(QStringLiteral("filers")).toInt())
+                             .arg(q.value(QStringLiteral("partial")).toBool()
+                                      ? QStringLiteral(", partial") : QString());
+            }
+            if (!parts.isEmpty()) {
+                self->index_status_ = QStringLiteral("Indexed: ") + parts.join(QStringLiteral(", "));
+                emit self->index_changed(self->index_status_);
+            }
+        },
+        /*on_line=*/{}, 30'000);
 }
 
 QString OwnershipService::index_status_text() const {
@@ -557,13 +591,28 @@ void OwnershipService::pull_current_quarter(int top) {
             if (!self)
                 return;
             self->index_busy_ = false;
-            const auto o = result.success
-                ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
-                : QJsonObject{};
+            // A failed run and a run that found nothing are different facts.
+            // Collapsing both into "no newer filings" tells the user the index
+            // is current when the fetch actually died — including on the
+            // timeout, which a 400-filer pull can legitimately approach.
+            if (!result.success) {
+                emit self->index_changed(
+                    QStringLiteral("Current-quarter pull failed: %1")
+                        .arg(result.error.isEmpty() ? QStringLiteral("the reader did not finish")
+                                                    : result.error.left(200)));
+                return;
+            }
+            const auto o =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+            const QString err = o.value(QStringLiteral("error")).toString();
+            if (!err.isEmpty()) {
+                emit self->index_changed(QStringLiteral("Current-quarter pull: ") + err);
+                return;
+            }
             const QString q = o.value(QStringLiteral("quarter")).toString();
             emit self->index_changed(
                 q.isEmpty()
-                    ? QStringLiteral("No newer 13F filings found on EDGAR.")
+                    ? QStringLiteral("No 13F filings newer than the indexed quarter on EDGAR yet.")
                     : QStringLiteral("%1 · pulled %2 for %3 large filers direct from EDGAR "
                                      "(partial — the bulk data set for it is not published yet)")
                           .arg(self->index_status_, q)

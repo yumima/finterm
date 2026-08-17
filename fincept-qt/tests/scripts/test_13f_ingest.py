@@ -186,6 +186,43 @@ def main():
         finally:
             con.close()
 
+        # ── the exit count must not cross-join blank CIKs ──────────────────
+        # The main holders query carries a cik <> '' guard because an empty CIK
+        # matches every other empty CIK; the exit count repeated the mistake and
+        # counted (prior-filing x current-book) PAIRS. Four exiting filers came
+        # back as seventy.
+        con4 = bulk.connect()
+        try:
+            # Prior quarter: four filers hold the security, three with no CIK.
+            con4.execute("INSERT OR REPLACE INTO quarters VALUES "
+                         "('2025-12-31','test',4,4,datetime('now'),0)")
+            for i, cik in enumerate(["", "", "", "0000009999"]):
+                acc = f"prev-{i}"
+                con4.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,0)",
+                             (acc, "2025-12-31", cik, f"Exiting Filer {i}"))
+                con4.execute("INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
+                             (acc, "2025-12-31", "111111111", "WIDGET CO", "COM", "",
+                              1000.0, 100.0))
+                con4.execute("INSERT OR REPLACE INTO books VALUES (?,?,?,?,?,?)",
+                             (acc, "2025-12-31", cik, f"Exiting Filer {i}", 1000.0, 1))
+            # Current quarter: twenty unrelated blank-CIK filers, none holding it.
+            for i in range(20):
+                acc = f"cur-{i}"
+                con4.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,0)",
+                             (acc, "2026-03-31", "", f"Unrelated {i}"))
+                con4.execute("INSERT OR REPLACE INTO books VALUES (?,?,?,?,?,?)",
+                             (acc, "2026-03-31", "", f"Unrelated {i}", 5000.0, 3))
+            con4.commit()
+        finally:
+            con4.close()
+        h3 = bulk.holders(cusip="111111111", quarter="2026-03-31",
+                          min_book=0, min_positions=0)
+        # Only the ONE filer with a real CIK who filed both quarters can be
+        # shown to have exited. The blank-CIK ones cannot be tracked across
+        # quarters at all, and inventing them is the bug.
+        check("exits: blank CIKs do not cross-join into a fabricated count",
+              h3["exited"] <= 1, "exited=%s (was 70 with the cross join)" % h3["exited"])
+
         # ── a partial quarter must not become the default answer ───────────
         # ingest_current pulls the newest quarter for the largest filers only,
         # months before SEC's bulk set exists. Serving that as "who owns this"
