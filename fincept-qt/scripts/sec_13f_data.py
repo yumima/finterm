@@ -421,8 +421,39 @@ def _norm_issuer(name):
     return " ".join(n.split())
 
 
+_TICKER_NAMES = None
+
+
+def company_name_for_ticker(ticker):
+    """Issuer name for a ticker, from EDGAR's own ticker file.
+
+    Resolved here rather than taken from the caller. The caller only has a
+    company name if some other fetch already ran, so requiring one made this
+    lookup silently return nothing when it was invoked first — matching "AAPL"
+    against "APPLE INC" finds nothing, and the panel would have reported "none
+    of the tracked managers hold it".
+    """
+    global _TICKER_NAMES
+    if _TICKER_NAMES is None:
+        r = _get("https://www.sec.gov/files/company_tickers.json")
+        _TICKER_NAMES = {}
+        if r is not None:
+            try:
+                for row in r.json().values():
+                    t = str(row.get("ticker", "")).upper()
+                    if t:
+                        _TICKER_NAMES[t] = row.get("title", "")
+            except Exception:
+                pass
+    return _TICKER_NAMES.get(str(ticker).upper(), "")
+
+
 def find_holders(ticker, company_name, manager_ciks, quarters=2):
     """Which of `manager_ciks` hold `ticker`, and what they did last quarter."""
+    # A caller that passed the ticker as the company name has told us nothing,
+    # so resolve it properly rather than matching a symbol against issuer names.
+    if not company_name or company_name.strip().upper() == str(ticker).strip().upper():
+        company_name = company_name_for_ticker(ticker) or company_name
     target = _norm_issuer(company_name or ticker)
     if not target:
         return {"error": "no company name to match on", "ticker": ticker}
@@ -468,8 +499,9 @@ def find_holders(ticker, company_name, manager_ciks, quarters=2):
         holders.append(entry)
 
     holders.sort(key=lambda h: h.get("weight") or 0, reverse=True)
-    return {"ticker": str(ticker).upper(), "matched_on": target,
-            "holders": holders, "managers_without_filings": unmatched}
+    return {"ticker": str(ticker).upper(), "company": company_name,
+            "matched_on": target, "holders": holders,
+            "managers_without_filings": unmatched}
 
 
 def handle_action(action, payload):

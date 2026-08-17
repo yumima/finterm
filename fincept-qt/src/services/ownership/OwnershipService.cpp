@@ -46,6 +46,11 @@ constexpr int kMaxFilings = 60;
 /// ceiling.
 constexpr int kSmartMoneyTimeoutMs = 600'000;
 
+// Source names for the in-flight set. Each fetch clears its own.
+const QString kSrcEdgar  = QStringLiteral("edgar");
+const QString kSrcMarket = QStringLiteral("market");
+const QString kSrcSmart  = QStringLiteral("smart");
+
 std::optional<double> opt_num(const QJsonObject& o, const char* key) {
     const auto v = o.value(QLatin1String(key));
     // Absent stays absent. A grant reports no price and a defaulted 0.0 would
@@ -249,6 +254,58 @@ void parse_smart_money_into(const QJsonObject& root, OwnershipSnapshot& snap,
     }
 }
 
+
+/// One manager's book, newest quarter, plus the moves that produced it.
+void parse_book_into(const QJsonObject& root, ManagerBook& b) {
+    const auto books = root.value(QStringLiteral("books")).toArray();
+    if (books.isEmpty()) {
+        b.error = QStringLiteral("no 13F filings found for this manager");
+        return;
+    }
+    const QJsonObject latest = books.first().toObject();
+    b.period      = iso_date(latest, "period");
+    b.filed_date  = iso_date(latest, "filed_date");
+    b.total_value = latest.value(QStringLiteral("total_value")).toDouble();
+    b.position_count = latest.value(QStringLiteral("position_count")).toInt();
+    b.value_basis = latest.value(QStringLiteral("value_basis")).toString();
+
+    for (const auto& v : latest.value(QStringLiteral("positions")).toArray()) {
+        const QJsonObject o = v.toObject();
+        BookPosition p;
+        p.issuer = o.value(QStringLiteral("issuer")).toString();
+        p.cusip  = o.value(QStringLiteral("cusip")).toString();
+        p.security_class = o.value(QStringLiteral("class")).toString();
+        p.shares = opt_num(o, "shares");
+        p.value  = opt_num(o, "value");
+        p.weight = opt_num(o, "weight");
+        if (!p.cusip.isEmpty())
+            b.positions.push_back(p);
+    }
+
+    for (const auto& v : root.value(QStringLiteral("moves")).toObject()
+                             .value(QStringLiteral("moves")).toArray()) {
+        const QJsonObject o = v.toObject();
+        ManagerPosition m;
+        m.manager = b.manager;
+        m.cik     = b.cik;
+        m.style   = b.style;
+        // `label` carries the share class — Alphabet A and C share an issuer
+        // name and would otherwise appear as one row printed twice.
+        m.issuer  = o.value(QStringLiteral("label")).toString().isEmpty()
+                        ? o.value(QStringLiteral("issuer")).toString()
+                        : o.value(QStringLiteral("label")).toString();
+        m.cusip   = o.value(QStringLiteral("cusip")).toString();
+        m.action  = o.value(QStringLiteral("action")).toString();
+        m.shares  = opt_num(o, "shares");
+        m.weight  = opt_num(o, "weight");
+        m.shares_delta = opt_num(o, "shares_delta");
+        m.pct_change   = opt_num(o, "pct_change");
+        m.period = b.period;
+        if (!m.cusip.isEmpty())
+            b.moves.push_back(m);
+    }
+}
+
 } // namespace
 
 OwnershipService& OwnershipService::instance() {
@@ -261,15 +318,18 @@ ownership::OwnershipSnapshot OwnershipService::snapshot(const QString& symbol) c
 }
 
 bool OwnershipService::is_loading(const QString& symbol) const {
-    return pending_.value(symbol.toUpper(), 0) > 0;
+    return !pending_.value(symbol.toUpper()).isEmpty();
 }
 
 void OwnershipService::load(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
     if (sym.isEmpty())
         return;
-    if (pending_.value(sym, 0) > 0)
-        return; // already in flight
+    // Only the register's own sources block a register load. A smart-money
+    // fetch running alongside is unrelated and must not gate it.
+    const auto in_flight = pending_.value(sym);
+    if (in_flight.contains(kSrcEdgar) || in_flight.contains(kSrcMarket))
+        return;
 
     const qint64 age = QDateTime::currentMSecsSinceEpoch() - fetched_at_.value(sym, 0);
     if (cache_.contains(sym) && age < kCacheTtlMs) {
@@ -288,7 +348,8 @@ void OwnershipService::refresh(const QString& symbol) {
     // load resets the counter to 2 with four callbacks live; it then decrements
     // past zero, so load_finished fires while two fetches are still running and
     // the status bar drops "loading…" early.
-    if (pending_.value(sym, 0) > 0)
+    const auto in_flight = pending_.value(sym);
+    if (in_flight.contains(kSrcEdgar) || in_flight.contains(kSrcMarket))
         return;
 
     OwnershipSnapshot fresh;
@@ -303,16 +364,18 @@ void OwnershipService::refresh(const QString& symbol) {
 
     // Both halves go out together and render as each lands, so the fast one
     // (holders, short interest) is on screen while EDGAR is still parsing.
-    pending_.insert(sym, 2);
+    auto& set = pending_[sym];
+    set.insert(kSrcEdgar);
+    set.insert(kSrcMarket);
     fetch_market(sym);
     fetch_edgar(sym);
 }
 
-void OwnershipService::note_source_done(const QString& symbol) {
-    const int left = pending_.value(symbol, 1) - 1;
-    pending_.insert(symbol, left);
+void OwnershipService::note_source_done(const QString& symbol, const QString& source) {
+    auto& set = pending_[symbol];
+    set.remove(source);
     emit snapshot_updated(symbol);
-    if (left <= 0) {
+    if (set.isEmpty()) {
         pending_.remove(symbol);
         // Only a snapshot with something in it earns a cache timestamp; a
         // failed pair stays uncached so the next visit retries.
@@ -355,7 +418,7 @@ void OwnershipService::fetch_edgar(const QString& sym) {
                 }
             }
             self->cache_.insert(sym, snap);
-            self->note_source_done(sym);
+            self->note_source_done(sym, kSrcEdgar);
         },
         /*on_line=*/{}, kEdgarTimeoutMs);
 }
@@ -395,7 +458,7 @@ void OwnershipService::fetch_market(const QString& sym) {
                 }
             }
             self->cache_.insert(sym, snap);
-            self->note_source_done(sym);
+            self->note_source_done(sym, kSrcMarket);
         },
         // Not kNetworkActionTimeoutMs (10s): ownership_extras makes three
         // separate yfinance calls — institutional holders, major holders and
@@ -458,6 +521,7 @@ bool OwnershipService::set_managers(const QVector<ownership::Manager>& list) {
     }
     f.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
     managers_cache_ = list;
+    emit managers_changed();
     return true;
 }
 
@@ -480,7 +544,9 @@ void OwnershipService::load_smart_money(const QString& symbol) {
     payload.insert(QStringLiteral("company"),
                    snap.company.isEmpty() ? sym : snap.company);
 
-    pending_.insert(sym, pending_.value(sym, 0) + 1);
+    if (pending_.value(sym).contains(kSrcSmart))
+        return; // this fetch is already running
+    pending_[sym].insert(kSrcSmart);
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_data.py"),
@@ -528,7 +594,107 @@ void OwnershipService::load_smart_money(const QString& symbol) {
                 }
             }
             self->cache_.insert(sym, snap);
-            self->note_source_done(sym);
+            self->note_source_done(sym, kSrcSmart);
+        },
+        /*on_line=*/{}, kSmartMoneyTimeoutMs);
+}
+
+
+// ── BY FIRM ─────────────────────────────────────────────────────────────────
+
+ownership::ManagerBook OwnershipService::book(const QString& cik) const {
+    return books_.value(cik);
+}
+
+bool OwnershipService::is_book_loading(const QString& cik) const {
+    return books_in_flight_.contains(cik);
+}
+
+void OwnershipService::load_book(const QString& cik) {
+    if (cik.isEmpty() || books_in_flight_.contains(cik))
+        return;
+    // Books are quarterly and immutable once filed, so a cached one is never
+    // stale within a session.
+    if (books_.contains(cik) && books_.value(cik).error.isEmpty()) {
+        emit book_updated(cik);
+        return;
+    }
+    books_in_flight_.insert(cik);
+
+    QString name, style;
+    for (const auto& m : managers()) {
+        if (m.cik == cik) { name = m.name; style = m.style; break; }
+    }
+
+    QPointer<OwnershipService> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"cik", cik}, {"quarters", 2}}).toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_data.py"), {QStringLiteral("book"), payload},
+        [self, cik, name, style](python::PythonResult result) {
+            if (!self)
+                return;
+            ManagerBook b;
+            b.cik = cik;
+            b.manager = name.isEmpty() ? QStringLiteral("CIK ") + cik : name;
+            b.style = style;
+            if (!result.success) {
+                b.error = result.error.isEmpty() ? QStringLiteral("13F fetch failed")
+                                                 : result.error.left(200);
+            } else {
+                const auto root =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = root.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    b.error = err;
+                } else {
+                    parse_book_into(root, b);
+                }
+            }
+            self->books_.insert(cik, b);
+            self->books_in_flight_.remove(cik);
+            emit self->book_updated(cik);
+        },
+        /*on_line=*/{}, kSmartMoneyTimeoutMs);
+}
+
+
+void OwnershipService::seed_default_managers() {
+    if (books_in_flight_.contains(QStringLiteral("__seed__")))
+        return;
+    books_in_flight_.insert(QStringLiteral("__seed__"));
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_data.py"),
+        {QStringLiteral("managers"), QStringLiteral("{\"resolve\":true}")},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->books_in_flight_.remove(QStringLiteral("__seed__"));
+            if (!result.success) {
+                LOG_WARN(TAG, "manager seed failed: " + result.error.left(200));
+                emit self->managers_changed();
+                return;
+            }
+            const auto root =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+            QVector<Manager> list;
+            for (const auto& v : root.value(QStringLiteral("managers")).toArray()) {
+                const auto o = v.toObject();
+                Manager m;
+                m.name = o.value(QStringLiteral("name")).toString();
+                m.cik = o.value(QStringLiteral("cik")).toString();
+                m.style = o.value(QStringLiteral("style")).toString();
+                // A manager whose CIK would not resolve is dropped rather than
+                // kept with an empty one: a row that can never be fetched is
+                // just a dead entry in the user's list.
+                if (!m.name.isEmpty() && !m.cik.isEmpty())
+                    list.push_back(m);
+            }
+            if (!list.isEmpty())
+                self->set_managers(list);
+            LOG_INFO(TAG, QString("Seeded %1 tracked 13F managers").arg(list.size()));
+            emit self->managers_changed();
         },
         /*on_line=*/{}, kSmartMoneyTimeoutMs);
 }

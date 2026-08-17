@@ -12,7 +12,7 @@ class QPushButton;
 class QTableWidget;
 class QVBoxLayout;
 
-namespace fincept::screens { class SmartMoneyPanel; }
+namespace fincept::screens { class SmartMoneyPanel; class FirmBookPanel; }
 
 namespace fincept::screens {
 
@@ -75,6 +75,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QTableWidget* holders_tbl_  = nullptr;
     QLabel*       short_lbl_    = nullptr;
     SmartMoneyPanel* smart_money_ = nullptr;
+    FirmBookPanel*   firm_book_   = nullptr;
 };
 
 } // namespace fincept::screens

@@ -17,6 +17,7 @@
 #include "screens/ownership/OwnershipTypes.h"
 
 #include <QHash>
+#include <QSet>
 #include <QObject>
 #include <QString>
 
@@ -64,11 +65,32 @@ class OwnershipService : public QObject {
     /// Path of the editable list, so the UI can point the user at it.
     static QString managers_file_path();
 
+    /// Populate the tracked-manager list from the curated defaults shipped with
+    /// the script, resolving each CIK from EDGAR, and persist the result.
+    ///
+    /// Needed because the defaults live in the script (one source of truth for
+    /// the list and its styles) but the CIKs are deliberately not hardcoded
+    /// there — a wrong CIK does not fail loudly, it quietly shows a different
+    /// firm's portfolio under the right name. Without this the list stays empty
+    /// until some other fetch happens to resolve it. Emits managers_changed.
+    void seed_default_managers();
+
     /// Fetch which tracked managers hold @p symbol, at what weight in their own
     /// book. Slow — every manager is several EDGAR round-trips — so it is a
     /// separate call from load(), and the rest of the screen renders without
     /// waiting on it.
     void load_smart_money(const QString& symbol);
+
+    // ── BY FIRM: one manager's whole book ───────────────────────────────────
+
+    /// Fetch @p cik's disclosed equity book and its quarter-over-quarter moves.
+    /// Emits book_updated when it lands.
+    void load_book(const QString& cik);
+
+    /// The cached book for @p cik, or a default-constructed one.
+    ownership::ManagerBook book(const QString& cik) const;
+
+    bool is_book_loading(const QString& cik) const;
 
   signals:
     /// A source returned and the snapshot changed. Carries the symbol so a
@@ -77,19 +99,34 @@ class OwnershipService : public QObject {
     void snapshot_updated(QString symbol);
     /// Both halves have settled, successfully or not.
     void load_finished(QString symbol);
+    /// A manager's book finished loading (or failed — check ManagerBook::error).
+    void book_updated(QString cik);
+    /// The tracked-manager list changed (seeded or edited).
+    void managers_changed();
 
   private:
     OwnershipService() = default;
 
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
-    void note_source_done(const QString& symbol);
+    void note_source_done(const QString& symbol, const QString& source);
 
     mutable QVector<ownership::Manager> managers_cache_;
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;   ///< ms since epoch, per symbol
-    QHash<QString, int>    pending_;      ///< outstanding sources, per symbol
+    /// Outstanding sources per symbol, BY NAME rather than as a count.
+    ///
+    /// A bare counter conflated three independent fetches. Smart money is
+    /// opt-in and takes minutes; while it ran, the counter was non-zero, and
+    /// load()'s "already in flight" guard then refused to fetch the register at
+    /// all — so clicking LOAD 13F POSITIONS before the page had loaded left the
+    /// rest of the screen permanently empty. Naming the sources lets each guard
+    /// on its own.
+    QHash<QString, QSet<QString>> pending_;
+
+    QHash<QString, ownership::ManagerBook> books_;
+    QSet<QString> books_in_flight_;
 };
 
 } // namespace fincept::services

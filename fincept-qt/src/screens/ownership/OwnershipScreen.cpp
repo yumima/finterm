@@ -2,6 +2,7 @@
 
 #include "core/symbol/SymbolContext.h"
 #include "screens/ownership/OwnershipSignals.h"
+#include "screens/ownership/FirmBookPanel.h"
 #include "screens/ownership/SmartMoneyPanel.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/ExternalLink.h"
@@ -212,6 +213,22 @@ void OwnershipScreen::build_ui() {
     short_lbl_->setWordWrap(true);
     short_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     bl->addWidget(short_lbl_);
+
+    // The other traversal of the same index: pick a firm, see its whole book.
+    // Sits last because the screen is keyed on a security — this is the
+    // manager-keyed view of the same filings, and it is where the tracked-firm
+    // list is edited.
+    bl->addWidget(section_label(QStringLiteral("BY FIRM — A MANAGER'S WHOLE BOOK")));
+    firm_book_ = new FirmBookPanel;
+    connect(firm_book_, &FirmBookPanel::navigate_to_symbol, this,
+            [this](const QString& issuer) {
+                // The book reports issuer NAMES, not tickers — 13F carries
+                // CUSIPs and the CUSIP-to-ticker map is licensed. Put the name
+                // in the search box rather than guessing a symbol from it.
+                if (!issuer.isEmpty())
+                    search_->setText(issuer);
+            });
+    bl->addWidget(firm_book_);
 
     bl->addStretch(1);
     scroll->setWidget(body);

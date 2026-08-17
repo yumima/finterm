@@ -2,14 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-16)
+## Today's commits (2026-08-17)
 
 Latest first.
 
-- [`ea995b987`](https://github.com/yumima/finterm/commit/ea995b987) Add OWNERSHIP: who owns a stock, and what that implies
-- [`705589fec`](https://github.com/yumima/finterm/commit/705589fec) Make dashboard headlines open the story
-- [`3803791b0`](https://github.com/yumima/finterm/commit/3803791b0) Remove Power Trader
-- [`11366ace2`](https://github.com/yumima/finterm/commit/11366ace2) Put the category list in one place, and split the headings the model merges
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
