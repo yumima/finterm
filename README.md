@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`992b354b1`](https://github.com/yumima/finterm/commit/992b354b1) Review fixes: a fabricated exit count, and an index that forgot itself
 - [`ff41ffbe0`](https://github.com/yumima/finterm/commit/ff41ffbe0) Close the quarter-long gap: read the current quarter straight from EDGAR
 - [`4f54bbe7d`](https://github.com/yumima/finterm/commit/4f54bbe7d) Put BY FIRM on the index, delete the curated list, fix contrast app-wide
 - [`aa11d46a2`](https://github.com/yumima/finterm/commit/aa11d46a2) Fix unreadable text, and let ER build the index it needs

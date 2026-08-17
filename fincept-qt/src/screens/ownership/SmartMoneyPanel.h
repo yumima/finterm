@@ -32,6 +32,11 @@ class SmartMoneyPanel : public QWidget {
     /// leaves the fetch to the user unless @p auto_fetch is set.
     void set_symbol(const QString& symbol, bool auto_fetch = false);
 
+    /// Hide the panel's own index button and 13F caveat. OWNERSHIP shows both
+    /// once at screen level; repeating them inside the tile was two identical
+    /// buttons and the same sentence twice on one screen.
+    void set_chrome_visible(bool on);
+
   private:
     /// Two legitimate rankings of the same rows. Bloomberg's HDS defaults to
     /// position size; a weight answers a different question. Exposed as a
@@ -47,6 +52,7 @@ class SmartMoneyPanel : public QWidget {
     QLabel*          caveat_ = nullptr;
     QLabel*          flow_ = nullptr;
     QPushButton*     build_btn_ = nullptr;
+    bool             chrome_ = true;
     class RankedBarChart* chart_ = nullptr;
 };
 

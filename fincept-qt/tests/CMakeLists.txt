@@ -578,6 +578,22 @@ target_link_libraries(test_ownership_signals PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ownership_signals PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ownership_signals COMMAND test_ownership_signals)
 
+# ── Palette contrast ─────────────────────────────────────────────────────────
+# text_dim shipped at 1.91:1 and text_tertiary at 2.53:1 against the ground —
+# below WCAG's 3:1 floor for ANY text — and both were used for the lines that
+# explain where a number came from. The palette is data, so this is assertable
+# without standing up a widget.
+add_executable(test_palette_contrast
+    ui/test_palette_contrast.cpp
+    ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/ThemeManager.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_palette_contrast PRIVATE ../src)
+target_link_libraries(test_palette_contrast PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+set_target_properties(test_palette_contrast PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME palette_contrast COMMAND test_palette_contrast)
+
 # ── Form 4 parsing + insider classification (OWNERSHIP) ──────────────────────
 # The screen's whole claim is that its numbers come off the filing. Three of
 # these pin bugs found by running against live EDGAR rather than by reading the

@@ -8,6 +8,7 @@
 
 class QLabel;
 class QComboBox;
+class QStackedWidget;
 class QLineEdit;
 class QPushButton;
 class QTableWidget;
@@ -73,6 +74,8 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QComboBox*   portfolio_    = nullptr;
     QPushButton* index_btn_    = nullptr;
     QLabel*      index_lbl_    = nullptr;
+    QStackedWidget* body_ = nullptr;
+    QWidget*     empty_page_ = nullptr;
     QPushButton* refresh_btn_  = nullptr;
     QLabel*      title_        = nullptr;
     QLabel*      status_       = nullptr;

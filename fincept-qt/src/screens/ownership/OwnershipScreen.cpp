@@ -22,6 +22,7 @@
 #include <QGridLayout>
 #include <QScrollArea>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -212,6 +213,7 @@ void OwnershipScreen::build_ui() {
     root->addLayout(bar);
 
     index_lbl_ = new QLabel;
+    index_lbl_->setVisible(false);   // shown only when it has something to add
     index_lbl_->setWordWrap(true);
     index_lbl_->setStyleSheet(QString("color:%1;font-size:12px;")
                                   .arg(ui::colors::TEXT_SECONDARY()));
@@ -264,6 +266,7 @@ void OwnershipScreen::build_ui() {
 
     // Row 1 — the institutional register and the short side.
     smart_money_ = new SmartMoneyPanel;
+    smart_money_->set_chrome_visible(false);
     grid->addWidget(tile(QStringLiteral("INSTITUTIONAL HOLDERS"), smart_money_,
                          QStringLiteral("Every 13F filer holding this, ranked by how much of "
                                         "their own book it is.")), 1, 0);
@@ -304,12 +307,58 @@ void OwnershipScreen::build_ui() {
                          QStringLiteral("The same filings keyed by manager instead of by "
                                         "security.")), 2, 1);
 
+    // ── Empty state ─────────────────────────────────────────────────────────
+    // Six empty tiles, each repeating "no 13F index", is five messages too
+    // many and no clear action. Without an index the screen has exactly one
+    // thing to say and one button to offer, so it says it once, in the middle,
+    // and swaps to the grid the moment there is data.
+    auto* empty = new QWidget;
+    auto* ev = new QVBoxLayout(empty);
+    ev->addStretch(1);
+    auto* etitle = new QLabel(QStringLiteral("No 13F ownership index yet"));
+    etitle->setAlignment(Qt::AlignCenter);
+    etitle->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;")
+                              .arg(ui::colors::TEXT_PRIMARY()));
+    ev->addWidget(etitle);
+    auto* ebody = new QLabel(QStringLiteral(
+        "Downloads two quarterly SEC 13F data sets — around 10,600 filers and 2.4 million "
+        "positions each — and indexes them locally. Every ticker then gets its complete "
+        "institutional holder list and its quarter-over-quarter changes, answered in "
+        "milliseconds with no network.\n\nRuns once, takes a couple of minutes."));
+    ebody->setAlignment(Qt::AlignCenter);
+    ebody->setWordWrap(true);
+    ebody->setMaximumWidth(620);
+    ebody->setStyleSheet(QString("color:%1;font-size:13px;").arg(ui::colors::TEXT_SECONDARY()));
+    auto* ebrow = new QHBoxLayout;
+    ebrow->addStretch(1);
+    ebrow->addWidget(ebody);
+    ebrow->addStretch(1);
+    ev->addLayout(ebrow);
+    auto* ebtn = new QPushButton(QStringLiteral("BUILD 13F INDEX"));
+    ebtn->setMinimumWidth(220);
+    ebtn->setMinimumHeight(34);
+    connect(ebtn, &QPushButton::clicked, this,
+            [this]() { services::OwnershipService::instance().build_index(); refresh_index_ui({}); });
+    auto* ebtnrow = new QHBoxLayout;
+    ebtnrow->addStretch(1);
+    ebtnrow->addWidget(ebtn);
+    ebtnrow->addStretch(1);
+    ev->addSpacing(14);
+    ev->addLayout(ebtnrow);
+    ev->addStretch(2);
+    empty_page_ = empty;
+
     grid->setColumnStretch(0, 1);
     grid->setColumnStretch(1, 1);
     grid->setRowStretch(0, 3);
     grid->setRowStretch(1, 3);
     grid->setRowStretch(2, 2);
-    root->addLayout(grid, 1);
+    auto* grid_host = new QWidget;
+    grid_host->setLayout(grid);
+    body_ = new QStackedWidget;
+    body_->addWidget(grid_host);   // 0
+    body_->addWidget(empty_page_); // 1
+    root->addWidget(body_, 1);
 }
 
 void OwnershipScreen::apply_theme() {
@@ -362,11 +411,23 @@ void OwnershipScreen::render() {
     bits << (snap.company.isEmpty() ? symbol_ : QString("%1 — %2").arg(symbol_, snap.company));
     if (loading)
         bits << QStringLiteral("loading…");
-    if (!snap.edgar_error.isEmpty())
-        bits << QStringLiteral("EDGAR: ") + snap.edgar_error;
-    if (!snap.market_error.isEmpty())
-        bits << QStringLiteral("Holders: ") + snap.market_error;
+    // Errors are elided and the full text goes to the tooltip. An unbounded
+    // message — a script path, a stack fragment — pushes the toolbar wider than
+    // the window and shoves the controls off the edge.
+    auto brief = [](const QString& e) {
+        return e.length() > 90 ? e.left(87) + QStringLiteral("…") : e;
+    };
+    QStringList full;
+    if (!snap.edgar_error.isEmpty()) {
+        bits << QStringLiteral("EDGAR: ") + brief(snap.edgar_error);
+        full << QStringLiteral("EDGAR: ") + snap.edgar_error;
+    }
+    if (!snap.market_error.isEmpty()) {
+        bits << QStringLiteral("Holders: ") + brief(snap.market_error);
+        full << QStringLiteral("Holders: ") + snap.market_error;
+    }
     status_->setText(bits.join(QStringLiteral("   ·   ")));
+    status_->setToolTip(full.join(QStringLiteral("\n")));
 
     render_reads(snap);
     render_insiders(snap);
@@ -633,6 +694,11 @@ void OwnershipScreen::reload_portfolio() {
 void OwnershipScreen::refresh_index_ui(const QString& msg) {
     auto& svc = services::OwnershipService::instance();
     const bool ready = svc.index_ready();
+    if (body_)
+        body_->setCurrentIndex(ready ? 0 : 1);
+    // The toolbar control is redundant while the empty page owns the action.
+    index_btn_->setVisible(ready);
+    index_lbl_->setVisible(ready && !msg.isEmpty());
     index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS")
                               : QStringLiteral("BUILD 13F INDEX"));
     index_btn_->setToolTip(

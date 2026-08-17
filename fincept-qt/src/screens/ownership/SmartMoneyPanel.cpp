@@ -97,6 +97,12 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
     render();
 }
 
+void SmartMoneyPanel::set_chrome_visible(bool on) {
+    chrome_ = on;
+    caveat_->setVisible(on);
+    render();
+}
+
 void SmartMoneyPanel::set_symbol(const QString& symbol, bool /*auto_fetch*/) {
     const QString sym = symbol.trimmed().toUpper();
     if (sym == symbol_)
@@ -122,7 +128,7 @@ void SmartMoneyPanel::render() {
                              "filings for the largest filers straight from EDGAR.")
             : QStringLiteral("Download two quarterly SEC 13F data sets — every filer, every "
                              "position — and index them locally. Runs once."));
-    build_btn_->setVisible(true);
+    build_btn_->setVisible(chrome_);
     build_btn_->setEnabled(!svc.index_busy());
     sort_->setVisible(svc.index_ready());
     if (symbol_.isEmpty()) {

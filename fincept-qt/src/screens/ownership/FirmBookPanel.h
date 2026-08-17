@@ -39,7 +39,6 @@ class FirmBookPanel : public QWidget {
     QLineEdit*    search_ = nullptr;
     QComboBox*    firm_ = nullptr;
     QLabel*       status_ = nullptr;
-    QLabel*       caveat_ = nullptr;
     QTableWidget* positions_ = nullptr;
     QTimer*       debounce_ = nullptr;
 };

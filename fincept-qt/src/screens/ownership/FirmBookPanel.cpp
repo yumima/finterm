@@ -69,12 +69,8 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     bar->addWidget(status_, 1);
     root->addLayout(bar);
 
-    caveat_ = new QLabel(QStringLiteral(
-        "13F covers long US equities only — no shorts, no bonds, no cash, no leverage — so these "
-        "weights are shares of the manager's disclosed equity book, not of their fund."));
-    caveat_->setWordWrap(true);
-    caveat_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    root->addWidget(caveat_);
+    // No caveat here: the same sentence already sits under the holders tile,
+    // and printing it twice on one screen is noise rather than emphasis.
 
     positions_ = new QTableWidget;
     positions_->setColumnCount(6);
