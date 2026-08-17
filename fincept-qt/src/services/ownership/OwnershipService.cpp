@@ -202,6 +202,14 @@ void parse_market_into(const QJsonObject& o, OwnershipSnapshot& snap) {
             snap.holders.push_back(ih);
     }
 
+    // The vendor's holder table carries its own as-of quarter, which is what
+    // lets the screen tell the reader when it is fresher than the bulk index.
+    for (const auto& v : o.value(QStringLiteral("institutional_holders")).toArray()) {
+        const QDate d = iso_date(v.toObject(), "date");
+        if (d.isValid() && (!snap.vendor_quarter.isValid() || d > snap.vendor_quarter))
+            snap.vendor_quarter = d;
+    }
+
     const QJsonObject s = o.value(QStringLiteral("short_interest")).toObject();
     ShortInterest si;
     si.shares_short          = opt_num(s, "shares_short");
@@ -732,7 +740,12 @@ void OwnershipService::build_index() {
     emit index_changed(QStringLiteral("Downloading SEC 13F data set…"));
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest"), QStringLiteral("{}")},
+        // Two quarters, not one. A single quarter is a photograph; the
+        // question people actually ask — who built, who exited — needs the
+        // frame before it, and asking the user to press the button twice would
+        // be a puzzle rather than a feature.
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("ingest_recent"), QStringLiteral("{\"quarters\":2}")},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -747,11 +760,16 @@ void OwnershipService::build_index() {
                 if (!err.isEmpty()) {
                     msg = err;
                 } else {
+                    QStringList qs;
+                    for (const auto& v : o.value(QStringLiteral("ingested")).toArray()) {
+                        const auto q = v.toObject();
+                        qs << QStringLiteral("%1 (%2 filers)")
+                                  .arg(q.value(QStringLiteral("quarter")).toString())
+                                  .arg(q.value(QStringLiteral("filers")).toInt());
+                    }
                     self->index_status_ =
-                        QStringLiteral("Quarter %1 · %2 filers · %3 positions")
-                            .arg(o.value(QStringLiteral("quarter")).toString())
-                            .arg(o.value(QStringLiteral("filers")).toInt())
-                            .arg(o.value(QStringLiteral("rows")).toInt());
+                        qs.isEmpty() ? QStringLiteral("13F index built")
+                                     : QStringLiteral("Indexed: ") + qs.join(QStringLiteral(", "));
                     msg = self->index_status_;
                 }
             }
@@ -819,6 +837,10 @@ void OwnershipService::load_index_holders(const QString& symbol) {
                     snap.option_holders = root.value(QStringLiteral("option_holder_count")).toInt();
                     snap.index_quarter = QDate::fromString(
                         root.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
+                    snap.index_shares_held =
+                        root.value(QStringLiteral("total_shares_held")).toDouble();
+                    snap.prior_quarter = QDate::fromString(
+                        root.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate);
                     for (const auto& v : root.value(QStringLiteral("holders")).toArray()) {
                         const auto o = v.toObject();
                         ManagerPosition p;
@@ -832,6 +854,10 @@ void OwnershipService::load_index_holders(const QString& symbol) {
                         p.position_count = o.value(QStringLiteral("position_count")).toInt();
                         p.put_call = o.value(QStringLiteral("put_call")).toString();
                         p.is_derivative = o.value(QStringLiteral("is_derivative")).toBool();
+                        p.action = o.value(QStringLiteral("action")).toString();
+                        p.shares_delta = opt_num(o, "shares_delta");
+                        p.pct_change = opt_num(o, "pct_change");
+                        p.note = o.value(QStringLiteral("note")).toString();
                         if (!p.manager.isEmpty())
                             snap.smart_money.push_back(p);
                     }

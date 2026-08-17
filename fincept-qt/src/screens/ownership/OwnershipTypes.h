@@ -153,6 +153,9 @@ struct ManagerPosition {
     /// folded into a share count or a weight.
     QString put_call;
     bool    is_derivative = false;
+    /// Why a move could not be read as a decision — a filer with no prior
+    /// filing has not opened a position, we simply could not see them.
+    QString note;
 };
 
 /// One position line inside a single manager's book (the BY FIRM view).
@@ -205,6 +208,16 @@ struct OwnershipSnapshot {
     int     holder_universe = 0;
     int     option_holders = 0;
     QDate   index_quarter;
+    /// Aggregate across EVERY 13F filer, so institutional ownership can be
+    /// computed from the filings instead of taken from a vendor aggregate.
+    double  index_shares_held = 0.0;
+    /// Quarter the vendor's holder table reports. Compared against
+    /// index_quarter: the SEC bulk data sets publish only after the filing
+    /// window closes, so the complete source can be a full quarter behind the
+    /// shallow one, and the screen has to say which it is showing.
+    QDate   vendor_quarter;
+    /// The quarter the index diffs against, when two are present.
+    QDate   prior_quarter;
 
     /// Coverage, so a truncated fetch can say so. A capped window that renders
     /// silently reads as a quiet period when it may be a busy one.

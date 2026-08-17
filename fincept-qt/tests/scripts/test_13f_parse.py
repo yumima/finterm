@@ -249,6 +249,35 @@ def test_issuer_matching_refuses_a_plausible_wrong_company():
     check("match: empty candidate refuses", not m(apple, ""))
 
 
+def test_bulk_quarter_date_parsing():
+    """SEC's data sets date quarters as 31-MAR-2026; the index keys on ISO."""
+    import sec_13f_bulk as bulk
+    check("bulk: quarter parsed", bulk._iso_quarter("31-MAR-2026") == "2026-03-31",
+          bulk._iso_quarter("31-MAR-2026"))
+    check("bulk: single-digit day padded", bulk._iso_quarter("1-JUN-2025") == "2025-06-01",
+          bulk._iso_quarter("1-JUN-2025"))
+    check("bulk: december", bulk._iso_quarter("31-DEC-2025") == "2025-12-31")
+    check("bulk: garbage passes through rather than raising",
+          bulk._iso_quarter("not a date") == "not a date")
+
+
+def test_bulk_book_floors_are_stated_not_hidden():
+    """A '% of book' ranking with no floor on the book puts a one-position
+    family account above Berkshire. The thresholds are constants, not magic
+    numbers buried in a query, and they are returned with every result."""
+    import sec_13f_bulk as bulk
+    check("bulk: book floor exists", bulk.MIN_BOOK_VALUE > 0)
+    check("bulk: position floor exists", bulk.MIN_BOOK_POSITIONS >= 2)
+    # The floors must be overridable by the caller and default to the stated
+    # constants — a threshold that cannot be changed or seen is unfalsifiable.
+    import inspect
+    sig = inspect.signature(bulk.holders)
+    check("bulk: min_book is a caller-visible parameter",
+          sig.parameters["min_book"].default == bulk.MIN_BOOK_VALUE)
+    check("bulk: min_positions is a caller-visible parameter",
+          sig.parameters["min_positions"].default == bulk.MIN_BOOK_POSITIONS)
+
+
 def test_namespace_stripping_helper():
     check("local: namespaced tag",
           t13._local("{http://www.sec.gov/edgar/x}infoTable") == "infoTable")

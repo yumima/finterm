@@ -205,6 +205,54 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
         }
     }
 
+    // ── Institutional ownership, computed rather than quoted ────────────────
+    // Two sources answer this and they disagree, so the screen computes it from
+    // the filings and shows the vendor's number beside it instead of silently
+    // picking one. The count of filings behind the number is what makes it
+    // auditable — a vendor aggregate cannot be checked against anything.
+    if (s.index_shares_held > 0.0 && si.shares_outstanding && *si.shares_outstanding > 0.0) {
+        const double computed = s.index_shares_held / *si.shares_outstanding;
+        QString detail =
+            QStringLiteral("%1 of shares outstanding, summed from %2 individual 13F filings "
+                           "reporting %3 shares against %4 outstanding.")
+                .arg(pct(computed))
+                .arg(s.holder_universe)
+                .arg(compact(s.index_shares_held), compact(*si.shares_outstanding));
+        if (si.held_pct_institutions) {
+            const double gap = std::fabs(computed - *si.held_pct_institutions);
+            detail += gap >= 0.05
+                          ? QStringLiteral(" The data vendor reports %1 — a %2 gap, which is "
+                                           "what a quarter of drift between the two sources "
+                                           "looks like.")
+                                .arg(pct(*si.held_pct_institutions), pct(gap))
+                          : QStringLiteral(" The data vendor reports %1, which agrees.")
+                                .arg(pct(*si.held_pct_institutions));
+        }
+        QString basis =
+            QStringLiteral("Computed from the filings, not quoted from a vendor: every 13F "
+                           "position in the indexed quarter divided by shares outstanding. "
+                           "It is a floor, because filers below the 13F threshold and "
+                           "non-13F institutions do not appear.");
+        // Freshness is the ceiling on this whole screen and belongs on the
+        // number, not in a footnote. SEC publishes the bulk data sets only
+        // after the filing window closes, so the complete source can trail the
+        // vendor's by a full quarter.
+        if (s.index_quarter.isValid()) {
+            basis += QStringLiteral(" As of %1")
+                         .arg(s.index_quarter.toString(QStringLiteral("MMM yyyy")));
+            if (s.vendor_quarter.isValid() && s.vendor_quarter > s.index_quarter) {
+                basis += QStringLiteral(", and the vendor already has %1 — the SEC bulk data "
+                                        "sets publish after the filing window closes, so the "
+                                        "complete source trails the shallow one by a quarter.")
+                             .arg(s.vendor_quarter.toString(QStringLiteral("MMM yyyy")));
+            } else {
+                basis += QStringLiteral(".");
+            }
+        }
+        out.push_back({Lens::Stock, Weight::Context,
+                       QStringLiteral("Institutional ownership"), detail, basis});
+    }
+
     // ── Index-money weight on the register ──────────────────────────────────
     // Computed independently of the provider's holder table: with a 13F index
     // built, this is answerable from the filings alone, and gating it on a

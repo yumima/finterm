@@ -12,6 +12,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -135,6 +136,8 @@ void SmartMoneyPanel::render() {
                        .arg(snap.holder_universe ? snap.holder_universe : stock.size());
     if (snap.index_quarter.isValid())
         head += QStringLiteral(" · as of ") + snap.index_quarter.toString(QStringLiteral("MMM yyyy"));
+    if (snap.prior_quarter.isValid())
+        head += QStringLiteral(" · vs ") + snap.prior_quarter.toString(QStringLiteral("MMM yyyy"));
     if (snap.option_holders > 0)
         head += QStringLiteral(" · %1 hold options only").arg(snap.option_holders);
     status_->setText(head);
@@ -162,6 +165,20 @@ void SmartMoneyPanel::render() {
         // shouting.
         b.colour = (p.weight.value_or(0) >= 0.05) ? QColor(ui::colors::AMBER())
                                                   : QColor(ui::colors::CYAN());
+        // Colour by what they DID, not by how big it is: green built, red cut,
+        // neutral held. That is the question a reader brings to this table.
+        if (p.action == QLatin1String("added") || p.action == QLatin1String("new"))
+            b.colour = QColor(ui::colors::GREEN());
+        else if (p.action == QLatin1String("trimmed") || p.action == QLatin1String("exited"))
+            b.colour = QColor(ui::colors::RED());
+        if (!p.action.isEmpty()) {
+            QString move = p.action;
+            if (p.shares_delta && *p.shares_delta != 0.0)
+                move += QStringLiteral(" %1%2")
+                            .arg(*p.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("-"),
+                                 fmt::format_compact(std::abs(*p.shares_delta)));
+            b.label += QStringLiteral("   ·   ") + move;
+        }
         b.tooltip = QStringLiteral("%1\n%2 shares · %3\n%4 of a %5 book across %6 positions")
                         .arg(p.manager,
                              p.shares ? fmt::format_compact(*p.shares) : fmt::placeholder(),
@@ -171,6 +188,13 @@ void SmartMoneyPanel::render() {
                              p.book_total ? fmt::format_compact(*p.book_total)
                                           : fmt::placeholder())
                         .arg(p.position_count);
+        if (!p.note.isEmpty())
+            b.tooltip += QStringLiteral("\n\n\u26a0 ") + p.note;
+        else if (!p.action.isEmpty())
+            b.tooltip += QStringLiteral("\n\n%1 since %2").arg(p.action).arg(
+                snap.prior_quarter.isValid()
+                    ? snap.prior_quarter.toString(QStringLiteral("MMM yyyy"))
+                    : QStringLiteral("the prior quarter"));
         bars.push_back(b);
     }
     chart_->set_bars(bars);

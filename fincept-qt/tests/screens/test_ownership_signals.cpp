@@ -334,6 +334,39 @@ private slots:
 
     // ── presentation contract ────────────────────────────────────────────────
 
+    void institutional_ownership_is_computed_and_cross_checked() {
+        OwnershipSnapshot s = blank();
+        s.index_shares_held = 9'012'622'443.0;
+        s.shorts.shares_outstanding = 14'594'180'000.0;
+        s.holder_universe = 7850;
+        s.index_quarter = QDate(2026, 3, 31);
+        s.vendor_quarter = QDate(2026, 6, 30);
+        s.shorts.held_pct_institutions = 0.6648;
+
+        const Read r = find(derive_reads(s), QStringLiteral("Institutional ownership"));
+        QVERIFY(!r.headline.isEmpty());
+        QVERIFY2(r.detail.contains(QStringLiteral("61.8%")),
+                 qPrintable(r.detail));   // computed, not the vendor's 66.5%
+        QVERIFY2(r.detail.contains(QStringLiteral("7850")),
+                 "the number of filings behind it is what makes it auditable");
+        QVERIFY2(r.detail.contains(QStringLiteral("66.5%")),
+                 "the vendor's number must be shown beside it, not hidden");
+        QVERIFY2(r.basis.contains(QStringLiteral("trails the shallow one by a quarter")),
+                 "a stale complete source must say so when a fresher one exists");
+        QVERIFY2(r.basis.contains(QStringLiteral("floor")),
+                 "sub-threshold filers do not appear, so it is a floor");
+    }
+
+    void institutional_ownership_needs_both_inputs() {
+        OwnershipSnapshot a = blank();
+        a.index_shares_held = 1'000'000.0;      // no shares outstanding
+        QVERIFY(!has_headline(derive_reads(a), QStringLiteral("Institutional ownership")));
+
+        OwnershipSnapshot b = blank();
+        b.shorts.shares_outstanding = 1'000'000.0;  // nothing indexed
+        QVERIFY(!has_headline(derive_reads(b), QStringLiteral("Institutional ownership")));
+    }
+
     void reads_are_ordered_by_weight() {
         OwnershipSnapshot s = blank();
         s.shorts.held_pct_institutions = 0.75;      // Notable
