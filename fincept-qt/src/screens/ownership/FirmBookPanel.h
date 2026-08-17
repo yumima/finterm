@@ -3,8 +3,9 @@
 
 class QComboBox;
 class QLabel;
-class QPushButton;
+class QLineEdit;
 class QTableWidget;
+class QTimer;
 
 namespace fincept::screens {
 
@@ -32,17 +33,15 @@ class FirmBookPanel : public QWidget {
     void navigate_to_symbol(const QString& issuer_name);
 
   private:
-    void reload_managers();
+    void reload_firms();
     void render();
 
+    QLineEdit*    search_ = nullptr;
     QComboBox*    firm_ = nullptr;
-    QPushButton*  load_btn_ = nullptr;
-    QPushButton*  edit_btn_ = nullptr;
-    QPushButton*  seed_btn_ = nullptr;
     QLabel*       status_ = nullptr;
     QLabel*       caveat_ = nullptr;
     QTableWidget* positions_ = nullptr;
-    QTableWidget* moves_ = nullptr;
+    QTimer*       debounce_ = nullptr;
 };
 
 } // namespace fincept::screens

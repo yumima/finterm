@@ -132,7 +132,7 @@ inline const QVector<CredentialDef>& catalogue() {
         {"OPENAQ_API_KEY", "Openaq"},
         {"OPENBB_API_KEY", "Openbb"},
         {"OPENEXCHANGERATES_API_KEY", "Openexchangerates"},
-        {"OPENFIGI_API_KEY", "Openfigi"},
+        {"OPENFIGI_API_KEY", "OpenFIGI (13F symbol mapping — optional)"},
         {"OPENSECRETS_API_KEY", "Opensecrets"},
         {"OPEN_OWNERSHIP_API_KEY", "Open Ownership"},
         {"OPSD_API_KEY", "Opsd"},

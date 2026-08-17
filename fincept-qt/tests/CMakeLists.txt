@@ -606,6 +606,20 @@ if(Python3_Interpreter_FOUND)
     )
 endif()
 
+# ── 13F bulk ingest ──────────────────────────────────────────────────────────
+# Runs the shipped ingest against a synthetic data set shaped exactly like
+# SEC's. Every case is a bug that actually shipped: duplicate CUSIP rows within
+# one filing (8,404 phantom holders of AAPL), a 13F-HR and its /A both counted,
+# puts folded into the share count, the 2023 thousands-to-dollars switch, and an
+# absent CIK zero-padded to "0000000000" so unrelated filers merged and one
+# vanished from the index.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME thirteen_f_ingest
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_13f_ingest.py
+    )
+endif()
+
 # ── S-1 section slicing ──────────────────────────────────────────────────────
 # The slicer anchored on the FIRST heading occurrence, which in a real S-1 is
 # the table of contents — so "verbatim excerpts" could be a page-number list.

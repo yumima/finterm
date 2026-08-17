@@ -50,6 +50,8 @@ LABELS = {
     "BLS_API_KEY": "BLS (Bureau of Labor Statistics)",
     "CENSUS_API_KEY": "US Census Bureau",
     "CONGRESS_GOV_API_KEY": "Congress.gov (Gov Data)",
+    # Optional. Without it the 13F symbol map takes ~95 minutes; with it, ~2.
+    "OPENFIGI_API_KEY": "OpenFIGI (13F symbol mapping — optional)",
     "DATABENTO_API_KEY": "Databento",
     "EIA_API_KEY": "EIA (Energy Information Administration)",
     "FINNHUB_API_KEY": "Finnhub",

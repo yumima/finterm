@@ -163,9 +163,17 @@ struct BookPosition {
     QString issuer;
     QString cusip;
     QString security_class;
+    /// Resolved from the index's CUSIP map, so a drill-through is exact rather
+    /// than a guess made from the issuer name. Empty when unmapped.
+    QString ticker;
     std::optional<double> shares;
     std::optional<double> value;
     std::optional<double> weight;
+    /// "new", "added", "trimmed", "held" or "first seen" versus the prior
+    /// indexed quarter; empty when only one quarter is indexed.
+    QString action;
+    std::optional<double> shares_delta;
+    std::optional<double> pct_change;
 };
 
 /// A manager's disclosed equity book for one quarter, with the moves that got
@@ -181,8 +189,12 @@ struct ManagerBook {
     /// How the filing's values were interpreted — SEC moved 13F from thousands
     /// to whole dollars in 2023 and a silent misread is a 1000x error.
     QString value_basis;
+    QDate   prior_period;             ///< the quarter this book is diffed against
     QVector<BookPosition> positions;
-    QVector<ManagerPosition> moves;   ///< quarter-over-quarter, newest period
+    /// Names held last quarter and gone this one. They carry no weight and so
+    /// have no place in a weight-ordered list, but "what did they get out of"
+    /// is half the question the by-firm view answers.
+    QVector<BookPosition> exits;
     QString error;
 };
 

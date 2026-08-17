@@ -58,6 +58,11 @@ UA = {"User-Agent": "FinceptTerminal research@hanlexon.com",
 
 DATASET_INDEX = "https://www.sec.gov/dera/data/form-13f"
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
+# Optional and per-user. Keyless OpenFIGI allows 25 requests a minute, which
+# puts the full 22,820-CUSIP map at about 95 minutes; a free key raises that to
+# 25 requests per 6 seconds and turns it into a couple of minutes. Never
+# bundled — read from the environment the app injects.
+OPENFIGI_KEY = os.environ.get("OPENFIGI_API_KEY", "")
 
 _LAST_REQ = 0.0
 _MIN_REQ_GAP = 0.4
@@ -223,8 +228,10 @@ def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
         for i in range(0, len(todo), batch):
             chunk = todo[i:i + batch]
             body = json.dumps([{"idType": "ID_CUSIP", "idValue": c} for c in chunk]).encode()
-            req = urllib.request.Request(
-                OPENFIGI_URL, data=body, headers={"Content-Type": "application/json"})
+            hdrs = {"Content-Type": "application/json"}
+            if OPENFIGI_KEY:
+                hdrs["X-OPENFIGI-APIKEY"] = OPENFIGI_KEY
+            req = urllib.request.Request(OPENFIGI_URL, data=body, headers=hdrs)
             try:
                 data = json.loads(urllib.request.urlopen(req, timeout=45).read())
             except Exception:
@@ -254,8 +261,8 @@ def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
             con.commit()
             if progress:
                 progress(resolved + failed, len(todo))
-            # Keyless OpenFIGI allows 25 requests a minute.
-            time.sleep(2.5)
+            # 25 requests a minute keyless; 25 per 6 seconds with a key.
+            time.sleep(0.25 if OPENFIGI_KEY else 2.5)
 
         remaining = con.execute("""
             SELECT COUNT(*) FROM (SELECT DISTINCT cusip FROM holdings
@@ -314,8 +321,13 @@ def ingest(url=None, progress=None):
                     if head is None:
                         head = {k: i for i, k in enumerate(parts)}
                         continue
-                    acc_cik[parts[head["ACCESSION_NUMBER"]]] = \
-                        parts[head["CIK"]].strip().zfill(10)
+                    # An ABSENT cik must stay absent. zfill on an empty string
+                    # produces "0000000000", which looks like a real CIK: two
+                    # unrelated filers missing a CIK then collide on it, the
+                    # per-filer dedup keeps one and the other disappears from
+                    # the index entirely. Only pad a value that exists.
+                    raw = parts[head["CIK"]].strip()
+                    acc_cik[parts[head["ACCESSION_NUMBER"]]] = raw.zfill(10) if raw else ""
 
             # Cover pages carry the manager name and the quarter reported for.
             acc_meta = {}
@@ -422,6 +434,26 @@ def ingest(url=None, progress=None):
                              (quarter,)).fetchone()[0]
         con.execute("DROP TABLE _agg")
 
+        # Units. SEC moved 13F VALUE from thousands to whole dollars for 2023
+        # onward, and the bulk files carry whatever the filing used — so an
+        # older data set would be off by 1000x in every weight with nothing on
+        # screen to show it. The date decides, checked against the implied price
+        # per share across the quarter, because a units error is invisible.
+        med = con.execute("""
+            SELECT value / shares FROM holdings
+             WHERE quarter=? AND put_call='' AND shares > 0
+             ORDER BY value / shares LIMIT 1
+            OFFSET (SELECT COUNT(*) / 2 FROM holdings
+                     WHERE quarter=? AND put_call='' AND shares > 0)
+        """, (quarter, quarter)).fetchone()
+        implied = med[0] if med else 0.0
+        if implied and implied < 1.0:
+            # Real equities do not trade below a dollar across a whole market.
+            con.execute("UPDATE holdings SET value = value * 1000 WHERE quarter=?", (quarter,))
+            value_basis = "thousands (scaled to dollars)"
+        else:
+            value_basis = "whole dollars"
+
         con.execute("DELETE FROM books WHERE quarter=?", (quarter,))
         con.execute("""
             INSERT INTO books (accession, quarter, cik, manager, stock_value, stock_count)
@@ -437,6 +469,7 @@ def ingest(url=None, progress=None):
                     (quarter, url, filers, n_rows))
         con.commit()
         return {"quarter": quarter, "filers": filers, "rows": n_rows, "source": url,
+                "value_basis": value_basis, "implied_price_median": implied,
                 "db": db_path()}
     finally:
         con.close()
@@ -454,6 +487,23 @@ def _iso_quarter(s):
 
 
 # ── Queries ─────────────────────────────────────────────────────────────────
+
+def newer_available():
+    """Is SEC publishing a quarter this index does not have?
+
+    Without this the index silently ages: it was built once, it still answers,
+    and nothing says the answers are a quarter behind.
+    """
+    have = {q["quarter"] for q in status().get("quarters", [])}
+    urls = available_datasets()
+    return {"indexed": sorted(have, reverse=True),
+            "newest_dataset": urls[0].rsplit("/", 1)[-1] if urls else "",
+            "datasets_available": len(urls),
+            # The data set is named by filing window, not by reported quarter,
+            # so this cannot be resolved to a quarter without downloading it.
+            # The honest signal is "there is a set you have not ingested".
+            "unseen_datasets": max(0, len(urls) - len(have))}
+
 
 def status():
     con = connect()
@@ -573,44 +623,6 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
         con.close()
 
 
-def manager_book(manager=None, accession=None, quarter=None, limit=200):
-    """One filer's whole disclosed book from the local index."""
-    con = connect()
-    try:
-        if not accession:
-            if not quarter:
-                row = con.execute(
-                    "SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 1").fetchone()
-                if not row:
-                    return {"error": "no 13F data ingested yet"}
-                quarter = row[0]
-            row = con.execute(
-                "SELECT accession, manager FROM filings "
-                "WHERE quarter=? AND manager LIKE ? ORDER BY is_amendment ASC LIMIT 1",
-                (quarter, f"%{manager}%")).fetchone()
-            if not row:
-                return {"error": f"no 13F filing found for '{manager}' in {quarter}"}
-            accession, manager = row
-        total = con.execute(
-            "SELECT SUM(value), COUNT(*) FROM holdings WHERE accession=? AND put_call=''",
-            (accession,)).fetchone()
-        book_total = total[0] or 0.0
-        rows = con.execute(
-            "SELECT issuer, class, cusip, put_call, value, shares FROM holdings "
-            "WHERE accession=? ORDER BY value DESC LIMIT ?", (accession, int(limit))).fetchall()
-        positions = [{
-            "issuer": r[0], "class": r[1], "cusip": r[2],
-            "put_call": r[3], "is_derivative": bool(r[3]),
-            "value": r[4], "shares": r[5],
-            "weight": (r[4] / book_total) if (book_total and not r[3]) else None,
-        } for r in rows]
-        return {"manager": manager, "accession": accession, "quarter": quarter,
-                "total_value": book_total, "position_count": total[1] or 0,
-                "positions": positions}
-    finally:
-        con.close()
-
-
 def ingest_recent(quarters=2, progress=None):
     """Ingest the newest `quarters` data sets that are not already indexed.
 
@@ -622,17 +634,13 @@ def ingest_recent(quarters=2, progress=None):
     if not urls:
         return {"error": "could not list SEC 13F data sets"}
     have = {q["quarter"] for q in status().get("quarters", [])}
-    done, skipped = [], []
+    done = []
     for url in urls:
-        if len(done) + len(have) >= int(quarters) + len(have) and len(done) >= int(quarters):
-            break
         if len(done) >= int(quarters):
             break
         r = ingest(url, progress)
         if r.get("error"):
             return {"error": r["error"], "ingested": done}
-        if r["quarter"] in have:
-            skipped.append(r["quarter"])
         done.append({"quarter": r["quarter"], "filers": r["filers"], "rows": r["rows"]})
         have.add(r["quarter"])
     return {"ingested": done, "quarters_present": sorted(have, reverse=True)}
@@ -644,100 +652,118 @@ def quarter_pair(con):
         "SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 2").fetchall()]
 
 
-def holder_moves(ticker=None, cusip=None, limit=60,
-                 min_book=None, min_positions=None):
-    """Who built, trimmed, entered or exited this security last quarter.
+def firms(query="", limit=40, quarter=None):
+    """Filers matching `query`, largest book first.
 
-    Filers are joined across quarters on CIK — the only stable identifier. The
-    manager NAME is display only; firms rename, and matching on a name would put
-    one filer's position under another's.
-
-    A filer present in the newer quarter but absent from the older one is only
-    reported as NEW when they actually filed that older quarter. A firm that did
-    not file at all cannot be said to have opened a position, and calling it
-    "new" would manufacture activity out of a missing filing.
+    The dropdown cannot list 10,647 firms, so this is a search. Matching is on
+    the filer's own reported name, which is safe here in a way it is not for
+    securities: the user is picking from what the index actually contains, and
+    the CIK travels with each row so the selection is exact from then on.
     """
     con = connect()
     try:
+        if not quarter:
+            row = con.execute(
+                "SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 1").fetchone()
+            if not row:
+                return {"error": "no 13F data ingested yet"}
+            quarter = row[0]
+        q = (query or "").strip()
+        if q:
+            rows = con.execute(
+                "SELECT cik, manager, stock_value, stock_count FROM books "
+                "WHERE quarter=? AND manager LIKE ? ORDER BY stock_value DESC LIMIT ?",
+                (quarter, f"%{q}%", int(limit))).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT cik, manager, stock_value, stock_count FROM books "
+                "WHERE quarter=? ORDER BY stock_value DESC LIMIT ?",
+                (quarter, int(limit))).fetchall()
+        return {"quarter": quarter, "query": q,
+                "firms": [{"cik": r[0], "manager": r[1], "book_value": r[2],
+                           "position_count": r[3]} for r in rows]}
+    finally:
+        con.close()
+
+
+def firm_book(cik=None, quarter=None, limit=250):
+    """One filer's whole book from the index, with its quarter-over-quarter moves.
+
+    Keyed on CIK, never on the manager name — firms rename between quarters and
+    a name join would splice one filer's history onto another's.
+    """
+    con = connect()
+    try:
+        if not cik:
+            return {"error": "cik required"}
         qs = quarter_pair(con)
-        if len(qs) < 2:
-            return {"error": "only one quarter is indexed — a diff needs two",
-                    "quarters": qs}
-        cur_q, prev_q = qs[0], qs[1]
+        if not qs:
+            return {"error": "no 13F data ingested yet"}
+        cur_q = quarter or qs[0]
+        prior_q = next((x for x in qs if x < cur_q), None)
 
-        name = ""
-        if not cusip:
-            res = resolve_ticker(ticker, con)
-            if res.get("error"):
-                return res
-            cusip, name = res["cusip"], res.get("name", "")
+        head = con.execute(
+            "SELECT accession, manager, stock_value, stock_count FROM books "
+            "WHERE cik=? AND quarter=? LIMIT 1", (cik, cur_q)).fetchone()
+        if not head:
+            return {"error": f"no 13F filing indexed for CIK {cik} in {cur_q}", "cik": cik}
+        accession, manager, book_total, book_count = head
 
-        mb = MIN_BOOK_VALUE if min_book is None else float(min_book)
-        mp = MIN_BOOK_POSITIONS if min_positions is None else int(min_positions)
+        rows = con.execute("""
+            SELECT h.issuer, h.class, h.cusip, h.put_call, h.value, h.shares,
+                   ct.ticker, ph.shares AS prior_shares, pb.accession AS filed_prior
+              FROM holdings h
+              LEFT JOIN cusip_ticker ct ON ct.cusip = h.cusip
+              LEFT JOIN books pb ON pb.cik = ? AND pb.quarter = ?
+              LEFT JOIN holdings ph ON ph.accession = pb.accession
+                                   AND ph.cusip = h.cusip AND ph.put_call = ''
+             WHERE h.accession = ?
+             ORDER BY h.value DESC LIMIT ?
+        """, (cik, prior_q or "", accession, int(limit))).fetchall()
 
-        def positions(q):
-            rows = con.execute("""
-                SELECT b.cik, b.manager, h.shares, h.value, b.stock_value, b.stock_count
-                  FROM holdings h JOIN books b ON b.accession=h.accession
-                 WHERE h.cusip=? AND h.quarter=? AND h.put_call=''
-                   AND b.stock_value>=? AND b.stock_count>=?
-            """, (cusip, q, mb, mp)).fetchall()
-            return {r[0]: {"cik": r[0], "manager": r[1], "shares": r[2], "value": r[3],
-                           "book_total": r[4], "position_count": r[5]} for r in rows if r[0]}
+        positions = []
+        for issuer, cls, cusip, pc, value, shares, ticker, prior_shares, filed_prior in rows:
+            rec = {"issuer": issuer, "class": cls, "cusip": cusip, "ticker": ticker or "",
+                   "put_call": pc, "is_derivative": bool(pc),
+                   "value": value, "shares": shares,
+                   "weight": (value / book_total) if (book_total and not pc) else None}
+            if prior_q and not pc:
+                if prior_shares is None:
+                    rec["action"] = "new" if filed_prior else "first seen"
+                    rec["shares_delta"] = shares
+                else:
+                    delta = shares - prior_shares
+                    rec["shares_delta"] = delta
+                    rec["pct_change"] = (delta / prior_shares) if prior_shares else None
+                    rec["action"] = ("held" if (prior_shares > 0
+                                                and abs(delta) / prior_shares < 0.01)
+                                     else ("added" if delta > 0 else "trimmed"))
+            positions.append(rec)
 
-        cur, prev = positions(cur_q), positions(prev_q)
-        filed_prev = {r[0] for r in con.execute(
-            "SELECT cik FROM books WHERE quarter=?", (prev_q,)).fetchall()}
+        # Exits: held last quarter, absent now. Only meaningful when the filer
+        # actually filed this quarter, which they did — we are reading it.
+        exits = []
+        if prior_q:
+            prior_acc = con.execute(
+                "SELECT accession FROM books WHERE cik=? AND quarter=? LIMIT 1",
+                (cik, prior_q)).fetchone()
+            if prior_acc:
+                exits = [{"issuer": r[0], "cusip": r[1], "ticker": r[3] or "",
+                          "shares": 0.0, "shares_delta": -r[2], "action": "exited",
+                          "weight": 0.0, "value": 0.0, "is_derivative": False}
+                         for r in con.execute("""
+                            SELECT ph.issuer, ph.cusip, ph.shares, ct.ticker
+                              FROM holdings ph
+                              LEFT JOIN cusip_ticker ct ON ct.cusip = ph.cusip
+                             WHERE ph.accession=? AND ph.put_call=''
+                               AND ph.cusip NOT IN (SELECT cusip FROM holdings
+                                                     WHERE accession=? AND put_call='')
+                             ORDER BY ph.value DESC LIMIT 40
+                         """, (prior_acc[0], accession)).fetchall()]
 
-        moves = []
-        for cik, p in cur.items():
-            before = prev.get(cik)
-            weight = (p["value"] / p["book_total"]) if p["book_total"] else None
-            if before is None:
-                moves.append({**p, "action": "new" if cik in filed_prev else "first seen",
-                              "shares_delta": p["shares"], "pct_change": None,
-                              "weight": weight,
-                              "note": None if cik in filed_prev
-                                      else "this filer has no prior-quarter filing indexed, "
-                                           "so an opening position cannot be distinguished "
-                                           "from a first appearance"})
-                continue
-            delta = p["shares"] - before["shares"]
-            if before["shares"] > 0 and abs(delta) / before["shares"] < 0.01:
-                continue  # drift, not a decision
-            moves.append({**p, "action": "added" if delta > 0 else "trimmed",
-                          "shares_delta": delta,
-                          "pct_change": delta / before["shares"] if before["shares"] else None,
-                          "weight": weight})
-        for cik, before in prev.items():
-            if cik in cur:
-                continue
-            # Only an exit if they filed this quarter. A filer who stopped
-            # filing has not sold; we simply cannot see them.
-            still_filing = con.execute(
-                "SELECT 1 FROM books WHERE quarter=? AND cik=? LIMIT 1",
-                (cur_q, cik)).fetchone()
-            moves.append({"cik": cik, "manager": before["manager"], "shares": 0.0,
-                          "value": 0.0, "book_total": before["book_total"],
-                          "position_count": before["position_count"],
-                          "action": "exited" if still_filing else "stopped filing",
-                          "shares_delta": -before["shares"], "pct_change": -1.0,
-                          "weight": 0.0,
-                          "note": None if still_filing
-                                  else "this filer has no current-quarter filing indexed, so "
-                                       "an exit cannot be distinguished from a missing filing"})
-        moves.sort(key=lambda m: abs(m.get("shares_delta") or 0), reverse=True)
-
-        added = sum(1 for m in moves if m["action"] in ("added", "new"))
-        cut = sum(1 for m in moves if m["action"] in ("trimmed", "exited"))
-        net = sum((m.get("shares_delta") or 0) for m in moves
-                  if m["action"] in ("added", "trimmed", "new", "exited"))
-        return {"ticker": (ticker or "").upper(), "cusip": cusip, "company": name,
-                "quarter": cur_q, "prior_quarter": prev_q,
-                "holders_now": len(cur), "holders_prior": len(prev),
-                "buyers": added, "sellers": cut, "net_share_change": net,
-                "min_book_value": mb, "min_book_positions": mp,
-                "moves": moves[:int(limit)]}
+        return {"cik": cik, "manager": manager, "quarter": cur_q, "prior_quarter": prior_q,
+                "accession": accession, "total_value": book_total,
+                "position_count": book_count, "positions": positions, "exits": exits}
     finally:
         con.close()
 
@@ -745,6 +771,8 @@ def holder_moves(ticker=None, cusip=None, limit=60,
 def handle_action(action, payload):
     if action == "status":
         return status()
+    if action == "newer":
+        return newer_available()
     if action == "datasets":
         return {"datasets": available_datasets()[:12]}
     if action == "ingest":
@@ -781,9 +809,12 @@ def handle_action(action, payload):
                        payload.get("limit") or 60, payload.get("quarter"),
                        float(payload.get("min_book") or MIN_BOOK_VALUE),
                        int(payload.get("min_positions") or MIN_BOOK_POSITIONS))
+    if action == "firms":
+        return firms(payload.get("query") or "", int(payload.get("limit") or 40),
+                     payload.get("quarter"))
     if action == "book":
-        return manager_book(payload.get("manager"), payload.get("accession"),
-                            payload.get("quarter"), payload.get("limit") or 200)
+        return firm_book(payload.get("cik"), payload.get("quarter"),
+                         int(payload.get("limit") or 250))
     return {"error": f"Unknown action: {action}"}
 
 

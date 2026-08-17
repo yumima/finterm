@@ -127,6 +127,8 @@ OwnershipScreen::OwnershipScreen(QWidget* parent) : QWidget(parent) {
             [this](const QString& msg) { refresh_index_ui(msg); });
     refresh_index_ui({});
     reload_portfolio();
+    // Asked once on construction rather than polled: SEC publishes quarterly.
+    services::OwnershipService::instance().check_for_newer_quarter();
 
     connect(&SymbolContext::instance(), &SymbolContext::group_symbol_changed, this,
             [this](SymbolGroup group, const SymbolRef& ref) {

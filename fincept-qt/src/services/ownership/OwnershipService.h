@@ -47,38 +47,16 @@ class OwnershipService : public QObject {
     /// True while any source for @p symbol is still outstanding.
     bool is_loading(const QString& symbol) const;
 
-    // ── Tracked 13F managers ────────────────────────────────────────────────
+    // ── Firms ───────────────────────────────────────────────────────────────
     //
-    // Curated rather than "top N by 13F AUM". That ranking fills up with
-    // multi-strategy and index books where a position weight is one leg of a
-    // hedge or a benchmark artifact, and presenting it as conviction would be
-    // the screen inventing confidence the filing cannot support.
+    // No curated list. It existed only to work around not having the universe;
+    // with every filer indexed, "which firms do I track" is answered by
+    // searching 10,647 of them instead of maintaining twenty.
 
-    /// The tracked managers. Reads the user's list from the app data directory
-    /// when present, otherwise the curated defaults shipped with the script.
-    QVector<ownership::Manager> managers() const;
+    /// Search indexed filers by name. Results arrive on firms_found.
+    void search_firms(const QString& query);
+    QVector<ownership::Manager> last_firm_results() const { return firm_results_; }
 
-    /// Overwrite the user's manager list and persist it. An empty list deletes
-    /// the override so the shipped defaults apply again.
-    bool set_managers(const QVector<ownership::Manager>& list);
-
-    /// Path of the editable list, so the UI can point the user at it.
-    static QString managers_file_path();
-
-    /// Populate the tracked-manager list from the curated defaults shipped with
-    /// the script, resolving each CIK from EDGAR, and persist the result.
-    ///
-    /// Needed because the defaults live in the script (one source of truth for
-    /// the list and its styles) but the CIKs are deliberately not hardcoded
-    /// there — a wrong CIK does not fail loudly, it quietly shows a different
-    /// firm's portfolio under the right name. Without this the list stays empty
-    /// until some other fetch happens to resolve it. Emits managers_changed.
-    void seed_default_managers();
-
-    /// Fetch which tracked managers hold @p symbol, at what weight in their own
-    /// book. Slow — every manager is several EDGAR round-trips — so it is a
-    /// separate call from load(), and the rest of the screen renders without
-    /// waiting on it.
     void load_smart_money(const QString& symbol);
 
     // ── Local 13F index ─────────────────────────────────────────────────────
@@ -99,6 +77,10 @@ class OwnershipService : public QObject {
     /// Resolve CUSIP -> ticker for the largest @p limit unmapped securities.
     void resolve_symbols(int limit = 2000);
     bool index_busy() const { return index_busy_; }
+    /// Ask SEC whether a data set exists that this index has not ingested.
+    /// Without this the index silently ages: it still answers, and nothing
+    /// says the answers are a quarter behind.
+    void check_for_newer_quarter();
 
     // ── BY FIRM: one manager's whole book ───────────────────────────────────
 
@@ -121,7 +103,7 @@ class OwnershipService : public QObject {
     /// A manager's book finished loading (or failed — check ManagerBook::error).
     void book_updated(QString cik);
     /// The tracked-manager list changed (seeded or edited).
-    void managers_changed();
+    void firms_found();
     /// The local 13F index changed state (ingest or symbol resolution).
     void index_changed(QString summary);
 
@@ -134,7 +116,7 @@ class OwnershipService : public QObject {
     void fetch_market(const QString& symbol);
     void note_source_done(const QString& symbol, const QString& source);
 
-    mutable QVector<ownership::Manager> managers_cache_;
+    QVector<ownership::Manager> firm_results_;
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
     QHash<QString, qint64> fetched_at_;   ///< ms since epoch, per symbol

@@ -154,10 +154,11 @@ private slots:
             even.holders.push_back(holder(QString("H%1").arg(i), 10.0));
         const Read r = find(derive_reads(even), QStringLiteral("Concentrated"));
         QVERIFY(!r.headline.isEmpty());
-        QVERIFY2(r.detail.contains(QStringLiteral("of the 8 reported holders")),
+        QVERIFY2(r.detail.contains(QStringLiteral("of 8 holders")),
                  qPrintable(r.detail));
         QVERIFY2(r.basis.contains(QStringLiteral("top-N list")),
-                 "the basis must admit the denominator is a truncated list");
+                 "with only a vendor holder table the basis must admit the denominator "
+                 "is truncated; the measured version says so instead");
     }
 
     void concentration_does_not_assume_the_rows_arrive_sorted() {

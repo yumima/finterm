@@ -163,44 +163,53 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
     }
 
     // ── Concentration on the register ───────────────────────────────────────
-    if (!s.holders.isEmpty()) {
-        // The provider returns a truncated, unordered top-N. Two consequences,
-        // both of which produced a wrong number before:
-        //   - The denominator is the REPORTED holders, not the register, so the
-        //     read must be worded as a share of what was reported.
-        //   - Nothing guarantees descending order, so "the five largest" has to
-        //     be established here rather than assumed from row position.
+    // Measured from the index when one exists: thousands of filers with exact
+    // values, so "the five largest hold X%" is a measurement. The vendor
+    // fallback is a truncated top-N and can only ever give a floor, which its
+    // basis line admits.
+    {
         QVector<double> values;
-        double total = 0.0, index_value = 0.0;
-        for (const auto& h : s.holders) {
-            if (!h.value) continue;
-            values.push_back(*h.value);
-            total += *h.value;
-            if (is_index_complex(h.holder)) index_value += *h.value;
+        double total = 0.0;
+        bool complete = false;
+        if (!s.smart_money.isEmpty()) {
+            for (const auto& p : s.smart_money) {
+                if (p.is_derivative || !p.value) continue;
+                values.push_back(*p.value);
+                total += *p.value;
+            }
+            complete = true;
+        } else {
+            for (const auto& h : s.holders) {
+                if (!h.value) continue;
+                values.push_back(*h.value);
+                total += *h.value;
+            }
         }
         std::sort(values.begin(), values.end(), std::greater<double>());
         const int counted = values.size();
         double top5 = 0.0;
         for (int i = 0; i < counted && i < 5; ++i) top5 += values[i];
 
-        // With exactly five reported holders the ratio is 100% by construction
-        // and says nothing about concentration. Require enough rows for the
-        // comparison to carry information.
+        // A "top five of five" ratio is 100% by construction and measures
+        // nothing; require enough rows for the comparison to carry information.
         if (total > 0.0 && counted >= 8) {
             const double share = top5 / total;
             if (share >= kTop5Concentrated) {
                 out.push_back({Lens::Stock, Weight::Elevated,
                     QStringLiteral("Concentrated register"),
-                    QStringLiteral("The five largest of the %1 reported holders account for %2 "
-                                   "of the institutional value on file. Concentrated ownership is "
-                                   "a documented predictor of volatility: correlated selling by a "
+                    QStringLiteral("The five largest of %1 holders account for %2 of the "
+                                   "institutional value on file. Concentrated ownership is a "
+                                   "documented predictor of volatility: correlated selling by a "
                                    "few holders is what makes a position unwind violently.")
                         .arg(counted).arg(pct(share)),
-                    QStringLiteral("Flagged above %1 of the value across the holders the data "
-                                   "provider reports — a top-N list, not the whole register, so "
-                                   "this is a floor on concentration rather than a measure of it. "
-                                   "Needs at least eight reported holders to mean anything.")
-                        .arg(pct(kTop5Concentrated, 0))});
+                    complete
+                        ? QStringLiteral("Flagged above %1, measured across every 13F filer in "
+                                         "the indexed quarter.").arg(pct(kTop5Concentrated, 0))
+                        : QStringLiteral("Flagged above %1 of the value across the holders the "
+                                         "data provider reports — a top-N list, not the whole "
+                                         "register, so this is a floor on concentration rather "
+                                         "than a measure of it. Build the 13F index for the "
+                                         "measured version.").arg(pct(kTop5Concentrated, 0))});
             }
         }
     }

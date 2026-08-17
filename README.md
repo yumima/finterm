@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`aa11d46a2`](https://github.com/yumima/finterm/commit/aa11d46a2) Fix unreadable text, and let ER build the index it needs
 - [`e03b91c03`](https://github.com/yumima/finterm/commit/e03b91c03) Index two quarters so the diff works, and cross-check the two data sources
 - [`89b902406`](https://github.com/yumima/finterm/commit/89b902406) Measure index-money weight instead of guessing it from firm names
 - [`a2b9b3db5`](https://github.com/yumima/finterm/commit/a2b9b3db5) Index the whole 13F universe; tile the screen; fix restart state

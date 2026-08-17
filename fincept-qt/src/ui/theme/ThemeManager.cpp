@@ -24,8 +24,19 @@ const ThemeTokens THEME_OBSIDIAN = {
     .border_bright = "#333333",
     .text_primary = "#e5e5e5",
     .text_secondary = "#808080",
-    .text_tertiary = "#525252",
-    .text_dim = "#404040",
+    // Contrast floors, not aesthetic choices. Against the #0a0a0a ground the
+    // previous values measured 2.53:1 and 1.91:1 — WCAG asks 4.5:1 for body
+    // text and 3:1 even for large text, so both failed for ANY text. They were
+    // used for captions, footnotes and the lines explaining where a number came
+    // from, which is exactly the text a reader needs when they doubt a figure.
+    //
+    // Raised to clear 3:1 while keeping the hierarchy visible:
+    //   primary   #e5e5e5  15.72:1
+    //   secondary #808080   5.01:1
+    //   tertiary  #767676   4.36:1
+    //   dim       #666666   3.45:1
+    .text_tertiary = "#767676",
+    .text_dim = "#666666",
     .accent = "#d97706",
     .accent_dim = "#78350f",
     .text_on_accent = "#ffffff",
