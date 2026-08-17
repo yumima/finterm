@@ -186,6 +186,27 @@ def main():
         finally:
             con.close()
 
+        # ── a partial quarter must not become the default answer ───────────
+        # ingest_current pulls the newest quarter for the largest filers only,
+        # months before SEC's bulk set exists. Serving that as "who owns this"
+        # would answer with the few hundred filers that happen to be loaded
+        # instead of the ten thousand who filed.
+        con3 = bulk.connect()
+        try:
+            con3.execute("INSERT OR REPLACE INTO quarters VALUES "
+                         "('2026-06-30','EDGAR direct',20,100,datetime('now'),1)")
+            con3.commit()
+        finally:
+            con3.close()
+        h2 = bulk.holders(cusip="111111111", min_book=0, min_positions=0)
+        check("partial: the complete quarter is served, not the newer partial one",
+              h2["quarter"] == "2026-03-31", str(h2["quarter"]))
+        check("partial: the newer quarter is reported rather than hidden",
+              (h2.get("newer_partial") or {}).get("quarter") == "2026-06-30",
+              str(h2.get("newer_partial")))
+        check("partial: holder count comes from the complete quarter",
+              h2["holder_count"] == 4, str(h2["holder_count"]))
+
         # ── value units ────────────────────────────────────────────────────
         # The same book with values in THOUSANDS: 100 shares reported as 1
         # implies $0.01/share, which no equity trades at.

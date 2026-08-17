@@ -82,6 +82,13 @@ class OwnershipService : public QObject {
     /// says the answers are a quarter behind.
     void check_for_newer_quarter();
 
+    /// Pull the current quarter straight from EDGAR for the @p top largest
+    /// filers. SEC's bulk data sets publish only after their filing window
+    /// closes, so they run a full quarter behind — Q2 filings were on EDGAR the
+    /// day they were due while the newest bulk set still covered Q1. This
+    /// closes that gap for the filers whose weights the screen is about.
+    void pull_current_quarter(int top = 400);
+
     // ── BY FIRM: one manager's whole book ───────────────────────────────────
 
     /// Fetch @p cik's disclosed equity book and its quarter-over-quarter moves.

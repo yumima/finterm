@@ -543,6 +543,35 @@ QString OwnershipService::index_status_text() const {
                : index_status_;
 }
 
+void OwnershipService::pull_current_quarter(int top) {
+    if (index_busy_ || !index_ready())
+        return;
+    index_busy_ = true;
+    emit index_changed(QStringLiteral("Reading the current quarter from EDGAR…"));
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("ingest_current"),
+         QString::fromUtf8(QJsonDocument(QJsonObject{{"top", top}}).toJson(QJsonDocument::Compact))},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->index_busy_ = false;
+            const auto o = result.success
+                ? QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object()
+                : QJsonObject{};
+            const QString q = o.value(QStringLiteral("quarter")).toString();
+            emit self->index_changed(
+                q.isEmpty()
+                    ? QStringLiteral("No newer 13F filings found on EDGAR.")
+                    : QStringLiteral("%1 · pulled %2 for %3 large filers direct from EDGAR "
+                                     "(partial — the bulk data set for it is not published yet)")
+                          .arg(self->index_status_, q)
+                          .arg(o.value(QStringLiteral("filers_added")).toInt()));
+        },
+        /*on_line=*/{}, kIndexBuildTimeoutMs);
+}
+
 void OwnershipService::check_for_newer_quarter() {
     if (index_busy_ || !index_ready())
         return;
@@ -688,6 +717,15 @@ void OwnershipService::load_index_holders(const QString& symbol) {
                         root.value(QStringLiteral("total_shares_held")).toDouble();
                     snap.prior_quarter = QDate::fromString(
                         root.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate);
+                    const auto np = root.value(QStringLiteral("newer_partial")).toObject();
+                    if (!np.isEmpty()) {
+                        snap.partial_quarter = QDate::fromString(
+                            np.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
+                        snap.partial_filers = np.value(QStringLiteral("filers")).toInt();
+                    }
+                    snap.buyers  = root.value(QStringLiteral("buyers")).toInt();
+                    snap.sellers = root.value(QStringLiteral("sellers")).toInt();
+                    snap.exited  = root.value(QStringLiteral("exited")).toInt();
                     for (const auto& v : root.value(QStringLiteral("holders")).toArray()) {
                         const auto o = v.toObject();
                         ManagerPosition p;

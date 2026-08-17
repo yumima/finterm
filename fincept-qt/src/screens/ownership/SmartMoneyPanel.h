@@ -45,6 +45,7 @@ class SmartMoneyPanel : public QWidget {
     QComboBox*       sort_ = nullptr;
     QLabel*          status_ = nullptr;
     QLabel*          caveat_ = nullptr;
+    QLabel*          flow_ = nullptr;
     QPushButton*     build_btn_ = nullptr;
     class RankedBarChart* chart_ = nullptr;
 };

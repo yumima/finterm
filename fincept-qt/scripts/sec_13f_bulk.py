@@ -100,6 +100,11 @@ def _get(url, timeout=300):
         return None
 
 
+def _pad_cik(cik):
+    """EDGAR keys CIKs as ten zero-padded digits."""
+    return str(cik).lstrip("0").zfill(10)
+
+
 def connect():
     con = sqlite3.connect(db_path())
     con.execute("PRAGMA journal_mode=WAL")
@@ -110,7 +115,13 @@ def connect():
             source  TEXT,
             filers  INTEGER,
             rows    INTEGER,
-            ingested_at TEXT
+            ingested_at TEXT,
+            -- 1 when the quarter holds only the filers pulled directly from
+            -- EDGAR ahead of the bulk data set. A partial quarter must never
+            -- be served as the default: AAPL has 5,716 institutional holders,
+            -- and answering with the 20 that happen to be loaded would be a
+            -- complete-looking answer that is wrong by two orders of magnitude.
+            partial INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS filings (
             accession TEXT PRIMARY KEY,
@@ -158,6 +169,10 @@ def connect():
         CREATE INDEX IF NOT EXISTS ix_books_q ON books(quarter, stock_value);
         CREATE INDEX IF NOT EXISTS ix_books_cik ON books(cik, quarter);
     """)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(quarters)")}
+    if "partial" not in cols:
+        con.execute("ALTER TABLE quarters ADD COLUMN partial INTEGER DEFAULT 0")
+    con.commit()
     return con
 
 
@@ -465,7 +480,7 @@ def ingest(url=None, progress=None):
 
         filers = con.execute(
             "SELECT COUNT(DISTINCT manager) FROM filings WHERE quarter=?", (quarter,)).fetchone()[0]
-        con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'))",
+        con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'),0)",
                     (quarter, url, filers, n_rows))
         con.commit()
         return {"quarter": quarter, "filers": filers, "rows": n_rows, "source": url,
@@ -537,12 +552,22 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
             if res.get("error"):
                 return res
             cusip, name = res["cusip"], res.get("name", "")
+        # A complete quarter by default. The partial one is newer and is worth
+        # knowing about, but "who owns this" answered from the 400 filers that
+        # happen to be loaded is a confident wrong answer.
+        newer_partial = None
         if not quarter:
-            row = con.execute("SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 1"
-                              ).fetchone()
+            row = con.execute(
+                "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=0 "
+                "ORDER BY quarter DESC LIMIT 1").fetchone()
             if not row:
-                return {"error": "no 13F data ingested yet", "cusip": cusip}
+                return {"error": "no complete 13F quarter ingested yet", "cusip": cusip}
             quarter = row[0]
+            p = con.execute(
+                "SELECT quarter, filers FROM quarters WHERE COALESCE(partial,0)=1 "
+                "AND quarter > ? ORDER BY quarter DESC LIMIT 1", (quarter,)).fetchone()
+            if p:
+                newer_partial = {"quarter": p[0], "filers": p[1]}
 
         # Book totals exclude options: an equity weight measured against a
         # denominator that includes option notionals is not an equity weight.
@@ -605,6 +630,26 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
             out.append(rec)
         out.sort(key=lambda r: (r["weight"] or 0), reverse=True)
         stock = [r for r in out if not r["is_derivative"]]
+
+        # Filers who held this last quarter and do not now. They cannot appear
+        # in the query above — it is driven by CURRENT holdings — but "twelve
+        # filers got out" is half of what changed, and counting it here avoids a
+        # second round trip. Only filers who DID file this quarter count: one
+        # who stopped filing has not sold, we simply cannot see them.
+        exited = 0
+        if prior_q:
+            exited = con.execute("""
+                SELECT COUNT(*) FROM holdings ph
+                  JOIN books pb ON pb.accession = ph.accession
+                  JOIN books cb ON cb.cik = pb.cik AND cb.quarter = ?
+                 WHERE ph.cusip = ? AND ph.quarter = ? AND ph.put_call = ''
+                   AND pb.stock_value >= ? AND pb.stock_count >= ?
+                   AND NOT EXISTS (SELECT 1 FROM holdings ch
+                                    WHERE ch.accession = cb.accession
+                                      AND ch.cusip = ph.cusip AND ch.put_call = '')
+            """, (quarter, cusip, prior_q, float(min_book), int(min_positions))).fetchone()[0]
+        buyers = sum(1 for r in stock if r.get("action") in ("added", "new"))
+        sellers = sum(1 for r in stock if r.get("action") == "trimmed")
         # Totals across EVERY filer, not just the rows returned. This is what
         # makes an institutional-ownership percentage computable from the
         # filings themselves rather than taken from a vendor aggregate.
@@ -617,6 +662,8 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                 "total_shares_held": total_shares,
                 "total_value_held": total_value,
                 "prior_quarter": prior_q,
+                "buyers": buyers, "sellers": sellers, "exited": exited,
+                "newer_partial": newer_partial,
                 "min_book_value": min_book, "min_book_positions": min_positions,
                 "holders": out[:int(limit)]}
     finally:
@@ -649,7 +696,8 @@ def ingest_recent(quarters=2, progress=None):
 def quarter_pair(con):
     """The two most recent indexed quarters, newest first, or fewer."""
     return [r[0] for r in con.execute(
-        "SELECT quarter FROM quarters ORDER BY quarter DESC LIMIT 2").fetchall()]
+        "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=0 "
+        "ORDER BY quarter DESC LIMIT 2").fetchall()]
 
 
 def firms(query="", limit=40, quarter=None):
@@ -768,6 +816,189 @@ def firm_book(cik=None, quarter=None, limit=250):
         con.close()
 
 
+# ── Current quarter, straight from EDGAR ────────────────────────────────────
+#
+# The bulk data sets publish only after their filing window closes, so they run
+# a full quarter behind: Q2 13Fs were due 14 August and were on EDGAR that day,
+# while the newest bulk set still covered Q1. Everything below closes that gap
+# by reading the filings directly for the filers that matter, which is the
+# difference between ownership data that is 45 days old and 135.
+
+from xml.etree import ElementTree
+
+
+def _local(tag):
+    """Tag without its namespace. The information table declares a default
+    namespace, so a bare tag lookup matches nothing — silently."""
+    return tag.rsplit("}", 1)[-1]
+
+
+def parse_information_table(xml_bytes):
+    """Positions from one information table, aggregated by (CUSIP, put/call).
+
+    Aggregation is not an optimisation: a filer reports the same security on
+    several rows, one per internal manager or discretion type, and a per-row
+    read understates the position and every weight derived from it. Options
+    share the underlying's CUSIP and are kept apart — a put is bearish and is
+    not a holding.
+    """
+    try:
+        root = ElementTree.fromstring(xml_bytes)
+    except ElementTree.ParseError:
+        return []
+    agg = {}
+    for node in root:
+        if _local(node.tag) != "infoTable":
+            continue
+        row = {}
+        for child in node:
+            tag = _local(child.tag)
+            if tag == "shrsOrPrnAmt":
+                for g in child:
+                    row[_local(g.tag)] = (g.text or "").strip()
+            else:
+                row[tag] = (child.text or "").strip()
+        cusip = (row.get("cusip") or "").upper()
+        if not cusip:
+            continue
+        if (row.get("sshPrnamtType") or "SH").upper() != "SH":
+            continue  # a principal amount is a bond, not a share count
+        try:
+            value = float(row.get("value") or 0)
+            shares = float(row.get("sshPrnamt") or 0)
+        except ValueError:
+            continue
+        pc = (row.get("putCall") or "").strip().upper()
+        key = (cusip, pc)
+        if key not in agg:
+            agg[key] = {"cusip": cusip, "issuer": row.get("nameOfIssuer") or "",
+                        "class": row.get("titleOfClass") or "", "put_call": pc,
+                        "value": 0.0, "shares": 0.0}
+        agg[key]["value"] += value
+        agg[key]["shares"] += shares
+    return list(agg.values())
+
+
+def _newest_13f(cik, after_quarter):
+    """The filer's newest 13F-HR reporting a quarter later than `after_quarter`."""
+    r = _get(f"https://data.sec.gov/submissions/CIK{_pad_cik(cik)}.json", timeout=30)
+    if r is None:
+        return None
+    try:
+        rec = (r.json().get("filings") or {}).get("recent") or {}
+    except Exception:
+        return None
+    acc, frm, fdt, rdt = (rec.get("accessionNumber") or [], rec.get("form") or [],
+                          rec.get("filingDate") or [], rec.get("reportDate") or [])
+    best = None
+    for i in range(len(acc)):
+        # Originals only. An amendment restates and would double the book.
+        if (frm[i] if i < len(frm) else "").upper() != "13F-HR":
+            continue
+        period = rdt[i] if i < len(rdt) else ""
+        if not period or period <= after_quarter:
+            continue
+        if best is None or period > best["period"]:
+            best = {"accession": acc[i], "period": period,
+                    "filed": fdt[i] if i < len(fdt) else ""}
+    return best
+
+
+def _information_table_url(cik, accession):
+    """Locate the info table inside an accession — its filename is assigned by
+    the filing agent, so the directory listing is the only way to find it."""
+    a = accession.replace("-", "")
+    r = _get(f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{a}/index.json", timeout=30)
+    if r is None:
+        return None
+    try:
+        items = r.json()["directory"]["item"]
+    except Exception:
+        return None
+    base = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{a}/"
+    for it in items:
+        n = (it.get("name") or "").lower()
+        if n.endswith(".xml") and "primary_doc" not in n:
+            return base + it["name"]
+    return None
+
+
+def ingest_current(top=400, progress=None):
+    """Pull the current quarter straight from EDGAR for the largest filers.
+
+    Ranked by book size in the newest indexed quarter, because that is the only
+    ordering available before the new quarter exists — and because a weight in a
+    large book is what the screen is for. Filers outside the cut keep their last
+    indexed quarter, and the result says how many that is rather than implying
+    the quarter is complete.
+    """
+    con = connect()
+    try:
+        qs = quarter_pair(con)
+        if not qs:
+            return {"error": "no 13F data ingested yet — build the index first"}
+        latest = qs[0]
+        rows = con.execute(
+            "SELECT cik, manager FROM books WHERE quarter=? AND cik<>'' "
+            "ORDER BY stock_value DESC LIMIT ?", (latest, int(top))).fetchall()
+
+        added = skipped = failed = 0
+        new_quarter = ""
+        for idx, (cik, manager) in enumerate(rows):
+            f = _newest_13f(cik, latest)
+            if not f:
+                skipped += 1
+                continue
+            url = _information_table_url(cik, f["accession"])
+            if not url:
+                failed += 1
+                continue
+            r = _get(url, timeout=45)
+            if r is None:
+                failed += 1
+                continue
+            positions = parse_information_table(r.content)
+            if not positions:
+                failed += 1
+                continue
+            q = f["period"]
+            new_quarter = max(new_quarter, q)
+            con.execute("DELETE FROM holdings WHERE accession=?", (f["accession"],))
+            con.execute("INSERT OR REPLACE INTO filings VALUES (?,?,?,?,?)",
+                        (f["accession"], q, _pad_cik(cik), manager, 0))
+            con.executemany(
+                "INSERT INTO holdings VALUES (?,?,?,?,?,?,?,?)",
+                [(f["accession"], q, p["cusip"], p["issuer"], p["class"], p["put_call"],
+                  p["value"], p["shares"]) for p in positions])
+            stock = [p for p in positions if not p["put_call"]]
+            con.execute("INSERT OR REPLACE INTO books VALUES (?,?,?,?,?,?)",
+                        (f["accession"], q, _pad_cik(cik), manager,
+                         sum(p["value"] for p in stock), len(stock)))
+            added += 1
+            if added % 25 == 0:
+                con.commit()
+                if progress:
+                    progress(idx + 1, len(rows))
+        con.commit()
+
+        if new_quarter:
+            # Recorded as PARTIAL. A quarter row that looks like the bulk ones
+            # would imply the whole universe is present, and it is the top few
+            # hundred filers by book size.
+            con.execute("INSERT OR REPLACE INTO quarters VALUES (?,?,?,?,datetime('now'),1)",
+                        (new_quarter, f"EDGAR direct (top {int(top)} filers)", added,
+                         con.execute("SELECT COUNT(*) FROM holdings WHERE quarter=?",
+                                     (new_quarter,)).fetchone()[0]))
+            con.commit()
+        return {"quarter": new_quarter, "filers_added": added,
+                "no_newer_filing": skipped, "failed": failed,
+                "requested": len(rows), "partial": True,
+                "note": "current quarter for the largest filers only — the bulk data set "
+                        "for it has not been published yet"}
+    finally:
+        con.close()
+
+
 def handle_action(action, payload):
     if action == "status":
         return status()
@@ -777,12 +1008,10 @@ def handle_action(action, payload):
         return {"datasets": available_datasets()[:12]}
     if action == "ingest":
         return ingest(payload.get("url"))
+    if action == "ingest_current":
+        return ingest_current(int(payload.get("top") or 400))
     if action == "ingest_recent":
         return ingest_recent(int(payload.get("quarters") or 2))
-    if action == "moves":
-        return holder_moves(payload.get("ticker"), payload.get("cusip"),
-                            payload.get("limit") or 60,
-                            payload.get("min_book"), payload.get("min_positions"))
     if action == "resolve":
         return resolve_ticker(payload.get("ticker") or "")
     if action == "resolve_symbols":

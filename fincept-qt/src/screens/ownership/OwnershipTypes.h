@@ -230,6 +230,18 @@ struct OwnershipSnapshot {
     QDate   vendor_quarter;
     /// The quarter the index diffs against, when two are present.
     QDate   prior_quarter;
+    /// What the register did last quarter, counted across every filer rather
+    /// than across the rows the panel happens to show.
+    int     buyers = 0;
+    int     sellers = 0;
+    int     exited = 0;
+    /// A newer quarter exists in the index but holds only the filers pulled
+    /// directly from EDGAR ahead of SEC's bulk data set. Reported, never
+    /// substituted: answering "who owns this" from a few hundred of 10,647
+    /// filers would be a complete-looking answer that is wrong by orders of
+    /// magnitude.
+    QDate   partial_quarter;
+    int     partial_filers = 0;
 
     /// Coverage, so a truncated fetch can say so. A capped window that renders
     /// silently reads as a quiet period when it may be a busy one.

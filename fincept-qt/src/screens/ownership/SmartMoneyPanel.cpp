@@ -50,7 +50,14 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
         "Download two quarterly SEC 13F data sets — every filer, every position — and index "
         "them locally. About 200 MB and a couple of minutes; runs once."));
     connect(build_btn_, &QPushButton::clicked, this, [this]() {
-        services::OwnershipService::instance().build_index();
+        auto& svc = services::OwnershipService::instance();
+        // Once a complete index exists the useful action changes: the bulk data
+        // sets lag a quarter, so what is missing is the current quarter, and
+        // that comes from EDGAR directly.
+        if (svc.index_ready())
+            svc.pull_current_quarter();
+        else
+            svc.build_index();
         render();
     });
     bar->addWidget(build_btn_);
@@ -60,6 +67,10 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
     status_->setWordWrap(true);
     bar->addWidget(status_, 1);
     root->addLayout(bar);
+
+    flow_ = new QLabel;
+    flow_->setTextFormat(Qt::RichText);
+    root->addWidget(flow_);
 
     chart_ = new RankedBarChart;
     chart_->set_empty_text(QStringLiteral("No 13F index built yet."));
@@ -103,7 +114,15 @@ void SmartMoneyPanel::render() {
     auto& svc = services::OwnershipService::instance();
     // Only offered when it is the thing to do; once an index exists it is
     // clutter, and OWNERSHIP owns the incremental controls.
-    build_btn_->setVisible(!svc.index_ready());
+    build_btn_->setText(svc.index_ready() ? QStringLiteral("PULL CURRENT QUARTER")
+                                          : QStringLiteral("BUILD 13F INDEX"));
+    build_btn_->setToolTip(
+        svc.index_ready()
+            ? QStringLiteral("SEC's bulk data sets publish a quarter late. This reads the newest "
+                             "filings for the largest filers straight from EDGAR.")
+            : QStringLiteral("Download two quarterly SEC 13F data sets — every filer, every "
+                             "position — and index them locally. Runs once."));
+    build_btn_->setVisible(true);
     build_btn_->setEnabled(!svc.index_busy());
     sort_->setVisible(svc.index_ready());
     if (symbol_.isEmpty()) {
@@ -168,6 +187,28 @@ void SmartMoneyPanel::render() {
     if (snap.option_holders > 0)
         head += QStringLiteral(" · %1 hold options only").arg(snap.option_holders);
     status_->setText(head);
+    // The net direction of the whole register, counted across every filer —
+    // not across the rows on screen, which are the top of a ranking and would
+    // give a badly skewed count.
+    // A newer quarter exists but is partial — say so on the number rather than
+    // quietly serving it, and offer the one action that helps.
+    if (snap.partial_quarter.isValid()) {
+        head += QStringLiteral("  ·  %1 filed but only %2 large filers pulled so far")
+                    .arg(snap.partial_quarter.toString(QStringLiteral("MMM yyyy")))
+                    .arg(snap.partial_filers);
+        status_->setText(head);
+    }
+    if (snap.prior_quarter.isValid() && (snap.buyers || snap.sellers || snap.exited)) {
+        flow_->setText(QStringLiteral(
+            "<span style='color:%1;'>%2 bought</span>  ·  "
+            "<span style='color:%3;'>%4 trimmed</span>  ·  "
+            "<span style='color:%3;'>%5 exited</span>")
+                           .arg(ui::colors::GREEN()).arg(snap.buyers)
+                           .arg(ui::colors::RED()).arg(snap.sellers).arg(snap.exited));
+        flow_->show();
+    } else {
+        flow_->hide();
+    }
     status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
 
     // Bars are scaled to the largest in view so the ranking is legible even

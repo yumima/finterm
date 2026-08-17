@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4f54bbe7d`](https://github.com/yumima/finterm/commit/4f54bbe7d) Put BY FIRM on the index, delete the curated list, fix contrast app-wide
 - [`aa11d46a2`](https://github.com/yumima/finterm/commit/aa11d46a2) Fix unreadable text, and let ER build the index it needs
 - [`e03b91c03`](https://github.com/yumima/finterm/commit/e03b91c03) Index two quarters so the diff works, and cross-check the two data sources
 - [`89b902406`](https://github.com/yumima/finterm/commit/89b902406) Measure index-money weight instead of guessing it from firm names
