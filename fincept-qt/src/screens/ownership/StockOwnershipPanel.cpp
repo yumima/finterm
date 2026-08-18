@@ -6,6 +6,7 @@
 #include "screens/ownership/SmartMoneyPanel.h"
 #include "services/ownership/OwnershipService.h"
 #include "storage/repositories/PortfolioRepository.h"
+#include "screens/ownership/Form4Dialog.h"
 #include "ui/components/ExternalLink.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -272,8 +273,25 @@ void StockOwnershipPanel::build_ui() {
                                 QStringLiteral("Action"), QStringLiteral("Shares"),
                                 QStringLiteral("Value"), QStringLiteral("Pattern")});
     connect(insiders_tbl_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
-        if (auto* it = insiders_tbl_->item(row, 0))
-            ui::open_external_link(it->data(Qt::UserRole).toString());
+        auto* it = insiders_tbl_->item(row, 0);
+        if (!it)
+            return;
+        // The filing's URL is raw XML — opening it in a browser shows markup,
+        // not a filing. Every transaction on that accession is already parsed
+        // and in the snapshot, so render it here and keep EDGAR one click away.
+        const QString url = it->data(Qt::UserRole).toString();
+        if (url.isEmpty())
+            return;
+        const auto snap = services::OwnershipService::instance().snapshot(symbol_);
+        QVector<ownership::InsiderTransaction> filing;
+        for (const auto& t : snap.transactions) {
+            if (t.source_url == url)
+                filing.push_back(t);
+        }
+        if (filing.isEmpty())
+            return;
+        Form4Dialog dlg(filing, snap.company.isEmpty() ? symbol_ : snap.company, this);
+        dlg.exec();
     });
     ins_v->addWidget(insiders_tbl_, 2);
     coverage_ = new QLabel;
@@ -282,7 +300,7 @@ void StockOwnershipPanel::build_ui() {
     auto* insiders_tile = tile(QStringLiteral("INSIDERS — FORM 4"), ins_box,
                                QStringLiteral("Open-market buys above the line, sells below, "
                                               "sized by value. Double-click a row to open the "
-                                              "filing on EDGAR."));
+                                              "filing."));
 
     // Row 1 — the institutional register and the short side.
     smart_money_ = new SmartMoneyPanel;

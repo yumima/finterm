@@ -1408,6 +1408,7 @@ set(SCREEN_SOURCES
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/FirmDetailPanel.cpp
+    src/screens/ownership/Form4Dialog.cpp
     src/screens/ownership/DemandQuadrant.cpp
     src/screens/ownership/HoldersChart.cpp
     src/screens/ownership/FirmBookPanel.cpp
@@ -1553,6 +1554,7 @@ set_source_files_properties(
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
     src/screens/ownership/FirmDetailPanel.cpp
+    src/screens/ownership/Form4Dialog.cpp
     src/screens/ownership/DemandQuadrant.cpp
     src/screens/ownership/HoldersChart.cpp
     src/screens/ownership/FirmBookPanel.cpp

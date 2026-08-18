@@ -6,6 +6,7 @@
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QToolTip>
 
 #include <algorithm>
@@ -144,6 +145,64 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
         g.setPen(Qt::NoPen);
         g.setBrush(c);
         g.drawEllipse(pt.at, 2.4, 2.4);
+    }
+
+    // ── the trend through the cloud ─────────────────────────────────────────
+    //
+    // A running MEDIAN, not a regression line. Least squares over these points
+    // returns r values of 0.00 to 0.05 on every large cap measured: conviction
+    // genuinely does not predict direction, and a straight line drawn through
+    // that would assert a relationship the data does not contain. The median of
+    // each vertical slice asserts nothing — it just says where the middle of
+    // the cloud actually sits as conviction rises, which is the shape a reader
+    // is looking for when they scan a scatter.
+    //
+    // Median rather than mean for the same reason the panel quotes a median
+    // elsewhere: a holder going from 100 shares to 1,000 is +900% and would
+    // drag a mean somewhere no actual holder is.
+    if (hit_.size() >= 60) {
+        constexpr int kBins = 14;
+        QVector<QVector<double>> bins(kBins);
+        QVector<double> bin_x(kBins, 0.0);
+        QVector<int>    bin_n(kBins, 0);
+        const double w = std::max(1.0, static_cast<double>(plot_.width()));
+        for (const auto& pt : hit_) {
+            const int b = std::clamp(
+                static_cast<int>((pt.at.x() - plot_.left()) / w * kBins), 0, kBins - 1);
+            bins[b].push_back(pt.at.y());
+            bin_x[b] += pt.at.x();
+            bin_n[b] += 1;
+        }
+        QVector<QPointF> curve;
+        for (int b = 0; b < kBins; ++b) {
+            // A bin holding three holders is noise, not a trend.
+            if (bin_n[b] < 8)
+                continue;
+            std::sort(bins[b].begin(), bins[b].end());
+            curve.push_back(QPointF(bin_x[b] / bin_n[b], bins[b][bins[b].size() / 2]));
+        }
+        if (curve.size() >= 3) {
+            QPainterPath path(curve.first());
+            // Smoothed between bin centres so the eye reads one trend rather
+            // than fourteen separate measurements.
+            for (int i = 1; i < curve.size(); ++i) {
+                const QPointF a = curve[i - 1], c = curve[i];
+                const double mx = (a.x() + c.x()) / 2.0;
+                path.cubicTo(QPointF(mx, a.y()), QPointF(mx, c.y()), c);
+            }
+            g.setBrush(Qt::NoBrush);
+            QColor line(ui::colors::CYAN());
+            g.setPen(QPen(line, 2.0));
+            g.drawPath(path);
+            // Anchored at the conviction end, where the reader is already
+            // looking for the largest holders.
+            g.setPen(QPen(line, 1));
+            QFont cf = f;
+            cf.setPixelSize(10);
+            g.setFont(cf);
+            g.drawText(QPointF(curve.last().x() - 96, curve.last().y() - 6),
+                       QStringLiteral("median holder"));
+        }
     }
 
     // ── the ten largest, named ──────────────────────────────────────────────
