@@ -304,14 +304,19 @@ void InsiderLeadersPanel::reload() {
                     if (!role.isEmpty() && !roles.contains(role, Qt::CaseInsensitive))
                         roles << role;
                 }
-                self->table_->setItem(i, 5, cell(roles.join(QStringLiteral(", ")),
-                                                 ui::colors::TEXT_SECONDARY()));
+                auto* rc = cell(roles.join(QStringLiteral(", ")), ui::colors::TEXT_SECONDARY());
+                rc->setToolTip(roles.join(QStringLiteral(", ")));
+                self->table_->setItem(i, 5, rc);
                 self->table_->setItem(i, 6, cell(o.value(QStringLiteral("latest")).toString(),
                                                  ui::colors::TEXT_SECONDARY()));
             }
             self->table_->setUpdatesEnabled(true);
             self->table_->resizeColumnsToContents();
-            self->table_->setColumnWidth(1, qMin(self->table_->columnWidth(1), 200));
+            // Company and roles are the two unbounded columns; left at content
+            // width they push the date — the one column that says whether this
+            // is news — off the pane. Both elide with the full text on hover.
+            self->table_->setColumnWidth(1, qMin(self->table_->columnWidth(1), 190));
+            self->table_->setColumnWidth(5, qMin(self->table_->columnWidth(5), 150));
             self->status_->setText(
                 QStringLiteral("%1 issuers · %2 with more than one insider · open-market %3 only, "
                                "grants and option exercises excluded")
