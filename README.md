@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`27294b891`](https://github.com/yumima/finterm/commit/27294b891) Add the daily flow series, and rank firms by conviction rather than size
 - [`5fce76540`](https://github.com/yumima/finterm/commit/5fce76540) Replace the demand verdict with the distribution behind it
 - [`1e420330c`](https://github.com/yumima/finterm/commit/1e420330c) Re-read the index from disk after every write to it
 - [`65ed30588`](https://github.com/yumima/finterm/commit/65ed30588) Fix the index probe latching on attempt instead of on success

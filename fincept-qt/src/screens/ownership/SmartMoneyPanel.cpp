@@ -282,7 +282,7 @@ void SmartMoneyPanel::render() {
         b.tooltip = QStringLiteral("%1\n%2 shares · %3\n%4 of a %5 book across %6 positions")
                         .arg(p.manager,
                              p.shares ? fmt::format_compact(*p.shares) : fmt::placeholder(),
-                             p.value ? fmt::format_money(*p.value) : fmt::placeholder(),
+                             p.value ? fmt::format_compact(*p.value) : fmt::placeholder(),
                              p.weight ? fmt::format_percent(*p.weight * 100.0, 2)
                                       : fmt::placeholder(),
                              p.book_total ? fmt::format_compact(*p.book_total)

@@ -71,7 +71,8 @@ QTableWidget* make_table(const QStringList& headers) {
     t->setAlternatingRowColors(true);
     // Interactive + stretch-last is the Qt default shape for a data table and
     // leaves the user free to size columns. Nothing is pinned to a fixed width.
-    t->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    t->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    t->horizontalHeader()->setSectionsMovable(true);
     t->horizontalHeader()->setStretchLastSection(true);
     return t;
 }
@@ -85,8 +86,11 @@ QString weight_colour(Weight w) {
     return ui::colors::TEXT_SECONDARY();
 }
 
+/// Compact, not exact. A position value is read for its magnitude, and
+/// format_money renders 732786778636 in full — twelve digits nobody parses,
+/// pushing every other column off the pane.
 QString money_or_placeholder(const std::optional<double>& v) {
-    return v ? fmt::format_money(*v) : fmt::placeholder();
+    return v ? fmt::format_compact(*v) : fmt::placeholder();
 }
 
 QString compact_or_placeholder(const std::optional<double>& v) {
@@ -222,10 +226,19 @@ void OwnershipScreen::build_ui() {
     // ── Tiled body ──────────────────────────────────────────────────────────
     // A grid, not a scroll. Every tile is visible at once at a normal window
     // size; each one scrolls internally if its own content is long.
+    // Three resizable columns rather than a fixed grid. A firm like Capital
+    // World files 613 positions and Berkshire 29 — a tile sized for the second
+    // shows six rows of the first. The two list-heavy panes get their own
+    // full-height column and the rest tile beside them, and every divider is a
+    // splitter handle so the reader can decide.
+    auto* cols = new QSplitter(Qt::Horizontal);
+    cols->setChildrenCollapsible(false);
+    auto* side = new QSplitter(Qt::Vertical);
+    side->setChildrenCollapsible(false);
+    // A shim so the tile() helper's addWidget calls still have somewhere to go
+    // while the three columns are assembled below.
     auto* grid = new QGridLayout;
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(8);
-    grid->setVerticalSpacing(8);
 
     // Row 0 — what it means, and who is buying. The two things a reader wants
     // first, side by side.
@@ -237,9 +250,9 @@ void OwnershipScreen::build_ui() {
     reads_scroll->setWidgetResizable(true);
     reads_scroll->setFrameShape(QFrame::NoFrame);
     reads_scroll->setWidget(reads_host_);
-    grid->addWidget(tile(QStringLiteral("READ-THROUGH"), reads_scroll,
+    side->addWidget(tile(QStringLiteral("READ-THROUGH"), reads_scroll,
                          QStringLiteral("What the register implies, with the number and the "
-                                        "rule behind each line.")), 0, 0);
+                                        "rule behind each line.")));
 
     insider_timeline_ = new EventTimeline;
     insider_timeline_->set_empty_text(QStringLiteral("No Form 4 activity in the window."));
@@ -259,17 +272,17 @@ void OwnershipScreen::build_ui() {
     coverage_ = new QLabel;
     coverage_->setWordWrap(true);
     ins_v->addWidget(coverage_);
-    grid->addWidget(tile(QStringLiteral("INSIDERS — FORM 4"), ins_box,
-                         QStringLiteral("Open-market buys above the line, sells below, sized "
-                                        "by value. Double-click a row to open the filing.")),
-                    0, 1);
+    auto* insiders_tile = tile(QStringLiteral("INSIDERS — FORM 4"), ins_box,
+                               QStringLiteral("Open-market buys above the line, sells below, "
+                                              "sized by value. Double-click a row to open the "
+                                              "filing on EDGAR."));
 
     // Row 1 — the institutional register and the short side.
     smart_money_ = new SmartMoneyPanel;
     smart_money_->set_chrome_visible(false);
-    grid->addWidget(tile(QStringLiteral("INSTITUTIONAL HOLDERS"), smart_money_,
-                         QStringLiteral("Every 13F filer holding this, ranked by how much of "
-                                        "their own book it is.")), 1, 0);
+    side->addWidget(tile(QStringLiteral("INSTITUTIONAL HOLDERS"), smart_money_,
+                         QStringLiteral("Every discretionary 13F filer holding this, on "
+                                        "conviction against direction.")));
 
     auto* right = new QWidget;
     auto* rv = new QVBoxLayout(right);
@@ -282,9 +295,9 @@ void OwnershipScreen::build_ui() {
     short_lbl_->setWordWrap(true);
     short_lbl_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     rv->addWidget(short_lbl_);
-    grid->addWidget(tile(QStringLiteral("FLOAT & SHORT INTEREST"), right,
-                         QStringLiteral("Who is sitting on the shares, and how much of the "
-                                        "float is sold short.")), 1, 1);
+    side->addWidget(tile(QStringLiteral("FLOAT & SHORT INTEREST"), right,
+                         QStringLiteral("Who is sitting on the shares, how much of the float "
+                                        "is sold short, and today's traded short volume.")));
 
     // Row 2 — 5% stakes and the firm-level browser.
     stakes_tbl_ = make_table({QStringLiteral("Filed"), QStringLiteral("Form"),
@@ -293,9 +306,9 @@ void OwnershipScreen::build_ui() {
         if (auto* it = stakes_tbl_->item(row, 0))
             ui::open_external_link(it->data(Qt::UserRole).toString());
     });
-    grid->addWidget(tile(QStringLiteral("5% STAKES — 13D / 13G"), stakes_tbl_,
+    side->addWidget(tile(QStringLiteral("5% STAKES — 13D / 13G"), stakes_tbl_,
                          QStringLiteral("13D declares intent to influence; 13G is passive. "
-                                        "Double-click to open the filing.")), 2, 0);
+                                        "Double-click to open the filing.")));
 
     firm_book_ = new FirmBookPanel;
     connect(firm_book_, &FirmBookPanel::navigate_to_symbol, this,
@@ -303,9 +316,9 @@ void OwnershipScreen::build_ui() {
                 if (!issuer.isEmpty())
                     search_->setText(issuer);
             });
-    grid->addWidget(tile(QStringLiteral("BY FIRM — A MANAGER'S BOOK"), firm_book_,
-                         QStringLiteral("The same filings keyed by manager instead of by "
-                                        "security.")), 2, 1);
+    auto* firms_tile = tile(QStringLiteral("BY FIRM — A MANAGER'S BOOK"), firm_book_,
+                            QStringLiteral("The same filings keyed by manager instead of by "
+                                           "security. The fifty largest discretionary books."));
 
     // ── Empty state ─────────────────────────────────────────────────────────
     // Six empty tiles, each repeating "no 13F index", is five messages too
@@ -348,13 +361,26 @@ void OwnershipScreen::build_ui() {
     ev->addStretch(2);
     empty_page_ = empty;
 
-    grid->setColumnStretch(0, 1);
-    grid->setColumnStretch(1, 1);
-    grid->setRowStretch(0, 3);
-    grid->setRowStretch(1, 3);
-    grid->setRowStretch(2, 2);
+    cols->addWidget(firms_tile);      // 0 — long book lists, full height
+    cols->addWidget(insiders_tile);   // 1 — long filing lists, full height
+    cols->addWidget(side);            // 2 — everything else, tiled
+
+    // Initial proportions only. Qt's own splitter behaviour is what the user
+    // expects, so nothing is pinned and nothing intercepts the drag — these
+    // are a starting point, not a constraint.
+    cols->setStretchFactor(0, 4);
+    cols->setStretchFactor(1, 3);
+    cols->setStretchFactor(2, 4);
+    side->setStretchFactor(0, 3);   // read-through
+    side->setStretchFactor(1, 4);   // holders + quadrant
+    side->setStretchFactor(2, 2);   // float and short
+    side->setStretchFactor(3, 2);   // stakes
+
     auto* grid_host = new QWidget;
-    grid_host->setLayout(grid);
+    auto* host_layout = new QVBoxLayout(grid_host);
+    host_layout->setContentsMargins(0, 0, 0, 0);
+    host_layout->addWidget(cols);
+    delete grid;
     body_ = new QStackedWidget;
     body_->addWidget(grid_host);   // 0
     body_->addWidget(empty_page_); // 1
@@ -363,11 +389,13 @@ void OwnershipScreen::build_ui() {
 
 void OwnershipScreen::apply_theme() {
     setStyleSheet(QString("QWidget{background:%1;color:%2;}"
-                          "QTableWidget{background:%1;gridline-color:%3;}"
+                          "QTableWidget{background:%1;gridline-color:%3;"
+                          "alternate-background-color:%6;color:%2;}"
+                          "QTableWidget::item{color:%2;}"
                           "QHeaderView::section{background:%4;color:%5;padding:4px;border:0;}")
                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
                            ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
-                           ui::colors::TEXT_SECONDARY()));
+                           ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE()));
 }
 
 void OwnershipScreen::showEvent(QShowEvent* e) {

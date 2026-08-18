@@ -81,7 +81,15 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     firms_->setSelectionMode(QAbstractItemView::SingleSelection);
     firms_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     firms_->setAlternatingRowColors(true);
-    firms_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    // Size to content, then stay interactive — a fixed default made the
+    // first column need a horizontal scrollbar to be read at all.
+    firms_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    firms_->horizontalHeader()->setSectionsMovable(true);
+    // The name column is capped and elided. Sized to content it grows to fit
+    // "DZ BANK AG Deutsche Zentral Genossenschafts Bank, Frankfurt am Main"
+    // and pushes what the firm DID off the pane — which is the column the
+    // table exists for.
+    firms_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
     firms_->horizontalHeader()->setStretchLastSection(true);
     firms_->setMinimumHeight(150);
     connect(firms_, &QTableWidget::itemSelectionChanged, this, [this]() {
@@ -106,7 +114,11 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     positions_->setSelectionBehavior(QAbstractItemView::SelectRows);
     positions_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     positions_->setAlternatingRowColors(true);
-    positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    // Size to content, then stay interactive — a fixed default made the
+    // first column need a horizontal scrollbar to be read at all.
+    positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    positions_->horizontalHeader()->setSectionsMovable(true);
+    positions_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     positions_->horizontalHeader()->setStretchLastSection(true);
     positions_->setMinimumHeight(170);
     // The ticker comes from the index, so a drill-through is exact rather than
@@ -152,6 +164,7 @@ void FirmBookPanel::reload_firms() {
         const auto& m = results[i];
         firms_->setItem(i, 0, cell(QString::number(i + 1), ui::colors::TEXT_SECONDARY()));
         auto* nm = cell(m.name);
+        nm->setToolTip(m.name);   // the full name is a hover away
         nm->setData(Qt::UserRole, m.cik);
         firms_->setItem(i, 1, nm);
         firms_->setItem(i, 2, cell(fmt::format_compact(m.book_value)));
@@ -181,6 +194,8 @@ void FirmBookPanel::reload_firms() {
             top += QStringLiteral("  %1").arg(fmt::format_percent(*m.top_weight * 100.0, 1));
         firms_->setItem(i, 5, cell(top, ui::colors::TEXT_SECONDARY()));
     }
+    firms_->resizeColumnsToContents();
+    firms_->setColumnWidth(1, qMin(firms_->columnWidth(1), 210));
     if (!results.isEmpty() && selected_cik_.isEmpty()) {
         firms_->selectRow(0);   // the largest book is a sensible landing place
     }
@@ -219,7 +234,7 @@ void FirmBookPanel::render() {
 
     QString head = QStringLiteral("%1 positions · %2 · %3")
                        .arg(b.position_count)
-                       .arg(fmt::format_money(b.total_value),
+                       .arg(fmt::format_compact(b.total_value),
                             b.period.toString(QStringLiteral("MMM yyyy")));
     if (b.prior_period.isValid())
         head += QStringLiteral(" vs ") + b.prior_period.toString(QStringLiteral("MMM yyyy"));
@@ -241,7 +256,7 @@ void FirmBookPanel::render() {
                                        exited ? col : ui::colors::AMBER()));
         positions_->setItem(r, 3, cell(p.shares ? fmt::format_compact(*p.shares)
                                                 : fmt::placeholder()));
-        positions_->setItem(r, 4, cell(p.value ? fmt::format_money(*p.value)
+        positions_->setItem(r, 4, cell(p.value ? fmt::format_compact(*p.value)
                                                : fmt::placeholder()));
         QString move = action.isEmpty() ? fmt::placeholder() : action;
         if (p.shares_delta && *p.shares_delta != 0.0) {
@@ -256,6 +271,8 @@ void FirmBookPanel::render() {
         put(p, false);
     for (const auto& p : b.exits)
         put(p, true);
+    positions_->resizeColumnsToContents();
+    positions_->setColumnWidth(0, qMin(positions_->columnWidth(0), 190));
 }
 
 } // namespace fincept::screens
