@@ -11,7 +11,6 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-#include <cmath>
 
 namespace fincept::screens {
 
