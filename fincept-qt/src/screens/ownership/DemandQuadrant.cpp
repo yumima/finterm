@@ -18,6 +18,17 @@ using namespace fincept::ownership;
 namespace fmt = fincept::ui::formatting;
 
 namespace {
+
+double min_med(const QVector<QPointF>& v) {
+    double m = v.first().y();
+    for (const auto& p : v) m = std::min(m, p.y());
+    return m;
+}
+double max_med(const QVector<QPointF>& v) {
+    double m = v.first().y();
+    for (const auto& p : v) m = std::max(m, p.y());
+    return m;
+}
 constexpr int kPad = 8;
 constexpr int kAxisW = 74;   // room for the y labels without clipping
 constexpr int kAxisH = 38;   // two footer lines, clear of the edge
@@ -151,15 +162,17 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
     //
     // A running MEDIAN, not a regression line. Least squares over these points
     // returns r values of 0.00 to 0.05 on every large cap measured: conviction
-    // genuinely does not predict direction, and a straight line drawn through
-    // that would assert a relationship the data does not contain. The median of
-    // each vertical slice asserts nothing — it just says where the middle of
-    // the cloud actually sits as conviction rises, which is the shape a reader
-    // is looking for when they scan a scatter.
+    // does not predict direction, and a straight line drawn through that
+    // asserts a relationship the data does not contain. The median of each
+    // vertical slice asserts nothing — it says where the middle of the cloud
+    // sits as conviction rises.
     //
-    // Median rather than mean for the same reason the panel quotes a median
-    // elsewhere: a holder going from 100 shares to 1,000 is +900% and would
-    // drag a mean somewhere no actual holder is.
+    // The medians are tiny (a few tenths of a percent), so plotted on the same
+    // axis as the cloud the curve is a flat line on the zero axis — true, and
+    // useless. It is drawn on its OWN scale, amplified to fill a band, so the
+    // SHAPE and DIRECTION are readable. The amplification and the real range
+    // are printed next to it: the curve shows which way, the label says how
+    // much, and neither is left to be inferred from the other.
     if (hit_.size() >= 60) {
         constexpr int kBins = 14;
         QVector<QVector<double>> bins(kBins);
@@ -167,41 +180,69 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
         QVector<int>    bin_n(kBins, 0);
         const double w = std::max(1.0, static_cast<double>(plot_.width()));
         for (const auto& pt : hit_) {
+            if (!pt.p->pct)
+                continue;   // a new position has no prior to measure against
             const int b = std::clamp(
                 static_cast<int>((pt.at.x() - plot_.left()) / w * kBins), 0, kBins - 1);
-            bins[b].push_back(pt.at.y());
+            bins[b].push_back(*pt.p->pct);
             bin_x[b] += pt.at.x();
             bin_n[b] += 1;
         }
-        QVector<QPointF> curve;
+        QVector<QPointF> med;   // x in pixels, y still in DATA units
         for (int b = 0; b < kBins; ++b) {
-            // A bin holding three holders is noise, not a trend.
-            if (bin_n[b] < 8)
+            if (bin_n[b] < 8)   // a bin holding three holders is noise, not a trend
                 continue;
             std::sort(bins[b].begin(), bins[b].end());
-            curve.push_back(QPointF(bin_x[b] / bin_n[b], bins[b][bins[b].size() / 2]));
+            med.push_back(QPointF(bin_x[b] / bin_n[b], bins[b][bins[b].size() / 2]));
         }
-        if (curve.size() >= 3) {
-            QPainterPath path(curve.first());
-            // Smoothed between bin centres so the eye reads one trend rather
-            // than fourteen separate measurements.
-            for (int i = 1; i < curve.size(); ++i) {
-                const QPointF a = curve[i - 1], c = curve[i];
-                const double mx = (a.x() + c.x()) / 2.0;
-                path.cubicTo(QPointF(mx, a.y()), QPointF(mx, c.y()), c);
+        if (med.size() >= 3) {
+            double peak = 0.0;
+            for (const auto& m : med)
+                peak = std::max(peak, std::abs(m.y()));
+            if (peak > 1e-9) {
+                // Fill roughly a third of each half, so the curve is legible
+                // without colliding with the quadrant counts.
+                const double band = (plot_.height() / 2.0) * 0.34;
+                const double amp = band / peak;
+                QVector<QPointF> pts;
+                for (const auto& m : med)
+                    pts.push_back(QPointF(m.x(), midY - m.y() * amp));
+
+                // Segment by sign so direction is carried by colour as well as
+                // position — accumulating stretches green, distributing red.
+                g.setBrush(Qt::NoBrush);
+                for (int i = 1; i < pts.size(); ++i) {
+                    const double mid_val = (med[i - 1].y() + med[i].y()) / 2.0;
+                    QColor c(mid_val > 0 ? ui::colors::GREEN()
+                                         : (mid_val < 0 ? ui::colors::RED()
+                                                        : ui::colors::TEXT_SECONDARY()));
+                    QPainterPath seg(pts[i - 1]);
+                    const double mx = (pts[i - 1].x() + pts[i].x()) / 2.0;
+                    seg.cubicTo(QPointF(mx, pts[i - 1].y()), QPointF(mx, pts[i].y()), pts[i]);
+                    g.setPen(QPen(c, 2.2));
+                    g.drawPath(seg);
+                }
+                // Endpoint marker: where the highest-conviction holders sit.
+                const QColor endc(med.last().y() >= 0 ? ui::colors::GREEN()
+                                                      : ui::colors::RED());
+                g.setPen(QPen(QColor(ui::colors::BG_BASE()), 1.5));
+                g.setBrush(endc);
+                g.drawEllipse(pts.last(), 3.6, 3.6);
+
+                QFont cf = f;
+                cf.setPixelSize(10);
+                g.setFont(cf);
+                g.setPen(QColor(ui::colors::TEXT_SECONDARY()));
+                // The multiplier itself tells a reader nothing — what they
+                // need is that the curve is not to scale and what the real
+                // numbers are. Shape from the line, magnitude from the label.
+                const QString caption =
+                    QStringLiteral("median holder %1 to %2 — shape amplified, not to scale")
+                        .arg(fmt::format_percent(min_med(med) * 100.0, 2, true),
+                             fmt::format_percent(max_med(med) * 100.0, 2, true));
+                const QRectF cap(plot_.left() + 4, plot_.top() + 2, plot_.width() - 8, 14);
+                g.drawText(cap, Qt::AlignHCenter | Qt::AlignVCenter, caption);
             }
-            g.setBrush(Qt::NoBrush);
-            QColor line(ui::colors::CYAN());
-            g.setPen(QPen(line, 2.0));
-            g.drawPath(path);
-            // Anchored at the conviction end, where the reader is already
-            // looking for the largest holders.
-            g.setPen(QPen(line, 1));
-            QFont cf = f;
-            cf.setPixelSize(10);
-            g.setFont(cf);
-            g.drawText(QPointF(curve.last().x() - 96, curve.last().y() - 6),
-                       QStringLiteral("median holder"));
         }
     }
 

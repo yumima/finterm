@@ -2,6 +2,7 @@
 
 #include "screens/ownership/FirmBookPanel.h"
 #include "screens/ownership/FirmDetailPanel.h"
+#include "screens/ownership/InsiderLeadersPanel.h"
 #include "screens/ownership/StockOwnershipPanel.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/theme/Theme.h"
@@ -12,6 +13,7 @@
 #include <QPushButton>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QTabWidget>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -112,9 +114,26 @@ void OwnershipScreen::build_ui() {
                 detail_stack_->setCurrentIndex(1);
             });
 
+    // Two aggregated views, one detail pane. BY FIRM asks who is running the
+    // money; INSIDERS asks where the people who run the companies are putting
+    // their own. Both hand the same right-hand pane a thing to open, so the
+    // reader never loses their place in either list.
+    insiders_ = new InsiderLeadersPanel;
+    connect(insiders_, &InsiderLeadersPanel::issuer_selected, this,
+            [this](const QString& symbol, const QString&) {
+                if (symbol.isEmpty())
+                    return;   // the filing named no security to open
+                stock_panel_->set_symbol(symbol);
+                detail_stack_->setCurrentIndex(1);
+            });
+
+    left_ = new QTabWidget;
+    left_->addTab(firm_book_, QStringLiteral("BY FIRM"));
+    left_->addTab(insiders_, QStringLiteral("INSIDERS"));
+
     auto* split = new QSplitter(Qt::Horizontal);
     split->setChildrenCollapsible(false);
-    split->addWidget(firm_book_);
+    split->addWidget(left_);
     split->addWidget(detail_stack_);
     split->setStretchFactor(0, 5);
     split->setStretchFactor(1, 5);

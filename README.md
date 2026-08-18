@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`9ba065cdf`](https://github.com/yumima/finterm/commit/9ba065cdf) ownership: a median trend through the cloud, and Form 4 rendered in place
 - [`487c75f8d`](https://github.com/yumima/finterm/commit/487c75f8d) ownership: hide the panel's own header where the host already names the stock
 - [`9e6ecb325`](https://github.com/yumima/finterm/commit/9e6ecb325) ownership: split the screen into a scan and a detail
 - [`215715e54`](https://github.com/yumima/finterm/commit/215715e54) ownership: two firm rankings, and say whose holdings the table shows

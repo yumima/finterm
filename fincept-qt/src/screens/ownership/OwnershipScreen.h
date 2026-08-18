@@ -7,11 +7,13 @@ class QLabel;
 class QPushButton;
 class QSplitter;
 class QStackedWidget;
+class QTabWidget;
 
 namespace fincept::screens {
 
 class FirmBookPanel;
 class FirmDetailPanel;
+class InsiderLeadersPanel;
 class StockOwnershipPanel;
 
 /// OWNERSHIP — the 13F universe keyed by MANAGER.
@@ -64,6 +66,8 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     FirmDetailPanel*     firm_detail_  = nullptr;
     StockOwnershipPanel* stock_panel_  = nullptr;
     QStackedWidget*      detail_stack_ = nullptr;
+    InsiderLeadersPanel* insiders_     = nullptr;
+    QTabWidget*          left_         = nullptr;
     QWidget*             split_        = nullptr;
     bool            loaded_once_ = false;
 };
