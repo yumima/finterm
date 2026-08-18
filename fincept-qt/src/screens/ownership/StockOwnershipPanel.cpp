@@ -184,7 +184,8 @@ void StockOwnershipPanel::build_ui() {
     // Drill-through to the deep per-ticker screen. Without this the
     // navigate_to_screen signal — and MainWindow's handler for it — was dead
     // code wired to nothing.
-    auto* er_btn = new QPushButton(QStringLiteral("EQUITY RESEARCH \u2192"));
+    er_btn_ = new QPushButton(QStringLiteral("EQUITY RESEARCH \u2192"));
+    auto* er_btn = er_btn_;
     er_btn->setToolTip(QStringLiteral("Open this ticker in Equity Research"));
     connect(er_btn, &QPushButton::clicked, this, [this]() {
         if (!symbol_.isEmpty())
@@ -763,6 +764,13 @@ void StockOwnershipPanel::set_symbol(const QString& symbol) {
 }
 
 void StockOwnershipPanel::set_chrome_visible(bool on) {
+    // Hosted inside Equity Research (or the ownership screen's detail pane) the
+    // symbol is already named above this widget, and a button offering to open
+    // Equity Research from inside Equity Research is a dead end.
+    if (title_)
+        title_->setVisible(on);
+    if (er_btn_)
+        er_btn_->setVisible(on);
     if (search_)
         search_->setVisible(on);
     if (portfolio_)

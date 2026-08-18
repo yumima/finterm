@@ -86,6 +86,7 @@ class StockOwnershipPanel : public QWidget, public IStatefulScreen {
     QWidget*     empty_page_ = nullptr;
     QPushButton* refresh_btn_  = nullptr;
     QLabel*      title_        = nullptr;
+    QPushButton* er_btn_       = nullptr;
     QLabel*      status_       = nullptr;
     QLabel*      coverage_     = nullptr;
 
