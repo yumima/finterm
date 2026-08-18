@@ -37,6 +37,10 @@ class SmartMoneyPanel : public QWidget {
     /// buttons and the same sentence twice on one screen.
     void set_chrome_visible(bool on);
 
+  signals:
+    /// A named holder on the quadrant was clicked.
+    void holder_selected(const QString& manager);
+
   private:
     /// Two legitimate rankings of the same rows. Bloomberg's HDS defaults to
     /// position size; a weight answers a different question. Exposed as a
@@ -54,6 +58,7 @@ class SmartMoneyPanel : public QWidget {
     QPushButton*     build_btn_ = nullptr;
     bool             chrome_ = true;
     class RankedBarChart* chart_ = nullptr;
+    class DemandQuadrant* quadrant_ = nullptr;
 };
 
 } // namespace fincept::screens

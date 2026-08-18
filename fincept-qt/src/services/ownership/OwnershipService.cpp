@@ -52,6 +52,7 @@ constexpr int kSmartMoneyTimeoutMs = 600'000;
 const QString kSrcEdgar  = QStringLiteral("edgar");
 const QString kSrcMarket = QStringLiteral("market");
 const QString kSrcSmart  = QStringLiteral("smart");
+const QString kSrcDemand = QStringLiteral("demand");
 
 /// A quarterly data set is ~100 MB and indexes 3.3m rows; symbol
 /// resolution is rate-limited by OpenFIGI to 25 requests a minute.
@@ -821,6 +822,76 @@ void OwnershipService::load_index_holders(const QString& symbol) {
             self->note_source_done(sym, kSrcSmart);
         },
         /*on_line=*/{}, 60'000);
+}
+
+
+void OwnershipService::load_demand(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty() || !index_ready() || pending_.value(sym).contains(kSrcDemand))
+        return;
+    pending_[sym].insert(kSrcDemand);
+
+    QPointer<OwnershipService> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"ticker", sym}, {"max_points", 1500}})
+            .toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("demand"), payload},
+        [self, sym](python::PythonResult result) {
+            if (!self)
+                return;
+            auto snap = self->cache_.value(sym);
+            InstitutionalDemand d;
+            d.symbol = sym;
+            if (!result.success) {
+                d.error = result.error.isEmpty() ? QStringLiteral("demand query failed")
+                                                 : result.error.left(200);
+            } else {
+                const auto o =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = o.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    d.error = err;
+                } else {
+                    d.company       = o.value(QStringLiteral("company")).toString();
+                    d.quarter       = iso_date(o, "quarter");
+                    d.prior_quarter = iso_date(o, "prior_quarter");
+                    d.holders       = o.value(QStringLiteral("holders_now")).toInt();
+                    d.buyers        = o.value(QStringLiteral("buyers")).toInt();
+                    d.sellers       = o.value(QStringLiteral("sellers")).toInt();
+                    d.exited        = o.value(QStringLiteral("exited")).toInt();
+                    d.unchanged     = o.value(QStringLiteral("unchanged")).toInt();
+                    d.median_weight = o.value(QStringLiteral("median_weight")).toDouble();
+                    d.points_truncated = o.value(QStringLiteral("points_truncated")).toInt();
+                    d.max_book_positions =
+                        o.value(QStringLiteral("max_book_positions")).toInt();
+                    const auto q = o.value(QStringLiteral("quadrants")).toObject();
+                    d.high_add = q.value(QStringLiteral("high_add")).toInt();
+                    d.high_cut = q.value(QStringLiteral("high_cut")).toInt();
+                    d.low_add  = q.value(QStringLiteral("low_add")).toInt();
+                    d.low_cut  = q.value(QStringLiteral("low_cut")).toInt();
+                    for (const auto& v : o.value(QStringLiteral("points")).toArray()) {
+                        const auto po = v.toObject();
+                        DemandPoint p;
+                        p.manager = po.value(QStringLiteral("manager")).toString();
+                        p.weight  = po.value(QStringLiteral("weight")).toDouble();
+                        p.shares  = opt_num(po, "shares");
+                        p.value   = opt_num(po, "value");
+                        p.delta   = opt_num(po, "delta");
+                        p.pct     = opt_num(po, "pct");
+                        p.action  = po.value(QStringLiteral("action")).toString();
+                        p.top     = po.value(QStringLiteral("top")).toBool();
+                        p.rank    = po.value(QStringLiteral("rank")).toInt();
+                        if (!p.manager.isEmpty())
+                            d.points.push_back(p);
+                    }
+                }
+            }
+            snap.demand = d;
+            self->cache_.insert(sym, snap);
+            self->note_source_done(sym, kSrcDemand);
+        },
+        /*on_line=*/{}, 90'000);
 }
 
 } // namespace fincept::services

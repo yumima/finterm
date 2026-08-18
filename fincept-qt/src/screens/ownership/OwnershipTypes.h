@@ -198,6 +198,56 @@ struct ManagerBook {
     QString error;
 };
 
+/// One holder on the demand scatter.
+struct DemandPoint {
+    QString manager;
+    double  weight = 0.0;        ///< share of THEIR book
+    std::optional<double> shares;
+    std::optional<double> value;
+    std::optional<double> delta; ///< share change vs the prior quarter
+    std::optional<double> pct;   ///< absent for a new position — nothing to divide by
+    QString action;
+    bool    top = false;         ///< among the ten largest, so it is named
+    int     rank = 0;
+};
+
+/// The two-axis read, as a distribution rather than a verdict.
+///
+/// Quadrant counts are taken against the MEDIAN holder's weight, because
+/// conviction only means something relative to the other holders of the same
+/// security. Kept as four counts rather than collapsed into a label: the whole
+/// reason this replaced a badge is that the aggregate and the
+/// conviction-weighted read can disagree, and both are true.
+struct InstitutionalDemand {
+    QString symbol;
+    QString company;
+    QDate   quarter;
+    QDate   prior_quarter;
+
+    int holders = 0;
+    int buyers = 0;
+    int sellers = 0;
+    int exited = 0;
+    int unchanged = 0;
+
+    int high_add = 0;   ///< above-median weight, added shares
+    int high_cut = 0;
+    int low_add = 0;
+    int low_cut = 0;
+
+    double median_weight = 0.0;
+    int    points_truncated = 0;
+    /// The widest book still counted as discretionary. An index book's
+    /// "change" is a rebalance, not a view, so they are excluded and the
+    /// threshold is shown rather than assumed.
+    int    max_book_positions = 0;
+
+    QVector<DemandPoint> points;
+    QString error;
+
+    bool has_data() const { return holders > 0 && !points.isEmpty(); }
+};
+
 /// Everything the screen shows for one symbol, plus what it could not show.
 struct OwnershipSnapshot {
     QString symbol;
@@ -240,6 +290,7 @@ struct OwnershipSnapshot {
     /// substituted: answering "who owns this" from a few hundred of 10,647
     /// filers would be a complete-looking answer that is wrong by orders of
     /// magnitude.
+    InstitutionalDemand demand;
     QDate   partial_quarter;
     int     partial_filers = 0;
 

@@ -549,8 +549,15 @@ MIN_BOOK_VALUE = 50_000_000.0   # a book too small to be a firm's equity book
 MIN_BOOK_POSITIONS = 5          # a book too narrow for a weight to mean anything
 
 
+# A book this wide is not expressing a view on any one name — it is tracking a
+# benchmark or running client mandates. BlackRock files 5,413 positions. Leaving
+# them in a demand signal measures index rebalancing, not conviction.
+MAX_DISCRETIONARY_POSITIONS = 1000
+
+
 def holders(ticker=None, cusip=None, limit=60, quarter=None,
-            min_book=MIN_BOOK_VALUE, min_positions=MIN_BOOK_POSITIONS):
+            min_book=MIN_BOOK_VALUE, min_positions=MIN_BOOK_POSITIONS,
+            max_positions=None):
     """Every filer holding this security, ranked by weight in their own book."""
     con = connect()
     try:
@@ -602,9 +609,11 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                                  AND ph.cusip = h.cusip AND ph.put_call = ''
             WHERE h.cusip = ? AND h.quarter = ?
               AND b.stock_value >= ? AND b.stock_count >= ?
+              AND (? = 0 OR b.stock_count <= ?)
             ORDER BY h.value DESC
         """, (prior_q or "", cusip, quarter,
-              float(min_book), int(min_positions))).fetchall()
+              float(min_book), int(min_positions),
+              int(max_positions or 0), int(max_positions or 0))).fetchall()
 
         out = []
         for (m, acc, issuer, cls, pc, value, shares, book_total, book_count, cik,
@@ -658,10 +667,12 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                   JOIN books cb ON cb.cik = pb.cik AND cb.quarter = ?
                  WHERE ph.cusip = ? AND ph.quarter = ? AND ph.put_call = ''
                    AND pb.stock_value >= ? AND pb.stock_count >= ?
+                   AND (? = 0 OR pb.stock_count <= ?)
                    AND NOT EXISTS (SELECT 1 FROM holdings ch
                                     WHERE ch.accession = cb.accession
                                       AND ch.cusip = ph.cusip AND ch.put_call = '')
-            """, (quarter, cusip, prior_q, float(min_book), int(min_positions))).fetchone()[0]
+            """, (quarter, cusip, prior_q, float(min_book), int(min_positions),
+                  int(max_positions or 0), int(max_positions or 0))).fetchone()[0]
         buyers = sum(1 for r in stock if r.get("action") in ("added", "new"))
         sellers = sum(1 for r in stock if r.get("action") == "trimmed")
         # Totals across EVERY filer, not just the rows returned. This is what
@@ -679,6 +690,7 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                 "buyers": buyers, "sellers": sellers, "exited": exited,
                 "newer_partial": newer_partial,
                 "min_book_value": min_book, "min_book_positions": min_positions,
+                "max_book_positions": max_positions or 0,
                 "holders": out[:int(limit)]}
     finally:
         con.close()
@@ -1033,6 +1045,103 @@ def ingest_current(top=400, progress=None):
         con.close()
 
 
+# ── Institutional demand ────────────────────────────────────────────────────
+#
+# Two axes, because one number hides the answer. AAPL last quarter gained 91
+# holders and 14.2m shares — "accumulation" by any single measure — while the
+# funds with the LARGEST stakes were net sellers, 1,124 trimming against 824
+# adding. The aggregate and the conviction-weighted read pointed opposite ways,
+# and only the second is a statement about what informed holders think.
+#
+# So: every holder is placed on conviction (share of THEIR book) against
+# direction (change in shares), and the four quadrants are counted. The caller
+# gets the cloud and the counts, not a verdict.
+
+def demand(ticker=None, cusip=None, quarter=None,
+           min_book=None, min_positions=None, max_points=1200):
+    con = connect()
+    try:
+        mb = MIN_BOOK_VALUE if min_book is None else float(min_book)
+        mp = MIN_BOOK_POSITIONS if min_positions is None else int(min_positions)
+        # Discretionary by default — an index book's "change" is a rebalance.
+        h = holders(ticker, cusip, limit=100000, quarter=quarter,
+                    min_book=mb, min_positions=mp,
+                    max_positions=MAX_DISCRETIONARY_POSITIONS)
+        if h.get("error"):
+            return h
+
+        rows = [r for r in h["holders"]
+                if not r["is_derivative"] and r.get("weight") is not None]
+        if not rows:
+            return {**{k: h[k] for k in ("ticker", "cusip", "company", "quarter")},
+                    "error": "no discretionary holders in the indexed quarter"}
+
+        weights = sorted(r["weight"] for r in rows)
+        median_weight = weights[len(weights) // 2]
+
+        # A fund is "high conviction" relative to the OTHER holders of this
+        # security, not against an absolute cut: 3% of a book means something
+        # different for a 20-name book than a 900-name one, and the median
+        # holder is the only honest reference point available.
+        quads = {"high_add": 0, "high_cut": 0, "low_add": 0, "low_cut": 0}
+        flat = 0
+        points = []
+        for r in rows:
+            d = r.get("shares_delta")
+            hi = r["weight"] >= median_weight
+            if d is None or abs(d) < 1:
+                flat += 1
+            elif hi and d > 0:
+                quads["high_add"] += 1
+            elif hi and d < 0:
+                quads["high_cut"] += 1
+            elif d > 0:
+                quads["low_add"] += 1
+            else:
+                quads["low_cut"] += 1
+            points.append({
+                "manager": r["manager"],
+                "weight": r["weight"],
+                "shares": r["shares"],
+                "value": r["value"],
+                "delta": d,
+                # Percent change is the readable y-axis, but a new position has
+                # no prior to divide by — those are carried as a flag rather
+                # than as an infinite percentage.
+                "pct": r.get("pct_change"),
+                "action": r.get("action") or "",
+            })
+
+        # Densest region first would hide the names that matter, so the cloud is
+        # capped by POSITION VALUE: the biggest holders always survive the cut.
+        points.sort(key=lambda p: p["value"] or 0, reverse=True)
+        # The ten largest are named on the chart rather than lost in the cloud:
+        # "where do the biggest holders sit" is the question the scatter exists
+        # to answer, and an unlabelled dot answers nothing.
+        for i, p in enumerate(points):
+            p["top"] = i < 10
+            p["rank"] = i + 1 if i < 10 else 0
+        truncated = max(0, len(points) - int(max_points))
+
+        return {
+            "ticker": h.get("ticker"), "cusip": h.get("cusip"),
+            "company": h.get("company"), "quarter": h.get("quarter"),
+            "prior_quarter": h.get("prior_quarter"),
+            "holders_now": len(rows),
+            "holders_prior": None,
+            "buyers": h.get("buyers"), "sellers": h.get("sellers"),
+            "exited": h.get("exited"),
+            "median_weight": median_weight,
+            "quadrants": quads, "unchanged": flat,
+            "points": points[:int(max_points)],
+            "points_truncated": truncated,
+            "min_book_value": mb, "min_book_positions": mp,
+            "max_book_positions": MAX_DISCRETIONARY_POSITIONS,
+        }
+    finally:
+        con.close()
+
+
 def handle_action(action, payload):
     if action == "status":
         return status()
@@ -1067,11 +1176,17 @@ def handle_action(action, payload):
             if not r.get("remaining") or r.get("resolved", 0) + r.get("unrecognised", 0) == 0:
                 break
         return total
+    if action == "demand":
+        return demand(payload.get("ticker"), payload.get("cusip"),
+                      payload.get("quarter"), payload.get("min_book"),
+                      payload.get("min_positions"),
+                      int(payload.get("max_points") or 1200))
     if action == "holders":
         return holders(payload.get("ticker"), payload.get("cusip"),
                        payload.get("limit") or 60, payload.get("quarter"),
                        float(payload.get("min_book") or MIN_BOOK_VALUE),
-                       int(payload.get("min_positions") or MIN_BOOK_POSITIONS))
+                       int(payload.get("min_positions") or MIN_BOOK_POSITIONS),
+                       payload.get("max_positions"))
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))

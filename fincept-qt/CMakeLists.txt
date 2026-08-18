@@ -1406,6 +1406,7 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
+    src/screens/ownership/DemandQuadrant.cpp
     src/screens/ownership/HoldersChart.cpp
     src/screens/ownership/FirmBookPanel.cpp
     src/screens/ownership/SmartMoneyPanel.cpp
@@ -1548,6 +1549,7 @@ set_source_files_properties(
     src/screens/pre_ipo/views/ScreenerView.cpp
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
+    src/screens/ownership/DemandQuadrant.cpp
     src/screens/ownership/HoldersChart.cpp
     src/screens/ownership/FirmBookPanel.cpp
     src/screens/ownership/SmartMoneyPanel.cpp

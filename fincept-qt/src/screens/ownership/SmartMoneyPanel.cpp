@@ -1,5 +1,6 @@
 #include "screens/ownership/SmartMoneyPanel.h"
 
+#include "screens/ownership/DemandQuadrant.h"
 #include "screens/ownership/HoldersChart.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/formatting/NumberFormat.h"
@@ -72,9 +73,17 @@ SmartMoneyPanel::SmartMoneyPanel(QWidget* parent) : QWidget(parent) {
     flow_->setTextFormat(Qt::RichText);
     root->addWidget(flow_);
 
+    // The scatter leads. A ranked bar list answers "who holds it"; the
+    // question that follows is "and what are they doing", which only the
+    // two-axis view can answer without collapsing to a single verdict.
+    quadrant_ = new DemandQuadrant;
+    connect(quadrant_, &DemandQuadrant::holder_activated, this,
+            [this](const QString& m) { emit holder_selected(m); });
+    root->addWidget(quadrant_, 3);
+
     chart_ = new RankedBarChart;
     chart_->set_empty_text(QStringLiteral("No 13F index built yet."));
-    root->addWidget(chart_, 1);
+    root->addWidget(chart_, 2);
 
     caveat_ = new QLabel(QStringLiteral(
         "13F: long US equities only, filed 45 days after quarter end. A weight is a share of "
@@ -146,6 +155,18 @@ void SmartMoneyPanel::render() {
 
     const auto snap = svc.snapshot(symbol_);
     const auto& rows = snap.smart_money;
+
+    if (snap.demand.has_data()) {
+        quadrant_->set_demand(snap.demand);
+    } else {
+        quadrant_->clear();
+        quadrant_->set_empty_text(
+            !svc.index_ready()
+                ? QStringLiteral("Build the 13F index to see what holders are doing.")
+                : (snap.demand.error.isEmpty()
+                       ? QStringLiteral("Reading holder activity…")
+                       : snap.demand.error));
+    }
 
     if (!snap.smart_money_error.isEmpty()) {
         status_->setText(snap.smart_money_error);

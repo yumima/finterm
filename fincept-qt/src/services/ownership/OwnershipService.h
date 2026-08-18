@@ -59,6 +59,11 @@ class OwnershipService : public QObject {
 
     void load_smart_money(const QString& symbol);
 
+    /// Load the two-axis demand read: every discretionary holder placed on
+    /// conviction against direction. Local index query, so it runs on a symbol
+    /// change like the holder list.
+    void load_demand(const QString& symbol);
+
     // ── Local 13F index ─────────────────────────────────────────────────────
     //
     // SEC publishes every 13F as a bulk quarterly data set: 10,647 filers and
