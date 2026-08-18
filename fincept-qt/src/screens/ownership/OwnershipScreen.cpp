@@ -128,7 +128,12 @@ void OwnershipScreen::build_ui() {
             });
 
     left_ = new QTabWidget;
-    left_->addTab(firm_book_, QStringLiteral("BY FIRM"));
+    // Only the firm view depends on the 13F index. INSIDERS reads Form 4 from
+    // EDGAR and works with no index at all, so the "build an index" page
+    // belongs inside this tab rather than over the whole screen.
+    firm_stack_ = new QStackedWidget;
+    firm_stack_->addWidget(firm_book_);   // 0
+    left_->addTab(firm_stack_, QStringLiteral("BY FIRM"));
     left_->addTab(insiders_, QStringLiteral("INSIDERS"));
 
     auto* split = new QSplitter(Qt::Horizontal);
@@ -181,17 +186,15 @@ void OwnershipScreen::build_ui() {
     ev->addStretch(2);
     empty_page_ = empty;
 
-    body_ = new QStackedWidget;
-    body_->addWidget(split_);       // 0
-    body_->addWidget(empty_page_);  // 1
-    root->addWidget(body_, 1);
+    firm_stack_->addWidget(empty_page_);   // 1 — swapped in when there is no index
+    root->addWidget(split_, 1);
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {
     auto& svc = services::OwnershipService::instance();
     const bool ready = svc.index_ready();
-    if (body_)
-        body_->setCurrentIndex(ready ? 0 : 1);
+    if (firm_stack_)
+        firm_stack_->setCurrentIndex(ready ? 0 : 1);
     // The toolbar control is redundant while the empty page owns the action.
     index_btn_->setVisible(ready);
     index_lbl_->setVisible(ready && !msg.isEmpty());

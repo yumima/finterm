@@ -37,7 +37,8 @@ class InsiderLeadersPanel : public QWidget {
 
   private:
     void reload();
-    void render();
+    /// Label the insiders behind the current ranking (per-owner EDGAR fetch).
+    void classify();
     void run_scan();
 
     QComboBox*    direction_ = nullptr;
@@ -46,6 +47,12 @@ class InsiderLeadersPanel : public QWidget {
     QLabel*       status_    = nullptr;
     QTableWidget* table_     = nullptr;
     bool          scanning_  = false;
+    bool          loading_   = false;
+    /// A request arrived while one was in flight; re-run when it lands so the
+    /// table always ends up matching the controls.
+    bool          restack_   = false;
+    /// Business days per scan press. A day is ~500 submission fetches.
+    static constexpr int kMaxScanDays = 5;
 };
 
 } // namespace fincept::screens

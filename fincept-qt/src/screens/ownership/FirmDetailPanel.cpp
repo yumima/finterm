@@ -4,12 +4,9 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLineEdit>
 #include <QTableWidget>
-#include <QTimer>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -122,6 +119,11 @@ void FirmDetailPanel::render() {
     if (svc.is_book_loading(cik)) {
         status_->setText(QStringLiteral("Reading the index…"));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+        // Leaving the previous firm's rows up while a different filer loads
+        // attributes one manager's holdings to another for as long as the read
+        // takes. Blank is honest; wrong is not.
+        positions_->setRowCount(0);
+        book_title_->clear();
         return;
     }
     if (!b.error.isEmpty()) {

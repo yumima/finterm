@@ -4,6 +4,8 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
+#include <algorithm>
+
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -78,10 +80,11 @@ InsiderLeadersPanel::InsiderLeadersPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(status_);
 
     table_ = new QTableWidget;
-    table_->setColumnCount(6);
+    table_->setColumnCount(7);
     table_->setHorizontalHeaderLabels({QStringLiteral("Ticker"), QStringLiteral("Company"),
                                        QStringLiteral("Bought"), QStringLiteral("Insiders"),
-                                       QStringLiteral("Roles"), QStringLiteral("Latest")});
+                                       QStringLiteral("Stake +"), QStringLiteral("Roles"),
+                                       QStringLiteral("Latest")});
     table_->verticalHeader()->setVisible(false);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -109,11 +112,24 @@ void InsiderLeadersPanel::run_scan() {
         return;
     scanning_ = true;
     scan_btn_->setEnabled(false);
-    status_->setText(QStringLiteral("Reading the EDGAR daily index… around 500 filings a day, "
-                                    "each one fetched and parsed."));
+
+    // Scan the window the reader is looking at, but bounded: a day is around
+    // 500 submission fetches, so thirty days is an hour of work against any
+    // sane deadline. The scan is incremental, so pressing it again extends the
+    // window rather than repeating it, and the status line says so.
+    const int want = window_->currentData().toInt();
+    const int days = std::min(want, kMaxScanDays);
+    status_->setText(
+        QStringLiteral("Reading the EDGAR daily index for the last %1 business days — around 500 "
+                       "filings a day, each fetched and parsed. Only filings not already read "
+                       "are fetched, so pressing this again extends the window.%2")
+            .arg(days)
+            .arg(days < want ? QStringLiteral(" Up to %1 days at a time.").arg(kMaxScanDays)
+                             : QString()));
+    status_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     QPointer<InsiderLeadersPanel> self = this;
     const QString payload = QString::fromUtf8(
-        QJsonDocument(QJsonObject{{"days", 3}}).toJson(QJsonDocument::Compact));
+        QJsonDocument(QJsonObject{{"days", days}}).toJson(QJsonDocument::Compact));
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form4_market.py"), {QStringLiteral("scan"), payload},
         [self](python::PythonResult result) {
@@ -127,12 +143,39 @@ void InsiderLeadersPanel::run_scan() {
                     QString("color:%1;font-size:12px;").arg(ui::colors::AMBER()));
                 return;
             }
+            // Show the ranking straight away, then label the insiders behind
+            // it. Classification is a per-owner fetch from EDGAR and would
+            // otherwise hold an already-usable table hostage to it.
             self->reload();
+            self->classify();
         },
-        /*on_line=*/{}, 15 * 60 * 1000);
+        /*on_line=*/{}, days * 6 * 60 * 1000);
+}
+
+void InsiderLeadersPanel::classify() {
+    QPointer<InsiderLeadersPanel> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"days", 30}, {"limit", 80}}).toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_form4_market.py"), {QStringLiteral("classify"), payload},
+        [self](python::PythonResult result) {
+            if (self && result.success)
+                self->reload();   // the labels are cached now; re-read with them
+        },
+        /*on_line=*/{}, 5 * 60 * 1000);
 }
 
 void InsiderLeadersPanel::reload() {
+    // One interpreter at a time, but the LAST request must win: dropping it
+    // outright let the table settle on a window the controls no longer show,
+    // and the in-flight callback captured the old direction, so the header
+    // could read "Bought" while the selector said selling.
+    if (loading_) {
+        restack_ = true;
+        return;
+    }
+    loading_ = true;
+    restack_ = false;
     QPointer<InsiderLeadersPanel> self = this;
     const int days = window_->currentData().toInt();
     const QString dir = direction_->currentData().toString();
@@ -144,6 +187,12 @@ void InsiderLeadersPanel::reload() {
         [self, dir](python::PythonResult result) {
             if (!self)
                 return;
+            self->loading_ = false;
+            if (self->restack_) {
+                self->restack_ = false;
+                self->reload();   // the controls moved on while this was in flight
+                return;
+            }
             self->table_->setRowCount(0);
             if (!result.success) {
                 self->status_->setText(result.error);
@@ -156,7 +205,8 @@ void InsiderLeadersPanel::reload() {
             self->table_->setHorizontalHeaderLabels(
                 {QStringLiteral("Ticker"), QStringLiteral("Company"),
                  buying ? QStringLiteral("Bought") : QStringLiteral("Sold"),
-                 QStringLiteral("Insiders"), QStringLiteral("Roles"), QStringLiteral("Latest")});
+                 QStringLiteral("Insiders"), QStringLiteral("Stake +"), QStringLiteral("Roles"),
+                 QStringLiteral("Latest")});
             if (rows.isEmpty()) {
                 self->status_->setText(QStringLiteral(
                     "Nothing scanned yet. Press SCAN EDGAR to read the last few days of Form 4 "
@@ -194,19 +244,56 @@ void InsiderLeadersPanel::reload() {
                 // "one officer bought three times" are different events, and
                 // folding them into one number decides for the reader.
                 const int people = o.value(QStringLiteral("insiders")).toInt();
-                auto* pc = cell(cluster ? QStringLiteral("%1  cluster").arg(people)
-                                        : QString::number(people),
-                                cluster ? ui::colors::AMBER() : QString());
-                pc->setToolTip(cluster
-                                   ? QStringLiteral("%1 separate insiders bought in this window. "
-                                                    "Several insiders acting within days of each "
-                                                    "other is a materially stronger signal than "
-                                                    "one person buying.")
-                                         .arg(people)
-                                   : QStringLiteral("%1 insider · %2 transactions")
-                                         .arg(people)
-                                         .arg(o.value(QStringLiteral("trades")).toInt()));
+                const int oppo = o.value(QStringLiteral("opportunistic")).toInt();
+                QString ptext = cluster ? QStringLiteral("%1  cluster").arg(people)
+                                        : QString::number(people);
+                // Cohen, Malloy and Pomorski: an insider who trades the same
+                // month every year is following a plan and predicts nothing,
+                // while the same trade from someone with no such pattern does.
+                // Only shown when the multi-year history exists to support it.
+                if (oppo > 0)
+                    ptext += QStringLiteral("  ·  %1 opportunistic").arg(oppo);
+                auto* pc = cell(ptext, oppo > 0 ? ui::colors::GREEN()
+                                                : (cluster ? ui::colors::AMBER() : QString()));
+                pc->setToolTip(
+                    QStringLiteral("%1 insider(s) · %2 transactions%3%4")
+                        .arg(people)
+                        .arg(o.value(QStringLiteral("trades")).toInt())
+                        .arg(cluster ? QStringLiteral(
+                                           "\n\nSeveral insiders acting within days of each "
+                                           "other is a materially stronger signal than one "
+                                           "person buying.")
+                                     : QString())
+                        .arg(oppo > 0
+                                 ? QStringLiteral(
+                                       "\n\n%1 of them trade on no annual pattern — the "
+                                       "distinction that carries most of Form 4's signal. "
+                                       "Insiders with too little filing history to judge are "
+                                       "left unlabelled rather than assumed opportunistic.")
+                                       .arg(oppo)
+                                 : QString()));
                 self->table_->setItem(i, 3, pc);
+
+                // What the purchase did to the insider's OWN position. A $50k
+                // buy by a director already holding $50m is noise; the same buy
+                // from someone holding $200k is not, and only this ratio
+                // separates them.
+                const auto stake = o.value(QStringLiteral("stake_increase"));
+                auto* st = cell(stake.isDouble()
+                                    ? fmt::format_percent(stake.toDouble() * 100.0, 0, true)
+                                    : fmt::placeholder(),
+                                stake.isDouble() && stake.toDouble() >= 0.25
+                                    ? ui::colors::GREEN()
+                                    : ui::colors::TEXT_SECONDARY());
+                st->setToolTip(stake.isDouble()
+                                   ? QStringLiteral("The biggest proportional buy here: one "
+                                                    "insider grew their own holding by this "
+                                                    "much. Not necessarily the largest purchase "
+                                                    "by value.")
+                                   : QStringLiteral("No filing in this window reported holdings "
+                                                    "after the trade, so the purchase cannot be "
+                                                    "sized against the insider's own position."));
+                self->table_->setItem(i, 4, st);
 
                 // Roles arrive once per filer, so three directors buying yields
                 // "Director, Director, Director". The distinct set is what the
@@ -217,9 +304,9 @@ void InsiderLeadersPanel::reload() {
                     if (!role.isEmpty() && !roles.contains(role, Qt::CaseInsensitive))
                         roles << role;
                 }
-                self->table_->setItem(i, 4, cell(roles.join(QStringLiteral(", ")),
+                self->table_->setItem(i, 5, cell(roles.join(QStringLiteral(", ")),
                                                  ui::colors::TEXT_SECONDARY()));
-                self->table_->setItem(i, 5, cell(o.value(QStringLiteral("latest")).toString(),
+                self->table_->setItem(i, 6, cell(o.value(QStringLiteral("latest")).toString(),
                                                  ui::colors::TEXT_SECONDARY()));
             }
             self->table_->setUpdatesEnabled(true);
@@ -236,7 +323,5 @@ void InsiderLeadersPanel::reload() {
         },
         /*on_line=*/{}, 60'000);
 }
-
-void InsiderLeadersPanel::render() {}
 
 } // namespace fincept::screens

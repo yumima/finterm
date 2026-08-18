@@ -48,7 +48,8 @@ import time
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sec_ownership_data import _get, parse_form4, UA  # noqa: E402
+from sec_ownership_data import (_get, parse_form4, UA,  # noqa: E402
+                                owner_filing_dates, ROUTINE_MIN_YEARS)
 
 BASE = "https://www.sec.gov/Archives"
 # EDGAR asks for <=10 req/s across everything using this User-Agent, and other
@@ -68,16 +69,39 @@ def db_path():
 def connect():
     con = sqlite3.connect(db_path())
     con.execute("PRAGMA journal_mode=WAL")
+    # A scan and a classify pass can be writing at the same time — the app
+    # chains one after the other and a user can start another. Without this a
+    # concurrent writer fails outright instead of waiting its turn.
+    con.execute("PRAGMA busy_timeout=15000")
     con.execute("""CREATE TABLE IF NOT EXISTS tx (
         accession TEXT, filed TEXT, tx_date TEXT, symbol TEXT, issuer TEXT,
         insider TEXT, insider_cik TEXT, roles TEXT, code TEXT, direction TEXT,
         shares REAL, price REAL, value REAL, open_market INTEGER,
-        derivative INTEGER, source_url TEXT)""")
+        derivative INTEGER, source_url TEXT, held_after REAL)""")
+    # Added after the first stores were written; ALTER is the migration.
+    cols = {r[1] for r in con.execute("PRAGMA table_info(tx)")}
+    if "held_after" not in cols:
+        con.execute("ALTER TABLE tx ADD COLUMN held_after REAL")
+        # Rows stored before the column existed carry NULL, and scan() never
+        # revisits an accession it has already seen. Drop those accessions from
+        # the seen set so the next scan reads them again, rather than leaving a
+        # permanently blank column that claims the filings were silent.
+        con.execute("""DELETE FROM seen WHERE accession IN (
+                         SELECT accession FROM tx GROUP BY accession
+                          HAVING COUNT(held_after) = 0)""")
+        con.execute("DELETE FROM tx WHERE held_after IS NULL")
     con.execute("CREATE INDEX IF NOT EXISTS ix_tx_filed ON tx(filed)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_tx_symbol ON tx(symbol)")
     # One row per accession so a rescan is incremental rather than a refetch of
     # everything already read.
     con.execute("CREATE TABLE IF NOT EXISTS seen (accession TEXT PRIMARY KEY, filed TEXT)")
+    # Routine-vs-opportunistic needs YEARS of an insider's filings, which a
+    # few days of daily index cannot supply — it is fetched per owner from
+    # EDGAR and cached here, because it changes about as often as a person's
+    # trading habits do.
+    con.execute("""CREATE TABLE IF NOT EXISTS owner_pattern (
+        insider_cik TEXT PRIMARY KEY, pattern TEXT, years INTEGER,
+        trades INTEGER, checked TEXT)""")
     con.commit()
     return con
 
@@ -164,14 +188,15 @@ def scan(days=3, limit=None):
                 for t in parse_form4(xml, f"{BASE}/{path}"):
                     parsed += 1
                     con.execute(
-                        "INSERT INTO tx VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO tx VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (acc, filed, t.get("date", ""), clean_symbol(t.get("symbol")),
                          t.get("issuer", ""), t.get("insider", ""),
                          t.get("insider_cik", ""), ", ".join(t.get("roles") or []),
                          t.get("code", ""), t.get("direction", ""),
                          t.get("shares"), t.get("price"), t.get("value"),
                          1 if t.get("open_market") else 0,
-                         1 if t.get("derivative") else 0, t.get("source_url", "")))
+                         1 if t.get("derivative") else 0, t.get("source_url", ""),
+                         t.get("shares_held_after")))
             con.commit()
         return {"fetched": fetched, "transactions": parsed,
                 "already_had": skipped, "days": int(days)}
@@ -192,6 +217,68 @@ def status():
         con.close()
 
 
+def classify(days=10, limit=60):
+    """Label the insiders behind recent open-market buys routine or opportunistic.
+
+    Cohen, Malloy and Pomorski found the distinction is most of the signal in
+    Form 4: an insider who trades the same month every year is following a plan
+    and predicts nothing, while the same trade from someone with no such pattern
+    does. The test needs several years of that person's filings, so it is a
+    per-owner fetch from EDGAR — done for the insiders actually on screen, and
+    cached, rather than for all ten thousand filers.
+
+    An insider without enough history is left UNCLASSIFIED. Calling them
+    opportunistic because no pattern was visible in two years of filings would
+    put the strongest label in the dataset on the weakest evidence.
+    """
+    con = connect()
+    try:
+        cutoff = (date.today() - timedelta(days=int(days) * 2)).isoformat()
+        rows = con.execute("""
+            SELECT DISTINCT t.insider_cik
+              FROM tx t
+              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
+             WHERE t.open_market=1 AND t.derivative=0 AND t.code='P'
+               AND t.direction='acquired' AND t.filed>=? AND t.insider_cik<>''
+               AND p.insider_cik IS NULL
+             LIMIT ?
+        """, (cutoff, int(limit))).fetchall()
+        done = 0
+        for (cik,) in rows:
+            dates = owner_filing_dates(cik) or []
+            time.sleep(REQ_PAUSE)
+            years, months = set(), {}
+            for d in dates:
+                try:
+                    y, m = int(d[0:4]), int(d[5:7])
+                except (ValueError, IndexError):
+                    continue
+                years.add(y)
+                months.setdefault(m, set()).add(y)
+            span = len(years)
+            if span < ROUTINE_MIN_YEARS:
+                pattern = "unclassified"
+            elif any(len(ys) >= ROUTINE_MIN_YEARS for ys in months.values()):
+                pattern = "routine"
+            else:
+                pattern = "opportunistic"
+            con.execute("INSERT OR REPLACE INTO owner_pattern VALUES (?,?,?,?,?)",
+                        (cik, pattern, span, len(dates), date.today().isoformat()))
+            done += 1
+        con.commit()
+        remaining = con.execute("""
+            SELECT COUNT(DISTINCT t.insider_cik)
+              FROM tx t
+              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
+             WHERE t.open_market=1 AND t.derivative=0 AND t.code='P'
+               AND t.direction='acquired' AND t.filed>=? AND t.insider_cik<>''
+               AND p.insider_cik IS NULL
+        """, (cutoff,)).fetchone()[0]
+        return {"classified": done, "remaining_unknown": remaining}
+    finally:
+        con.close()
+
+
 def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
     """Issuers ranked by open-market insider conviction in the window.
 
@@ -207,22 +294,37 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
         # Code P only: see the module docstring on why grants and exercises are
         # excluded rather than merely de-emphasised.
         rows = con.execute("""
-            SELECT symbol, issuer,
-                   SUM(COALESCE(value,0)) AS v,
-                   SUM(COALESCE(shares,0)) AS sh,
-                   COUNT(DISTINCT insider_cik) AS people,
+            SELECT t.symbol, t.issuer,
+                   SUM(COALESCE(t.value,0)) AS v,
+                   SUM(COALESCE(t.shares,0)) AS sh,
+                   COUNT(DISTINCT t.insider_cik) AS people,
                    COUNT(*) AS trades,
-                   MAX(tx_date) AS latest,
-                   GROUP_CONCAT(DISTINCT roles)
-              FROM tx
+                   MAX(t.tx_date) AS latest,
+                   GROUP_CONCAT(DISTINCT t.roles),
+                   COUNT(DISTINCT CASE WHEN p.pattern='opportunistic'
+                                       THEN t.insider_cik END),
+                   COUNT(DISTINCT CASE WHEN p.pattern='routine'
+                                       THEN t.insider_cik END),
+                   -- How much a buy grew the insider's own holding. A $50k
+                   -- purchase by a director already holding $50m is noise; the
+                   -- same purchase from someone holding $200k is not, and only
+                   -- this ratio can tell them apart. Purchases ONLY: after a
+                   -- sale held_after is what is left, and the same arithmetic
+                   -- yields a number that means nothing.
+                   MAX(CASE WHEN t.direction='acquired' AND t.held_after > t.shares
+                                 AND t.shares > 0
+                            THEN t.shares / (t.held_after - t.shares) END)
+              FROM tx t
+              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
              WHERE open_market=1 AND derivative=0 AND code='P'
                AND direction=? AND filed>=?
-             GROUP BY COALESCE(NULLIF(symbol,''), issuer)
+             GROUP BY COALESCE(NULLIF(t.symbol,''), t.issuer)
             HAVING v >= ?
              ORDER BY v DESC LIMIT ?
         """, (want, cutoff, float(min_value), int(limit))).fetchall()
         out = []
-        for sym, issuer, v, sh, people, trades, latest, roles in rows:
+        for (sym, issuer, v, sh, people, trades, latest, roles,
+             opportunistic, routine, stake) in rows:
             out.append({
                 "symbol": sym or "", "issuer": issuer or "",
                 "value": v or 0.0, "shares": sh or 0.0,
@@ -232,30 +334,12 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
                 # the filings rather than as a rating.
                 "cluster": (people or 0) >= 2,
                 "roles": [r for r in (roles or "").split(",") if r.strip()][:4],
+                "opportunistic": opportunistic or 0,
+                "routine": routine or 0,
+                # None when no filing reported holdings after the trade.
+                "stake_increase": stake,
             })
         return {"leaders": out, "days": int(days), "direction": direction}
-    finally:
-        con.close()
-
-
-def detail(symbol=None, issuer=None, days=30):
-    """Every open-market insider transaction behind one issuer's ranking."""
-    con = connect()
-    try:
-        cutoff = (date.today() - timedelta(days=int(days) * 2)).isoformat()
-        key, val = ("symbol", symbol) if symbol else ("issuer", issuer)
-        rows = con.execute(f"""
-            SELECT tx_date, insider, roles, code, direction, shares, price, value,
-                   source_url, issuer, symbol
-              FROM tx WHERE {key}=? AND filed>=? AND derivative=0
-             ORDER BY tx_date DESC, ABS(COALESCE(value,0)) DESC LIMIT 200
-        """, (val, cutoff)).fetchall()
-        return {"symbol": symbol or "", "issuer": issuer or "",
-                "transactions": [
-                    {"date": r[0], "insider": r[1], "roles": r[2], "code": r[3],
-                     "direction": r[4], "shares": r[5], "price": r[6],
-                     "value": r[7], "url": r[8], "issuer": r[9], "symbol": r[10]}
-                    for r in rows]}
     finally:
         con.close()
 
@@ -268,8 +352,8 @@ def handle_action(action, p):
     if action == "leaders":
         return leaders(p.get("days") or 5, p.get("limit") or 40,
                        p.get("min_value") or 0.0, p.get("direction") or "buy")
-    if action == "detail":
-        return detail(p.get("symbol"), p.get("issuer"), p.get("days") or 30)
+    if action == "classify":
+        return classify(p.get("days") or 10, p.get("limit") or 60)
     return {"error": f"Unknown action: {action}"}
 
 

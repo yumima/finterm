@@ -3,7 +3,6 @@
 
 #include "services/ownership/OwnershipService.h"
 
-class QLabel;
 class QComboBox;
 class QLineEdit;
 class QTableWidget;
@@ -44,7 +43,6 @@ class FirmBookPanel : public QWidget {
     QComboBox*    ranking_ = nullptr;
     QTableWidget* firms_ = nullptr;
     QString       selected_cik_;
-    QLabel*       status_ = nullptr;
     QTimer*       debounce_ = nullptr;
 };
 

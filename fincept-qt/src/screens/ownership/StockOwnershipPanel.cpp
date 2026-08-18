@@ -789,6 +789,14 @@ void StockOwnershipPanel::set_chrome_visible(bool on) {
         title_->setVisible(on);
     if (er_btn_)
         er_btn_->setVisible(on);
+    // The index controls belong to whichever screen owns the index, not to a
+    // panel embedded three levels down: in the ownership screen's detail pane
+    // this was a second MAP MORE SYMBOLS beside the screen's own. The empty
+    // state still offers to build the index when there isn't one.
+    if (index_btn_)
+        index_btn_->setVisible(on && services::OwnershipService::instance().index_ready());
+    if (index_lbl_)
+        index_lbl_->setVisible(on && index_lbl_->isVisible());
     if (search_)
         search_->setVisible(on);
     if (portfolio_)

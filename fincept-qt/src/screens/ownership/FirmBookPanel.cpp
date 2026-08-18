@@ -6,7 +6,6 @@
 
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QLabel>
 #include <QLineEdit>
 #include <QTableWidget>
 #include <QTimer>
@@ -20,17 +19,6 @@ using namespace fincept::ownership;
 namespace fmt = fincept::ui::formatting;
 
 namespace {
-
-/// Colour by what the filer did. An exit is not "bad", it is a decision — the
-/// same green/red convention the insider timeline and the holder list use, so
-/// the whole screen reads one way.
-QString action_colour(const QString& action) {
-    if (action == QLatin1String("new") || action == QLatin1String("added"))
-        return ui::colors::GREEN();
-    if (action == QLatin1String("trimmed") || action == QLatin1String("exited"))
-        return ui::colors::RED();
-    return ui::colors::TEXT_SECONDARY();
-}
 
 QTableWidgetItem* cell(const QString& text, const QString& colour = {}) {
     auto* it = new QTableWidgetItem(text);
@@ -76,10 +64,18 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
         services::OwnershipService::instance().search_firms(search_->text(), current_ranking());
     });
 
+    // Typing runs a query against 10,647 filers, so it is debounced rather than
+    // fired per keystroke.
+    debounce_ = new QTimer(this);
+    debounce_->setSingleShot(true);
+    debounce_->setInterval(220);
+    connect(debounce_, &QTimer::timeout, this, [this]() {
+        services::OwnershipService::instance().search_firms(search_->text(), current_ranking());
+    });
+    connect(search_, &QLineEdit::textChanged, this, [this]() { debounce_->start(); });
 
-    status_ = new QLabel;
-    status_->setWordWrap(true);
-    bar->addWidget(status_, 1);
+
+    bar->addStretch(1);
     root->addLayout(bar);
 
     // No caveat here: the same sentence already sits under the holders tile,
@@ -117,7 +113,19 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
             return;
         if (auto* it = firms_->item(r, 1)) {
             const QString cik = it->data(Qt::UserRole).toString();
-            if (!cik.isEmpty() && cik != selected_cik_) {
+            if (!cik.isEmpty()) {
+                selected_cik_ = cik;
+                emit firm_selected(cik);
+            }
+        }
+    });
+    // Selection alone cannot bring a book back once the reader has drilled into
+    // one of its holdings: the row is still current, so no selection change is
+    // emitted. A click always re-announces the firm.
+    connect(firms_, &QTableWidget::cellClicked, this, [this](int r, int) {
+        if (auto* it = firms_->item(r, 1)) {
+            const QString cik = it->data(Qt::UserRole).toString();
+            if (!cik.isEmpty()) {
                 selected_cik_ = cik;
                 emit firm_selected(cik);
             }

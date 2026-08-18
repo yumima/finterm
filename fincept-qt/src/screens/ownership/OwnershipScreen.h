@@ -60,12 +60,12 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QPushButton*    index_btn_  = nullptr;
     QPushButton*    map_btn_    = nullptr;
     QLabel*         index_lbl_  = nullptr;
-    QStackedWidget* body_       = nullptr;
     QWidget*        empty_page_ = nullptr;
     FirmBookPanel*       firm_book_    = nullptr;
     FirmDetailPanel*     firm_detail_  = nullptr;
     StockOwnershipPanel* stock_panel_  = nullptr;
     QStackedWidget*      detail_stack_ = nullptr;
+    QStackedWidget*      firm_stack_   = nullptr;
     InsiderLeadersPanel* insiders_     = nullptr;
     QTabWidget*          left_         = nullptr;
     QWidget*             split_        = nullptr;

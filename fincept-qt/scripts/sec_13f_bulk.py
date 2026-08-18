@@ -654,6 +654,7 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
         # second round trip. Only filers who DID file this quarter count: one
         # who stopped filing has not sold, we simply cannot see them.
         exited = 0
+        exited_shares = 0.0
         if prior_q:
             # pb.cik <> '' and COUNT(DISTINCT) are both load-bearing, for the
             # same reason the main query above carries the guard: thousands of
@@ -661,6 +662,18 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
             # other empty CIK, and COUNT(*) then counts prior-filing x
             # current-book PAIRS rather than filers. A four-filer fixture
             # returned 70 without this.
+            exited_shares = con.execute("""
+                SELECT COALESCE(SUM(ph.shares), 0) FROM holdings ph
+                  JOIN books pb ON pb.accession = ph.accession AND pb.cik <> ''
+                  JOIN books cb ON cb.cik = pb.cik AND cb.quarter = ?
+                 WHERE ph.cusip = ? AND ph.quarter = ? AND ph.put_call = ''
+                   AND pb.stock_value >= ? AND pb.stock_count >= ?
+                   AND (? = 0 OR pb.stock_count <= ?)
+                   AND NOT EXISTS (SELECT 1 FROM holdings ch
+                                    WHERE ch.accession = cb.accession
+                                      AND ch.cusip = ph.cusip AND ch.put_call = '')
+            """, (quarter, cusip, prior_q, float(min_book), int(min_positions),
+                  int(max_positions or 0), int(max_positions or 0))).fetchone()[0]
             exited = con.execute("""
                 SELECT COUNT(DISTINCT pb.cik) FROM holdings ph
                   JOIN books pb ON pb.accession = ph.accession AND pb.cik <> ''
@@ -688,6 +701,7 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                 "total_value_held": total_value,
                 "prior_quarter": prior_q,
                 "buyers": buyers, "sellers": sellers, "exited": exited,
+                "exited_shares": exited_shares,
                 "newer_partial": newer_partial,
                 "min_book_value": min_book, "min_book_positions": min_positions,
                 "max_book_positions": max_positions or 0,
@@ -1150,8 +1164,24 @@ def demand(ticker=None, cusip=None, quarter=None,
         sx = sy = sxx = sxy = syy = 0.0
         wnum = wden = 0.0
         inflow = outflow = 0.0
+        # One price for the whole security, from the quarter's own filings, so
+        # exits — which have no current row and therefore no price of their own
+        # — can be valued on the same basis as everything else.
+        px_all = None
+        pv = [(r["value"], r["shares"]) for r in rows
+              if r.get("shares") and r.get("value")]
+        if pv:
+            tot_v = sum(v for v, _ in pv)
+            tot_s = sum(sh for _, sh in pv)
+            px_all = (tot_v / tot_s) if tot_s else None
         for r in rows:
             d = r.get("shares_delta")
+            # A filer appearing for the first time has no prior position to
+            # measure against. Treating the whole holding as a purchase inflates
+            # inflow with filers who may have held it for years and only now
+            # crossed the reporting threshold.
+            if r.get("action") == "first seen":
+                continue
             px = None
             if r.get("shares") and r.get("value"):
                 px = r["value"] / r["shares"] if r["shares"] else None
@@ -1189,6 +1219,12 @@ def demand(ticker=None, cusip=None, quarter=None,
                 r_corr = ((n * sxy - sx * sy) / denom) if denom > 0 else 0.0
                 fit = {"slope": slope, "intercept": intercept,
                        "r": r_corr, "n": n}
+
+        # Filers who sold the position out entirely are absent from the current
+        # quarter's rows, so without this a quarter of heavy exits could read as
+        # net accumulation.
+        if px_all and h.get("exited_shares"):
+            outflow += float(h["exited_shares"]) * px_all
 
         return {
             "ticker": h.get("ticker"), "cusip": h.get("cusip"),
