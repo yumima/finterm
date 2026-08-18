@@ -432,7 +432,7 @@ void OwnershipService::fetch_market(const QString& sym) {
 
 // ── Firms ───────────────────────────────────────────────────────────────────
 
-void OwnershipService::search_firms(const QString& query) {
+void OwnershipService::search_firms(const QString& query, FirmRanking ranking) {
     QPointer<OwnershipService> self = this;
     const QString q = query.trimmed();
     // With no query this is the ranked top 50 DISCRETIONARY books, not the
@@ -440,9 +440,17 @@ void OwnershipService::search_firms(const QString& query) {
     // Vanguard, State Street and Morgan Stanley, whose quarterly change is an
     // index rebalance rather than a view on anything.
     const QString action = q.isEmpty() ? QStringLiteral("top_firms") : QStringLiteral("firms");
+    // Concentrated needs a floor as well as a ceiling: narrowing the book size
+    // to surface real managers also surfaces filers that are not managing
+    // anything — a corporate cross-holding, a foundation sitting on its
+    // founder's stock. A filer with one position has no "what are they doing".
+    QJsonObject top{{"limit", 50}};
+    if (ranking == FirmRanking::Concentrated) {
+        top.insert(QStringLiteral("max_positions"), 150);
+        top.insert(QStringLiteral("min_positions"), 10);
+    }
     const QString payload = QString::fromUtf8(
-        QJsonDocument(q.isEmpty() ? QJsonObject{{"limit", 50}}
-                                  : QJsonObject{{"query", q}, {"limit", 40}})
+        QJsonDocument(q.isEmpty() ? top : QJsonObject{{"query", q}, {"limit", 40}})
             .toJson(QJsonDocument::Compact));
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_bulk.py"), {action, payload},

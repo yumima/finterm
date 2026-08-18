@@ -1142,7 +1142,7 @@ def demand(ticker=None, cusip=None, quarter=None,
         con.close()
 
 
-def top_firms(limit=50, quarter=None, max_positions=None):
+def top_firms(limit=50, quarter=None, max_positions=None, min_positions=None):
     """The largest DISCRETIONARY books, with what each did last quarter.
 
     Ranked by book value among books narrow enough to carry a view. Ranking by
@@ -1159,13 +1159,21 @@ def top_firms(limit=50, quarter=None, max_positions=None):
         cur_q = quarter or qs[0]
         prior_q = next((x for x in qs if x < cur_q), None)
         mx = int(max_positions or MAX_DISCRETIONARY_POSITIONS)
+        # A floor as well as a ceiling. Tightening max_positions to surface
+        # concentrated managers also surfaces holders that are not managers at
+        # all: a corporate cross-holding, an endowment sitting on the shares of
+        # the company that founded it, a bank holding one name. Those are real
+        # 13F filers but they are not running a book, and "what are they doing
+        # with the stock" has no answer for a filer with one position.
+        mn = int(min_positions if min_positions is not None else MIN_BOOK_POSITIONS)
 
         rows = con.execute("""
             SELECT cik, manager, accession, stock_value, stock_count
               FROM books
-             WHERE quarter=? AND cik<>'' AND stock_count<=? AND stock_value>=?
+             WHERE quarter=? AND cik<>'' AND stock_count<=? AND stock_count>=?
+               AND stock_value>=?
              ORDER BY stock_value DESC LIMIT ?
-        """, (cur_q, mx, MIN_BOOK_VALUE, int(limit))).fetchall()
+        """, (cur_q, mx, mn, MIN_BOOK_VALUE, int(limit))).fetchall()
 
         out = []
         for cik, manager, acc, value, count in rows:
@@ -1265,7 +1273,7 @@ def handle_action(action, payload):
                        payload.get("max_positions"))
     if action == "top_firms":
         return top_firms(int(payload.get("limit") or 50), payload.get("quarter"),
-                         payload.get("max_positions"))
+                         payload.get("max_positions"), payload.get("min_positions"))
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))

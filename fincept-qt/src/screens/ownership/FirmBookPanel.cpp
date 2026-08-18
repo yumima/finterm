@@ -58,6 +58,24 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     search_->setMinimumWidth(200);
     bar->addWidget(search_, 1);
 
+    // Which fifty. Ranking the universe by book value answers "who manages the
+    // most money" and returns fund complexes and pension books; ranking the
+    // concentrated books answers "who is running a book with a view in it",
+    // which is what a trader means by the big money. Both are real readings of
+    // the same filings, so the reader chooses rather than us deciding.
+    ranking_ = new QComboBox;
+    ranking_->addItem(QStringLiteral("Largest books"));
+    ranking_->addItem(QStringLiteral("High conviction"));
+    ranking_->setToolTip(QStringLiteral(
+        "Largest books — the biggest disclosed equity books, which includes fund complexes "
+        "and pension funds whose quarterly change is largely a rebalance.\n"
+        "High conviction — books of 10 to 150 names, where a quarterly change is a decision. "
+        "This is the list that surfaces Berkshire, TCI, Viking and the like."));
+    bar->addWidget(ranking_);
+    connect(ranking_, &QComboBox::currentIndexChanged, this, [this]() {
+        services::OwnershipService::instance().search_firms(search_->text(), current_ranking());
+    });
+
 
     status_ = new QLabel;
     status_->setWordWrap(true);
@@ -132,6 +150,15 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
                 emit navigate_to_symbol(it->text());
         }
     });
+    // The holdings table had no caption, so "Issuer / Ticker / % of book" sat
+    // under a list of firms with nothing saying whose holdings they were. The
+    // selected firm's name belongs on the table, not only in the row highlight.
+    book_title_ = new QLabel;
+    book_title_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
+                                       "padding:3px 0 1px 0;")
+                                   .arg(ui::colors::AMBER()));
+    book_title_->setWordWrap(true);
+    root->addWidget(book_title_);
     root->addWidget(positions_, 1);
 
     // Debounced: a query per keystroke over 10,647 filers is wasted work.
@@ -139,7 +166,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     debounce_->setSingleShot(true);
     debounce_->setInterval(250);
     connect(debounce_, &QTimer::timeout, this, [this]() {
-        services::OwnershipService::instance().search_firms(search_->text());
+        services::OwnershipService::instance().search_firms(search_->text(), current_ranking());
     });
     connect(search_, &QLineEdit::textChanged, this, [this](const QString&) { debounce_->start(); });
 
@@ -150,14 +177,19 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
             render();
     });
     connect(&svc, &services::OwnershipService::index_changed, this, [this](const QString&) {
-        services::OwnershipService::instance().search_firms(search_->text());
+        services::OwnershipService::instance().search_firms(search_->text(), current_ranking());
         render();
     });
 
     // Seed with the largest books, so an untouched panel over an indexed
     // universe is useful rather than blank.
-    svc.search_firms(QString());
+    svc.search_firms(QString(), current_ranking());
     render();
+}
+
+services::OwnershipService::FirmRanking FirmBookPanel::current_ranking() const {
+    using R = services::OwnershipService::FirmRanking;
+    return ranking_ && ranking_->currentIndex() == 1 ? R::Concentrated : R::LargestBooks;
 }
 
 void FirmBookPanel::reload_firms() {
@@ -215,6 +247,7 @@ void FirmBookPanel::render() {
                                            : QStringLiteral("No 13F index yet."));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
         positions_->setRowCount(0);
+        book_title_->clear();
         return;
     }
 
@@ -236,6 +269,10 @@ void FirmBookPanel::render() {
         positions_->setRowCount(0);
         return;
     }
+
+    book_title_->setText(b.manager.isEmpty()
+                             ? QStringLiteral("Holdings")
+                             : b.manager + QStringLiteral(" — disclosed equity holdings"));
 
     QString head = QStringLiteral("%1 positions · %2 · %3")
                        .arg(b.position_count)

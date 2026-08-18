@@ -1,7 +1,10 @@
 #pragma once
 #include <QWidget>
 
+#include "services/ownership/OwnershipService.h"
+
 class QLabel;
+class QComboBox;
 class QLineEdit;
 class QTableWidget;
 class QTimer;
@@ -32,13 +35,18 @@ class FirmBookPanel : public QWidget {
     void navigate_to_symbol(const QString& issuer_name);
 
   private:
+    /// Which of the two rankings the selector is on.
+    services::OwnershipService::FirmRanking current_ranking() const;
+
     void reload_firms();
     void render();
 
     QLineEdit*    search_ = nullptr;
+    QComboBox*    ranking_ = nullptr;
     QTableWidget* firms_ = nullptr;
     QString       selected_cik_;
     QLabel*       status_ = nullptr;
+    QLabel*       book_title_ = nullptr;
     QTableWidget* positions_ = nullptr;
     QTimer*       debounce_ = nullptr;
 };

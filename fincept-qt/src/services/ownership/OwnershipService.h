@@ -54,7 +54,13 @@ class OwnershipService : public QObject {
     // searching 10,647 of them instead of maintaining twenty.
 
     /// Search indexed filers by name. Results arrive on firms_found.
-    void search_firms(const QString& query);
+    /// Two legitimate rankings of the same universe, both data-driven — no
+    /// hand-picked list of "important" firms. LargestBooks answers "who
+    /// manages the most money"; Concentrated answers "who is actually running
+    /// a book with a view in it", which is the list a trader means by the big
+    /// investment firms. Neither is a subset of the other, so the reader picks.
+    enum class FirmRanking { LargestBooks, Concentrated };
+    void search_firms(const QString& query, FirmRanking ranking = FirmRanking::LargestBooks);
     QVector<ownership::Manager> last_firm_results() const { return firm_results_; }
 
     void load_smart_money(const QString& symbol);
