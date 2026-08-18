@@ -7,6 +7,7 @@
 #include "services/ownership/OwnershipService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "screens/ownership/Form4Dialog.h"
+#include "screens/ownership/ReadThroughStrip.h"
 #include "ui/components/ExternalLink.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -246,18 +247,15 @@ void StockOwnershipPanel::build_ui() {
 
     // Row 0 — what it means, and who is buying. The two things a reader wants
     // first, side by side.
-    reads_host_ = new QWidget;
-    reads_layout_ = new QVBoxLayout(reads_host_);
-    reads_layout_->setContentsMargins(0, 0, 0, 0);
-    reads_layout_->setSpacing(6);
+    reads_strip_ = new ReadThroughStrip;
     auto* reads_scroll = new QScrollArea;
     reads_scroll->setWidgetResizable(true);
     reads_scroll->setFrameShape(QFrame::NoFrame);
-    reads_scroll->setWidget(reads_host_);
+    reads_scroll->setWidget(reads_strip_);
     // A scroll area's size hint is its viewport's, not its content's, so the
     // splitter would happily crush this to one clipped line next to tiles with
     // tall tables. The floor is roughly two read-through cards.
-    reads_scroll->setMinimumHeight(150);
+    reads_scroll->setMinimumHeight(80);
     side->addWidget(tile(QStringLiteral("READ-THROUGH"), reads_scroll,
                          QStringLiteral("What the register implies, with the number and the "
                                         "rule behind each line.")));
@@ -392,7 +390,7 @@ void StockOwnershipPanel::build_ui() {
     // size hint, and the hints here are wildly uneven (a scroll area reports
     // almost nothing, a populated table reports a lot). Seed the proportions
     // directly so the column opens balanced; the user can drag from there.
-    side->setSizes({320, 400, 220, 180});
+    side->setSizes({150, 520, 220, 180});
 
     auto* grid_host = new QWidget;
     auto* host_layout = new QVBoxLayout(grid_host);
@@ -483,55 +481,14 @@ void StockOwnershipPanel::render() {
 }
 
 void StockOwnershipPanel::render_reads(const OwnershipSnapshot& s) {
-    while (QLayoutItem* item = reads_layout_->takeAt(0)) {
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
     const auto reads = derive_reads(s);
-    if (reads.isEmpty()) {
-        auto* none = new QLabel(
-            services::OwnershipService::instance().is_loading(s.symbol)
-                ? QStringLiteral("Reading the register…")
-                : QStringLiteral("Nothing in this register crosses a stated threshold. "
-                                 "That is itself a read: ordinary ownership, ordinary "
-                                 "short interest, no activist and no insider cluster."));
-        none->setWordWrap(true);
-        none->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
-        reads_layout_->addWidget(none);
-        return;
-    }
-
-    auto add_group = [&](Lens lens, const QString& heading) {
-        const auto group = reads_for(reads, lens);
-        if (group.isEmpty())
-            return;
-        auto* h = new QLabel(heading);
-        h->setStyleSheet(QString("color:%1;font-weight:700;padding-top:4px;")
-                             .arg(ui::colors::TEXT_SECONDARY()));
-        reads_layout_->addWidget(h);
-        for (const auto& r : group) {
-            auto* card = new QLabel;
-            card->setWordWrap(true);
-            card->setTextInteractionFlags(Qt::TextSelectableByMouse);
-            // Headline, then the sentence, then the rule that produced it in a
-            // dimmer tone — the user can audit any line without leaving it.
-            card->setText(QStringLiteral(
-                              "<div style='margin:2px 0 2px 0;'>"
-                              "<span style='color:%1;font-weight:700;'>%2</span><br>"
-                              "<span style='color:%3;'>%4</span><br>"
-                              "<span style='color:%5;font-size:12px;'>%6</span></div>")
-                              .arg(weight_colour(r.weight), r.headline.toHtmlEscaped(),
-                                   ui::colors::TEXT_PRIMARY(), r.detail.toHtmlEscaped(),
-                                   ui::colors::TEXT_SECONDARY(), r.basis.toHtmlEscaped()));
-            card->setStyleSheet(QString("border-left:2px solid %1;padding-left:8px;")
-                                    .arg(weight_colour(r.weight)));
-            reads_layout_->addWidget(card);
-        }
-    };
-    add_group(Lens::Stock, QStringLiteral("WHAT IT MEANS FOR THE STOCK"));
-    add_group(Lens::Flows, QStringLiteral("WHAT IT MEANS FOR HOW IT TRADES"));
+    reads_strip_->set_empty_text(
+        services::OwnershipService::instance().is_loading(s.symbol)
+            ? QStringLiteral("Reading the register…")
+            : QStringLiteral("Nothing in this register crosses a stated threshold. That is "
+                             "itself a read: ordinary ownership, ordinary short interest, no "
+                             "activist and no insider cluster."));
+    reads_strip_->set_reads(reads);
 }
 
 void StockOwnershipPanel::render_insiders(const OwnershipSnapshot& s) {

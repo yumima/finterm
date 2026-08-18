@@ -87,8 +87,7 @@ class StockOwnershipPanel : public QWidget {
     QLabel*      status_       = nullptr;
     QLabel*      coverage_     = nullptr;
 
-    QWidget*     reads_host_   = nullptr;
-    QVBoxLayout* reads_layout_ = nullptr;
+    class ReadThroughStrip* reads_strip_ = nullptr;
 
     QTableWidget* insiders_tbl_ = nullptr;
     QTableWidget* stakes_tbl_   = nullptr;
