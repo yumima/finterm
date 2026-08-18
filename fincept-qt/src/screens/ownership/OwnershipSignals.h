@@ -51,6 +51,20 @@ struct Read {
     QString headline;  ///< four or five words
     QString detail;    ///< one sentence, carrying the driving number
     QString basis;     ///< the rule and threshold applied
+
+    /// The number the read turns on, and the level it crossed, so a compact
+    /// view can show HOW FAR past the rule this is rather than only that it
+    /// is. Severity alone cannot: a register concentrated at 51% and one at
+    /// 92% are both "Elevated" and look identical without these.
+    ///
+    /// Absent on reads with no threshold to be past — a count of activist
+    /// filings is a fact, not a level — and those render the figure alone.
+    std::optional<double> value;
+    std::optional<double> threshold;
+    /// The figure exactly as the sentence states it, so the compact view and
+    /// the prose can never disagree about the same number. Carried as text
+    /// because the unit differs per read: a share, a count, a number of days.
+    QString value_text;
 };
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
@@ -148,7 +162,7 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                                "is actually available to trade.")
                     .arg(pct(closely), pct(*si.held_pct_institutions), pct(*si.held_pct_insiders)),
                 QStringLiteral("Flagged above %1 combined. A thin float means each dollar of "
-                               "buying or selling moves the price further.").arg(pct(kCloselyHeld, 0))});
+                               "buying or selling moves the price further.").arg(pct(kCloselyHeld, 0)), closely, kCloselyHeld, pct(closely, 0)});
         }
     }
     if (si.held_pct_institutions && *si.held_pct_institutions <= 1.0 &&
@@ -159,7 +173,9 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                            "number of professional desks rather than by retail flow, and the "
                            "stock will react to quarter-end rebalancing.")
                 .arg(pct(*si.held_pct_institutions)),
-            QStringLiteral("Flagged above %1 of shares outstanding.").arg(pct(kInstitutionalHeavy, 0))});
+            QStringLiteral("Flagged above %1 of shares outstanding.").arg(pct(kInstitutionalHeavy, 0)),
+            *si.held_pct_institutions, kInstitutionalHeavy,
+            pct(*si.held_pct_institutions, 0)});
     }
 
     // ── Concentration on the register ───────────────────────────────────────
@@ -209,7 +225,8 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                                          "data provider reports — a top-N list, not the whole "
                                          "register, so this is a floor on concentration rather "
                                          "than a measure of it. Build the 13F index for the "
-                                         "measured version.").arg(pct(kTop5Concentrated, 0))});
+                                         "measured version.").arg(pct(kTop5Concentrated, 0)),
+                    share, kTop5Concentrated, pct(share, 0)});
             }
         }
     }
@@ -259,7 +276,8 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
             }
         }
         out.push_back({Lens::Stock, Weight::Context,
-                       QStringLiteral("Institutional ownership"), detail, basis});
+                       QStringLiteral("Institutional ownership"), detail, basis,
+                       computed, std::nullopt, pct(computed, 0)});
     }
 
     // ── Index-money weight on the register ──────────────────────────────────
@@ -315,7 +333,8 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                                      "when no 13F index has been built: it matches firm NAMES, so "
                                      "it cannot see an index arm under a name it does not know, "
                                      "and those houses run active mandates too. Build the index "
-                                     "for the measured version.").arg(pct(kIndexComplexHeavy, 0))});
+                                     "for the measured version.").arg(pct(kIndexComplexHeavy, 0)),
+                idx, kIndexComplexHeavy, pct(idx, 0)});
         }
     }
 
@@ -333,7 +352,8 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                 QStringLiteral("Flagged above %1 days to cover, %2 above %3.")
                     .arg(QString::number(kDaysToCoverElevated, 'f', 0),
                          QStringLiteral("elevated"),
-                         QString::number(kDaysToCoverHigh, 'f', 0))});
+                         QString::number(kDaysToCoverHigh, 'f', 0)),
+                d, kDaysToCoverElevated, QString::number(d, 'f', 1) + QStringLiteral("d")});
         }
     }
     if (si.pct_float && *si.pct_float >= kShortFloatElevated) {
@@ -345,7 +365,8 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                            "on any disappointment.").arg(pct(*si.pct_float)),
             QStringLiteral("Flagged above %1 of float, %2 above %3.")
                 .arg(pct(kShortFloatElevated, 0), QStringLiteral("elevated"),
-                     pct(kShortFloatHigh, 0))});
+                     pct(kShortFloatHigh, 0)),
+            *si.pct_float, kShortFloatElevated, pct(*si.pct_float, 0)});
     }
     if (si.shares_short && si.shares_short_prior && *si.shares_short_prior > 0.0) {
         const double chg = (*si.shares_short - *si.shares_short_prior) / *si.shares_short_prior;
@@ -359,7 +380,9 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                          pct(std::fabs(chg), 0), compact(*si.shares_short_prior),
                          compact(*si.shares_short)),
                 QStringLiteral("Flagged at a %1 move between the two reported settlement dates.")
-                    .arg(pct(kShortInterestJump, 0))});
+                    .arg(pct(kShortInterestJump, 0)),
+                std::fabs(chg), kShortInterestJump,
+                (up ? QStringLiteral("+") : QStringLiteral("-")) + pct(std::fabs(chg), 0)});
         }
     }
 
@@ -377,7 +400,9 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                                          : QString()),
             QStringLiteral("Two or more distinct insiders with open-market purchases (code P) "
                            "inside 30 days. Grants and option exercises are excluded — those "
-                           "vest on a calendar, they are not decisions.")});
+                           "vest on a calendar, they are not decisions."),
+            static_cast<double>(c.insiders.size()), std::nullopt,
+            QStringLiteral("%1 buyers").arg(c.insiders.size())});
     }
     int opportunistic_buyers = 0;
     for (const auto& p : s.insiders)
@@ -391,7 +416,9 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                 .arg(opportunistic_buyers).arg(s.insiders.size()),
             QStringLiteral("Routine means a trade in the same calendar month in three or more "
                            "years of that insider's own filing history (Cohen, Malloy and "
-                           "Pomorski). Insiders without enough history are left unclassified.")});
+                           "Pomorski). Insiders without enough history are left unclassified."),
+            static_cast<double>(opportunistic_buyers), std::nullopt,
+            QStringLiteral("%1 of %2").arg(opportunistic_buyers).arg(s.insiders.size())});
     }
 
     // ── Activists ───────────────────────────────────────────────────────────
@@ -414,7 +441,10 @@ inline QVector<Read> derive_reads(const OwnershipSnapshot& s) {
                      latest_activist.toString(QStringLiteral("d MMM yyyy")),
                      QStringLiteral("%")),
             QStringLiteral("13D means activist intent and is due within five business days; 13G "
-                           "is the passive equivalent and is not counted here.")});
+                           "is the passive equivalent and is not counted here."),
+            static_cast<double>(activist_filings), std::nullopt,
+            QStringLiteral("%1 filing%2").arg(activist_filings)
+                .arg(activist_filings == 1 ? QString() : QStringLiteral("s"))});
     }
 
     std::stable_sort(out.begin(), out.end(), [](const Read& a, const Read& b) {

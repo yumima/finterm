@@ -17,6 +17,12 @@ constexpr int kPad     = 6;
 constexpr int kChipH   = 22;
 constexpr int kGap     = 6;
 constexpr int kBarW    = 3;    // the severity bar down the chip's left edge
+constexpr int kGaugeW  = 40;   // the value gauge on the chip's right edge
+/// Where the threshold sits along the gauge. Putting it at a fixed fraction
+/// rather than scaling both ends means "just over the line" and "far past it"
+/// look the same across every read, whatever its unit — a share of float, a
+/// number of days to cover, a share of the register.
+constexpr double kThresholdAt = 0.55;
 constexpr int kHeadH   = 16;
 
 QString weight_colour(Weight w) {
@@ -95,7 +101,11 @@ int ReadThroughStrip::layout_chips(int width, QVector<Chip>* out) const {
 
         int x = kPad;
         for (const auto& r : group) {
-            const int w = kBarW + 8 + fm.horizontalAdvance(r.headline) + 10;
+            int w = kBarW + 8 + fm.horizontalAdvance(r.headline) + 10;
+            if (!r.value_text.isEmpty())
+                w += fm.horizontalAdvance(r.value_text) + 8;
+            if (r.value && r.threshold)
+                w += kGaugeW + 6;
             if (x > kPad && x + w > width - kPad) {   // wrap
                 x = kPad;
                 y += kChipH + kGap;
@@ -157,6 +167,42 @@ void ReadThroughStrip::paintEvent(QPaintEvent*) {
                                                          : ui::colors::TEXT_PRIMARY()));
         g.drawText(c.box.adjusted(kBarW + 8, 0, -6, 0), Qt::AlignVCenter | Qt::AlignLeft,
                    c.read.headline);
+
+        int right = c.box.right() - 6;
+
+        // The gauge: how far past its own rule this read sits. The threshold is
+        // pinned at a fixed point on every gauge, so the eye compares distance
+        // past the line across reads whose units have nothing in common. Only
+        // drawn where a rule was actually crossed — a count of activist filings
+        // has no "how far past" to show, and inventing one would be a claim.
+        if (c.read.value && c.read.threshold && *c.read.threshold > 0.0) {
+            const QRect track(right - kGaugeW, c.box.center().y() - 3, kGaugeW, 6);
+            g.fillRect(track, QColor(ui::colors::BG_RAISED()));
+            const double ratio = *c.read.value / *c.read.threshold;
+            const double filled = std::clamp(ratio * kThresholdAt, 0.0, 1.0);
+            QColor fill(col);
+            fill.setAlpha(200);
+            g.fillRect(QRect(track.left(), track.top(),
+                             static_cast<int>(track.width() * filled), track.height()),
+                       fill);
+            // The rule itself, so "past the line" is visible and not inferred.
+            const int tx = track.left() + static_cast<int>(track.width() * kThresholdAt);
+            g.setPen(QPen(QColor(ui::colors::TEXT_SECONDARY()), 1));
+            g.drawLine(tx, track.top() - 2, tx, track.bottom() + 2);
+            right -= kGaugeW + 6;
+        }
+
+        if (!c.read.value_text.isEmpty()) {
+            QFont vf = g.font();
+            vf.setBold(true);
+            g.setFont(vf);
+            g.setPen(col);
+            const int vw = QFontMetrics(vf).horizontalAdvance(c.read.value_text);
+            g.drawText(QRect(right - vw, c.box.top(), vw, c.box.height()),
+                       Qt::AlignVCenter | Qt::AlignRight, c.read.value_text);
+            vf.setBold(false);
+            g.setFont(vf);
+        }
     }
 }
 

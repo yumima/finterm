@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`985f35fcb`](https://github.com/yumima/finterm/commit/985f35fcb) ownership: read-through as tokens, with the prose one hover away
 - [`ce1b5cba6`](https://github.com/yumima/finterm/commit/ce1b5cba6) ownership: navigate on a click, and give the reader a way back
 - [`eb90fd5c1`](https://github.com/yumima/finterm/commit/eb90fd5c1) **fix:** live stream stalls silently, ownership tab keeps a stale symbol, news JSON
 - [`a146444f2`](https://github.com/yumima/finterm/commit/a146444f2) equity research: place the price in its own range, without implying an entry

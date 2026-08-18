@@ -464,7 +464,73 @@ private slots:
         }
         QVERIFY(!batch.last().has_value());   // predates the series entirely
     }
+
+    // ── Gauge inputs ────────────────────────────────────────────────────────
+    //
+    // The chip shows a number and a distance past a threshold. If either drifts
+    // from the sentence, the compact view and the prose contradict each other
+    // about the same security — worse than showing no gauge at all.
+
+    void a_thresholded_read_carries_its_value_and_rule() {
+        auto s = blank();
+        s.shorts.pct_float = 0.24;   // heavily shorted, past the 20% high mark
+        const auto reads = derive_reads(s);
+        bool found = false;
+        for (const auto& r : reads) {
+            if (r.headline != QLatin1String("Heavily shorted"))
+                continue;
+            found = true;
+            QVERIFY(r.value.has_value());
+            QVERIFY(r.threshold.has_value());
+            QCOMPARE(*r.value, 0.24);
+            QCOMPARE(*r.threshold, kShortFloatElevated);
+            // The figure on the chip must be the figure in the sentence.
+            QVERIFY(!r.value_text.isEmpty());
+            QVERIFY(r.detail.contains(r.value_text.left(2)));
+        }
+        QVERIFY(found);
+    }
+
+    // A count is a fact, not a level: there is no "how far past the rule" for
+    // "two activists filed", so no threshold is offered and the gauge is not
+    // drawn for it.
+    void a_counted_read_offers_a_figure_but_no_threshold() {
+        auto s = blank();
+        BeneficialStake st;
+        st.activist = true;
+        st.filed_date = QDate(2026, 5, 1);
+        st.form = QStringLiteral("SC 13D");
+        s.stakes.push_back(st);
+        const auto reads = derive_reads(s);
+        bool found = false;
+        for (const auto& r : reads) {
+            if (r.headline != QLatin1String("Activist on the register"))
+                continue;
+            found = true;
+            QVERIFY(r.value.has_value());
+            QVERIFY(!r.threshold.has_value());
+            QVERIFY(!r.value_text.isEmpty());
+        }
+        QVERIFY(found);
+    }
+
+    // Every read is either gauge-able or explicitly not; a value with no
+    // threshold is fine, but a threshold with no value would draw a rule line
+    // against nothing.
+    void no_read_carries_a_threshold_without_a_value() {
+        auto s = blank();
+        s.shorts.pct_float = 0.31;
+        s.shorts.short_ratio = 12.0;
+        s.shorts.held_pct_institutions = 0.82;
+        s.shorts.held_pct_insiders = 0.05;
+        for (const auto& r : derive_reads(s)) {
+            if (r.threshold.has_value())
+                QVERIFY2(r.value.has_value(),
+                         qPrintable(QStringLiteral("threshold without value: ") + r.headline));
+        }
+    }
 };
+
 
 
 QTEST_APPLESS_MAIN(TestOwnershipSignals)
