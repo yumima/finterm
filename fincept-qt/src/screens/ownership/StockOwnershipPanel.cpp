@@ -1,6 +1,5 @@
 #include "screens/ownership/StockOwnershipPanel.h"
 
-#include "core/symbol/SymbolContext.h"
 #include "screens/ownership/OwnershipSignals.h"
 #include "screens/ownership/HoldersChart.h"
 #include "screens/ownership/SmartMoneyPanel.h"
@@ -81,14 +80,6 @@ QTableWidget* make_table(const QStringList& headers) {
     return t;
 }
 
-QString weight_colour(Weight w) {
-    switch (w) {
-        case Weight::Elevated: return ui::colors::AMBER();
-        case Weight::Notable:  return ui::colors::CYAN();
-        case Weight::Context:  break;
-    }
-    return ui::colors::TEXT_SECONDARY();
-}
 
 /// Compact, not exact. A position value is read for its magnitude, and
 /// format_money renders 732786778636 in full — twelve digits nobody parses,
@@ -139,11 +130,21 @@ StockOwnershipPanel::StockOwnershipPanel(QWidget* parent) : QWidget(parent) {
     // Asked once on construction rather than polled: SEC publishes quarterly.
     services::OwnershipService::instance().check_for_newer_quarter();
 
-    connect(&SymbolContext::instance(), &SymbolContext::group_symbol_changed, this,
-            [this](SymbolGroup group, const SymbolRef& ref) {
-                if (group == SymbolGroup::A && !ref.symbol.isEmpty() && isVisible())
-                    load(ref.symbol);
-            });
+    // NO shared-symbol subscription. This followed symbol group A when it was
+    // the OWNERSHIP SCREEN, where following the shell was right. Embedded — in
+    // Equity Research's tab, and in the ownership screen's detail pane — it is
+    // told what to show by its host, and following the group fights that host.
+    //
+    // Concretely: clicking a holding switches the detail stack to this panel,
+    // which makes it VISIBLE for the first time, which fired showEvent, which
+    // re-synced to whatever symbol Equity Research had last published. Click
+    // Meta in Capital World's book and the panel loaded Microsoft, because
+    // Microsoft was what the rest of the shell was pointed at. The click was
+    // not lost; it was overwritten a moment later.
+    //
+    // Group linking still works where it belongs: Equity Research implements
+    // IGroupLinked and routes group changes through load_symbol, which calls
+    // set_symbol here.
 }
 
 void StockOwnershipPanel::build_ui() {
@@ -416,14 +417,10 @@ void StockOwnershipPanel::apply_theme() {
 
 void StockOwnershipPanel::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    // Re-sync on EVERY show, not only the first. The group_symbol_changed
-    // handler requires isVisible(), so a symbol change made while this tab was
-    // hidden never reached it — and the old guard (symbol_.isEmpty()) then
-    // skipped the catch-up, leaving OWNERSHIP on AAPL while the rest of the
-    // shell had moved to MSFT.
-    const auto ref = SymbolContext::instance().group_symbol(SymbolGroup::A);
-    if (!ref.symbol.isEmpty() && ref.symbol.compare(symbol_, Qt::CaseInsensitive) != 0)
-        load(ref.symbol);
+    // Deliberately does NOT re-sync to the shared symbol group. Becoming
+    // visible is not new information about which security the reader wants —
+    // the host already said, and the host is the only thing that knows whether
+    // this panel is showing a stock the user clicked or a tab they opened.
 }
 
 void StockOwnershipPanel::load(const QString& symbol) {
