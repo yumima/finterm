@@ -68,6 +68,8 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QStackedWidget*      firm_stack_   = nullptr;
     InsiderLeadersPanel* insiders_     = nullptr;
     QTabWidget*          left_         = nullptr;
+    QPushButton*         back_btn_     = nullptr;
+    QString              selected_firm_name_;
     QWidget*             split_        = nullptr;
     bool            loaded_once_ = false;
 };

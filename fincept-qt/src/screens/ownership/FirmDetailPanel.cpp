@@ -75,9 +75,13 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     // A holding is a security, and the question that follows "they own this"
     // is "who else does". One click, because a holding a reader is looking at
     // is already the thing they are asking about.
-    connect(positions_, &QTableWidget::itemSelectionChanged, this, [this]() {
-        const int r = positions_->currentRow();
-        if (r < 0)
+    // cellClicked, NOT itemSelectionChanged: the selection signal also fires
+    // when the table is repopulated for a different firm, with the current row
+    // left over from the previous book — so filling a new book could announce a
+    // holding nobody clicked and swap the pane to it. Navigation must come from
+    // a real gesture.
+    connect(positions_, &QTableWidget::cellClicked, this, [this](int r, int) {
+        if (populating_ || r < 0)
             return;
         auto* it = positions_->item(r, 1);
         const QString ticker = it ? it->text().trimmed() : QString();
@@ -184,6 +188,7 @@ void FirmDetailPanel::render() {
     // they get out of" is half the question this panel answers.
     positions_->setRowCount(b.positions.size() + b.exits.size());
     positions_->setUpdatesEnabled(false);
+    populating_ = true;
     int r = 0;
     auto put = [&](const BookPosition& p, bool exited) {
         const QString action = exited ? QStringLiteral("exited") : p.action;
@@ -241,6 +246,7 @@ void FirmDetailPanel::render() {
         put(p, false);
     for (const auto& p : b.exits)
         put(p, true);
+    populating_ = false;
     positions_->setUpdatesEnabled(true);
     positions_->resizeColumnsToContents();
     // Nine columns do not fit a third of the screen at content width, and the

@@ -29,6 +29,10 @@ class FirmBookPanel : public QWidget {
   public:
     explicit FirmBookPanel(QWidget* parent = nullptr);
 
+    /// Display name of the filer currently selected, for naming the way back
+    /// out of a holding.
+    QString selected_firm_name() const;
+
   signals:
     /// A filer was picked from the ranked list.
     void firm_selected(const QString& cik);

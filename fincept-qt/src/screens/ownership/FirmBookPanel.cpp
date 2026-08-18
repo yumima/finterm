@@ -143,6 +143,14 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     svc.search_firms(QString(), current_ranking());
 }
 
+QString FirmBookPanel::selected_firm_name() const {
+    const int r = firms_ ? firms_->currentRow() : -1;
+    if (r < 0)
+        return {};
+    auto* it = firms_->item(r, 1);
+    return it ? it->text() : QString();
+}
+
 services::OwnershipService::FirmRanking FirmBookPanel::current_ranking() const {
     using R = services::OwnershipService::FirmRanking;
     return ranking_ && ranking_->currentIndex() == 1 ? R::Concentrated : R::LargestBooks;

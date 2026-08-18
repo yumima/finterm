@@ -99,9 +99,35 @@ void OwnershipScreen::build_ui() {
     detail_stack_->addWidget(firm_detail_);   // 0 — a firm's book
     detail_stack_->addWidget(stock_panel_);   // 1 — a security's register
 
+    // A way back. Opening a holding replaced the firm's book with the
+    // security's register and left no route back to it — the only escape was
+    // clicking the firm in the ranked list again, which is not something a
+    // reader can be expected to guess.
+    back_btn_ = new QPushButton;
+    back_btn_->setCursor(Qt::PointingHandCursor);
+    back_btn_->setVisible(false);
+    back_btn_->setStyleSheet(QString("QPushButton{color:%1;background:%2;border:1px solid %3;"
+                                     "padding:3px 10px;text-align:left;}"
+                                     "QPushButton:hover{color:%4;}")
+                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
+                                      ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+    connect(back_btn_, &QPushButton::clicked, this, [this]() {
+        detail_stack_->setCurrentIndex(0);
+        back_btn_->setVisible(false);
+    });
+
+    auto* detail_host = new QWidget;
+    auto* dv = new QVBoxLayout(detail_host);
+    dv->setContentsMargins(0, 0, 0, 0);
+    dv->setSpacing(4);
+    dv->addWidget(back_btn_);
+    dv->addWidget(detail_stack_, 1);
+
     connect(firm_book_, &FirmBookPanel::firm_selected, this, [this](const QString& cik) {
         firm_detail_->set_firm(cik);
         detail_stack_->setCurrentIndex(0);
+        back_btn_->setVisible(false);
+        selected_firm_name_ = firm_book_->selected_firm_name();
     });
     // A holding is a security, and the question after "they own this" is "who
     // else does". Answer it in place rather than sending the reader to another
@@ -112,6 +138,11 @@ void OwnershipScreen::build_ui() {
                     return;
                 stock_panel_->set_symbol(ticker);
                 detail_stack_->setCurrentIndex(1);
+                back_btn_->setText(QStringLiteral("←  Back to %1")
+                                       .arg(selected_firm_name_.isEmpty()
+                                                ? QStringLiteral("the firm's holdings")
+                                                : selected_firm_name_));
+                back_btn_->setVisible(true);
             });
 
     // Two aggregated views, one detail pane. BY FIRM asks who is running the
@@ -125,6 +156,8 @@ void OwnershipScreen::build_ui() {
                     return;   // the filing named no security to open
                 stock_panel_->set_symbol(symbol);
                 detail_stack_->setCurrentIndex(1);
+                back_btn_->setText(QStringLiteral("←  Back to the firm's holdings"));
+                back_btn_->setVisible(true);
             });
 
     left_ = new QTabWidget;
@@ -139,7 +172,7 @@ void OwnershipScreen::build_ui() {
     auto* split = new QSplitter(Qt::Horizontal);
     split->setChildrenCollapsible(false);
     split->addWidget(left_);
-    split->addWidget(detail_stack_);
+    split->addWidget(detail_host);
     split->setStretchFactor(0, 5);
     split->setStretchFactor(1, 5);
     split->setSizes({760, 900});

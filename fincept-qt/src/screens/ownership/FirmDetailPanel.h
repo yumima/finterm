@@ -37,6 +37,9 @@ class FirmDetailPanel : public QWidget {
     QLabel*       status_     = nullptr;
     QLabel*       book_title_ = nullptr;
     QTableWidget* positions_  = nullptr;
+    /// True while the table is being filled, so nothing a fill does to the
+    /// selection can be mistaken for the user picking a holding.
+    bool          populating_ = false;
 };
 
 } // namespace fincept::screens
