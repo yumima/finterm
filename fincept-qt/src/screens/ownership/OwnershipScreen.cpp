@@ -71,7 +71,10 @@ QTableWidget* make_table(const QStringList& headers) {
     t->setAlternatingRowColors(true);
     // Interactive + stretch-last is the Qt default shape for a data table and
     // leaves the user free to size columns. Nothing is pinned to a fixed width.
-    t->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    // Deliberately NOT ResizeToContents: that mode re-measures on every layout
+    // pass for the life of the table. Callers size once after filling, which
+    // gives identical widths without the standing cost.
+    t->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     t->horizontalHeader()->setSectionsMovable(true);
     t->horizontalHeader()->setStretchLastSection(true);
     return t;
@@ -250,6 +253,10 @@ void OwnershipScreen::build_ui() {
     reads_scroll->setWidgetResizable(true);
     reads_scroll->setFrameShape(QFrame::NoFrame);
     reads_scroll->setWidget(reads_host_);
+    // A scroll area's size hint is its viewport's, not its content's, so the
+    // splitter would happily crush this to one clipped line next to tiles with
+    // tall tables. The floor is roughly two read-through cards.
+    reads_scroll->setMinimumHeight(150);
     side->addWidget(tile(QStringLiteral("READ-THROUGH"), reads_scroll,
                          QStringLiteral("What the register implies, with the number and the "
                                         "rule behind each line.")));
@@ -375,6 +382,11 @@ void OwnershipScreen::build_ui() {
     side->setStretchFactor(1, 4);   // holders + quadrant
     side->setStretchFactor(2, 2);   // float and short
     side->setStretchFactor(3, 2);   // stakes
+    // Stretch factors only divide space left over once every widget has its
+    // size hint, and the hints here are wildly uneven (a scroll area reports
+    // almost nothing, a populated table reports a lot). Seed the proportions
+    // directly so the column opens balanced; the user can drag from there.
+    side->setSizes({320, 400, 220, 180});
 
     auto* grid_host = new QWidget;
     auto* host_layout = new QVBoxLayout(grid_host);
@@ -554,6 +566,7 @@ void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
 
     // ── Table ───────────────────────────────────────────────────────────────
     insiders_tbl_->setRowCount(s.transactions.size());
+    insiders_tbl_->setUpdatesEnabled(false);
     for (int i = 0; i < s.transactions.size(); ++i) {
         const auto& t = s.transactions[i];
         // Only real decisions carry a direction colour. Colouring a grant green
@@ -597,6 +610,8 @@ void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
                                      .arg(p.trades).arg(p.years_observed));
         insiders_tbl_->setItem(i, 5, pat_item);
     }
+    insiders_tbl_->setUpdatesEnabled(true);
+    insiders_tbl_->resizeColumnsToContents();
 
     QStringList notes;
     if (s.filings_found > 0) {
@@ -612,6 +627,7 @@ void OwnershipScreen::render_insiders(const OwnershipSnapshot& s) {
 
 void OwnershipScreen::render_stakes(const OwnershipSnapshot& s) {
     stakes_tbl_->setRowCount(s.stakes.size());
+    stakes_tbl_->setUpdatesEnabled(false);
     for (int i = 0; i < s.stakes.size(); ++i) {
         const auto& b = s.stakes[i];
         auto* d = cell(b.filed_date.toString(QStringLiteral("yyyy-MM-dd")));
@@ -630,6 +646,8 @@ void OwnershipScreen::render_stakes(const OwnershipSnapshot& s) {
         stakes_tbl_->setItem(i, 3, cell(b.amendment ? QStringLiteral("amendment — open to read %")
                                                     : QStringLiteral("open to read %")));
     }
+    stakes_tbl_->setUpdatesEnabled(true);
+    stakes_tbl_->resizeColumnsToContents();
 }
 
 void OwnershipScreen::render_holders(const OwnershipSnapshot& s) {

@@ -508,10 +508,11 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
 
 def batch_closes(symbols, start_date, end_date):
     """Daily close history for many tickers over [start_date, end_date] in ONE
-    download. Returns {"closes": {ticker: [[unix_ts, close], ...]}} with real
+    download. Returns {"closes": {ticker: [["YYYY-MM-DD", close], ...]}} with real
     auto-adjusted closes only — tickers/days with no data are omitted (never
-    fabricated). Used to value disclosed congressional trades at the real close
-    on their transaction date.
+    fabricated). Callers: disclosed congressional trades valued at the real
+    close on their transaction date, and 13F books marked to market against the
+    quarter end they describe.
     """
     try:
         syms = [s for s in (symbols or []) if s]
@@ -3369,7 +3370,7 @@ _CACHE_TTL = {
     # batched close history over a date range — long: past daily closes don't
     # change, so a 1h TTL avoids re-downloading wide ranges. No C++ caller
     # since Power Trader was removed; kept as generic multi-symbol history.
-    "batch_closes": 3600,
+    "batch_closes": 3600,   # keyed on a payload carrying end=today, so a stale hit is not possible
     # per-symbol raw closes for portfolio NAV backfill — same rationale.
     "portfolio_closes_history": 3600,
     # static SEC filing — very long

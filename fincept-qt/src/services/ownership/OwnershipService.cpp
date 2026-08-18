@@ -80,16 +80,6 @@ QDate epoch_date(const QJsonObject& o, const char* key) {
     return QDateTime::fromSecsSinceEpoch(static_cast<qint64>(v.toDouble()), QTimeZone::UTC).date();
 }
 
-/// Compact money for a dropdown label — the book size is what tells a reader
-/// whether a weight in it means anything.
-QString compact_money(double v) {
-    const double a = std::fabs(v);
-    if (a >= 1e12) return QStringLiteral("$%1T").arg(v / 1e12, 0, 'f', 2);
-    if (a >= 1e9)  return QStringLiteral("$%1B").arg(v / 1e9, 0, 'f', 1);
-    if (a >= 1e6)  return QStringLiteral("$%1M").arg(v / 1e6, 0, 'f', 0);
-    return QStringLiteral("$%1").arg(v, 0, 'f', 0);
-}
-
 Pattern pattern_from(const QString& s) {
     if (s == QLatin1String("routine"))       return Pattern::Routine;
     if (s == QLatin1String("opportunistic")) return Pattern::Opportunistic;
@@ -495,8 +485,14 @@ void OwnershipService::load_smart_money(const QString& symbol) {
     // and existed only because the universe was not indexed. Without an index
     // the panel says so and offers to build one, which is a better answer than
     // a slow partial one presented as the whole picture.
-    if (index_ready())
+    if (index_ready()) {
         load_index_holders(symbol);
+        // The holder list and the demand distribution are two reads of the
+        // same quarter and are always shown together — the ranked bars answer
+        // "who", the quadrant answers "what are they all doing". Fetching one
+        // without the other left the quadrant reading "loading" forever.
+        load_demand(symbol);
+    }
 }
 
 ownership::ManagerBook OwnershipService::book(const QString& cik) const {
@@ -542,6 +538,8 @@ void OwnershipService::load_book(const QString& cik) {
             self->books_.insert(cik, b);
             self->books_in_flight_.remove(cik);
             emit self->book_updated(cik);
+            if (b.error.isEmpty() && !b.positions.isEmpty())
+                self->price_book(cik);
         },
         /*on_line=*/{}, 60'000);
 
@@ -844,6 +842,11 @@ void OwnershipService::load_demand(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
     if (sym.isEmpty() || !index_ready() || pending_.value(sym).contains(kSrcDemand))
         return;
+    // index_changed fires several times during a symbol map or a quarter pull,
+    // and each one re-enters here. The distribution is per quarter, not per
+    // event, so once it has been answered there is nothing to re-ask.
+    if (cache_.value(sym).demand.has_data())
+        return;
     pending_[sym].insert(kSrcDemand);
 
     QPointer<OwnershipService> self = this;
@@ -956,6 +959,114 @@ void OwnershipService::load_short_volume(const QString& symbol) {
             self->note_source_done(sym, kSrcShortVol);
         },
         /*on_line=*/{}, 180'000);
+}
+
+
+void OwnershipService::price_book(const QString& cik) {
+    auto b = books_.value(cik);
+    if (b.positions.isEmpty() || !b.period.isValid())
+        return;
+    // Selecting a firm loads its book, and loading a book prices it. Arrowing
+    // down the ranked list would otherwise queue one wide download per row,
+    // each one competing for the daemon's network workers and starving quotes
+    // on every other screen. One pricing pass per CIK at a time.
+    if (pricing_in_flight_.contains(cik))
+        return;
+    pricing_in_flight_.insert(cik);
+
+    // Only mapped tickers can be priced. An unmapped CUSIP is left without a
+    // return rather than guessed at, and the coverage figure says how much of
+    // the book that leaves uncovered.
+    QJsonArray syms;
+    QSet<QString> seen;
+    for (const auto& p : b.positions) {
+        if (p.ticker.isEmpty() || seen.contains(p.ticker))
+            continue;
+        seen.insert(p.ticker);
+        syms.append(p.ticker);
+        if (syms.size() >= 120)   // the daemon call is one round trip; keep it sane
+            break;
+    }
+    if (syms.isEmpty()) {
+        pricing_in_flight_.remove(cik);
+        return;
+    }
+
+    // Reach back past the quarter being priced so a 6-month window exists.
+    const QDate from = b.period.addMonths(-7);
+    QPointer<OwnershipService> self = this;
+    python::PythonWorker::instance().submit(
+        QStringLiteral("batch_closes"),
+        QJsonObject{{"symbols", syms},
+                    {"start", from.toString(Qt::ISODate)},
+                    {"end", QDate::currentDate().toString(Qt::ISODate)}},
+        [self, cik](bool ok, QJsonObject result, QString err) {
+            if (!self)
+                return;
+            self->pricing_in_flight_.remove(cik);
+            auto book = self->books_.value(cik);
+            if (book.positions.isEmpty())
+                return;
+            if (!ok) {
+                // The book itself is still valid and on screen; only the return
+                // columns are missing. Say why in the one place that would
+                // otherwise show three silent dashes, and leave the guard clear
+                // so re-selecting the firm retries.
+                book.return_error = err.isEmpty()
+                                        ? QStringLiteral("price history unavailable")
+                                        : err;
+                self->books_.insert(cik, book);
+                emit self->book_updated(cik);
+                return;
+            }
+
+            const auto closes = result.value(QStringLiteral("closes")).toObject();
+            const QDate now = QDate::currentDate();
+            // Index 0 is the quarter end the filing describes; the rest are
+            // trailing windows measured from today.
+            const QVector<QDate> marks{book.period, now, now.addMonths(-3), now.addMonths(-6)};
+
+            double covered = 0.0;
+            double wsum_qe = 0.0, wsum_3m = 0.0, w3 = 0.0;
+            for (auto& p : book.positions) {
+                if (p.ticker.isEmpty() || !closes.contains(p.ticker))
+                    continue;
+                const auto px = ownership::closes_on_or_before(
+                    closes.value(p.ticker).toArray(), marks);
+                const auto& at_qe = px[0];
+                const auto& now_px = px[1];
+                const auto& at_3m = px[2];
+                const auto& at_6m = px[3];
+                if (!now_px || *now_px <= 0)
+                    continue;
+                p.priced = true;
+                const double value = p.value.value_or(0.0);
+                if (at_qe && *at_qe > 0) {
+                    p.ret_since_quarter_end = (*now_px / *at_qe) - 1.0;
+                    covered += value;
+                    wsum_qe += *p.ret_since_quarter_end * value;
+                }
+                if (at_3m && *at_3m > 0) {
+                    p.ret_3m = (*now_px / *at_3m) - 1.0;
+                    wsum_3m += *p.ret_3m * value;
+                    w3 += value;
+                }
+                if (at_6m && *at_6m > 0)
+                    p.ret_6m = (*now_px / *at_6m) - 1.0;
+            }
+            // Against the filer's WHOLE book, not against the fetched slice —
+            // otherwise a 3,000-name filer reads "on 92% of it" when the real
+            // figure is a fraction of that.
+            book.return_coverage = book.total_value > 0 ? covered / book.total_value : 0.0;
+            if (covered > 0)
+                book.book_return_since_quarter_end = wsum_qe / covered;
+            if (w3 > 0)
+                book.book_return_3m = wsum_3m / w3;
+
+            self->books_.insert(cik, book);
+            emit self->book_updated(cik);
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
 }
 
 } // namespace fincept::services

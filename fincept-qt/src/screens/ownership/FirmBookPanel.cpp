@@ -83,7 +83,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     firms_->setAlternatingRowColors(true);
     // Size to content, then stay interactive — a fixed default made the
     // first column need a horizontal scrollbar to be read at all.
-    firms_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    firms_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     firms_->horizontalHeader()->setSectionsMovable(true);
     // The name column is capped and elided. Sized to content it grows to fit
     // "DZ BANK AG Deutsche Zentral Genossenschafts Bank, Frankfurt am Main"
@@ -106,19 +106,22 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(firms_, 2);
 
     positions_ = new QTableWidget;
-    positions_->setColumnCount(6);
+    positions_->setColumnCount(9);
     positions_->setHorizontalHeaderLabels({QStringLiteral("Issuer"), QStringLiteral("Ticker"),
                                            QStringLiteral("% of book"), QStringLiteral("Shares"),
-                                           QStringLiteral("Value"), QStringLiteral("Move")});
+                                           QStringLiteral("Value"), QStringLiteral("Move"),
+                                           QStringLiteral("Since Q-end"),
+                                           QStringLiteral("3M"), QStringLiteral("6M")});
     positions_->verticalHeader()->setVisible(false);
     positions_->setSelectionBehavior(QAbstractItemView::SelectRows);
     positions_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     positions_->setAlternatingRowColors(true);
-    // Size to content, then stay interactive — a fixed default made the
-    // first column need a horizontal scrollbar to be read at all.
-    positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    // Interactive, sized once per load. Same widths as ResizeToContents, but
+    // measured on demand instead of on every layout pass — this table is now
+    // rendered twice per book (once on the filing, once when prices land), so
+    // the repeat measuring is worth avoiding.
+    positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     positions_->horizontalHeader()->setSectionsMovable(true);
-    positions_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     positions_->horizontalHeader()->setStretchLastSection(true);
     positions_->setMinimumHeight(170);
     // The ticker comes from the index, so a drill-through is exact rather than
@@ -160,6 +163,7 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
 void FirmBookPanel::reload_firms() {
     const auto results = services::OwnershipService::instance().last_firm_results();
     firms_->setRowCount(results.size());
+    firms_->setUpdatesEnabled(false);
     for (int i = 0; i < results.size(); ++i) {
         const auto& m = results[i];
         firms_->setItem(i, 0, cell(QString::number(i + 1), ui::colors::TEXT_SECONDARY()));
@@ -194,6 +198,7 @@ void FirmBookPanel::reload_firms() {
             top += QStringLiteral("  %1").arg(fmt::format_percent(*m.top_weight * 100.0, 1));
         firms_->setItem(i, 5, cell(top, ui::colors::TEXT_SECONDARY()));
     }
+    firms_->setUpdatesEnabled(true);
     firms_->resizeColumnsToContents();
     firms_->setColumnWidth(1, qMin(firms_->columnWidth(1), 210));
     if (!results.isEmpty() && selected_cik_.isEmpty()) {
@@ -238,6 +243,33 @@ void FirmBookPanel::render() {
                             b.period.toString(QStringLiteral("MMM yyyy")));
     if (b.prior_period.isValid())
         head += QStringLiteral(" vs ") + b.prior_period.toString(QStringLiteral("MMM yyyy"));
+    if (b.book_return_since_quarter_end && b.return_coverage >= ownership::kMinReturnCoverage) {
+        // "Since quarter end", never "since filed": 13F is due 45 days after the
+        // quarter closes and the SEC data sets carry no filing date at all, so
+        // part of this window predates disclosure. Calling it "since filed"
+        // would imply a return a reader could have captured.
+        head += QStringLiteral(" · book %1 since %2")
+                    .arg(fmt::format_percent(*b.book_return_since_quarter_end * 100.0, 1, true),
+                         b.period.toString(QStringLiteral("d MMM")));
+        if (b.return_coverage < 0.95)
+            head += QStringLiteral(" (on %1 of book value)")
+                        .arg(fmt::format_percent(b.return_coverage * 100.0, 0));
+        // The quarter-end return depends on which quarter this filer is in; the
+        // trailing three months is the same window for every firm, so it is the
+        // one that can be compared across the ranked list.
+        if (b.book_return_3m)
+            head += QStringLiteral(" · %1 over 3M")
+                        .arg(fmt::format_percent(*b.book_return_3m * 100.0, 1, true));
+    } else if (!b.return_error.isEmpty()) {
+        head += QStringLiteral(" · returns unavailable (") + b.return_error + QStringLiteral(")");
+    } else if (b.book_return_since_quarter_end) {
+        // Priced, but over too thin a slice to summarise. The per-position
+        // columns are still exact, so point at them rather than inventing a
+        // book number.
+        head += QStringLiteral(" · book return not shown — priced names cover only %1 of "
+                               "book value")
+                    .arg(fmt::format_percent(b.return_coverage * 100.0, 0));
+    }
     status_->setText(head);
     status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
 
@@ -245,11 +277,14 @@ void FirmBookPanel::render() {
     // owns has no weight and no place in a weight-ordered list, but "what did
     // they get out of" is half the question this panel answers.
     positions_->setRowCount(b.positions.size() + b.exits.size());
+    positions_->setUpdatesEnabled(false);
     int r = 0;
     auto put = [&](const BookPosition& p, bool exited) {
         const QString action = exited ? QStringLiteral("exited") : p.action;
         const QString col = action_colour(action);
-        positions_->setItem(r, 0, cell(p.issuer));
+        auto* issuer_cell = cell(p.issuer);
+        issuer_cell->setToolTip(p.issuer);   // the column is capped; the full name is a hover away
+        positions_->setItem(r, 0, issuer_cell);
         positions_->setItem(r, 1, cell(p.ticker));
         positions_->setItem(r, 2, cell(p.weight ? fmt::format_percent(*p.weight * 100.0, 2)
                                                 : fmt::placeholder(),
@@ -265,14 +300,49 @@ void FirmBookPanel::render() {
                              fmt::format_compact(std::abs(*p.shares_delta)));
         }
         positions_->setItem(r, 5, cell(move, col));
+
+        // Price performance of the position as disclosed. The holding is a
+        // quarter-end photograph and the price is daily, so these are what the
+        // disclosed shares have done — not a claim about trading since.
+        auto ret = [&](const std::optional<double>& v) {
+            auto* it = cell(v ? fmt::format_percent(*v * 100.0, 1, true) : fmt::placeholder(),
+                            v ? (*v >= 0 ? ui::colors::GREEN() : ui::colors::RED()) : QString());
+            if (!v) {
+                // Four different reasons produce an empty cell; saying the
+                // wrong one is worse than saying nothing.
+                if (exited)
+                    it->setToolTip(QStringLiteral("Exited positions are not priced — there is no "
+                                                 "position left to value."));
+                else if (p.ticker.isEmpty())
+                    it->setToolTip(QStringLiteral("This CUSIP is not mapped to a ticker yet, so "
+                                                 "it cannot be priced."));
+                else if (!p.priced)
+                    it->setToolTip(QStringLiteral("Outside the priced set — the largest positions "
+                                                 "by value are priced, this one is further down "
+                                                 "the book."));
+                else
+                    it->setToolTip(QStringLiteral("Priced, but the daily history does not reach "
+                                                 "back over this window."));
+            }
+            return it;
+        };
+        positions_->setItem(r, 6, ret(p.ret_since_quarter_end));
+        positions_->setItem(r, 7, ret(p.ret_3m));
+        positions_->setItem(r, 8, ret(p.ret_6m));
         ++r;
     };
     for (const auto& p : b.positions)
         put(p, false);
     for (const auto& p : b.exits)
         put(p, true);
+    positions_->setUpdatesEnabled(true);
     positions_->resizeColumnsToContents();
-    positions_->setColumnWidth(0, qMin(positions_->columnWidth(0), 190));
+    // Nine columns do not fit a third of the screen at content width, and the
+    // ones that get pushed off the right edge are the returns — the reason the
+    // row is worth reading. Cap the issuer name (the only unbounded column) so
+    // the numeric tail stays on-pane; the full name is in the tooltip and the
+    // pane itself is user-resizable.
+    positions_->setColumnWidth(0, qMin(positions_->columnWidth(0), 150));
 }
 
 } // namespace fincept::screens

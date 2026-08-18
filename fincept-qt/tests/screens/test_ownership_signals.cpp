@@ -5,6 +5,7 @@
 // number. The tests that matter most here are the negative ones — a read that
 // appears when its input is missing is a fabricated claim about a real company.
 
+#include <QJsonArray>
 #include <QTest>
 
 #include "screens/ownership/OwnershipSignals.h"
@@ -394,7 +395,77 @@ private slots:
         QVERIFY(!stock.isEmpty());
         QVERIFY(!flows.isEmpty());
     }
+
+    // ── Price marks ─────────────────────────────────────────────────────────
+    //
+    // These back the 13F book's return columns. A missing mark must stay
+    // missing: a mark silently read as zero renders a -100% return on a real
+    // company's real position.
+
+    /// A close series in the daemon's shape: [["YYYY-MM-DD", close], ...].
+    static QJsonArray series(const QVector<QPair<const char*, double>>& rows) {
+        QJsonArray a;
+        for (const auto& r : rows)
+            a.append(QJsonArray{QString::fromLatin1(r.first), r.second});
+        return a;
+    }
+
+    // Quarter ends and 3/6-month anniversaries land on non-trading days often
+    // enough that an exact-date lookup would drop the mark and the return with
+    // it. The last trade at or before the date is the honest mark.
+    void a_mark_lands_on_the_last_trade_before_the_date() {
+        const auto s = series({{"2026-03-27", 100.0}, {"2026-03-30", 101.0},
+                               {"2026-04-01", 109.0}});
+        const auto px = close_on_or_before(s, QDate(2026, 3, 31));
+        QVERIFY(px.has_value());
+        QCOMPARE(*px, 101.0);   // the Monday close, never the April one
+    }
+
+    // The payload arrives ascending today, but the only other consumer of this
+    // shape sorts before use, so ordering is not something to rely on.
+    void an_unordered_series_still_yields_the_latest_mark() {
+        const auto s = series({{"2026-03-30", 101.0}, {"2026-03-20", 90.0},
+                               {"2026-03-27", 100.0}});
+        const auto px = close_on_or_before(s, QDate(2026, 3, 31));
+        QVERIFY(px.has_value());
+        QCOMPARE(*px, 101.0);
+    }
+
+    void a_series_that_starts_too_late_yields_nothing() {
+        const auto s = series({{"2026-05-01", 120.0}});
+        QVERIFY(!close_on_or_before(s, QDate(2026, 3, 31)).has_value());
+    }
+
+    void a_malformed_row_is_skipped_not_read_as_zero() {
+        QJsonArray s = series({{"2026-03-30", 101.0}});
+        s.append(QJsonArray{QStringLiteral("not-a-date"), 5.0});
+        s.append(QJsonArray{QStringLiteral("2026-03-31")});   // no close at all
+        const auto px = close_on_or_before(s, QDate(2026, 3, 31));
+        QVERIFY(px.has_value());
+        QCOMPARE(*px, 101.0);
+    }
+
+    // The batched form exists only as a speed optimisation, so its answers must
+    // be indistinguishable from the one-at-a-time lookup it replaced.
+    void one_pass_agrees_with_the_single_date_lookup() {
+        const auto s = series({{"2025-09-15", 80.0}, {"2026-02-27", 95.0},
+                               {"2026-03-30", 101.0}, {"2026-05-29", 110.0},
+                               {"2026-08-14", 130.0}});
+        const QVector<QDate> marks{QDate(2026, 3, 31), QDate(2026, 8, 18),
+                                   QDate(2026, 5, 31), QDate(2026, 2, 28),
+                                   QDate(2020, 1, 1)};
+        const auto batch = closes_on_or_before(s, marks);
+        QCOMPARE(batch.size(), marks.size());
+        for (int i = 0; i < marks.size(); ++i) {
+            const auto one = close_on_or_before(s, marks[i]);
+            QCOMPARE(batch[i].has_value(), one.has_value());
+            if (one)
+                QCOMPARE(*batch[i], *one);
+        }
+        QVERIFY(!batch.last().has_value());   // predates the series entirely
+    }
 };
+
 
 QTEST_APPLESS_MAIN(TestOwnershipSignals)
 #include "test_ownership_signals.moc"

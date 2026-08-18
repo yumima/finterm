@@ -2,23 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-17)
+## Today's commits (2026-08-18)
 
 Latest first.
 
-- [`27294b891`](https://github.com/yumima/finterm/commit/27294b891) Add the daily flow series, and rank firms by conviction rather than size
-- [`5fce76540`](https://github.com/yumima/finterm/commit/5fce76540) Replace the demand verdict with the distribution behind it
-- [`1e420330c`](https://github.com/yumima/finterm/commit/1e420330c) Re-read the index from disk after every write to it
-- [`65ed30588`](https://github.com/yumima/finterm/commit/65ed30588) Fix the index probe latching on attempt instead of on success
-- [`b7e440542`](https://github.com/yumima/finterm/commit/b7e440542) Make the empty OWNERSHIP screen say one thing instead of five
-- [`992b354b1`](https://github.com/yumima/finterm/commit/992b354b1) Review fixes: a fabricated exit count, and an index that forgot itself
-- [`ff41ffbe0`](https://github.com/yumima/finterm/commit/ff41ffbe0) Close the quarter-long gap: read the current quarter straight from EDGAR
-- [`4f54bbe7d`](https://github.com/yumima/finterm/commit/4f54bbe7d) Put BY FIRM on the index, delete the curated list, fix contrast app-wide
-- [`aa11d46a2`](https://github.com/yumima/finterm/commit/aa11d46a2) Fix unreadable text, and let ER build the index it needs
-- [`e03b91c03`](https://github.com/yumima/finterm/commit/e03b91c03) Index two quarters so the diff works, and cross-check the two data sources
-- [`89b902406`](https://github.com/yumima/finterm/commit/89b902406) Measure index-money weight instead of guessing it from firm names
-- [`a2b9b3db5`](https://github.com/yumima/finterm/commit/a2b9b3db5) Index the whole 13F universe; tile the screen; fix restart state
-- [`1f0b9609f`](https://github.com/yumima/finterm/commit/1f0b9609f) Add BY FIRM, the manager-list editor, and fix two blocking bugs
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -9,6 +9,7 @@
 // facts about the same company.
 
 #include <QDate>
+#include <QJsonArray>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -189,7 +190,83 @@ struct BookPosition {
     QString action;
     std::optional<double> shares_delta;
     std::optional<double> pct_change;
+
+    /// Price performance of the position AS DISCLOSED, measured from the
+    /// QUARTER END the filing describes — not from the filing date, which the
+    /// SEC data sets do not carry. 13F is due 45 days after quarter end, so
+    /// part of this window predates public disclosure: it is what the disclosed
+    /// shares did, never a return anyone could have earned by reading the
+    /// filing. Absent when the ticker is unmapped, the position was not in the
+    /// priced set, or the history does not reach back.
+    std::optional<double> ret_since_quarter_end;
+    std::optional<double> ret_3m;
+    std::optional<double> ret_6m;
+    /// Whether this position was in the priced set at all. Distinguishes "we
+    /// looked and there is no usable history" from "we never looked", so the
+    /// blank cell can explain itself accurately.
+    bool priced = false;
 };
+
+/// The last close ON OR BEFORE @p on, from a [["YYYY-MM-DD", close], ...]
+/// series. Quarter ends and 3/6-month anniversaries land on weekends and
+/// holidays often enough that an exact-date lookup would silently drop a
+/// position's return; the last trade before the date is the honest mark.
+/// Returns nullopt when the series does not reach back that far, so a caller
+/// can distinguish "no data" from a zero return.
+inline std::optional<double> close_on_or_before(const QJsonArray& series, const QDate& on) {
+    std::optional<double> best;
+    QDate best_date;
+    for (const auto& v : series) {
+        const auto row = v.toArray();
+        if (row.size() < 2)
+            continue;
+        const QDate d = QDate::fromString(row.at(0).toString(), Qt::ISODate);
+        if (!d.isValid() || d > on)
+            continue;
+        // Latest qualifying date, not the last qualifying row: the payload is
+        // ascending today, but the other consumer of this shape sorts before
+        // use, so the ordering is not something to rely on.
+        if (!best || d > best_date) {
+            best = row.at(1).toDouble();
+            best_date = d;
+        }
+    }
+    return best;
+}
+
+/// The same lookup for several dates in ONE pass over the series. Pricing a
+/// book means four marks per position across a hundred-odd positions, and this
+/// runs in a worker callback on the GUI thread — four independent scans, each
+/// re-parsing every date, is the difference between imperceptible and a visible
+/// hitch at the moment prices land.
+inline QVector<std::optional<double>> closes_on_or_before(const QJsonArray& series,
+                                                         const QVector<QDate>& on) {
+    QVector<std::optional<double>> best(on.size());
+    QVector<QDate> best_date(on.size());
+    for (const auto& v : series) {
+        const auto row = v.toArray();
+        if (row.size() < 2)
+            continue;
+        const QDate d = QDate::fromString(row.at(0).toString(), Qt::ISODate);
+        if (!d.isValid())
+            continue;
+        const double close = row.at(1).toDouble();
+        for (int i = 0; i < on.size(); ++i) {
+            if (d > on[i])
+                continue;
+            if (!best[i] || d > best_date[i]) {
+                best[i] = close;
+                best_date[i] = d;
+            }
+        }
+    }
+    return best;
+}
+
+/// Below this share of a filer's book, a value-weighted return describes the
+/// sample rather than the book, so it is withheld instead of shown with a
+/// caveat nobody reads.
+inline constexpr double kMinReturnCoverage = 0.5;
 
 /// A manager's disclosed equity book for one quarter, with the moves that got
 /// them there.
@@ -204,6 +281,21 @@ struct ManagerBook {
     /// How the filing's values were interpreted — SEC moved 13F from thousands
     /// to whole dollars in 2023 and a silent misread is a 1000x error.
     QString value_basis;
+    /// The book marked to market: each disclosed position at today's price
+    /// against its price at the quarter end, weighted by position value. See
+    /// BookPosition::ret_since_quarter_end for why it is not "since filed".
+    std::optional<double> book_return_since_quarter_end;
+    std::optional<double> book_return_3m;
+    /// Share of TOTAL book value the returns were computed over — measured
+    /// against total_value, the filer's whole book, not against the slice of
+    /// positions that happens to have been fetched. Callers must refuse to
+    /// print a book-level return below kMinReturnCoverage: a headline number
+    /// computed over a tenth of a book is not that book's return.
+    double return_coverage = 0.0;
+    /// Why the returns are missing, when the price fetch itself failed. Empty
+    /// when it succeeded — including when it succeeded and simply had nothing
+    /// to say about a given name.
+    QString return_error;
     QDate   prior_period;             ///< the quarter this book is diffed against
     QVector<BookPosition> positions;
     /// Names held last quarter and gone this one. They carry no weight and so

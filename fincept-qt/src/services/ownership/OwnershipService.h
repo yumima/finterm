@@ -129,6 +129,12 @@ class OwnershipService : public QObject {
 
     void load_index_holders(const QString& symbol);
     void probe_index();
+    /// Price the disclosed book. Runs after the book lands, because the
+    /// tickers to fetch are only known once it has.
+    void price_book(const QString& cik);
+    /// CIKs with a price fetch outstanding. Without this, moving through the
+    /// ranked firm list fires one wide download per row.
+    QSet<QString> pricing_in_flight_;
 
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
