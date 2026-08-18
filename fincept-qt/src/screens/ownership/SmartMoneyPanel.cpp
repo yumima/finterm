@@ -233,12 +233,61 @@ void SmartMoneyPanel::render() {
         status_->setText(head);
     }
     if (snap.prior_quarter.isValid() && (snap.buyers || snap.sellers || snap.exited)) {
-        flow_->setText(QStringLiteral(
-            "<span style='color:%1;'>%2 bought</span>  ·  "
-            "<span style='color:%3;'>%4 trimmed</span>  ·  "
-            "<span style='color:%3;'>%5 exited</span>")
-                           .arg(ui::colors::GREEN()).arg(snap.buyers)
-                           .arg(ui::colors::RED()).arg(snap.sellers).arg(snap.exited));
+        // The headline is the MONEY, not the head count. "1810 bought, 2059
+        // trimmed" reads as mild net selling; the same quarter can be billions
+        // of net buying, because the count weights a family office equally with
+        // a sovereign fund. Lead with the dollar flow and keep breadth as the
+        // supporting detail.
+        QString line;
+        const auto& d = snap.demand;
+        if (d.net_value_flow) {
+            const double net = *d.net_value_flow;
+            const bool in = net >= 0;
+            line += QStringLiteral(
+                        "<span style='color:%1;font-weight:700;'>%2%3</span>"
+                        "<span style='color:%4;'> net %5 this quarter</span>")
+                        .arg(in ? ui::colors::GREEN() : ui::colors::RED(),
+                             in ? QStringLiteral("+") : QStringLiteral("−"),
+                             fmt::format_compact(std::abs(net)),
+                             ui::colors::TEXT_SECONDARY(),
+                             in ? QStringLiteral("in") : QStringLiteral("out"));
+            if (d.value_bought && d.value_sold)
+                line += QStringLiteral(
+                            "<span style='color:%1;'>  ·  %2 bought vs %3 sold</span>")
+                            .arg(ui::colors::TEXT_SECONDARY(),
+                                 fmt::format_compact(*d.value_bought),
+                                 fmt::format_compact(*d.value_sold));
+            line += QStringLiteral("<br/>");
+        }
+        line += QStringLiteral(
+                    "<span style='color:%1;'>%2 bought</span>  ·  "
+                    "<span style='color:%3;'>%4 trimmed</span>  ·  "
+                    "<span style='color:%3;'>%5 exited</span>")
+                    .arg(ui::colors::GREEN()).arg(snap.buyers)
+                    .arg(ui::colors::RED()).arg(snap.sellers).arg(snap.exited);
+        if (d.median_pct)
+            line += QStringLiteral("<span style='color:%1;'>  ·  typical holder %2</span>")
+                        .arg(ui::colors::TEXT_SECONDARY(),
+                             fmt::format_percent(*d.median_pct * 100.0, 1, true));
+        // The conviction tilt is stated only when the correlation supports it.
+        // Across the large caps measured, r sits at 0.00–0.05: for most
+        // securities conviction simply does not predict direction, and saying
+        // so is more useful than a slope dressed up as a finding.
+        if (d.fit_is_meaningful() && d.fit_slope) {
+            const bool with = *d.fit_slope > 0;
+            line += QStringLiteral(
+                        "<br/><span style='color:%1;'>Largest-conviction holders are the ones "
+                        "%2 (r %3)</span>")
+                        .arg(with ? ui::colors::GREEN() : ui::colors::RED(),
+                             with ? QStringLiteral("adding") : QStringLiteral("selling"),
+                             QString::number(std::abs(*d.fit_r), 'f', 2));
+        } else if (d.fit_r) {
+            line += QStringLiteral(
+                        "<span style='color:%1;'>  ·  no conviction tilt (r %2)</span>")
+                        .arg(ui::colors::TEXT_DIM(),
+                             QString::number(std::abs(*d.fit_r), 'f', 2));
+        }
+        flow_->setText(line);
         flow_->show();
     }
     status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));

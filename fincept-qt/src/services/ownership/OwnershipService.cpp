@@ -471,6 +471,20 @@ void OwnershipService::search_firms(const QString& query, FirmRanking ranking) {
                     m.top_name   = o.value(QStringLiteral("top_name")).toString();
                     m.top_ticker = o.value(QStringLiteral("top_ticker")).toString();
                     m.top_weight = opt_num(o, "top_weight");
+                    auto move = [&o](const char* key) {
+                        Manager::Move mv;
+                        const auto b = o.value(QLatin1String(key)).toObject();
+                        if (b.isEmpty())
+                            return mv;
+                        mv.issuer = b.value(QStringLiteral("issuer")).toString();
+                        mv.ticker = b.value(QStringLiteral("ticker")).toString();
+                        mv.value  = b.value(QStringLiteral("value")).toDouble();
+                        mv.valid  = !mv.issuer.isEmpty() && mv.value > 0;
+                        return mv;
+                    };
+                    m.top_add  = move("top_add");
+                    m.top_trim = move("top_trim");
+                    m.top_exit = move("top_exit");
                     if (o.contains(QStringLiteral("added"))) {
                         m.opened  = o.value(QStringLiteral("new")).toInt();
                         m.added   = o.value(QStringLiteral("added")).toInt();
@@ -888,6 +902,21 @@ void OwnershipService::load_demand(const QString& symbol) {
                     d.exited        = o.value(QStringLiteral("exited")).toInt();
                     d.unchanged     = o.value(QStringLiteral("unchanged")).toInt();
                     d.median_weight = o.value(QStringLiteral("median_weight")).toDouble();
+                    auto num = [&o](const char* k) -> std::optional<double> {
+                        const auto v = o.value(QLatin1String(k));
+                        return v.isDouble() ? std::optional<double>(v.toDouble()) : std::nullopt;
+                    };
+                    d.net_value_flow = num("net_value_flow");
+                    d.value_bought   = num("value_bought");
+                    d.value_sold     = num("value_sold");
+                    d.median_pct     = num("median_pct");
+                    const auto fit = o.value(QStringLiteral("fit")).toObject();
+                    if (!fit.isEmpty()) {
+                        d.fit_slope     = fit.value(QStringLiteral("slope")).toDouble();
+                        d.fit_intercept = fit.value(QStringLiteral("intercept")).toDouble();
+                        d.fit_r         = fit.value(QStringLiteral("r")).toDouble();
+                        d.fit_n         = fit.value(QStringLiteral("n")).toInt();
+                    }
                     d.points_truncated = o.value(QStringLiteral("points_truncated")).toInt();
                     d.max_book_positions =
                         o.value(QStringLiteral("max_book_positions")).toInt();

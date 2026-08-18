@@ -15,7 +15,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens { class SmartMoneyPanel; }
+namespace fincept::screens { class StockOwnershipPanel; }
 
 namespace fincept::screens {
 
@@ -131,7 +131,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     /// "Which large managers hold this, at what weight in THEIR book." The
     /// stock-perspective view of the 13F index; the same widget the OWNERSHIP
     /// screen embeds, so there is one implementation of the question.
-    SmartMoneyPanel* ownership_tab_ = nullptr;
+    StockOwnershipPanel* ownership_tab_ = nullptr;
 
     QTimer* refresh_timer_ = nullptr;
     QString current_symbol_;

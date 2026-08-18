@@ -31,23 +31,20 @@ class FirmBookPanel : public QWidget {
     explicit FirmBookPanel(QWidget* parent = nullptr);
 
   signals:
-    /// The user asked to see one of this firm's holdings as a security.
-    void navigate_to_symbol(const QString& issuer_name);
+    /// A filer was picked from the ranked list.
+    void firm_selected(const QString& cik);
 
   private:
     /// Which of the two rankings the selector is on.
     services::OwnershipService::FirmRanking current_ranking() const;
 
     void reload_firms();
-    void render();
 
     QLineEdit*    search_ = nullptr;
     QComboBox*    ranking_ = nullptr;
     QTableWidget* firms_ = nullptr;
     QString       selected_cik_;
     QLabel*       status_ = nullptr;
-    QLabel*       book_title_ = nullptr;
-    QTableWidget* positions_ = nullptr;
     QTimer*       debounce_ = nullptr;
 };
 

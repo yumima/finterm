@@ -1,7 +1,7 @@
 // src/screens/equity_research/EquityResearchScreen.cpp
 #include "screens/equity_research/EquityResearchScreen.h"
 
-#include "screens/ownership/SmartMoneyPanel.h"
+#include "screens/ownership/StockOwnershipPanel.h"
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
@@ -390,7 +390,8 @@ void EquityResearchScreen::build_ui() {
     // Deliberately a tab rather than a strip on Overview — the fetch is minutes
     // of EDGAR round-trips, so it should only be reachable when the user has
     // gone looking for it.
-    ownership_tab_ = new SmartMoneyPanel;
+    ownership_tab_ = new StockOwnershipPanel;
+    ownership_tab_->set_chrome_visible(false);   // ER owns the symbol box
     tab_widget_->addTab(ownership_tab_, "Ownership");
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);

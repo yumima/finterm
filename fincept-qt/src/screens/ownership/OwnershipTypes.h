@@ -135,6 +135,23 @@ struct Manager {
     QString top_name;    ///< their largest position
     QString top_ticker;
     std::optional<double> top_weight;
+
+    /// The single biggest move in each direction, by dollar change valued at
+    /// this quarter's price. Counts say how busy a filer was; these say what it
+    /// actually did, which is the difference between "236 added" — a row that
+    /// looks identical for every large filer — and "added $10.5B of GOOGL".
+    struct Move {
+        QString issuer;
+        QString ticker;
+        double  value = 0.0;
+        bool    valid = false;
+        /// Ticker where one is mapped, issuer otherwise: a CUSIP with no
+        /// ticker still has a name worth reading.
+        QString label() const { return ticker.isEmpty() ? issuer : ticker; }
+    };
+    Move top_add;
+    Move top_trim;
+    Move top_exit;
 };
 
 /// What one tracked manager did with one security, from their own 13F.
@@ -348,6 +365,35 @@ struct InstitutionalDemand {
     /// "change" is a rebalance, not a view, so they are excluded and the
     /// threshold is shown rather than assumed.
     int    max_book_positions = 0;
+
+    /// ── The cloud reduced to something actionable ───────────────────────
+    ///
+    /// Shares added minus shares cut, valued at the quarter's own price. The
+    /// only one of these figures denominated in money, and the one that
+    /// answers "did large money move in or out of this name".
+    std::optional<double> net_value_flow;
+    std::optional<double> value_bought;
+    std::optional<double> value_sold;
+    /// What the TYPICAL holder did. Median, not mean: a holder going from 100
+    /// shares to 1,000 is +900%, and a few of those put the mean somewhere no
+    /// actual holder is.
+    std::optional<double> median_pct;
+    /// Least squares of percentage change on log conviction — whether the
+    /// holders with the most at stake are the ones adding. Reported WITH its
+    /// correlation, and only ever drawn when that correlation is strong enough
+    /// to mean anything; a slope on its own reads as a prediction.
+    std::optional<double> fit_slope;
+    std::optional<double> fit_intercept;
+    std::optional<double> fit_r;
+    int fit_n = 0;
+    /// Below this |r| the fit is not drawn and not described as a tilt. The
+    /// large-cap names measured during development sit at r = 0.00 to 0.05:
+    /// conviction genuinely does not predict direction for most securities,
+    /// and a line drawn through that would be inventing structure.
+    static constexpr double kMinFitR = 0.15;
+    bool fit_is_meaningful() const {
+        return fit_r && std::abs(*fit_r) >= kMinFitR && fit_n >= 30;
+    }
 
     QVector<DemandPoint> points;
     QString error;

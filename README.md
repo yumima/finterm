@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`215715e54`](https://github.com/yumima/finterm/commit/215715e54) ownership: two firm rankings, and say whose holdings the table shows
 - [`9aacf77e7`](https://github.com/yumima/finterm/commit/9aacf77e7) ownership: mark 13F books to market, and fix the quadrant never loading
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

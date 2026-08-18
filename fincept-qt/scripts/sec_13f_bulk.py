@@ -1123,6 +1123,73 @@ def demand(ticker=None, cusip=None, quarter=None,
             p["rank"] = i + 1 if i < 10 else 0
         truncated = max(0, len(points) - int(max_points))
 
+        # ── Trend, derived from the cloud rather than eyeballed ──────────────
+        #
+        # The scatter shows the distribution; these reduce it to something a
+        # reader can act on. Three independent statistics, because they can
+        # disagree and the disagreement is the interesting case:
+        #
+        #   net_value_flow  — shares added minus shares cut, valued at the
+        #                     quarter's own price. The only figure in actual
+        #                     money: "the institutions put $2.1B in".
+        #   weighted_pct    — the average position's percentage change, weighted
+        #                     by position size, so a 40% cut by a large holder
+        #                     outweighs a 40% add by a small one.
+        #   fit             — least squares of percentage change on log
+        #                     conviction. A positive slope means the holders
+        #                     with the most at stake are the ones adding;
+        #                     negative means the big holders are selling into
+        #                     buying by smaller ones, which is the distribution
+        #                     pattern a breadth count alone would miss.
+        #
+        # r is reported with the slope and is usually small. A slope without it
+        # would read as a prediction; the pair reads as a tilt, which is what it
+        # is.
+        import math
+        n = 0
+        sx = sy = sxx = sxy = syy = 0.0
+        wnum = wden = 0.0
+        inflow = outflow = 0.0
+        for r in rows:
+            d = r.get("shares_delta")
+            px = None
+            if r.get("shares") and r.get("value"):
+                px = r["value"] / r["shares"] if r["shares"] else None
+            if d is not None and px:
+                if d > 0:
+                    inflow += d * px
+                elif d < 0:
+                    outflow += -d * px
+            pct = r.get("pct_change")
+            val = r.get("value") or 0.0
+            if pct is not None and val > 0:
+                wnum += pct * val
+                wden += val
+            if pct is None or not r.get("weight"):
+                continue
+            x = math.log10(max(r["weight"], 1e-6))
+            y = pct
+            n += 1
+            sx += x; sy += y; sxx += x * x; sxy += x * y; syy += y * y
+        # The mean percentage change is worthless here: a holder going from 100
+        # shares to 1,000 is +900%, and a handful of those drag the average
+        # somewhere no actual holder is. The median is what "the typical holder
+        # did" means.
+        pcts = sorted(r["pct_change"] for r in rows if r.get("pct_change") is not None)
+        median_pct = pcts[len(pcts) // 2] if pcts else None
+
+        fit = None
+        if n >= 30:
+            dx = n * sxx - sx * sx
+            dy = n * syy - sy * sy
+            if dx > 1e-12:
+                slope = (n * sxy - sx * sy) / dx
+                intercept = (sy - slope * sx) / n
+                denom = math.sqrt(dx * dy) if dy > 1e-12 else 0.0
+                r_corr = ((n * sxy - sx * sy) / denom) if denom > 0 else 0.0
+                fit = {"slope": slope, "intercept": intercept,
+                       "r": r_corr, "n": n}
+
         return {
             "ticker": h.get("ticker"), "cusip": h.get("cusip"),
             "company": h.get("company"), "quarter": h.get("quarter"),
@@ -1133,6 +1200,11 @@ def demand(ticker=None, cusip=None, quarter=None,
             "exited": h.get("exited"),
             "median_weight": median_weight,
             "quadrants": quads, "unchanged": flat,
+            "net_value_flow": inflow - outflow,
+            "value_bought": inflow, "value_sold": outflow,
+            "weighted_pct": (wnum / wden) if wden > 0 else None,
+            "median_pct": median_pct,
+            "fit": fit,
             "points": points[:int(max_points)],
             "points_truncated": truncated,
             "min_book_value": mb, "min_book_positions": mp,
@@ -1218,6 +1290,52 @@ def top_firms(limit=50, quarter=None, max_positions=None, min_positions=None):
                     rec.update({"new": agg[0] or 0, "added": agg[1] or 0,
                                 "trimmed": agg[2] or 0, "exited": exits,
                                 "prior_quarter": prior_q})
+
+                    # Counts say how busy a filer was; they do not say what it
+                    # DID. "236 added" is very nearly the same row for every
+                    # large filer, while "added $10.5B of GOOGL" is the reason
+                    # to stop and look. Biggest move by DOLLAR change, valued at
+                    # this quarter's price, in each of the three directions.
+                    def biggest(sql, args):
+                        r = con.execute(sql, args).fetchone()
+                        if not r or r[2] is None:
+                            return None
+                        return {"issuer": r[0], "ticker": r[1] or "", "value": r[2]}
+
+                    rec["top_add"] = biggest("""
+                        SELECT c.issuer, ct.ticker,
+                               (c.shares - COALESCE(p.shares,0)) * (c.value / NULLIF(c.shares,0))
+                          FROM holdings c
+                          LEFT JOIN holdings p
+                                 ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
+                          LEFT JOIN cusip_ticker ct ON ct.cusip=c.cusip
+                         WHERE c.accession=? AND c.put_call='' AND c.shares > 0
+                           AND c.shares > COALESCE(p.shares,0)
+                         ORDER BY 3 DESC LIMIT 1
+                    """, (pacc[0], acc))
+                    rec["top_trim"] = biggest("""
+                        SELECT c.issuer, ct.ticker,
+                               (COALESCE(p.shares,0) - c.shares) * (c.value / NULLIF(c.shares,0))
+                          FROM holdings c
+                          JOIN holdings p
+                                 ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
+                          LEFT JOIN cusip_ticker ct ON ct.cusip=c.cusip
+                         WHERE c.accession=? AND c.put_call='' AND c.shares > 0
+                           AND p.shares > c.shares
+                         ORDER BY 3 DESC LIMIT 1
+                    """, (pacc[0], acc))
+                    # An exit has no current row, so it is valued at the price
+                    # it was carried at in the last quarter it was still held.
+                    rec["top_exit"] = biggest("""
+                        SELECT p.issuer, ct.ticker, p.value
+                          FROM holdings p
+                          LEFT JOIN cusip_ticker ct ON ct.cusip=p.cusip
+                         WHERE p.accession=? AND p.put_call=''
+                           AND NOT EXISTS (SELECT 1 FROM holdings c
+                                            WHERE c.accession=? AND c.cusip=p.cusip
+                                              AND c.put_call='')
+                         ORDER BY p.value DESC LIMIT 1
+                    """, (pacc[0], acc))
             out.append(rec)
 
         return {"quarter": cur_q, "prior_quarter": prior_q,
