@@ -87,6 +87,9 @@ class StockOwnershipPanel : public QWidget, public IStatefulScreen {
     QPushButton* refresh_btn_  = nullptr;
     QLabel*      title_        = nullptr;
     QPushButton* er_btn_       = nullptr;
+    /// False when embedded (Equity Research, or the ownership detail pane),
+    /// where the host already names the symbol and owns the index controls.
+    bool         chrome_       = true;
     QLabel*      status_       = nullptr;
     QLabel*      coverage_     = nullptr;
 

@@ -503,9 +503,21 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                 case QMediaPlayer::PausedState:
                     resume_playback();
                     break;
-                case QMediaPlayer::StoppedState:
-                    player_->play();
+                case QMediaPlayer::StoppedState: {
+                    // play() only works if media is actually loaded. After a
+                    // failed open the player sits in StoppedState holding a
+                    // source it never parsed, and play() is a silent no-op
+                    // forever. Reload rather than pretending.
+                    const QMediaPlayer::MediaStatus st = player_->mediaStatus();
+                    const bool unloadable = player_->error() != QMediaPlayer::NoError ||
+                                            st == QMediaPlayer::NoMedia ||
+                                            st == QMediaPlayer::InvalidMedia;
+                    if (unloadable)
+                        hard_reload_source();
+                    else
+                        player_->play();
                     break;
+                }
             }
             // User pressed the button → not an auto-pause, so clear the
             // latch even if a subsequent unlock fires.
@@ -1009,6 +1021,51 @@ void VideoPlayerWidget::sync_web_mode_controls() {
 // auto-resume be a one-liner with the right safety semantics
 // (auto_paused_on_lock_ contract: "we paused it; resume only if
 // it's still paused; otherwise leave alone").
+void VideoPlayerWidget::hard_reload_source() {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_)
+        return;
+    // errorOccurred clears current_url_, but the player keeps the source it
+    // failed on, so that is the reliable place to read it back from.
+    const QUrl src = pending_reload_src_.isValid() ? pending_reload_src_ : player_->source();
+    if (!src.isValid())
+        return;
+
+    player_->stop();
+    player_->setSource(QUrl{});
+    pending_reload_src_ = src;
+    // ONE EVENT-LOOP TURN between the clear and the re-set. Doing both in the
+    // same turn makes the new demuxer open race the old one's cancellation,
+    // and FFmpeg aborts it through its interrupt callback with "Immediate exit
+    // requested". That is not a recoverable transient: the player is left
+    // holding a source it will never load, so every subsequent play() returns
+    // silently and the stream is dead until the widget is rebuilt. Pause works
+    // (it needs no media), play does nothing — which is exactly how the bug
+    // presents.
+    QTimer::singleShot(0, this, [this]() {
+        if (!player_ || !pending_reload_src_.isValid())
+            return;
+        const QUrl s = pending_reload_src_;
+        pending_reload_src_.clear();
+        player_->setSource(s);
+        // Re-attach after the source is set: the Qt6 FFmpeg backend has been
+        // observed dropping outputs across a source reset.
+        refresh_audio_output();
+        if (video_sink_)
+            player_->setVideoOutput(video_sink_);
+        if (status_label_)
+            status_label_->hide();   // clear any error left from the dead load
+        // Recovering the stream also recovers its refresh: without this the
+        // stream plays but refresh_data() stays disabled from the error.
+        if (current_url_.isEmpty() && !url_before_error_.isEmpty()) {
+            current_url_ = url_before_error_;
+            url_before_error_.clear();
+        }
+        player_->play();
+    });
+#endif
+}
+
 void VideoPlayerWidget::resume_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     if (!player_ || player_->playbackState() != QMediaPlayer::PausedState)
@@ -1041,17 +1098,9 @@ void VideoPlayerWidget::resume_playback() {
         // Order matters — without the explicit empty setSource()
         // between stop() and setSource(src), Qt may treat the re-set
         // as a seek and reuse the stale cursor.
-        player_->stop();
-        player_->setSource(QUrl{});
-        player_->setSource(src);
-        // Defensive output re-attach AFTER setSource() — the Qt6
-        // FFmpeg backend has been buggy enough to drop outputs across
-        // source resets, and no-op-when-already-attached calls are
-        // cheap insurance. refresh_audio_output() also picks up any
-        // system-default sink change that happened while paused.
-        refresh_audio_output();
-        if (video_sink_) player_->setVideoOutput(video_sink_);
-        player_->play();
+        // Re-opens the playlist a turn later so the new open cannot race the
+        // teardown; it re-attaches the outputs and plays.
+        hard_reload_source();
         return;
     }
 
@@ -1851,6 +1900,7 @@ void VideoPlayerWidget::on_player_error() {
 #ifdef HAS_QT_MULTIMEDIA
     const QString err = player_->errorString();
     play_in_progress_ = false;
+    url_before_error_ = current_url_;   // restored if the user recovers the stream
     current_url_.clear(); // stops refresh_data() from retrying
     // Stop the render loop — without this, frameSwapped keeps firing 60fps
     // rendering the last frozen frame behind the error label indefinitely.

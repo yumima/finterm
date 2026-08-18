@@ -782,6 +782,7 @@ void StockOwnershipPanel::set_symbol(const QString& symbol) {
 }
 
 void StockOwnershipPanel::set_chrome_visible(bool on) {
+    chrome_ = on;
     // Hosted inside Equity Research (or the ownership screen's detail pane) the
     // symbol is already named above this widget, and a button offering to open
     // Equity Research from inside Equity Research is a dead end.
@@ -793,10 +794,7 @@ void StockOwnershipPanel::set_chrome_visible(bool on) {
     // panel embedded three levels down: in the ownership screen's detail pane
     // this was a second MAP MORE SYMBOLS beside the screen's own. The empty
     // state still offers to build the index when there isn't one.
-    if (index_btn_)
-        index_btn_->setVisible(on && services::OwnershipService::instance().index_ready());
-    if (index_lbl_)
-        index_lbl_->setVisible(on && index_lbl_->isVisible());
+    refresh_index_ui({});   // one place decides index-control visibility
     if (search_)
         search_->setVisible(on);
     if (portfolio_)
@@ -811,8 +809,11 @@ void StockOwnershipPanel::refresh_index_ui(const QString& msg) {
     if (body_)
         body_->setCurrentIndex(ready ? 0 : 1);
     // The toolbar control is redundant while the empty page owns the action.
-    index_btn_->setVisible(ready);
-    index_lbl_->setVisible(ready && !msg.isEmpty());
+    // chrome_ gates these too: embedded, the host screen owns the index
+    // controls, and showing a second MAP MORE SYMBOLS beside its own is a
+    // question about which one is in charge.
+    index_btn_->setVisible(chrome_ && ready);
+    index_lbl_->setVisible(chrome_ && ready && !msg.isEmpty());
     index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS")
                               : QStringLiteral("BUILD 13F INDEX"));
     index_btn_->setToolTip(

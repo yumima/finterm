@@ -184,6 +184,12 @@ void SmartMoneyPanel::render() {
     if (svc.is_loading(symbol_) && !snap.smart_money_ok) {
         status_->setText(QStringLiteral("Reading the 13F index…"));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+        // Clear the bars with it. Without this the PREVIOUS security's holders
+        // stay on screen under the new one's name for as long as the read
+        // takes — click Alphabet after Microsoft and the tile still lists
+        // Microsoft's holders, which is not a stale view but a wrong one.
+        chart_->set_bars({});
+        chart_->set_empty_text(QStringLiteral("Reading the 13F index…"));
         return;
     }
     if (!snap.smart_money_ok) {

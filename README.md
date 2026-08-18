@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`0d32f3126`](https://github.com/yumima/finterm/commit/0d32f3126) ownership: keep the filing date on the pane in the insider list
 - [`810aaa8c9`](https://github.com/yumima/finterm/commit/810aaa8c9) ownership: drop an include the list panel no longer uses
 - [`bdfc4f6a0`](https://github.com/yumima/finterm/commit/bdfc4f6a0) ownership: fix twelve defects found reviewing the Form 4 and split work
 - [`be9059561`](https://github.com/yumima/finterm/commit/be9059561) ownership: market-wide Form 4, and a curve you can actually read

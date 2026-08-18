@@ -235,6 +235,18 @@ class VideoPlayerWidget : public BaseWidget {
     /// `auto_paused_on_lock_`'s "only resume if still paused"
     /// contract.
     void resume_playback();
+    /// Tear the current source down and load it again, one event-loop turn
+    /// apart. The only safe way to re-open a live source, and the only way out
+    /// of a player whose media failed to open — see the .cpp for why doing it
+    /// in a single turn wedges the FFmpeg backend permanently.
+    void hard_reload_source();
+    /// Source waiting to be re-set on the next turn by hard_reload_source().
+    QUrl pending_reload_src_;
+    /// current_url_ as it was when playback last failed. errorOccurred clears
+    /// current_url_ to stop refresh_data() retrying a broken stream; if the
+    /// user recovers that stream by pressing play, refresh has to come back
+    /// with it or the stream plays once and then silently stops refreshing.
+    QString url_before_error_;
     void play_url(const QString& url, const QString& title);
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);
     QString resolve_ytdlp_program() const;
