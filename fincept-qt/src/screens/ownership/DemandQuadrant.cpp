@@ -19,16 +19,8 @@ namespace fmt = fincept::ui::formatting;
 
 namespace {
 
-double min_med(const QVector<QPointF>& v) {
-    double m = v.first().y();
-    for (const auto& p : v) m = std::min(m, p.y());
-    return m;
-}
-double max_med(const QVector<QPointF>& v) {
-    double m = v.first().y();
-    for (const auto& p : v) m = std::max(m, p.y());
-    return m;
-}
+constexpr int kVerdictH = 48;
+constexpr int kCurveH   = 46;   // caption row plus the share-buying band
 constexpr int kPad = 8;
 constexpr int kAxisW = 74;   // room for the y labels without clipping
 constexpr int kAxisH = 38;   // two footer lines, clear of the edge
@@ -115,7 +107,9 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
         return;
     }
 
-    plot_ = rect().adjusted(kAxisW, kPad + 14, -kPad, -(kAxisH));
+    // kVerdictH is reserved under the axis labels for the named scale that
+    // says what the whole cloud adds up to.
+    plot_ = rect().adjusted(kAxisW, kPad + 14 + kCurveH, -kPad, -(kAxisH + kVerdictH));
     const int midY = plot_.center().y();
     const double lw = std::log10(std::max(d_.median_weight, 0.0005));
     double wmax = 0.0;
@@ -158,101 +152,157 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
         g.drawEllipse(pt.at, 2.4, 2.4);
     }
 
-    // ── the trend through the cloud ─────────────────────────────────────────
+    // ── share buying, by conviction ─────────────────────────────────────────
     //
-    // A running MEDIAN, not a regression line. Least squares over these points
-    // returns r values of 0.00 to 0.05 on every large cap measured: conviction
-    // does not predict direction, and a straight line drawn through that
-    // asserts a relationship the data does not contain. The median of each
-    // vertical slice asserts nothing — it says where the middle of the cloud
-    // sits as conviction rises.
+    // One question, one line: as positions get larger, does the share of
+    // holders BUYING rise or fall? A count of buyers over buyers-plus-sellers
+    // in each conviction slice — bounded 0 to 100%, with a 50% guide, so
+    // "more buyers than sellers here" is read off the line's side of the
+    // guide rather than decoded.
     //
-    // The medians are tiny (a few tenths of a percent), so plotted on the same
-    // axis as the cloud the curve is a flat line on the zero axis — true, and
-    // useless. It is drawn on its OWN scale, amplified to fill a band, so the
-    // SHAPE and DIRECTION are readable. The amplification and the real range
-    // are printed next to it: the curve shows which way, the label says how
-    // much, and neither is left to be inferred from the other.
+    // It sits in its own band, sharing only the x axis with the cloud below.
+    // The previous attempt drew a median of share-CHANGE straight over the
+    // scatter, which put a second unit on the scatter's own y axis and had to
+    // be amplified to be visible at all — two reasons a reader could not say
+    // what it meant.
     if (hit_.size() >= 60) {
-        constexpr int kBins = 14;
-        QVector<QVector<double>> bins(kBins);
-        QVector<double> bin_x(kBins, 0.0);
-        QVector<int>    bin_n(kBins, 0);
+        // Caption gets its own row above the band: drawn inside it, the text
+        // and the line land on the same pixels wherever the curve is flat.
+        const QRect band(plot_.left(), plot_.top() - kCurveH + 14, plot_.width(),
+                         kCurveH - 22);
+        constexpr int kBins = 16;
+        QVector<int> buyers(kBins, 0), movers(kBins, 0);
+        QVector<double> bx(kBins, 0.0);
         const double w = std::max(1.0, static_cast<double>(plot_.width()));
         for (const auto& pt : hit_) {
-            if (!pt.p->pct)
-                continue;   // a new position has no prior to measure against
+            const double dl = pt.p->delta.value_or(0.0);
+            if (std::fabs(dl) < 1.0)
+                continue;   // holders who did nothing carry no direction
             const int b = std::clamp(
                 static_cast<int>((pt.at.x() - plot_.left()) / w * kBins), 0, kBins - 1);
-            bins[b].push_back(*pt.p->pct);
-            bin_x[b] += pt.at.x();
-            bin_n[b] += 1;
+            movers[b] += 1;
+            buyers[b] += dl > 0 ? 1 : 0;
+            bx[b] += pt.at.x();
         }
-        QVector<QPointF> med;   // x in pixels, y still in DATA units
+        QVector<QPointF> line;
         for (int b = 0; b < kBins; ++b) {
-            if (bin_n[b] < 8)   // a bin holding three holders is noise, not a trend
+            if (movers[b] < 8)   // a slice of three holders is noise
                 continue;
-            std::sort(bins[b].begin(), bins[b].end());
-            med.push_back(QPointF(bin_x[b] / bin_n[b], bins[b][bins[b].size() / 2]));
+            const double share = static_cast<double>(buyers[b]) / movers[b];
+            line.push_back(QPointF(bx[b] / movers[b], band.bottom() - share * band.height()));
         }
-        if (med.size() >= 3) {
-            double peak = 0.0;
-            for (const auto& m : med)
-                peak = std::max(peak, std::abs(m.y()));
-            if (peak > 1e-9) {
-                // Fill roughly a third of each half, so the curve is legible
-                // without colliding with the quadrant counts.
-                const double band = (plot_.height() / 2.0) * 0.34;
-                const double amp = band / peak;
-                QVector<QPointF> pts;
-                for (const auto& m : med)
-                    pts.push_back(QPointF(m.x(), midY - m.y() * amp));
-
-                // Segment by sign so direction is carried by colour as well as
-                // position — accumulating stretches green, distributing red.
-                g.setBrush(Qt::NoBrush);
-                for (int i = 1; i < pts.size(); ++i) {
-                    const double mid_val = (med[i - 1].y() + med[i].y()) / 2.0;
-                    QColor c(mid_val > 0 ? ui::colors::GREEN()
-                                         : (mid_val < 0 ? ui::colors::RED()
-                                                        : ui::colors::TEXT_SECONDARY()));
-                    QPainterPath seg(pts[i - 1]);
-                    const double mx = (pts[i - 1].x() + pts[i].x()) / 2.0;
-                    seg.cubicTo(QPointF(mx, pts[i - 1].y()), QPointF(mx, pts[i].y()), pts[i]);
-                    g.setPen(QPen(c, 2.2));
-                    g.drawPath(seg);
-                }
-                // Endpoint marker: where the highest-conviction holders sit.
-                const QColor endc(med.last().y() >= 0 ? ui::colors::GREEN()
-                                                      : ui::colors::RED());
-                g.setPen(QPen(QColor(ui::colors::BG_BASE()), 1.5));
-                g.setBrush(endc);
-                g.drawEllipse(pts.last(), 3.6, 3.6);
-
-                QFont cf = f;
-                cf.setPixelSize(10);
-                g.setFont(cf);
-                g.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-                // The multiplier itself tells a reader nothing — what they
-                // need is that the curve is not to scale and what the real
-                // numbers are. Shape from the line, magnitude from the label.
-                const QString caption =
-                    QStringLiteral("median holder %1 to %2 — shape amplified, not to scale")
-                        .arg(fmt::format_percent(min_med(med) * 100.0, 2, true),
-                             fmt::format_percent(max_med(med) * 100.0, 2, true));
-                // Top centre — the corners carry the four quadrant counts and
-                // the bottom band the axis labels and named managers, so the
-                // middle of the top edge is the one strip nothing else claims.
-                // The rect spans the full width and the TEXT is elided to the
-                // gap between the two count badges: drawText clips to its rect
-                // without eliding, so a narrow rect silently cut the caption in
-                // half rather than shortening it legibly.
-                const int badge = 120;   // room the corner counts occupy
-                const int avail = std::max(80, plot_.width() - badge * 2);
-                const QRectF cap(plot_.left(), plot_.top() + 1, plot_.width(), 14);
-                g.drawText(cap, Qt::AlignHCenter | Qt::AlignVCenter,
-                           QFontMetrics(cf).elidedText(caption, Qt::ElideRight, avail));
+        // The 50% guide: the line's side of this IS the reading.
+        const int mid = band.bottom() - band.height() / 2;
+        g.setPen(QPen(QColor(ui::colors::BORDER_DIM()), 1, Qt::DashLine));
+        g.drawLine(band.left(), mid, band.right(), mid);
+        if (line.size() >= 3) {
+            g.setBrush(Qt::NoBrush);
+            for (int i = 1; i < line.size(); ++i) {
+                const bool buying = (line[i - 1].y() + line[i].y()) / 2.0 < mid;
+                g.setPen(QPen(QColor(buying ? ui::colors::GREEN() : ui::colors::RED()), 2.0));
+                QPainterPath seg(line[i - 1]);
+                const double mx = (line[i - 1].x() + line[i].x()) / 2.0;
+                seg.cubicTo(QPointF(mx, line[i - 1].y()), QPointF(mx, line[i].y()), line[i]);
+                g.drawPath(seg);
             }
+        }
+        QFont bf = f;
+        bf.setPixelSize(9);
+        g.setFont(bf);
+        g.setPen(QColor(ui::colors::TEXT_DIM()));
+        g.drawText(QRect(band.left(), band.top() - 14, band.width(), 12),
+                   Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("share of movers buying — above the line, buyers outnumber "
+                                  "sellers at that position size"));
+        g.drawText(QRect(band.left() - kAxisW, mid - 6, kAxisW - 4, 12),
+                   Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("50%"));
+        g.setFont(f);
+    }
+
+    // The running median that used to sit here is gone. It was a real
+    // statistic — the middle of each vertical slice — but on every large cap
+    // measured it came out flat along zero, so it had to be amplified to be
+    // visible at all, and an amplified flat line tells a reader nothing they
+    // can act on while costing them the effort of decoding it. What they want
+    // from a cloud of five thousand holders is the direction it adds up to.
+    // That is drawn as a named scale below the plot instead.
+
+    // ── what it adds up to ──────────────────────────────────────────────────
+    //
+    // The one line a reader wants from five thousand holders: which way did
+    // the money actually go. Measured as the NET share of the money that
+    // MOVED — net flow over gross flow — rather than net flow against the
+    // position, because the second is dominated by how big the holding
+    // already is and barely moves however violently the quarter traded.
+    //
+    // So: of every dollar institutions put in or took out of this name this
+    // quarter, what share was net out. AAPL's Mar-2026 quarter is 17.3B
+    // bought against 28.5B sold, so a quarter of the money that moved, moved
+    // out — which is a fact about the quarter, not a forecast about the stock.
+    if (d_.value_bought && d_.value_sold) {
+        const double gross = *d_.value_bought + *d_.value_sold;
+        if (gross > 0.0) {
+            const double net = (*d_.value_bought - *d_.value_sold) / gross;
+
+            // Sits BELOW the axis footer, not over it.
+            const int top = plot_.bottom() + kAxisH + 2;
+            const QRect scale(plot_.left(), top + 14, plot_.width(), 11);
+
+            // Zones are EQUAL WIDTH, not proportional to their numeric range.
+            // Mapped linearly over -100%..+100% the two extreme zones take
+            // four fifths of the bar and "holding" becomes a sliver too narrow
+            // to label — while almost every real quarter lands in the middle.
+            // Equal widths give every reading room to be named, and the marker
+            // is placed proportionally inside its own zone.
+            struct Zone { double from, to; const char* name; };
+            const Zone zones[] = {
+                {-1.00, -0.20, "DISTRIBUTING"}, {-0.20, -0.05, "TRIMMING"},
+                {-0.05,  0.05, "HOLDING"},      { 0.05,  0.20, "ADDING"},
+                { 0.20,  1.00, "ACCUMULATING"},
+            };
+            constexpr int kZones = 5;
+            const int zw = scale.width() / kZones;
+
+            QFont zf = f;
+            zf.setPixelSize(9);
+            const QFontMetrics zfm(zf);
+            int marker_x = scale.left();
+            for (int i = 0; i < kZones; ++i) {
+                const auto& z = zones[i];
+                const int x0 = scale.left() + i * zw;
+                const bool live = net >= z.from && net < z.to;
+                QColor c(z.to <= -0.05 ? ui::colors::RED()
+                       : z.from >= 0.05 ? ui::colors::GREEN()
+                                        : ui::colors::TEXT_SECONDARY());
+                QColor band(c);
+                band.setAlpha(live ? 160 : 30);
+                g.fillRect(QRect(x0 + 1, scale.top(), zw - 2, scale.height()), band);
+                g.setFont(zf);
+                g.setPen(QColor(live ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_DIM()));
+                const QString nm = QString::fromLatin1(z.name);
+                g.drawText(QRect(x0, scale.bottom() + 2, zw, 11),
+                           Qt::AlignHCenter | Qt::AlignTop,
+                           zfm.horizontalAdvance(nm) < zw - 2 ? nm : nm.left(4));
+                if (live) {
+                    const double t = (net - z.from) / std::max(1e-9, z.to - z.from);
+                    marker_x = x0 + static_cast<int>(std::clamp(t, 0.0, 1.0) * zw);
+                }
+            }
+            g.setPen(QPen(QColor(ui::colors::TEXT_PRIMARY()), 2));
+            g.drawLine(marker_x, scale.top() - 3, marker_x, scale.bottom() + 1);
+
+            g.setPen(QColor(ui::colors::TEXT_PRIMARY()));
+            QFont vf = f;
+            vf.setPixelSize(10);
+            vf.setBold(true);
+            g.setFont(vf);
+            g.drawText(QRect(scale.left(), top, scale.width(), 13),
+                       Qt::AlignHCenter | Qt::AlignVCenter,
+                       QStringLiteral("%1 of the money that moved, moved %2")
+                           .arg(fmt::format_percent(std::fabs(net) * 100.0, 0),
+                                net >= 0 ? QStringLiteral("in") : QStringLiteral("out")));
+            g.setFont(f);
+            verdict_rect_ = QRect(scale.left(), top, scale.width(), 40);
         }
     }
 

@@ -1,5 +1,6 @@
 #include "screens/ownership/HoldersChart.h"
 
+#include "ui/components/TooltipText.h"
 #include "ui/theme/Theme.h"
 
 #include <QHelpEvent>
@@ -108,7 +109,7 @@ bool RankedBarChart::event(QEvent* e) {
         auto* he = static_cast<QHelpEvent*>(e);
         const int idx = (he->pos().y() - kPadY) / (row_height_ + kGap);
         if (idx >= 0 && idx < bars_.size() && !bars_[idx].tooltip.isEmpty()) {
-            QToolTip::showText(he->globalPos(), bars_[idx].tooltip, this);
+            QToolTip::showText(he->globalPos(), ui::tooltip_wrap(bars_[idx].tooltip), this);
             return true;
         }
         QToolTip::hideText();
@@ -210,7 +211,7 @@ bool EventTimeline::event(QEvent* e) {
             if (dx < best_dx) { best_dx = dx; best = i; }
         }
         if (best >= 0 && best_dx < 12 && !events_[best].tooltip.isEmpty()) {
-            QToolTip::showText(he->globalPos(), events_[best].tooltip, this);
+            QToolTip::showText(he->globalPos(), ui::tooltip_wrap(events_[best].tooltip), this);
             return true;
         }
         QToolTip::hideText();

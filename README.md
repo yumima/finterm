@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e1fef8931`](https://github.com/yumima/finterm/commit/e1fef8931) **fix:** the ownership panel overwrote the holding you clicked
 - [`58b541f8f`](https://github.com/yumima/finterm/commit/58b541f8f) ownership: give each read its number and how far past its rule it sits
 - [`985f35fcb`](https://github.com/yumima/finterm/commit/985f35fcb) ownership: read-through as tokens, with the prose one hover away
 - [`ce1b5cba6`](https://github.com/yumima/finterm/commit/ce1b5cba6) ownership: navigate on a click, and give the reader a way back

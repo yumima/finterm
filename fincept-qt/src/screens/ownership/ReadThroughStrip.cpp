@@ -1,5 +1,6 @@
 #include "screens/ownership/ReadThroughStrip.h"
 
+#include "ui/components/TooltipText.h"
 #include "ui/theme/Theme.h"
 
 #include <QHelpEvent>
@@ -220,7 +221,7 @@ bool ReadThroughStrip::event(QEvent* e) {
             QString t = c.read.detail;
             if (!c.read.basis.isEmpty())
                 t += QStringLiteral("\n\n") + c.read.basis;
-            QToolTip::showText(he->globalPos(), t, this);
+            QToolTip::showText(he->globalPos(), ui::tooltip_wrap(t), this);
             return true;
         }
         QToolTip::hideText();

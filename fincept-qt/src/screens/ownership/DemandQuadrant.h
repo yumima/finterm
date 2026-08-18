@@ -54,6 +54,8 @@ class DemandQuadrant : public QWidget {
     QString empty_text_;
     mutable QVector<Plotted> hit_;
     mutable QRect plot_;
+    /// Hit area for the named scale, so it can explain its own bands.
+    mutable QRect verdict_rect_;
 };
 
 } // namespace fincept::screens
