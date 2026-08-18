@@ -1,7 +1,6 @@
 #pragma once
 #include <QWidget>
 
-class QComboBox;
 class QLabel;
 class QLineEdit;
 class QTableWidget;
@@ -37,7 +36,8 @@ class FirmBookPanel : public QWidget {
     void render();
 
     QLineEdit*    search_ = nullptr;
-    QComboBox*    firm_ = nullptr;
+    QTableWidget* firms_ = nullptr;
+    QString       selected_cik_;
     QLabel*       status_ = nullptr;
     QTableWidget* positions_ = nullptr;
     QTimer*       debounce_ = nullptr;

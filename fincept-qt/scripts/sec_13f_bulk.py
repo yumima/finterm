@@ -1142,6 +1142,82 @@ def demand(ticker=None, cusip=None, quarter=None,
         con.close()
 
 
+def top_firms(limit=50, quarter=None, max_positions=None):
+    """The largest DISCRETIONARY books, with what each did last quarter.
+
+    Ranked by book value among books narrow enough to carry a view. Ranking by
+    size alone returns BlackRock, Vanguard, State Street, Fidelity and Morgan
+    Stanley — every one an index or platform book of three to eight thousand
+    names, whose quarterly change is a rebalance. As a list of "who is holding
+    what and what are they doing" that is the wrong fifty firms.
+    """
+    con = connect()
+    try:
+        qs = quarter_pair(con)
+        if not qs:
+            return {"error": "no 13F data ingested yet"}
+        cur_q = quarter or qs[0]
+        prior_q = next((x for x in qs if x < cur_q), None)
+        mx = int(max_positions or MAX_DISCRETIONARY_POSITIONS)
+
+        rows = con.execute("""
+            SELECT cik, manager, accession, stock_value, stock_count
+              FROM books
+             WHERE quarter=? AND cik<>'' AND stock_count<=? AND stock_value>=?
+             ORDER BY stock_value DESC LIMIT ?
+        """, (cur_q, mx, MIN_BOOK_VALUE, int(limit))).fetchall()
+
+        out = []
+        for cik, manager, acc, value, count in rows:
+            rec = {"cik": cik, "manager": manager, "accession": acc,
+                   "book_value": value, "position_count": count}
+            top = con.execute(
+                "SELECT h.issuer, ct.ticker, h.value FROM holdings h "
+                "LEFT JOIN cusip_ticker ct ON ct.cusip=h.cusip "
+                "WHERE h.accession=? AND h.put_call='' ORDER BY h.value DESC LIMIT 1",
+                (acc,)).fetchone()
+            if top:
+                rec["top_name"] = top[0]
+                rec["top_ticker"] = top[1] or ""
+                rec["top_weight"] = (top[2] / value) if value else None
+
+            if prior_q:
+                pacc = con.execute("SELECT accession FROM books WHERE cik=? AND quarter=?",
+                                   (cik, prior_q)).fetchone()
+                if pacc:
+                    # Counted per SECURITY, not per share: "added four, cut
+                    # three" is what a reader can act on; a net share number
+                    # across unrelated names is not comparable to anything.
+                    agg = con.execute("""
+                        SELECT
+                          SUM(CASE WHEN p.shares IS NULL THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN p.shares IS NOT NULL
+                                    AND c.shares > p.shares * 1.01 THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN p.shares IS NOT NULL
+                                    AND c.shares < p.shares * 0.99 THEN 1 ELSE 0 END)
+                        FROM holdings c
+                        LEFT JOIN holdings p
+                               ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
+                       WHERE c.accession=? AND c.put_call=''
+                    """, (pacc[0], acc)).fetchone()
+                    exits = con.execute("""
+                        SELECT COUNT(*) FROM holdings p
+                         WHERE p.accession=? AND p.put_call=''
+                           AND NOT EXISTS (SELECT 1 FROM holdings c
+                                            WHERE c.accession=? AND c.cusip=p.cusip
+                                              AND c.put_call='')
+                    """, (pacc[0], acc)).fetchone()[0]
+                    rec.update({"new": agg[0] or 0, "added": agg[1] or 0,
+                                "trimmed": agg[2] or 0, "exited": exits,
+                                "prior_quarter": prior_q})
+            out.append(rec)
+
+        return {"quarter": cur_q, "prior_quarter": prior_q,
+                "max_book_positions": mx, "firms": out}
+    finally:
+        con.close()
+
+
 def handle_action(action, payload):
     if action == "status":
         return status()
@@ -1187,6 +1263,9 @@ def handle_action(action, payload):
                        float(payload.get("min_book") or MIN_BOOK_VALUE),
                        int(payload.get("min_positions") or MIN_BOOK_POSITIONS),
                        payload.get("max_positions"))
+    if action == "top_firms":
+        return top_firms(int(payload.get("limit") or 50), payload.get("quarter"),
+                         payload.get("max_positions"))
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))

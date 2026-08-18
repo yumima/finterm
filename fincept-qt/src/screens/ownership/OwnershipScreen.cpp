@@ -633,7 +633,7 @@ void OwnershipScreen::render_holders(const OwnershipSnapshot& s) {
 
 void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
     const auto& si = s.shorts;
-    if (!si.shares_short && !si.short_ratio && !si.pct_float) {
+    if (!si.shares_short && !si.short_ratio && !si.pct_float && !s.short_volume.has_data()) {
         short_lbl_->setText(QStringLiteral("No short-interest figures reported for %1.")
                                 .arg(symbol_));
         short_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
@@ -652,6 +652,35 @@ void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
     row(QStringLiteral("Held by institutions"), pct_or_placeholder(si.held_pct_institutions));
     row(QStringLiteral("Held by insiders"), pct_or_placeholder(si.held_pct_insiders));
 
+    // The daily series, above the fortnightly figures. Short interest is a
+    // settled position reported twice a month; short volume is intraday flow
+    // reported every morning. Different numbers, so they are labelled
+    // separately rather than merged into one "short" line.
+    const auto& sv = s.short_volume;
+    QString daily;
+    if (sv.has_data()) {
+        const QString dir = sv.latest > sv.avg_20 ? QStringLiteral("above")
+                                                  : QStringLiteral("below");
+        const QString col = sv.latest > sv.avg_20 ? ui::colors::RED() : ui::colors::GREEN();
+        daily = QStringLiteral(
+                    "<b>Short volume %1</b> of %2 volume &nbsp;·&nbsp; "
+                    "<span style='color:%3;'>%4 its 20-day average of %5</span> &nbsp;·&nbsp; "
+                    "%6 of its own %7-day range"
+                    "<br><span style='color:%8;font-size:12px;'>Daily from FINRA. This is "
+                    "traded short volume, not short interest — much of it is market-maker "
+                    "inventory that is flat by the close, so the trend is the signal, not "
+                    "the level.</span><br><br>")
+                    .arg(fmt::format_percent(sv.latest * 100.0, 1),
+                         sv.as_of.toString(QStringLiteral("d MMM")), col, dir,
+                         fmt::format_percent(sv.avg_20 * 100.0, 1))
+                    .arg(QStringLiteral("%1th").arg(qRound(sv.percentile * 100.0)))
+                    .arg(sv.days)
+                    .arg(ui::colors::TEXT_SECONDARY());
+    } else if (!sv.error.isEmpty()) {
+        daily = QStringLiteral("<span style='color:%1;'>Daily short volume: %2</span><br><br>")
+                    .arg(ui::colors::TEXT_SECONDARY(), sv.error.left(90));
+    }
+
     QString as_of;
     if (si.as_of.isValid()) {
         // Short interest is a twice-monthly settlement snapshot published a few
@@ -663,7 +692,7 @@ void OwnershipScreen::render_short(const OwnershipSnapshot& s) {
                     .arg(ui::colors::TEXT_SECONDARY(),
                          si.as_of.toString(QStringLiteral("d MMM yyyy")));
     }
-    short_lbl_->setText(rows.join(QStringLiteral(" &nbsp;·&nbsp; ")) + as_of);
+    short_lbl_->setText(daily + rows.join(QStringLiteral(" &nbsp;·&nbsp; ")) + as_of);
     short_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
 }
 

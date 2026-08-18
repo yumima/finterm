@@ -53,6 +53,7 @@ const QString kSrcEdgar  = QStringLiteral("edgar");
 const QString kSrcMarket = QStringLiteral("market");
 const QString kSrcSmart  = QStringLiteral("smart");
 const QString kSrcDemand = QStringLiteral("demand");
+const QString kSrcShortVol = QStringLiteral("shortvol");
 
 /// A quarterly data set is ~100 MB and indexes 3.3m rows; symbol
 /// resolution is rate-limited by OpenFIGI to 25 requests a minute.
@@ -340,6 +341,7 @@ void OwnershipService::refresh(const QString& symbol) {
     set.insert(kSrcMarket);
     fetch_market(sym);
     fetch_edgar(sym);
+    load_short_volume(sym);
 }
 
 void OwnershipService::note_source_done(const QString& symbol, const QString& source) {
@@ -442,11 +444,18 @@ void OwnershipService::fetch_market(const QString& sym) {
 
 void OwnershipService::search_firms(const QString& query) {
     QPointer<OwnershipService> self = this;
+    const QString q = query.trimmed();
+    // With no query this is the ranked top 50 DISCRETIONARY books, not the
+    // largest books outright — ranking by size alone returns BlackRock,
+    // Vanguard, State Street and Morgan Stanley, whose quarterly change is an
+    // index rebalance rather than a view on anything.
+    const QString action = q.isEmpty() ? QStringLiteral("top_firms") : QStringLiteral("firms");
     const QString payload = QString::fromUtf8(
-        QJsonDocument(QJsonObject{{"query", query.trimmed()}, {"limit", 40}})
+        QJsonDocument(q.isEmpty() ? QJsonObject{{"limit", 50}}
+                                  : QJsonObject{{"query", q}, {"limit", 40}})
             .toJson(QJsonDocument::Compact));
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("firms"), payload},
+        QStringLiteral("sec_13f_bulk.py"), {action, payload},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -457,21 +466,27 @@ void OwnershipService::search_firms(const QString& query) {
                 for (const auto& v : root.value(QStringLiteral("firms")).toArray()) {
                     const auto o = v.toObject();
                     Manager m;
-                    m.cik = o.value(QStringLiteral("cik")).toString();
-                    // The book size is what tells a reader whether a weight in
-                    // it means anything, so it travels in the label rather than
-                    // being something to go and look up.
-                    m.name = QStringLiteral("%1  —  %2, %3 pos")
-                                 .arg(o.value(QStringLiteral("manager")).toString(),
-                                      compact_money(o.value(QStringLiteral("book_value")).toDouble()))
-                                 .arg(o.value(QStringLiteral("position_count")).toInt());
+                    m.cik  = o.value(QStringLiteral("cik")).toString();
+                    m.name = o.value(QStringLiteral("manager")).toString();
+                    m.book_value     = o.value(QStringLiteral("book_value")).toDouble();
+                    m.position_count = o.value(QStringLiteral("position_count")).toInt();
+                    m.top_name   = o.value(QStringLiteral("top_name")).toString();
+                    m.top_ticker = o.value(QStringLiteral("top_ticker")).toString();
+                    m.top_weight = opt_num(o, "top_weight");
+                    if (o.contains(QStringLiteral("added"))) {
+                        m.opened  = o.value(QStringLiteral("new")).toInt();
+                        m.added   = o.value(QStringLiteral("added")).toInt();
+                        m.trimmed = o.value(QStringLiteral("trimmed")).toInt();
+                        m.exited  = o.value(QStringLiteral("exited")).toInt();
+                        m.has_activity = true;
+                    }
                     if (!m.cik.isEmpty())
                         self->firm_results_.push_back(m);
                 }
             }
             emit self->firms_found();
         },
-        /*on_line=*/{}, 30'000);
+        /*on_line=*/{}, 60'000);
 }
 
 void OwnershipService::load_smart_money(const QString& symbol) {
@@ -892,6 +907,55 @@ void OwnershipService::load_demand(const QString& symbol) {
             self->note_source_done(sym, kSrcDemand);
         },
         /*on_line=*/{}, 90'000);
+}
+
+
+void OwnershipService::load_short_volume(const QString& symbol) {
+    const QString sym = symbol.trimmed().toUpper();
+    if (sym.isEmpty() || pending_.value(sym).contains(kSrcShortVol))
+        return;
+    const auto have = cache_.value(sym).short_volume;
+    if (have.has_data())
+        return;
+    pending_[sym].insert(kSrcShortVol);
+
+    QPointer<OwnershipService> self = this;
+    const QString payload = QString::fromUtf8(
+        QJsonDocument(QJsonObject{{"symbol", sym}, {"days", 60}}).toJson(QJsonDocument::Compact));
+    python::PythonRunner::instance().run(
+        QStringLiteral("finra_short_volume.py"), {QStringLiteral("series"), payload},
+        [self, sym](python::PythonResult result) {
+            if (!self)
+                return;
+            auto snap = self->cache_.value(sym);
+            ShortVolume sv;
+            if (!result.success) {
+                sv.error = result.error.isEmpty() ? QStringLiteral("short-volume fetch failed")
+                                                  : result.error.left(200);
+            } else {
+                const auto o =
+                    QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+                const QString err = o.value(QStringLiteral("error")).toString();
+                if (!err.isEmpty()) {
+                    sv.error = err;
+                } else {
+                    sv.as_of      = iso_date(o, "as_of");
+                    sv.latest     = o.value(QStringLiteral("latest_ratio")).toDouble();
+                    sv.avg_5      = o.value(QStringLiteral("avg_5")).toDouble();
+                    sv.avg_20     = o.value(QStringLiteral("avg_20")).toDouble();
+                    sv.min_ratio  = o.value(QStringLiteral("min_ratio")).toDouble();
+                    sv.max_ratio  = o.value(QStringLiteral("max_ratio")).toDouble();
+                    sv.percentile = o.value(QStringLiteral("percentile")).toDouble();
+                    sv.days       = o.value(QStringLiteral("days")).toInt();
+                    for (const auto& v : o.value(QStringLiteral("rows")).toArray())
+                        sv.ratios.push_back(v.toObject().value(QStringLiteral("ratio")).toDouble());
+                }
+            }
+            snap.short_volume = sv;
+            self->cache_.insert(sym, snap);
+            self->note_source_done(sym, kSrcShortVol);
+        },
+        /*on_line=*/{}, 180'000);
 }
 
 } // namespace fincept::services

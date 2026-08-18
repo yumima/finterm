@@ -117,8 +117,23 @@ struct ShortInterest {
 struct Manager {
     QString name;
     QString cik;
-    QString style;      ///< "concentrated long", "activist", "index complex", …
+    QString style;
     bool    user_added = false;
+
+    double book_value = 0.0;
+    int    position_count = 0;
+    /// What they did last quarter, counted per SECURITY. "Added four, cut
+    /// three" is actionable; a net share number summed across unrelated names
+    /// is not comparable to anything.
+    int    opened = 0;
+    int    added = 0;
+    int    trimmed = 0;
+    int    exited = 0;
+    bool   has_activity = false;
+
+    QString top_name;    ///< their largest position
+    QString top_ticker;
+    std::optional<double> top_weight;
 };
 
 /// What one tracked manager did with one security, from their own 13F.
@@ -248,6 +263,30 @@ struct InstitutionalDemand {
     bool has_data() const { return holders > 0 && !points.isEmpty(); }
 };
 
+/// Daily short-sale volume from FINRA, and where today sits in its own range.
+///
+/// Short VOLUME, not short interest. This counts the sell side of trades
+/// executed short during the day, much of which is market-maker inventory that
+/// is flat again by the close — a 45% ratio is not 45% of the float being
+/// short. It is here because it is the only institutional-flow series that is
+/// DAILY, and it is read as a trend against the symbol's own recent range,
+/// never as a level and never across symbols.
+struct ShortVolume {
+    QDate  as_of;
+    double latest = 0.0;
+    double avg_5 = 0.0;
+    double avg_20 = 0.0;
+    double min_ratio = 0.0;
+    double max_ratio = 0.0;
+    /// Where the latest reading sits between this window's low and high, 0..1.
+    double percentile = 0.0;
+    int    days = 0;
+    QVector<double> ratios;   ///< oldest first, for the sparkline
+    QString error;
+
+    bool has_data() const { return days > 0 && !ratios.isEmpty(); }
+};
+
 /// Everything the screen shows for one symbol, plus what it could not show.
 struct OwnershipSnapshot {
     QString symbol;
@@ -291,6 +330,7 @@ struct OwnershipSnapshot {
     /// filers would be a complete-looking answer that is wrong by orders of
     /// magnitude.
     InstitutionalDemand demand;
+    ShortVolume         short_volume;
     QDate   partial_quarter;
     int     partial_filers = 0;
 

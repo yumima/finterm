@@ -4,12 +4,10 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#include <QComboBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -60,9 +58,6 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     search_->setMinimumWidth(200);
     bar->addWidget(search_, 1);
 
-    firm_ = new QComboBox;
-    firm_->setMinimumWidth(230);
-    bar->addWidget(firm_, 1);
 
     status_ = new QLabel;
     status_->setWordWrap(true);
@@ -71,6 +66,36 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
 
     // No caveat here: the same sentence already sits under the holders tile,
     // and printing it twice on one screen is noise rather than emphasis.
+
+    // The ranked list, above the selected firm's book. A dropdown could not
+    // show what each firm DID last quarter, and "who is holding what and what
+    // are they doing" needs both halves visible at once.
+    firms_ = new QTableWidget;
+    firms_->setColumnCount(6);
+    firms_->setHorizontalHeaderLabels({QStringLiteral("#"), QStringLiteral("Firm"),
+                                       QStringLiteral("Book"), QStringLiteral("Names"),
+                                       QStringLiteral("Last quarter"),
+                                       QStringLiteral("Largest position")});
+    firms_->verticalHeader()->setVisible(false);
+    firms_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    firms_->setSelectionMode(QAbstractItemView::SingleSelection);
+    firms_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    firms_->setAlternatingRowColors(true);
+    firms_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    firms_->horizontalHeader()->setStretchLastSection(true);
+    firms_->setMinimumHeight(150);
+    connect(firms_, &QTableWidget::itemSelectionChanged, this, [this]() {
+        const int r = firms_->currentRow();
+        if (r < 0)
+            return;
+        if (auto* it = firms_->item(r, 1)) {
+            selected_cik_ = it->data(Qt::UserRole).toString();
+            if (!selected_cik_.isEmpty())
+                services::OwnershipService::instance().load_book(selected_cik_);
+            render();
+        }
+    });
+    root->addWidget(firms_, 2);
 
     positions_ = new QTableWidget;
     positions_->setColumnCount(6);
@@ -103,17 +128,10 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
     });
     connect(search_, &QLineEdit::textChanged, this, [this](const QString&) { debounce_->start(); });
 
-    connect(firm_, &QComboBox::currentIndexChanged, this, [this](int i) {
-        const QString cik = firm_->itemData(i).toString();
-        if (!cik.isEmpty())
-            services::OwnershipService::instance().load_book(cik);
-        render();
-    });
-
     auto& svc = services::OwnershipService::instance();
     connect(&svc, &services::OwnershipService::firms_found, this, [this]() { reload_firms(); });
     connect(&svc, &services::OwnershipService::book_updated, this, [this](const QString& cik) {
-        if (cik == firm_->currentData().toString())
+        if (cik == selected_cik_)
             render();
     });
     connect(&svc, &services::OwnershipService::index_changed, this, [this](const QString&) {
@@ -128,33 +146,50 @@ FirmBookPanel::FirmBookPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void FirmBookPanel::reload_firms() {
-    const QString keep = firm_->currentData().toString();
-    {
-        QSignalBlocker block(firm_);
-        firm_->clear();
-        const auto results = services::OwnershipService::instance().last_firm_results();
-        if (results.isEmpty()) {
-            firm_->addItem(QStringLiteral("No filers — build the 13F index"), QString());
-            firm_->setEnabled(false);
-            render();
-            return;
+    const auto results = services::OwnershipService::instance().last_firm_results();
+    firms_->setRowCount(results.size());
+    for (int i = 0; i < results.size(); ++i) {
+        const auto& m = results[i];
+        firms_->setItem(i, 0, cell(QString::number(i + 1), ui::colors::TEXT_SECONDARY()));
+        auto* nm = cell(m.name);
+        nm->setData(Qt::UserRole, m.cik);
+        firms_->setItem(i, 1, nm);
+        firms_->setItem(i, 2, cell(fmt::format_compact(m.book_value)));
+        firms_->setItem(i, 3, cell(QString::number(m.position_count),
+                                   ui::colors::TEXT_SECONDARY()));
+
+        // Direction as words with colour, not a bare net number: a firm that
+        // opened four and exited sixteen is doing something a single figure
+        // cannot express.
+        QString act = fmt::placeholder();
+        QString col;
+        if (m.has_activity) {
+            QStringList parts;
+            if (m.opened)  parts << QStringLiteral("%1 new").arg(m.opened);
+            if (m.added)   parts << QStringLiteral("%1 added").arg(m.added);
+            if (m.trimmed) parts << QStringLiteral("%1 cut").arg(m.trimmed);
+            if (m.exited)  parts << QStringLiteral("%1 exited").arg(m.exited);
+            act = parts.isEmpty() ? QStringLiteral("no change") : parts.join(QStringLiteral(" · "));
+            const int up = m.opened + m.added, down = m.trimmed + m.exited;
+            col = up > down * 1.15 ? ui::colors::GREEN()
+                                   : (down > up * 1.15 ? ui::colors::RED() : QString());
         }
-        firm_->setEnabled(true);
-        for (const auto& m : results)
-            firm_->addItem(m.name, m.cik);
-        const int idx = firm_->findData(keep);
-        if (idx >= 0)
-            firm_->setCurrentIndex(idx);
+        firms_->setItem(i, 4, cell(act, col));
+
+        QString top = m.top_ticker.isEmpty() ? m.top_name : m.top_ticker;
+        if (m.top_weight)
+            top += QStringLiteral("  %1").arg(fmt::format_percent(*m.top_weight * 100.0, 1));
+        firms_->setItem(i, 5, cell(top, ui::colors::TEXT_SECONDARY()));
     }
-    const QString cik = firm_->currentData().toString();
-    if (!cik.isEmpty())
-        services::OwnershipService::instance().load_book(cik);
+    if (!results.isEmpty() && selected_cik_.isEmpty()) {
+        firms_->selectRow(0);   // the largest book is a sensible landing place
+    }
     render();
 }
 
 void FirmBookPanel::render() {
     auto& svc = services::OwnershipService::instance();
-    const QString cik = firm_->currentData().toString();
+    const QString cik = selected_cik_;
     if (cik.isEmpty()) {
         status_->setText(svc.index_ready() ? QStringLiteral("Pick a filer.")
                                            : QStringLiteral("No 13F index yet."));

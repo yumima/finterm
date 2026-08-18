@@ -64,6 +64,11 @@ class OwnershipService : public QObject {
     /// change like the holder list.
     void load_demand(const QString& symbol);
 
+    /// Daily short-sale volume from FINRA. The only flow series here that is
+    /// not quarterly, so it is fetched alongside the register rather than
+    /// behind the index.
+    void load_short_volume(const QString& symbol);
+
     // ── Local 13F index ─────────────────────────────────────────────────────
     //
     // SEC publishes every 13F as a bulk quarterly data set: 10,647 filers and
