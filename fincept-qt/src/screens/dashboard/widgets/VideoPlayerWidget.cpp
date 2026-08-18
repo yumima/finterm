@@ -1031,18 +1031,33 @@ void VideoPlayerWidget::hard_reload_source() {
     if (!src.isValid())
         return;
 
+    pending_reload_src_ = src;
+    // Close the door on refresh_data() for the duration. Between the teardown
+    // and the deferred play() the player is Stopped with a non-empty
+    // current_url_, which is precisely the state a refresh tick turns into a
+    // second setSource() on a half-torn-down player — the double-open that
+    // wedges the backend for good. Cleared on PlayingState or on error.
+    play_in_progress_ = true;
     player_->stop();
     player_->setSource(QUrl{});
-    pending_reload_src_ = src;
-    // ONE EVENT-LOOP TURN between the clear and the re-set. Doing both in the
-    // same turn makes the new demuxer open race the old one's cancellation,
-    // and FFmpeg aborts it through its interrupt callback with "Immediate exit
-    // requested". That is not a recoverable transient: the player is left
-    // holding a source it will never load, so every subsequent play() returns
-    // silently and the stream is dead until the widget is rebuilt. Pause works
-    // (it needs no media), play does nothing — which is exactly how the bug
-    // presents.
-    QTimer::singleShot(0, this, [this]() {
+
+    // WAIT FOR THE OLD MEDIA TO ACTUALLY BE RELEASED before opening the new
+    // one. Re-setting in the same turn makes the new demuxer open race the old
+    // one's teardown, and FFmpeg aborts it through its interrupt callback with
+    // "Immediate exit requested" — which is unrecoverable: the player is left
+    // holding a source it will never load, so every play() after it returns
+    // silently. Pause still works (it needs no media) and play does nothing.
+    //
+    // NoMedia is the backend saying the teardown is done. It is not safe to
+    // assume that happens within one event-loop turn: the demuxer runs on its
+    // own thread. So this waits for the signal, with a timer as a backstop in
+    // case a backend never emits it — a late reload is recoverable, a wedged
+    // player is not.
+    auto* guard = new QObject(this);
+    auto fire = [this, guard]() {
+        // Whichever of the signal and the backstop arrives first does the work;
+        // the other finds pending_reload_src_ already cleared and returns.
+        guard->deleteLater();
         if (!player_ || !pending_reload_src_.isValid())
             return;
         const QUrl s = pending_reload_src_;
@@ -1057,12 +1072,27 @@ void VideoPlayerWidget::hard_reload_source() {
             status_label_->hide();   // clear any error left from the dead load
         // Recovering the stream also recovers its refresh: without this the
         // stream plays but refresh_data() stays disabled from the error.
-        if (current_url_.isEmpty() && !url_before_error_.isEmpty()) {
+        // Only when the player is still on the source that errored — if the
+        // user has since chosen another stream whose own load failed, the
+        // remembered URL belongs to the old one and restoring it would play
+        // and then keep refreshing something they did not select.
+        if (current_url_.isEmpty() && !url_before_error_.isEmpty() && s == errored_source_) {
             current_url_ = url_before_error_;
-            url_before_error_.clear();
         }
+        url_before_error_.clear();
+        errored_source_.clear();
         player_->play();
-    });
+    };
+
+    connect(player_, &QMediaPlayer::mediaStatusChanged, guard,
+            [fire](QMediaPlayer::MediaStatus st) {
+                if (st == QMediaPlayer::NoMedia)
+                    fire();
+            });
+    // Backstop, and the path taken when the backend already reported NoMedia
+    // synchronously from setSource() above — in which case the signal has
+    // already been and gone before this connect ran.
+    QTimer::singleShot(250, guard, fire);
 #endif
 }
 
@@ -1441,6 +1471,9 @@ void VideoPlayerWidget::play_custom_url() {
 }
 
 void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
+    // A new selection retires any recovery pending from the previous stream.
+    url_before_error_.clear();
+    errored_source_.clear();
     current_url_ = url;
     current_title_ = title;
     pending_title_ = title;
@@ -1860,6 +1893,8 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void VideoPlayerWidget::stop_playback() {
+    url_before_error_.clear();
+    errored_source_.clear();
     // Bring the surface back into the tile before tearing playback
     // down — otherwise the user gets a momentarily-visible fullscreen
     // window with a stopped (black) frame.
@@ -1901,6 +1936,7 @@ void VideoPlayerWidget::on_player_error() {
     const QString err = player_->errorString();
     play_in_progress_ = false;
     url_before_error_ = current_url_;   // restored if the user recovers the stream
+    errored_source_   = player_->source();
     current_url_.clear(); // stops refresh_data() from retrying
     // Stop the render loop — without this, frameSwapped keeps firing 60fps
     // rendering the last frozen frame behind the error label indefinitely.

@@ -193,6 +193,13 @@ void SmartMoneyPanel::render() {
         return;
     }
     if (!snap.smart_money_ok) {
+        // Overwrite the loading text: this branch is reached once the read has
+        // finished with nothing to show, and leaving "Reading the 13F index…"
+        // there says the opposite of what happened.
+        chart_->set_empty_text(svc.index_ready()
+                                   ? QStringLiteral("No 13F holders on file for this security "
+                                                    "in the indexed quarter.")
+                                   : QStringLiteral("No 13F index yet."));
         status_->setText(svc.index_ready()
                              ? svc.index_status_text()
                              : QStringLiteral("No institutional holder data yet. Build the 13F "

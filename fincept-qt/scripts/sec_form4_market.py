@@ -82,14 +82,11 @@ def connect():
     cols = {r[1] for r in con.execute("PRAGMA table_info(tx)")}
     if "held_after" not in cols:
         con.execute("ALTER TABLE tx ADD COLUMN held_after REAL")
-        # Rows stored before the column existed carry NULL, and scan() never
-        # revisits an accession it has already seen. Drop those accessions from
-        # the seen set so the next scan reads them again, rather than leaving a
-        # permanently blank column that claims the filings were silent.
-        con.execute("""DELETE FROM seen WHERE accession IN (
-                         SELECT accession FROM tx GROUP BY accession
-                          HAVING COUNT(held_after) = 0)""")
-        con.execute("DELETE FROM tx WHERE held_after IS NULL")
+        # Deliberately NOT deleting the rows that predate this column. They
+        # carry NULL and show a blank cell, which is a small cost; deleting
+        # them to force a re-read would destroy the store, because scan() only
+        # ever walks back from today and cannot reach filings older than its
+        # window. Weeks of accumulated filings would be unrecoverable.
     con.execute("CREATE INDEX IF NOT EXISTS ix_tx_filed ON tx(filed)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_tx_symbol ON tx(symbol)")
     # One row per accession so a rescan is incremental rather than a refetch of
@@ -99,6 +96,11 @@ def connect():
     # few days of daily index cannot supply — it is fetched per owner from
     # EDGAR and cached here, because it changes about as often as a person's
     # trading habits do.
+    # Days already walked, including ones the index had nothing for. Without
+    # this a market holiday is never recorded in `seen` (no accessions to
+    # record), so every scan would re-walk it and spend its budget on a day
+    # that will never have filings.
+    con.execute("CREATE TABLE IF NOT EXISTS scanned_days (filed TEXT PRIMARY KEY)")
     con.execute("""CREATE TABLE IF NOT EXISTS owner_pattern (
         insider_cik TEXT PRIMARY KEY, pattern TEXT, years INTEGER,
         trades INTEGER, checked TEXT)""")
@@ -159,16 +161,45 @@ def _extract_xml(text):
     return text[i:j + len("</ownershipDocument>")].encode("utf-8", "replace")
 
 
-def scan(days=3, limit=None):
-    """Read the last @days business days of Form 4 filings into the local store."""
+def scan(days=3, limit=None, max_new_days=None):
+    """Read Form 4 filings into the local store, oldest-unread day first.
+
+    @days is the window the reader is looking at; @max_new_days bounds how much
+    of it one press will fetch, because a day is around 500 submission fetches.
+    Days already present in the store are skipped, so pressing again genuinely
+    reaches further back instead of re-walking the same few days — which is what
+    a "last 30 days" selector implies is reachable.
+    """
     con = connect()
     try:
         fetched = parsed = skipped = 0
-        for d in business_days(int(days)):
+        # A day with any filing recorded has been walked; the index for a given
+        # day never changes once published.
+        done_days = {r[0] for r in con.execute(
+            "SELECT filed FROM scanned_days").fetchall()}
+        done_days |= {r[0] for r in con.execute(
+            "SELECT DISTINCT filed FROM seen").fetchall()}
+        wanted = [d for d in business_days(int(days)) if d.isoformat() not in done_days]
+        budget = int(max_new_days) if max_new_days else len(wanted)
+        days_left = budget
+        for d in wanted:
+            if days_left <= 0:
+                break
             filed = d.isoformat()
             idx = day_index(d)
             if not idx:
+                # No index for this date — a holiday, or today before EDGAR
+                # publishes. Record it only when it is in the past: today's
+                # index will appear later and must not be written off.
+                if d < date.today():
+                    con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)",
+                                (filed,))
+                    con.commit()
+                # Not counted against the budget: nothing was read. Today's
+                # index in particular does not exist until EDGAR publishes, and
+                # spending the day's allowance on it would stall the walk.
                 continue
+            days_left -= 1
             have = {r[0] for r in con.execute(
                 "SELECT accession FROM seen WHERE filed=?", (filed,)).fetchall()}
             todo = [(a, p) for a, p in idx.items() if a not in have]
@@ -197,9 +228,15 @@ def scan(days=3, limit=None):
                          1 if t.get("open_market") else 0,
                          1 if t.get("derivative") else 0, t.get("source_url", ""),
                          t.get("shares_held_after")))
+            con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (filed,))
             con.commit()
+        remaining_days = max(0, len(wanted) - budget)
         return {"fetched": fetched, "transactions": parsed,
-                "already_had": skipped, "days": int(days)}
+                "already_had": skipped, "days": int(days),
+                "days_read": budget - days_left,
+                # >0 means the window asked for is not fully covered yet and
+                # pressing again will fetch more.
+                "days_remaining": remaining_days}
     finally:
         con.close()
 
@@ -240,9 +277,14 @@ def classify(days=10, limit=60):
               LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
              WHERE t.open_market=1 AND t.derivative=0 AND t.code='P'
                AND t.direction='acquired' AND t.filed>=? AND t.insider_cik<>''
-               AND p.insider_cik IS NULL
+               AND (p.insider_cik IS NULL
+                    -- Re-examine the ones we could not judge. "Unclassified"
+                    -- means too little filing history YET; cached forever it
+                    -- would still say so years after the history existed.
+                    OR (p.pattern='unclassified' AND p.checked < ?))
              LIMIT ?
-        """, (cutoff, int(limit))).fetchall()
+        """, (cutoff, (date.today() - timedelta(days=90)).isoformat(),
+              int(limit))).fetchall()
         done = 0
         for (cik,) in rows:
             dates = owner_filing_dates(cik) or []
@@ -264,8 +306,11 @@ def classify(days=10, limit=60):
                 pattern = "opportunistic"
             con.execute("INSERT OR REPLACE INTO owner_pattern VALUES (?,?,?,?,?)",
                         (cik, pattern, span, len(dates), date.today().isoformat()))
+            # Commit per owner. Holding one transaction across eighty network
+            # round-trips keeps the write lock for minutes, and a scan started
+            # meanwhile exhausts its busy timeout and fails outright.
+            con.commit()
             done += 1
-        con.commit()
         remaining = con.execute("""
             SELECT COUNT(DISTINCT t.insider_cik)
               FROM tx t
@@ -290,7 +335,12 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
     con = connect()
     try:
         cutoff = (date.today() - timedelta(days=int(days) * 2)).isoformat()
-        want = "acquired" if direction == "buy" else "disposed"
+        buying = direction != "sell"
+        # P is an open-market purchase and S an open-market sale. Pinning code
+        # to P while asking for disposals matches nothing at all, which read as
+        # "nothing scanned yet" however full the store was.
+        want_code = "P" if buying else "S"
+        want = "acquired" if buying else "disposed"
         # Code P only: see the module docstring on why grants and exercises are
         # excluded rather than merely de-emphasised.
         rows = con.execute("""
@@ -316,12 +366,12 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
                             THEN t.shares / (t.held_after - t.shares) END)
               FROM tx t
               LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
-             WHERE open_market=1 AND derivative=0 AND code='P'
-               AND direction=? AND filed>=?
+             WHERE t.open_market=1 AND t.derivative=0 AND t.code=?
+               AND t.direction=? AND t.filed>=?
              GROUP BY COALESCE(NULLIF(t.symbol,''), t.issuer)
             HAVING v >= ?
              ORDER BY v DESC LIMIT ?
-        """, (want, cutoff, float(min_value), int(limit))).fetchall()
+        """, (want_code, want, cutoff, float(min_value), int(limit))).fetchall()
         out = []
         for (sym, issuer, v, sh, people, trades, latest, roles,
              opportunistic, routine, stake) in rows:
@@ -338,6 +388,9 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
                 "routine": routine or 0,
                 # None when no filing reported holdings after the trade.
                 "stake_increase": stake,
+                # False on the sell view: the metric is about growing a
+                # position, so the UI must not claim the filing was silent.
+                "stake_applies": buying,
             })
         return {"leaders": out, "days": int(days), "direction": direction}
     finally:
@@ -346,7 +399,7 @@ def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
 
 def handle_action(action, p):
     if action == "scan":
-        return scan(p.get("days") or 3, p.get("limit"))
+        return scan(p.get("days") or 3, p.get("limit"), p.get("max_new_days"))
     if action == "status":
         return status()
     if action == "leaders":

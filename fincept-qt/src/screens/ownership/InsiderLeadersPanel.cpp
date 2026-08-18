@@ -124,12 +124,15 @@ void InsiderLeadersPanel::run_scan() {
                        "filings a day, each fetched and parsed. Only filings not already read "
                        "are fetched, so pressing this again extends the window.%2")
             .arg(days)
-            .arg(days < want ? QStringLiteral(" Up to %1 days at a time.").arg(kMaxScanDays)
-                             : QString()));
+            .arg(days < want
+                     ? QStringLiteral(" Up to %1 unread days per press; press again for more.")
+                           .arg(kMaxScanDays)
+                     : QString()));
     status_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     QPointer<InsiderLeadersPanel> self = this;
     const QString payload = QString::fromUtf8(
-        QJsonDocument(QJsonObject{{"days", days}}).toJson(QJsonDocument::Compact));
+        QJsonDocument(QJsonObject{{"days", want}, {"max_new_days", kMaxScanDays}})
+            .toJson(QJsonDocument::Compact));
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form4_market.py"), {QStringLiteral("scan"), payload},
         [self](python::PythonResult result) {
@@ -143,6 +146,18 @@ void InsiderLeadersPanel::run_scan() {
                     QString("color:%1;font-size:12px;").arg(ui::colors::AMBER()));
                 return;
             }
+            // Report whether the window is now fully covered — the scan reads
+            // the oldest unread days first and is bounded per press, so
+            // "press again for more" has to be true or absent, never implied.
+            const auto root =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
+            const int left = root.value(QStringLiteral("days_remaining")).toInt();
+            if (left > 0)
+                self->status_->setText(
+                    QStringLiteral("Read %1 more day(s). %2 day(s) of the selected window still "
+                                   "unread — press SCAN EDGAR again to fetch them.")
+                        .arg(root.value(QStringLiteral("days_read")).toInt())
+                        .arg(left));
             // Show the ranking straight away, then label the insiders behind
             // it. Classification is a per-owner fetch from EDGAR and would
             // otherwise hold an already-usable table hostage to it.
@@ -205,8 +220,11 @@ void InsiderLeadersPanel::reload() {
             self->table_->setHorizontalHeaderLabels(
                 {QStringLiteral("Ticker"), QStringLiteral("Company"),
                  buying ? QStringLiteral("Bought") : QStringLiteral("Sold"),
-                 QStringLiteral("Insiders"), QStringLiteral("Stake +"), QStringLiteral("Roles"),
-                 QStringLiteral("Latest")});
+                 QStringLiteral("Insiders"),
+                 // The ratio measures a position growing, so the header only
+                 // claims it on the buy view.
+                 buying ? QStringLiteral("Stake +") : QStringLiteral("—"),
+                 QStringLiteral("Roles"), QStringLiteral("Latest")});
             if (rows.isEmpty()) {
                 self->status_->setText(QStringLiteral(
                     "Nothing scanned yet. Press SCAN EDGAR to read the last few days of Form 4 "
@@ -278,6 +296,8 @@ void InsiderLeadersPanel::reload() {
                 // buy by a director already holding $50m is noise; the same buy
                 // from someone holding $200k is not, and only this ratio
                 // separates them.
+                const bool stake_applies =
+                    o.value(QStringLiteral("stake_applies")).toBool(true);
                 const auto stake = o.value(QStringLiteral("stake_increase"));
                 auto* st = cell(stake.isDouble()
                                     ? fmt::format_percent(stake.toDouble() * 100.0, 0, true)
@@ -285,14 +305,17 @@ void InsiderLeadersPanel::reload() {
                                 stake.isDouble() && stake.toDouble() >= 0.25
                                     ? ui::colors::GREEN()
                                     : ui::colors::TEXT_SECONDARY());
-                st->setToolTip(stake.isDouble()
-                                   ? QStringLiteral("The biggest proportional buy here: one "
-                                                    "insider grew their own holding by this "
-                                                    "much. Not necessarily the largest purchase "
-                                                    "by value.")
-                                   : QStringLiteral("No filing in this window reported holdings "
-                                                    "after the trade, so the purchase cannot be "
-                                                    "sized against the insider's own position."));
+                st->setToolTip(
+                    !stake_applies
+                        ? QStringLiteral("Only meaningful for purchases — this measures a "
+                                         "position growing, which a sale does not do.")
+                        : (stake.isDouble()
+                               ? QStringLiteral("The biggest proportional buy here: one insider "
+                                                "grew their own holding by this much. Not "
+                                                "necessarily the largest purchase by value.")
+                               : QStringLiteral("No filing in this window reported holdings after "
+                                                "the trade, so the purchase cannot be sized "
+                                                "against the insider's own position.")));
                 self->table_->setItem(i, 4, st);
 
                 // Roles arrive once per filer, so three directors buying yields

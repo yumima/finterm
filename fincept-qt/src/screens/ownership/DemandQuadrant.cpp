@@ -240,13 +240,18 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
                     QStringLiteral("median holder %1 to %2 — shape amplified, not to scale")
                         .arg(fmt::format_percent(min_med(med) * 100.0, 2, true),
                              fmt::format_percent(max_med(med) * 100.0, 2, true));
-                // Top centre: the corners carry the four quadrant counts and
-                // the bottom band carries the axis labels and the named
-                // managers, so the middle of the top edge is the one strip of
-                // this chart nothing else claims.
-                const QRectF cap(plot_.left() + plot_.width() / 4, plot_.top() + 1,
-                                 plot_.width() / 2, 14);
-                g.drawText(cap, Qt::AlignHCenter | Qt::AlignVCenter, caption);
+                // Top centre — the corners carry the four quadrant counts and
+                // the bottom band the axis labels and named managers, so the
+                // middle of the top edge is the one strip nothing else claims.
+                // The rect spans the full width and the TEXT is elided to the
+                // gap between the two count badges: drawText clips to its rect
+                // without eliding, so a narrow rect silently cut the caption in
+                // half rather than shortening it legibly.
+                const int badge = 120;   // room the corner counts occupy
+                const int avail = std::max(80, plot_.width() - badge * 2);
+                const QRectF cap(plot_.left(), plot_.top() + 1, plot_.width(), 14);
+                g.drawText(cap, Qt::AlignHCenter | Qt::AlignVCenter,
+                           QFontMetrics(cf).elidedText(caption, Qt::ElideRight, avail));
             }
         }
     }
