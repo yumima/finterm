@@ -1433,6 +1433,7 @@ set(SCREEN_SOURCES
     # Equity Research
     src/screens/equity_research/EquityResearchScreen.cpp
     src/screens/equity_research/EquityOverviewTab.cpp
+    src/screens/equity_research/PriceRangeStrip.cpp
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityAiTab.cpp
     src/screens/equity_research/EarningsReactionChart.cpp
@@ -1673,6 +1674,7 @@ set_source_files_properties(
     src/screens/equity_research/EquityFinancialsTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
     src/screens/equity_research/EquityOverviewTab.cpp
+    src/screens/equity_research/PriceRangeStrip.cpp
     src/screens/equity_research/EquityPeersTab.cpp
     src/screens/equity_research/EquityResearchScreen.cpp
     src/screens/equity_research/EquitySentimentTab.cpp

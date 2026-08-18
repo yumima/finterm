@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityOverviewTab.cpp
 #include "screens/equity_research/EquityOverviewTab.h"
 
+#include "screens/equity_research/PriceRangeStrip.h"
+
 #include "screens/knowledge/HelpHint.h"
 #include "services/equity/EquityResearchService.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -1081,6 +1083,13 @@ QWidget* EquityOverviewTab::build_chart_panel() {
 
     vl->addWidget(candle_canvas_, 1);
 
+    // Under the chart: where this price sits in its own year, with the two
+    // averages most capital watches marked for reference. Deliberately not a
+    // buy/sell read — see PriceRangeStrip for the evidence on why "below the
+    // average" is not the entry signal it is widely assumed to be.
+    range_strip_ = new PriceRangeStrip;
+    vl->addWidget(range_strip_);
+
     // Canvas → tab hover updates. Crosshair-moved → recompute both the
     // permanent primary stats strip AND the comp chip labels in lockstep.
     connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
@@ -2027,6 +2036,10 @@ void EquityOverviewTab::refresh_earnings_subscription() {
 void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& candles) {
     const QString cs = currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_);
     candle_canvas_->set_candles(candles, cs);
+    // Same series, so the range strip and the chart can never disagree about
+    // what the 52-week high was.
+    if (range_strip_)
+        range_strip_->set_candles(candles, cs);
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────

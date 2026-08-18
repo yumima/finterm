@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b46fc7b88`](https://github.com/yumima/finterm/commit/b46fc7b88) **fix:** ten defects from review, including a migration that destroyed the store
 - [`572a5973d`](https://github.com/yumima/finterm/commit/572a5973d) **fix:** video that will not resume, and holders shown under the wrong stock
 - [`0d32f3126`](https://github.com/yumima/finterm/commit/0d32f3126) ownership: keep the filing date on the pane in the insider list
 - [`810aaa8c9`](https://github.com/yumima/finterm/commit/810aaa8c9) ownership: drop an include the list panel no longer uses

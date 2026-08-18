@@ -286,6 +286,7 @@ class EquityOverviewTab : public QWidget {
     QPushButton* btn_vol_   = nullptr;
     QPushButton* btn_sma20_ = nullptr;
     QPushButton* btn_sma50_ = nullptr;
+    class PriceRangeStrip* range_strip_ = nullptr;
     QPushButton* btn_sma200_= nullptr;
     QPushButton* btn_earn_  = nullptr;
     QPushButton* btn_comp_  = nullptr;   // label + click-to-focus the inline input
