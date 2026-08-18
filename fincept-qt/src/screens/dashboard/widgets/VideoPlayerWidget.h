@@ -241,6 +241,20 @@ class VideoPlayerWidget : public BaseWidget {
     /// see the .cpp for why doing both in one turn wedges the FFmpeg backend
     /// permanently.
     void hard_reload_source();
+    /// True when the current source is served by the local live-HLS proxy.
+    /// A live stream reaching "end of media" has not ended — the segment
+    /// window rolled, or the transport hiccuped — so it is reconnected rather
+    /// than left stopped.
+    bool is_live_source() const;
+    /// Reconnect a live stream that stopped or stalled on its own, with
+    /// backoff. Never fires for a user pause or a lock auto-pause.
+    void auto_reconnect(const QString& why);
+
+    class QTimer* stall_timer_ = nullptr;
+    int  reconnect_attempts_ = 0;
+    /// Reconnects stop after this many consecutive failures so a dead stream
+    /// cannot retry forever; reset as soon as playback genuinely resumes.
+    static constexpr int kMaxReconnects = 5;
     /// Source waiting to be re-set once the old media has been released.
     QUrl pending_reload_src_;
     /// current_url_ as it was when playback last failed. errorOccurred clears

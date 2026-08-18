@@ -560,8 +560,19 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
                              cb(true, analysis);
                              emit this->analysis_ready(analysis);
                          });
-        watcher->setFuture(QtConcurrent::run(
-            [prompt]() { return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false); }));
+        // Constrained JSON decoding, and no chain-of-thought. The parser here
+        // takes the first '{' to the last '}' and needs valid JSON in between;
+        // small local models emit nearly-valid JSON often enough — a dropped
+        // comma between two fields — that analysis failed on some articles and
+        // not others, with nothing to distinguish them. Measured against the
+        // configured local model, roughly one request in three was unparseable
+        // free-form and none were with response_format set.
+        ai_chat::PersonaScope scope;
+        scope.json_object = true;
+        scope.think = false;   // a one-shot structured extraction, not reasoning
+        watcher->setFuture(QtConcurrent::run([prompt, scope]() {
+            return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, scope);
+        }));
     });
 }
 

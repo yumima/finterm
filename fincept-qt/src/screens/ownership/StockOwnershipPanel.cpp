@@ -827,17 +827,6 @@ void StockOwnershipPanel::refresh_index_ui(const QString& msg) {
         svc.load_smart_money(symbol_);
 }
 
-void StockOwnershipPanel::restore_state(const QVariantMap& state) {
-    const QString sym = state.value(QStringLiteral("symbol")).toString();
-    if (!sym.isEmpty())
-        load(sym);
-}
 
-QVariantMap StockOwnershipPanel::save_state() const {
-    QVariantMap m;
-    if (!symbol_.isEmpty())
-        m.insert(QStringLiteral("symbol"), symbol_);
-    return m;
-}
 
 } // namespace fincept::screens

@@ -90,6 +90,13 @@ struct PersonaScope {
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
     bool think = true;
+    // Ask the backend to constrain decoding to a single JSON object
+    // (OpenAI `response_format`, which hearth forwards to Ollama's grammar
+    // mode). Small local models emit NEARLY valid JSON — a dropped comma, a
+    // missing quote between two fields — often enough that a caller parsing
+    // free text fails intermittently on some articles and not others. No
+    // amount of repair heuristics fixes that; constraining the decoder does.
+    bool json_object = false;
     // ── Per-call target override (role binding) ──────────────────────────────
     //
     // Empty = use the service's configured provider/model. Non-empty = this

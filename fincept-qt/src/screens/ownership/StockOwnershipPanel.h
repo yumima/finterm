@@ -1,5 +1,4 @@
 #pragma once
-#include "screens/IStatefulScreen.h"
 #include "screens/ownership/OwnershipTypes.h"
 
 #include <QHideEvent>
@@ -36,7 +35,7 @@ namespace fincept::screens {
 /// stock and for how it trades, each line carrying the number that produced it
 /// and the rule that was applied. The tables below are the evidence for those
 /// lines, in the order a reader would check them.
-class StockOwnershipPanel : public QWidget, public IStatefulScreen {
+class StockOwnershipPanel : public QWidget {
     Q_OBJECT
   public:
     explicit StockOwnershipPanel(QWidget* parent = nullptr);
@@ -50,11 +49,6 @@ class StockOwnershipPanel : public QWidget, public IStatefulScreen {
     /// on one screen is a question about which one is in charge.
     void set_chrome_visible(bool on);
 
-    // IStatefulScreen
-    void restore_state(const QVariantMap& state) override;
-    QVariantMap save_state() const override;
-    QString state_key() const override { return QStringLiteral("ownership"); }
-    int state_version() const override { return 1; }
 
   signals:
     /// Ask the shell to open another screen for @p ticker (Equity Research).

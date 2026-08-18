@@ -522,6 +522,13 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             // User pressed the button → not an auto-pause, so clear the
             // latch even if a subsequent unlock fires.
             auto_paused_on_lock_ = false;
+            // A deliberate press is also a fresh start for the reconnect
+            // budget: "press PLAY to try again" has to mean something after
+            // the automatic attempts are spent. And a user pause must cancel
+            // any reconnect queued against the stall it just caused.
+            reconnect_attempts_ = 0;
+            if (stall_timer_)
+                stall_timer_->stop();
 #endif
         });
         cl->addWidget(play_pause_btn_);
@@ -851,6 +858,44 @@ void VideoPlayerWidget::build_player_view() {
 
     connect(player_, &QMediaPlayer::errorOccurred, this,
             &VideoPlayerWidget::on_player_error);
+
+    // Nothing watched media status before this, which is why a live stream
+    // that ran out of segments stayed "playing" forever with a frozen picture:
+    // EndOfMedia and StalledMedia are reported HERE, not through
+    // playbackStateChanged, so neither was ever seen.
+    stall_timer_ = new QTimer(this);
+    stall_timer_->setSingleShot(true);
+    // Long enough that an ordinary rebuffer recovers on its own — reconnecting
+    // on every hiccup would interrupt more playback than it restores.
+    stall_timer_->setInterval(6000);
+    connect(stall_timer_, &QTimer::timeout, this,
+            [this]() { auto_reconnect(QStringLiteral("stalled")); });
+
+    connect(player_, &QMediaPlayer::mediaStatusChanged, this,
+            [this](QMediaPlayer::MediaStatus st) {
+                switch (st) {
+                    case QMediaPlayer::StalledMedia:
+                        // Give it a chance to refill before intervening.
+                        if (player_->playbackState() == QMediaPlayer::PlayingState)
+                            stall_timer_->start();
+                        break;
+                    case QMediaPlayer::BufferedMedia:
+                        // Real playback resumed: cancel any pending reconnect
+                        // and forget the attempt count, so a stream that
+                        // hiccups once an hour never exhausts its budget.
+                        stall_timer_->stop();
+                        reconnect_attempts_ = 0;
+                        if (status_label_->text().startsWith(QLatin1String("Reconnecting")))
+                            status_label_->hide();
+                        break;
+                    case QMediaPlayer::EndOfMedia:
+                        stall_timer_->stop();
+                        auto_reconnect(QStringLiteral("end of stream"));
+                        break;
+                    default:
+                        break;
+                }
+            });
     connect(player_, &QMediaPlayer::playbackStateChanged, this,
             [this](QMediaPlayer::PlaybackState s) {
                 if (s == QMediaPlayer::PlayingState)
@@ -869,15 +914,15 @@ void VideoPlayerWidget::build_player_view() {
                 // pause and lock-auto-pause flow through this signal.
                 if (s == QMediaPlayer::PausedState)
                     paused_at_ = QDateTime::currentDateTime();
-                // Reflect state on the pause/play button. StoppedState falls
-                // through to "PAUSE" since the controls bar is hidden then
-                // anyway (stop_playback returns the user to the channel list).
+                // Reflect state on the pause/play button. StoppedState used to
+                // fall through on the assumption that stopping always meant
+                // stop_playback(), which hides the bar — but a stream that
+                // ends or errors on its own stops with the bar still visible,
+                // leaving the button reading PAUSE while nothing was playing.
                 if (play_pause_btn_) {
-                    if (s == QMediaPlayer::PlayingState) {
-                        play_pause_btn_->setText(QString(QChar(0x23F8)) + " PAUSE");
-                    } else if (s == QMediaPlayer::PausedState) {
-                        play_pause_btn_->setText(QString(QChar(0x25B6)) + " PLAY");
-                    }
+                    play_pause_btn_->setText(s == QMediaPlayer::PlayingState
+                                                 ? QString(QChar(0x23F8)) + " PAUSE"
+                                                 : QString(QChar(0x25B6)) + " PLAY");
                 }
             });
 #else
@@ -1021,6 +1066,48 @@ void VideoPlayerWidget::sync_web_mode_controls() {
 // auto-resume be a one-liner with the right safety semantics
 // (auto_paused_on_lock_ contract: "we paused it; resume only if
 // it's still paused; otherwise leave alone").
+bool VideoPlayerWidget::is_live_source() const {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_)
+        return false;
+    // LiveHlsProxy binds 127.0.0.1, but the player URL is built with either
+    // the literal or the hostname depending on the call site.
+    const QString host = player_->source().host();
+    return host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost");
+#else
+    return false;
+#endif
+}
+
+void VideoPlayerWidget::auto_reconnect(const QString& why) {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_ || auto_paused_on_lock_)
+        return;
+    // A live stream does not end and does not stall for good: the segment
+    // window rolled past the buffered position, or the transport hiccuped.
+    // Both are transport conditions, and the only correct response is to
+    // re-open at the live edge. VOD genuinely ends, so it is left alone.
+    if (!is_live_source())
+        return;
+    if (reconnect_attempts_ >= kMaxReconnects) {
+        set_loading(false);
+        status_label_->setText(
+            QStringLiteral("Stream stopped after %1 reconnect attempts (%2). Press PLAY to try "
+                           "again.").arg(kMaxReconnects).arg(why));
+        status_label_->show();
+        return;
+    }
+    ++reconnect_attempts_;
+    LOG_INFO("VideoPlayer", QString("Live stream %1 — reconnecting (%2/%3)")
+                                .arg(why).arg(reconnect_attempts_).arg(kMaxReconnects));
+    status_label_->setText(QStringLiteral("Reconnecting… (%1)").arg(why));
+    status_label_->show();
+    hard_reload_source();
+#else
+    Q_UNUSED(why);
+#endif
+}
+
 void VideoPlayerWidget::hard_reload_source() {
 #ifdef HAS_QT_MULTIMEDIA
     if (!player_)
@@ -1474,6 +1561,9 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     // A new selection retires any recovery pending from the previous stream.
     url_before_error_.clear();
     errored_source_.clear();
+    if (stall_timer_)
+        stall_timer_->stop();
+    reconnect_attempts_ = 0;
     current_url_ = url;
     current_title_ = title;
     pending_title_ = title;
@@ -1895,6 +1985,11 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
 void VideoPlayerWidget::stop_playback() {
     url_before_error_.clear();
     errored_source_.clear();
+    // Leaving the channel must not leave a reconnect armed against the stream
+    // the user just walked away from.
+    if (stall_timer_)
+        stall_timer_->stop();
+    reconnect_attempts_ = 0;
     // Bring the surface back into the tile before tearing playback
     // down — otherwise the user gets a momentarily-visible fullscreen
     // window with a stopped (black) frame.

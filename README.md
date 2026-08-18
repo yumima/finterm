@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a146444f2`](https://github.com/yumima/finterm/commit/a146444f2) equity research: place the price in its own range, without implying an entry
 - [`b46fc7b88`](https://github.com/yumima/finterm/commit/b46fc7b88) **fix:** ten defects from review, including a migration that destroyed the store
 - [`572a5973d`](https://github.com/yumima/finterm/commit/572a5973d) **fix:** video that will not resume, and holders shown under the wrong stock
 - [`0d32f3126`](https://github.com/yumima/finterm/commit/0d32f3126) ownership: keep the filing date on the pane in the insider list

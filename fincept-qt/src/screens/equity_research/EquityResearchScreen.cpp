@@ -738,6 +738,13 @@ void EquityResearchScreen::on_tab_changed(int index) {
         svc.fetch_news(current_symbol_);
     } else if (tab == sentiment_tab_) {
         sentiment_tab_->set_symbol(current_symbol_);
+    } else if (tab == ownership_tab_) {
+        // Every other tab re-syncs its symbol on activation, and ownership was
+        // the one that did not — so if it ever missed a load_symbol (created
+        // after one, or fed by any path that did not reach it), nothing ever
+        // corrected it and the tab showed one company's register under
+        // another's header. set_symbol is a no-op when already correct.
+        ownership_tab_->set_symbol(current_symbol_);
     } else if (tab == relationships_tab_) {
         // Relationships tab — lazy fetch on activation only. The
         // RelationshipMapService::fetch call is multi-second and can spawn
