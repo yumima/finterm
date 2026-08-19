@@ -44,6 +44,11 @@ void Surface3DWidget::set_surface(const std::vector<std::vector<float>>& grid, c
     update();
 }
 
+void Surface3DWidget::set_empty_text(const QString& text) {
+    empty_text_ = text;
+    update();
+}
+
 void Surface3DWidget::clear() {
     grid_.clear();
     update();
@@ -133,9 +138,10 @@ void Surface3DWidget::paintEvent(QPaintEvent*) {
     }
 
     if (grid_.empty() || grid_[0].empty()) {
-        painter.setPen(QColor(80, 80, 80));
+        painter.setPen(QColor(120, 120, 120));
         painter.setFont(QFont("Consolas", 11));
-        painter.drawText(rect(), Qt::AlignCenter, "NO DATA LOADED");
+        painter.drawText(QRect(24, 0, W - 48, H), Qt::AlignCenter | Qt::TextWordWrap,
+                         empty_text_.isEmpty() ? QStringLiteral("NO DATA LOADED") : empty_text_);
         return;
     }
 

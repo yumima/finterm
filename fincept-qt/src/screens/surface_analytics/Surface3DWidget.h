@@ -25,6 +25,14 @@ class Surface3DWidget : public QWidget {
 
     void clear();
 
+    /// Message shown in place of the surface when there is no data. Used to
+    /// name the feed a gated surface would need, so an empty panel explains
+    /// itself instead of reading as a bug.
+    void set_empty_text(const QString& text);
+
+  private:
+    QString empty_text_;
+
   protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

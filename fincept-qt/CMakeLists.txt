@@ -1278,6 +1278,7 @@ set(SCREEN_SOURCES
     src/screens/notes/NotesScreen.cpp
     src/screens/watchlist/WatchlistScreen.cpp
     src/screens/surface_analytics/SurfaceDemoData.cpp
+    src/screens/surface_analytics/SurfaceEquityMath.cpp
     src/screens/surface_analytics/SurfaceCsvImporter.cpp
     src/screens/surface_analytics/Surface3DWidget.cpp
     src/screens/surface_analytics/SurfaceTableWidget.cpp
@@ -1824,6 +1825,7 @@ set_source_files_properties(
     src/screens/surface_analytics/SurfaceCsvImporter.cpp
     src/screens/surface_analytics/SurfaceDataInspector.cpp
     src/screens/surface_analytics/SurfaceDemoData.cpp
+    src/screens/surface_analytics/SurfaceEquityMath.cpp
     src/screens/surface_analytics/SurfaceLineWidget.cpp
     src/screens/surface_analytics/SurfaceTableWidget.cpp
     src/screens/trade_viz/TradeVizScreen.cpp

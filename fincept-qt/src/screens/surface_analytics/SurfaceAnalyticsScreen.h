@@ -83,6 +83,15 @@ class SurfaceAnalyticsScreen : public QWidget,
     QWidget* build_surface_bar();
     void refresh_surface_bar();
     void load_demo_data();
+    /// Build Correlation, PCA, VaR, Drawdown and Beta from the daily bars a
+    /// fetch returned. Everything it fills is marked fetched_, so the badge
+    /// and the lineage report real provenance for them.
+    void compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r);
+    /// What the beta surface is measured AGAINST — a broad-market ETF from
+    /// the basket when there is one, otherwise the equal-weighted basket.
+    /// Shown on the axis, because a beta without its benchmark is not a
+    /// number anyone can use.
+    QString beta_benchmark_;
     /// Chart types whose drawn surface came from a real fetch. Everything not
     /// in here is analytically generated — load_demo_data() fills EVERY
     /// surface, including the ones whose tier names a Databento dataset, so

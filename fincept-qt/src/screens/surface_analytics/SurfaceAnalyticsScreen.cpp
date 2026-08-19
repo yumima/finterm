@@ -6,6 +6,7 @@
 #include "SurfaceCsvImporter.h"
 #include "SurfaceDataInspector.h"
 #include "SurfaceDefaults.h"
+#include "SurfaceEquityMath.h"
 #include "SurfaceLineWidget.h"
 #include "SurfaceTableWidget.h"
 #include "core/logging/Logger.h"
@@ -401,43 +402,41 @@ void SurfaceAnalyticsScreen::load_demo_data() {
     skew_data_ = generate_skew_surface(sym.c_str());
     local_vol_data_ = generate_local_vol(sym.c_str(), spot);
 
-    yield_data_ = generate_yield_curve();
-    swaption_data_ = generate_swaption_vol();
-    capfloor_data_ = generate_capfloor_vol();
-    bond_spread_data_ = generate_bond_spread();
-    ois_data_ = generate_ois_basis();
-    real_yield_data_ = generate_real_yield();
-    fwd_rate_data_ = generate_forward_rate();
+    // Swaption / cap-floor vol and the OIS basis are gated for the same
+    // reason. The curve, real yields, breakevens, credit spreads and implied
+    // forwards are filled from FRED by load_rates_from_fred().
 
-    fx_vol_data_ = generate_fx_vol();
-    fx_fwd_data_ = generate_fx_forward_points();
-    xccy_data_ = generate_xccy_basis();
-
-    cds_data_ = generate_cds_spread();
-    credit_trans_data_ = generate_credit_transition();
-    recovery_data_ = generate_recovery_rate();
+    // FX vol / forward points / cross-currency basis, CDS, rating transitions
+    // and recovery rates are gated — see required_feed(). They stay empty, and
+    // the chart says which feed it would take rather than drawing a model.
 
     cmdty_fwd_data_ = generate_commodity_forward();
     cmdty_vol_data_ = generate_commodity_vol();
     crack_data_ = generate_crack_spread();
     contango_data_ = generate_contango();
 
-    corr_data_ = generate_correlation(basket);
-    pca_data_ = generate_pca(basket);
-    var_data_ = generate_var();
-    stress_data_ = generate_stress_test();
-    factor_data_ = generate_factor_exposure(basket);
+    // Stress-test P&L and factor exposure are gated: both need definitions the
+    // app does not have. VaR, correlation, PCA, drawdown and beta are computed
+    // from real bars by compute_equity_surfaces().
     liquidity_data_ = generate_liquidity(sym.c_str(), spot);
-    drawdown_data_ = generate_drawdown(basket);
-    beta_data_ = generate_beta(basket);
     impl_div_data_ = generate_implied_dividend(sym.c_str(), spot);
 
-    inflation_data_ = generate_inflation_expectations();
-    monetary_data_ = generate_monetary_policy();
 }
 
 // ── Chart routing ─────────────────────────────────────────────────────────────
 void SurfaceAnalyticsScreen::update_chart() {
+    // A gated surface draws nothing and says what it would take. Set before
+    // the dispatch below so it applies whichever view mode is active.
+    if (surface_3d_) {
+        const char* feed = required_feed(active_chart_);
+        surface_3d_->set_empty_text(
+            feed ? QStringLiteral("NO DATA — this surface needs %1.\n\n"
+                                  "Nothing is drawn rather than a modelled shape:\n"
+                                  "an invented surface is worse than an empty one.")
+                       .arg(QString::fromUtf8(feed))
+                 : QString());
+    }
+
     auto minmax = [](const std::vector<std::vector<float>>& z, float& mn, float& mx) {
         mn = 9999;
         mx = -9999;
@@ -870,7 +869,15 @@ void SurfaceAnalyticsScreen::update_chart() {
                 std::snprintf(b, 8, "%dD", h);
                 hl2.push_back(b);
             }
-            surface_3d_->set_surface(beta_data_.z, "HORIZON", "BETA", "ASSET", mn, mx, true, &hl2, nullptr);
+            // Name the benchmark on the axis. "BETA" alone is not a number
+            // anyone can act on — beta to what?
+            const std::string blabel =
+                beta_benchmark_.isEmpty()
+                    ? std::string("BETA")
+                    : "BETA vs " + beta_benchmark_.toUpper().toStdString();
+            std::vector<std::string> al(beta_data_.assets);
+            surface_3d_->set_surface(beta_data_.z, "HORIZON", blabel, "ASSET", mn, mx, true, &hl2,
+                                     al.empty() ? nullptr : &al);
             break;
         }
         case ChartType::ImpliedDividend: {
@@ -1521,22 +1528,175 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
                                     QString::number(bar.value("volume").toDouble(), 'f', 0)});
                 }
             }
-            // The bars land in the inspector table ONLY. The EQUITIES-tier
-            // surfaces (Correlation, PCA, VaR, Stress Test, Factor Exposure,
-            // Drawdown, Beta) are not computed from them, so the chart stays
-            // generated. Saying "loaded" and leaving it at that let the user
-            // believe the picture in front of them came from these bars.
             data_inspector_->show_table("ohlcv-1d", headers, rows);
-            if (capability_for(active_chart_).tier == SurfaceTier::EQUITIES)
-                data_inspector_->set_status(
-                    QStringLiteral("%1 bars loaded into the table below — this chart is not "
-                                   "computed from them yet, so it stays generated")
-                        .arg(rows.size()), true);
+            compute_equity_surfaces(r);
         }
     }
     update_chart();
     update_metrics();
     update_inspector_lineage();
+}
+
+// Build the risk surfaces from the bars themselves.
+//
+// These five were drawn by SurfaceDemoData's generators while the bars needed
+// to compute them were being fetched and dropped into the inspector table. The
+// data was there; nothing joined it to the chart.
+void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r) {
+    using namespace fincept::surface;
+    PriceTable prices;
+    for (auto it = r.data.constBegin(); it != r.data.constEnd(); ++it) {
+        // Bars arrive newest-last from the provider, but sort on the date the
+        // bar carries rather than trusting arrival order — every statistic
+        // below is order-dependent and a silent reversal inverts all of them.
+        QVector<QJsonObject> bars = it.value();
+        std::sort(bars.begin(), bars.end(), [](const QJsonObject& a, const QJsonObject& b) {
+            return a.value("date").toString() < b.value("date").toString();
+        });
+        PriceSeries closes;
+        closes.reserve(size_t(bars.size()));
+        for (const QJsonObject& b : bars) {
+            const double c = b.value("close").toDouble();
+            if (c > 0.0)
+                closes.push_back(c);
+        }
+        if (closes.size() >= 2)
+            prices[it.key().toStdString()] = std::move(closes);
+    }
+    if (prices.size() < 2)
+        return;   // a correlation of one asset with itself is not a surface
+
+    // ── Correlation ─────────────────────────────────────────────────────
+    const CorrelationResult corr = compute_correlation(prices);
+    if (!corr.z.empty()) {
+        corr_data_.assets = corr.assets;
+        corr_data_.z = corr.z;
+        corr_data_.window = corr.observations;
+        fetched_.insert(ChartType::Correlation);
+    }
+
+    // ── PCA ─────────────────────────────────────────────────────────────
+    const PcaResult pca = compute_pca(prices);
+    if (!pca.z.empty()) {
+        pca_data_.factors = pca.factors;
+        pca_data_.assets = pca.assets;
+        pca_data_.z = pca.z;
+        pca_data_.variance_explained = pca.variance_explained;
+        fetched_.insert(ChartType::PCA);
+    }
+
+    // ── Drawdown: asset x lookback window ───────────────────────────────
+    // NaN where a window is longer than the history fetched, so a 90-day
+    // drawdown is never a 40-day drawdown wearing the wrong label.
+    {
+        const std::vector<int> windows = {20, 60, 120, 250};
+        drawdown_data_.assets.clear();
+        drawdown_data_.windows = windows;
+        drawdown_data_.z.clear();
+        bool any = false;
+        for (const auto& [sym, closes] : prices) {
+            drawdown_data_.assets.push_back(sym);
+            std::vector<float> row;
+            for (int w : windows) {
+                const double d = max_drawdown_pct(closes, w);
+                row.push_back(float(d));
+                any = any || !std::isnan(d);
+            }
+            drawdown_data_.z.push_back(std::move(row));
+        }
+        if (any)
+            fetched_.insert(ChartType::Drawdown);
+        else
+            drawdown_data_ = {};
+    }
+
+    // ── Beta: asset x lookback ──────────────────────────────────────────
+    // Against a broad-market ETF when the basket has one, otherwise against
+    // the equal-weighted basket. Which one is stated in the axis label — a
+    // beta means nothing without saying beta to WHAT.
+    {
+        static const std::vector<std::string> kBroad = {"SPY", "IVV", "VOO", "VTI", "QQQ"};
+        std::string bench;
+        for (const auto& cand : kBroad)
+            if (prices.count(cand)) { bench = cand; break; }
+
+        std::vector<double> bench_rets;
+        if (!bench.empty()) {
+            bench_rets = daily_returns(prices.at(bench));
+        } else {
+            // Equal-weighted basket: average the per-day returns across names,
+            // over the window they all share.
+            size_t common = std::numeric_limits<size_t>::max();
+            std::vector<std::vector<double>> all;
+            for (const auto& [sym, closes] : prices) {
+                all.push_back(daily_returns(closes));
+                common = std::min(common, all.back().size());
+            }
+            if (common != std::numeric_limits<size_t>::max() && common > 0) {
+                bench_rets.assign(common, 0.0);
+                for (auto& rr : all) {
+                    const size_t off = rr.size() - common;
+                    for (size_t i = 0; i < common; ++i)
+                        bench_rets[i] += rr[off + i] / double(all.size());
+                }
+            }
+        }
+
+        if (bench_rets.size() >= 20) {
+            const std::vector<int> horizons = {20, 60, 120, 250};
+            beta_data_.assets.clear();
+            beta_data_.horizons = horizons;
+            beta_data_.z.clear();
+            for (const auto& [sym, closes] : prices) {
+                beta_data_.assets.push_back(sym);
+                const std::vector<double> ar = daily_returns(closes);
+                std::vector<float> row;
+                for (int h : horizons) {
+                    if (int(ar.size()) < h || int(bench_rets.size()) < h) {
+                        row.push_back(std::numeric_limits<float>::quiet_NaN());
+                        continue;
+                    }
+                    const std::vector<double> a(ar.end() - h, ar.end());
+                    const std::vector<double> b(bench_rets.end() - h, bench_rets.end());
+                    row.push_back(float(beta(a, b)));
+                }
+                beta_data_.z.push_back(std::move(row));
+            }
+            beta_benchmark_ = QString::fromStdString(
+                bench.empty() ? std::string("equal-weighted basket") : bench);
+            fetched_.insert(ChartType::BetaSurface);
+        }
+    }
+
+    // ── VaR: confidence x horizon, on the equal-weighted basket ─────────
+    {
+        size_t common = std::numeric_limits<size_t>::max();
+        std::vector<std::vector<double>> all;
+        for (const auto& [sym, closes] : prices) {
+            all.push_back(daily_returns(closes));
+            common = std::min(common, all.back().size());
+        }
+        if (common != std::numeric_limits<size_t>::max() && common >= 30) {
+            std::vector<double> port(common, 0.0);
+            for (auto& rr : all) {
+                const size_t off = rr.size() - common;
+                for (size_t i = 0; i < common; ++i)
+                    port[i] += rr[off + i] / double(all.size());
+            }
+            const std::vector<float> confs = {0.90f, 0.95f, 0.99f};
+            const std::vector<int> horizons = {1, 5, 10, 20};
+            var_data_.confidence_levels = confs;
+            var_data_.horizons = horizons;
+            var_data_.z.clear();
+            for (float c : confs) {
+                std::vector<float> row;
+                for (int h : horizons)
+                    row.push_back(float(historical_var_pct(port, double(c), h)));
+                var_data_.z.push_back(std::move(row));
+            }
+            fetched_.insert(ChartType::VaR);
+        }
+    }
 }
 
 void SurfaceAnalyticsScreen::on_futures_received(const fincept::DatabentoFuturesResult& r) {

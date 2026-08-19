@@ -37,6 +37,38 @@ inline const char* tier_name(SurfaceTier t) {
     return "UNKNOWN";
 }
 
+/// The feed a surface would need to hold real numbers, or nullptr when the
+/// app can already produce it for real.
+///
+/// These twelve are quoted by dealers or published by rating agencies and have
+/// no free feed: swaption and cap/floor vol, FX vol and forward points, the
+/// cross-currency basis, CDS spreads, rating transitions and recovery rates,
+/// the OIS basis, and the policy path. Stress-test P&L and factor exposure are
+/// here for a different reason — both need definitions (scenarios, a factor
+/// set) that are a modelling choice, not data, and inventing them would be the
+/// same fabrication in a different coat.
+///
+/// A gated surface draws nothing at all. It used to draw an analytic model
+/// with rand() noise, which in a financial terminal is worse than an empty
+/// panel: a realistic-looking CDS surface invites a decision.
+inline const char* required_feed(ChartType t) {
+    switch (t) {
+        case ChartType::SwaptionVol:         return "swaption vol quotes (dealer / ICAP)";
+        case ChartType::CapFloorVol:         return "cap-floor vol quotes (dealer)";
+        case ChartType::FXVol:               return "FX option vol surface (dealer)";
+        case ChartType::FXForwardPoints:     return "FX forward quotes (dealer)";
+        case ChartType::CrossCurrencyBasis:  return "cross-currency basis swap quotes (dealer)";
+        case ChartType::CDSSpread:           return "CDS quotes (Markit / dealer)";
+        case ChartType::CreditTransition:    return "rating transition matrix (S&P / Moody's)";
+        case ChartType::RecoveryRate:        return "recovery-rate study (rating agency)";
+        case ChartType::OISBasis:            return "OIS and term-rate fixings";
+        case ChartType::MonetaryPolicyPath:  return "fed funds futures";
+        case ChartType::StressTestPnL:       return "a scenario set and your portfolio";
+        case ChartType::FactorExposure:      return "factor returns (Fama-French / Barra)";
+        default:                             return nullptr;
+    }
+}
+
 /// Where the numbers currently drawn actually came from. Distinct from the
 /// tier, which only says where a surface COULD be fetched from.
 enum class SurfaceProvenance { Fetched, Synthetic, Imported };
