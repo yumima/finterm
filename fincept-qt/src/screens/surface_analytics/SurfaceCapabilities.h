@@ -62,6 +62,10 @@ inline const char* required_feed(ChartType t) {
         case ChartType::CreditTransition:    return "rating transition matrix (S&P / Moody's)";
         case ChartType::RecoveryRate:        return "recovery-rate study (rating agency)";
         case ChartType::OISBasis:            return "OIS and term-rate fixings";
+        // ICE/BofA publish OAS by rating OR by maturity bucket, never the
+        // rating x maturity grid this surface is shaped for. Half of it would
+        // have to be invented, so none of it is drawn.
+        case ChartType::BondSpread:          return "a rating x maturity OAS grid";
         case ChartType::MonetaryPolicyPath:  return "fed funds futures";
         case ChartType::StressTestPnL:       return "a scenario set and your portfolio";
         case ChartType::FactorExposure:      return "factor returns (Fama-French / Barra)";

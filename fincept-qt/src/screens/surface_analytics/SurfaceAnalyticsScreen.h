@@ -4,6 +4,7 @@
 
 #include "SurfaceCapabilities.h"
 #include "SurfaceDemoData.h"
+#include "services/economics/EconomicsService.h"
 
 #include <QSet>
 #include "SurfaceTypes.h"
@@ -87,6 +88,13 @@ class SurfaceAnalyticsScreen : public QWidget,
     /// fetch returned. Everything it fills is marked fetched_, so the badge
     /// and the lineage report real provenance for them.
     void compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r);
+    /// Ask FRED for the Treasury curve, TIPS real yields and breakevens.
+    void load_rates_from_fred();
+    void on_fred_result(const QString& request_id,
+                        const fincept::services::EconomicsResult& r);
+    /// Implied forwards derived from the published curve — see the .cpp for
+    /// why they are only built on top of real data and never alone.
+    void build_forward_rates();
     /// What the beta surface is measured AGAINST — a broad-market ETF from
     /// the basket when there is one, otherwise the equal-weighted basket.
     /// Shown on the axis, because a beta without its benchmark is not a

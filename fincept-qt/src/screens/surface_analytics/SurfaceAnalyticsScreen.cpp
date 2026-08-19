@@ -16,6 +16,10 @@
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 
+#include <QDate>
+#include <QJsonArray>
+#include <QJsonValue>
+#include <QMap>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -402,9 +406,10 @@ void SurfaceAnalyticsScreen::load_demo_data() {
     skew_data_ = generate_skew_surface(sym.c_str());
     local_vol_data_ = generate_local_vol(sym.c_str(), spot);
 
-    // Swaption / cap-floor vol and the OIS basis are gated for the same
-    // reason. The curve, real yields, breakevens, credit spreads and implied
-    // forwards are filled from FRED by load_rates_from_fred().
+    // Swaption / cap-floor vol, the OIS basis and the rating x maturity bond
+    // spread grid are gated for the same reason. The curve, real yields,
+    // breakevens and the implied forwards derived from the curve are filled
+    // from FRED by load_rates_from_fred().
 
     // FX vol / forward points / cross-currency basis, CDS, rating transitions
     // and recovery rates are gated — see required_feed(). They stay empty, and
@@ -1537,6 +1542,221 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
     update_inspector_lineage();
 }
 
+// ── Rates and inflation, from FRED ──────────────────────────────────────────
+//
+// The Treasury curve, real yields and breakevens are published daily by the
+// St. Louis Fed and fred_data.py already knows how to fetch them. They were
+// being drawn by generate_yield_curve() and friends instead — smooth invented
+// shapes on a screen a reader could reasonably price against.
+//
+// Each surface is maturity x date: the last N observations of each maturity's
+// series, so the picture is the curve moving through time rather than one
+// snapshot. A maturity with no observation on a date is a hole (NaN), never
+// interpolated — an interpolated yield is a number nobody published.
+namespace {
+
+struct FredSeriesSpec {
+    const char* series;   ///< FRED series id
+    int         months;   ///< maturity/horizon this series represents
+};
+
+// Constant-maturity nominal Treasury yields.
+const std::vector<FredSeriesSpec> kCurveSeries = {
+    {"DGS1MO", 1},  {"DGS3MO", 3},  {"DGS6MO", 6},   {"DGS1", 12},  {"DGS2", 24},
+    {"DGS3", 36},   {"DGS5", 60},   {"DGS7", 84},    {"DGS10", 120},
+    {"DGS20", 240}, {"DGS30", 360},
+};
+// TIPS constant-maturity real yields.
+const std::vector<FredSeriesSpec> kRealSeries = {
+    {"DFII5", 60}, {"DFII7", 84}, {"DFII10", 120}, {"DFII20", 240}, {"DFII30", 360},
+};
+// Breakeven inflation. Daily series only, so the axis is a true horizon.
+const std::vector<FredSeriesSpec> kBreakevenSeries = {
+    {"T5YIE", 60}, {"T10YIE", 120},
+};
+
+QStringList series_ids(const std::vector<FredSeriesSpec>& specs) {
+    QStringList out;
+    for (const auto& s : specs) out << QString::fromUtf8(s.series);
+    return out;
+}
+
+/// date -> series_id -> value, from fred_data.py's `multiple` payload.
+QMap<QString, QHash<QString, double>> by_date(const QJsonObject& payload) {
+    QMap<QString, QHash<QString, double>> out;
+    const QJsonArray arr = payload.value(QStringLiteral("results")).isArray()
+                               ? payload.value(QStringLiteral("results")).toArray()
+                               : payload.value(QStringLiteral("data")).toArray();
+    for (const auto& v : arr) {
+        const QJsonObject o = v.toObject();
+        const QString id = o.value(QStringLiteral("series_id")).toString();
+        if (id.isEmpty())
+            continue;
+        for (const auto& ov : o.value(QStringLiteral("observations")).toArray()) {
+            const QJsonObject obs = ov.toObject();
+            const QString date = obs.value(QStringLiteral("date")).toString();
+            const QJsonValue vv = obs.value(QStringLiteral("value"));
+            // get_series() converts to float and drops FRED's "." placeholder,
+            // so the value arrives as a NUMBER. Accept a string too rather
+            // than depend on that: reading a number with toString() yields an
+            // empty string and would silently empty every one of these
+            // surfaces.
+            bool ok = false;
+            double val = 0.0;
+            if (vv.isDouble()) {
+                val = vv.toDouble();
+                ok = true;
+            } else if (vv.isString()) {
+                val = vv.toString().toDouble(&ok);   // "." parses as not-ok
+            }
+            // A day a series has no observation is a hole, and it stays one.
+            if (ok && !date.isEmpty())
+                out[date][id] = val;
+        }
+    }
+    return out;
+}
+
+/// Fill a maturity x date grid, newest `max_dates` dates, oldest first.
+/// Returns false when nothing usable came back, so the caller can leave the
+/// surface empty rather than draw a grid of holes.
+bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& specs,
+               int max_dates, std::vector<int>& maturities,
+               std::vector<int>& time_points, std::vector<std::vector<float>>& z) {
+    const auto rows = by_date(payload);
+    if (rows.isEmpty())
+        return false;
+    QStringList dates = rows.keys();          // QMap keys are sorted: oldest first
+    if (dates.size() > max_dates)
+        dates = dates.mid(dates.size() - max_dates);
+
+    maturities.clear();
+    for (const auto& sp : specs) maturities.push_back(sp.months);
+    time_points.clear();
+    z.clear();
+    int filled = 0;
+    for (int d = 0; d < dates.size(); ++d) {
+        const auto& row = rows[dates[d]];
+        std::vector<float> line;
+        for (const auto& sp : specs) {
+            const auto it = row.constFind(QString::fromUtf8(sp.series));
+            if (it == row.constEnd()) {
+                line.push_back(std::numeric_limits<float>::quiet_NaN());
+            } else {
+                line.push_back(float(it.value()));
+                ++filled;
+            }
+        }
+        time_points.push_back(d);
+        z.push_back(std::move(line));
+    }
+    return filled > 0;
+}
+
+} // namespace
+
+void SurfaceAnalyticsScreen::load_rates_from_fred() {
+    auto& econ = fincept::services::EconomicsService::instance();
+    const QString start = QDate::currentDate().addDays(-180).toString(Qt::ISODate);
+    const QString end   = QDate::currentDate().toString(Qt::ISODate);
+
+    const struct { const char* rid; const std::vector<FredSeriesSpec>* specs; } jobs[] = {
+        {"surface_curve",     &kCurveSeries},
+        {"surface_real",      &kRealSeries},
+        {"surface_breakeven", &kBreakevenSeries},
+    };
+    for (const auto& j : jobs) {
+        QStringList args = series_ids(*j.specs);
+        args << start << end;
+        econ.execute(QStringLiteral("surface_analytics"), QStringLiteral("fred_data.py"),
+                     QStringLiteral("multiple"), args, QString::fromUtf8(j.rid));
+    }
+}
+
+void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id,
+                                            const fincept::services::EconomicsResult& r) {
+    if (!r.success) {
+        // FRED needs a key. Say which surfaces are empty because of it rather
+        // than leaving three panels blank with no reason.
+        if (request_id.startsWith(QStringLiteral("surface_")) && data_inspector_)
+            data_inspector_->set_error(
+                QStringLiteral("FRED fetch failed (%1). Set FRED_API_KEY to fill the curve, "
+                               "real-yield and breakeven surfaces.").arg(r.error.left(120)));
+        return;
+    }
+    if (request_id == QStringLiteral("surface_curve")) {
+        if (fill_grid(r.data, kCurveSeries, 60, yield_data_.maturities,
+                      yield_data_.time_points, yield_data_.z)) {
+            fetched_.insert(ChartType::YieldCurve);
+            build_forward_rates();
+        }
+    } else if (request_id == QStringLiteral("surface_real")) {
+        if (fill_grid(r.data, kRealSeries, 60, real_yield_data_.maturities,
+                      real_yield_data_.time_points, real_yield_data_.z))
+            fetched_.insert(ChartType::RealYield);
+    } else if (request_id == QStringLiteral("surface_breakeven")) {
+        if (fill_grid(r.data, kBreakevenSeries, 60, inflation_data_.horizons,
+                      inflation_data_.time_points, inflation_data_.z))
+            fetched_.insert(ChartType::InflationExpectations);
+    } else {
+        return;
+    }
+    update_chart();
+    update_metrics();
+    update_inspector_lineage();
+}
+
+// Implied forward rates from the most recent published curve.
+//
+// f(a,b) is the rate the curve implies for the period from a to b, under
+// continuous compounding: (y_b*b - y_a*a) / (b - a). It is a DERIVATION of
+// numbers FRED published, not a quote — which is why it is only built when a
+// real curve is present, and never on its own.
+void SurfaceAnalyticsScreen::build_forward_rates() {
+    if (yield_data_.z.empty() || yield_data_.maturities.size() < 2)
+        return;
+    const std::vector<float>& latest = yield_data_.z.back();
+    const auto& mats = yield_data_.maturities;
+
+    fwd_rate_data_.start_tenors.clear();
+    fwd_rate_data_.forward_periods.clear();
+    fwd_rate_data_.z.clear();
+    for (int m : mats) fwd_rate_data_.start_tenors.push_back(m);
+    const std::vector<int> periods = {12, 24, 60, 120};
+    fwd_rate_data_.forward_periods = periods;
+
+    auto yield_at = [&](int months) -> double {
+        for (size_t i = 0; i < mats.size(); ++i)
+            if (mats[i] == months)
+                return double(latest[i]);
+        return std::numeric_limits<double>::quiet_NaN();
+    };
+
+    bool any = false;
+    for (size_t i = 0; i < mats.size(); ++i) {
+        const double a = double(mats[i]) / 12.0;
+        const double ya = double(latest[i]);
+        std::vector<float> row;
+        for (int p : periods) {
+            const double b = a + double(p) / 12.0;
+            const double yb = yield_at(mats[i] + p);
+            // Only where BOTH legs are published maturities. Interpolating the
+            // far leg would invent the very number the chart is reporting.
+            if (std::isnan(ya) || std::isnan(yb) || b <= a) {
+                row.push_back(std::numeric_limits<float>::quiet_NaN());
+                continue;
+            }
+            row.push_back(float((yb * b - ya * a) / (b - a)));
+            any = true;
+        }
+        fwd_rate_data_.z.push_back(std::move(row));
+    }
+    if (any)
+        fetched_.insert(ChartType::ForwardRate);
+    else
+        fwd_rate_data_ = {};
+}
+
 // Build the risk surfaces from the bars themselves.
 //
 // These five were drawn by SurfaceDemoData's generators while the bars needed
@@ -1852,6 +2072,10 @@ void SurfaceAnalyticsScreen::showEvent(QShowEvent* e) {
             &SurfaceAnalyticsScreen::on_db_connection_tested, Qt::UniqueConnection);
     connect(&svc, &DatabentoService::raw_response, this,
             &SurfaceAnalyticsScreen::on_db_raw_response, Qt::UniqueConnection);
+    connect(&fincept::services::EconomicsService::instance(),
+            &fincept::services::EconomicsService::result_ready, this,
+            &SurfaceAnalyticsScreen::on_fred_result, Qt::UniqueConnection);
+    load_rates_from_fred();
     refresh_provider_status();
     load_dataset_range_for_active_capability();
 }
