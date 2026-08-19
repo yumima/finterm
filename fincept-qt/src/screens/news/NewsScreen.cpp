@@ -523,6 +523,11 @@ void NewsScreen::connect_signals() {
         // from a broken button — the exact failure mode that made the stranded
         // in-flight gate so hard to diagnose.
         if (filtered_articles_.isEmpty()) {
+            // Through the loading path so the message follows the same "is
+            // this brief still wanted" rule as a real one.
+            detail_panel_->show_tldr_loading((active_category_ == "ALL")
+                                                 ? QStringLiteral("TL;DR")
+                                                 : QStringLiteral("TL;DR — %1").arg(active_category_));
             detail_panel_->show_tldr_summary(
                 QStringLiteral("No articles in the current view to brief. Widen the filters or "
                                "refresh the feed."),

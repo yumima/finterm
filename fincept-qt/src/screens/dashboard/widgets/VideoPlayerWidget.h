@@ -246,15 +246,73 @@ class VideoPlayerWidget : public BaseWidget {
     /// window rolled, or the transport hiccuped — so it is reconnected rather
     /// than left stopped.
     bool is_live_source() const;
-    /// Reconnect a live stream that stopped or stalled on its own, with
-    /// backoff. Never fires for a user pause or a lock auto-pause.
+    /// Recover a live stream that stopped, stalled, or went quiet on its own.
+    /// Never fires for a user pause or a lock auto-pause. Escalates: the first
+    /// attempt re-opens the same source (cheap, fixes a transport hiccup), and
+    /// every attempt after that re-resolves the stream from scratch, because
+    /// re-opening a dead session cannot bring it back — see re_resolve_source().
     void auto_reconnect(const QString& why);
+    /// Throw the resolved stream away and start again from the channel URL:
+    /// a new yt-dlp resolve, a new relay proxy, a new player source.
+    ///
+    /// This is the only recovery that works once YouTube has retired the live
+    /// session. Measured 2026-08-19 against a session the player had stopped
+    /// pulling from: the relay's upstream manifest still answered 200 with
+    /// advancing sequence numbers, yet every segment URL in it answered 403,
+    /// while a manifest resolved seconds later served the same segments fine.
+    /// Nothing on our side can revive the old session; only a new one plays.
+    void re_resolve_source(const QString& why);
+    /// Watchdog tick: did any picture or any position movement reach us since
+    /// the last tick? Media status is not trustworthy here — when segments
+    /// stop being fetchable the FFmpeg backend parks at StoppedState +
+    /// LoadingMedia and emits nothing at all, forever (reproduced offscreen,
+    /// 2026-08-19). Frames arriving is the one signal that cannot lie.
+    void on_watchdog_tick();
+    /// Start/stop the progress watchdog together with the intent to play.
+    /// want_playing_ is what separates "nothing is happening because the user
+    /// paused" from "nothing is happening and nobody noticed".
+    void set_playback_intent(bool want_playing);
 
     class QTimer* stall_timer_ = nullptr;
+    /// Fires while want_playing_ to confirm pictures are still arriving.
+    class QTimer* watchdog_ = nullptr;
     int  reconnect_attempts_ = 0;
+    /// Give up: stop the player, say so, and leave PLAY as the way back.
+    void give_up_on_stream(const QString& why);
+    /// True while a deliberate teardown (BACK, a reload, a re-resolve) is
+    /// still settling. Errors the backend reports inside that window are
+    /// consequences of the teardown, not streams that need rescuing.
+    bool recovery_suppressed() const;
+    void suppress_recovery_briefly();
+    /// End of the current suppression window, in ms since the epoch. A window
+    /// rather than a flag because errorOccurred is delivered asynchronously
+    /// from the demuxer thread — see suppress_recovery_briefly().
+    qint64 suppress_recovery_until_ms_ = 0;
+    static constexpr int kRecoverySuppressMs = 1500;
+    /// True between "we asked the player to play" and "the user paused or
+    /// stopped it". Only then does a silent player mean something is wrong.
+    bool want_playing_ = false;
+    /// Frames delivered to video_sink_ since construction, counted on the GUI
+    /// thread. The watchdog compares it tick to tick.
+    quint64 frames_seen_ = 0;
+    quint64 frames_at_check_ = 0;
+    qint64  position_at_check_ = -1;
+    int     starved_ticks_ = 0;
+    /// Consecutive ticks that saw progress. The reconnect budget is refunded
+    /// only after kGoodTicksToRefund of them, so a stream that plays a moment
+    /// after every reconnect and dies again still runs out of attempts.
+    int     good_ticks_ = 0;
     /// Reconnects stop after this many consecutive failures so a dead stream
-    /// cannot retry forever; reset as soon as playback genuinely resumes.
+    /// cannot retry forever; refunded only by real progress (pictures), never
+    /// by a status change — a dead stream can still flicker its status.
     static constexpr int kMaxReconnects = 5;
+    static constexpr int kWatchdogIntervalMs = 2000;
+    /// Six quiet ticks — twelve seconds without a picture. Long enough to sit
+    /// through a first demuxer open and an ordinary rebuffer, short enough
+    /// that a dead stream is not left dead on screen.
+    static constexpr int kStarvedTicksToRecover = 6;
+    /// Ten seconds of uninterrupted pictures before the budget is refunded.
+    static constexpr int kGoodTicksToRefund = 5;
     /// Source waiting to be re-set once the old media has been released.
     QUrl pending_reload_src_;
     /// current_url_ as it was when playback last failed. errorOccurred clears

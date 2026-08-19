@@ -492,43 +492,56 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             if (!player_) return;
             // User explicitly pressed the button — handle each state.
             // resume_playback() applies the Qt6 FFmpeg audio-detach
-            // workaround on the Paused→Playing edge; on Stopped (e.g.
-            // the stream ended) a bare play() restarts from the current
-            // source, which is what "PLAY pressed on a stopped stream"
-            // intuitively means.
+            // workaround on the Paused→Playing edge; Stopped is handled
+            // below, where "press PLAY and nothing happens" was living.
+            // A deliberate press is a fresh start for the reconnect budget:
+            // "press PLAY to try again" has to mean something after the
+            // automatic attempts are spent. Do it before dispatching so the
+            // recovery below runs on a full budget — but remember whether we
+            // had given up, because a stream we abandoned is never "ready to
+            // play" no matter what its media status still claims.
+            const bool gave_up = reconnect_attempts_ >= kMaxReconnects;
+            reconnect_attempts_ = 0;
+            if (stall_timer_)
+                stall_timer_->stop();
             switch (player_->playbackState()) {
                 case QMediaPlayer::PlayingState:
                     player_->pause();
+                    set_playback_intent(false);
                     break;
                 case QMediaPlayer::PausedState:
+                    set_playback_intent(true);
                     resume_playback();
                     break;
                 case QMediaPlayer::StoppedState: {
-                    // play() only works if media is actually loaded. After a
-                    // failed open the player sits in StoppedState holding a
-                    // source it never parsed, and play() is a silent no-op
-                    // forever. Reload rather than pretending.
+                    // play() moves nothing unless the media is actually
+                    // loaded. Only these three statuses mean "ready, just not
+                    // running"; every other stop is a stream that never
+                    // opened or has run dry, where play() is a silent no-op
+                    // forever — which is exactly how this reads to the user:
+                    // the button says PLAY, they press it, nothing happens.
                     const QMediaPlayer::MediaStatus st = player_->mediaStatus();
-                    const bool unloadable = player_->error() != QMediaPlayer::NoError ||
-                                            st == QMediaPlayer::NoMedia ||
-                                            st == QMediaPlayer::InvalidMedia;
-                    if (unloadable)
-                        hard_reload_source();
-                    else
+                    const bool ready = !gave_up &&
+                                       player_->error() == QMediaPlayer::NoError &&
+                                       (st == QMediaPlayer::LoadedMedia ||
+                                        st == QMediaPlayer::BufferedMedia ||
+                                        st == QMediaPlayer::BufferingMedia);
+                    if (ready) {
+                        set_playback_intent(true);
                         player_->play();
+                    } else {
+                        // Re-resolve rather than re-open. Re-opening the same
+                        // source is what the automatic path has already tried
+                        // by the time a user reaches for the button, and it
+                        // cannot revive a retired live session.
+                        re_resolve_source(QStringLiteral("PLAY pressed on a stopped stream"));
+                    }
                     break;
                 }
             }
             // User pressed the button → not an auto-pause, so clear the
             // latch even if a subsequent unlock fires.
             auto_paused_on_lock_ = false;
-            // A deliberate press is also a fresh start for the reconnect
-            // budget: "press PLAY to try again" has to mean something after
-            // the automatic attempts are spent. And a user pause must cancel
-            // any reconnect queued against the stall it just caused.
-            reconnect_attempts_ = 0;
-            if (stall_timer_)
-                stall_timer_->stop();
 #endif
         });
         cl->addWidget(play_pause_btn_);
@@ -611,10 +624,28 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                     if (player_->playbackState() == QMediaPlayer::PlayingState) {
                         player_->pause();
                         auto_paused_on_lock_ = true;
+                        // Nothing should be arriving while locked; stand the
+                        // watchdog down so it doesn't call the lock a stall.
+                        set_playback_intent(false);
                     }
                 } else if (auto_paused_on_lock_) {
                     auto_paused_on_lock_ = false;
-                    resume_playback();
+                    set_playback_intent(true);
+                    if (player_->playbackState() == QMediaPlayer::PausedState) {
+                        resume_playback();
+                    } else if (is_live_source() || current_is_live_) {
+                        // It did not survive the lock. resume_playback() only
+                        // handles the Paused→Playing edge, so before this the
+                        // unlock did nothing at all and the button sat on PLAY
+                        // with no way back — the reported regression. A live
+                        // stream that is no longer even paused has lost its
+                        // session; re-resolve it. A VOD is left alone: it has
+                        // a position worth keeping, and re-resolving would
+                        // restart a half-watched video from the beginning.
+                        re_resolve_source(QStringLiteral("stream did not survive the lock"));
+                    } else {
+                        set_playback_intent(false);
+                    }
                 }
 #else
                 Q_UNUSED(locked);
@@ -856,6 +887,13 @@ void VideoPlayerWidget::build_player_view() {
             video_widget_, &VideoRenderWidget::present,
             Qt::QueuedConnection);
 
+    // Count frames on the GUI thread (the sink emits from a backend thread, so
+    // `this` as the context object makes the connection queued). This counter
+    // is the watchdog's ground truth: media status can sit still and lie, a
+    // frame arriving cannot.
+    connect(video_sink_, &QVideoSink::videoFrameChanged, this,
+            [this](const QVideoFrame&) { ++frames_seen_; });
+
     connect(player_, &QMediaPlayer::errorOccurred, this,
             &VideoPlayerWidget::on_player_error);
 
@@ -871,6 +909,16 @@ void VideoPlayerWidget::build_player_view() {
     connect(stall_timer_, &QTimer::timeout, this,
             [this]() { auto_reconnect(QStringLiteral("stalled")); });
 
+    // The stall timer above only ever runs when the backend says StalledMedia.
+    // It never says it when the segments themselves stop being fetchable: the
+    // FFmpeg backend then parks at StoppedState + LoadingMedia and emits
+    // nothing more, so a stream can die with every signal silent (reproduced
+    // offscreen, 2026-08-19). The watchdog is what notices that, by watching
+    // pictures rather than status.
+    watchdog_ = new QTimer(this);
+    watchdog_->setInterval(kWatchdogIntervalMs);
+    connect(watchdog_, &QTimer::timeout, this, &VideoPlayerWidget::on_watchdog_tick);
+
     connect(player_, &QMediaPlayer::mediaStatusChanged, this,
             [this](QMediaPlayer::MediaStatus st) {
                 switch (st) {
@@ -880,13 +928,12 @@ void VideoPlayerWidget::build_player_view() {
                             stall_timer_->start();
                         break;
                     case QMediaPlayer::BufferedMedia:
-                        // Real playback resumed: cancel any pending reconnect
-                        // and forget the attempt count, so a stream that
-                        // hiccups once an hour never exhausts its budget.
+                        // Buffered again: cancel any pending reconnect. The
+                        // attempt count is NOT refunded here — only pictures
+                        // do that, in on_watchdog_tick(). A dead stream can
+                        // still cycle its status, and refunding on status
+                        // alone gives it an endless reconnect budget.
                         stall_timer_->stop();
-                        reconnect_attempts_ = 0;
-                        if (status_label_->text().startsWith(QLatin1String("Reconnecting")))
-                            status_label_->hide();
                         break;
                     case QMediaPlayer::EndOfMedia:
                         stall_timer_->stop();
@@ -1079,30 +1126,219 @@ bool VideoPlayerWidget::is_live_source() const {
 #endif
 }
 
+bool VideoPlayerWidget::recovery_suppressed() const {
+    return QDateTime::currentMSecsSinceEpoch() < suppress_recovery_until_ms_;
+}
+
+void VideoPlayerWidget::suppress_recovery_briefly() {
+    // A window, not a flag. QMediaPlayer::errorOccurred arrives from the
+    // demuxer's own thread, so an error caused by a teardown can land several
+    // event-loop turns after the teardown returned — a flag cleared at the end
+    // of the synchronous block would already be down by then.
+    suppress_recovery_until_ms_ = QDateTime::currentMSecsSinceEpoch() + kRecoverySuppressMs;
+}
+
+void VideoPlayerWidget::set_playback_intent(bool want_playing) {
+#ifdef HAS_QT_MULTIMEDIA
+    want_playing_ = want_playing;
+    if (!watchdog_)
+        return;
+    if (want_playing) {
+        // Restart the count from here so the seconds spent paused, resolving
+        // or reloading are never charged against the stream.
+        frames_at_check_   = frames_seen_;
+        position_at_check_ = player_ ? player_->position() : -1;
+        starved_ticks_     = 0;
+        good_ticks_        = 0;
+        watchdog_->start();
+    } else {
+        watchdog_->stop();
+        starved_ticks_ = 0;
+    }
+#else
+    Q_UNUSED(want_playing);
+#endif
+}
+
+void VideoPlayerWidget::on_watchdog_tick() {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_ || !want_playing_ || auto_paused_on_lock_)
+        return;
+    // Someone paused without going through the button (nothing does today,
+    // but a pause is never a fault).
+    if (player_->playbackState() == QMediaPlayer::PausedState)
+        return;
+
+    const quint64 frames = frames_seen_;
+    const qint64  pos    = player_->position();
+    // Position covers an audio-only source, which delivers no frames at all.
+    const bool progressed = frames != frames_at_check_ ||
+                            (pos > 0 && pos != position_at_check_);
+    frames_at_check_   = frames;
+    position_at_check_ = pos;
+
+    if (progressed) {
+        // Real pictures are the only thing that refunds the reconnect budget,
+        // so a stream that hiccups hourly never runs out and a dead one stops
+        // retrying. The refund needs SUSTAINED progress, not one good tick: a
+        // stream that plays two seconds after each reconnect and dies again
+        // would otherwise top its budget back up every round and retry until
+        // the app is closed.
+        starved_ticks_ = 0;
+        if (++good_ticks_ >= kGoodTicksToRefund)
+            reconnect_attempts_ = 0;
+        if (status_label_ && !status_label_->isHidden() &&
+            (status_label_->text().startsWith(QLatin1String("Reconnecting")) ||
+             status_label_->text().startsWith(QLatin1String("Reloading"))))
+            status_label_->hide();
+        return;
+    }
+
+    good_ticks_ = 0;
+    if (++starved_ticks_ < kStarvedTicksToRecover)
+        return;
+    starved_ticks_ = 0;
+    auto_reconnect(QStringLiteral("no picture for %1s")
+                       .arg(kStarvedTicksToRecover * kWatchdogIntervalMs / 1000));
+#endif
+}
+
 void VideoPlayerWidget::auto_reconnect(const QString& why) {
 #ifdef HAS_QT_MULTIMEDIA
-    if (!player_ || auto_paused_on_lock_)
+    if (!player_ || auto_paused_on_lock_ || recovery_suppressed())
+        return;
+    // Nothing to recover: the user pressed BACK (stop_playback() clears both)
+    // or never started anything. Without this an error arriving late from that
+    // teardown would put the stream back on top of the channel list.
+    if (current_url_.isEmpty() && url_before_error_.isEmpty())
+        return;
+    if (stack_ && stack_->currentIndex() != 1)
         return;
     // A live stream does not end and does not stall for good: the segment
-    // window rolled past the buffered position, or the transport hiccuped.
-    // Both are transport conditions, and the only correct response is to
-    // re-open at the live edge. VOD genuinely ends, so it is left alone.
-    if (!is_live_source())
+    // window rolled past the buffered position, the transport hiccuped, or the
+    // session behind it was retired. All transport conditions, and the only
+    // correct response is to get back to the live edge. A VOD genuinely ends
+    // and a finished clip must not be dragged back to its first frame, so
+    // recovery is limited to sources we know are live.
+    if (!is_live_source() && !current_is_live_) {
+        set_playback_intent(false);   // and stop asking about it every tick
         return;
+    }
     if (reconnect_attempts_ >= kMaxReconnects) {
-        set_loading(false);
-        status_label_->setText(
-            QStringLiteral("Stream stopped after %1 reconnect attempts (%2). Press PLAY to try "
-                           "again.").arg(kMaxReconnects).arg(why));
+        give_up_on_stream(why);
+        return;
+    }
+
+    // ESCALATION. The first attempt re-opens the same source: that is the
+    // cheap, correct fix for a transport hiccup or a rolled segment window,
+    // and it keeps the relay and its resolved URL. Every attempt after it
+    // re-resolves, because a source that did not come back on a re-open is
+    // not a source with a hiccup — it is a dead session, and re-opening a
+    // dead session is what left the player stuck with a PLAY button that
+    // did nothing.
+    if (reconnect_attempts_ == 0) {
+        reconnect_attempts_ = 1;
+        LOG_INFO("VideoPlayer", QString("Live stream %1 — reloading source (1/%2)")
+                                    .arg(why).arg(kMaxReconnects));
+        status_label_->setText(QStringLiteral("Reloading stream… (%1)").arg(why));
         status_label_->show();
+        hard_reload_source();
+        return;
+    }
+    // re_resolve_source() does its own budget accounting, so it is safe to
+    // reach directly — which the unlock path does.
+    re_resolve_source(why);
+#else
+    Q_UNUSED(why);
+#endif
+}
+
+void VideoPlayerWidget::give_up_on_stream(const QString& why) {
+#ifdef HAS_QT_MULTIMEDIA
+    set_loading(false);
+    set_playback_intent(false);   // stop retrying; the user's PLAY restarts it
+    play_in_progress_ = false;
+    // STOP the player. The failure this exists for leaves it in PlayingState
+    // with a frozen picture, so playbackStateChanged never fires and the
+    // button still reads PAUSE — pressing it would pause a stream that is not
+    // running instead of retrying, and the message below could not be obeyed
+    // in one press.
+    if (player_ && player_->playbackState() != QMediaPlayer::StoppedState) {
+        suppress_recovery_briefly();
+        player_->stop();
+    }
+    status_label_->setText(
+        QStringLiteral("Stream stopped after %1 reconnect attempts (%2). Press PLAY to try "
+                       "again.").arg(kMaxReconnects).arg(why));
+    status_label_->show();
+    LOG_WARN("VideoPlayer", QString("Live stream gave up after %1 attempts (%2)")
+                                .arg(kMaxReconnects).arg(why));
+#else
+    Q_UNUSED(why);
+#endif
+}
+
+void VideoPlayerWidget::re_resolve_source(const QString& why) {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!player_ || recovery_suppressed())
+        return;
+    // on_player_error() clears current_url_ so refresh_data() stops retrying a
+    // broken stream; url_before_error_ is where it went.
+    const QString url = !current_url_.isEmpty() ? current_url_ : url_before_error_;
+    if (url.isEmpty()) {
+        set_playback_intent(false);
+        return;
+    }
+    // Counted here rather than by the caller, because the unlock path reaches
+    // this directly and must not be able to retry past the cap.
+    if (reconnect_attempts_ >= kMaxReconnects) {
+        give_up_on_stream(why);
         return;
     }
     ++reconnect_attempts_;
-    LOG_INFO("VideoPlayer", QString("Live stream %1 — reconnecting (%2/%3)")
+
+    LOG_INFO("VideoPlayer", QString("Re-resolving live stream (%1) — attempt %2/%3")
                                 .arg(why).arg(reconnect_attempts_).arg(kMaxReconnects));
+    // Drop everything the dead session owns before asking for a new one: the
+    // player's hold on the old relay URL, and the relay itself. play_url()
+    // resolves from the channel URL again, which is the only thing that gets
+    // fetchable segments back.
+    const QString title = current_title_;
+    pending_reload_src_.clear();
+    if (stall_timer_)
+        stall_timer_->stop();
+    // Closing the relay under a demuxer that has not finished releasing can
+    // itself raise a playback error. That error is a consequence of this
+    // teardown, not a stream that needs rescuing — without the latch it
+    // re-enters here and starts a second concurrent resolve, each tearing
+    // down the other's relay.
+    suppress_recovery_briefly();
+    player_->stop();
+    player_->setSource(QUrl{});
+    stop_hls_proxy();
+    url_before_error_.clear();
+    errored_source_.clear();
     status_label_->setText(QStringLiteral("Reconnecting… (%1)").arg(why));
     status_label_->show();
-    hard_reload_source();
+    set_playback_intent(false);   // re-armed when the new source starts playing
+
+    // Let the teardown above finish before anything opens a new source. The
+    // YouTube path takes a yt-dlp round trip and would never have raced it,
+    // but a direct URL re-sets the source synchronously inside play_url() —
+    // and a new open racing an old teardown is what wedges the FFmpeg backend
+    // for good (see hard_reload_source(), same 250 ms).
+    const QString resolved_title = title.isEmpty() ? QStringLiteral("Live Stream") : title;
+    // Own the stream for the length of the wait: current_url_ identifies it
+    // (on_player_error may have cleared it) and play_in_progress_ keeps a
+    // refresh tick from starting a second attempt in the gap.
+    current_url_ = url;
+    play_in_progress_ = true;
+    QTimer::singleShot(250, this, [this, url, resolved_title]() {
+        // The user picked another channel while we waited — theirs wins.
+        if (current_url_ != url)
+            return;
+        play_url(url, resolved_title);
+    });
 #else
     Q_UNUSED(why);
 #endif
@@ -1125,6 +1361,10 @@ void VideoPlayerWidget::hard_reload_source() {
     // second setSource() on a half-torn-down player — the double-open that
     // wedges the backend for good. Cleared on PlayingState or on error.
     play_in_progress_ = true;
+    // The teardown below can raise an error of its own. It is noise from a
+    // reload we asked for, not a stream to rescue — without this it escalates
+    // the ladder and aborts the very reload that caused it.
+    suppress_recovery_briefly();
     player_->stop();
     player_->setSource(QUrl{});
 
@@ -1168,6 +1408,9 @@ void VideoPlayerWidget::hard_reload_source() {
         }
         url_before_error_.clear();
         errored_source_.clear();
+        // Arm the watchdog on the re-open. If the source is dead the player
+        // parks silently here, and this is what notices and escalates.
+        set_playback_intent(true);
         player_->play();
     };
 
@@ -1187,6 +1430,7 @@ void VideoPlayerWidget::resume_playback() {
 #ifdef HAS_QT_MULTIMEDIA
     if (!player_ || player_->playbackState() != QMediaPlayer::PausedState)
         return;
+    set_playback_intent(true);
     const QUrl src = player_->source();
     if (!src.isValid()) {
         player_->play();
@@ -1217,6 +1461,14 @@ void VideoPlayerWidget::resume_playback() {
         // as a seek and reuse the stale cursor.
         // Re-opens the playlist a turn later so the new open cannot race the
         // teardown; it re-attaches the outputs and plays.
+        //
+        // Charge it to the reconnect budget. A re-open is exactly what the
+        // ladder's first attempt is, so if the watchdog finds no picture after
+        // this one it escalates straight to a re-resolve instead of spending
+        // another twelve seconds re-opening the same dead session — which is
+        // the wait the user sat through on unlock.
+        if (reconnect_attempts_ < 1)
+            reconnect_attempts_ = 1;
         hard_reload_source();
         return;
     }
@@ -1508,6 +1760,9 @@ VideoPlayerWidget::~VideoPlayerWidget() {
 void VideoPlayerWidget::play_preset(int index) {
     if (index < 0 || index >= channels_.size())
         return;
+    // A deliberate choice starts the reconnect budget over — play_url() no
+    // longer does it, because play_url() is also the recovery path.
+    reconnect_attempts_ = 0;
     const auto& ch = channels_[index];
 #ifdef HAS_QT_WEBENGINE
     // Spotify presets ride the iframe path regardless of the GL/WEB engine
@@ -1530,6 +1785,7 @@ void VideoPlayerWidget::play_custom_url() {
     QString url = url_input_->text().trimmed();
     if (url.isEmpty())
         return;
+    reconnect_attempts_ = 0;   // deliberate choice — see play_preset()
     if (!url.startsWith("http://") && !url.startsWith("https://"))
         url.prepend("https://");
 
@@ -1563,7 +1819,10 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     errored_source_.clear();
     if (stall_timer_)
         stall_timer_->stop();
-    reconnect_attempts_ = 0;
+    // NOT reconnect_attempts_ = 0 — this is also the recovery path, and
+    // refunding the budget here would let a dead stream re-resolve forever.
+    // User-initiated entry points (a preset, a typed URL, the PLAY button)
+    // reset it themselves.
     current_url_ = url;
     current_title_ = title;
     pending_title_ = title;
@@ -1600,6 +1859,14 @@ void VideoPlayerWidget::refresh_data() {
     // would call setSource() on a mid-transition player.
     if (play_in_progress_)
         return;
+#ifdef HAS_QT_MULTIMEDIA
+    // The only thing that reaches here is the tile's REFRESH button, which is
+    // as deliberate as picking a channel — so it restarts the reconnect budget
+    // rather than being blocked by it. Gating on the budget instead would make
+    // REFRESH do nothing at all after five failures: the same "press it and
+    // nothing happens" this change exists to remove.
+    reconnect_attempts_ = 0;
+#endif
 #ifdef HAS_QT_WEBENGINE
     // Spotify embeds keep playing in the iframe; refresh is a no-op there.
     // Routing through play_url() would hand a Spotify URL to yt-dlp and
@@ -1705,6 +1972,10 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     if (exit_code != 0) {
         const QString err = proc->readAllStandardError().trimmed();
         play_in_progress_ = false;
+        // Remember what failed. current_url_ has to go so refresh_data() stops
+        // retrying, but PLAY re-resolves from one of the two — and clearing
+        // both is what made PLAY do nothing at all after a yt-dlp failure.
+        url_before_error_ = current_url_;
         current_url_.clear(); // stop refresh_data() from retrying
         set_loading(false);
         status_label_->setText("yt-dlp error: " + (err.isEmpty() ? QString("Unknown error") : err.left(120)));
@@ -1750,6 +2021,7 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
     const QString err = proc->errorString();
     play_in_progress_ = false;
+    url_before_error_ = current_url_;   // so PLAY can try again — see on_ytdlp_finished
     current_url_.clear(); // stop refresh_data() from retrying indefinitely
     set_loading(false);
     status_label_->setText("Failed to start yt-dlp: " + (err.isEmpty() ? QString("Unknown error") : err.left(90)));
@@ -1777,6 +2049,7 @@ void VideoPlayerWidget::play_direct(const QString& stream_url) {
     populate_audio_devices();
     refresh_audio_output();
     player_->setSource(QUrl(stream_url));
+    set_playback_intent(true);
     player_->play();
 #else
     Q_UNUSED(stream_url)
@@ -1818,6 +2091,7 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
         populate_audio_devices();  // refresh the picker (see play_direct)
         refresh_audio_output();    // re-pin to the current default sink
         player_->setSource(hls_proxy_->local_url());
+        set_playback_intent(true);
         player_->play();
     });
     connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error,
@@ -1989,6 +2263,7 @@ void VideoPlayerWidget::stop_playback() {
     // the user just walked away from.
     if (stall_timer_)
         stall_timer_->stop();
+    set_playback_intent(false);
     reconnect_attempts_ = 0;
     // Bring the surface back into the tile before tearing playback
     // down — otherwise the user gets a momentarily-visible fullscreen
@@ -2012,6 +2287,11 @@ void VideoPlayerWidget::stop_playback() {
     sync_web_mode_controls();
 #endif
 #ifdef HAS_QT_MULTIMEDIA
+    // Anything the teardown raises belongs to the stream the user just left.
+    // Without the latch, an error here reaches auto_reconnect() while the
+    // player still holds the relay URL and the budget has just been reset —
+    // and BACK would put the stream back on top of the channel list.
+    suppress_recovery_briefly();
     player_->stop();
     // Tear down the relay proxy AFTER player_->stop() so QMediaPlayer is
     // no longer pulling from it when we close the listening socket.
@@ -2028,6 +2308,14 @@ void VideoPlayerWidget::stop_playback() {
 
 void VideoPlayerWidget::on_player_error() {
 #ifdef HAS_QT_MULTIMEDIA
+    if (recovery_suppressed()) {
+        // Raised by our own teardown — the stream is already going away, and
+        // the label would announce a failure the user did not have.
+        LOG_INFO("VideoPlayer", "Player error during teardown (ignored): " +
+                                    player_->errorString().left(120));
+        play_in_progress_ = false;
+        return;
+    }
     const QString err = player_->errorString();
     play_in_progress_ = false;
     url_before_error_ = current_url_;   // restored if the user recovers the stream
@@ -2041,6 +2329,11 @@ void VideoPlayerWidget::on_player_error() {
     status_label_->setText("Playback error: " + (err.isEmpty() ? "Unknown" : err.left(120)));
     status_label_->show();
     LOG_ERROR("VideoPlayer", "QMediaPlayer error: " + err.left(250));
+    // A reported error is the one failure the app used to be told about, and
+    // it still only painted a label. Put it on the same recovery ladder as a
+    // silent death — the budget bounds it.
+    set_playback_intent(false);
+    auto_reconnect(QStringLiteral("playback error"));
 #endif
 }
 

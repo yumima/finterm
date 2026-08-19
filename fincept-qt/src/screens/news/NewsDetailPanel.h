@@ -10,6 +10,7 @@
 #include <QStackedWidget>
 #include <QTextBrowser>
 #include <QVBoxLayout>
+#include <QVector>
 #include <QWidget>
 
 namespace fincept::screens {
@@ -56,10 +57,42 @@ class NewsDetailPanel : public QWidget {
   private:
     QWidget* build_empty_state();
     QWidget* build_content_view();
-    /// Shows the ARTICLE block only when an article is actually open. The
-    /// TL;DR paths force the content page, which would otherwise reveal a
-    /// permanent "Loading article…" under a brief with nothing selected.
+    /// Shows the ARTICLE block only when an article is actually open and no
+    /// brief is holding the pane. The TL;DR paths force the content page,
+    /// which would otherwise reveal a permanent "Loading article…" under a
+    /// brief with nothing selected.
     void sync_article_block();
+    /// Show or hide everything that belongs to the open story — headline,
+    /// meta row, summary, action buttons, body, and every per-story section
+    /// (AI ANALYSIS, RELATED, MONITORS, ENTITIES, INFRASTRUCTURE).
+    ///
+    /// The reading pane shows one thing at a time. A brief is a read of the
+    /// feed, not of whichever story happened to be open when the user asked
+    /// for it, and leaving that story's AI ANALYSIS sitting under a TL;DR
+    /// reads as though the brief were part of the analysis — which is exactly
+    /// how it was reported. The opposite direction is already handled:
+    /// opening an article calls hide_tldr().
+    void set_article_visible(bool visible);
+    /// Hide one per-story section and forget it, so it is not restored when a
+    /// brief gives the pane back.
+    void conceal_article_section(QWidget* section);
+    /// Show one per-story section — unless a brief currently owns the pane, in
+    /// which case it stays hidden and joins sections_hidden_by_brief_ so it
+    /// reappears with the story.
+    void reveal_article_section(QWidget* section);
+    /// Per-story sections that were on screen when a brief took the pane (or
+    /// were populated while it held it). set_article_visible(true) restores
+    /// exactly these, so hiding and showing a brief is symmetric.
+    QVector<QWidget*> sections_hidden_by_brief_;
+
+    /// True between asking for a brief and rendering it. If the user opens an
+    /// article while the request is in flight the brief is stale — the same
+    /// reason hide_tldr() exists — so the late answer is dropped rather than
+    /// pulling the pane out from under the story they just started reading.
+    bool brief_pending_ = false;
+    /// True while a TL;DR / DIGEST owns the reading pane. Set by the
+    /// show_tldr_* paths, cleared by show_article() and hide_tldr().
+    bool brief_owns_pane_ = false;
 
     // TL;DR section — rendered ABOVE the article body so it stays visible
     // when the user scrolls through the feed. Populated by NewsScreen via
@@ -77,6 +110,11 @@ class NewsDetailPanel : public QWidget {
     QLabel* tldr_detail_label_ = nullptr;
 
     // Article section
+    /// The loose article widgets that are not inside a section container.
+    /// Held so a brief can collapse the whole story, not just parts of it.
+    QWidget* article_meta_row_   = nullptr;
+    QWidget* article_actions_    = nullptr;
+    QWidget* article_separator_  = nullptr;
     QLabel* headline_label_ = nullptr;
     QLabel* priority_badge_ = nullptr;
     QLabel* sentiment_badge_ = nullptr;

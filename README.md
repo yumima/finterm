@@ -2,27 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-18)
+## Today's commits (2026-08-19)
 
 Latest first.
 
-- [`e1fef8931`](https://github.com/yumima/finterm/commit/e1fef8931) **fix:** the ownership panel overwrote the holding you clicked
-- [`58b541f8f`](https://github.com/yumima/finterm/commit/58b541f8f) ownership: give each read its number and how far past its rule it sits
-- [`985f35fcb`](https://github.com/yumima/finterm/commit/985f35fcb) ownership: read-through as tokens, with the prose one hover away
-- [`ce1b5cba6`](https://github.com/yumima/finterm/commit/ce1b5cba6) ownership: navigate on a click, and give the reader a way back
-- [`eb90fd5c1`](https://github.com/yumima/finterm/commit/eb90fd5c1) **fix:** live stream stalls silently, ownership tab keeps a stale symbol, news JSON
-- [`a146444f2`](https://github.com/yumima/finterm/commit/a146444f2) equity research: place the price in its own range, without implying an entry
-- [`b46fc7b88`](https://github.com/yumima/finterm/commit/b46fc7b88) **fix:** ten defects from review, including a migration that destroyed the store
-- [`572a5973d`](https://github.com/yumima/finterm/commit/572a5973d) **fix:** video that will not resume, and holders shown under the wrong stock
-- [`0d32f3126`](https://github.com/yumima/finterm/commit/0d32f3126) ownership: keep the filing date on the pane in the insider list
-- [`810aaa8c9`](https://github.com/yumima/finterm/commit/810aaa8c9) ownership: drop an include the list panel no longer uses
-- [`bdfc4f6a0`](https://github.com/yumima/finterm/commit/bdfc4f6a0) ownership: fix twelve defects found reviewing the Form 4 and split work
-- [`be9059561`](https://github.com/yumima/finterm/commit/be9059561) ownership: market-wide Form 4, and a curve you can actually read
-- [`9ba065cdf`](https://github.com/yumima/finterm/commit/9ba065cdf) ownership: a median trend through the cloud, and Form 4 rendered in place
-- [`487c75f8d`](https://github.com/yumima/finterm/commit/487c75f8d) ownership: hide the panel's own header where the host already names the stock
-- [`9e6ecb325`](https://github.com/yumima/finterm/commit/9e6ecb325) ownership: split the screen into a scan and a detail
-- [`215715e54`](https://github.com/yumima/finterm/commit/215715e54) ownership: two firm rankings, and say whose holdings the table shows
-- [`9aacf77e7`](https://github.com/yumima/finterm/commit/9aacf77e7) ownership: mark 13F books to market, and fix the quadrant never loading
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

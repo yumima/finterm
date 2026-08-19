@@ -213,6 +213,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     // impact, tickers). Collapsing saves three rows of vertical space above
     // the summary and groups all the article metadata as one strip.
     auto* meta_row = new QWidget(content);
+    article_meta_row_ = meta_row;
     meta_row->setObjectName("newsDetailMetaRow");
     auto* meta_layout = new QHBoxLayout(meta_row);
     meta_layout->setContentsMargins(0, 0, 0, 0);
@@ -257,6 +258,7 @@ QWidget* NewsDetailPanel::build_content_view() {
 
     // Action buttons — arranged in a flow
     auto* actions = new QWidget(content);
+    article_actions_ = actions;
     auto* action_layout = new QHBoxLayout(actions);
     action_layout->setContentsMargins(0, 4, 0, 4);
     action_layout->setSpacing(6);
@@ -557,6 +559,7 @@ QWidget* NewsDetailPanel::build_content_view() {
 
     // Separator
     auto* sep = new QWidget(content);
+    article_separator_ = sep;
     sep->setFixedHeight(1);
     sep->setObjectName("newsDetailSep");
     layout->addWidget(sep);
@@ -707,7 +710,20 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     }
     current_article_ = article;
     has_article_ = true;
-    sync_article_block();
+    // Opening a story takes the pane back from any brief that was holding it.
+    // hide_tldr() rather than the flags alone: on_cluster_clicked() reaches
+    // here without calling it, and a brief still generating would otherwise
+    // leave "Generating brief…" parked above the story forever. Nothing is
+    // restored from the previous story — every section is reset just below.
+    sections_hidden_by_brief_.clear();
+    hide_tldr();
+    // Every per-story section belongs to the story that populated it.
+    // ENTITIES and INFRASTRUCTURE were never reset here, so a late callback
+    // for the previous article could leave its findings under this headline.
+    for (QWidget* section : {analysis_section_, related_section_, monitor_section_,
+                             entities_section_, infra_section_})
+        if (section)
+            section->hide();
     stack_->setCurrentIndex(1);
 
     // Render headline as a link to the article URL. Qt's rich-text engine
@@ -787,7 +803,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
         tickers_label_->clear();
 
     // Reset analysis
-    analysis_section_->hide();
+    conceal_article_section(analysis_section_);
     analyze_btn_->setText("ANALYZE");
     analyze_btn_->setEnabled(true);
     analyze_timeout_->stop();
@@ -810,7 +826,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
 
     // Clear related and monitors
     show_related({});
-    monitor_section_->hide();
+    conceal_article_section(monitor_section_);
 
     // Kick off article-body extraction. Bump the generation token so any
     // late callback from a prior article is discarded — the trafilatura
@@ -866,7 +882,7 @@ void NewsDetailPanel::show_analysis_error(const QString& message) {
         }
     }
     ai_summary_->setText(message.isEmpty() ? "AI analysis is unavailable right now." : message);
-    analysis_section_->show();
+    reveal_article_section(analysis_section_);
 }
 
 void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {
@@ -937,7 +953,7 @@ void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {
     topics_flow->addStretch();
     topics_layout_->addWidget(topics_row);
 
-    analysis_section_->show();
+    reveal_article_section(analysis_section_);
 }
 
 void NewsDetailPanel::show_related(const QVector<services::NewsArticle>& related) {
@@ -949,11 +965,11 @@ void NewsDetailPanel::show_related(const QVector<services::NewsArticle>& related
     }
 
     if (related.isEmpty()) {
-        related_section_->hide();
+        conceal_article_section(related_section_);
         return;
     }
 
-    related_section_->show();
+    reveal_article_section(related_section_);
     for (const auto& article : related) {
         auto* btn = new QPushButton(related_section_);
         btn->setObjectName("newsRelatedBtn");
@@ -976,11 +992,11 @@ void NewsDetailPanel::show_monitor_matches(const QVector<QPair<services::NewsMon
     }
 
     if (matches.isEmpty()) {
-        monitor_section_->hide();
+        conceal_article_section(monitor_section_);
         return;
     }
 
-    monitor_section_->show();
+    reveal_article_section(monitor_section_);
     for (const auto& [monitor, keywords] : matches) {
         auto* row = new QWidget(monitor_section_);
         auto* hl = new QHBoxLayout(row);
@@ -1030,7 +1046,10 @@ void NewsDetailPanel::show_entities(const services::EntityResult& entities) {
         has_data = true;
     }
 
-    entities_section_->setVisible(has_data);
+    if (has_data)
+        reveal_article_section(entities_section_);
+    else
+        conceal_article_section(entities_section_);
 }
 
 void NewsDetailPanel::show_infrastructure(const QVector<services::InfrastructureItem>& items) {
@@ -1042,10 +1061,10 @@ void NewsDetailPanel::show_infrastructure(const QVector<services::Infrastructure
     }
 
     if (items.isEmpty()) {
-        infra_section_->hide();
+        conceal_article_section(infra_section_);
         return;
     }
-    infra_section_->show();
+    reveal_article_section(infra_section_);
 
     for (const auto& inf : items) {
         QString type_icon = inf.type == "airport"
@@ -1062,11 +1081,11 @@ void NewsDetailPanel::show_infrastructure(const QVector<services::Infrastructure
 void NewsDetailPanel::clear() {
     has_article_ = false;
     stack_->setCurrentIndex(0);
-    analysis_section_->hide();
-    related_section_->hide();
-    monitor_section_->hide();
-    entities_section_->hide();
-    infra_section_->hide();
+    conceal_article_section(analysis_section_);
+    conceal_article_section(related_section_);
+    conceal_article_section(monitor_section_);
+    conceal_article_section(entities_section_);
+    conceal_article_section(infra_section_);
     analyze_timeout_->stop();
 }
 
@@ -1085,7 +1104,9 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
     // Clear any previous brief's categories while the new one generates.
     if (tldr_detail_section_)
         tldr_detail_section_->hide();
-    sync_article_block();
+    brief_pending_ = true;
+    brief_owns_pane_ = true;
+    set_article_visible(false);
     stack_->setCurrentIndex(1);
 }
 
@@ -1095,16 +1116,86 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
 // user something was in flight when nothing was.
 void NewsDetailPanel::sync_article_block() {
     if (body_section_)
-        body_section_->setVisible(has_article_);
+        body_section_->setVisible(has_article_ && !brief_owns_pane_);
+}
+
+// A per-story section only becomes visible while the story owns the pane. An
+// ANALYZE that was already in flight when the user asked for a brief would
+// otherwise land its AI ANALYSIS underneath that brief — the same mingling,
+// arriving a second later.
+void NewsDetailPanel::conceal_article_section(QWidget* section) {
+    if (!section)
+        return;
+    section->hide();
+    // Drop it from the restore list too: a section emptied while a brief holds
+    // the pane must not reappear with the story as an empty heading.
+    sections_hidden_by_brief_.removeAll(section);
+}
+
+void NewsDetailPanel::reveal_article_section(QWidget* section) {
+    if (!section)
+        return;
+    if (!brief_owns_pane_) {
+        section->show();
+        return;
+    }
+    // The story is underneath a brief. Keep the section populated and hidden,
+    // and remember it so it comes back with the story rather than appearing
+    // under the brief — which is the reported defect, arriving a second late.
+    section->hide();
+    if (!sections_hidden_by_brief_.contains(section))
+        sections_hidden_by_brief_.append(section);
+}
+
+void NewsDetailPanel::set_article_visible(bool visible) {
+    if (headline_label_)      headline_label_->setVisible(visible);
+    if (article_meta_row_)    article_meta_row_->setVisible(visible);
+    if (summary_label_)       summary_label_->setVisible(visible);
+    if (article_actions_)     article_actions_->setVisible(visible);
+    if (article_separator_)   article_separator_->setVisible(visible);
+    sync_article_block();
+
+    if (visible) {
+        // Put back exactly what the brief took away, and nothing else — an
+        // empty section must stay empty and hidden.
+        for (QWidget* section : std::as_const(sections_hidden_by_brief_))
+            if (section)
+                section->show();
+        sections_hidden_by_brief_.clear();
+        return;
+    }
+
+    // Remember which per-story sections were actually on screen, so hiding the
+    // brief again is the exact inverse of showing it. Without this, "hide the
+    // brief" would be the reason the story's ANALYSIS stayed missing.
+    sections_hidden_by_brief_.clear();
+    for (QWidget* section : {analysis_section_, related_section_, monitor_section_,
+                             entities_section_, infra_section_}) {
+        // isHidden(), not isVisible(): the panel may itself be off-screen
+        // (another dock tab in front), and that must not be mistaken for a
+        // section the story had closed.
+        if (section && !section->isHidden()) {
+            sections_hidden_by_brief_.append(section);
+            section->hide();
+        }
+    }
 }
 
 void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& title) {
     if (!tldr_label_ || !tldr_section_)
         return;
+    // The user opened an article while this was being written: the brief is a
+    // read of the feed they have since left. Drop it.
+    if (!brief_pending_)
+        return;
+    brief_pending_ = false;
     if (text.isEmpty()) {
         tldr_section_->hide();
         if (tldr_detail_section_)
             tldr_detail_section_->hide();
+        // Nothing to show — give the pane back to the story that was open.
+        brief_owns_pane_ = false;
+        set_article_visible(has_article_);
         return;
     }
     if (tldr_title_)
@@ -1128,11 +1219,18 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
             tldr_detail_section_->show();
         }
     }
-    sync_article_block();
+    brief_owns_pane_ = true;
+    set_article_visible(false);
     stack_->setCurrentIndex(1);
 }
 
 void NewsDetailPanel::hide_tldr() {
+    brief_owns_pane_ = false;
+    brief_pending_   = false;
+    // Give the pane back to the open story. Today's only caller follows this
+    // with show_article(), which would restore it anyway — but a method named
+    // "hide the brief" must not be the reason the article stays hidden.
+    set_article_visible(has_article_);
     if (tldr_section_)
         tldr_section_->hide();
     // The category breakdown belongs to the brief — it must collapse with it,
