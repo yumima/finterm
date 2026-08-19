@@ -647,6 +647,8 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     # kills the WHOLE ownership call, insider table included — so the
     # verification gets its own budget and stops when it is spent, reporting
     # what it did not reach instead of racing the timeout.
+    # `filings` is sorted newest-first, so when the budget runs out it is the
+    # OLDEST schedules that go unverified — the right end to lose.
     verify_deadline = time.time() + _STAKE_VERIFY_BUDGET_S
     for f in filings:
         if time.time() > verify_deadline:
@@ -663,7 +665,11 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
             unverified += 1          # counted, not guessed at
             continue
         subject_cik, filer_cik, filer_name = parties
-        if subject_cik and subject_cik != cik:
+        # Either side is enough to place the filing. Without the second test a
+        # header whose SUBJECT block fell outside the 6 KB range would keep a
+        # schedule this company filed on somebody else — the Berkshire-on-Delta
+        # case, shown as a stake in Berkshire, which is the whole defect.
+        if (subject_cik and subject_cik != cik) or (not subject_cik and filer_cik == cik):
             filed_by_this_cik += 1
             continue
         out.append({

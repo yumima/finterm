@@ -163,9 +163,14 @@ class LiveHlsProxy : public QObject {
     /// Age of the CURRENT playback session — reset by set_upstream(), not by
     /// a manifest refetch, because refetching does not renew the session.
     QElapsedTimer         session_age_;
-    /// Latched so the owner is asked to re-resolve once per session, not on
-    /// every 4-second refresh tick while the resolve is in flight.
-    bool                  refresh_requested_ = false;
+    /// When the owner was last asked to re-resolve. Throttles the ask to one
+    /// per kRefreshAskGapMs rather than one per session: a resolve can fail
+    /// (yt-dlp error, no network), and a one-shot latch would then never ask
+    /// again, leaving the session to die with only the player-side watchdog
+    /// to notice. Invalid until the first ask.
+    QElapsedTimer         refresh_asked_at_;
+    /// Gap between repeat asks while the session is still over-age.
+    static constexpr int  kRefreshAskGapMs = 6000;
     QUrl                  local_url_;
     QByteArray            trimmed_cache_;
     /// Age of trimmed_cache_. Invalid (i.e., !isValid()) until first

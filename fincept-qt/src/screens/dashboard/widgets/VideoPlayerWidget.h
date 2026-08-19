@@ -346,6 +346,9 @@ class VideoPlayerWidget : public BaseWidget {
     /// relay, so playback continues across a YouTube session expiry without
     /// the player ever seeing a source change.
     void refresh_live_session();
+    /// Ceiling on one session-refresh resolve. Measured at ~1.5 s; this is
+    /// slack, not a target, and exists so a hang cannot disable rotation.
+    static constexpr int kSessionResolveTimeoutMs = 8000;
     /// The in-flight session-refresh resolve, if any. One at a time.
     class QProcess* session_refresh_proc_ = nullptr;
     void set_loading(bool loading);

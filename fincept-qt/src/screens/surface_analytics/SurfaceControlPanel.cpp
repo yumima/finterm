@@ -498,10 +498,10 @@ void SurfaceControlPanel::prefill_datasets() {
     dataset_combo_->blockSignals(false);
 }
 
-void SurfaceControlPanel::set_synthetic(bool synthetic) {
-    if (showing_synthetic_ == synthetic)
+void SurfaceControlPanel::set_provenance(SurfaceProvenance p) {
+    if (provenance_ == p)
         return;
-    showing_synthetic_ = synthetic;
+    provenance_ = p;
     apply_tier_badge();
 }
 
@@ -512,15 +512,25 @@ void SurfaceControlPanel::apply_tier_badge() {
     // What is DRAWN decides the badge. The tier only says where this surface
     // could be fetched from, and a generated surface under a COMPUTED badge is
     // a claim about provenance that is not true.
-    const bool synthetic = showing_synthetic_ || cap.tier == SurfaceTier::DEMO;
-    const QColor bg = synthetic ? tier_color(SurfaceTier::DEMO) : tier_color(cap.tier);
-    tier_badge_->setText(synthetic ? tier_name(SurfaceTier::DEMO) : tier_name(cap.tier));
+    const bool imported = provenance_ == SurfaceProvenance::Imported;
+    const bool synthetic = !imported && (provenance_ == SurfaceProvenance::Synthetic ||
+                                         cap.tier == SurfaceTier::DEMO);
+    const QColor bg = imported  ? QColor(ui::colors::CYAN())
+                    : synthetic ? tier_color(SurfaceTier::DEMO)
+                                : tier_color(cap.tier);
+    tier_badge_->setText(imported  ? QStringLiteral("IMPORTED FILE")
+                       : synthetic ? QString::fromUtf8(tier_name(SurfaceTier::DEMO))
+                                   : QString::fromUtf8(tier_name(cap.tier)));
     tier_badge_->setStyleSheet(
         QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
                 "padding:2px 6px; border-radius:2px; max-width:140px;")
             .arg(bg.name()));
     tier_badge_->setToolTip(
-        synthetic
+        imported
+            ? QStringLiteral("These numbers came from a file you imported, not from %1.")
+                  .arg(QString(cap.dataset).isEmpty() ? QStringLiteral("a market data source")
+                                                      : QString::fromUtf8(cap.dataset))
+        : synthetic
             ? QStringLiteral("This surface is generated analytically, not fetched from a\n"
                              "market data source. The shape is realistic; the numbers are\n"
                              "not real quotes.%1")

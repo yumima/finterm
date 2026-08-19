@@ -46,6 +46,10 @@ class NewsDetailPanel : public QWidget {
     /// Rendered in the brief section WITHOUT taking the pane from an open
     /// story — see the .cpp.
     void show_brief_unavailable(const QString& text, const QString& title);
+    /// True while a brief the user asked for is still expected. A late
+    /// failure notice for a brief they have already navigated away from is
+    /// as stale as a late brief, and must be dropped the same way.
+    bool brief_pending() const { return brief_pending_; }
     void show_tldr_summary(const QString& text, const QString& title = QStringLiteral("TL;DR"));
     /// Hide the TL;DR section (called when a new article is opened so the
     /// summary doesn't outlive its relevance to the feed snapshot).

@@ -1104,6 +1104,10 @@ void NewsDetailPanel::show_brief_unavailable(const QString& text, const QString&
     tldr_section_->show();
     if (tldr_detail_section_)
         tldr_detail_section_->hide();
+    // Forcing page 1 with no story ever opened would reveal the never-filled
+    // ARTICLE block — a permanent "Loading article…" under an empty headline,
+    // with live ANALYZE / LISTEN / OPEN buttons pointing at nothing.
+    set_article_visible(has_article_);
     stack_->setCurrentIndex(1);
 }
 

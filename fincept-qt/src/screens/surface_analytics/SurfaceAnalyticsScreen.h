@@ -89,8 +89,16 @@ class SurfaceAnalyticsScreen : public QWidget,
     /// "which tier is this chart" was never an answer to "where did these
     /// numbers come from".
     QSet<ChartType> fetched_;
-    /// True when the surface currently on screen was generated, not fetched.
-    bool active_is_synthetic() const { return !fetched_.contains(active_chart_); }
+    /// Surfaces loaded from a file the user chose, and where each came from.
+    /// Kept apart from fetched_: an import is real data, but it did not come
+    /// out of the tier's Databento dataset, and saying it did is the same
+    /// false provenance claim as calling generated data COMPUTED.
+    QHash<ChartType, QString> imported_from_;
+    /// True when the surface currently on screen was generated, not fetched
+    /// and not imported.
+    bool active_is_synthetic() const {
+        return !fetched_.contains(active_chart_) && !imported_from_.contains(active_chart_);
+    }
     void update_chart();
     void update_metrics();
     void update_inspector_lineage();

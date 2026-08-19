@@ -526,7 +526,15 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                                        (st == QMediaPlayer::LoadedMedia ||
                                         st == QMediaPlayer::BufferedMedia ||
                                         st == QMediaPlayer::BufferingMedia);
-                    if (ready) {
+                    if (play_in_progress_) {
+                        // A resolve is already running — its callback will
+                        // start playback. Starting another would put two
+                        // relays and two setSource() calls in flight against
+                        // one player, which is the double-open this file goes
+                        // out of its way to avoid everywhere else.
+                        status_label_->setText(QStringLiteral("Still opening the stream…"));
+                        status_label_->show();
+                    } else if (ready) {
                         set_playback_intent(true);
                         player_->play();
                     } else {
@@ -2028,6 +2036,10 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     const QString stream_url = output.split('\n').first().trimmed();
 
     if (stream_url.isEmpty()) {
+        // Same contract as the two failure paths above: release the guard so
+        // REFRESH works again, and keep the URL so PLAY can retry.
+        play_in_progress_ = false;
+        url_before_error_ = current_url_;
         set_loading(false);
         status_label_->setText("Could not extract stream URL.");
         status_label_->show();
@@ -2190,6 +2202,16 @@ void VideoPlayerWidget::refresh_live_session() {
     auto* proc = new QProcess(this);
     session_refresh_proc_ = proc;
     proc->setProperty("requested_url", current_url_);
+    // Bound it. A resolve that never returns (no network, wedged JS runtime)
+    // would leave session_refresh_proc_ set forever, and every later request
+    // to rotate the session would be dropped — rotation silently off, and the
+    // viewer back to a visible stop every forty seconds.
+    QTimer::singleShot(kSessionResolveTimeoutMs, proc, [proc]() {
+        if (proc->state() != QProcess::NotRunning) {
+            LOG_WARN("VideoPlayer", "live session refresh timed out — killing yt-dlp");
+            proc->kill();
+        }
+    });
     connect(proc, &QProcess::finished, this,
             [this, proc](int code, QProcess::ExitStatus) {
         proc->deleteLater();

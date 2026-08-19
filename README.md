@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`2ce1fd8a3`](https://github.com/yumima/finterm/commit/2ce1fd8a3) video: a YouTube live session dies in ~20s, so rotate it under the player
 - [`6a69b6ab1`](https://github.com/yumima/finterm/commit/6a69b6ab1) surface: refuse a spot-priced fetch without a spot, rather than sending 0
 - [`0b4c5ec2b`](https://github.com/yumima/finterm/commit/0b4c5ec2b) data surfaces: say where every number came from, or do not show it
 - [`57ccdb3a0`](https://github.com/yumima/finterm/commit/57ccdb3a0) ownership: a CIK's filings are not all ABOUT that CIK

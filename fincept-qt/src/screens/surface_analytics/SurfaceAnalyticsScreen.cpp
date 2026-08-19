@@ -16,6 +16,7 @@
 #include "ui/theme/Theme.h"
 
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -370,6 +371,7 @@ void SurfaceAnalyticsScreen::load_demo_data() {
     // otherwise a symbol change silently swaps real data for a smooth curve
     // and leaves the badge and the lineage still claiming OPRA.
     fetched_.clear();
+    imported_from_.clear();
     QString qsym = current_symbol_or_default();
     std::string sym = qsym.toStdString();
     // A generated surface needs a scale to be drawn around. With no live quote
@@ -982,8 +984,19 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
     // came out of OPRA.PILLAR, which is exactly the claim that must never be
     // made without it being true.
     const bool synthetic = active_is_synthetic();
+    const auto imported = imported_from_.constFind(active_chart_);
+    const bool is_import = imported != imported_from_.constEnd();
     if (control_panel_)
-        control_panel_->set_synthetic(synthetic);
+        control_panel_->set_provenance(is_import ? SurfaceProvenance::Imported
+                                       : synthetic ? SurfaceProvenance::Synthetic
+                                                   : SurfaceProvenance::Fetched);
+    if (is_import) {
+        // The file IS the source. No dataset, no schema, and no cost query —
+        // nothing here went near Databento.
+        data_inspector_->set_lineage(imported.value(), QStringLiteral("imported CSV"),
+                                     QStringLiteral("—"), sym, QString(), count, 0.0);
+        return;
+    }
     if (synthetic) {
         data_inspector_->set_lineage(QStringLiteral("— generated, not fetched —"),
                                      QStringLiteral("analytic model"),
@@ -1372,8 +1385,9 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
     // rules would badge it SYNTHETIC DATA and report its lineage as
     // "generated, not fetched" — the same false claim as before, pointed the
     // other way.
-    const auto mark_imported = [this]() {
-        fetched_.insert(active_chart_);
+    const auto mark_imported = [this, &path]() {
+        imported_from_.insert(active_chart_, QFileInfo(path).fileName());
+        fetched_.remove(active_chart_);   // a file replaces whatever was fetched
         update_inspector_lineage();
     };
     switch (active_chart_) {

@@ -33,7 +33,7 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
 
     upstream_url_ = upstream;
     session_age_.start();
-    refresh_requested_ = false;
+    refresh_asked_at_.invalidate();
     trimmed_cache_.clear();
     cache_age_.invalidate();
     first_ready_emitted_ = false;
@@ -67,7 +67,18 @@ void LiveHlsProxy::set_upstream(const QUrl& upstream) {
         return;
     upstream_url_ = upstream;
     session_age_.restart();
-    refresh_requested_ = false;
+    refresh_asked_at_.invalidate();
+    // Drop the fetch still running against the RETIRED session. Left alone it
+    // would land after this and overwrite the cache with the dying session's
+    // segment URLs, and on_refresh_timer() below would skip while it ran — so
+    // the player could be handed a full playlist of about-to-403 URLs at
+    // exactly the moment the rotation was supposed to prevent that.
+    if (in_flight_) {
+        disconnect(in_flight_, nullptr, this, nullptr);
+        in_flight_->abort();
+        in_flight_->deleteLater();
+        in_flight_ = nullptr;
+    }
     LOG_INFO("LiveHlsProxy", "upstream session replaced — playback continues on " +
                                  local_url_.toString());
     // Pull the new session's playlist at once. The cached one is still served
@@ -172,9 +183,9 @@ void LiveHlsProxy::on_refresh_timer() {
     // Ask for a new session BEFORE the current one's segments die. The
     // manifest will keep answering 200 either way, so nothing else here can
     // tell that playback is about to stop — see set_upstream().
-    if (!refresh_requested_ && session_age_.isValid() &&
-        session_age_.elapsed() > kSessionMaxAgeMs) {
-        refresh_requested_ = true;
+    if (session_age_.isValid() && session_age_.elapsed() > kSessionMaxAgeMs &&
+        (!refresh_asked_at_.isValid() || refresh_asked_at_.elapsed() > kRefreshAskGapMs)) {
+        refresh_asked_at_.start();
         emit refresh_upstream_requested();
     }
     if (in_flight_) {
@@ -201,6 +212,15 @@ void LiveHlsProxy::on_upstream_finished() {
     // The in_flight_ guard pairs with this — release it before doing any
     // work so the next refresh tick can spawn a new fetch if needed.
     if (reply == in_flight_) in_flight_ = nullptr;
+
+    // A reply for an upstream we have since rotated away from carries the old
+    // session's segment URLs, which are about to stop working. Belt to
+    // set_upstream()'s braces: it aborts the in-flight fetch, and this catches
+    // one that had already completed and was queued behind us.
+    if (reply->request().url() != upstream_url_) {
+        reply->deleteLater();
+        return;
+    }
 
     if (reply->error() != QNetworkReply::NoError) {
         const QString err = reply->errorString();

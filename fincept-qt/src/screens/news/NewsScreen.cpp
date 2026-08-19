@@ -576,7 +576,13 @@ void NewsScreen::connect_signals() {
                                     ? QStringLiteral("The local model returned nothing — check that hearth is "
                                                      "running and the chat model is loaded.")
                                     : QStringLiteral("No LLM is configured. Open Settings -> AI Chat.");
-            self->detail_panel_->show_tldr_summary(
+            // The user opened an article while the model was working: this
+            // notice is about a brief they have left, so drop it.
+            if (!self->detail_panel_->brief_pending())
+                return;
+            // Same reasoning as the empty-feed branch: a one-line failure
+            // notice is not worth evicting the story the reader has open.
+            self->detail_panel_->show_brief_unavailable(
                 QStringLiteral("**AI brief unavailable.** %1").arg(why), scope_title);
         });
     });

@@ -645,7 +645,8 @@ void StockOwnershipPanel::render_stakes(const OwnershipSnapshot& s) {
         notes << QStringLiteral("%1 schedule(s) this company filed on OTHERS — not stakes in it")
                      .arg(s.stakes_filed_by_this_cik);
     if (s.stakes_unverified > 0)
-        notes << QStringLiteral("%1 could not be checked against EDGAR and were left out")
+        notes << QStringLiteral("%1 older filing(s) could not be checked in time — left out "
+                                "rather than shown without knowing whose side they are on")
                      .arg(s.stakes_unverified);
     if (s.stakes_truncated > 0)
         notes << QStringLiteral("%1 older not fetched").arg(s.stakes_truncated);

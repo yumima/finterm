@@ -37,6 +37,10 @@ inline const char* tier_name(SurfaceTier t) {
     return "UNKNOWN";
 }
 
+/// Where the numbers currently drawn actually came from. Distinct from the
+/// tier, which only says where a surface COULD be fetched from.
+enum class SurfaceProvenance { Fetched, Synthetic, Imported };
+
 // View modes a surface can be rendered in. The capability declares which apply.
 enum class ViewMode { Surface3D, Table, Line };
 
