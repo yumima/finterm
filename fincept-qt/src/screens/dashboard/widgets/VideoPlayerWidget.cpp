@@ -1286,6 +1286,13 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
         hard_reload_source();
         return;
     }
+    // Two failed recoveries is enough evidence that the direct path cannot
+    // hold this stream — a fresh resolve did not help, so the next one will
+    // not either. Switch transports rather than spending the whole budget
+    // proving it five times over. One stall is a transient and still gets the
+    // cheap reload; this only fires on the second.
+    if (reconnect_attempts_ >= kAttemptsBeforeWebFallback && fall_back_to_web(why))
+        return;
     // re_resolve_source() does its own budget accounting, so it is safe to
     // reach directly — which the unlock path does.
     re_resolve_source(why);
@@ -1294,8 +1301,54 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
 #endif
 }
 
+// Hand this stream to the embedded player, which is a browser and therefore
+// does not depend on a yt-dlp URL at all.
+//
+// The direct path fetches segments with credentials yt-dlp obtained without a
+// proof-of-origin token, and googlevideo stops honouring those about 35
+// seconds later — measured with plain ffmpeg, no finterm in the loop:
+// 34.6 seconds decoded, then 403 on every segment, on every client (web,
+// android_vr), every rendition (1080/720/480/360) and either User-Agent.
+// Chromium runs YouTube's own JS, mints the token, and plays the same stream
+// indefinitely — which is exactly what the browser next to us is doing.
+//
+// So when the direct path has proved it cannot hold the stream, stop retrying
+// it and use the transport that works.
+bool VideoPlayerWidget::fall_back_to_web(const QString& why) {
+#if defined(HAS_QT_WEBENGINE) && defined(HAS_QT_MULTIMEDIA)
+    const QString url = !current_url_.isEmpty() ? current_url_ : url_before_error_;
+    if (url.isEmpty() || !is_youtube_url(url) || web_fallback_done_)
+        return false;
+    const QString vid = extract_youtube_id(url);
+    if (vid.isEmpty())
+        return false;   // a channel URL needs a resolve, which is the thing failing
+
+    LOG_INFO("VideoPlayer",
+             QString("direct stream unusable (%1) — switching to the embedded player").arg(why));
+    web_fallback_done_ = true;      // one switch per stream, never a loop
+    set_playback_intent(false);
+    suppress_recovery_briefly();
+    player_->stop();
+    player_->setSource(QUrl{});
+    stop_hls_proxy();
+    status_label_->setText(
+        QStringLiteral("The direct stream kept expiring — switched to the embedded player."));
+    status_label_->show();
+    play_web_video_id(vid, current_title_.isEmpty() ? QStringLiteral("Live Stream")
+                                                    : current_title_, url);
+    return true;
+#else
+    Q_UNUSED(why);
+    return false;
+#endif
+}
+
 void VideoPlayerWidget::give_up_on_stream(const QString& why) {
 #ifdef HAS_QT_MULTIMEDIA
+    // Before telling the user to press PLAY on something that will fail the
+    // same way, try the transport that does not depend on a yt-dlp URL.
+    if (fall_back_to_web(why))
+        return;
     set_loading(false);
     set_playback_intent(false);   // stop retrying; the user's PLAY restarts it
     play_in_progress_ = false;
@@ -1861,9 +1914,11 @@ void VideoPlayerWidget::play_custom_url() {
 }
 
 void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
-    // A new selection retires any recovery pending from the previous stream.
+    // A new selection retires any recovery pending from the previous stream,
+    // and re-arms the one-shot fallback to the embedded player.
     url_before_error_.clear();
     errored_source_.clear();
+    web_fallback_done_ = false;
     if (stall_timer_)
         stall_timer_->stop();
     // NOT reconnect_attempts_ = 0 — this is also the recovery path, and

@@ -298,6 +298,18 @@ class VideoPlayerWidget : public BaseWidget {
     int  reconnect_attempts_ = 0;
     /// Give up: stop the player, say so, and leave PLAY as the way back.
     void give_up_on_stream(const QString& why);
+    /// Move this stream to the embedded (Chromium) player, which mints the
+    /// proof-of-origin token the direct path cannot and therefore holds a
+    /// live stream indefinitely. Returns false when there is nothing to
+    /// switch to. One switch per selection — see web_fallback_done_.
+    bool fall_back_to_web(const QString& why);
+    /// True once this stream has been handed to the embedded player, so a
+    /// failure there cannot bounce it back and forth.
+    bool web_fallback_done_ = false;
+    /// Recovery attempts to spend on the direct path before handing the
+    /// stream to the embedded player. One stall is a transient worth a cheap
+    /// reload; a second, after a fresh resolve, is the path failing.
+    static constexpr int kAttemptsBeforeWebFallback = 2;
     /// True while a deliberate teardown (BACK, a reload, a re-resolve) is
     /// still settling. Errors the backend reports inside that window are
     /// consequences of the teardown, not streams that need rescuing.
