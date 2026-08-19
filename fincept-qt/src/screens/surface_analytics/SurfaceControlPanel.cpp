@@ -568,6 +568,18 @@ void SurfaceControlPanel::set_capability(ChartType type) {
     // FETCH button enable state
     bool can_fetch = cap.tier != SurfaceTier::DEMO;
     fetch_btn_->setEnabled(can_fetch);
+    // Be honest about what the button does per tier. On EQUITIES charts a
+    // fetch returns daily bars into the inspector table; nothing computes the
+    // surface from them, so the picture does not change.
+    fetch_btn_->setToolTip(
+        !can_fetch
+            ? QStringLiteral("This surface is generated analytically — there is nothing to fetch.")
+        : cap.tier == SurfaceTier::EQUITIES
+            ? QStringLiteral("Fetches daily bars from %1 into the data table.\n"
+                             "This chart is NOT computed from them yet — the surface stays "
+                             "generated.").arg(QString::fromUtf8(cap.dataset))
+            : QStringLiteral("Fetch this surface from %1 (%2).")
+                  .arg(QString::fromUtf8(cap.dataset), QString::fromUtf8(cap.schema)));
     fetch_btn_->setStyleSheet(fetch_btn_qss(can_fetch));
     fetch_btn_->setToolTip(can_fetch ? QString()
                                      : "No Databento source for this surface — "

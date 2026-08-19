@@ -69,11 +69,41 @@ VideoRenderWidget::VideoRenderWidget(QWidget* parent) : QWidget(parent) {
 
 void VideoRenderWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
+        // A click that brings the terminal to the front is a click at the
+        // window manager, not at the video. Both X11 and Wayland deliver that
+        // activating press through to the widget under the cursor, so with a
+        // browser or an editor overlapping the tile, clicking finterm to use
+        // it paused whatever was playing — indistinguishable from the stream
+        // stopping on its own, and it leaves the button reading PLAY.
+        //
+        // Two tests, because neither alone is reliable: the window may not
+        // read as active yet, or the compositor may have delivered the
+        // focus-in first and made it read active already.
+        const bool inactive = !window() || !window()->isActiveWindow();
+        const bool just_activated = window_activated_at_.isValid() &&
+                                    window_activated_at_.elapsed() < kActivationGraceMs;
+        if (inactive || just_activated) {
+            event->accept();
+            return;
+        }
         emit clicked();
         event->accept();
         return;
     }
     QWidget::mousePressEvent(event);
+}
+
+void VideoRenderWidget::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    // window() is only meaningful once the widget is in a shown hierarchy.
+    if (QWidget* top = window())
+        top->installEventFilter(this);
+}
+
+bool VideoRenderWidget::eventFilter(QObject* obj, QEvent* event) {
+    if (event->type() == QEvent::WindowActivate)
+        window_activated_at_.restart();
+    return QWidget::eventFilter(obj, event);
 }
 
 void VideoRenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {

@@ -1521,12 +1521,17 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
                                     QString::number(bar.value("volume").toDouble(), 'f', 0)});
                 }
             }
-            // NOTE: the bars land in the inspector table only. The
-            // EQUITIES-tier surfaces (Correlation, PCA, VaR, Factor
-            // Exposure, Drawdown, Beta) are NOT computed from them, so they
-            // stay generated — and now say so on their badge — until
-            // something computes them for real.
+            // The bars land in the inspector table ONLY. The EQUITIES-tier
+            // surfaces (Correlation, PCA, VaR, Stress Test, Factor Exposure,
+            // Drawdown, Beta) are not computed from them, so the chart stays
+            // generated. Saying "loaded" and leaving it at that let the user
+            // believe the picture in front of them came from these bars.
             data_inspector_->show_table("ohlcv-1d", headers, rows);
+            if (capability_for(active_chart_).tier == SurfaceTier::EQUITIES)
+                data_inspector_->set_status(
+                    QStringLiteral("%1 bars loaded into the table below — this chart is not "
+                                   "computed from them yet, so it stays generated")
+                        .arg(rows.size()), true);
         }
     }
     update_chart();

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`9a7ea6f2e`](https://github.com/yumima/finterm/commit/9a7ea6f2e) ownership: bound the stakes check by count as well as by clock
 - [`33bc46bda`](https://github.com/yumima/finterm/commit/33bc46bda) review fixes: two relays racing, a lineage that lied the other way, a ghost article
 - [`2ce1fd8a3`](https://github.com/yumima/finterm/commit/2ce1fd8a3) video: a YouTube live session dies in ~20s, so rotate it under the player
 - [`6a69b6ab1`](https://github.com/yumima/finterm/commit/6a69b6ab1) surface: refuse a spot-priced fetch without a spot, rather than sending 0

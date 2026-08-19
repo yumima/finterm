@@ -2,6 +2,7 @@
 #include "screens/dashboard/widgets/BaseWidget.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProcess>
@@ -87,6 +88,22 @@ class VideoRenderWidget : public QWidget {
   protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    /// Watches the top-level window for activation so an activating click can
+    /// be told apart from a click made while the terminal already had focus.
+    bool eventFilter(QObject* obj, QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+
+  private:
+    /// When the terminal window last became active. A left-click on the video
+    /// within kActivationGraceMs of that is the click that RAISED the window,
+    /// not a play/pause gesture.
+    ///
+    /// isActiveWindow() alone is not enough: X11 and Wayland do not guarantee
+    /// that the focus-in is delivered before the button-press, so on some
+    /// compositors the window already reads as active by the time the press
+    /// arrives. The timestamp holds regardless of that ordering.
+    QElapsedTimer window_activated_at_;
+    static constexpr int kActivationGraceMs = 300;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     /// Reset the drop-late-frames flag whenever the widget's parent
