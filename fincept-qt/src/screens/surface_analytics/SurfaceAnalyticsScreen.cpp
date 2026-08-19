@@ -1326,6 +1326,37 @@ void SurfaceAnalyticsScreen::on_fetch_requested() {
     p.iv_method = s.iv_method;
     p.spot_override = spot_for(p.symbol);
 
+    // These fetches PRICE against spot — the provider needs a real one, and
+    // shipping the unknown 0 through would return quotes with no IV, leave
+    // every grid empty, and report "loaded" over the unchanged synthetic
+    // chart. Refusing with a reason is the honest failure; substituting a
+    // round number was the dishonest one this stopped doing.
+    switch (active_chart_) {
+        case ChartType::Volatility:
+        case ChartType::DeltaSurface:
+        case ChartType::GammaSurface:
+        case ChartType::VegaSurface:
+        case ChartType::ThetaSurface:
+        case ChartType::SkewSurface:
+        case ChartType::LocalVolSurface:
+        case ChartType::ImpliedDividend:
+        case ChartType::LiquidityHeatmap:
+            if (p.spot_override <= 0.0f) {
+                if (data_inspector_) {
+                    data_inspector_->set_status(
+                        QStringLiteral("No live quote for %1").arg(p.symbol), false);
+                    data_inspector_->set_error(
+                        QStringLiteral("This surface is priced against spot, and no quote for %1 "
+                                       "has been published yet. Open the symbol on a screen that "
+                                       "subscribes to its quote, then fetch again.").arg(p.symbol));
+                }
+                return;
+            }
+            break;
+        default:
+            break;
+    }
+
     if (data_inspector_)
         data_inspector_->set_status(
             QString("Fetching %1 …").arg(QString::fromUtf8(chart_type_name(active_chart_))), true);
@@ -1687,6 +1718,7 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
         load_demo_data();
         update_chart();
         update_metrics();
+        update_inspector_lineage();   // load_demo_data() cleared fetched_
     }
 }
 
