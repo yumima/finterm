@@ -72,6 +72,22 @@ class LiveHlsProxy : public QObject {
     /// bind. On failure, error string is available via last_error().
     bool start(const QUrl& upstream);
 
+    /// Swap in a freshly resolved upstream playlist, keeping the local URL
+    /// and the served sequence numbering intact.
+    ///
+    /// A YouTube live playback session stops serving its segments roughly
+    /// 25-50 seconds after it is issued — measured 2026-08-19: every segment
+    /// 200 for the first ~25s, then 403 for good, while the MANIFEST keeps
+    /// answering 200 with advancing sequence numbers. The manifest is
+    /// therefore no evidence that playback still works, and refetching the
+    /// same manifest forever (which is what this used to do) hands the player
+    /// a playlist full of URLs that are all dead.
+    ///
+    /// The stream itself is continuous across resolves — sq numbering carries
+    /// straight on, only the signing parameters differ — so replacing the
+    /// upstream mid-flight is invisible to the demuxer reading our local URL.
+    void set_upstream(const QUrl& upstream);
+
     /// Stop accepting new connections, abort outstanding upstream fetches,
     /// and stop the refresh timer. Safe to call multiple times.
     void stop();
@@ -84,6 +100,11 @@ class LiveHlsProxy : public QObject {
     QString last_error() const { return last_error_; }
 
   signals:
+    /// The current session is old enough that its segments are about to stop
+    /// working. The owner answers by resolving the stream again and calling
+    /// set_upstream() — see it for why nothing else keeps playback alive.
+    void refresh_upstream_requested();
+
     /// Emitted the first time we successfully fetch and trim the upstream
     /// playlist. The owner can wait for this before calling setSource on
     /// QMediaPlayer so the player's first GET hits a non-empty cache.
@@ -119,12 +140,32 @@ class LiveHlsProxy : public QObject {
     static constexpr int kRefreshIntervalMs    = 4000;  ///< background fetch period
     static constexpr int kFetchTimeoutMs       = 30000; ///< per-fetch timeout
     static constexpr int kMaxCacheAgeMs        = 30000; ///< drop cache after this without a successful refresh
+    /// How old a playback session is allowed to get before it is replaced.
+    ///
+    /// Measured 2026-08-19 on youtube.com/watch?v=QB5BNdBFujE: segments answer
+    /// 200 for the first 12-25 seconds after a resolve and 403 for good after
+    /// that. The check runs on the 4 s refresh tick and the replacement resolve
+    /// costs another 1-2 s, so 14 s lands the new session around 16-20 s —
+    /// inside the window, with room for a slow resolve. Rotating every 14 s
+    /// against that measurement, a 130 s run held 15/15 segments at 200 where
+    /// an unrotated session was dead by 25 s.
+    ///
+    /// Lower is safer and costs one more yt-dlp run per interval; higher risks
+    /// the old session dying before its replacement lands, which the viewer
+    /// sees as the freeze this exists to remove.
+    static constexpr int kSessionMaxAgeMs      = 14000;
 
     QTcpServer*           server_         = nullptr;
     QNetworkAccessManager* netman_        = nullptr;
     QTimer*               refresh_timer_  = nullptr;
     QNetworkReply*        in_flight_      = nullptr;  ///< most recent upstream fetch, may be running
     QUrl                  upstream_url_;
+    /// Age of the CURRENT playback session — reset by set_upstream(), not by
+    /// a manifest refetch, because refetching does not renew the session.
+    QElapsedTimer         session_age_;
+    /// Latched so the owner is asked to re-resolve once per session, not on
+    /// every 4-second refresh tick while the resolve is in flight.
+    bool                  refresh_requested_ = false;
     QUrl                  local_url_;
     QByteArray            trimmed_cache_;
     /// Age of trimmed_cache_. Invalid (i.e., !isValid()) until first

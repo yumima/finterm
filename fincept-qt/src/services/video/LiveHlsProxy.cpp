@@ -32,6 +32,8 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
     stop();  // idempotent reset
 
     upstream_url_ = upstream;
+    session_age_.start();
+    refresh_requested_ = false;
     trimmed_cache_.clear();
     cache_age_.invalidate();
     first_ready_emitted_ = false;
@@ -58,6 +60,20 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
     on_refresh_timer();
     refresh_timer_->start();
     return true;
+}
+
+void LiveHlsProxy::set_upstream(const QUrl& upstream) {
+    if (!upstream.isValid() || upstream.scheme().isEmpty())
+        return;
+    upstream_url_ = upstream;
+    session_age_.restart();
+    refresh_requested_ = false;
+    LOG_INFO("LiveHlsProxy", "upstream session replaced — playback continues on " +
+                                 local_url_.toString());
+    // Pull the new session's playlist at once. The cached one is still served
+    // until it lands, so there is no gap: its segments are seconds old and the
+    // player is not reading the newest one yet.
+    on_refresh_timer();
 }
 
 void LiveHlsProxy::stop() {
@@ -153,6 +169,14 @@ void LiveHlsProxy::serve_request(QTcpSocket* client) {
 }
 
 void LiveHlsProxy::on_refresh_timer() {
+    // Ask for a new session BEFORE the current one's segments die. The
+    // manifest will keep answering 200 either way, so nothing else here can
+    // tell that playback is about to stop — see set_upstream().
+    if (!refresh_requested_ && session_age_.isValid() &&
+        session_age_.elapsed() > kSessionMaxAgeMs) {
+        refresh_requested_ = true;
+        emit refresh_upstream_requested();
+    }
     if (in_flight_) {
         // Previous fetch hasn't finished — skip this tick rather than
         // pile up parallel requests. Upstream is slow; that's the whole

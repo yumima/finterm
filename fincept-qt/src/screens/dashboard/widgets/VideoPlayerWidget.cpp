@@ -1966,6 +1966,35 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
                  "-g", youtube_url});
 }
 
+// yt-dlp's stderr opens with boilerplate — a version-age nag, an update hint,
+// a JS-runtime notice — and the ACTUAL failure is underneath it. Showing the
+// first 120 characters therefore showed the user
+// "yt-dlp error: WARNING: Your yt-dlp version (2026.03.17) is older than 90
+// days!", which names a real annoyance and hides the real error.
+QString VideoPlayerWidget::ytdlp_real_error(const QByteArray& stderr_bytes) {
+    const QStringList lines = QString::fromUtf8(stderr_bytes).split(QLatin1Char('\n'));
+    QStringList errors, warnings;
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.isEmpty())
+            continue;
+        if (line.startsWith(QLatin1String("ERROR"), Qt::CaseInsensitive)) {
+            errors << line;
+        } else if (line.startsWith(QLatin1String("WARNING"), Qt::CaseInsensitive)) {
+            // Keep warnings only as a fallback, and drop the two that say
+            // nothing about why THIS call failed.
+            if (!line.contains(QLatin1String("is older than"), Qt::CaseInsensitive) &&
+                !line.contains(QLatin1String("To suppress this warning"), Qt::CaseInsensitive))
+                warnings << line;
+        } else if (errors.isEmpty() && warnings.isEmpty()) {
+            // Continuation of an unlabelled traceback / usage message.
+            warnings << line;
+        }
+    }
+    const QStringList& pick = !errors.isEmpty() ? errors : warnings;
+    return pick.isEmpty() ? QString() : pick.join(QLatin1String(" · "));
+}
+
 void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*status*/) {
     auto* proc = qobject_cast<QProcess*>(sender());
     if (!proc)
@@ -1979,7 +2008,7 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     }
 
     if (exit_code != 0) {
-        const QString err = proc->readAllStandardError().trimmed();
+        const QString err = ytdlp_real_error(proc->readAllStandardError());
         play_in_progress_ = false;
         // Remember what failed. current_url_ has to go so refresh_data() stops
         // retrying, but PLAY re-resolves from one of the two — and clearing
@@ -2103,6 +2132,12 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
         set_playback_intent(true);
         player_->play();
     });
+    // The relay asks for a new playback session before the current one's
+    // segments go 403. Answer with a fresh yt-dlp resolve and hand the URL
+    // back — the player keeps reading the same local URL throughout, so this
+    // is invisible: no source reset, no stop, no re-buffer.
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::refresh_upstream_requested,
+            this, &VideoPlayerWidget::refresh_live_session);
     connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error,
             this, [this](const QString& msg) {
         set_loading(false);
@@ -2132,8 +2167,78 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
 #endif
 }
 
+// Re-resolve the live stream and hand the new upstream to the running relay.
+//
+// This is what keeps a live stream playing. A YouTube playback session serves
+// its segments for roughly 25-50 seconds and then 403s for good, while its
+// manifest carries on answering 200 — so without this the relay serves a
+// playlist of dead URLs, the picture freezes, and the only recovery is the
+// watchdog tearing the player down and building it again. That recovery works
+// (which is why the stream came back) but it is a visible stop every minute.
+// Rotating the session underneath a stable local URL is the version the
+// viewer never sees.
+void VideoPlayerWidget::refresh_live_session() {
+#ifdef HAS_QT_MULTIMEDIA
+    if (!hls_proxy_ || current_url_.isEmpty() || !current_is_live_)
+        return;
+    if (session_refresh_proc_)
+        return;   // one resolve in flight is enough
+    const QString program = resolve_ytdlp_program();
+    if (program.isEmpty())
+        return;
+
+    auto* proc = new QProcess(this);
+    session_refresh_proc_ = proc;
+    proc->setProperty("requested_url", current_url_);
+    connect(proc, &QProcess::finished, this,
+            [this, proc](int code, QProcess::ExitStatus) {
+        proc->deleteLater();
+        if (session_refresh_proc_ == proc)
+            session_refresh_proc_ = nullptr;
+        // The user moved on while we were resolving.
+        if (!hls_proxy_ || proc->property("requested_url").toString() != current_url_)
+            return;
+        if (code != 0) {
+            // Not fatal: the current session still has a few seconds, and the
+            // next tick asks again. The watchdog is the backstop.
+            LOG_WARN("VideoPlayer", "live session refresh failed: " +
+                                        ytdlp_real_error(proc->readAllStandardError()).left(200));
+            return;
+        }
+        const QString url =
+            QString::fromUtf8(proc->readAllStandardOutput()).trimmed().split('\n').value(0).trimmed();
+        if (url.isEmpty())
+            return;
+        hls_proxy_->set_upstream(QUrl(url));
+    });
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError) {
+        if (session_refresh_proc_ == proc)
+            session_refresh_proc_ = nullptr;
+        proc->deleteLater();
+    });
+
+    // Same format chain as the first resolve, so the rotation cannot land on a
+    // different rendition mid-stream.
+    const int ceiling = max_height_;
+    QString fmt = QString("best[protocol=m3u8_native][height<=%1]").arg(ceiling);
+    if (ceiling > 720)
+        fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
+    fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
+    proc->start(program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node",
+                          "-g", current_url_});
+#endif
+}
+
 void VideoPlayerWidget::stop_hls_proxy() {
 #ifdef HAS_QT_MULTIMEDIA
+    if (session_refresh_proc_) {
+        // A resolve for the stream being torn down must not come back and
+        // point the next stream's relay at the old channel.
+        disconnect(session_refresh_proc_, nullptr, this, nullptr);
+        session_refresh_proc_->kill();
+        session_refresh_proc_->deleteLater();
+        session_refresh_proc_ = nullptr;
+    }
     if (!hls_proxy_) return;
     // Disconnect signals before delete so the late-arriving `ready` /
     // `upstream_error` from an in-flight upstream fetch doesn't touch a

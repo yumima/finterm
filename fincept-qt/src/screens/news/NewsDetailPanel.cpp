@@ -1091,6 +1091,22 @@ void NewsDetailPanel::clear() {
 
 // ── TL;DR ──────────────────────────────────────────────────────────────────
 
+// A brief that cannot be produced. Shown in the brief's own section, without
+// taking the pane from the story underneath — there is nothing to read here
+// that is worth an open article.
+void NewsDetailPanel::show_brief_unavailable(const QString& text, const QString& title) {
+    if (!tldr_label_ || !tldr_section_)
+        return;
+    brief_pending_ = false;
+    if (tldr_title_)
+        tldr_title_->setText(title);
+    tldr_label_->setText(text);
+    tldr_section_->show();
+    if (tldr_detail_section_)
+        tldr_detail_section_->hide();
+    stack_->setCurrentIndex(1);
+}
+
 void NewsDetailPanel::show_tldr_loading(const QString& title) {
     // Force the content stack page so the TL;DR section is reachable even
     // if no article has been selected yet. Keep the panel open while the

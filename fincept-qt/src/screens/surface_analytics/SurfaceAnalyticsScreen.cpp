@@ -1368,35 +1368,48 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
     auto rows = parse_csv_file(path, err);
     if (rows.empty())
         return;
+    // The user's own file is real data. Without marking it, the provenance
+    // rules would badge it SYNTHETIC DATA and report its lineage as
+    // "generated, not fetched" — the same false claim as before, pointed the
+    // other way.
+    const auto mark_imported = [this]() {
+        fetched_.insert(active_chart_);
+        update_inspector_lineage();
+    };
     switch (active_chart_) {
         case ChartType::Volatility:
             if (load_vol_surface(rows, vol_data_, err)) {
                 update_chart();
                 update_metrics();
+                mark_imported();
             }
             break;
         case ChartType::DeltaSurface:
             if (load_greeks_surface(rows, delta_data_, err, "Delta")) {
                 update_chart();
                 update_metrics();
+                mark_imported();
             }
             break;
         case ChartType::GammaSurface:
             if (load_greeks_surface(rows, gamma_data_, err, "Gamma")) {
                 update_chart();
                 update_metrics();
+                mark_imported();
             }
             break;
         case ChartType::VegaSurface:
             if (load_greeks_surface(rows, vega_data_, err, "Vega")) {
                 update_chart();
                 update_metrics();
+                mark_imported();
             }
             break;
         case ChartType::ThetaSurface:
             if (load_greeks_surface(rows, theta_data_, err, "Theta")) {
                 update_chart();
                 update_metrics();
+                mark_imported();
             }
             break;
         default:

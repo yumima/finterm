@@ -42,6 +42,10 @@ class NewsDetailPanel : public QWidget {
     void show_tldr_loading(const QString& title = QStringLiteral("TL;DR"));
     /// Populate the TL;DR section with the AI-generated brief. Pass an
     /// empty string to hide the section (e.g., on backend failure).
+    /// A brief that could not be produced (empty view, model unavailable).
+    /// Rendered in the brief section WITHOUT taking the pane from an open
+    /// story — see the .cpp.
+    void show_brief_unavailable(const QString& text, const QString& title);
     void show_tldr_summary(const QString& text, const QString& title = QStringLiteral("TL;DR"));
     /// Hide the TL;DR section (called when a new article is opened so the
     /// summary doesn't outlive its relevance to the feed snapshot).

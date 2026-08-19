@@ -330,6 +330,10 @@ class VideoPlayerWidget : public BaseWidget {
     void play_url(const QString& url, const QString& title);
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);
     QString resolve_ytdlp_program() const;
+    /// The line from yt-dlp's stderr that actually says why it failed, with
+    /// the version-age nag and the update hint dropped — they are always
+    /// first, and truncating stderr showed them instead of the error.
+    static QString ytdlp_real_error(const QByteArray& stderr_bytes);
     void play_direct(const QString& stream_url);
     // Live HLS via local trimming proxy. Bypasses Qt 6.8.3's libavformat
     // HLS demuxer choking on YouTube's 3.5 MB DVR playlists: the proxy
@@ -338,6 +342,12 @@ class VideoPlayerWidget : public BaseWidget {
     // sees a tiny playlist its existing HLS code handles in milliseconds.
     void play_via_proxy(const QString& hls_url);
     void stop_hls_proxy();
+    /// Resolve the live stream again and hand the new upstream to the running
+    /// relay, so playback continues across a YouTube session expiry without
+    /// the player ever seeing a source change.
+    void refresh_live_session();
+    /// The in-flight session-refresh resolve, if any. One at a time.
+    class QProcess* session_refresh_proc_ = nullptr;
     void set_loading(bool loading);
 
     void load_channels();                                     // pull from SettingsRepository (+ seed defaults)

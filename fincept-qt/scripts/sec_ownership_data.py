@@ -562,6 +562,11 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     }
 
 
+# Wall-clock ceiling for verifying who filed the beneficial-ownership
+# schedules. At the module's 0.4 s floor this is ~50 filings; past that the
+# rest are reported unverified rather than risking the caller's timeout.
+_STAKE_VERIFY_BUDGET_S = 20.0
+
 _PARTY_RE = re.compile(
     r"(SUBJECT COMPANY|FILED BY):(.*?)CENTRAL INDEX KEY:\s*(\d+)", re.S)
 _NAME_RE = re.compile(r"COMPANY CONFORMED NAME:\s*(.+)")
@@ -579,16 +584,25 @@ def _filing_parties(cik, accession):
         return None
     url = "https://www.sec.gov/Archives/edgar/data/{}/{}/{}.txt".format(
         int(cik), accession.replace("-", ""), accession)
-    r = _get(url, headers=dict(UA, Range="bytes=0-6000"))
+    # No Accept-Encoding: a ranged GET of a gzip stream comes back as a
+    # truncated member, and decoding it raises out of r.text — which is lazy,
+    # so _get()'s "never raises" does not cover it. Identity encoding on 6 KB
+    # costs nothing and cannot half-decode.
+    headers = dict(UA, Range="bytes=0-6000")
+    headers["Accept-Encoding"] = "identity"
+    r = _get(url, headers=headers)
     if r is None:
         # One retry. These run on top of the Form 4 fetches against the same
         # 10 req/s budget, so a transient 403 is expected — and treating it as
         # an answer would drop a real 13D from the list.
         time.sleep(_MIN_REQ_GAP)
-        r = _get(url, headers=dict(UA, Range="bytes=0-6000"))
+        r = _get(url, headers=headers)
     if r is None:
         return None
-    text = r.text or ""
+    try:
+        text = r.text or ""
+    except Exception:
+        return None
     subject_cik, filer_cik, filer_name = "", "", ""
     for role, block, party_cik in _PARTY_RE.findall(text):
         name_hit = _NAME_RE.search(block)
@@ -628,7 +642,16 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
 
     acc_dir = "https://www.sec.gov/Archives/edgar/data/{}/{}/{}"
     out, filed_by_this_cik, unverified = [], 0, 0
+    # Header verification costs a request each, on top of the Form 4 fetches
+    # already running under the caller's wall-clock ceiling. Overrunning it
+    # kills the WHOLE ownership call, insider table included — so the
+    # verification gets its own budget and stops when it is spent, reporting
+    # what it did not reach instead of racing the timeout.
+    verify_deadline = time.time() + _STAKE_VERIFY_BUDGET_S
     for f in filings:
+        if time.time() > verify_deadline:
+            unverified += 1
+            continue
         form = f.get("form", "")
         # Same trap as Form 4: a CIK's submissions index lists the schedules it
         # FILED about other companies alongside the ones filed AGAINST it. A
