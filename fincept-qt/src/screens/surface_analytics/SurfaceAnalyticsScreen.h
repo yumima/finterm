@@ -4,6 +4,8 @@
 
 #include "SurfaceCapabilities.h"
 #include "SurfaceDemoData.h"
+
+#include <QSet>
 #include "SurfaceTypes.h"
 #include "core/symbol/IGroupLinked.h"
 #include "screens/IStatefulScreen.h"
@@ -81,6 +83,14 @@ class SurfaceAnalyticsScreen : public QWidget,
     QWidget* build_surface_bar();
     void refresh_surface_bar();
     void load_demo_data();
+    /// Chart types whose drawn surface came from a real fetch. Everything not
+    /// in here is analytically generated — load_demo_data() fills EVERY
+    /// surface, including the ones whose tier names a Databento dataset, so
+    /// "which tier is this chart" was never an answer to "where did these
+    /// numbers come from".
+    QSet<ChartType> fetched_;
+    /// True when the surface currently on screen was generated, not fetched.
+    bool active_is_synthetic() const { return !fetched_.contains(active_chart_); }
     void update_chart();
     void update_metrics();
     void update_inspector_lineage();

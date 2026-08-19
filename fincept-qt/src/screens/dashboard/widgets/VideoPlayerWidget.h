@@ -261,7 +261,9 @@ class VideoPlayerWidget : public BaseWidget {
     /// advancing sequence numbers, yet every segment URL in it answered 403,
     /// while a manifest resolved seconds later served the same segments fine.
     /// Nothing on our side can revive the old session; only a new one plays.
-    void re_resolve_source(const QString& why);
+    /// `user_initiated` marks a press of PLAY: it clears any teardown
+    /// suppression window rather than being blocked by it.
+    void re_resolve_source(const QString& why, bool user_initiated = false);
     /// Watchdog tick: did any picture or any position movement reach us since
     /// the last tick? Media status is not trustworthy here — when segments
     /// stop being fetchable the FFmpeg backend parks at StoppedState +

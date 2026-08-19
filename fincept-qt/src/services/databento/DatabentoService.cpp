@@ -1012,10 +1012,11 @@ void DatabentoService::search_symbols(const QString& query, const QString& datas
 void DatabentoService::fetch_with_params(const DatabentoFetchParams& params) {
     const QString& chart = params.chart_type;
 
-    // Resolve spot for option-surface fetches. If the caller provided one,
-    // honour it; otherwise default to a placeholder; the screen can later
-    // consult DataHub for a live quote.
-    float spot = params.spot_override > 0.0f ? params.spot_override : 100.0f;
+    // Resolve spot for option-surface fetches. No quote means no spot: the
+    // parsers stamp this onto the surface they return and it goes out through
+    // MCP as a number, so substituting a round 100.0 published a price nobody
+    // quoted. 0 travels as "unknown" and is rendered as such.
+    const float spot = params.spot_override > 0.0f ? params.spot_override : 0.0f;
 
     if (chart == "Volatility" || chart == "DeltaSurface" || chart == "GammaSurface" ||
         chart == "VegaSurface" || chart == "ThetaSurface" || chart == "SkewSurface") {

@@ -100,9 +100,13 @@ QString SurfaceAnalyticsScreen::current_symbol_or_default() const {
     return s;
 }
 
+// 0 means "no quote" — NOT a price. It used to return 100.0, which was then
+// stamped onto real fetched surfaces as spot_price and handed to MCP clients
+// as a number. A made-up round figure is indistinguishable from a real one
+// once it leaves here, so the unknown has to stay unknown.
 float SurfaceAnalyticsScreen::spot_for(const QString& sym) const {
     if (sym.isEmpty())
-        return 100.0f;
+        return 0.0f;
     auto it = spot_cache_.constFind(sym);
     if (it != spot_cache_.constEnd())
         return it.value();
@@ -120,7 +124,7 @@ float SurfaceAnalyticsScreen::spot_for(const QString& sym) const {
         if (ok && d > 0.0)
             return (float)d;
     }
-    return 100.0f;
+    return 0.0f;
 }
 
 // ── Layout ───────────────────────────────────────────────────────────────────
@@ -361,9 +365,20 @@ void SurfaceAnalyticsScreen::refresh_surface_bar() {
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 void SurfaceAnalyticsScreen::load_demo_data() {
+    // Every surface below is generated. Whatever was fetched before this call
+    // has just been overwritten, so the provenance has to go with it —
+    // otherwise a symbol change silently swaps real data for a smooth curve
+    // and leaves the badge and the lineage still claiming OPRA.
+    fetched_.clear();
     QString qsym = current_symbol_or_default();
     std::string sym = qsym.toStdString();
+    // A generated surface needs a scale to be drawn around. With no live quote
+    // this is a drawing constant, not a price — which is why everything below
+    // is badged SYNTHETIC DATA and its lineage says "generated, not fetched".
+    constexpr float kNominalSpot = 100.0f;
     float spot = spot_for(qsym);
+    if (spot <= 0.0f)
+        spot = kNominalSpot;
 
     // Build a basket vector<string> from the control-panel state for risk surfaces.
     std::vector<std::string> basket;
@@ -962,6 +977,20 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
     if (const auto* z = active_z_grid())
         for (const auto& row : *z)
             count += (qint64)row.size();
+    // Provenance is about the numbers on screen, not about the chart's tier.
+    // Naming cap.dataset for a generated surface asserts that these values
+    // came out of OPRA.PILLAR, which is exactly the claim that must never be
+    // made without it being true.
+    const bool synthetic = active_is_synthetic();
+    if (control_panel_)
+        control_panel_->set_synthetic(synthetic);
+    if (synthetic) {
+        data_inspector_->set_lineage(QStringLiteral("— generated, not fetched —"),
+                                     QStringLiteral("analytic model"),
+                                     QStringLiteral("—"),
+                                     sym, QString(), count, 0.0);
+        return;
+    }
     data_inspector_->set_lineage(QString::fromUtf8(cap.dataset),
                                  QString::fromUtf8(cap.schema),
                                  QString::fromUtf8(cap.symbology),
@@ -1363,30 +1392,36 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
         vol_data_ = r.vol;
         vol_data_.underlying = sym_std;
         vol_data_.spot_price = spot;
+        fetched_.insert(ChartType::Volatility);
     }
     if (!r.delta.z.empty()) {
         delta_data_ = r.delta;
         delta_data_.underlying = sym_std;
         delta_data_.spot_price = spot;
+        fetched_.insert(ChartType::DeltaSurface);
     }
     if (!r.gamma.z.empty()) {
         gamma_data_ = r.gamma;
         gamma_data_.underlying = sym_std;
         gamma_data_.spot_price = spot;
+        fetched_.insert(ChartType::GammaSurface);
     }
     if (!r.vega.z.empty()) {
         vega_data_ = r.vega;
         vega_data_.underlying = sym_std;
         vega_data_.spot_price = spot;
+        fetched_.insert(ChartType::VegaSurface);
     }
     if (!r.theta.z.empty()) {
         theta_data_ = r.theta;
         theta_data_.underlying = sym_std;
         theta_data_.spot_price = spot;
+        fetched_.insert(ChartType::ThetaSurface);
     }
     if (!r.skew.z.empty()) {
         skew_data_ = r.skew;
         skew_data_.underlying = sym_std;
+        fetched_.insert(ChartType::SkewSurface);
     }
 
     if (data_inspector_) {
@@ -1428,6 +1463,11 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
                                     QString::number(bar.value("volume").toDouble(), 'f', 0)});
                 }
             }
+            // NOTE: the bars land in the inspector table only. The
+            // EQUITIES-tier surfaces (Correlation, PCA, VaR, Factor
+            // Exposure, Drawdown, Beta) are NOT computed from them, so they
+            // stay generated — and now say so on their badge — until
+            // something computes them for real.
             data_inspector_->show_table("ohlcv-1d", headers, rows);
         }
     }
@@ -1443,10 +1483,14 @@ void SurfaceAnalyticsScreen::on_futures_received(const fincept::DatabentoFutures
             data_inspector_->set_error(r.error);
     }
     if (r.success) {
-        if (!r.forward.z.empty())
+        if (!r.forward.z.empty()) {
             cmdty_fwd_data_ = r.forward;
-        if (!r.contango.z.empty())
+            fetched_.insert(ChartType::CommodityForward);
+        }
+        if (!r.contango.z.empty()) {
             contango_data_ = r.contango;
+            fetched_.insert(ChartType::ContangoBackwardation);
+        }
     }
     update_chart();
     update_metrics();
@@ -1474,29 +1518,35 @@ void SurfaceAnalyticsScreen::on_surface_received(const fincept::DatabentoSurface
         local_vol_data_.z = r.z;
         local_vol_data_.underlying = sym_std;
         local_vol_data_.spot_price = spot;
+        fetched_.insert(ChartType::LocalVolSurface);
     } else if (type == "implied_dividend" && !r.z.empty()) {
         impl_div_data_.strikes.assign(r.x_axis.begin(), r.x_axis.end());
         impl_div_data_.expirations.assign(r.y_axis.begin(), r.y_axis.end());
         impl_div_data_.z = r.z;
         impl_div_data_.underlying = sym_std;
+        fetched_.insert(ChartType::ImpliedDividend);
     } else if (type == "liquidity" && !r.z.empty()) {
         liquidity_data_.strikes.assign(r.x_axis.begin(), r.x_axis.end());
         liquidity_data_.expirations.assign(r.y_axis.begin(), r.y_axis.end());
         liquidity_data_.z = r.z;
         liquidity_data_.underlying = sym_std;
+        fetched_.insert(ChartType::LiquidityHeatmap);
     } else if (type == "commodity_vol" && !r.z.empty()) {
         cmdty_vol_data_.strikes.assign(r.x_axis.begin(), r.x_axis.end());
         cmdty_vol_data_.expirations.assign(r.y_axis.begin(), r.y_axis.end());
         cmdty_vol_data_.z = r.z;
         cmdty_vol_data_.commodity = sym_std;
+        fetched_.insert(ChartType::CommodityVol);
     } else if (type == "crack_spread" && !r.z.empty()) {
         crack_data_.spread_types = r.x_labels;
         crack_data_.contract_months.assign(r.y_axis.begin(), r.y_axis.end());
         crack_data_.z = r.z;
+        fetched_.insert(ChartType::CrackSpread);
     } else if (type == "stress_test" && !r.z.empty()) {
         stress_data_.scenarios = r.x_labels;
         stress_data_.portfolios = r.y_labels;
         stress_data_.z = r.z;
+        fetched_.insert(ChartType::StressTestPnL);
     }
 
     update_chart();

@@ -63,7 +63,12 @@ class DemandQuadrant : public QWidget {
     mutable QRect scale_rect_;
     /// The hover text for the named scale, composed from the same zone table
     /// the strip is painted from.
-    QString flow_scale_tooltip(int hover_x) const;
+    /// Takes the whole hover point, not just its x: scale_rect_ and
+    /// verdict_rect_ share their x extent, so an x-only test made every hover
+    /// inside the verdict block — including the sentence 14px above the strip
+    /// — look like a hover on a band, and the heading never showed the band
+    /// the quarter actually landed in.
+    QString flow_scale_tooltip(const QPoint& hover_pos) const;
 };
 
 } // namespace fincept::screens

@@ -103,13 +103,20 @@ QJsonArray z_to_json(const std::vector<std::vector<float>>& z) {
     return rows;
 }
 
+// An unknown spot travels as JSON null, never as a number. A client cannot
+// tell a placeholder price from a quoted one, and arithmetic on null fails
+// loudly where arithmetic on a made-up 100.0 quietly produces a wrong answer.
+QJsonValue spot_or_null(float spot) {
+    return spot > 0.0f ? QJsonValue(spot) : QJsonValue(QJsonValue::Null);
+}
+
 QJsonObject vol_surface_to_json(const surface::VolatilitySurfaceData& v) {
     QJsonArray strikes, exps;
     for (float s : v.strikes) strikes.append(s);
     for (int e : v.expirations) exps.append(e);
     return QJsonObject{
         {"underlying", QString::fromStdString(v.underlying)},
-        {"spot_price", v.spot_price},
+        {"spot_price", spot_or_null(v.spot_price)},
         {"strikes", strikes},
         {"expirations", exps},
         {"z", z_to_json(v.z)},
@@ -123,7 +130,7 @@ QJsonObject greeks_to_json(const surface::GreeksSurfaceData& g) {
     return QJsonObject{
         {"underlying", QString::fromStdString(g.underlying)},
         {"greek", QString::fromStdString(g.greek_name)},
-        {"spot_price", g.spot_price},
+        {"spot_price", spot_or_null(g.spot_price)},
         {"strikes", strikes},
         {"expirations", exps},
         {"z", z_to_json(g.z)},

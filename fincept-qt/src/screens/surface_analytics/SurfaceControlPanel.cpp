@@ -498,26 +498,47 @@ void SurfaceControlPanel::prefill_datasets() {
     dataset_combo_->blockSignals(false);
 }
 
-void SurfaceControlPanel::set_capability(ChartType type) {
-    active_type_ = type;
-    const auto& cap = capability_for(type);
+void SurfaceControlPanel::set_synthetic(bool synthetic) {
+    if (showing_synthetic_ == synthetic)
+        return;
+    showing_synthetic_ = synthetic;
+    apply_tier_badge();
+}
 
-    // Tier badge
-    QColor bg = tier_color(cap.tier);
-    tier_badge_->setText(tier_name(cap.tier));
+void SurfaceControlPanel::apply_tier_badge() {
+    if (!tier_badge_)
+        return;
+    const auto& cap = capability_for(active_type_);
+    // What is DRAWN decides the badge. The tier only says where this surface
+    // could be fetched from, and a generated surface under a COMPUTED badge is
+    // a claim about provenance that is not true.
+    const bool synthetic = showing_synthetic_ || cap.tier == SurfaceTier::DEMO;
+    const QColor bg = synthetic ? tier_color(SurfaceTier::DEMO) : tier_color(cap.tier);
+    tier_badge_->setText(synthetic ? tier_name(SurfaceTier::DEMO) : tier_name(cap.tier));
     tier_badge_->setStyleSheet(
         QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
                 "padding:2px 6px; border-radius:2px; max-width:140px;")
             .arg(bg.name()));
-    // set_capability runs on construction and on every chart switch, so the
-    // disclosure has to be re-applied here — setting it once in the
-    // constructor was silently overwritten before the first paint.
     tier_badge_->setToolTip(
-        cap.tier == SurfaceTier::DEMO
-            ? QStringLiteral("These surfaces are generated analytically, not fetched from a\n"
-                             "market data source. The shapes are realistic; the numbers are\n"
-                             "not real quotes.")
+        synthetic
+            ? QStringLiteral("This surface is generated analytically, not fetched from a\n"
+                             "market data source. The shape is realistic; the numbers are\n"
+                             "not real quotes.%1")
+                  .arg(cap.tier == SurfaceTier::DEMO
+                           ? QString()
+                           : QStringLiteral("\n\nPress FETCH to replace it with %1 data.")
+                                 .arg(QString::fromUtf8(cap.dataset)))
             : QString());
+}
+
+void SurfaceControlPanel::set_capability(ChartType type) {
+    active_type_ = type;
+    const auto& cap = capability_for(type);
+
+    // Tier badge. Re-applied here because set_capability() runs on every chart
+    // switch — setting the disclosure once in the constructor was silently
+    // overwritten before the first paint.
+    apply_tier_badge();
 
     // Default dataset for this surface
     if (!QString(cap.dataset).isEmpty()) {

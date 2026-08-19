@@ -121,6 +121,11 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     snap.filings_found     = ins.value(QStringLiteral("filings_found")).toInt();
     snap.filings_parsed    = ins.value(QStringLiteral("filings_parsed")).toInt();
     snap.filings_truncated = ins.value(QStringLiteral("filings_truncated")).toInt();
+    snap.insider_rows_filed_as_owner =
+        ins.value(QStringLiteral("rows_filed_as_owner")).toInt();
+    snap.insider_other_issuers.clear();
+    for (const auto& v : ins.value(QStringLiteral("other_issuers")).toArray())
+        snap.insider_other_issuers << v.toString();
     snap.window_months     = ins.value(QStringLiteral("window_months")).toInt();
 
     snap.transactions.clear();
@@ -178,6 +183,10 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     const QJsonObject stk = root.value(QStringLiteral("stakes")).isObject()
                                 ? root.value(QStringLiteral("stakes")).toObject()
                                 : QJsonObject{};
+    snap.stakes_found            = stk.value(QStringLiteral("filings_found")).toInt();
+    snap.stakes_truncated        = stk.value(QStringLiteral("filings_truncated")).toInt();
+    snap.stakes_filed_by_this_cik = stk.value(QStringLiteral("filed_by_this_cik")).toInt();
+    snap.stakes_unverified       = stk.value(QStringLiteral("filings_unverified")).toInt();
     snap.stakes.clear();
     for (const auto& v : stk.value(QStringLiteral("stakes")).toArray()) {
         const QJsonObject o = v.toObject();

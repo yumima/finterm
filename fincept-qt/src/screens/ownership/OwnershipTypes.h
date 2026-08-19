@@ -481,6 +481,17 @@ struct OwnershipSnapshot {
     int  filings_found = 0;
     int  filings_parsed = 0;
     int  filings_truncated = 0;
+    /// Form 4 rows this CIK filed about OTHER issuers, and the issuers they
+    /// belonged to. Dropped from the table because they are not insider
+    /// trades in this company — reported so a near-empty table on a holding
+    /// company reads as "they file about other people", not as "no activity".
+    int         insider_rows_filed_as_owner = 0;
+    QStringList insider_other_issuers;
+    /// Coverage of the 5% STAKES list, which is filtered the same way.
+    int  stakes_found = 0;
+    int  stakes_truncated = 0;
+    int  stakes_filed_by_this_cik = 0;   ///< schedules THIS company filed on others
+    int  stakes_unverified = 0;          ///< header unreadable — side unknown, so excluded
     int  window_months = 0;
 
     bool    edgar_ok = false;   ///< the Form 4 / 13D half returned

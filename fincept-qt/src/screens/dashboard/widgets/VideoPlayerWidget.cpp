@@ -534,7 +534,8 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                         // source is what the automatic path has already tried
                         // by the time a user reaches for the button, and it
                         // cannot revive a retired live session.
-                        re_resolve_source(QStringLiteral("PLAY pressed on a stopped stream"));
+                        re_resolve_source(QStringLiteral("PLAY pressed on a stopped stream"),
+                                          /*user_initiated=*/true);
                     }
                     break;
                 }
@@ -1212,8 +1213,10 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
     // teardown would put the stream back on top of the channel list.
     if (current_url_.isEmpty() && url_before_error_.isEmpty())
         return;
-    if (stack_ && stack_->currentIndex() != 1)
+    if (stack_ && stack_->currentIndex() != 1) {
+        set_playback_intent(false);   // not on the player page: nothing to watch
         return;
+    }
     // A live stream does not end and does not stall for good: the segment
     // window rolled past the buffered position, the transport hiccuped, or the
     // session behind it was retired. All transport conditions, and the only
@@ -1278,10 +1281,16 @@ void VideoPlayerWidget::give_up_on_stream(const QString& why) {
 #endif
 }
 
-void VideoPlayerWidget::re_resolve_source(const QString& why) {
+void VideoPlayerWidget::re_resolve_source(const QString& why, bool user_initiated) {
 #ifdef HAS_QT_MULTIMEDIA
-    if (!player_ || recovery_suppressed())
+    // The suppression window exists to ignore errors OUR teardown caused. A
+    // person pressing PLAY is not that — and give_up_on_stream() stops the
+    // player inside the window, so gating here meant "press PLAY to try
+    // again" did nothing for the 1.5 s right after the message appeared.
+    if (!player_ || (!user_initiated && recovery_suppressed()))
         return;
+    if (user_initiated)
+        suppress_recovery_until_ms_ = 0;
     // on_player_error() clears current_url_ so refresh_data() stops retrying a
     // broken stream; url_before_error_ is where it went.
     const QString url = !current_url_.isEmpty() ? current_url_ : url_before_error_;
@@ -2311,9 +2320,14 @@ void VideoPlayerWidget::on_player_error() {
     if (recovery_suppressed()) {
         // Raised by our own teardown — the stream is already going away, and
         // the label would announce a failure the user did not have.
+        //
+        // play_in_progress_ is deliberately NOT cleared: re_resolve_source()
+        // holds it across the 250 ms teardown gap precisely so a refresh tick
+        // cannot open a second source on a half-torn-down player, and this
+        // error lands inside that gap. It is cleared when playback starts or
+        // when the reload gives up.
         LOG_INFO("VideoPlayer", "Player error during teardown (ignored): " +
                                     player_->errorString().left(120));
-        play_in_progress_ = false;
         return;
     }
     const QString err = player_->errorString();

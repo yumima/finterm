@@ -43,6 +43,18 @@ constexpr FlowZone kFlowZones[] = {
 };
 constexpr int kZones = int(std::size(kFlowZones));
 
+/// Index of the band a reading falls in. The bands are half-open [from, to),
+/// so an exact +1.00 — a quarter where not one holder trimmed, which
+/// sec_13f_bulk starts outflow at zero for — matched nothing and left the
+/// caller's `live = 0` fallback marking DISTRIBUTING in red under the line
+/// "100% of the money that moved, moved in".
+int zone_for(double net) {
+    for (int i = 0; i < kZones; ++i)
+        if (net >= kFlowZones[i].from && net < kFlowZones[i].to)
+            return i;
+    return net > 0 ? kZones - 1 : 0;
+}
+
 /// Share change compressed for display. A fund that doubled and one that added
 /// 2% are both "buying", and a linear axis would put every ordinary move on the
 /// zero line to make room for one outlier.
@@ -281,7 +293,7 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
             for (int i = 0; i < kZones; ++i) {
                 const auto& z = kFlowZones[i];
                 const int x0 = scale.left() + i * zw;
-                const bool live = net >= z.from && net < z.to;
+                const bool live = i == zone_for(net);
                 QColor c(z.to <= -0.05 ? ui::colors::RED()
                        : z.from >= 0.05 ? ui::colors::GREEN()
                                         : ui::colors::TEXT_SECONDARY());
@@ -427,7 +439,7 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
 // What the named scale means, in the words it would need if someone asked.
 // The zone thresholds come from kFlowZones, the same table the bar is painted
 // from, so the explanation cannot describe a bar that isn't there.
-QString DemandQuadrant::flow_scale_tooltip(int hover_x) const {
+QString DemandQuadrant::flow_scale_tooltip(const QPoint& hover_pos) const {
     if (!d_.value_bought || !d_.value_sold)
         return {};
     const double gross = *d_.value_bought + *d_.value_sold;
@@ -438,15 +450,11 @@ QString DemandQuadrant::flow_scale_tooltip(int hover_x) const {
     // Which band is live, and which one the cursor is actually over — they
     // differ whenever the reader is measuring their stock against a band it
     // did not land in, which is most of why anyone hovers a scale.
-    int live = 0;
-    for (int i = 0; i < kZones; ++i)
-        if (net >= kFlowZones[i].from && net < kFlowZones[i].to)
-            live = i;
+    const int live = zone_for(net);
     int hovered = -1;
-    if (!scale_rect_.isNull() && hover_x >= scale_rect_.left() &&
-        hover_x <= scale_rect_.right()) {
+    if (scale_rect_.isValid() && scale_rect_.contains(hover_pos)) {
         const int zw = std::max(1, scale_rect_.width() / kZones);
-        hovered = std::clamp((hover_x - scale_rect_.left()) / zw, 0, kZones - 1);
+        hovered = std::clamp((hover_pos.x() - scale_rect_.left()) / zw, 0, kZones - 1);
     }
     const int head_i = hovered >= 0 ? hovered : live;
 
@@ -529,7 +537,7 @@ bool DemandQuadrant::event(QEvent* e) {
         auto* he = static_cast<QHelpEvent*>(e);
         // The scale sits below the plot, so it can never contend with a point.
         if (verdict_rect_.isValid() && verdict_rect_.contains(he->pos())) {
-            const QString t = flow_scale_tooltip(he->pos().x());
+            const QString t = flow_scale_tooltip(he->pos());
             if (!t.isEmpty()) {
                 QToolTip::showText(he->globalPos(), t, this);
                 return true;

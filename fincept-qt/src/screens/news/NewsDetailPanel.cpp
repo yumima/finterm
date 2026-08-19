@@ -1148,6 +1148,8 @@ void NewsDetailPanel::reveal_article_section(QWidget* section) {
 }
 
 void NewsDetailPanel::set_article_visible(bool visible) {
+    // Whether the story was ALREADY put away, read before anything moves.
+    const bool already_hidden = headline_label_ && headline_label_->isHidden();
     if (headline_label_)      headline_label_->setVisible(visible);
     if (article_meta_row_)    article_meta_row_->setVisible(visible);
     if (summary_label_)       summary_label_->setVisible(visible);
@@ -1168,6 +1170,13 @@ void NewsDetailPanel::set_article_visible(bool visible) {
     // Remember which per-story sections were actually on screen, so hiding the
     // brief again is the exact inverse of showing it. Without this, "hide the
     // brief" would be the reason the story's ANALYSIS stayed missing.
+    //
+    // Only on the transition INTO hidden. show_tldr_loading() and
+    // show_tldr_summary() both call this, and rebuilding the list on the
+    // second call would collect nothing — everything is already hidden — and
+    // silently throw away what the first call recorded.
+    if (already_hidden)
+        return;
     sections_hidden_by_brief_.clear();
     for (QWidget* section : {analysis_section_, related_section_, monitor_section_,
                              entities_section_, infra_section_}) {

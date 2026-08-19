@@ -91,6 +91,9 @@ class StockOwnershipPanel : public QWidget {
 
     QTableWidget* insiders_tbl_ = nullptr;
     QTableWidget* stakes_tbl_   = nullptr;
+    /// Says what the stakes list left out — schedules this company filed on
+    /// others, headers that could not be read, filings past the cap.
+    QLabel*      stakes_note_  = nullptr;
     QLabel*       short_lbl_    = nullptr;
     SmartMoneyPanel* smart_money_ = nullptr;
     RankedBarChart*  ownership_mix_ = nullptr;

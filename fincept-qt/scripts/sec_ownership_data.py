@@ -488,7 +488,7 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     # Rows dropped because this CIK filed them ABOUT someone else — reported
     # rather than silently discarded, since "Berkshire sold DaVita" is a real
     # filing a reader may have been looking for on the other company's page.
-    filed_as_owner, other_issuers = 0, set()
+    filed_as_owner, other_issuers, parsed_for_issuer = 0, set(), 0
     for f in filings:
         url = _raw_xml_url(cik, f["accession"], f["primary_doc"])
         if not url:
@@ -519,6 +519,7 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
                 if not row.get("issuer_cik") or _pad_cik(row["issuer_cik"]) == cik]
         if not rows:
             continue
+        parsed_for_issuer += 1
         for row in rows:
             row["filed_date"] = f.get("filed_date", "")
             row["form"] = f.get("form", "4")
@@ -545,7 +546,10 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
         "window_months": months,
         "since": since,
         "filings_found": total,
-        "filings_parsed": len(filings) - unparsed,
+        # Filings that yielded at least one row FOR THIS ISSUER. A holding
+        # company's Form 4s parse fine and belong to somebody else; counting
+        # them as parsed put "60 filings, 60 parsed" over a near-empty table.
+        "filings_parsed": parsed_for_issuer,
         "filings_truncated": truncated,
         "filings_unparsed": unparsed,
         # Form 4 rows this CIK filed about OTHER issuers, dropped from the
@@ -576,6 +580,12 @@ def _filing_parties(cik, accession):
     url = "https://www.sec.gov/Archives/edgar/data/{}/{}/{}.txt".format(
         int(cik), accession.replace("-", ""), accession)
     r = _get(url, headers=dict(UA, Range="bytes=0-6000"))
+    if r is None:
+        # One retry. These run on top of the Form 4 fetches against the same
+        # 10 req/s budget, so a transient 403 is expected — and treating it as
+        # an answer would drop a real 13D from the list.
+        time.sleep(_MIN_REQ_GAP)
+        r = _get(url, headers=dict(UA, Range="bytes=0-6000"))
     if r is None:
         return None
     text = r.text or ""

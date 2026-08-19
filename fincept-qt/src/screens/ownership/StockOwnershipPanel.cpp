@@ -330,7 +330,20 @@ void StockOwnershipPanel::build_ui() {
         if (auto* it = stakes_tbl_->item(row, 0))
             ui::open_external_link(it->data(Qt::UserRole).toString());
     });
-    side->addWidget(tile(QStringLiteral("5% STAKES — 13D / 13G"), stakes_tbl_,
+    // Coverage line for the stakes list. It is filtered — schedules this
+    // company filed ON OTHERS are excluded, and so is anything whose header
+    // could not be read — and a filtered list has to say so or it reads as
+    // the whole truth.
+    stakes_note_ = new QLabel;
+    stakes_note_->setWordWrap(true);
+    stakes_note_->hide();
+    auto* stakes_box = new QWidget;
+    auto* stakes_v = new QVBoxLayout(stakes_box);
+    stakes_v->setContentsMargins(0, 0, 0, 0);
+    stakes_v->setSpacing(3);
+    stakes_v->addWidget(stakes_tbl_, 1);
+    stakes_v->addWidget(stakes_note_);
+    side->addWidget(tile(QStringLiteral("5% STAKES — 13D / 13G"), stakes_box,
                          QStringLiteral("13D declares intent to influence; 13G is passive. "
                                         "Double-click to open the filing.")));
 
@@ -575,11 +588,24 @@ void StockOwnershipPanel::render_insiders(const OwnershipSnapshot& s) {
 
     QStringList notes;
     if (s.filings_found > 0) {
-        notes << QStringLiteral("%1 filings in %2 months, %3 parsed")
+        notes << QStringLiteral("%1 filings in %2 months, %3 about this company")
                      .arg(s.filings_found).arg(s.window_months).arg(s.filings_parsed);
         if (s.filings_truncated > 0)
             notes << QStringLiteral("%1 older filings not fetched — this is the most recent "
                                     "slice, not the whole window").arg(s.filings_truncated);
+        // A holding company files Form 4s about the issuers it owns 10% of.
+        // Those are real filings and they are not insider trades here, so say
+        // where they went rather than leaving an unexplained empty table.
+        if (s.insider_rows_filed_as_owner > 0) {
+            QString where = s.insider_other_issuers.mid(0, 3).join(QStringLiteral(", "));
+            if (s.insider_other_issuers.size() > 3)
+                where += QStringLiteral(" and %1 more")
+                             .arg(s.insider_other_issuers.size() - 3);
+            notes << QStringLiteral("%1 rows filed BY this company about %2 — shown on those "
+                                    "companies, not here")
+                         .arg(s.insider_rows_filed_as_owner)
+                         .arg(where.isEmpty() ? QStringLiteral("other issuers") : where);
+        }
     }
     coverage_->setText(notes.join(QStringLiteral(" · ")));
     coverage_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
@@ -613,6 +639,20 @@ void StockOwnershipPanel::render_stakes(const OwnershipSnapshot& s) {
     }
     stakes_tbl_->setUpdatesEnabled(true);
     stakes_tbl_->resizeColumnsToContents();
+
+    QStringList notes;
+    if (s.stakes_filed_by_this_cik > 0)
+        notes << QStringLiteral("%1 schedule(s) this company filed on OTHERS — not stakes in it")
+                     .arg(s.stakes_filed_by_this_cik);
+    if (s.stakes_unverified > 0)
+        notes << QStringLiteral("%1 could not be checked against EDGAR and were left out")
+                     .arg(s.stakes_unverified);
+    if (s.stakes_truncated > 0)
+        notes << QStringLiteral("%1 older not fetched").arg(s.stakes_truncated);
+    stakes_note_->setText(notes.join(QStringLiteral(" · ")));
+    stakes_note_->setVisible(!notes.isEmpty());
+    stakes_note_->setStyleSheet(
+        QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void StockOwnershipPanel::render_holders(const OwnershipSnapshot& s) {

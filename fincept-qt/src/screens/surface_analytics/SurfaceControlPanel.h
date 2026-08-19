@@ -53,6 +53,15 @@ class SurfaceControlPanel : public QWidget {
     // Re-render sections to match the active surface's capability profile.
     // Called by the screen on every chip click.
     void set_capability(ChartType type);
+    /// Override the tier badge when what is ON SCREEN is synthetic.
+    ///
+    /// The tier describes what a surface COULD be fetched from; it is not a
+    /// statement about the numbers currently drawn. Every surface starts out
+    /// generated analytically, so a COMPUTED chart showed a rand()-noised vol
+    /// smile under a badge reading COMPUTED until something was fetched.
+    void set_synthetic(bool synthetic);
+    /// Paint the badge from the tier AND showing_synthetic_ together.
+    void apply_tier_badge();
 
     // Push min/max/mean/median/std/skew/kurt of the active surface's z matrix.
     void update_metrics(const std::vector<std::vector<float>>& z, const QString& units = "");
@@ -117,6 +126,9 @@ class SurfaceControlPanel : public QWidget {
     QComboBox* dataset_combo_ = nullptr;
     QLabel* spot_label_ = nullptr;
     QLabel* tier_badge_ = nullptr;
+    /// True while the drawn surface is generated rather than fetched. Held so
+    /// set_capability() (which runs on every chart switch) re-applies it.
+    bool showing_synthetic_ = true;
     // Symbol search autocomplete (Databento)
     QCompleter* symbol_completer_ = nullptr;
     QStringListModel* symbol_completer_model_ = nullptr;
