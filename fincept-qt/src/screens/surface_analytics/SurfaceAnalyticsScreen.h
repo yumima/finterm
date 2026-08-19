@@ -95,6 +95,9 @@ class SurfaceAnalyticsScreen : public QWidget,
     /// Implied forwards derived from the published curve — see the .cpp for
     /// why they are only built on top of real data and never alone.
     void build_forward_rates();
+    /// Observation dates behind the curve grid, oldest first — so the lineage
+    /// can say which days are on screen instead of "D0…D59".
+    QStringList rates_dates_;
     /// What the beta surface is measured AGAINST — a broad-market ETF from
     /// the basket when there is one, otherwise the equal-weighted basket.
     /// Shown on the axis, because a beta without its benchmark is not a

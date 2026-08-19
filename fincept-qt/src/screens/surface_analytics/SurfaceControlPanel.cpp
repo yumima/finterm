@@ -575,15 +575,16 @@ void SurfaceControlPanel::set_capability(ChartType type) {
         !can_fetch
             ? QStringLiteral("This surface is generated analytically — there is nothing to fetch.")
         : cap.tier == SurfaceTier::EQUITIES
-            ? QStringLiteral("Fetches daily bars from %1 into the data table.\n"
-                             "This chart is NOT computed from them yet — the surface stays "
-                             "generated.").arg(QString::fromUtf8(cap.dataset))
+            ? QStringLiteral("Fetches daily bars from %1. Correlation, PCA, VaR, drawdown and "
+                             "beta\nare computed from them; the bars themselves stay in the "
+                             "data table.").arg(QString::fromUtf8(cap.dataset))
             : QStringLiteral("Fetch this surface from %1 (%2).")
                   .arg(QString::fromUtf8(cap.dataset), QString::fromUtf8(cap.schema)));
     fetch_btn_->setStyleSheet(fetch_btn_qss(can_fetch));
-    fetch_btn_->setToolTip(can_fetch ? QString()
-                                     : "No Databento source for this surface — "
-                                       "viewing synthetic data");
+    // The per-tier tooltip is set above. This used to overwrite it here with a
+    // one-liner — so the enabled button had NO tooltip at all, and the
+    // disabled one said "viewing synthetic data" for surfaces that now draw
+    // nothing rather than a model.
 
     update_lineage(QString::fromUtf8(cap.description));
 }

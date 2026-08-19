@@ -624,11 +624,19 @@ void StockOwnershipPanel::render_stakes(const OwnershipSnapshot& s) {
         // is free-form for most filers — extracting it with a regex over prose
         // would produce an authoritative-looking number that is sometimes
         // wrong, so the name is shown and the document is a double-click away.
-        auto* who = cell(b.filer.isEmpty() ? QStringLiteral("—") : b.filer);
-        who->setToolTip(b.filer.isEmpty()
-                            ? QStringLiteral("Filer not named in the submission header")
-                            : QStringLiteral("%1 — double-click to open the filing and read the %")
-                                  .arg(b.filer));
+        auto* who = cell(!b.subject_verified ? QStringLiteral("— not checked —")
+                         : b.filer.isEmpty()   ? QStringLiteral("—")
+                                               : b.filer,
+                         b.subject_verified ? QString() : ui::colors::TEXT_DIM());
+        who->setToolTip(
+            !b.subject_verified
+                ? QStringLiteral("Listed but not checked: the request budget ran out before this "
+                                 "filing's header could be read, so whether this company is the "
+                                 "SUBJECT or the FILER is unknown. Double-click to see on EDGAR.")
+            : b.filer.isEmpty()
+                ? QStringLiteral("Filer not named in the submission header")
+                : QStringLiteral("%1 — double-click to open the filing and read the %")
+                      .arg(b.filer));
         stakes_tbl_->setItem(i, 1, who);
         stakes_tbl_->setItem(i, 2, cell(b.amendment ? b.form + QStringLiteral(" (amended)")
                                                     : b.form));
@@ -645,8 +653,8 @@ void StockOwnershipPanel::render_stakes(const OwnershipSnapshot& s) {
         notes << QStringLiteral("%1 schedule(s) this company filed on OTHERS — not stakes in it")
                      .arg(s.stakes_filed_by_this_cik);
     if (s.stakes_unverified > 0)
-        notes << QStringLiteral("%1 older filing(s) could not be checked in time — left out "
-                                "rather than shown without knowing whose side they are on")
+        notes << QStringLiteral("%1 older filing(s) listed but not checked — shown so a real "
+                                "stake is never hidden, marked so it is never trusted")
                      .arg(s.stakes_unverified);
     if (s.stakes_truncated > 0)
         notes << QStringLiteral("%1 older not fetched").arg(s.stakes_truncated);

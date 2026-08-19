@@ -85,6 +85,11 @@ struct BeneficialStake {
     /// submissions index never says, so this list could previously only report
     /// that somebody had filed.
     QString filer;
+    /// False when the request budget ran out before this filing's header could
+    /// be read. It is listed anyway — dropping a real 13D because we ran out
+    /// of requests hides a stake that exists — but which side of it this
+    /// company is on has not been checked.
+    bool    subject_verified = true;
     QString url;
 };
 

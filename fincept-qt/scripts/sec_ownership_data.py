@@ -657,11 +657,26 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     verify_deadline = time.time() + _STAKE_VERIFY_BUDGET_S
     verified_count = 0
     for f in filings:
+        form = f.get("form", "")
         if verified_count >= _STAKE_VERIFY_MAX or time.time() > verify_deadline:
+            # Past the budget: LIST it, do not delete it. Dropping a real 13D
+            # because we ran out of requests hides a stake that exists; listing
+            # it with no filer says exactly what is known and what is not.
             unverified += 1
+            out.append({
+                "form": form,
+                "activist": form.startswith("SC 13D"),
+                "amendment": form.endswith("/A"),
+                "filed_date": f.get("filed_date", ""),
+                "accession": f.get("accession", ""),
+                "filer": "",
+                "filer_cik": "",
+                "subject_verified": False,
+                "url": acc_dir.format(int(cik), f["accession"].replace("-", ""),
+                                      f.get("primary_doc", "")),
+            })
             continue
         verified_count += 1
-        form = f.get("form", "")
         # Same trap as Form 4: a CIK's submissions index lists the schedules it
         # FILED about other companies alongside the ones filed AGAINST it. A
         # 13G Berkshire filed on Delta Air Lines is not a stake in Berkshire.
@@ -689,6 +704,7 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
             # the list could only say that SOMEBODY filed.
             "filer": filer_name,
             "filer_cik": filer_cik,
+            "subject_verified": True,
             "url": acc_dir.format(int(cik), f["accession"].replace("-", ""),
                                   f.get("primary_doc", "")),
         })

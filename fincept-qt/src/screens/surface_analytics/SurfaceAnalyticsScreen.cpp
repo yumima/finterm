@@ -371,11 +371,22 @@ void SurfaceAnalyticsScreen::refresh_surface_bar() {
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 void SurfaceAnalyticsScreen::load_demo_data() {
-    // Every surface below is generated. Whatever was fetched before this call
-    // has just been overwritten, so the provenance has to go with it —
-    // otherwise a symbol change silently swaps real data for a smooth curve
-    // and leaves the badge and the lineage still claiming OPRA.
-    fetched_.clear();
+    // Every surface REGENERATED below loses its provenance — it has just been
+    // overwritten, and leaving the mark would keep the badge claiming OPRA
+    // over a generated curve.
+    //
+    // The rates surfaces are not regenerated and are not symbol-dependent: the
+    // Treasury curve does not change because the user typed another ticker.
+    // The bar-derived risk surfaces are not regenerated either. Clearing their
+    // marks would re-badge real data SYNTHETIC and report its lineage as
+    // "generated, not fetched" — the same false claim, pointed the other way.
+    static const QSet<ChartType> kSurvivesRegeneration = {
+        ChartType::YieldCurve, ChartType::RealYield, ChartType::InflationExpectations,
+        ChartType::ForwardRate, ChartType::Correlation, ChartType::PCA,
+        ChartType::VaR, ChartType::Drawdown, ChartType::BetaSurface,
+    };
+    for (auto it = fetched_.begin(); it != fetched_.end();)
+        it = kSurvivesRegeneration.contains(*it) ? std::next(it) : fetched_.erase(it);
     imported_from_.clear();
     QString qsym = current_symbol_or_default();
     std::string sym = qsym.toStdString();
@@ -1009,6 +1020,19 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
                                      QStringLiteral("—"), sym, QString(), count, 0.0);
         return;
     }
+    // Name the window the rates surfaces actually cover.
+    if (!rates_dates_.isEmpty() && !synthetic &&
+        (active_chart_ == ChartType::YieldCurve || active_chart_ == ChartType::RealYield ||
+         active_chart_ == ChartType::InflationExpectations ||
+         active_chart_ == ChartType::ForwardRate)) {
+        data_inspector_->set_lineage(QStringLiteral("FRED (St. Louis Fed)"),
+                                     QStringLiteral("constant-maturity series"),
+                                     QStringLiteral("series id"), sym,
+                                     QStringLiteral("%1 → %2").arg(rates_dates_.first(),
+                                                                   rates_dates_.last()),
+                                     count, 0.0);
+        return;
+    }
     if (synthetic) {
         data_inspector_->set_lineage(QStringLiteral("— generated, not fetched —"),
                                      QStringLiteral("analytic model"),
@@ -1078,13 +1102,16 @@ void SurfaceAnalyticsScreen::update_line_view() {
 
     switch (active_chart_) {
         case ChartType::YieldCurve: {
-            // Show the latest column of the yield matrix as a single curve
+            // Newest row: fill_grid() writes oldest-first of the yield matrix as a single curve
             if (yield_data_.z.empty() || yield_data_.maturities.empty())
                 break;
             std::vector<float> xs, ys;
             for (size_t i = 0; i < yield_data_.maturities.size(); ++i) {
                 xs.push_back((float)yield_data_.maturities[i]);
-                ys.push_back(yield_data_.z[0].size() > i ? yield_data_.z[0][i] : 0.0f);
+                // z.back(): fill_grid() writes oldest-first, so [0] is up to
+                // sixty business days stale while the 3D and forward views
+                // both use today's curve.
+                ys.push_back(yield_data_.z.back().size() > i ? yield_data_.z.back()[i] : 0.0f);
             }
             surface_line_->set_curve("YIELD CURVE", xs, ys, fmt_months_str(yield_data_.maturities),
                                      "Maturity (months)", "Yield %", QColor(63, 185, 80));
@@ -1162,7 +1189,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
             std::vector<float> xs, ys;
             for (size_t i = 0; i < inflation_data_.horizons.size(); ++i) {
                 xs.push_back((float)inflation_data_.horizons[i]);
-                ys.push_back(inflation_data_.z[0].size() > i ? inflation_data_.z[0][i] : 0.0f);
+                ys.push_back(inflation_data_.z.back().size() > i ? inflation_data_.z.back()[i]
+                                                                  : 0.0f);
             }
             QStringList xl;
             for (int h : inflation_data_.horizons) xl << QString("%1Y").arg(h);
@@ -1571,14 +1599,38 @@ const std::vector<FredSeriesSpec> kRealSeries = {
     {"DFII5", 60}, {"DFII7", 84}, {"DFII10", 120}, {"DFII20", 240}, {"DFII30", 360},
 };
 // Breakeven inflation. Daily series only, so the axis is a true horizon.
+// NOTE the unit: every consumer of InflationExpData::horizons formats it as
+// "%dY", so these are YEARS. The maturity vectors above are months, which is
+// what their consumers format — the two axes genuinely differ, and storing 60
+// here drew the 5-year breakeven labelled "60Y".
 const std::vector<FredSeriesSpec> kBreakevenSeries = {
-    {"T5YIE", 60}, {"T10YIE", 120},
+    {"T5YIE", 5}, {"T10YIE", 10},
 };
 
 QStringList series_ids(const std::vector<FredSeriesSpec>& specs) {
     QStringList out;
     for (const auto& s : specs) out << QString::fromUtf8(s.series);
     return out;
+}
+
+/// The first per-series error in a `multiple` payload, or empty when the
+/// response carries data. See on_fred_result() for why this is needed.
+QString first_series_error(const QJsonObject& payload) {
+    const QJsonArray arr = payload.value(QStringLiteral("results")).isArray()
+                               ? payload.value(QStringLiteral("results")).toArray()
+                               : payload.value(QStringLiteral("data")).toArray();
+    if (arr.isEmpty())
+        return {};
+    QString first;
+    for (const auto& v : arr) {
+        const QJsonObject o = v.toObject();
+        if (!o.value(QStringLiteral("observations")).toArray().isEmpty())
+            return {};   // at least one series came back — not a blanket failure
+        const QString e = o.value(QStringLiteral("error")).toString();
+        if (first.isEmpty() && !e.isEmpty())
+            first = e;
+    }
+    return first;
 }
 
 /// date -> series_id -> value, from fred_data.py's `multiple` payload.
@@ -1622,7 +1674,8 @@ QMap<QString, QHash<QString, double>> by_date(const QJsonObject& payload) {
 /// surface empty rather than draw a grid of holes.
 bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& specs,
                int max_dates, std::vector<int>& maturities,
-               std::vector<int>& time_points, std::vector<std::vector<float>>& z) {
+               std::vector<int>& time_points, std::vector<std::vector<float>>& z,
+               QStringList* out_dates = nullptr) {
     const auto rows = by_date(payload);
     if (rows.isEmpty())
         return false;
@@ -1650,6 +1703,11 @@ bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& sp
         time_points.push_back(d);
         z.push_back(std::move(line));
     }
+    // Keep the real dates. The row index is what the axis needs, but a table
+    // labelled "D0…D59" over published FRED observations hides WHEN each row
+    // is — and that is half of what a curve-through-time is for.
+    if (out_dates)
+        *out_dates = dates;
     return filled > 0;
 }
 
@@ -1684,9 +1742,20 @@ void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id,
                                "real-yield and breakeven surfaces.").arg(r.error.left(120)));
         return;
     }
+    // fred_data.py's `multiple` returns an ARRAY, which EconomicsService wraps
+    // as {"data": [...]} — and its failure test only fires when the root has
+    // an `error` and no `data`. So a missing API key arrives here as SUCCESS
+    // with every element carrying its own error, and the branch above never
+    // runs: three panels stay blank with nothing said. Look inside.
+    if (const QString per_series = first_series_error(r.data); !per_series.isEmpty()) {
+        if (data_inspector_)
+            data_inspector_->set_error(
+                QStringLiteral("FRED returned no data: %1").arg(per_series.left(160)));
+        return;
+    }
     if (request_id == QStringLiteral("surface_curve")) {
         if (fill_grid(r.data, kCurveSeries, 60, yield_data_.maturities,
-                      yield_data_.time_points, yield_data_.z)) {
+                      yield_data_.time_points, yield_data_.z, &rates_dates_)) {
             fetched_.insert(ChartType::YieldCurve);
             build_forward_rates();
         }
@@ -1751,10 +1820,15 @@ void SurfaceAnalyticsScreen::build_forward_rates() {
         }
         fwd_rate_data_.z.push_back(std::move(row));
     }
-    if (any)
+    if (any) {
         fetched_.insert(ChartType::ForwardRate);
-    else
+    } else {
+        // load_rates_from_fred() runs on every showEvent, so a later curve
+        // that yields no exact-maturity pairs must drop the mark too —
+        // otherwise the badge claims FRED provenance for a blank surface.
         fwd_rate_data_ = {};
+        fetched_.remove(ChartType::ForwardRate);
+    }
 }
 
 // Build the risk surfaces from the bars themselves.

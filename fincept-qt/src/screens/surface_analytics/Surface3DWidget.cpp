@@ -257,11 +257,20 @@ void Surface3DWidget::paintEvent(QPaintEvent*) {
             q.edge = edge_col;
             q.depth = depth;
             q.value = avg_val;
-            quads.push_back(q);
+            // A cell with no data makes every corner, and therefore the depth,
+            // NaN. Sorting on NaN is not just a wrong picture: every NaN
+            // comparison is false, so the comparator stops being a strict weak
+            // ordering and introsort is free to run past the end of the
+            // buffer. Holes are now routine — a forward rate with no matching
+            // maturity, a drawdown window longer than the history fetched — so
+            // the quad is dropped and the surface simply has a gap there.
+            if (std::isfinite(q.depth))
+                quads.push_back(q);
         }
     }
 
-    // Back-to-front sort
+    // Back-to-front sort. Every depth here is finite — non-finite quads were
+    // dropped above, because they would break the ordering this relies on.
     std::sort(quads.begin(), quads.end(), [](const SurfQuad& a, const SurfQuad& b) { return a.depth < b.depth; });
 
     // Draw quads

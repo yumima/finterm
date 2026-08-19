@@ -1098,6 +1098,11 @@ void NewsDetailPanel::show_brief_unavailable(const QString& text, const QString&
     if (!tldr_label_ || !tldr_section_)
         return;
     brief_pending_ = false;
+    // The brief does not own the pane — it failed. Clearing this BEFORE the
+    // restore below matters: sync_article_block() reads it, so leaving it set
+    // kept the story's body hidden and made every later section (an ANALYZE
+    // result, ENTITIES, RELATED) stash itself instead of appearing.
+    brief_owns_pane_ = false;
     if (tldr_title_)
         tldr_title_->setText(title);
     tldr_label_->setText(text);

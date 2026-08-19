@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`b0b76bbb2`](https://github.com/yumima/finterm/commit/b0b76bbb2) surfaces: the curve, real yields and breakevens come from FRED now
 - [`02147a8e4`](https://github.com/yumima/finterm/commit/02147a8e4) surfaces: compute the risk charts from the bars, and draw nothing where there is no feed
 - [`d60239876`](https://github.com/yumima/finterm/commit/d60239876) video: when the direct path cannot hold a live stream, use the one that can
 - [`aa45f11df`](https://github.com/yumima/finterm/commit/aa45f11df) video: a click that raises the window is not a click on the video
