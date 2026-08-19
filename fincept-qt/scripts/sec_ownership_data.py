@@ -562,10 +562,15 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     }
 
 
-# Wall-clock ceiling for verifying who filed the beneficial-ownership
-# schedules. At the module's 0.4 s floor this is ~50 filings; past that the
-# rest are reported unverified rather than risking the caller's timeout.
-_STAKE_VERIFY_BUDGET_S = 20.0
+# Verifying who filed a beneficial-ownership schedule costs one ranged GET
+# each, on top of the Form 4 fetches already running under the caller's
+# wall-clock ceiling. Two bounds, because one alone is the wrong shape:
+#   - a COUNT, so the result is the same every run and the note is stable;
+#   - a wall-clock backstop, so a slow EDGAR cannot still overrun the caller
+#     and take the insider half down with the stakes half.
+# Both are applied newest-first, so what goes unchecked is the oldest.
+_STAKE_VERIFY_MAX = 30
+_STAKE_VERIFY_BUDGET_S = 35.0
 
 _PARTY_RE = re.compile(
     r"(SUBJECT COMPANY|FILED BY):(.*?)CENTRAL INDEX KEY:\s*(\d+)", re.S)
@@ -650,10 +655,12 @@ def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     # `filings` is sorted newest-first, so when the budget runs out it is the
     # OLDEST schedules that go unverified — the right end to lose.
     verify_deadline = time.time() + _STAKE_VERIFY_BUDGET_S
+    verified_count = 0
     for f in filings:
-        if time.time() > verify_deadline:
+        if verified_count >= _STAKE_VERIFY_MAX or time.time() > verify_deadline:
             unverified += 1
             continue
+        verified_count += 1
         form = f.get("form", "")
         # Same trap as Form 4: a CIK's submissions index lists the schedules it
         # FILED about other companies alongside the ones filed AGAINST it. A
