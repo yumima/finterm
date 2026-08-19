@@ -81,6 +81,10 @@ struct BeneficialStake {
     bool    activist = false;   ///< 13D declares intent to influence; 13G is passive
     bool    amendment = false;
     QDate   filed_date;
+    /// Who took the stake, from the submission header's FILED BY block. The
+    /// submissions index never says, so this list could previously only report
+    /// that somebody had filed.
+    QString filer;
     QString url;
 };
 

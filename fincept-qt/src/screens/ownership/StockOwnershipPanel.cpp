@@ -324,8 +324,8 @@ void StockOwnershipPanel::build_ui() {
                                         "is sold short, and today's traded short volume.")));
 
     // Row 2 — 5% stakes and the firm-level browser.
-    stakes_tbl_ = make_table({QStringLiteral("Filed"), QStringLiteral("Form"),
-                              QStringLiteral("Intent"), QStringLiteral("Document")});
+    stakes_tbl_ = make_table({QStringLiteral("Filed"), QStringLiteral("Filer"),
+                              QStringLiteral("Form"), QStringLiteral("Intent")});
     connect(stakes_tbl_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         if (auto* it = stakes_tbl_->item(row, 0))
             ui::open_external_link(it->data(Qt::UserRole).toString());
@@ -594,17 +594,22 @@ void StockOwnershipPanel::render_stakes(const OwnershipSnapshot& s) {
         d->setData(Qt::UserRole, b.url);
         d->setToolTip(QStringLiteral("Double-click to open the filing on EDGAR"));
         stakes_tbl_->setItem(i, 0, d);
-        stakes_tbl_->setItem(i, 1, cell(b.form));
+        // Who filed it. The percentage owned is inside the filing body, which
+        // is free-form for most filers — extracting it with a regex over prose
+        // would produce an authoritative-looking number that is sometimes
+        // wrong, so the name is shown and the document is a double-click away.
+        auto* who = cell(b.filer.isEmpty() ? QStringLiteral("—") : b.filer);
+        who->setToolTip(b.filer.isEmpty()
+                            ? QStringLiteral("Filer not named in the submission header")
+                            : QStringLiteral("%1 — double-click to open the filing and read the %")
+                                  .arg(b.filer));
+        stakes_tbl_->setItem(i, 1, who);
+        stakes_tbl_->setItem(i, 2, cell(b.amendment ? b.form + QStringLiteral(" (amended)")
+                                                    : b.form));
         stakes_tbl_->setItem(
-            i, 2,
+            i, 3,
             cell(b.activist ? QStringLiteral("activist") : QStringLiteral("passive"),
                  b.activist ? ui::colors::AMBER() : QString()));
-        // The percentage owned is inside the filing body, which is free-form
-        // for most filers. Extracting it with a regex over prose would produce
-        // an authoritative-looking number that is sometimes wrong, so the
-        // document is offered instead.
-        stakes_tbl_->setItem(i, 3, cell(b.amendment ? QStringLiteral("amendment — open to read %")
-                                                    : QStringLiteral("open to read %")));
     }
     stakes_tbl_->setUpdatesEnabled(true);
     stakes_tbl_->resizeColumnsToContents();

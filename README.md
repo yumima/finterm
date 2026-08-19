@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`7dd67b04c`](https://github.com/yumima/finterm/commit/7dd67b04c) **fix:** a live stream that dies is invisible to Qt, so nothing recovered it
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

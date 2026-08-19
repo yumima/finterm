@@ -25,6 +25,24 @@ constexpr int kPad = 8;
 constexpr int kAxisW = 74;   // room for the y labels without clipping
 constexpr int kAxisH = 38;   // two footer lines, clear of the edge
 
+/// The named scale under the plot. `from`/`to` are the net share of the money
+/// that MOVED — net flow over gross flow — and `range` says the same thing in
+/// the words the hover text uses, so the bar and its explanation can never
+/// drift apart.
+struct FlowZone {
+    double from, to;
+    const char* name;
+    const char* range;
+};
+constexpr FlowZone kFlowZones[] = {
+    {-1.00, -0.20, "DISTRIBUTING", "more than 20% out"},
+    {-0.20, -0.05, "TRIMMING",     "5–20% out"},
+    {-0.05,  0.05, "HOLDING",      "within 5% either way"},
+    { 0.05,  0.20, "ADDING",       "5–20% in"},
+    { 0.20,  1.00, "ACCUMULATING", "more than 20% in"},
+};
+constexpr int kZones = int(std::size(kFlowZones));
+
 /// Share change compressed for display. A fund that doubled and one that added
 /// 2% are both "buying", and a linear axis would put every ordinary move on the
 /// zero line to make room for one outlier.
@@ -254,13 +272,6 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
             // to label — while almost every real quarter lands in the middle.
             // Equal widths give every reading room to be named, and the marker
             // is placed proportionally inside its own zone.
-            struct Zone { double from, to; const char* name; };
-            const Zone zones[] = {
-                {-1.00, -0.20, "DISTRIBUTING"}, {-0.20, -0.05, "TRIMMING"},
-                {-0.05,  0.05, "HOLDING"},      { 0.05,  0.20, "ADDING"},
-                { 0.20,  1.00, "ACCUMULATING"},
-            };
-            constexpr int kZones = 5;
             const int zw = scale.width() / kZones;
 
             QFont zf = f;
@@ -268,7 +279,7 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
             const QFontMetrics zfm(zf);
             int marker_x = scale.left();
             for (int i = 0; i < kZones; ++i) {
-                const auto& z = zones[i];
+                const auto& z = kFlowZones[i];
                 const int x0 = scale.left() + i * zw;
                 const bool live = net >= z.from && net < z.to;
                 QColor c(z.to <= -0.05 ? ui::colors::RED()
@@ -302,6 +313,9 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
                            .arg(fmt::format_percent(std::fabs(net) * 100.0, 0),
                                 net >= 0 ? QStringLiteral("in") : QStringLiteral("out")));
             g.setFont(f);
+            scale_rect_   = scale;
+            // Covers the reading line above the bar and the zone labels below,
+            // so the whole thing explains itself, not just the coloured strip.
             verdict_rect_ = QRect(scale.left(), top, scale.width(), 40);
         }
     }
@@ -410,9 +424,117 @@ void DemandQuadrant::paintEvent(QPaintEvent*) {
     g.drawText(QRect(plot_.left(), plot_.bottom() + 17, plot_.width(), 14), Qt::AlignRight, foot);
 }
 
+// What the named scale means, in the words it would need if someone asked.
+// The zone thresholds come from kFlowZones, the same table the bar is painted
+// from, so the explanation cannot describe a bar that isn't there.
+QString DemandQuadrant::flow_scale_tooltip(int hover_x) const {
+    if (!d_.value_bought || !d_.value_sold)
+        return {};
+    const double gross = *d_.value_bought + *d_.value_sold;
+    if (gross <= 0.0)
+        return {};
+    const double net = (*d_.value_bought - *d_.value_sold) / gross;
+
+    // Which band is live, and which one the cursor is actually over — they
+    // differ whenever the reader is measuring their stock against a band it
+    // did not land in, which is most of why anyone hovers a scale.
+    int live = 0;
+    for (int i = 0; i < kZones; ++i)
+        if (net >= kFlowZones[i].from && net < kFlowZones[i].to)
+            live = i;
+    int hovered = -1;
+    if (!scale_rect_.isNull() && hover_x >= scale_rect_.left() &&
+        hover_x <= scale_rect_.right()) {
+        const int zw = std::max(1, scale_rect_.width() / kZones);
+        hovered = std::clamp((hover_x - scale_rect_.left()) / zw, 0, kZones - 1);
+    }
+    const int head_i = hovered >= 0 ? hovered : live;
+
+    // Rich text, not padded plain text: the tooltip font is proportional, so
+    // a column of names only lines up in a table.
+    auto zone_color = [](const FlowZone& z) {
+        return z.to <= -0.05 ? ui::colors::RED()
+             : z.from >= 0.05 ? ui::colors::GREEN()
+                              : ui::colors::TEXT_SECONDARY();
+    };
+    const QString dim  = ui::colors::TEXT_DIM();
+    const QString sec  = ui::colors::TEXT_SECONDARY();
+    const QString prim = ui::colors::TEXT_PRIMARY();
+    const QString dir  = net >= 0 ? QStringLiteral("in") : QStringLiteral("out");
+
+    QString t;
+    t += QStringLiteral("<div style='white-space:nowrap;'>");
+    t += QStringLiteral("<span style='color:%1;font-weight:700;'>%2</span>"
+                        "<span style='color:%3;'> — %4</span><br/><br/>")
+             .arg(zone_color(kFlowZones[head_i]),
+                  QString::fromUtf8(kFlowZones[head_i].name),
+                  sec, QString::fromUtf8(kFlowZones[head_i].range));
+
+    // The measure itself, and why it is a share of what moved rather than a
+    // share of what is held.
+    // Definitional, with no direction in it: the heading above names the band
+    // under the CURSOR, which is usually not the band this quarter landed in.
+    t += QStringLiteral(
+             "<span style='color:%1;'>Of every dollar large money moved in or out of this"
+             "<br/>name last quarter, how much of it was net. Measured against<br/>"
+             "what MOVED, not against the position — otherwise a big<br/>"
+             "holding that barely traded drowns out the quarter.</span><br/><br/>")
+             .arg(sec);
+
+    t += QStringLiteral(
+             "<span style='color:%1;'>This quarter: </span>"
+             "<span style='color:%2;font-weight:700;'>%3</span>"
+             "<span style='color:%1;'> of the money that moved, moved %4</span><br/>"
+             "<span style='color:%5;'>%6 bought  ·  %7 sold</span><br/><br/>")
+             .arg(sec,
+                  net >= 0 ? ui::colors::GREEN() : ui::colors::RED(),
+                  fmt::format_percent(std::fabs(net) * 100.0, 0),
+                  dir, dim,
+                  fmt::format_compact(*d_.value_bought),
+                  fmt::format_compact(*d_.value_sold));
+
+    t += QStringLiteral("<table cellspacing='0' cellpadding='0'>");
+    for (int i = 0; i < kZones; ++i) {
+        const bool is_live = i == live;
+        t += QStringLiteral(
+                 "<tr>"
+                 "<td style='color:%1;font-weight:%2;padding-right:14px;'>%3</td>"
+                 "<td style='color:%4;padding-right:10px;'>%5</td>"
+                 "<td style='color:%6;'>%7</td>"
+                 "</tr>")
+                 .arg(is_live ? zone_color(kFlowZones[i]) : dim)
+                 .arg(is_live ? 700 : 400)
+                 .arg(QString::fromUtf8(kFlowZones[i].name),
+                      is_live ? sec : dim,
+                      QString::fromUtf8(kFlowZones[i].range),
+                      prim,
+                      is_live ? QStringLiteral("← this quarter") : QString());
+    }
+    t += QStringLiteral("</table><br/><br/>");
+
+    // The two things a reader would otherwise have to guess.
+    t += QStringLiteral(
+             "<span style='color:%1;'>Bands are drawn equal width so each has room to be"
+             "<br/>named; the marker sits proportionally inside its own band.<br/>"
+             "Positions sold out entirely count as outflow. A 13F quarter is<br/>"
+             "up to 45 days old when filed — a fact about the quarter, not<br/>"
+             "a forecast.</span>")
+             .arg(dim);
+    t += QStringLiteral("</div>");
+    return t;
+}
+
 bool DemandQuadrant::event(QEvent* e) {
     if (e->type() == QEvent::ToolTip) {
         auto* he = static_cast<QHelpEvent*>(e);
+        // The scale sits below the plot, so it can never contend with a point.
+        if (verdict_rect_.isValid() && verdict_rect_.contains(he->pos())) {
+            const QString t = flow_scale_tooltip(he->pos().x());
+            if (!t.isEmpty()) {
+                QToolTip::showText(he->globalPos(), t, this);
+                return true;
+            }
+        }
         const DemandPoint* best = nullptr;
         double bestd = 1e9;
         for (const auto& pt : hit_) {

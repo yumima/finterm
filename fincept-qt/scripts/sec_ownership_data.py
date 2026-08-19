@@ -253,6 +253,7 @@ def parse_form4(xml_bytes, source_url):
         return []
 
     issuer = root.find("issuer")
+    issuer_cik = _text(issuer, "issuerCik") or ""
     issuer_name = _text(issuer, "issuerName") or ""
     issuer_symbol = _text(issuer, "issuerTradingSymbol") or ""
 
@@ -305,6 +306,7 @@ def parse_form4(xml_bytes, source_url):
                 "co_filers": [o["name"] for o in owners[1:] if o["name"]],
                 "roles": owner_roles,
                 "issuer": issuer_name,
+                "issuer_cik": issuer_cik,
                 "symbol": issuer_symbol,
                 "date": _text(tx, "transactionDate") or "",
                 "code": code or "",
@@ -483,6 +485,10 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
     filings = filings[:int(max_filings)]
 
     transactions, unparsed = [], 0
+    # Rows dropped because this CIK filed them ABOUT someone else — reported
+    # rather than silently discarded, since "Berkshire sold DaVita" is a real
+    # filing a reader may have been looking for on the other company's page.
+    filed_as_owner, other_issuers = 0, set()
     for f in filings:
         url = _raw_xml_url(cik, f["accession"], f["primary_doc"])
         if not url:
@@ -495,6 +501,23 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
         rows = parse_form4(r.content, url)
         if not rows:
             unparsed += 1
+            continue
+
+        # A CIK's submissions index carries every Form 4 the CIK is a PARTY to,
+        # not only the ones where it is the issuer. A holding company that is a
+        # 10% owner of other issuers files Form 4s about THEM, and those land
+        # here looking like insider trades in this company at another company's
+        # share price. Berkshire's 2026-08-04 filing is a DaVita sale at
+        # $199.55; shown under BRK-B, whose own insiders were trading at $510,
+        # it reads as bad data. It is good data about a different issuer.
+        foreign = [row for row in rows
+                   if row.get("issuer_cik") and _pad_cik(row["issuer_cik"]) != cik]
+        if foreign:
+            other_issuers.update(row.get("issuer", "") for row in foreign)
+            filed_as_owner += len(foreign)
+        rows = [row for row in rows
+                if not row.get("issuer_cik") or _pad_cik(row["issuer_cik"]) == cik]
+        if not rows:
             continue
         for row in rows:
             row["filed_date"] = f.get("filed_date", "")
@@ -525,13 +548,52 @@ def fetch_insiders(symbol, months=24, max_filings=80, cik=None):
         "filings_parsed": len(filings) - unparsed,
         "filings_truncated": truncated,
         "filings_unparsed": unparsed,
+        # Form 4 rows this CIK filed about OTHER issuers, dropped from the
+        # table above because they are not insider trades in this company.
+        "rows_filed_as_owner": filed_as_owner,
+        "other_issuers": sorted(x for x in other_issuers if x),
         "transactions": transactions,
         "insiders": classify_insiders(transactions, date_lookup),
         "clusters": find_clusters(transactions),
     }
 
 
-def fetch_stakes(symbol, months=24, cik=None):
+_PARTY_RE = re.compile(
+    r"(SUBJECT COMPANY|FILED BY):(.*?)CENTRAL INDEX KEY:\s*(\d+)", re.S)
+_NAME_RE = re.compile(r"COMPANY CONFORMED NAME:\s*(.+)")
+
+
+def _filing_parties(cik, accession):
+    """(subject_cik, filer_cik, filer_name) for one accession, or None.
+
+    A beneficial-ownership schedule names both sides in the SGML header at the
+    top of the full submission text file, and nowhere in the submissions JSON.
+    Only the first few KB are needed, so this is a ranged GET — servers that
+    ignore Range simply send more than was asked for, which still parses.
+    """
+    if not accession:
+        return None
+    url = "https://www.sec.gov/Archives/edgar/data/{}/{}/{}.txt".format(
+        int(cik), accession.replace("-", ""), accession)
+    r = _get(url, headers=dict(UA, Range="bytes=0-6000"))
+    if r is None:
+        return None
+    text = r.text or ""
+    subject_cik, filer_cik, filer_name = "", "", ""
+    for role, block, party_cik in _PARTY_RE.findall(text):
+        name_hit = _NAME_RE.search(block)
+        name = name_hit.group(1).strip() if name_hit else ""
+        if role == "SUBJECT COMPANY":
+            subject_cik = _pad_cik(party_cik)
+        elif not filer_cik:
+            filer_cik, filer_name = _pad_cik(party_cik), name
+    # A header with neither side named is not evidence of anything.
+    if not subject_cik and not filer_cik:
+        return None
+    return subject_cik, filer_cik, filer_name
+
+
+def fetch_stakes(symbol, months=24, cik=None, max_filings=80):
     """SC 13D / 13G beneficial-ownership filings against one issuer.
 
     Reports what the submissions index states — filer, form, dates, document.
@@ -550,17 +612,37 @@ def fetch_stakes(symbol, months=24, cik=None):
     forms = ["SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A"]
     filings = recent_filings(cik, forms, since)
     filings.sort(key=lambda f: f.get("filed_date", ""), reverse=True)
+    total = len(filings)
+    truncated = max(0, total - int(max_filings))
+    filings = filings[:int(max_filings)]
 
     acc_dir = "https://www.sec.gov/Archives/edgar/data/{}/{}/{}"
-    out = []
+    out, filed_by_this_cik, unverified = [], 0, 0
     for f in filings:
         form = f.get("form", "")
+        # Same trap as Form 4: a CIK's submissions index lists the schedules it
+        # FILED about other companies alongside the ones filed AGAINST it. A
+        # 13G Berkshire filed on Delta Air Lines is not a stake in Berkshire.
+        # The submissions JSON does not say which side this CIK is on, but the
+        # submission header does, and it is the first few KB of the file.
+        parties = _filing_parties(cik, f.get("accession", ""))
+        if parties is None:
+            unverified += 1          # counted, not guessed at
+            continue
+        subject_cik, filer_cik, filer_name = parties
+        if subject_cik and subject_cik != cik:
+            filed_by_this_cik += 1
+            continue
         out.append({
             "form": form,
             "activist": form.startswith("SC 13D"),
             "amendment": form.endswith("/A"),
             "filed_date": f.get("filed_date", ""),
             "accession": f.get("accession", ""),
+            # Who took the stake. It was in the header all along; without it
+            # the list could only say that SOMEBODY filed.
+            "filer": filer_name,
+            "filer_cik": filer_cik,
             "url": acc_dir.format(int(cik), f["accession"].replace("-", ""),
                                   f.get("primary_doc", "")),
         })
@@ -570,6 +652,12 @@ def fetch_stakes(symbol, months=24, cik=None):
         "company": company_name_for_symbol(symbol),
         "window_months": months,
         "since": since,
+        "filings_found": total,
+        "filings_truncated": truncated,
+        # Schedules this CIK filed about other companies, and schedules whose
+        # header could not be read — neither is a stake in this company.
+        "filed_by_this_cik": filed_by_this_cik,
+        "filings_unverified": unverified,
         "stakes": out,
     }
 
@@ -585,10 +673,10 @@ def handle_action(action, payload):
     if action == "insiders":
         return fetch_insiders(symbol, months, max_filings, cik)
     if action == "stakes":
-        return fetch_stakes(symbol, months, cik)
+        return fetch_stakes(symbol, months, cik, max_filings)
     if action == "all":
         ins = fetch_insiders(symbol, months, max_filings, cik)
-        stk = fetch_stakes(symbol, months, cik)
+        stk = fetch_stakes(symbol, months, cik, max_filings)
         return {
             "symbol": str(symbol).upper(),
             "insiders": ins,

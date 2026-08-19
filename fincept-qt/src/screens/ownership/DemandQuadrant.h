@@ -54,8 +54,16 @@ class DemandQuadrant : public QWidget {
     QString empty_text_;
     mutable QVector<Plotted> hit_;
     mutable QRect plot_;
-    /// Hit area for the named scale, so it can explain its own bands.
+    /// Hit area for the named scale, so it can explain its own bands: the
+    /// reading line, the coloured strip and the zone labels under it.
     mutable QRect verdict_rect_;
+    /// The coloured strip alone. Hovering it names the band under the cursor
+    /// rather than only the one this quarter landed in — comparing against a
+    /// band you did NOT land in is most of the reason to hover a scale.
+    mutable QRect scale_rect_;
+    /// The hover text for the named scale, composed from the same zone table
+    /// the strip is painted from.
+    QString flow_scale_tooltip(int hover_x) const;
 };
 
 } // namespace fincept::screens

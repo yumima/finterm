@@ -186,6 +186,7 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
         b.activist   = o.value(QStringLiteral("activist")).toBool();
         b.amendment  = o.value(QStringLiteral("amendment")).toBool();
         b.filed_date = iso_date(o, "filed_date");
+        b.filer      = o.value(QStringLiteral("filer")).toString();
         b.url        = o.value(QStringLiteral("url")).toString();
         if (!b.form.isEmpty())
             snap.stakes.push_back(b);
